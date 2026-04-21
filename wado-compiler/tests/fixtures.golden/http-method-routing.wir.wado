@@ -773,7 +773,7 @@ fn "wado-compiler/tests/fixtures/http-method-routing.wado/handle"(request) {
     drop("mem/realloc"(__fw_write_ptr_2, 40, 8, 0));
 }
 
-fn "wado-compiler/tests/fixtures/http-method-routing.wado/__cm_binding__Request_get_method"(self) {
+fn "wado-compiler/tests/fixtures/http-method-routing.wado/__cm_binding__Request_get_method"(self) with Request {
     let __outptr: i32;
     let __vdisc: i32;
     let __vresult: ref "wasi:http/types.wado//Method";
@@ -815,11 +815,11 @@ fn "wado-compiler/tests/fixtures/http-method-routing.wado/__cm_binding__Request_
     return __vresult;
 }
 
-fn "wado-compiler/tests/fixtures/http-method-routing.wado/__cm_binding__Fields_new"() {
+fn "wado-compiler/tests/fixtures/http-method-routing.wado/__cm_binding__Fields_new"() with Fields {
     return "wasi/wasi:http/Fields::new"();
 }
 
-fn "wado-compiler/tests/fixtures/http-method-routing.wado/__cm_binding__Response_new"(headers, contents, trailers) {
+fn "wado-compiler/tests/fixtures/http-method-routing.wado/__cm_binding__Response_new"(headers, contents, trailers) with Response {
     let __contents_disc: i32;
     let __contents_inner0: i32;
     let __outptr: i32;
@@ -838,7 +838,7 @@ fn "wado-compiler/tests/fixtures/http-method-routing.wado/__cm_binding__Response
     return __lifted_result_7, __lifted_result_8;
 }
 
-fn "wado-compiler/tests/fixtures/http-method-routing.wado/__cm_binding__Response_set_status_code"(self, status_code) {
+fn "wado-compiler/tests/fixtures/http-method-routing.wado/__cm_binding__Response_set_status_code"(self, status_code) with Response {
     let __disc: i32;
     let __result_val: ref "core:prelude/types.wado//Result<unit,unit>";
     __disc = "wasi/wasi:http/Response::set_status_code"(self, status_code);

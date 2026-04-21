@@ -243,15 +243,15 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_open_flags.wado/run"() with Std
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("all open_flags tests passed"), used: 27 });
 }
 
-fn "wado-compiler/tests/fixtures/wasi_filesystem_open_flags.wado/__cm_binding__Stdout_write_via_stream"(data) {
+fn "wado-compiler/tests/fixtures/wasi_filesystem_open_flags.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/wasi_filesystem_open_flags.wado/__cm_binding__Stderr_write_via_stream"(data) {
+fn "wado-compiler/tests/fixtures/wasi_filesystem_open_flags.wado/__cm_binding__Stderr_write_via_stream"(data) with Stderr {
     return "wasi/wasi:cli/Stderr::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/wasi_filesystem_open_flags.wado/__cm_binding__Preopens_get_directories"() {
+fn "wado-compiler/tests/fixtures/wasi_filesystem_open_flags.wado/__cm_binding__Preopens_get_directories"() with Preopens {
     let __outptr: i32;
     let __base: i32;
     let __count: i32;
@@ -296,7 +296,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_open_flags.wado/__cm_binding__P
     return __result;
 }
 
-fn "wado-compiler/tests/fixtures/wasi_filesystem_open_flags.wado/__cm_binding__Descriptor_unlink_file_at"(self, path) {
+fn "wado-compiler/tests/fixtures/wasi_filesystem_open_flags.wado/__cm_binding__Descriptor_unlink_file_at"(self, path) with Descriptor {
     let __path_packed: i64;
     let __async_outptr: i32;
     let __subtask: i32;
@@ -413,7 +413,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_open_flags.wado/__cm_binding__D
     return __result_val;
 }
 
-fn "wado-compiler/tests/fixtures/wasi_filesystem_open_flags.wado/__cm_binding__Descriptor_open_at"(self, path_flags, path, open_flags, flags) {
+fn "wado-compiler/tests/fixtures/wasi_filesystem_open_flags.wado/__cm_binding__Descriptor_open_at"(self, path_flags, path, open_flags, flags) with Descriptor {
     let __path_packed: i64;
     let __async_outptr: i32;
     let __params_buf: i32;
@@ -640,7 +640,7 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {
     "wasi/stream-drop-writable"(tx);
 }
 
-fn "core:internal/wait_for_subtask"(packed) {
+fn "core:internal/wait_for_subtask"(packed) with WaitableSet, Subtask {
     let handle: i32;
     let subtask: i32;
     let ws: i32;

@@ -255,11 +255,11 @@ condition: stderr_terminal matches { None }
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("all terminal tests passed"), used: 25 });
 }
 
-fn "wado-compiler/tests/fixtures/wasi_cli_terminal.wado/__cm_binding__Stdout_write_via_stream"(data) {
+fn "wado-compiler/tests/fixtures/wasi_cli_terminal.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/wasi_cli_terminal.wado/__cm_binding__TerminalStdin_get_terminal_stdin"() {
+fn "wado-compiler/tests/fixtures/wasi_cli_terminal.wado/__cm_binding__TerminalStdin_get_terminal_stdin"() with TerminalStdin {
     let __outptr: i32;
     let __disc: i32;
     let __option_result: ref "core:prelude/types.wado//Option<TerminalInput>";
@@ -274,7 +274,7 @@ fn "wado-compiler/tests/fixtures/wasi_cli_terminal.wado/__cm_binding__TerminalSt
     return __option_result;
 }
 
-fn "wado-compiler/tests/fixtures/wasi_cli_terminal.wado/__cm_binding__TerminalStdout_get_terminal_stdout"() {
+fn "wado-compiler/tests/fixtures/wasi_cli_terminal.wado/__cm_binding__TerminalStdout_get_terminal_stdout"() with TerminalStdout {
     let __outptr: i32;
     let __disc: i32;
     let __option_result: ref "core:prelude/types.wado//Option<TerminalOutput>";
@@ -289,7 +289,7 @@ fn "wado-compiler/tests/fixtures/wasi_cli_terminal.wado/__cm_binding__TerminalSt
     return __option_result;
 }
 
-fn "wado-compiler/tests/fixtures/wasi_cli_terminal.wado/__cm_binding__TerminalStderr_get_terminal_stderr"() {
+fn "wado-compiler/tests/fixtures/wasi_cli_terminal.wado/__cm_binding__TerminalStderr_get_terminal_stderr"() with TerminalStderr {
     let __outptr: i32;
     let __disc: i32;
     let __option_result: ref "core:prelude/types.wado//Option<TerminalOutput>";

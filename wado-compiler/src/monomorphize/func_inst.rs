@@ -860,6 +860,7 @@ impl Monomorphizer {
             }),
             params,
             return_type,
+            task_return_type: None,
             effects: generic.effects.clone(),
             stores: generic.stores.clone(),
             body,
@@ -871,6 +872,7 @@ impl Monomorphizer {
             // Scratch local fields - computed by lower phase (after monomorphization)
             is_cm_binding: false,
             is_cm_export: false,
+            is_ambient: false,
             inline_hint: generic.inline_hint,
             comp_features: generic.comp_features,
             export_name: generic.export_name.clone(),

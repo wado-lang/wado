@@ -1,0 +1,18 @@
+// Test: calling a resource method without declaring `with <Resource>` errors.
+// `TcpSocket::create(...)` is a host call on the TcpSocket resource so the
+// caller must hold the TcpSocket effect.
+
+use { println, Stdout } from "core:cli";
+use { TcpSocket, IpAddressFamily } from "wasi:sockets";
+
+fn bad() {
+    let family = IpAddressFamily::Ipv4;
+    let _ = TcpSocket::create(family);
+}
+
+export fn run() with Stdout {
+    println("this test should not run");
+}
+
+__DATA__
+{"compile_error": "missing resource 'TcpSocket'"}

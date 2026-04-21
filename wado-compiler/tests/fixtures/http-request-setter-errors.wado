@@ -9,7 +9,9 @@
 use { Request, Response, ErrorCode, Fields, Method, Scheme, Trailers } from "wasi:http";
 use { Client } from "wasi:http/client.wado";
 
-export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+export async fn handle(request: Request) -> Result<Response, ErrorCode>
+    with Client
+{
     let headers = Fields::new();
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let [out_req, _req_future] = Request::new(headers, null, trailers_future, null);

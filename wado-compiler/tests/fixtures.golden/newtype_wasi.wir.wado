@@ -76,7 +76,7 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-fn "wado-compiler/tests/fixtures/newtype_wasi.wado/newtype_wasi_chained"() with Stdout {
+fn "wado-compiler/tests/fixtures/newtype_wasi.wado/newtype_wasi_chained"() with Stdout, MonotonicClock {
     let t1: u64;
     let ts: u64;
     let evt: u64;
@@ -110,7 +110,7 @@ fn "wado-compiler/tests/fixtures/newtype_wasi.wado/newtype_wasi_chained"() with 
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("chained newtype tests passed"), used: 28 });
 }
 
-fn "wado-compiler/tests/fixtures/newtype_wasi.wado/newtype_wasi_duration"() with Stdout {
+fn "wado-compiler/tests/fixtures/newtype_wasi.wado/newtype_wasi_duration"() with Stdout, MonotonicClock {
     let res: u64;
     let double_res: u64;
     let as_u64: u64;
@@ -131,7 +131,7 @@ fn "wado-compiler/tests/fixtures/newtype_wasi.wado/newtype_wasi_duration"() with
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("duration tests passed"), used: 21 });
 }
 
-fn "wado-compiler/tests/fixtures/newtype_wasi.wado/newtype_wasi_multiple"() with Stdout {
+fn "wado-compiler/tests/fixtures/newtype_wasi.wado/newtype_wasi_multiple"() with Stdout, MonotonicClock {
     let start: u64;
     let res: u64;
     let end: u64;
@@ -153,15 +153,15 @@ fn "wado-compiler/tests/fixtures/newtype_wasi.wado/newtype_wasi_multiple"() with
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("multiple wasi newtype tests passed"), used: 34 });
 }
 
-fn "wado-compiler/tests/fixtures/newtype_wasi.wado/__cm_binding__Stdout_write_via_stream"(data) {
+fn "wado-compiler/tests/fixtures/newtype_wasi.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/newtype_wasi.wado/__cm_binding__MonotonicClock_now"() {
+fn "wado-compiler/tests/fixtures/newtype_wasi.wado/__cm_binding__MonotonicClock_now"() with MonotonicClock {
     return "wasi/wasi:clocks/MonotonicClock::now"();
 }
 
-fn "wado-compiler/tests/fixtures/newtype_wasi.wado/__cm_binding__MonotonicClock_get_resolution"() {
+fn "wado-compiler/tests/fixtures/newtype_wasi.wado/__cm_binding__MonotonicClock_get_resolution"() with MonotonicClock {
     return "wasi/wasi:clocks/MonotonicClock::get_resolution"();
 }
 

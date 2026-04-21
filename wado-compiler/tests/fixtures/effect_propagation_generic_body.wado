@@ -1,0 +1,32 @@
+#![TODO]
+// TODO: generic effect parameter `<effect E>` does not propagate to
+// concrete resources inside the function body.
+//
+// `effect_check` runs before monomorphization, so when a generic
+// function's body uses a concrete resource (e.g. `Stream::new()`),
+// the checker has no way to know which concrete effect `E` will
+// resolve to and whether that effect's propagation closure grants
+// the resource. The body is checked in a context where the only
+// declared effect is the abstract `E`, and the concrete resource
+// lookup fails.
+//
+// When body-effect inference lands (deferred WEP), this fixture
+// will start passing and the runner will flag that `#![TODO]` must
+// be removed.
+
+use { println, Stdout } from "core:cli";
+
+fn generic_runner<effect E>(f: fn() with E) with E {
+    let [rx, tx] = Stream::<u8>::new();
+    tx.drop();
+    rx.drop();
+    f();
+}
+
+export fn run() with Stdout {
+    generic_runner(|| { println("inside"); });
+    println("ok");
+}
+
+__DATA__
+{"stdout_contains": ["inside", "ok"]}

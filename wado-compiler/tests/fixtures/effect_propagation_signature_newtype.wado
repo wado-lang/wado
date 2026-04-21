@@ -1,0 +1,27 @@
+// Test: signature-resource inference unwraps newtypes. When a `type Foo = R`
+// newtype of a resource appears in the signature, the underlying resource `R`
+// is treated as implicitly present in `with`. This matches `wasi:http`'s
+// `type Headers = Fields` pattern, where functions taking `&Headers` should
+// not need to repeat `with Fields`.
+
+use { println, Stdout } from "core:cli";
+
+pub type MyStream = Stream<u8>;
+
+// No `with Stream` declared — Stream is reached through the MyStream newtype.
+pub fn consume(ms: MyStream) {
+    let [rx, tx] = Stream::<u8>::new();
+    tx.drop();
+    rx.drop();
+    ms.drop();
+}
+
+export fn run() with Stdout {
+    let [rx, tx] = Stream::<u8>::new();
+    tx.drop();
+    consume(rx as MyStream);
+    println("ok");
+}
+
+__DATA__
+{"stdout_contains": ["ok"]}

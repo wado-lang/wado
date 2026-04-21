@@ -305,7 +305,7 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 import fn wasi/future-drop-readable:transmission-filesystem from "wasi/future-drop-readable:transmission-filesystem";
 import fn wasi/subtask-drop from "wasi/subtask-drop";
 
-fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/run"() with Stdout, Stderr, Preopens {
+fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/run"() with Stdout, Stderr, Preopens, Descriptor {
     let dirs: ref "core:prelude//Array<Tuple<Descriptor,String>>";
     let dir: i32;
     let sym_result: ref "core:prelude/types.wado//Result<unit,ErrorCode>";
@@ -429,7 +429,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/run"() with Stdout
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("all symlink tests passed"), used: 24 });
 }
 
-fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/test_link_at"(dir) with Stdout, Stderr {
+fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/test_link_at"(dir) with Stdout, Stderr, Descriptor {
     let link_result: ref "core:prelude/types.wado//Result<unit,ErrorCode>";
     let err: ref "wasi:filesystem/types.wado//ErrorCode";
     let link_stat: ref "core:prelude/types.wado//Result<DescriptorStat,ErrorCode>";
@@ -457,15 +457,15 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/test_link_at"(dir)
     }
 }
 
-fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Stdout_write_via_stream"(data) {
+fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Stderr_write_via_stream"(data) {
+fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Stderr_write_via_stream"(data) with Stderr {
     return "wasi/wasi:cli/Stderr::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Preopens_get_directories"() {
+fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Preopens_get_directories"() with Preopens {
     let __outptr: i32;
     let __base: i32;
     let __count: i32;
@@ -510,7 +510,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Preo
     return __result;
 }
 
-fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Descriptor_unlink_file_at"(self, path) {
+fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Descriptor_unlink_file_at"(self, path) with Descriptor {
     let __path_packed: i64;
     let __async_outptr: i32;
     let __subtask: i32;
@@ -627,7 +627,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Desc
     return __result_val;
 }
 
-fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Descriptor_symlink_at"(self, old_path, new_path) {
+fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Descriptor_symlink_at"(self, old_path, new_path) with Descriptor {
     let __old_path_packed: i64;
     let __new_path_packed: i64;
     let __async_outptr: i32;
@@ -753,7 +753,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Desc
     return __result_val;
 }
 
-fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Descriptor_readlink_at"(self, path) {
+fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Descriptor_readlink_at"(self, path) with Descriptor {
     let __path_packed: i64;
     let __async_outptr: i32;
     let __subtask: i32;
@@ -879,7 +879,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Desc
     return __result_val;
 }
 
-fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Descriptor_open_at"(self, path_flags, path, open_flags, flags) {
+fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Descriptor_open_at"(self, path_flags, path, open_flags, flags) with Descriptor {
     let __path_packed: i64;
     let __async_outptr: i32;
     let __params_buf: i32;
@@ -1004,7 +1004,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Desc
     return __result_val;
 }
 
-fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Descriptor_stat"(self) {
+fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Descriptor_stat"(self) with Descriptor {
     let __async_outptr: i32;
     let __subtask: i32;
     let __disc_3: i32;
@@ -1202,7 +1202,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Desc
     return __result_val;
 }
 
-fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Descriptor_read_via_stream"(self, offset) {
+fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Descriptor_read_via_stream"(self, offset) with Descriptor {
     let __outptr: i32;
     let __lifted_result_3: i32;
     let __lifted_result_4: i32;
@@ -1214,7 +1214,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Desc
     return __lifted_result_3, __lifted_result_4;
 }
 
-fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Descriptor_link_at"(self, old_path_flags, old_path, new_descriptor, new_path) {
+fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Descriptor_link_at"(self, old_path_flags, old_path, new_descriptor, new_path) with Descriptor {
     let __old_path_packed: i64;
     let __new_path_packed: i64;
     let __async_outptr: i32;
@@ -1342,7 +1342,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Desc
     return __result_val;
 }
 
-fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Descriptor_stat_at"(self, path_flags, path) {
+fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Descriptor_stat_at"(self, path_flags, path) with Descriptor {
     let __path_packed: i64;
     let __async_outptr: i32;
     let __subtask: i32;
@@ -1644,7 +1644,7 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {
     "wasi/stream-drop-writable"(tx);
 }
 
-fn "core:internal/wait_for_subtask"(packed) {
+fn "core:internal/wait_for_subtask"(packed) with WaitableSet, Subtask {
     let handle: i32;
     let subtask: i32;
     let ws: i32;

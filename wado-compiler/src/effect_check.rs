@@ -26,12 +26,34 @@ struct EffectSignature {
     effects: Vec<EffectRef>,
     params: Vec<EffectParam>,
     is_method: bool,
+    /// `#[ambient]` — the function bypasses caller effect requirements.
+    /// Its own effects are ignored when checking callers.
+    is_ambient: bool,
 }
 
 /// Minimal parameter info needed for effect resolution.
 struct EffectParam {
     name: String,
     type_id: TypeId,
+}
+
+/// Whether a missing `with` entry refers to a resource or a regular effect.
+/// Used to select the diagnostic wording (`missing resource` vs `missing effect`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EffectKind {
+    /// A `resource` declaration — the caller needs the resource capability.
+    Resource,
+    /// An `effect` declaration (or unknown — default wording).
+    Effect,
+}
+
+impl EffectKind {
+    fn noun(self) -> &'static str {
+        match self {
+            EffectKind::Resource => "resource",
+            EffectKind::Effect => "effect",
+        }
+    }
 }
 
 /// Error from effect checking
@@ -41,6 +63,8 @@ pub struct EffectError {
     pub callee: String,
     /// The missing effect
     pub missing_effect: String,
+    /// Whether the missing item is a resource or a regular effect
+    pub kind: EffectKind,
     /// Source location of the call
     pub span: Span,
 }
@@ -49,8 +73,12 @@ impl std::fmt::Display for EffectError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "{}:{}: missing effect '{}' required by '{}'",
-            self.span.line, self.span.column, self.missing_effect, self.callee
+            "{}:{}: missing {} '{}' required by '{}'",
+            self.span.line,
+            self.span.column,
+            self.kind.noun(),
+            self.missing_effect,
+            self.callee
         )
     }
 }
@@ -64,8 +92,10 @@ impl From<EffectError> for crate::compiler_host::Diagnostic {
             severity: Severity::Error,
             code: Code::TypeMismatch,
             message: format!(
-                "missing effect '{}' required by '{}'",
-                e.missing_effect, e.callee
+                "missing {} '{}' required by '{}'",
+                e.kind.noun(),
+                e.missing_effect,
+                e.callee
             ),
             span: Some(DiagnosticSpan::from_span(&e.span, None)),
         }
@@ -155,12 +185,37 @@ struct EffectChecker<'a, H: CompilerHost> {
     mode: CheckMode,
     /// Pre-built index: (`module_source`, `func_name`) -> `EffectSignature`
     func_index: IndexMap<(ModuleSource, String), EffectSignature>,
+    /// Set of `(module_source, resource_name)` pairs for every declared resource.
+    /// Used to inject the resource as an effect for any call to one of its methods.
+    resource_names: IndexSet<(ModuleSource, String)>,
+    /// Effect / resource propagation closure.
+    ///
+    /// For each effect or resource `E`, `closure[E]` is the transitive set
+    /// of resource effects implied by holding `E`. When a function enters a
+    /// `with` scope, every concrete effect in its signature is expanded through
+    /// this map before checking callees. Keyed by the full `EffectRef::Concrete`
+    /// (i.e. `(module_source, name)`), matching how every other resolved
+    /// symbol identifies itself.
+    closure: IndexMap<EffectRef, IndexSet<EffectRef>>,
+    /// Pre-indexed struct field types, keyed by `(module_source, struct_name)`.
+    /// Shared by `build_propagation_closure` and signature-resource inference so
+    /// both paths can walk nested resource references inside struct values.
+    struct_fields: IndexMap<(ModuleSource, String), Vec<TypeId>>,
+    /// Pre-indexed variant case payload types, keyed by `(module_source,
+    /// variant_name)`. Same role as `struct_fields` for variant payloads.
+    variant_payloads: IndexMap<(ModuleSource, String), Vec<TypeId>>,
 }
 
 impl<'a, H: CompilerHost> EffectChecker<'a, H> {
     fn new(modules: &'a IndexMap<ModuleSource, TirModule>, logger: &'a Logger<'a, H>) -> Self {
         let type_table = modules.values().next().map(|m| Rc::clone(&m.type_table));
         let mut func_index = IndexMap::default();
+        let mut resource_names: IndexSet<(ModuleSource, String)> = IndexSet::default();
+        for (module_source, module) in modules {
+            for resource in &module.resources {
+                resource_names.insert((module_source.clone(), resource.name.clone()));
+            }
+        }
         for (module_source, module) in modules {
             for func_rc in &module.functions {
                 let func = func_rc.borrow();
@@ -177,6 +232,7 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
                             })
                             .collect(),
                         is_method: func.is_method(),
+                        is_ambient: func.is_ambient,
                     },
                 );
             }
@@ -195,11 +251,31 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
                                 })
                                 .collect(),
                             is_method: method.is_method(),
+                            is_ambient: method.is_ambient,
                         },
                     );
                 }
             }
         }
+        let mut struct_fields: IndexMap<(ModuleSource, String), Vec<TypeId>> = IndexMap::default();
+        let mut variant_payloads: IndexMap<(ModuleSource, String), Vec<TypeId>> =
+            IndexMap::default();
+        for (module_source, module) in modules {
+            for s in &module.structs {
+                let tids: Vec<TypeId> = s.fields.iter().map(|f| f.type_id).collect();
+                struct_fields.insert((module_source.clone(), s.name.clone()), tids);
+            }
+            for v in &module.variants {
+                let tids: Vec<TypeId> = v.cases.iter().map(|c| c.payload).collect();
+                variant_payloads.insert((module_source.clone(), v.name.clone()), tids);
+            }
+        }
+        let closure = build_propagation_closure(
+            modules,
+            type_table.as_ref(),
+            &struct_fields,
+            &variant_payloads,
+        );
         Self {
             modules,
             logger,
@@ -209,7 +285,97 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
             type_table,
             mode: CheckMode::EffectsOnly,
             func_index,
+            resource_names,
+            closure,
+            struct_fields,
+            variant_payloads,
         }
+    }
+
+    /// Classify an effect reference as a `resource` or `effect` for diagnostic
+    /// wording. Looks up `(module_source, name)` in the resource index; falls
+    /// back to `Effect` for anything not registered as a resource.
+    fn classify(&self, effect: &EffectRef) -> EffectKind {
+        match effect {
+            EffectRef::Concrete {
+                name,
+                module_source,
+            } => {
+                if self
+                    .resource_names
+                    .contains(&(module_source.clone(), name.clone()))
+                {
+                    EffectKind::Resource
+                } else {
+                    EffectKind::Effect
+                }
+            }
+            EffectRef::Param { .. } => EffectKind::Effect,
+        }
+    }
+
+    /// Expand a set of effects through the propagation closure.
+    ///
+    /// For each concrete effect in the input, unions in the closure entries.
+    /// `Param` effects are passed through unchanged — they are resolved at
+    /// call sites via function-typed arguments.
+    fn expand_effects(&self, effects: &IndexSet<EffectRef>) -> IndexSet<EffectRef> {
+        let mut out: IndexSet<EffectRef> = IndexSet::default();
+        for eff in effects {
+            out.insert(eff.clone());
+            if matches!(eff, EffectRef::Concrete { .. })
+                && let Some(extra) = self.closure.get(eff)
+            {
+                for e in extra {
+                    out.insert(e.clone());
+                }
+            }
+        }
+        out
+    }
+
+    /// Resources that appear anywhere in the function's signature — parameter
+    /// types or the return type, recursively through containers, struct fields
+    /// and variant payloads. These are unioned with the declared `with` set so
+    /// `fn f(s: Stream<u8>)` does not need to repeat `with Stream`.
+    fn signature_resources(&self, func: &TirFunction) -> IndexSet<EffectRef> {
+        let mut out: IndexSet<EffectRef> = IndexSet::default();
+        let Some(tt_rc) = &self.type_table else {
+            return out;
+        };
+        let tt = tt_rc.borrow();
+        let mut visited: IndexSet<TypeId> = IndexSet::default();
+        for p in &func.params {
+            collect_resource_refs(
+                p.type_id,
+                &tt,
+                &self.struct_fields,
+                &self.variant_payloads,
+                &mut out,
+                &mut visited,
+            );
+        }
+        collect_resource_refs(
+            func.return_type,
+            &tt,
+            &self.struct_fields,
+            &self.variant_payloads,
+            &mut out,
+            &mut visited,
+        );
+        // Async functions erase `return_type` to unit (the result travels via
+        // `task return`), so walk the declared task return type too.
+        if let Some(task_ret) = func.task_return_type {
+            collect_resource_refs(
+                task_ret,
+                &tt,
+                &self.struct_fields,
+                &self.variant_payloads,
+                &mut out,
+                &mut visited,
+            );
+        }
+        out
     }
 
     /// Check all modules
@@ -266,8 +432,25 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
             return Ok(());
         }
 
-        // Set current context
-        self.current_effects = func.effects.iter().cloned().collect();
+        // `#[ambient]` functions intentionally bypass the effect system so
+        // logging / panic / unreachable work anywhere. Their bodies perform
+        // resource operations (Stream::new, Future::drop) that would otherwise
+        // require `with Stream`, `with Future`, etc.
+        if func.is_ambient {
+            return Ok(());
+        }
+
+        // Set current context. Start with the user-declared `with` set, add
+        // resources that appear anywhere in the signature (param / return types,
+        // recursively through containers, struct fields, variant payloads) so
+        // the user does not need to repeat `with R` when `R` is already visible
+        // in the signature, then expand through the propagation closure so
+        // resources referenced by an effect's operations (e.g.
+        // `Stdout::write_via_stream` references `Stream`, `Future`) are
+        // implicitly admitted.
+        let mut effects: IndexSet<EffectRef> = func.effects.iter().cloned().collect();
+        effects.extend(self.signature_resources(func));
+        self.current_effects = self.expand_effects(&effects);
         self.current_stores = func.stores.iter().cloned().collect();
 
         // Track which parameters are reference types (only for stores checking)
@@ -394,7 +577,19 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
                 for arg in args {
                     self.check_expr(arg)?;
                 }
-                // Check effects from the callee's function type
+                // Check effects from the callee's function type.
+                //
+                // The function type's `effects` list is the exact set the type
+                // checker stored at the closure expression — it is NOT
+                // closure-expanded. `current_effects` *is* expanded at function
+                // entry, so a caller that declares `with Stdout` can invoke an
+                // indirect closure that internally needs `Stream` (via Stdout
+                // propagation). Cases where the function-type effect list
+                // itself should be augmented with propagation (e.g. handing
+                // such a closure further down) are not yet handled; any such
+                // call that actually leaks a resource through propagation
+                // would need to re-resolve the callee's concrete effects
+                // first.
                 if self.mode == CheckMode::EffectsOnly
                     && let Some(tt) = &self.type_table
                 {
@@ -402,9 +597,11 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
                     if let ResolvedType::Function { effects, .. } = tt.get(callee.type_id) {
                         for effect in effects {
                             if !self.current_effects.contains(effect) {
+                                let kind = self.classify(effect);
                                 self.logger.error(EffectError {
                                     callee: "(indirect call)".to_string(),
                                     missing_effect: effect.name().to_string(),
+                                    kind,
                                     span: expr.span,
                                 })?;
                             }
@@ -561,9 +758,11 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
 
         for effect in &resolved_effects {
             if !self.current_effects.contains(effect) {
+                let kind = self.classify(effect);
                 self.logger.error(EffectError {
                     callee: func_ref.name.clone(),
                     missing_effect: effect.name().to_string(),
+                    kind,
                     span,
                 })?;
             }
@@ -704,14 +903,19 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
             }
         }
 
-        // Build resolved effect list: replace param names with concrete effects
+        // Build resolved effect list: replace param names with concrete effects.
+        // Expand concrete effects through the propagation closure so that a
+        // resolved effect param pointing at e.g. `Stdout` also picks up
+        // `Stream`, `Future`, etc. (propagation is applied symmetrically to
+        // caller context; see `check_function`).
         let mut resolved: IndexSet<EffectRef> = IndexSet::default();
         for effect in callee_effects {
             match effect {
                 EffectRef::Param { name } => {
                     if let Some(concrete_set) = effect_param_concrete.get(name) {
-                        for concrete in concrete_set {
-                            resolved.insert(concrete.clone());
+                        let expanded = self.expand_effects(concrete_set);
+                        for concrete in expanded {
+                            resolved.insert(concrete);
                         }
                     }
                 }
@@ -723,14 +927,47 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
         resolved.into_iter().collect()
     }
 
-    /// Get the effects for a function
+    /// Get the effects for a function.
+    ///
+    /// If the call targets a method on a resource type, the resource itself is
+    /// implicitly required as an effect (resources are effects). Resource
+    /// operations are host calls so the caller must declare the resource in
+    /// its `with` clause to use them.
     fn get_function_effects(&self, func_ref: &FunctionRef) -> Vec<EffectRef> {
         let key = (func_ref.module_source.clone(), func_ref.name.clone());
-        if let Some(sig) = self.func_index.get(&key) {
-            sig.effects.clone()
-        } else {
-            Vec::new()
+        // `#[ambient]` callees expose no effects to callers — they bypass the
+        // effect system by design.
+        if self.func_index.get(&key).is_some_and(|sig| sig.is_ambient) {
+            return Vec::new();
         }
+        let mut effects = self
+            .func_index
+            .get(&key)
+            .map(|sig| sig.effects.clone())
+            .unwrap_or_default();
+        if let Some(method_info) = &func_ref.method_info {
+            // Trait methods (`trait_name` is Some) are dispatch through user or
+            // auto-derived trait impls — they are not host operations on the
+            // resource itself, so they don't trigger the resource effect.
+            // Only direct resource operations (constructors, instance, statics
+            // declared in the `resource` block) require the effect.
+            if method_info.trait_name.is_none() {
+                let resource_key = (
+                    func_ref.module_source.clone(),
+                    method_info.base_struct_name.clone(),
+                );
+                if self.resource_names.contains(&resource_key) {
+                    let resource_effect = EffectRef::Concrete {
+                        name: method_info.base_struct_name.clone(),
+                        module_source: func_ref.module_source.clone(),
+                    };
+                    if !effects.contains(&resource_effect) {
+                        effects.push(resource_effect);
+                    }
+                }
+            }
+        }
+        effects
     }
 
     /// Find the effect signature for a function by reference (O(1) lookup)
@@ -1034,6 +1271,231 @@ fn check_pure_stmt<H: CompilerHost>(
     }
 }
 
+/// Build the transitive propagation closure for effects and resources.
+///
+/// An effect (or resource) `E` "propagates" any resource that appears in the
+/// parameter or return types of its operations. For example,
+/// `Stdout::write_via_stream(rx: Stream<u8>) -> Future<...>` makes `Stdout`
+/// propagate `Stream` and `Future`. The closure is then taken over the
+/// `propagates` relation so holding `with Stdout` transitively admits
+/// `Stream`, `StreamWritable`, `Future`, `FutureWritable`.
+///
+/// Returns a map keyed by `EffectRef::Concrete` (i.e. `(module_source, name)`).
+/// Each entry contains the transitively-reachable resources (also
+/// `EffectRef::Concrete`), but does NOT include the effect itself.
+fn build_propagation_closure(
+    modules: &IndexMap<ModuleSource, TirModule>,
+    type_table: Option<&Rc<RefCell<TypeTable>>>,
+    struct_fields: &IndexMap<(ModuleSource, String), Vec<TypeId>>,
+    variant_payloads: &IndexMap<(ModuleSource, String), Vec<TypeId>>,
+) -> IndexMap<EffectRef, IndexSet<EffectRef>> {
+    let mut direct: IndexMap<EffectRef, IndexSet<EffectRef>> = IndexMap::default();
+    let Some(tt_rc) = type_table else {
+        return direct;
+    };
+    let tt = tt_rc.borrow();
+
+    for (module_source, module) in modules {
+        for effect in &module.effects {
+            let mut refs: IndexSet<EffectRef> = IndexSet::default();
+            for op in &effect.operations {
+                for param in &op.params {
+                    collect_resource_refs(
+                        param.type_id,
+                        &tt,
+                        struct_fields,
+                        variant_payloads,
+                        &mut refs,
+                        &mut IndexSet::default(),
+                    );
+                }
+                collect_resource_refs(
+                    op.return_type,
+                    &tt,
+                    struct_fields,
+                    variant_payloads,
+                    &mut refs,
+                    &mut IndexSet::default(),
+                );
+            }
+            // Do not include the effect itself (effects are not resources).
+            let key = EffectRef::Concrete {
+                name: effect.name.clone(),
+                module_source: module_source.clone(),
+            };
+            merge_sets(direct.entry(key).or_default(), &refs);
+        }
+        for resource in &module.resources {
+            let mut refs: IndexSet<EffectRef> = IndexSet::default();
+            for op in &resource.operations {
+                for param in &op.params {
+                    collect_resource_refs(
+                        param.type_id,
+                        &tt,
+                        struct_fields,
+                        variant_payloads,
+                        &mut refs,
+                        &mut IndexSet::default(),
+                    );
+                }
+                collect_resource_refs(
+                    op.return_type,
+                    &tt,
+                    struct_fields,
+                    variant_payloads,
+                    &mut refs,
+                    &mut IndexSet::default(),
+                );
+            }
+            // Drop the self-reference: holding `with R` already implies `R`.
+            let self_ref = EffectRef::Concrete {
+                name: resource.name.clone(),
+                module_source: module_source.clone(),
+            };
+            refs.shift_remove(&self_ref);
+            merge_sets(direct.entry(self_ref).or_default(), &refs);
+        }
+    }
+
+    // Fixpoint: close over `propagates` until no set changes.
+    loop {
+        let mut changed = false;
+        let keys: Vec<EffectRef> = direct.keys().cloned().collect();
+        for key in &keys {
+            let cur = direct.get(key).cloned().unwrap_or_default();
+            let mut merged: IndexSet<EffectRef> = cur.clone();
+            for eff in &cur {
+                if matches!(eff, EffectRef::Concrete { .. })
+                    && let Some(child) = direct.get(eff).cloned()
+                {
+                    for e in &child {
+                        if merged.insert(e.clone()) {
+                            changed = true;
+                        }
+                    }
+                }
+            }
+            if merged.len() != cur.len() {
+                direct.insert(key.clone(), merged);
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+
+    direct
+}
+
+fn merge_sets(dst: &mut IndexSet<EffectRef>, src: &IndexSet<EffectRef>) {
+    for e in src {
+        dst.insert(e.clone());
+    }
+}
+
+/// Walk a type recursively, collecting every resource (`Resource` or
+/// `GenericResource`) reference as an `EffectRef::Concrete`.
+///
+/// Handles nested containers (`Option<T>`, `Result<T,E>`, tuples, `Array<T>`,
+/// function types, refs, newtypes, struct fields, variant case payloads).
+/// Uses `visited` to stop at cycles (e.g. recursive struct types).
+fn collect_resource_refs(
+    type_id: TypeId,
+    tt: &TypeTable,
+    struct_fields: &IndexMap<(ModuleSource, String), Vec<TypeId>>,
+    variant_payloads: &IndexMap<(ModuleSource, String), Vec<TypeId>>,
+    out: &mut IndexSet<EffectRef>,
+    visited: &mut IndexSet<TypeId>,
+) {
+    if !visited.insert(type_id) {
+        return;
+    }
+    let ty = tt.get(type_id);
+    match ty {
+        ResolvedType::Resource {
+            name,
+            module_source,
+        }
+        | ResolvedType::GenericResource {
+            name,
+            module_source,
+            ..
+        } => {
+            out.insert(EffectRef::Concrete {
+                name: name.clone(),
+                module_source: module_source.clone(),
+            });
+            if let ResolvedType::GenericResource { type_args, .. } = ty {
+                for ta in type_args {
+                    collect_resource_refs(*ta, tt, struct_fields, variant_payloads, out, visited);
+                }
+            }
+        }
+        ResolvedType::GenericInstance { type_args, .. } => {
+            for ta in type_args {
+                collect_resource_refs(*ta, tt, struct_fields, variant_payloads, out, visited);
+            }
+        }
+        ResolvedType::Ref(t)
+        | ResolvedType::MutRef(t)
+        | ResolvedType::Reactive(t)
+        | ResolvedType::BuiltinArray(t) => {
+            collect_resource_refs(*t, tt, struct_fields, variant_payloads, out, visited);
+        }
+        ResolvedType::Function {
+            params,
+            return_type,
+            ..
+        } => {
+            for p in params {
+                collect_resource_refs(*p, tt, struct_fields, variant_payloads, out, visited);
+            }
+            collect_resource_refs(
+                *return_type,
+                tt,
+                struct_fields,
+                variant_payloads,
+                out,
+                visited,
+            );
+        }
+        ResolvedType::Newtype { base_type, .. } => {
+            collect_resource_refs(
+                *base_type,
+                tt,
+                struct_fields,
+                variant_payloads,
+                out,
+                visited,
+            );
+        }
+        ResolvedType::Struct {
+            name,
+            module_source,
+            ..
+        } => {
+            if let Some(fields) = struct_fields.get(&(module_source.clone(), name.clone())) {
+                for ft in fields {
+                    collect_resource_refs(*ft, tt, struct_fields, variant_payloads, out, visited);
+                }
+            }
+        }
+        ResolvedType::Variant {
+            name,
+            module_source,
+        } => {
+            if let Some(payloads) = variant_payloads.get(&(module_source.clone(), name.clone())) {
+                for pt in payloads {
+                    collect_resource_refs(*pt, tt, struct_fields, variant_payloads, out, visited);
+                }
+            }
+        }
+        // Primitives, Unit, Never, Enum, Flags, TypeParam, TypePack,
+        // AssocTypeProjection, Unknown, Error — no resource refs.
+        _ => {}
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1043,6 +1505,7 @@ mod tests {
         let error = EffectError {
             callee: "println".to_string(),
             missing_effect: "Stdout".to_string(),
+            kind: EffectKind::Effect,
             span: Span {
                 start: 100,
                 end: 107,

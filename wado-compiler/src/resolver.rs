@@ -431,6 +431,9 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 Item::Effect(effect_decl) => {
                     sources.insert(effect_decl.name.clone(), module_source.clone());
                 }
+                Item::Resource(resource_decl) => {
+                    sources.insert(resource_decl.name.clone(), module_source.clone());
+                }
                 _ => {}
             }
         }
@@ -459,23 +462,46 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     }
                     tir::EffectRef::Param { name: name.clone() }
                 } else if let Some(source) = self.effect_sources.get(name) {
-                    if let Some(use_id) = use_id
-                        && let Some(sym) = self.symbols.lookup_in_module(source, name)
-                    {
-                        self.record_reference_to_key(use_id, sym.defined_at.clone());
-                    }
+                    // Canonicalize: re-exports point at the importing module, but
+                    // identity must match the defining module so two `with Stdout`
+                    // clauses (one importing from `core:cli`, one from `wasi:cli`)
+                    // refer to the same effect.
+                    let canonical = self
+                        .symbols
+                        .lookup_in_module(source, name)
+                        .map(|sym| {
+                            if let Some(use_id) = use_id {
+                                self.record_reference_to_key(use_id, sym.defined_at.clone());
+                            }
+                            sym.defined_at.module.clone()
+                        })
+                        .unwrap_or_else(|| source.clone());
                     tir::EffectRef::Concrete {
                         name: name.clone(),
-                        module_source: source.clone(),
+                        module_source: canonical,
                     }
                 } else {
                     if let Some(use_id) = use_id {
                         self.record_item_reference_by_name(use_id, name);
                     }
-                    // Fallback: effect from current module (local effect declaration)
+                    // Fallback: resolve via the import-aware symbol table so that
+                    // prelude-defined effects/resources (e.g. `Future`, `Stream`)
+                    // canonicalise to their defining module rather than the
+                    // current module. Falls through to `current_module_source`
+                    // only when no symbol exists (genuinely-local declaration).
+                    let canonical = self
+                        .symbols
+                        .lookup(name)
+                        .map(|sym| {
+                            if let Some(use_id) = use_id {
+                                self.record_reference_to_key(use_id, sym.defined_at.clone());
+                            }
+                            sym.defined_at.module.clone()
+                        })
+                        .unwrap_or_else(|| self.current_module_source.clone());
                     tir::EffectRef::Concrete {
                         name: name.clone(),
-                        module_source: self.current_module_source.clone(),
+                        module_source: canonical,
                     }
                 }
             })
@@ -923,6 +949,14 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             span: newtype_decl.span,
                         });
                     }
+                }
+                Item::Effect(effect_decl) => {
+                    let tir_effect = self.resolve_effect_decl(effect_decl);
+                    tir_module.add_effect(tir_effect);
+                }
+                Item::Resource(resource_decl) => {
+                    let tir_resource = self.resolve_resource_decl(resource_decl);
+                    tir_module.add_resource(tir_resource);
                 }
                 // Other items will be added as needed
                 _ => {}

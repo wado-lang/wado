@@ -1,0 +1,16 @@
+// Test: `with TcpSocket` admits TcpSocket::create() and TcpSocket instance methods.
+
+use { println, Stdout } from "core:cli";
+use { TcpSocket, IpAddressFamily } from "wasi:sockets";
+
+fn good() with TcpSocket {
+    let family = IpAddressFamily::Ipv4;
+    let _ = TcpSocket::create(family);
+}
+
+export fn run() with Stdout {
+    println("ok");
+}
+
+__DATA__
+{"stdout_contains": ["ok"]}

@@ -109,7 +109,7 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-fn "wado-compiler/tests/fixtures/resource-method-instance.wado/run"() with Stdout {
+fn "wado-compiler/tests/fixtures/resource-method-instance.wado/run"() with Stdout, TcpSocket {
     let family: "wasi:sockets/types.wado//enum:IpAddressFamily";
     let result: ref "core:prelude/types.wado//Result<TcpSocket,ErrorCode>";
     family = 0;
@@ -121,11 +121,11 @@ fn "wado-compiler/tests/fixtures/resource-method-instance.wado/run"() with Stdou
     }
 }
 
-fn "wado-compiler/tests/fixtures/resource-method-instance.wado/__cm_binding__Stdout_write_via_stream"(data) {
+fn "wado-compiler/tests/fixtures/resource-method-instance.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/resource-method-instance.wado/__cm_binding__TcpSocket_create"(address_family) {
+fn "wado-compiler/tests/fixtures/resource-method-instance.wado/__cm_binding__TcpSocket_create"(address_family) with TcpSocket {
     let __outptr: i32;
     let __disc_2: i32;
     let __result_val: ref "core:prelude/types.wado//Result<TcpSocket,ErrorCode>";

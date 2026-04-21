@@ -1,0 +1,23 @@
+// Test: `with Stdout` transitively admits StreamWritable via Stream propagation.
+// `Stdout::write_via_stream(data: Stream<u8>) -> Future<...>` makes `Stdout`
+// propagate `Stream` + `Future`, and `Stream::new() -> [Stream, StreamWritable]`
+// makes `Stream` propagate `StreamWritable`. Transitivity must fire so that a
+// `with Stdout` caller can invoke `StreamWritable::write` on the writable end
+// returned from `Stream::new()`.
+
+use { println, Stdout } from "core:cli";
+
+// Never called at runtime — we only want to verify effect-check accepts the body.
+pub fn writes_via_stdout() with Stdout {
+    let [rx, tx] = Stream::<u8>::new();
+    tx.write([42 as u8]);
+    tx.drop();
+    rx.drop();
+}
+
+export fn run() with Stdout {
+    println("ok");
+}
+
+__DATA__
+{"stdout_contains": ["ok"]}

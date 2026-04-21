@@ -127,19 +127,19 @@ fn "wado-compiler/tests/fixtures/wasi_random.wado/run"() with Stdout, Random, In
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("all random tests passed"), used: 23 });
 }
 
-fn "wado-compiler/tests/fixtures/wasi_random.wado/__cm_binding__Stdout_write_via_stream"(data) {
+fn "wado-compiler/tests/fixtures/wasi_random.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/wasi_random.wado/__cm_binding__Random_get_random_u64"() {
+fn "wado-compiler/tests/fixtures/wasi_random.wado/__cm_binding__Random_get_random_u64"() with Random {
     return "wasi/wasi:random/Random::get_random_u64"();
 }
 
-fn "wado-compiler/tests/fixtures/wasi_random.wado/__cm_binding__Insecure_get_insecure_random_u64"() {
+fn "wado-compiler/tests/fixtures/wasi_random.wado/__cm_binding__Insecure_get_insecure_random_u64"() with Insecure {
     return "wasi/wasi:random/Insecure::get_insecure_random_u64"();
 }
 
-fn "wado-compiler/tests/fixtures/wasi_random.wado/__cm_binding__InsecureSeed_get_insecure_seed"() {
+fn "wado-compiler/tests/fixtures/wasi_random.wado/__cm_binding__InsecureSeed_get_insecure_seed"() with InsecureSeed {
     let __outptr: i32;
     let __lifted_result_1: i64;
     let __lifted_result_2: i64;

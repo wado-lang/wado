@@ -1398,7 +1398,7 @@ fn "wado-compiler/tests/fixtures/httpbin-get.wado/handle"(request) {
     drop("mem/realloc"(__fw_write_ptr_4, 40, 8, 0));
 }
 
-fn "wado-compiler/tests/fixtures/httpbin-get.wado/__cm_binding__Fields_copy_all"(self) {
+fn "wado-compiler/tests/fixtures/httpbin-get.wado/__cm_binding__Fields_copy_all"(self) with Fields {
     let __outptr: i32;
     let __base_2: i32;
     let __count_3: i32;
@@ -1464,7 +1464,7 @@ fn "wado-compiler/tests/fixtures/httpbin-get.wado/__cm_binding__Fields_copy_all"
     return __result_4;
 }
 
-fn "wado-compiler/tests/fixtures/httpbin-get.wado/__cm_binding__Fields_get"(self, name) {
+fn "wado-compiler/tests/fixtures/httpbin-get.wado/__cm_binding__Fields_get"(self, name) with Fields {
     let __name_packed: i64;
     let __outptr: i32;
     let __base_4: i32;
@@ -1520,7 +1520,7 @@ fn "wado-compiler/tests/fixtures/httpbin-get.wado/__cm_binding__Fields_get"(self
     return __result_6;
 }
 
-fn "wado-compiler/tests/fixtures/httpbin-get.wado/__cm_binding__Request_consume_body"(this, res) {
+fn "wado-compiler/tests/fixtures/httpbin-get.wado/__cm_binding__Request_consume_body"(this, res) with Request {
     let __outptr: i32;
     let __lifted_result_3: i32;
     let __lifted_result_4: i32;
@@ -1532,11 +1532,11 @@ fn "wado-compiler/tests/fixtures/httpbin-get.wado/__cm_binding__Request_consume_
     return __lifted_result_3, __lifted_result_4;
 }
 
-fn "wado-compiler/tests/fixtures/httpbin-get.wado/__cm_binding__Request_get_headers"(self) {
+fn "wado-compiler/tests/fixtures/httpbin-get.wado/__cm_binding__Request_get_headers"(self) with Request {
     return "wasi/wasi:http/Request::get_headers"(self);
 }
 
-fn "wado-compiler/tests/fixtures/httpbin-get.wado/__cm_binding__Request_get_path_with_query"(self) {
+fn "wado-compiler/tests/fixtures/httpbin-get.wado/__cm_binding__Request_get_path_with_query"(self) with Request {
     let __outptr: i32;
     let __disc: i32;
     let __option_result: ref null "core:prelude/string.wado//String";
@@ -1561,7 +1561,7 @@ fn "wado-compiler/tests/fixtures/httpbin-get.wado/__cm_binding__Request_get_path
     return __option_result;
 }
 
-fn "wado-compiler/tests/fixtures/httpbin-get.wado/__cm_binding__Request_get_method"(self) {
+fn "wado-compiler/tests/fixtures/httpbin-get.wado/__cm_binding__Request_get_method"(self) with Request {
     let __outptr: i32;
     let __vdisc: i32;
     let __vresult: ref "wasi:http/types.wado//Method";
@@ -1603,11 +1603,11 @@ fn "wado-compiler/tests/fixtures/httpbin-get.wado/__cm_binding__Request_get_meth
     return __vresult;
 }
 
-fn "wado-compiler/tests/fixtures/httpbin-get.wado/__cm_binding__Fields_new"() {
+fn "wado-compiler/tests/fixtures/httpbin-get.wado/__cm_binding__Fields_new"() with Fields {
     return "wasi/wasi:http/Fields::new"();
 }
 
-fn "wado-compiler/tests/fixtures/httpbin-get.wado/__cm_binding__Fields_append"(self, name, value) {
+fn "wado-compiler/tests/fixtures/httpbin-get.wado/__cm_binding__Fields_append"(self, name, value) with Fields {
     let __name_packed: i64;
     let __value_packed: i64;
     let __outptr: i32;
@@ -1667,7 +1667,7 @@ fn "wado-compiler/tests/fixtures/httpbin-get.wado/__cm_binding__Fields_append"(s
     return __result_val;
 }
 
-fn "wado-compiler/tests/fixtures/httpbin-get.wado/__cm_binding__Response_new"(headers, contents, trailers) {
+fn "wado-compiler/tests/fixtures/httpbin-get.wado/__cm_binding__Response_new"(headers, contents, trailers) with Response {
     let __contents_disc: i32;
     let __contents_inner0: i32;
     let __outptr: i32;
@@ -1686,7 +1686,7 @@ fn "wado-compiler/tests/fixtures/httpbin-get.wado/__cm_binding__Response_new"(he
     return __lifted_result_7, __lifted_result_8;
 }
 
-fn "wado-compiler/tests/fixtures/httpbin-get.wado/__cm_binding__Response_set_status_code"(self, status_code) {
+fn "wado-compiler/tests/fixtures/httpbin-get.wado/__cm_binding__Response_set_status_code"(self, status_code) with Response {
     let __disc: i32;
     let __result_val: ref "core:prelude/types.wado//Result<unit,unit>";
     __disc = "wasi/wasi:http/Response::set_status_code"(self, status_code);
@@ -1796,7 +1796,7 @@ fn "./sub/httpbin_handler.wado/parse_query_params"(query) {
     return params;
 }
 
-fn "./sub/httpbin_handler.wado/headers_to_json"(headers) {
+fn "./sub/httpbin_handler.wado/headers_to_json"(headers) with Fields {
     let all: ref "core:prelude//Array<Tuple<String,Array<u8>>>";
     let map: ref "core:collections//TreeMap<String,Value>";
     let __iter_3: ref "core:prelude/array.wado//ArrayIter<Tuple<FieldName,FieldValue>>";
@@ -1831,7 +1831,7 @@ fn "./sub/httpbin_handler.wado/headers_to_json"(headers) {
     return struct.new "core:json_value//Value::Object" { discriminant: 5, payload_0: map };
 }
 
-fn "./sub/httpbin_handler.wado/get_header"(headers, name) {
+fn "./sub/httpbin_handler.wado/get_header"(headers, name) with Fields {
     let values: ref "core:prelude//Array<Array<u8>>";
     values = "wado-compiler/tests/fixtures/httpbin-get.wado/__cm_binding__Fields_get"(headers, name);
     if values.used == 0 {
@@ -1907,7 +1907,7 @@ fn "./sub/httpbin_handler.wado/parse_status_code"(s) {
     return 1, 0;
 }
 
-fn "./sub/httpbin_handler.wado/build_request_json"(method, path, query, headers, body) {
+fn "./sub/httpbin_handler.wado/build_request_json"(method, path, query, headers, body) with Fields {
     let obj: ref "core:collections//TreeMap<String,Value>";
     let url: ref "core:prelude/string.wado//String";
     let data: ref "core:prelude/string.wado//String";

@@ -11,7 +11,7 @@
 use { Request, Response, ErrorCode, Fields, FieldName, FieldValue, Scheme, Trailers } from "wasi:http";
 use { Client } from "wasi:http/client.wado";
 
-fn send_request(path: String) -> Response {
+fn send_request(path: String) -> Response with Client {
     let headers = Fields::new();
     let _ = headers.append("x-request-id" as FieldName, "req-123".as_bytes() as FieldValue);
 
@@ -51,7 +51,9 @@ fn read_body(resp: Response) -> String {
     return result;
 }
 
-export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+export async fn handle(request: Request) -> Result<Response, ErrorCode>
+    with Client
+{
     // First request: GET /api/a with custom headers
     let resp1 = send_request("/api/a");
     let status1 = resp1.get_status_code();

@@ -1,0 +1,18 @@
+// Test: `with Resource` syntax is accepted — resources are effects.
+// Declares `with TcpSocket` and uses TcpSocket::create(...). This must
+// compile cleanly.
+
+use { println, Stdout } from "core:cli";
+use { TcpSocket, IpAddressFamily } from "wasi:sockets";
+
+fn with_socket() with TcpSocket {
+    let family = IpAddressFamily::Ipv4;
+    let _result = TcpSocket::create(family);
+}
+
+export fn run() with Stdout {
+    println("ok");
+}
+
+__DATA__
+{"stdout_contains": ["ok"]}

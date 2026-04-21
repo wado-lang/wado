@@ -414,15 +414,15 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/run"() with Stdout
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("all dir_ops tests passed"), used: 24 });
 }
 
-fn "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/__cm_binding__Stdout_write_via_stream"(data) {
+fn "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/__cm_binding__Stderr_write_via_stream"(data) {
+fn "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/__cm_binding__Stderr_write_via_stream"(data) with Stderr {
     return "wasi/wasi:cli/Stderr::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/__cm_binding__Preopens_get_directories"() {
+fn "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/__cm_binding__Preopens_get_directories"() with Preopens {
     let __outptr: i32;
     let __base: i32;
     let __count: i32;
@@ -467,7 +467,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/__cm_binding__Preo
     return __result;
 }
 
-fn "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/__cm_binding__Descriptor_remove_directory_at"(self, path) {
+fn "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/__cm_binding__Descriptor_remove_directory_at"(self, path) with Descriptor {
     let __path_packed: i64;
     let __async_outptr: i32;
     let __subtask: i32;
@@ -584,7 +584,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/__cm_binding__Desc
     return __result_val;
 }
 
-fn "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/__cm_binding__Descriptor_create_directory_at"(self, path) {
+fn "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/__cm_binding__Descriptor_create_directory_at"(self, path) with Descriptor {
     let __path_packed: i64;
     let __async_outptr: i32;
     let __subtask: i32;
@@ -701,7 +701,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/__cm_binding__Desc
     return __result_val;
 }
 
-fn "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/__cm_binding__Descriptor_read_directory"(self) {
+fn "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/__cm_binding__Descriptor_read_directory"(self) with Descriptor {
     let __outptr: i32;
     let __lifted_result_2: i32;
     let __lifted_result_3: i32;
@@ -898,7 +898,7 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {
     "wasi/stream-drop-writable"(tx);
 }
 
-fn "core:internal/wait_for_subtask"(packed) {
+fn "core:internal/wait_for_subtask"(packed) with WaitableSet, Subtask {
     let handle: i32;
     let subtask: i32;
     let ws: i32;

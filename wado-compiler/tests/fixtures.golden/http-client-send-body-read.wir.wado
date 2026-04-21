@@ -403,7 +403,7 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/subtask-drop from "wasi/subtask-drop";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-fn "wado-compiler/tests/fixtures/http-client-send-body-read.wado/handle"() {
+fn "wado-compiler/tests/fixtures/http-client-send-body-read.wado/handle"() with Client {
     let headers: i32;
     let trailers_future: i32;
     let trailers_tx: i32;
@@ -981,11 +981,11 @@ fn "wado-compiler/tests/fixtures/http-client-send-body-read.wado/handle"() {
     drop("mem/realloc"(__fw_write_ptr_10, 40, 8, 0));
 }
 
-fn "wado-compiler/tests/fixtures/http-client-send-body-read.wado/__cm_binding__Fields_new"() {
+fn "wado-compiler/tests/fixtures/http-client-send-body-read.wado/__cm_binding__Fields_new"() with Fields {
     return "wasi/wasi:http/Fields::new"();
 }
 
-fn "wado-compiler/tests/fixtures/http-client-send-body-read.wado/__cm_binding__Request_new"(headers, contents, trailers, options) {
+fn "wado-compiler/tests/fixtures/http-client-send-body-read.wado/__cm_binding__Request_new"(headers, contents, trailers, options) with Request {
     let __contents_disc: i32;
     let __contents_inner0: i32;
     let __options_disc: i32;
@@ -1011,7 +1011,7 @@ fn "wado-compiler/tests/fixtures/http-client-send-body-read.wado/__cm_binding__R
     return __lifted_result_11, __lifted_result_12;
 }
 
-fn "wado-compiler/tests/fixtures/http-client-send-body-read.wado/__cm_binding__Request_set_scheme"(self, scheme) {
+fn "wado-compiler/tests/fixtures/http-client-send-body-read.wado/__cm_binding__Request_set_scheme"(self, scheme) with Request {
     let __scheme_disc: i32;
     let __scheme_inner0: i32;
     let __scheme_inner1: i32;
@@ -1049,7 +1049,7 @@ fn "wado-compiler/tests/fixtures/http-client-send-body-read.wado/__cm_binding__R
     return __result_val;
 }
 
-fn "wado-compiler/tests/fixtures/http-client-send-body-read.wado/__cm_binding__Request_set_authority"(self, authority) {
+fn "wado-compiler/tests/fixtures/http-client-send-body-read.wado/__cm_binding__Request_set_authority"(self, authority) with Request {
     let __authority_disc: i32;
     let __authority_inner0: i32;
     let __authority_inner1: i32;
@@ -1074,7 +1074,7 @@ fn "wado-compiler/tests/fixtures/http-client-send-body-read.wado/__cm_binding__R
     return __result_val;
 }
 
-fn "wado-compiler/tests/fixtures/http-client-send-body-read.wado/__cm_binding__Request_set_path_with_query"(self, path_with_query) {
+fn "wado-compiler/tests/fixtures/http-client-send-body-read.wado/__cm_binding__Request_set_path_with_query"(self, path_with_query) with Request {
     let __path_with_query_disc: i32;
     let __path_with_query_inner0: i32;
     let __path_with_query_inner1: i32;
@@ -1099,7 +1099,7 @@ fn "wado-compiler/tests/fixtures/http-client-send-body-read.wado/__cm_binding__R
     return __result_val;
 }
 
-fn "wado-compiler/tests/fixtures/http-client-send-body-read.wado/__cm_binding__Client_send"(request) {
+fn "wado-compiler/tests/fixtures/http-client-send-body-read.wado/__cm_binding__Client_send"(request) with Client {
     let __async_outptr: i32;
     let __subtask: i32;
     let __disc_3: i32;
@@ -1457,7 +1457,7 @@ fn "wado-compiler/tests/fixtures/http-client-send-body-read.wado/__cm_binding__C
     return __result_val;
 }
 
-fn "wado-compiler/tests/fixtures/http-client-send-body-read.wado/__cm_binding__Response_consume_body"(this, res) {
+fn "wado-compiler/tests/fixtures/http-client-send-body-read.wado/__cm_binding__Response_consume_body"(this, res) with Response {
     let __outptr: i32;
     let __lifted_result_3: i32;
     let __lifted_result_4: i32;
@@ -1469,7 +1469,7 @@ fn "wado-compiler/tests/fixtures/http-client-send-body-read.wado/__cm_binding__R
     return __lifted_result_3, __lifted_result_4;
 }
 
-fn "wado-compiler/tests/fixtures/http-client-send-body-read.wado/__cm_binding__Response_new"(headers, contents, trailers) {
+fn "wado-compiler/tests/fixtures/http-client-send-body-read.wado/__cm_binding__Response_new"(headers, contents, trailers) with Response {
     let __contents_disc: i32;
     let __contents_inner0: i32;
     let __outptr: i32;
@@ -1546,7 +1546,7 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {
     "wasi/stream-drop-writable"(tx);
 }
 
-fn "core:internal/wait_for_subtask"(packed) {
+fn "core:internal/wait_for_subtask"(packed) with WaitableSet, Subtask {
     let handle: i32;
     let subtask: i32;
     let ws: i32;

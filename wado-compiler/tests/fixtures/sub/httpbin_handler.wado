@@ -51,7 +51,7 @@ fn parse_query_params(query: String) -> TreeMap<String, Value> {
     return params;
 }
 
-fn headers_to_json(headers: &Fields) -> Value {
+fn headers_to_json(headers: &Fields) -> Value with Fields {
     let all = headers.copy_all();
     let mut map = TreeMap::<String, Value>::new();
     for let entry of all {
@@ -61,7 +61,7 @@ fn headers_to_json(headers: &Fields) -> Value {
     return Value::Object(map);
 }
 
-fn get_header(headers: &Fields, name: String) -> String {
+fn get_header(headers: &Fields, name: String) -> String with Fields {
     let values = headers.get(name as FieldName);
     if values.is_empty() {
         return "";
@@ -99,7 +99,7 @@ fn parse_status_code(s: String) -> Option<u16> {
     return null;
 }
 
-fn build_request_json(method: String, path: String, query: String, headers: &Fields, body: Option<String>) -> String {
+fn build_request_json(method: String, path: String, query: String, headers: &Fields, body: Option<String>) -> String with Fields {
     let mut obj = TreeMap::<String, Value>::new();
     obj["method"] = Value::String(method);
     obj["path"] = Value::String(path);

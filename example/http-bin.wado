@@ -263,7 +263,9 @@ fn echo_if_method(
 
 global HOMEPAGE: String = #include_str("./http-bin-index.html");
 
-export async fn handle(request: Request) -> Result<Response, ErrorCode> with MonotonicClock {
+export async fn handle(request: Request) -> Result<Response, ErrorCode>
+    with MonotonicClock
+{
     let start_mark = MonotonicClock::now();
     let method = request.get_method();
     let scheme = scheme_name(request.get_scheme());

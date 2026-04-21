@@ -10,7 +10,7 @@ use { println, eprintln, Stdout, Stderr } from "core:cli";
 use { Preopens, Descriptor, Filesize, DescriptorType, DescriptorFlags, PathFlags, OpenFlags } from "wasi:filesystem";
 
 
-export fn run() with Stdout, Stderr, Preopens {
+export fn run() with Stdout, Stderr, Preopens, Descriptor {
     let dirs = Preopens::get_directories();
     if dirs.len() == 0 {
         eprintln("no preopened directories available");
@@ -102,7 +102,7 @@ export fn run() with Stdout, Stderr, Preopens {
     println("all symlink tests passed");
 }
 
-fn test_link_at(dir: &Descriptor) with Stdout, Stderr {
+fn test_link_at(dir: &Descriptor) with Stdout, Stderr, Descriptor {
     let link_result = dir.link_at(
         PathFlags::none(),
         "hello.txt",

@@ -22,8 +22,8 @@ use crate::name::LocalMethodName;
 use crate::name::ModuleSource;
 use crate::package::Package;
 use crate::tir::{
-    CallArg, FunctionRef, InlineHint, MonomorphInfo, TirBinaryOp, TirBlock, TirExpr, TirExprKind,
-    TirFunction, TirParam, TirStmt, TirStmtKind, TypeId, TypeTable,
+    CallArg, EffectRef, FunctionRef, InlineHint, MonomorphInfo, TirBinaryOp, TirBlock, TirExpr,
+    TirExprKind, TirFunction, TirParam, TirStmt, TirStmtKind, TypeId, TypeTable,
 };
 
 use super::common::{
@@ -2348,6 +2348,7 @@ fn make_binding_function(
         method_info: None,
         params,
         return_type,
+        task_return_type: None,
         effects: vec![],
         stores: vec![],
         body: Some(body),
@@ -2358,6 +2359,7 @@ fn make_binding_function(
         stores_aliased_locals: IndexSet::default(),
         is_cm_binding: true,
         is_cm_export: false,
+        is_ambient: false,
         inline_hint: InlineHint::Auto,
         comp_features: 0,
         export_name: None,
@@ -2421,6 +2423,7 @@ fn synthesize_adapter(
     func_info: &WasiFunctionInfo,
     wasi_registry: &crate::component_model::WasiRegistry,
     type_table: &RefCell<TypeTable>,
+    owner_module: &ModuleSource,
 ) -> Rc<RefCell<TirFunction>> {
     let name = binding_func_name(&func_info.effect_name, &func_info.method_name);
     let local_name = func_info.local_alias_name();
@@ -3372,14 +3375,50 @@ fn synthesize_adapter(
 
     let body = block(body_stmts);
 
-    make_binding_function(
+    let binding = make_binding_function(
         name,
         params,
         adapter_return_type,
         body,
         next_local,
         local_types,
-    )
+    );
+    // Resources and effects are unified at the effect-system level: every
+    // operation on `<E>` (whether `<E>` is declared as `effect` or `resource`)
+    // requires the caller to hold `with <E>`. The binding for a CM-imported
+    // operation therefore carries its owning name as its single concrete
+    // effect. The propagation closure (built in `effect_check`) walks
+    // operation signatures separately, so additional resources reachable
+    // through `<E>`'s operations are admitted without listing them here.
+    {
+        let mut b = binding.borrow_mut();
+        b.effects.push(EffectRef::Concrete {
+            name: func_info.effect_name.clone(),
+            module_source: owner_module.clone(),
+        });
+    }
+    binding
+}
+
+/// Build a name → module source map for every effect/resource declared in the
+/// loaded TIR modules. The CM binding synthesizer uses this to attach the
+/// owning effect to each generated binding using the same `module_source` the
+/// resolver assigns to user-written `with E` clauses.
+fn effect_owner_module_sources(
+    modules: &IndexMap<ModuleSource, crate::tir::TirModule>,
+) -> IndexMap<String, ModuleSource> {
+    let mut out: IndexMap<String, ModuleSource> = IndexMap::default();
+    for (module_source, module) in modules {
+        for effect in &module.effects {
+            out.entry(effect.name.clone())
+                .or_insert_with(|| module_source.clone());
+        }
+        for resource in &module.resources {
+            out.entry(resource.name.clone())
+                .or_insert_with(|| module_source.clone());
+        }
+    }
+    out
 }
 
 /// Compute flat CM ABI types for an export return type, resolving variant and
@@ -5632,14 +5671,28 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
             .get(&project.entry_module_source)
             .map(|m| m.type_table.clone())
             .unwrap_or_else(|| Rc::new(RefCell::new(TypeTable::new())));
+        // Map effect/resource name → defining module source. Used to attach the
+        // canonical owner as an effect on each generated binding so the
+        // checker's `(module_source, name)` identity matches user-written
+        // `with E` clauses (which the resolver also canonicalises to the
+        // defining module).
+        let owner_sources = effect_owner_module_sources(&project.tir_modules);
         let mut adapters: IndexMap<String, Rc<RefCell<TirFunction>>> = IndexMap::default();
         for qualified_name in &seen_effects {
             if let Some(func_info) = project.wasi_registry.get_function(qualified_name) {
                 let func_info = func_info.clone();
                 let binding_name =
                     binding_func_name(&func_info.effect_name, &func_info.method_name);
-                let adapter =
-                    synthesize_adapter(&func_info, project.wasi_registry, &entry_type_table);
+                let owner_module = owner_sources
+                    .get(&func_info.effect_name)
+                    .cloned()
+                    .unwrap_or_else(|| ModuleSource::wasi(&func_info.package));
+                let adapter = synthesize_adapter(
+                    &func_info,
+                    project.wasi_registry,
+                    &entry_type_table,
+                    &owner_module,
+                );
                 adapters.insert(qualified_name.clone(), adapter.clone());
                 // Also index by binding function name for lookup
                 adapters.insert(binding_name, adapter);
@@ -6454,6 +6507,7 @@ fn synthesize_stream_read_func(
             },
         ],
         return_type: array_type_id,
+        task_return_type: None,
         effects: vec![],
         stores: vec![],
         body: Some(TirBlock {
@@ -6467,6 +6521,7 @@ fn synthesize_stream_read_func(
         stores_aliased_locals: IndexSet::default(),
         is_cm_binding: true,
         is_cm_export: false,
+        is_ambient: false,
         inline_hint: InlineHint::Auto,
         comp_features: 0,
         export_name: None,

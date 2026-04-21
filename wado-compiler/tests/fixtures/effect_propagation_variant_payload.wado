@@ -1,0 +1,32 @@
+// Effect propagation must walk into variant case payloads: declaring
+// `with MyFutures` where an operation returns a user `variant` whose
+// case carries a `Future<i32>` should transitively admit `Future` in
+// the caller.
+//
+// Bug repro: before this test, `collect_resource_refs` skipped
+// `ResolvedType::Variant`, so `Maybe::Just(Future<i32>)` was treated
+// as carrying no resources.
+
+use { println, Stdout } from "core:cli";
+
+variant Maybe {
+    Just(Future<i32>),
+    Nothing,
+}
+
+effect MyFutures {
+    fn get() -> Maybe;
+}
+
+pub fn uses_variant() with MyFutures {
+    let [future_rx, future_tx] = Future::<i32>::new();
+    future_tx.drop();
+    future_rx.drop();
+}
+
+export fn run() with Stdout {
+    println("ok");
+}
+
+__DATA__
+{"stdout_contains": ["ok"]}

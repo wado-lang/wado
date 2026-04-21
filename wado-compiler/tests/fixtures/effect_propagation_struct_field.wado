@@ -1,0 +1,31 @@
+// Effect propagation must walk into struct fields: declaring `with MyIO`
+// where MyIO's operation signature mentions a struct that embeds a
+// `Stream<u8>` should transitively admit `Stream` in the caller.
+//
+// Bug repro: before this test, `collect_resource_refs` skipped
+// `ResolvedType::Struct`, so `Holder` was treated as carrying no
+// resources and callers of `uses_struct` had to declare `with Stream`
+// explicitly even though `with MyIO` should have been enough.
+
+use { println, Stdout } from "core:cli";
+
+struct Holder {
+    pub stream: Stream<u8>,
+}
+
+effect MyIO {
+    fn take() -> Holder;
+}
+
+pub fn uses_struct() with MyIO {
+    let [rx, tx] = Stream::<u8>::new();
+    tx.drop();
+    rx.drop();
+}
+
+export fn run() with Stdout {
+    println("ok");
+}
+
+__DATA__
+{"stdout_contains": ["ok"]}

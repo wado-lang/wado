@@ -1,0 +1,21 @@
+// Test: when a resource type appears in a function's return type, the
+// function implicitly has that resource in its `with` set. The user doesn't
+// need to repeat `with Stream` when the function returns `Stream<u8>`.
+
+use { println, Stdout } from "core:cli";
+
+// No `with Stream` declared — Stream comes from the return type
+// (inside the tuple payload).
+pub fn make_pair() -> [Stream<u8>, StreamWritable<u8>] {
+    return Stream::<u8>::new();
+}
+
+export fn run() with Stdout {
+    let [rx, tx] = make_pair();
+    tx.drop();
+    rx.drop();
+    println("ok");
+}
+
+__DATA__
+{"stdout_contains": ["ok"]}

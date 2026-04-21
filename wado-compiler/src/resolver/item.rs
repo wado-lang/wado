@@ -5,8 +5,8 @@ use crate::compiler_host::CompilerHost;
 use crate::hashmap::IndexSet;
 use crate::name::{LocalMethodName, MethodName, ModuleSource};
 use crate::tir::{
-    TirFunction, TirGlobal, TirParam, TirStruct, TirTest, TirVariantCase, TirVariantDecl, TypeId,
-    TypeTable,
+    TirEffect, TirEffectOp, TirFunction, TirGlobal, TirParam, TirResource, TirStruct, TirTest,
+    TirVariantCase, TirVariantDecl, TypeId, TypeTable,
 };
 
 use super::Resolver;
@@ -132,6 +132,72 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
     }
 
+    /// Resolve the `methods` list of an effect or resource declaration into
+    /// TIR operations. Generic type parameters declared on the enclosing
+    /// resource (e.g. `resource Stream<T>`) are brought into scope before
+    /// resolving each method's params and return type so that `T` maps to a
+    /// proper `TypeParam` rather than `UNKNOWN`.
+    fn resolve_effect_ops(
+        &mut self,
+        type_params: &[ast::GenericParam],
+        methods: &[ast::EffectMethod],
+    ) -> Vec<TirEffectOp> {
+        let mut scope = self.enter_inherited_type_param_scope();
+        scope.trait_ctx.type_params.clear();
+        scope.register_generic_params(type_params, 0);
+
+        let mut ops = Vec::with_capacity(methods.len());
+        for method in methods {
+            let mut params = Vec::with_capacity(method.params.len());
+            for (idx, p) in method.params.iter().enumerate() {
+                if !matches!(p.self_kind, SelfKind::None) {
+                    continue;
+                }
+                let type_id = scope.resolve_type(&p.ty);
+                params.push(TirParam {
+                    name: p.name.clone(),
+                    type_id,
+                    local_index: idx as u32,
+                    is_mut: p.is_mut,
+                    default_expr: None,
+                    span: p.span,
+                });
+            }
+            let return_type = method
+                .return_type
+                .as_ref()
+                .map(|ty| scope.resolve_type(ty))
+                .unwrap_or(TypeTable::UNIT);
+            ops.push(TirEffectOp {
+                name: method.name.clone(),
+                params,
+                return_type,
+                span: method.span,
+            });
+        }
+        ops
+    }
+
+    pub(super) fn resolve_effect_decl(&mut self, decl: &ast::EffectDecl) -> TirEffect {
+        let operations = self.resolve_effect_ops(&[], &decl.methods);
+        TirEffect {
+            name: decl.name.clone(),
+            is_pub: decl.is_pub,
+            operations,
+            span: decl.span,
+        }
+    }
+
+    pub(super) fn resolve_resource_decl(&mut self, decl: &ast::ResourceDecl) -> TirResource {
+        let operations = self.resolve_effect_ops(&decl.type_params, &decl.methods);
+        TirResource {
+            name: decl.name.clone(),
+            is_pub: decl.is_pub,
+            operations,
+            span: decl.span,
+        }
+    }
+
     /// Resolve a global variable declaration
     pub(super) fn resolve_global(&mut self, global_decl: &GlobalDecl) -> Option<TirGlobal> {
         // Resolve the type
@@ -243,6 +309,15 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .find(|a| a.name == "allocator")
             .and_then(|a| a.args.first())
             .map(|a| a.as_str().to_string())
+    }
+
+    /// Extract `#[ambient]` marker from function attributes.
+    /// Ambient functions bypass effect-check propagation to callers: they may
+    /// declare effects for implementation purposes, but callers don't need to
+    /// list those effects. Intended for low-level helpers like `log_stdout`
+    /// that use an implicit ambient capability.
+    pub(super) fn extract_is_ambient(attrs: &[crate::ast::Attribute]) -> bool {
+        attrs.iter().any(|a| a.name == "ambient")
     }
 
     pub(super) fn extract_inline_hint(attrs: &[crate::ast::Attribute]) -> crate::tir::InlineHint {
@@ -507,6 +582,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
             method_info: None,        // Not a method
             params,
             return_type,
+            task_return_type: if func.is_async {
+                Some(declared_return_type)
+            } else {
+                None
+            },
             effects,
             stores: func.stores.clone(),
             body,
@@ -518,6 +598,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             // Scratch local fields - computed by lower phase
             is_cm_binding: false,
             is_cm_export: false,
+            is_ambient: Self::extract_is_ambient(&func.attrs),
             inline_hint: Self::extract_inline_hint(&func.attrs),
             comp_features: extract_comp_features(&func.attrs),
             export_name: Self::extract_export_name(&func.attrs),
@@ -588,6 +669,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             method_info: None,
             params: vec![], // Tests have no parameters
             return_type,
+            task_return_type: None,
             effects: vec![], // Tests can have any effects (they're allowed to do I/O)
             stores: vec![],
             body: Some(body),
@@ -598,6 +680,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             stores_aliased_locals: IndexSet::default(),
             is_cm_binding: false,
             is_cm_export: false,
+            is_ambient: false,
             inline_hint: crate::tir::InlineHint::Auto,
             comp_features: 0,
             export_name: None,
@@ -971,6 +1054,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }),
             params,
             return_type,
+            task_return_type: None,
             effects,
             stores: func.stores.clone(),
             body,
@@ -981,6 +1065,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             stores_aliased_locals: IndexSet::default(),
             is_cm_binding: false,
             is_cm_export: false,
+            is_ambient: Self::extract_is_ambient(&func.attrs),
             inline_hint: Self::extract_inline_hint(&func.attrs),
             comp_features: extract_comp_features(&func.attrs),
             export_name: None,

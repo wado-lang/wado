@@ -47,11 +47,11 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 
-fn "wado-compiler/tests/fixtures/stream-cm-stdin-pipe.wado/__cm_binding__Stdout_write_via_stream"(data) {
+fn "wado-compiler/tests/fixtures/stream-cm-stdin-pipe.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/stream-cm-stdin-pipe.wado/__cm_binding__Stdin_read_via_stream"() {
+fn "wado-compiler/tests/fixtures/stream-cm-stdin-pipe.wado/__cm_binding__Stdin_read_via_stream"() with Stdin {
     let __outptr: i32;
     let __lifted_result_1: i32;
     let __lifted_result_2: i32;

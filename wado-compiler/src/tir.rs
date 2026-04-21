@@ -34,10 +34,12 @@ pub enum TypeParamScope {
 /// the module source where the effect is defined, enabling cross-module
 /// effect identity.
 ///
-/// Equality and hashing are based on the effect name only, not the module source.
-/// This is because effects with the same name but imported from different modules
-/// (e.g., `Stdout` from `core:cli` vs `wasi:cli`) refer to the same effect.
-#[derive(Debug, Clone)]
+/// Identity is `(module_source, name)` for `Concrete` and `name` alone for
+/// `Param` — same as every other resolved symbol in the compiler. The
+/// resolver canonicalises the module source, so `with Stdout` imported from
+/// `wasi:cli` and `core:cli` both end up with `module_source = wasi:cli`
+/// (the defining module) and compare equal.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum EffectRef {
     /// A concrete effect resolved to a module source (e.g., `Stdout` from `wasi:cli`)
     Concrete {
@@ -46,20 +48,6 @@ pub enum EffectRef {
     },
     /// An effect parameter from a generic effect declaration (e.g., `E` in `<effect E>`)
     Param { name: String },
-}
-
-impl PartialEq for EffectRef {
-    fn eq(&self, other: &Self) -> bool {
-        self.name() == other.name()
-    }
-}
-
-impl Eq for EffectRef {}
-
-impl std::hash::Hash for EffectRef {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.name().hash(state);
-    }
 }
 
 impl EffectRef {
@@ -2774,6 +2762,11 @@ pub struct TirFunction {
     pub method_info: Option<LocalMethodName>,
     pub params: Vec<TirParam>,
     pub return_type: TypeId,
+    /// Declared return type for `async fn` (where `return_type` is erased to unit
+    /// because the result is delivered via `task return`). `None` for non-async fns
+    /// and for CM-binding / synthesized wrappers. Preserved so the effect checker
+    /// can infer signature resources from the user-visible return type.
+    pub task_return_type: Option<TypeId>,
     pub effects: Vec<EffectRef>,
     /// Parameter names declared in `stores[...]` — the function may store these references.
     pub stores: Vec<String>,
@@ -2799,6 +2792,12 @@ pub struct TirFunction {
     /// When true, the global initializer (`__initialize_modules`) is injected at the start
     /// of this function's body during lowering.
     pub is_cm_export: bool,
+
+    /// Whether this function is marked `#[ambient]`. Ambient functions are implicitly
+    /// available to callers without requiring matching `with` clauses — they still carry
+    /// effect declarations for documentation / implementation purposes, but the effect
+    /// checker does not propagate those requirements to callers.
+    pub is_ambient: bool,
 
     /// Inline hint from `#[inline]`, `#[inline(always)]`, or `#[inline(never)]` attributes.
     pub inline_hint: InlineHint,
@@ -3021,6 +3020,20 @@ pub struct TirEffectOp {
     pub span: Span,
 }
 
+/// Resource declaration captured in TIR for effect propagation.
+///
+/// Resources are effects in Wado's effect system: every operation on a
+/// resource type requires the resource to be in scope. The `operations`
+/// list mirrors `TirEffect` so the propagation closure builder can treat
+/// effects and resources uniformly.
+#[derive(Debug, Clone)]
+pub struct TirResource {
+    pub name: String,
+    pub is_pub: bool,
+    pub operations: Vec<TirEffectOp>,
+    pub span: Span,
+}
+
 /// Trait declaration
 #[derive(Debug, Clone)]
 pub struct TirTrait {
@@ -3157,6 +3170,7 @@ pub struct TirModule {
     pub variants: Vec<TirVariantDecl>,
     pub newtypes: Vec<TirNewtype>,
     pub effects: Vec<TirEffect>,
+    pub resources: Vec<TirResource>,
     pub traits: Vec<TirTrait>,
     pub impls: Vec<TirImpl>,
     /// `impl Trait for Type;` — synthesis requests (populated by resolver, consumed by synthesis)
@@ -3201,6 +3215,7 @@ impl TirModule {
             variants: Vec::new(),
             newtypes: Vec::new(),
             effects: Vec::new(),
+            resources: Vec::new(),
             traits: Vec::new(),
             impls: Vec::new(),
             synthesis_requests: Vec::new(),
@@ -3234,6 +3249,7 @@ impl TirModule {
             variants: Vec::new(),
             newtypes: Vec::new(),
             effects: Vec::new(),
+            resources: Vec::new(),
             traits: Vec::new(),
             impls: Vec::new(),
             synthesis_requests: Vec::new(),
@@ -3285,6 +3301,10 @@ impl TirModule {
 
     pub fn add_effect(&mut self, effect: TirEffect) {
         self.effects.push(effect);
+    }
+
+    pub fn add_resource(&mut self, resource: TirResource) {
+        self.resources.push(resource);
     }
 
     pub fn add_trait(&mut self, trait_decl: TirTrait) {

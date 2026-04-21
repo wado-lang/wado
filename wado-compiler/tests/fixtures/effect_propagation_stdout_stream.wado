@@ -1,0 +1,20 @@
+// Test: declaring `with Stdout` implicitly admits the resources that appear in
+// its operation signatures (Stream, Future, StreamWritable, FutureWritable).
+// Without propagation, a user writing `with Stdout` would need to repeat every
+// transitively-required resource by hand.
+
+use { println, Stdout } from "core:cli";
+
+pub fn writer() with Stdout {
+    let [rx, tx] = Stream::<u8>::new();
+    tx.drop();
+    rx.drop();
+}
+
+export fn run() with Stdout {
+    writer();
+    println("ok");
+}
+
+__DATA__
+{"stdout_contains": ["ok"]}

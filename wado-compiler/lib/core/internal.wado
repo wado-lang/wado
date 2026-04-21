@@ -54,7 +54,7 @@ pub fn write_string_to_stream(tx: StreamWritable<u8>, message: String, add_newli
 /// If the upper 28 bits (handle) are nonzero, an async task is in flight.
 /// A subtask transitions through Starting → Started → Returned. Each call to
 /// waitable-set.wait delivers one transition, so we must loop until RETURNED.
-pub fn wait_for_subtask(packed: i32) {
+pub fn wait_for_subtask(packed: i32) with WaitableSet, Subtask {
     let handle = packed >> 4;
     if handle != 0 {
         let subtask = handle as Subtask;
@@ -82,6 +82,7 @@ pub fn drop_cli_write_future(future: Future<Result<(), CliErrorCode>>) {
 /// Logs a message with newline to stdout (ambient, no effect required).
 /// Uses builtin::call_indirect_* to bypass the effect system — this is
 /// intentional for logging/debugging which must work without effects.
+#[ambient]
 pub fn log_stdout(message: String) {
     let [rx, tx] = Stream::<u8>::new();
 
@@ -93,6 +94,7 @@ pub fn log_stdout(message: String) {
 /// Logs a message with newline to stderr (ambient, no effect required).
 /// Uses builtin::call_indirect_* to bypass the effect system — this is
 /// intentional for logging/debugging which must work without effects.
+#[ambient]
 pub fn log_stderr(message: String) {
     let [rx, tx] = Stream::<u8>::new();
 

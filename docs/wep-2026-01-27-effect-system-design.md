@@ -137,7 +137,7 @@ See also: [WIT and Wado Mapping](./wep-2026-01-29-wit-wado-mapping.md) for how e
 
 ### Resource Types as Effects
 
-- [ ] Not yet implemented.
+- [x] Implemented.
 
 Resource types (`resource`) are capabilities. Every operation on a resource (constructors, methods, statics) is a host call that requires the host to provide the implementation. Therefore, resource types are effects: using any operation on a resource type requires that the resource is available in the current effect scope.
 
@@ -167,7 +167,7 @@ Note: `Stream` and `Future` are CM canonical builtins, but their operations (`st
 
 ### Effect Propagation
 
-- [ ] Not yet implemented. Depends on resource-as-effect.
+- [x] Implemented. Depends on resource-as-effect.
 
 When an effect operation's signature contains resource types, those resource effects are automatically available to the caller. This propagation is transitive.
 
@@ -229,6 +229,51 @@ with Exit         → (nothing)   // exit(Result<(), ()>)
 
 Only resource types (`resource` keyword) trigger propagation. Structs, enums, variants, and primitives do not.
 
+### Signature-Resource Inference
+
+- [x] Implemented.
+
+Resources that appear in a function's own parameter types or return type do not need to be repeated in `with`. They are inferred. This mirrors effect propagation but applies to the function's own signature rather than to an effect's operations.
+
+The rule: if a resource type `R` appears anywhere in a function's parameter types, return type (including the declared return type of an `async fn` that erases to unit through `task return`), or reachable via newtypes, containers (`Option`, `Result`, tuples, `Array<T>`, `&T`, `&mut T`), struct fields, variant case payloads, or function types, then `R` is unioned into the function's declared `with` set before effect checking. Propagation (above) then runs over the union, so transitive resources (`Stream` → `StreamWritable`, etc.) also become available.
+
+```wado
+// `s: Stream<u8>` puts Stream (and transitively StreamWritable) in scope.
+// No `with Stream` / `with StreamWritable` needed.
+fn consume(s: Stream<u8>) {
+    let [rx, tx] = Stream::<u8>::new();
+    tx.drop();
+    rx.drop();
+    s.drop();
+}
+
+// Return type counts too. `make_pair` sees Stream / StreamWritable
+// through the tuple payload of the return type.
+fn make_pair() -> [Stream<u8>, StreamWritable<u8>] {
+    return Stream::<u8>::new();
+}
+
+// `&Headers` is a newtype of `Fields` (a resource). Signature inference
+// unwraps the newtype, so `with Fields` is not needed.
+fn headers_to_map(headers: &Headers) -> TreeMap<String, String> { ... }
+
+// Async handlers: the declared return type `Result<Response, ErrorCode>`
+// is erased to unit at the Wasm boundary (the result travels via
+// `task return`), but the effect checker still walks it, so
+// `with Response` is not needed.
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    // Request (param), Response + ErrorCode (task return) all in scope.
+    ...
+}
+```
+
+This is the Wado analogue of Scala 3 Caprese's capture inference: a capability named in the signature does not need to be repeated in the capture set. Unlike Caprese, Wado has no subtyping on effect sets — inference only unions, never narrows.
+
+Limitations — these require separate work and are pinned by `#![TODO]` fixtures today:
+
+- Closure body effects (`effect_propagation_indirect.wado`): a closure body that uses `Stream::new()` assigned to a declared `fn() with Stdout` cannot be rescued, because the closure's signature doesn't name `Stream`. Requires effect-set propagation-closure equivalence at the closure-typing site.
+- Generic body effects (`effect_propagation_generic_body.wado`): a `<effect E>` function body that uses a concrete resource cannot be rescued by signature inference either. Requires body-effect inference + generic monomorphization.
+
 ### Handlers
 
 See [WEP: Effect Handler](./wep-2026-04-11-effect-handler.md) for the full handler design including syntax, resume semantics, MockCM, handler bundling, and testing patterns.
@@ -249,6 +294,7 @@ fn register(data: &Data) -> Handle with Stdout, stores[data] {
 - Effect violations produce clear compile errors
 - Resource types are effects: every resource operation requires the resource to be in scope
 - Effect propagation eliminates verbosity: `with Stdout` automatically grants `Stream`, `Future`, etc.
+- Signature-resource inference removes the need to repeat resources that already appear in parameter or return types (including `async fn` task return types and newtypes of resources)
 - Generic effects (`<effect E>`) support higher-order functions without effect polymorphism complexity
 - No existing language has signature-based effect propagation; this is a novel design
 - See [WEP: Effect Handler](./wep-2026-04-11-effect-handler.md) for handler-specific consequences
