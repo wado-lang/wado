@@ -1194,7 +1194,7 @@ pub(super) struct ArithmeticTraitInfo {
 /// [rtq]: crate::resolver::Resolver::resolve_trait_method_for_op
 /// [bop]: crate::resolver::Resolver::build_trait_op_method_call_on_resolved
 pub(super) struct ResolvedTraitMethod {
-    /// Trait name (e.g., "Eq", "Ord", "Add", "Shl", "Neg", "BitNot").
+    /// Trait name (e.g., "Eq", "Ord", "Add", "Shl", "Neg", "`BitNot`").
     pub(super) trait_name: String,
     /// Method name (e.g., "eq", "cmp", "add", "shl", "neg", "bitnot").
     pub(super) method_name: String,

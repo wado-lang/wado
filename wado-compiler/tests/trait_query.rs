@@ -50,7 +50,7 @@ fn compile_err_contains(source: &str, needle: &str) -> String {
 #[test]
 fn auto_derived_eq_operator_on_struct() {
     compile_ok(
-        r#"
+        r"
 struct P { x: i32 }
 
 export fn run() {
@@ -58,7 +58,7 @@ export fn run() {
     let b = P { x: 1 };
     assert a == b;
 }
-"#,
+",
     );
 }
 
@@ -68,7 +68,7 @@ fn auto_derived_eq_method_call_on_struct() {
     // "no method 'eq' found on type 'P'" because
     // find_trait_method_for_type ignored auto-derive eligibility.
     compile_ok(
-        r#"
+        r"
 struct P { x: i32 }
 
 export fn run() {
@@ -76,7 +76,7 @@ export fn run() {
     let b = P { x: 1 };
     assert a.eq(&b);
 }
-"#,
+",
     );
 }
 
@@ -86,14 +86,14 @@ fn auto_derived_eq_method_rejects_wrong_arg_type() {
     // = [&P], so resolve_method_call's arg typecheck catches the
     // mismatch at resolve time (no ICE).
     compile_err_contains(
-        r#"
+        r"
 struct P { x: i32 }
 
 export fn run() {
     let a = P { x: 1 };
     let _ = a.eq(&42);
 }
-"#,
+",
         "type mismatch",
     );
 }
@@ -101,7 +101,7 @@ export fn run() {
 #[test]
 fn auto_derived_ord_operator_on_struct() {
     compile_ok(
-        r#"
+        r"
 struct P { x: i32 }
 
 export fn run() {
@@ -110,7 +110,7 @@ export fn run() {
     assert a < b;
     assert !(a > b);
 }
-"#,
+",
     );
 }
 
@@ -125,13 +125,13 @@ fn user_generic_eq_direct_method_call_succeeds() {
     // directly.  Uses the Result type from the prelude so no explicit
     // impl is needed in the test source.
     compile_ok(
-        r#"
+        r"
 export fn run() {
     let r1: Result<i32, i32> = Result::Ok(1);
     let r2: Result<i32, i32> = Result::Ok(1);
     assert r1.eq(&r2);
 }
-"#,
+",
     );
 }
 
@@ -180,7 +180,7 @@ fn type_param_bounded_eq_dispatch() {
     // operator path goes through the type-param branch of
     // resolve_binary.
     compile_ok(
-        r#"
+        r"
 fn both_equal<T: Eq>(a: T, b: T, c: T) -> bool {
     return a == b && b == c;
 }
@@ -189,7 +189,7 @@ export fn run() {
     let ok = both_equal::<i32>(1, 1, 1);
     assert ok;
 }
-"#,
+",
     );
 }
 
@@ -209,7 +209,7 @@ fn operator_on_fn_type_gives_targeted_error() {
     // reaching the primitive `TirExprKind::Binary` construction.  Before
     // the fix in stage 7a this ICEd at codegen validation.
     compile_err_contains(
-        r#"
+        r"
 fn takes_fn(f: fn() -> i32, g: fn() -> i32) -> bool {
     return f == g;
 }
@@ -217,7 +217,7 @@ fn takes_fn(f: fn() -> i32, g: fn() -> i32) -> bool {
 export fn run() {
     let _ = takes_fn(|| 1, || 2);
 }
-"#,
+",
         "cannot be applied",
     );
 }
@@ -233,26 +233,26 @@ fn unary_neg_dispatches_through_trait_subsystem() {
     // pipeline as binary operators.  The builder's zero-arg branch
     // (`resolved.param_types.is_empty()`) runs for this case.
     compile_ok(
-        r#"
+        r"
 export fn run() {
     let x: i128 = 5;
     let y: i128 = -x;
     assert y == (-(5 as i128));
 }
-"#,
+",
     );
 }
 
 #[test]
 fn unary_bitnot_dispatches_through_trait_subsystem() {
     compile_ok(
-        r#"
+        r"
 export fn run() {
     let x: i128 = 0;
     let y: i128 = ~x;
     assert y == (-(1 as i128));
 }
-"#,
+",
     );
 }
 
@@ -262,12 +262,12 @@ fn shift_operator_accepts_u32_rhs() {
     // in the prelude — use that to confirm the subsystem accepts
     // concrete rhs types (not `&Self`) without wrapping in `&`.
     compile_ok(
-        r#"
+        r"
 export fn run() {
     let x: i128 = 1;
     let shifted: i128 = x << 4;
     assert shifted == (16 as i128);
 }
-"#,
+",
     );
 }

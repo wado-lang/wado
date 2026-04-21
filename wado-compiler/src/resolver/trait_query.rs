@@ -1033,8 +1033,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
     }
 
     /// Single entry point for resolving a trait method that a binary operator
-    /// dispatches to (Eq / Ord / Add / Sub / Mul / Div / Rem / BitAnd / BitOr /
-    /// BitXor / Shl / Shr). Produces a fully-populated
+    /// dispatches to (Eq / Ord / Add / Sub / Mul / Div / Rem / `BitAnd` / `BitOr` /
+    /// `BitXor` / Shl / Shr). Produces a fully-populated
     /// [`ResolvedTraitMethod`] with the rhs type already substituted, so
     /// callers need not reach into the underlying `find_*_trait_impl`
     /// family and cannot forget to wire `rhs_type` through the typecheck.

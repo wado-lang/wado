@@ -287,7 +287,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         impl_name: name.clone(),
                         self_kind: info.self_kind,
                         return_type: info.return_type,
-                        param_types: info.param_types.clone(),
+                        param_types: info.param_types,
                         is_type_param_receiver: true,
                     };
                     let call = self.build_trait_op_method_call_on_resolved(
@@ -320,7 +320,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         impl_name: name.clone(),
                         self_kind: info.self_kind,
                         return_type: info.return_type,
-                        param_types: info.param_types.clone(),
+                        param_types: info.param_types,
                         is_type_param_receiver: true,
                     };
                     let cmp_call = self.build_trait_op_method_call_on_resolved(
@@ -442,7 +442,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         impl_name: name.clone(),
                         self_kind: info.self_kind,
                         return_type: operand_type_id,
-                        param_types: info.param_types.clone(),
+                        param_types: info.param_types,
                         is_type_param_receiver: true,
                     };
                     return self.build_trait_op_method_call_on_resolved(

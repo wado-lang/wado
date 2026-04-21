@@ -2121,7 +2121,7 @@ impl CallArg {
 /// callee's declared parameter types.
 ///
 /// Post-resolve phases (monomorphize / lower / optimize / codegen) still
-/// rebuild MethodCall nodes legitimately; they do so via the same
+/// rebuild `MethodCall` nodes legitimately; they do so via the same
 /// constructor, which is pub(crate) and therefore available only inside
 /// the compiler.
 #[derive(Debug, Clone)]

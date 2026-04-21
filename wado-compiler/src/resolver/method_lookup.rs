@@ -3226,7 +3226,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
     /// it flows into TIR".  Typecheck is the caller's responsibility —
     /// the helper exists so that any future machine-enforced invariant
     /// (e.g. privatizing the enum variant's fields, adding a debug
-    /// assertion, wiring a LocalMethodName witness type) can plug in
+    /// assertion, wiring a `LocalMethodName` witness type) can plug in
     /// here without having to chase down scattered `TirExprKind::MethodCall
     /// { … }` literals.
     ///
