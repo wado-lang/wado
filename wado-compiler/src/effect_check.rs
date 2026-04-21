@@ -257,8 +257,7 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
                 }
             }
         }
-        let mut struct_fields: IndexMap<(ModuleSource, String), Vec<TypeId>> =
-            IndexMap::default();
+        let mut struct_fields: IndexMap<(ModuleSource, String), Vec<TypeId>> = IndexMap::default();
         let mut variant_payloads: IndexMap<(ModuleSource, String), Vec<TypeId>> =
             IndexMap::default();
         for (module_source, module) in modules {
@@ -1304,8 +1303,8 @@ fn build_propagation_closure(
                     collect_resource_refs(
                         param.type_id,
                         &tt,
-                        &struct_fields,
-                        &variant_payloads,
+                        struct_fields,
+                        variant_payloads,
                         &mut refs,
                         &mut IndexSet::default(),
                     );
@@ -1313,8 +1312,8 @@ fn build_propagation_closure(
                 collect_resource_refs(
                     op.return_type,
                     &tt,
-                    &struct_fields,
-                    &variant_payloads,
+                    struct_fields,
+                    variant_payloads,
                     &mut refs,
                     &mut IndexSet::default(),
                 );
@@ -1333,8 +1332,8 @@ fn build_propagation_closure(
                     collect_resource_refs(
                         param.type_id,
                         &tt,
-                        &struct_fields,
-                        &variant_payloads,
+                        struct_fields,
+                        variant_payloads,
                         &mut refs,
                         &mut IndexSet::default(),
                     );
@@ -1342,8 +1341,8 @@ fn build_propagation_closure(
                 collect_resource_refs(
                     op.return_type,
                     &tt,
-                    &struct_fields,
-                    &variant_payloads,
+                    struct_fields,
+                    variant_payloads,
                     &mut refs,
                     &mut IndexSet::default(),
                 );
