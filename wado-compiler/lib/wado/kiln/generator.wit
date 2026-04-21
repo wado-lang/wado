@@ -1,0 +1,63 @@
+package wado:kiln@0.1.0;
+
+interface host {
+    read-file: func(path: string) -> result<list<u8>, host-error>;
+
+    emit-diagnostic: func(diagnostic: diagnostic);
+
+    variant host-error {
+        not-found,
+        permission-denied,
+        io(string),
+    }
+
+    record diagnostic {
+        level: diagnostic-level,
+        span: option<source-span>,
+        message: string,
+    }
+
+    enum diagnostic-level { error, warning, info, hint }
+
+    record source-span {
+        path: string,
+        byte-start: u32,
+        byte-end: u32,
+    }
+}
+
+interface types {
+    record input-file {
+        path: string,
+        content: list<u8>,
+    }
+
+    record request {
+        primary: input-file,
+        inputs: list<input-file>,
+        options: list<u8>,
+    }
+
+    record output-file {
+        path: string,
+        content: string,
+        is-entry: bool,
+    }
+
+    record response {
+        files: list<output-file>,
+    }
+
+    variant error {
+        invalid-schema(string),
+        unsupported(string),
+        other(string),
+    }
+}
+
+world generator {
+    import host;
+    use types.{request, response, error};
+
+    export generate: func(req: request) -> result<response, error>;
+}

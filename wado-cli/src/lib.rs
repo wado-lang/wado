@@ -19,6 +19,7 @@ pub mod doc;
 pub mod dump;
 pub mod format;
 pub mod init;
+pub mod kiln_runtime;
 pub mod lsp;
 pub mod manifest;
 pub mod query;

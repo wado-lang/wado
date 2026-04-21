@@ -4,31 +4,39 @@
 //! phase-tracking timestamps, log-level filtering, and stderr printing.
 
 use std::path::PathBuf;
+use std::sync::{Arc, OnceLock};
 use std::time::Instant;
 
-use wado_compiler::{Code, CompilerHost, Diagnostic, LogLevel, Severity, SourceError};
+use wado_compiler::{
+    Code, CompilerHost, Diagnostic, GeneratorRequest, GeneratorResponse, GeneratorRunnerError,
+    LogLevel, Severity, SourceError,
+};
+
+use crate::kiln_runtime::{self, KilnRunPolicy};
+use crate::runtime::{ProfileMode, create_engine};
 
 /// Filesystem-based compiler host for the CLI.
 ///
 /// Loads sources and collects diagnostics via an inner
 /// [`wado_lsp::FilesystemCompilerHost`], then layers stderr printing with
 /// timestamps and a log-level filter on top.
-#[derive(Debug)]
 pub struct FilesystemCompilerHost {
-    inner: wado_lsp::FilesystemCompilerHost,
+    inner: Arc<wado_lsp::FilesystemCompilerHost>,
     print_diagnostics: bool,
     log_level: LogLevel,
     start_time: Instant,
+    kiln_engine: OnceLock<wasmtime::Engine>,
 }
 
 impl FilesystemCompilerHost {
     #[must_use]
     pub fn new(base_path: PathBuf) -> Self {
         Self {
-            inner: wado_lsp::FilesystemCompilerHost::new(base_path),
+            inner: Arc::new(wado_lsp::FilesystemCompilerHost::new(base_path)),
             print_diagnostics: true,
             log_level: LogLevel::Info,
             start_time: Instant::now(),
+            kiln_engine: OnceLock::new(),
         }
     }
 
@@ -37,20 +45,22 @@ impl FilesystemCompilerHost {
     #[must_use]
     pub fn silent(base_path: PathBuf) -> Self {
         Self {
-            inner: wado_lsp::FilesystemCompilerHost::new(base_path),
+            inner: Arc::new(wado_lsp::FilesystemCompilerHost::new(base_path)),
             print_diagnostics: false,
             log_level: LogLevel::Off,
             start_time: Instant::now(),
+            kiln_engine: OnceLock::new(),
         }
     }
 
     #[must_use]
     pub fn with_log_level(base_path: PathBuf, log_level: LogLevel) -> Self {
         Self {
-            inner: wado_lsp::FilesystemCompilerHost::new(base_path),
+            inner: Arc::new(wado_lsp::FilesystemCompilerHost::new(base_path)),
             print_diagnostics: true,
             log_level,
             start_time: Instant::now(),
+            kiln_engine: OnceLock::new(),
         }
     }
 
@@ -133,5 +143,27 @@ impl CompilerHost for FilesystemCompilerHost {
             eprintln!("{formatted}");
         }
         self.inner.collect_diagnostic(diagnostic);
+    }
+
+    async fn run_generator(
+        &self,
+        component_wasm: &[u8],
+        request: GeneratorRequest,
+    ) -> Result<GeneratorResponse, GeneratorRunnerError> {
+        let engine = self
+            .kiln_engine
+            .get_or_init(|| {
+                create_engine(wasmtime::OptLevel::Speed, &ProfileMode::None)
+                    .expect("failed to create kiln wasmtime engine")
+            })
+            .clone();
+        kiln_runtime::run_generator(
+            &engine,
+            self.inner.clone(),
+            component_wasm,
+            request,
+            KilnRunPolicy::default(),
+        )
+        .await
     }
 }
