@@ -1757,6 +1757,31 @@ fn parse_int_literal(text: &String) -> i32 {
     return value;
 }
 
+/// Syntactic parse only. Turns a `.g4` source string into a `Grammar` IR
+/// without running the semantic rule-reference resolution pass — mirrors
+/// ANTLR4's `ANTLRParser.g`, which accepts any syntactically well-formed
+/// grammar and leaves symbol resolution to a later phase.
+///
+/// The parser still rejects mistakes that can be caught locally during a
+/// single pass: duplicate rule names (B1), a `mode X;` declaration inside
+/// a `parser grammar`, `~` applied to something that isn't a set (B5),
+/// unknown lexer commands (B7), and `<assoc=…>` values other than `left`
+/// / `right` (B6). These are structural / lexical errors, not
+/// cross-rule symbol lookups.
+///
+/// Use `parse` when the translation unit deliberately defers symbols to
+/// a sibling grammar:
+///   - a `parser grammar` that pulls tokens from its matching `lexer
+///     grammar` (they're merged by `merge_grammars` before codegen).
+///   - a combined grammar that uses `tokenVocab` / `import` to bring in
+///     rules from elsewhere.
+///   - minimal test fixtures that intentionally leave references
+///     dangling.
+///
+/// If you want the full ANTLR4-tool contract — including rejection of
+/// references to undefined rules / tokens — call `parse_checked`
+/// instead, or follow `parse` with `G4Parser::check_references` on the
+/// merged grammar.
 pub fn parse(input: String) -> Result<Grammar, ParseError> {
     let chars: Array<char> = input.chars().collect();
     let tokens = tokenize(input);
@@ -1764,15 +1789,27 @@ pub fn parse(input: String) -> Result<Grammar, ParseError> {
     return parser.parse_grammar();
 }
 
-/// Parse and run the semantic rule-reference checks (ANTLR4
-/// `SymbolChecks.checkForUnresolvedRuleRefs` equivalent). Prefer this
-/// over bare `parse` when the input is expected to be a complete
-/// grammar translation unit — i.e. a combined grammar, a `lexer grammar`
-/// with self-contained lexer refs, or a `parser grammar` whose parser
-/// refs resolve against its own rule table. Split-grammar halves that
-/// rely on a sibling translation unit (e.g. a parser grammar using
-/// tokens defined in its matching lexer grammar) should still go
-/// through `parse` and be validated after `merge_grammars`.
+/// Parse + semantic rule-reference resolution, in one call. Equivalent
+/// to `parse` followed by `G4Parser::check_references`, and mirrors
+/// ANTLR4's full tool-level contract (`ANTLRParser.g` +
+/// `SymbolChecks.checkForUnresolvedRuleRefs`).
+///
+/// Rejects grammars that `parse` would accept but where a parser-rule
+/// ref, token ref, or lexer-rule ref does not resolve against the rule
+/// table of the current translation unit. The check is
+/// grammar-kind-aware:
+///   - combined grammar: parser refs, token refs, and lexer-to-lexer
+///     refs are all resolvable locally and all validated.
+///   - `lexer grammar`: only lexer-to-lexer refs can be resolved
+///     locally; there are no parser / token refs to check.
+///   - `parser grammar`: only parser-rule refs can be resolved
+///     locally; token refs come from the matching lexer grammar at
+///     merge time and are skipped.
+///
+/// Prefer this over bare `parse` whenever the input is a complete,
+/// self-contained grammar translation unit. Split-grammar halves that
+/// rely on a sibling translation unit should still go through `parse`
+/// and call `check_references` after `merge_grammars`.
 pub fn parse_checked(input: String) -> Result<Grammar, ParseError> {
     let chars: Array<char> = input.chars().collect();
     let tokens = tokenize(input);
