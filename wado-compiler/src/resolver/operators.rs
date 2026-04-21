@@ -199,6 +199,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         });
                         return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, binary.span);
                     };
+                    // `Eq::eq(&self, other: &Self)` requires both sides to have the same type.
+                    // Without this check, a type mismatch slips through to codegen and surfaces
+                    // as an ICE on invalid Wasm.
+                    if let Some(err) =
+                        self.check_trait_op_rhs_type(left.type_id, right.type_id, binary.span)
+                    {
+                        return err;
+                    }
                     return self.build_eq_method_call(
                         left,
                         right,
@@ -245,6 +253,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         });
                         return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, binary.span);
                     };
+                    // `Ord::cmp(&self, other: &Self)` requires both sides to have the same type.
+                    if let Some(err) =
+                        self.check_trait_op_rhs_type(left.type_id, right.type_id, binary.span)
+                    {
+                        return err;
+                    }
                     return self.build_ord_method_call(
                         left,
                         right,
@@ -1282,6 +1296,40 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // This should have been desugared to binary && chain
         // Just resolve the first expression for now
         self.resolve_expr(&chain.first, ctx, None)
+    }
+
+    /// Verify that `right_type_id` matches `left_type_id` for trait-dispatched
+    /// `==`/`!=`/`<`/`<=`/`>`/`>=` operators. Both sides of `Eq::eq` / `Ord::cmp`
+    /// must be the same type (the signatures take `&Self`), so mixing types is
+    /// rejected here before the method call is built. Returns `Some(err_expr)`
+    /// when a mismatch was reported.
+    fn check_trait_op_rhs_type(
+        &mut self,
+        left_type_id: TypeId,
+        right_type_id: TypeId,
+        span: Span,
+    ) -> Option<TirExpr> {
+        if left_type_id == right_type_id
+            || left_type_id == TypeTable::ERROR
+            || right_type_id == TypeTable::ERROR
+            || left_type_id == TypeTable::NEVER
+            || right_type_id == TypeTable::NEVER
+        {
+            return None;
+        }
+        let type_table = self.type_table.borrow();
+        let left_name = type_table.type_name(left_type_id);
+        let right_name = type_table.type_name(right_type_id);
+        if left_name == right_name {
+            return None;
+        }
+        drop(type_table);
+        let _ = self.logger.error(TypeError::TypeMismatch {
+            expected: left_name,
+            found: right_name,
+            span,
+        });
+        Some(TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, span))
     }
 
     /// Build a method call for `Eq::eq` (== / !=) operators.

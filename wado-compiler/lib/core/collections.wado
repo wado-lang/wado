@@ -458,10 +458,10 @@ impl<T: Ord> SequenceLiteralBuilder for TreeSet<T> {
     }
 }
 
-impl<T: Serialize, V: Serialize> Serialize for TreeMap<String, V> {
+impl<V: Serialize> Serialize for TreeMap<String, V> {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
         let entries = self.entries();
-        let m = s.begin_map(entries.len())?;
+        let mut m = s.begin_map(entries.len())?;
         for let [k, v] of entries {
             m.key(&k)?;
             m.value(&v)?;
