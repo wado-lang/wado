@@ -206,7 +206,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     };
                     let call = self.build_trait_op_method_call_on_resolved(
                         left,
-                        right,
+                        vec![right],
                         &resolved,
                         binary.span,
                     );
@@ -253,7 +253,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     };
                     let cmp_call = self.build_trait_op_method_call_on_resolved(
                         left,
-                        right,
+                        vec![right],
                         &resolved,
                         binary.span,
                     );
@@ -287,12 +287,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         impl_name: name.clone(),
                         self_kind: info.self_kind,
                         return_type: info.return_type,
-                        rhs_type: info.param_types.first().copied(),
+                        param_types: info.param_types.clone(),
                         is_type_param_receiver: true,
                     };
                     let call = self.build_trait_op_method_call_on_resolved(
                         left,
-                        right,
+                        vec![right],
                         &resolved,
                         binary.span,
                     );
@@ -320,12 +320,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         impl_name: name.clone(),
                         self_kind: info.self_kind,
                         return_type: info.return_type,
-                        rhs_type: info.param_types.first().copied(),
+                        param_types: info.param_types.clone(),
                         is_type_param_receiver: true,
                     };
                     let cmp_call = self.build_trait_op_method_call_on_resolved(
                         left,
-                        right,
+                        vec![right],
                         &resolved,
                         binary.span,
                     );
@@ -400,12 +400,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         impl_name,
                         self_kind: trait_info.self_kind,
                         return_type: trait_info.output_type,
-                        rhs_type: trait_info.rhs_type,
+                        param_types: trait_info.rhs_type.map(|t| vec![t]).unwrap_or_default(),
                         is_type_param_receiver: false,
                     };
                     return self.build_trait_op_method_call_on_resolved(
                         left,
-                        right,
+                        vec![right],
                         &resolved,
                         binary.span,
                     );
@@ -442,12 +442,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         impl_name: name.clone(),
                         self_kind: info.self_kind,
                         return_type: operand_type_id,
-                        rhs_type: info.param_types.first().copied(),
+                        param_types: info.param_types.clone(),
                         is_type_param_receiver: true,
                     };
                     return self.build_trait_op_method_call_on_resolved(
                         left,
-                        right,
+                        vec![right],
                         &resolved,
                         binary.span,
                     );
@@ -505,12 +505,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         impl_name,
                         self_kind: trait_info.self_kind,
                         return_type: trait_info.output_type,
-                        rhs_type: trait_info.rhs_type,
+                        param_types: trait_info.rhs_type.map(|t| vec![t]).unwrap_or_default(),
                         is_type_param_receiver: false,
                     };
                     return self.build_trait_op_method_call_on_resolved(
                         left,
-                        right,
+                        vec![right],
                         &resolved,
                         binary.span,
                     );
@@ -748,8 +748,15 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
         }
 
-        // Check for negation on non-primitive types that implement Neg trait
-        if unary.op == UnaryOp::Neg {
+        // Unary trait operators (`-x`, `~x`) dispatch through the same
+        // `resolve_trait_method_for_op` + `build_trait_op_method_call_on_resolved`
+        // pipeline as binary operators.  The builder handles the zero-arg
+        // case via `resolved.param_types.is_empty()`.
+        if let Some((trait_name, method_name)) = match unary.op {
+            UnaryOp::Neg => Some(("Neg", "neg")),
+            UnaryOp::BitNot => Some(("BitNot", "bitnot")),
+            _ => None,
+        } {
             let expr_type = self.type_table.borrow().get(expr.type_id).clone();
             let struct_name = match &expr_type {
                 ResolvedType::Struct { name, .. } => Some(name.clone()),
@@ -759,115 +766,31 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 }
                 _ => None,
             };
-
             if let Some(struct_name) = struct_name {
                 let (lookup_name, lookup_type_id) =
                     self.newtype_base_lookup(&struct_name, expr.type_id);
-
-                // Find the Neg trait implementation
-                let neg_info = self
-                    .find_arithmetic_trait_impl(&struct_name, expr.type_id, "Neg", "neg")
-                    .map(|info| (info, struct_name.clone()))
-                    .or_else(|| {
-                        self.find_arithmetic_trait_impl(&lookup_name, lookup_type_id, "Neg", "neg")
-                            .map(|info| (info, lookup_name.clone()))
-                    });
-                if let Some((trait_info, impl_name)) = neg_info {
-                    // Adjust receiver for self kind (&self)
-                    let receiver = self.adjust_receiver_for_self_kind(
-                        expr,
-                        trait_info.self_kind,
+                let resolved = self
+                    .resolve_trait_method_for_op(
+                        &struct_name,
+                        expr.type_id,
+                        trait_name,
+                        method_name,
                         false,
-                        unary.span,
-                    );
-
-                    let mangled_method_name =
-                        MethodName::format_local(&impl_name, Some(&trait_info.trait_name), "neg");
-
-                    return TirExpr::new(
-                        TirExprKind::MethodCall {
-                            receiver: Box::new(receiver),
-                            func: FunctionRef {
-                                module_source: self.find_struct_module_source(&impl_name),
-                                name: mangled_method_name,
-                                monomorph_info: None,
-                                method_info: Some(LocalMethodName::new(
-                                    impl_name.clone(),
-                                    Some(trait_info.trait_name.clone()),
-                                    "neg".to_string(),
-                                )),
-                            },
-                            type_args: vec![],
-                            args: vec![],
-                        },
-                        trait_info.output_type,
-                        unary.span,
-                    );
-                }
-            }
-        }
-
-        // Check for bitwise NOT on non-primitive types that implement BitNot trait
-        if unary.op == UnaryOp::BitNot {
-            let expr_type = self.type_table.borrow().get(expr.type_id).clone();
-            let struct_name = match &expr_type {
-                ResolvedType::Struct { name, .. } => Some(name.clone()),
-                ResolvedType::GenericInstance { name, .. } => Some(name.clone()),
-                ResolvedType::Newtype { name, .. } | ResolvedType::Flags { name, .. } => {
-                    Some(name.clone())
-                }
-                _ => None,
-            };
-
-            if let Some(struct_name) = struct_name {
-                let (lookup_name, lookup_type_id) =
-                    self.newtype_base_lookup(&struct_name, expr.type_id);
-
-                // Find the BitNot trait implementation
-                let bitnot_info = self
-                    .find_arithmetic_trait_impl(&struct_name, expr.type_id, "BitNot", "bitnot")
-                    .map(|info| (info, struct_name.clone()))
+                    )
                     .or_else(|| {
-                        self.find_arithmetic_trait_impl(
+                        self.resolve_trait_method_for_op(
                             &lookup_name,
                             lookup_type_id,
-                            "BitNot",
-                            "bitnot",
+                            trait_name,
+                            method_name,
+                            false,
                         )
-                        .map(|info| (info, lookup_name.clone()))
                     });
-                if let Some((trait_info, impl_name)) = bitnot_info {
-                    // Adjust receiver for self kind (&self)
-                    let receiver = self.adjust_receiver_for_self_kind(
+                if let Some(resolved) = resolved {
+                    return self.build_trait_op_method_call_on_resolved(
                         expr,
-                        trait_info.self_kind,
-                        false,
-                        unary.span,
-                    );
-
-                    let mangled_method_name = MethodName::format_local(
-                        &impl_name,
-                        Some(&trait_info.trait_name),
-                        "bitnot",
-                    );
-
-                    return TirExpr::new(
-                        TirExprKind::MethodCall {
-                            receiver: Box::new(receiver),
-                            func: FunctionRef {
-                                module_source: self.find_struct_module_source(&impl_name),
-                                name: mangled_method_name,
-                                monomorph_info: None,
-                                method_info: Some(LocalMethodName::new(
-                                    impl_name.clone(),
-                                    Some(trait_info.trait_name.clone()),
-                                    "bitnot".to_string(),
-                                )),
-                            },
-                            type_args: vec![],
-                            args: vec![],
-                        },
-                        trait_info.output_type,
+                        vec![],
+                        &resolved,
                         unary.span,
                     );
                 }
@@ -1048,25 +971,23 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             "index_assign",
                         );
 
-                        return TirExpr::new(
-                            TirExprKind::MethodCall {
-                                receiver: Box::new(receiver),
-                                func: FunctionRef {
-                                    module_source: trait_info.impl_module_source.clone(),
-                                    name: mangled_method_name,
-                                    monomorph_info: None,
-                                    method_info: Some(LocalMethodName::new(
-                                        lookup_name,
-                                        Some(trait_info.trait_name),
-                                        "index_assign".to_string(),
-                                    )),
-                                },
-                                type_args: vec![],
-                                args: vec![
-                                    CallArg::new(index_resolved, false),
-                                    CallArg::new(value, false),
-                                ],
+                        return Self::build_tir_method_call(
+                            receiver,
+                            FunctionRef {
+                                module_source: trait_info.impl_module_source.clone(),
+                                name: mangled_method_name,
+                                monomorph_info: None,
+                                method_info: Some(LocalMethodName::new(
+                                    lookup_name,
+                                    Some(trait_info.trait_name),
+                                    "index_assign".to_string(),
+                                )),
                             },
+                            vec![],
+                            vec![
+                                CallArg::new(index_resolved, false),
+                                CallArg::new(value, false),
+                            ],
                             TypeTable::UNIT,
                             assign.span,
                         );
@@ -1224,89 +1145,104 @@ impl<H: CompilerHost> Resolver<'_, H> {
         self.resolve_expr(&chain.first, ctx, None)
     }
 
-    /// Single TIR-level builder for every binary operator that dispatches to
-    /// a trait method (`Eq::eq`, `Ord::cmp`, `Add::add`, …, `Shl::shl`).
-    /// Inputs are already resolved [`TirExpr`]s for both operands. The
-    /// [`ResolvedTraitMethod`] provides the substituted rhs type, self kind,
-    /// and return type, so:
+    /// Single TIR-level builder for every operator that dispatches to a
+    /// trait method — unary (`Neg::neg`, `BitNot::bitnot`) as well as
+    /// binary (`Eq::eq`, `Ord::cmp`, `Add::add`, …, `Shl::shl`).  Inputs
+    /// are already-resolved [`TirExpr`]s: the receiver and zero or more
+    /// argument operands matching `resolved.param_types` in order.
     ///
-    /// 1. The rhs operand is type-checked against the trait's declared
-    ///    parameter type. Mismatch emits `TypeMismatch` and returns an
-    ///    `ERROR` expression; there is no way to skip the check.
-    /// 2. The receiver is adjusted (`&self` / `&mut self`) via
+    /// The builder is the single source of truth for:
+    ///
+    /// 1. Type-checking each argument against the trait's declared
+    ///    parameter type.  Mismatches emit `TypeMismatch` and return an
+    ///    `ERROR` expression; there is no way for a caller to skip the
+    ///    check.  For `&Self` parameters the expected value type is the
+    ///    receiver's own type so newtype dispatch (base-impl method
+    ///    called through the newtype) still accepts the newtype on both
+    ///    sides.
+    /// 2. Adjusting the receiver via
     ///    [`Self::adjust_receiver_for_self_kind`].
-    /// 3. The rhs operand is wrapped in `&` iff the trait's declared rhs
-    ///    type is a reference (i.e. `&Self` for Eq/Ord/arithmetic, never
-    ///    for `Shl::shl(&self, rhs: u32)`).
-    /// 4. A [`TirExprKind::MethodCall`] is constructed with the correct
-    ///    mangled name and the `ResolvedTraitMethod`'s return type.
+    /// 3. Wrapping each argument in `&` iff the matching parameter type
+    ///    is a reference — never otherwise, so `Shl::shl(&self, rhs:
+    ///    u32)` receives the `u32` by value.
+    /// 4. Constructing the [`TirExprKind::MethodCall`] with the correct
+    ///    mangled name and `resolved.return_type`.
     fn build_trait_op_method_call_on_resolved(
         &mut self,
-        left: TirExpr,
-        right: TirExpr,
+        receiver: TirExpr,
+        args: Vec<TirExpr>,
         resolved: &ResolvedTraitMethod,
         span: Span,
     ) -> TirExpr {
-        // Decide whether to wrap rhs in `&` and what value type to expect
-        // for `right`.  The trait's declared rhs type tells us the shape:
-        //
-        //   * `&Self` / `&mut Self` → rhs is passed by reference; the
-        //     caller hands us a value of the receiver's type (so when the
-        //     receiver is a newtype, the rhs is the same newtype — not
-        //     the base).  We therefore typecheck against `left.type_id`.
-        //   * Any other explicit type (e.g. `rhs: u32` for `Shl::shl`) →
-        //     rhs is passed by value and must match `rhs_type` verbatim.
-        let wrap_rhs_as_ref = match resolved.rhs_type {
-            Some(rhs_ty) => matches!(
-                self.type_table.borrow().get(rhs_ty),
-                ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-            ),
-            None => false,
-        };
-        let expected_value_ty: Option<TypeId> = if wrap_rhs_as_ref {
-            Some(left.type_id)
-        } else {
-            resolved.rhs_type
-        };
-
-        if let Some(expected) = expected_value_ty
-            && right.type_id != expected
-            && right.type_id != TypeTable::ERROR
-            && expected != TypeTable::ERROR
-            && right.type_id != TypeTable::NEVER
-        {
-            let type_table = self.type_table.borrow();
-            let expected_name = type_table.type_name(expected);
-            let found_name = type_table.type_name(right.type_id);
-            if expected_name != found_name {
-                drop(type_table);
-                let _ = self.logger.error(TypeError::TypeMismatch {
-                    expected: expected_name,
-                    found: found_name,
-                    span,
-                });
-                return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, span);
-            }
+        if args.len() != resolved.param_types.len() {
+            // This is an internal invariant violation by the caller — the
+            // resolve-site should always line up operand count with the
+            // trait's arity.  Return ERROR so the rest of resolve recovers
+            // gracefully, but flag it as a mismatch too so tests notice.
+            let _ = self.logger.error(TypeError::TypeMismatch {
+                expected: format!("{} arg(s)", resolved.param_types.len()),
+                found: format!("{} arg(s)", args.len()),
+                span,
+            });
+            return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, span);
         }
 
-        let receiver = self.adjust_receiver_for_self_kind(left, resolved.self_kind, false, span);
+        // For each argument, decide whether the trait parameter is by
+        // reference, and validate against the correct expected value type.
+        let mut wrap_flags: Vec<bool> = Vec::with_capacity(args.len());
+        for (arg, &param_ty) in args.iter().zip(resolved.param_types.iter()) {
+            let wrap = matches!(
+                self.type_table.borrow().get(param_ty),
+                ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+            );
+            let expected = if wrap { receiver.type_id } else { param_ty };
+            if arg.type_id != expected
+                && arg.type_id != TypeTable::ERROR
+                && expected != TypeTable::ERROR
+                && arg.type_id != TypeTable::NEVER
+            {
+                let type_table = self.type_table.borrow();
+                let expected_name = type_table.type_name(expected);
+                let found_name = type_table.type_name(arg.type_id);
+                if expected_name != found_name {
+                    drop(type_table);
+                    let _ = self.logger.error(TypeError::TypeMismatch {
+                        expected: expected_name,
+                        found: found_name,
+                        span,
+                    });
+                    return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, span);
+                }
+            }
+            wrap_flags.push(wrap);
+        }
 
-        let arg_expr = if wrap_rhs_as_ref {
-            let arg_ref_type = self
-                .type_table
-                .borrow_mut()
-                .intern(ResolvedType::Ref(right.type_id));
-            TirExpr::new(
-                TirExprKind::Unary {
-                    op: TirUnaryOp::Ref,
-                    expr: Box::new(right),
-                },
-                arg_ref_type,
-                span,
-            )
-        } else {
-            right
-        };
+        let receiver =
+            self.adjust_receiver_for_self_kind(receiver, resolved.self_kind, false, span);
+
+        let call_args: Vec<CallArg> = args
+            .into_iter()
+            .zip(wrap_flags)
+            .map(|(arg, wrap)| {
+                let arg_expr = if wrap {
+                    let arg_ref_type = self
+                        .type_table
+                        .borrow_mut()
+                        .intern(ResolvedType::Ref(arg.type_id));
+                    TirExpr::new(
+                        TirExprKind::Unary {
+                            op: TirUnaryOp::Ref,
+                            expr: Box::new(arg),
+                        },
+                        arg_ref_type,
+                        span,
+                    )
+                } else {
+                    arg
+                };
+                CallArg::new(arg_expr, false)
+            })
+            .collect();
 
         let mangled_method_name = MethodName::format_local(
             &resolved.impl_name,
@@ -1321,18 +1257,16 @@ impl<H: CompilerHost> Resolver<'_, H> {
         );
         method_info.is_type_param_receiver = resolved.is_type_param_receiver;
 
-        TirExpr::new(
-            TirExprKind::MethodCall {
-                receiver: Box::new(receiver),
-                func: FunctionRef {
-                    module_source: self.find_struct_module_source(&resolved.impl_name),
-                    name: mangled_method_name,
-                    monomorph_info: None,
-                    method_info: Some(method_info),
-                },
-                type_args: vec![],
-                args: vec![CallArg::new(arg_expr, false)],
+        Self::build_tir_method_call(
+            receiver,
+            FunctionRef {
+                module_source: self.find_struct_module_source(&resolved.impl_name),
+                name: mangled_method_name,
+                monomorph_info: None,
+                method_info: Some(method_info),
             },
+            vec![],
+            call_args,
             resolved.return_type,
             span,
         )

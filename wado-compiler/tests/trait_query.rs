@@ -197,6 +197,40 @@ export fn run() {
 // Shift dispatches rhs:u32 verbatim (not wrapped in &Self)
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Unary trait operators (Neg, BitNot) go through the same subsystem
+// ---------------------------------------------------------------------------
+
+#[test]
+fn unary_neg_dispatches_through_trait_subsystem() {
+    // i128 has `impl Neg for i128` in the prelude — exercise that the
+    // unary operator dispatch lands in the same resolve_trait_method_for_op
+    // pipeline as binary operators.  The builder's zero-arg branch
+    // (`resolved.param_types.is_empty()`) runs for this case.
+    compile_ok(
+        r#"
+export fn run() {
+    let x: i128 = 5;
+    let y: i128 = -x;
+    assert y == (-(5 as i128));
+}
+"#,
+    );
+}
+
+#[test]
+fn unary_bitnot_dispatches_through_trait_subsystem() {
+    compile_ok(
+        r#"
+export fn run() {
+    let x: i128 = 0;
+    let y: i128 = ~x;
+    assert y == (-(1 as i128));
+}
+"#,
+    );
+}
+
 #[test]
 fn shift_operator_accepts_u32_rhs() {
     // i128 has `impl Shl for i128 { fn shl(&self, rhs: u32) -> i128 }`

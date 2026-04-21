@@ -3116,22 +3116,20 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .borrow_mut()
             .make_mut_ref(index_mut_info.output_type);
 
-        let index_mut_call = TirExpr::new(
-            TirExprKind::MethodCall {
-                receiver: Box::new(receiver_for_index_mut),
-                func: FunctionRef {
-                    module_source: index_mut_info.impl_module_source.clone(),
-                    name: mangled_index_mut_name,
-                    monomorph_info: None,
-                    method_info: Some(LocalMethodName::new(
-                        struct_name.clone(),
-                        Some(index_mut_info.trait_name),
-                        "index_mut".to_string(),
-                    )),
-                },
-                type_args: vec![],
-                args: vec![CallArg::new(index_resolved, false)],
+        let index_mut_call = Self::build_tir_method_call(
+            receiver_for_index_mut,
+            FunctionRef {
+                module_source: index_mut_info.impl_module_source.clone(),
+                name: mangled_index_mut_name,
+                monomorph_info: None,
+                method_info: Some(LocalMethodName::new(
+                    struct_name.clone(),
+                    Some(index_mut_info.trait_name),
+                    "index_mut".to_string(),
+                )),
             },
+            vec![],
+            vec![CallArg::new(index_resolved, false)],
             mut_ref_output_type,
             index_expr.span,
         );
@@ -3169,32 +3167,66 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let method_call_module_source =
             method_trait_impl_source.unwrap_or_else(|| self.current_module_source.clone());
 
-        Some(TirExpr::new(
-            TirExprKind::MethodCall {
-                receiver: Box::new(receiver_for_method),
-                func: FunctionRef {
-                    module_source: method_call_module_source,
-                    name: mangled_method_name,
-                    monomorph_info: None,
-                    method_info: Some(LocalMethodName::new(
-                        output_struct_name,
-                        method_trait_name,
-                        method_call.method.clone(),
-                    )),
-                },
-                type_args,
-                args: args
-                    .into_iter()
-                    .zip(
-                        method_param_is_mut
-                            .into_iter()
-                            .chain(std::iter::repeat(false)),
-                    )
-                    .map(|(expr, is_mut)| CallArg::new(expr, is_mut))
-                    .collect(),
+        Some(Self::build_tir_method_call(
+            receiver_for_method,
+            FunctionRef {
+                module_source: method_call_module_source,
+                name: mangled_method_name,
+                monomorph_info: None,
+                method_info: Some(LocalMethodName::new(
+                    output_struct_name,
+                    method_trait_name,
+                    method_call.method.clone(),
+                )),
             },
+            type_args,
+            args.into_iter()
+                .zip(
+                    method_param_is_mut
+                        .into_iter()
+                        .chain(std::iter::repeat(false)),
+                )
+                .map(|(expr, is_mut)| CallArg::new(expr, is_mut))
+                .collect(),
             return_type,
             method_call.span,
         ))
+    }
+
+    /// Sole resolver-side constructor of [`TirExprKind::MethodCall`].
+    ///
+    /// Centralizing construction here establishes a single audit point for
+    /// the invariant "every resolver-emitted method call has been
+    /// typechecked against the callee's declared parameter types before
+    /// it flows into TIR".  Typecheck is the caller's responsibility —
+    /// the helper exists so that any future machine-enforced invariant
+    /// (e.g. privatizing the enum variant's fields, adding a debug
+    /// assertion, wiring a LocalMethodName witness type) can plug in
+    /// here without having to chase down scattered `TirExprKind::MethodCall
+    /// { … }` literals.
+    ///
+    /// Post-resolve phases (monomorphize / lower / optimize / codegen)
+    /// rebuild `TirExprKind::MethodCall` nodes from already-checked
+    /// expressions and legitimately bypass this helper; they operate on
+    /// TIR that is guaranteed to have been produced through this path
+    /// originally.
+    pub(super) fn build_tir_method_call(
+        receiver: TirExpr,
+        func: FunctionRef,
+        type_args: Vec<TypeId>,
+        args: Vec<CallArg>,
+        return_type: TypeId,
+        span: crate::token::Span,
+    ) -> TirExpr {
+        TirExpr::new(
+            TirExprKind::MethodCall {
+                receiver: Box::new(receiver),
+                func,
+                type_args,
+                args,
+            },
+            return_type,
+            span,
+        )
     }
 }

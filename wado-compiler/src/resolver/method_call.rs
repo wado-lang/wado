@@ -659,22 +659,19 @@ impl<H: CompilerHost> Resolver<'_, H> {
             );
         }
 
-        TirExpr::new(
-            TirExprKind::MethodCall {
-                receiver: Box::new(receiver),
-                func: FunctionRef {
-                    module_source: method_module_source,
-                    name: mangled_method_name,
-                    monomorph_info,
-                    method_info: Some(method_info),
-                },
-                type_args: method_type_args, // Use inferred type args
-                args: args
-                    .into_iter()
-                    .zip(param_is_mut.into_iter().chain(std::iter::repeat(false)))
-                    .map(|(expr, is_mut)| CallArg::new(expr, is_mut))
-                    .collect(),
+        Self::build_tir_method_call(
+            receiver,
+            FunctionRef {
+                module_source: method_module_source,
+                name: mangled_method_name,
+                monomorph_info,
+                method_info: Some(method_info),
             },
+            method_type_args, // Use inferred type args
+            args.into_iter()
+                .zip(param_is_mut.into_iter().chain(std::iter::repeat(false)))
+                .map(|(expr, is_mut)| CallArg::new(expr, is_mut))
+                .collect(),
             return_type,
             method_call.span,
         )

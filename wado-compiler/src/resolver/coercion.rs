@@ -639,18 +639,16 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 span,
             );
 
-            let insert_call = TirExpr::new(
-                TirExprKind::MethodCall {
-                    receiver: Box::new(receiver),
-                    func: FunctionRef {
-                        module_source: self.current_module_source.clone(),
-                        name: insert_mangled_name.clone(),
-                        monomorph_info: None,
-                        method_info: Some(insert_method_info.clone()),
-                    },
-                    type_args: vec![],
-                    args: vec![CallArg::new(key_expr, false), CallArg::new(value, false)],
+            let insert_call = Self::build_tir_method_call(
+                receiver,
+                FunctionRef {
+                    module_source: self.current_module_source.clone(),
+                    name: insert_mangled_name.clone(),
+                    monomorph_info: None,
+                    method_info: Some(insert_method_info.clone()),
                 },
+                vec![],
+                vec![CallArg::new(key_expr, false), CallArg::new(value, false)],
                 TypeTable::UNIT,
                 span,
             );
@@ -688,18 +686,16 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     is_blanket: false,
                 })
             };
-            TirExpr::new(
-                TirExprKind::MethodCall {
-                    receiver: Box::new(builder_local_final),
-                    func: FunctionRef {
-                        module_source: self.current_module_source.clone(),
-                        name: build_mangled_name,
-                        monomorph_info: build_monomorph,
-                        method_info: Some(build_method_info),
-                    },
-                    type_args: vec![],
-                    args: vec![],
+            Self::build_tir_method_call(
+                builder_local_final,
+                FunctionRef {
+                    module_source: self.current_module_source.clone(),
+                    name: build_mangled_name,
+                    monomorph_info: build_monomorph,
+                    method_info: Some(build_method_info),
                 },
+                vec![],
+                vec![],
                 target_type,
                 span,
             )
@@ -888,27 +884,25 @@ impl<H: CompilerHost> Resolver<'_, H> {
             );
             let receiver =
                 self.adjust_receiver_for_self_kind(builder_local, push_self_kind, false, span);
-            let push_call = TirExpr::new(
-                TirExprKind::MethodCall {
-                    receiver: Box::new(receiver),
-                    func: FunctionRef {
-                        module_source: impl_module_source.clone(),
-                        name: push_mangled_name.clone(),
-                        monomorph_info: if type_arg_ids.is_empty() {
-                            None
-                        } else {
-                            Some(MonomorphInfo {
-                                generic_name: format!("{builder_base_name}::push_literal"),
-                                impl_type_args: type_arg_ids.clone(),
-                                method_type_args: vec![],
-                                is_blanket: false,
-                            })
-                        },
-                        method_info: Some(push_method_info.clone()),
+            let push_call = Self::build_tir_method_call(
+                receiver,
+                FunctionRef {
+                    module_source: impl_module_source.clone(),
+                    name: push_mangled_name.clone(),
+                    monomorph_info: if type_arg_ids.is_empty() {
+                        None
+                    } else {
+                        Some(MonomorphInfo {
+                            generic_name: format!("{builder_base_name}::push_literal"),
+                            impl_type_args: type_arg_ids.clone(),
+                            method_type_args: vec![],
+                            is_blanket: false,
+                        })
                     },
-                    type_args: vec![],
-                    args: vec![CallArg::new(elem_expr, false)],
+                    method_info: Some(push_method_info.clone()),
                 },
+                vec![],
+                vec![CallArg::new(elem_expr, false)],
                 TypeTable::UNIT,
                 span,
             );
@@ -932,27 +926,25 @@ impl<H: CompilerHost> Resolver<'_, H> {
             "build".to_string(),
         )
         .with_struct_type_args(&type_arg_names);
-        let build_call = TirExpr::new(
-            TirExprKind::MethodCall {
-                receiver: Box::new(builder_local_final),
-                func: FunctionRef {
-                    module_source: impl_module_source,
-                    name: build_mangled_name,
-                    monomorph_info: if type_arg_ids.is_empty() {
-                        None
-                    } else {
-                        Some(MonomorphInfo {
-                            generic_name: format!("{builder_base_name}::build"),
-                            impl_type_args: type_arg_ids,
-                            method_type_args: vec![],
-                            is_blanket: false,
-                        })
-                    },
-                    method_info: Some(build_method_info),
+        let build_call = Self::build_tir_method_call(
+            builder_local_final,
+            FunctionRef {
+                module_source: impl_module_source,
+                name: build_mangled_name,
+                monomorph_info: if type_arg_ids.is_empty() {
+                    None
+                } else {
+                    Some(MonomorphInfo {
+                        generic_name: format!("{builder_base_name}::build"),
+                        impl_type_args: type_arg_ids,
+                        method_type_args: vec![],
+                        is_blanket: false,
+                    })
                 },
-                type_args: vec![],
-                args: vec![],
+                method_info: Some(build_method_info),
             },
+            vec![],
+            vec![],
             output_type,
             span,
         );

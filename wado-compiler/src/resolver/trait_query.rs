@@ -1059,7 +1059,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // those here. `find_arithmetic_trait_impl` would otherwise default
         // `output_type` to the receiver type when no `type Output` is
         // declared.
-        let (info_trait_name, self_kind, rhs_type, return_type) = if let Some(info) =
+        let (info_trait_name, self_kind, param_types, return_type) = if let Some(info) =
             self.find_arithmetic_trait_impl(struct_name, lookup_type_id, trait_name, method_name)
         {
             let return_type = match trait_name {
@@ -1070,7 +1070,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 }),
                 _ => info.output_type,
             };
-            (info.trait_name, info.self_kind, info.rhs_type, return_type)
+            let param_types = info.rhs_type.map(|t| vec![t]).unwrap_or_default();
+            (info.trait_name, info.self_kind, param_types, return_type)
         } else if matches!(trait_name, "Eq" | "Ord")
             && self.type_implements_trait(lookup_type_id, trait_name)
         {
@@ -1089,7 +1090,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             (
                 trait_name.to_string(),
                 ast::SelfKind::Ref,
-                Some(ref_self_ty),
+                vec![ref_self_ty],
                 return_type,
             )
         } else {
@@ -1101,7 +1102,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             impl_name: struct_name.to_string(),
             self_kind,
             return_type,
-            rhs_type,
+            param_types,
             is_type_param_receiver: is_type_param,
         })
     }
