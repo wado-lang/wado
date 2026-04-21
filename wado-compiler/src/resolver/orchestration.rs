@@ -77,6 +77,9 @@ pub(crate) struct AnnotateState {
     /// parameters). Keyed by the binding's defining [`SymbolKey`]. Populated
     /// alongside [`Self::references`] as the resolver walks function bodies.
     pub(crate) local_symbols: Rc<RefCell<IndexMap<SymbolKey, Symbol>>>,
+    /// Kiln invocation redirects consulted by `resolve_import` call sites
+    /// when walking `use` declarations. Populated from [`crate::loader::LoadResult`].
+    pub(crate) invocations: Rc<crate::kiln::InvocationIndex>,
 }
 
 impl<'a, H: CompilerHost> Resolver<'a, H> {
@@ -91,8 +94,10 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         entry_module_source: ModuleSource,
         logger: &'a Logger<'a, H>,
         included_files: &'a IndexMap<[String; 2], Vec<u8>>,
+        invocations: crate::kiln::InvocationIndex,
     ) -> Result<IndexMap<ModuleSource, TirModule>, Bail> {
-        let state = Self::annotate_modules(symbols, modules, &entry_module_source, logger)?;
+        let state =
+            Self::annotate_modules(symbols, modules, &entry_module_source, logger, invocations)?;
         Self::lower_tir_from_state(
             &state,
             symbols,
@@ -112,7 +117,9 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         modules: &'a IndexMap<ModuleSource, Module>,
         entry_module_source: &ModuleSource,
         logger: &'a Logger<'a, H>,
+        invocations: crate::kiln::InvocationIndex,
     ) -> Result<AnnotateState, Bail> {
+        let invocations = Rc::new(invocations);
         // Create a shared type table wrapped in Rc<RefCell<>> for cross-module sharing
         let type_table = Rc::new(RefCell::new(TypeTable::new()));
         let mut all_newtypes: IndexMap<ModuleSource, IndexMap<String, TypeId>> =
@@ -258,8 +265,12 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         // Second sub-pass: resolve struct fields and newtypes
         for (module_source, module) in modules {
             // Build imported type sources for this module
-            let (imported_type_sources, import_original_names) =
-                Self::build_imported_type_sources(module, module_source, Some(entry_module_source));
+            let (imported_type_sources, import_original_names) = Self::build_imported_type_sources(
+                module,
+                module_source,
+                Some(entry_module_source),
+                &invocations,
+            );
 
             // Build module-specific flat maps for resolving types in this module
             let mut flat_newtypes = Self::build_module_map(
@@ -682,6 +693,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             all_module_func_indices,
             references: Rc::new(RefCell::new(IndexMap::default())),
             local_symbols: Rc::new(RefCell::new(IndexMap::default())),
+            invocations,
         })
     }
 
@@ -710,6 +722,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 module,
                 module_source,
                 Some(&entry_module_source),
+                &state.invocations,
             );
             let newtypes = Self::build_module_map(
                 &state.all_newtypes,
@@ -802,10 +815,11 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             }
                             crate::ast::UseItem::Namespace { name } => {
                                 // Namespace import: all symbols from source module are available
-                                let source = crate::name::resolve_import_with_entry(
+                                let source = crate::name::resolve_import_with_invocations(
                                     module_source,
                                     &use_decl.source,
                                     Some(&entry_module_source),
+                                    &state.invocations,
                                 );
                                 for sym in symbols.get_module_symbols(&source) {
                                     imported_functions.insert(sym.name.clone());
@@ -872,6 +886,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 references: Rc::clone(&state.references),
                 local_symbols: Rc::clone(&state.local_symbols),
                 default_scope_module: None,
+                invocations: Rc::clone(&state.invocations),
             };
             // known_type_names_cache is pre-computed globally; no per-module rebuild needed
 
@@ -1042,13 +1057,18 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         module: &Module,
         from_module: &ModuleSource,
         entry_module: Option<&ModuleSource>,
+        invocations: &crate::kiln::InvocationIndex,
     ) -> (IndexMap<String, ModuleSource>, IndexMap<String, String>) {
         let mut sources = IndexMap::default();
         let mut original_names = IndexMap::default();
         for item in &module.items {
             if let Item::Use(use_decl) = item {
-                let source =
-                    name::resolve_import_with_entry(from_module, &use_decl.source, entry_module);
+                let source = name::resolve_import_with_invocations(
+                    from_module,
+                    &use_decl.source,
+                    entry_module,
+                    invocations,
+                );
                 for use_item in &use_decl.items {
                     match use_item {
                         ast::UseItem::Simple { name, alias, .. } => {
@@ -1085,6 +1105,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             module,
             module_source,
             Some(&self.entry_module_source),
+            &self.invocations,
         );
         let maps = ModuleTypeMaps {
             struct_fields: Self::build_module_map(

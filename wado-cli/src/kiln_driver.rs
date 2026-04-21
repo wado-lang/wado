@@ -59,9 +59,11 @@ pub struct PlanOutcome {
 /// lowering step.
 #[derive(Debug)]
 pub enum DriverError {
-    /// The manifest's `module = { ... }` inline form is not yet supported by
-    /// the driver. M3c ships with `module = "ns:name@ver"` only; inline
-    /// records land together with build-dependency resolution.
+    /// The manifest's `module = { foo = ... }` inline record form with
+    /// keys other than `path` is not supported. `module = "ns:name@ver"`
+    /// (spec form) and `module = { path = "..." }` (local path) are
+    /// accepted; other shapes surface this error so registry/git/workspace
+    /// forms remain an explicit, actionable v1 limitation.
     UnsupportedInlineModule { invocation: String },
     /// Dedup / cycle error from the planner.
     Plan(PlanError),
@@ -786,6 +788,11 @@ pub struct PipelineOutcome {
     /// and skips lockfile / output-directory writes so committed artifacts
     /// are preserved.
     pub stale: Vec<String>,
+    /// Redirect index for the resolver: `(decl_file, from)` → entry path.
+    /// Populated from every invocation (cached, executed, or stale) so the
+    /// compiler can redirect `use { X } from "<schema>"` to the generated
+    /// entry module. Empty when no invocations ran.
+    pub invocations: wado_compiler::kiln::InvocationIndex,
 }
 
 /// Failure modes from [`run_pipeline`].
@@ -866,7 +873,44 @@ where
     H: CompilerHost,
     P: GeneratorProvider,
 {
-    let mut planned = plan(manifest, manifest_root)?;
+    run_pipeline_with_inline(manifest, manifest_root, host, provider, Vec::new()).await
+}
+
+/// Like [`run_pipeline`] but also accepts pre-collected inline invocations
+/// (from `use ... with { generator: ... }` clauses). The inline set is merged
+/// with the manifest-declared set before planning.
+///
+/// # Errors
+/// See [`PipelineError`].
+pub async fn run_pipeline_with_inline<H, P>(
+    manifest: &Manifest,
+    manifest_root: &Path,
+    host: &H,
+    provider: &P,
+    inline_invocations: Vec<wado_compiler::kiln::Invocation>,
+) -> Result<PipelineOutcome, PipelineError>
+where
+    H: CompilerHost,
+    P: GeneratorProvider,
+{
+    let manifest_plan = plan(manifest, manifest_root)?;
+    let merged = match wado_compiler::kiln::merge_manifest_and_inline(
+        manifest_plan.plan.order,
+        inline_invocations,
+    ) {
+        Ok(v) => v,
+        Err(diags) => {
+            for d in diags {
+                host.emit_diagnostic(d);
+            }
+            return Ok(PipelineOutcome::default());
+        }
+    };
+    let plan_order = wado_compiler::kiln::build_plan(merged).map_err(DriverError::Plan)?;
+    let mut planned = PlanOutcome {
+        plan: plan_order,
+        manifest_root: manifest_root.to_path_buf(),
+    };
     if planned.plan.order.is_empty() {
         return Ok(PipelineOutcome::default());
     }
@@ -949,6 +993,15 @@ where
                 for o in &entry.outputs {
                     kept.push(o.path.clone());
                 }
+            }
+            if let Some(entry_path) = entry.outputs.iter().find(|o| o.entry).map(|o| &o.path) {
+                let decl_file = match &invocation.decl_site {
+                    wado_compiler::kiln::DeclSite::Manifest { .. } => String::new(),
+                    wado_compiler::kiln::DeclSite::Inline { module, .. } => module.clone(),
+                };
+                outcome
+                    .invocations
+                    .insert(&decl_file, invocation.from.as_str(), entry_path);
             }
             new_cache.push(entry);
         }
@@ -1116,9 +1169,7 @@ where
 fn invocation_id(inv: &Invocation) -> String {
     match &inv.decl_site {
         DeclSite::Manifest { name } => name.clone(),
-        DeclSite::Inline { .. } => {
-            panic!("inline kiln invocation ids are introduced in M5")
-        }
+        DeclSite::Inline { synthetic_id, .. } => synthetic_id.clone(),
     }
 }
 
@@ -1427,6 +1478,197 @@ d_string = "hi"
     }
 
     #[test]
+    fn typed_encoder_enum_matches_bare_string() {
+        use wado_compiler::kiln::{OptionsDescriptor, OptionsField, OptionsType};
+        use wado_compiler::token::Span;
+
+        let desc = OptionsDescriptor {
+            fields: vec![OptionsField {
+                name: "style".to_string(),
+                ty: OptionsType::Enum {
+                    name: "Style".to_string(),
+                    variants: vec!["Rpc".to_string(), "Rest".to_string()],
+                },
+                default: None,
+                span: Span::new(0, 0, 1, 1),
+            }],
+        };
+
+        let toml_val: toml::Value = toml::from_str(r#"style = "Rpc""#).unwrap();
+        let provisional_bytes = encode_options_canonical_provisional(&toml_val);
+
+        let attr = toml_to_attr_value(&toml_val);
+        let canonical = validate_options(&desc, Some(&attr)).unwrap();
+        let typed_bytes = encode_options_canonical(&canonical);
+
+        assert_eq!(
+            provisional_bytes, typed_bytes,
+            "enum variant must encode identically to a bare string",
+        );
+    }
+
+    #[test]
+    fn typed_encoder_key_order_independent() {
+        use wado_compiler::kiln::{OptionsDescriptor, OptionsField, OptionsType};
+        use wado_compiler::token::Span;
+
+        let desc = OptionsDescriptor {
+            fields: vec![
+                OptionsField {
+                    name: "a".to_string(),
+                    ty: OptionsType::I64,
+                    default: None,
+                    span: Span::new(0, 0, 1, 1),
+                },
+                OptionsField {
+                    name: "b".to_string(),
+                    ty: OptionsType::String,
+                    default: None,
+                    span: Span::new(0, 0, 1, 1),
+                },
+                OptionsField {
+                    name: "c".to_string(),
+                    ty: OptionsType::Bool,
+                    default: None,
+                    span: Span::new(0, 0, 1, 1),
+                },
+            ],
+        };
+
+        let order1: toml::Value = toml::from_str("a = 1\nb = \"x\"\nc = true").unwrap();
+        let order2: toml::Value = toml::from_str("c = true\na = 1\nb = \"x\"").unwrap();
+
+        let canonical1 = validate_options(&desc, Some(&toml_to_attr_value(&order1))).unwrap();
+        let canonical2 = validate_options(&desc, Some(&toml_to_attr_value(&order2))).unwrap();
+        assert_eq!(
+            encode_options_canonical(&canonical1),
+            encode_options_canonical(&canonical2),
+            "typed encoder must be key-order independent like the provisional one",
+        );
+    }
+
+    #[test]
+    fn typed_encoder_distinguishes_numeric_widths() {
+        use wado_compiler::kiln::{OptionsDescriptor, OptionsField, OptionsType};
+        use wado_compiler::token::Span;
+
+        let make_desc = |ty: OptionsType| OptionsDescriptor {
+            fields: vec![OptionsField {
+                name: "n".to_string(),
+                ty,
+                default: None,
+                span: Span::new(0, 0, 1, 1),
+            }],
+        };
+
+        let toml_val: toml::Value = toml::from_str("n = 42").unwrap();
+        let attr = toml_to_attr_value(&toml_val);
+
+        let as_i32 = encode_options_canonical(
+            &validate_options(&make_desc(OptionsType::I32), Some(&attr)).unwrap(),
+        );
+        let as_i64 = encode_options_canonical(
+            &validate_options(&make_desc(OptionsType::I64), Some(&attr)).unwrap(),
+        );
+        let as_u64 = encode_options_canonical(
+            &validate_options(&make_desc(OptionsType::U64), Some(&attr)).unwrap(),
+        );
+        assert_eq!(
+            as_i32, as_i64,
+            "integer widths must collapse into a single canonical int",
+        );
+        assert_eq!(
+            as_i64, as_u64,
+            "signed and unsigned integers must encode identically at the same width",
+        );
+    }
+
+    #[test]
+    fn typed_encoder_float_preserves_zero_and_negative() {
+        use wado_compiler::kiln::{OptionsDescriptor, OptionsField, OptionsType};
+        use wado_compiler::token::Span;
+
+        let desc = OptionsDescriptor {
+            fields: vec![OptionsField {
+                name: "x".to_string(),
+                ty: OptionsType::F64,
+                default: None,
+                span: Span::new(0, 0, 1, 1),
+            }],
+        };
+
+        let pos_zero: toml::Value = toml::from_str("x = 0.0").unwrap();
+        let neg: toml::Value = toml::from_str("x = -3.14").unwrap();
+        let pos: toml::Value = toml::from_str("x = 3.14").unwrap();
+
+        let bytes_pos_zero = encode_options_canonical(
+            &validate_options(&desc, Some(&toml_to_attr_value(&pos_zero))).unwrap(),
+        );
+        let bytes_neg = encode_options_canonical(
+            &validate_options(&desc, Some(&toml_to_attr_value(&neg))).unwrap(),
+        );
+        let bytes_pos = encode_options_canonical(
+            &validate_options(&desc, Some(&toml_to_attr_value(&pos))).unwrap(),
+        );
+        assert_ne!(bytes_pos_zero, bytes_neg);
+        assert_ne!(bytes_neg, bytes_pos);
+    }
+
+    #[test]
+    fn typed_encoder_mixed_fields_match_provisional() {
+        use wado_compiler::kiln::{OptionsDescriptor, OptionsField, OptionsType};
+        use wado_compiler::token::Span;
+
+        let desc = OptionsDescriptor {
+            fields: vec![
+                OptionsField {
+                    name: "emit".to_string(),
+                    ty: OptionsType::Bool,
+                    default: None,
+                    span: Span::new(0, 0, 1, 1),
+                },
+                OptionsField {
+                    name: "name".to_string(),
+                    ty: OptionsType::String,
+                    default: None,
+                    span: Span::new(0, 0, 1, 1),
+                },
+                OptionsField {
+                    name: "n".to_string(),
+                    ty: OptionsType::U32,
+                    default: None,
+                    span: Span::new(0, 0, 1, 1),
+                },
+                OptionsField {
+                    name: "opt".to_string(),
+                    ty: OptionsType::Option(Box::new(OptionsType::I32)),
+                    default: None,
+                    span: Span::new(0, 0, 1, 1),
+                },
+            ],
+        };
+
+        let with_opt: toml::Value =
+            toml::from_str("emit = false\nname = \"gen\"\nn = 7\nopt = 9").unwrap();
+        let provisional = encode_options_canonical_provisional(&with_opt);
+        let typed = encode_options_canonical(
+            &validate_options(&desc, Some(&toml_to_attr_value(&with_opt))).unwrap(),
+        );
+        assert_eq!(provisional, typed);
+
+        let without_opt: toml::Value =
+            toml::from_str("emit = false\nname = \"gen\"\nn = 7").unwrap();
+        let provisional2 = encode_options_canonical_provisional(&without_opt);
+        let typed2 = encode_options_canonical(
+            &validate_options(&desc, Some(&toml_to_attr_value(&without_opt))).unwrap(),
+        );
+        assert_eq!(
+            provisional2, typed2,
+            "Option::None fields must be invisible in the canonical byte stream",
+        );
+    }
+
+    #[test]
     fn typed_encoder_option_none_omitted_from_table() {
         use wado_compiler::kiln::{OptionsDescriptor, OptionsField, OptionsType};
         use wado_compiler::token::Span;
@@ -1588,7 +1830,7 @@ d_string = "hi"
         }
 
         #[test]
-        fn unsupported_runner_error_bubbles_up() {
+        fn execute_surfaces_runner_unsupported_verbatim() {
             let tmp = tempfile::tempdir().unwrap();
             let host = MockHost::new(
                 &[("schema.proto", b"x"), ("dep.proto", b"y")],

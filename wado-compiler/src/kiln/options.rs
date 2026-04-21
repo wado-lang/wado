@@ -17,6 +17,7 @@
 
 use crate::annotate::Annotated;
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
+use crate::hashmap::IndexSet;
 use crate::name::ModuleSource;
 use crate::tir::{
     PrimitiveType, ResolvedType, TirExpr, TirExprKind, TirField, TirModule, TypeId, TypeTable,
@@ -170,9 +171,11 @@ pub fn extract_options_descriptor(
         });
     }
 
+    let mut visiting: IndexSet<(ModuleSource, String)> = IndexSet::default();
+    visiting.insert((module.clone(), "Options".to_string()));
     let mut descriptor_fields = Vec::with_capacity(options_struct.fields.len());
     for field in &options_struct.fields {
-        match lower_field(field, &annotated.types, module, &mut diagnostics) {
+        match lower_field(field, annotated, module, &mut visiting, &mut diagnostics) {
             Some(desc_field) => descriptor_fields.push(desc_field),
             None => {
                 // Diagnostic already pushed by lower_field; continue so other
@@ -192,15 +195,23 @@ pub fn extract_options_descriptor(
 
 fn lower_field(
     field: &TirField,
-    types: &TypeTable,
+    annotated: &Annotated,
     module: &ModuleSource,
+    visiting: &mut IndexSet<(ModuleSource, String)>,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<OptionsField> {
-    let ty = lower_type(field.type_id, types, module, &field.name, diagnostics)?;
+    let ty = lower_type(
+        field.type_id,
+        annotated,
+        module,
+        &field.name,
+        visiting,
+        diagnostics,
+    )?;
     let default = field
         .default_expr
         .as_deref()
-        .and_then(|e| evaluate_literal(e, &ty, types, module, &field.name, diagnostics));
+        .and_then(|e| evaluate_literal(e, &ty, &annotated.types, module, &field.name, diagnostics));
     Some(OptionsField {
         name: field.name.clone(),
         ty,
@@ -211,13 +222,22 @@ fn lower_field(
 
 fn lower_type(
     type_id: TypeId,
-    types: &TypeTable,
+    annotated: &Annotated,
     module: &ModuleSource,
     field_name: &str,
+    visiting: &mut IndexSet<(ModuleSource, String)>,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<OptionsType> {
+    let types = &annotated.types;
     if let Some(inner_id) = types.as_option(type_id) {
-        let inner = lower_type(inner_id, types, module, field_name, diagnostics)?;
+        let inner = lower_type(
+            inner_id,
+            annotated,
+            module,
+            field_name,
+            visiting,
+            diagnostics,
+        )?;
         return Some(OptionsType::Option(Box::new(inner)));
     }
 
@@ -249,7 +269,15 @@ fn lower_type(
             module_source,
             ..
         } => {
-            let nested = nested_struct_descriptor(name, module_source, types, module, diagnostics)?;
+            let nested = nested_struct_descriptor(
+                name,
+                module_source,
+                annotated,
+                module,
+                field_name,
+                visiting,
+                diagnostics,
+            )?;
             Some(OptionsType::Struct {
                 name: name.clone(),
                 descriptor: nested,
@@ -259,7 +287,14 @@ fn lower_type(
             name,
             module_source,
         } => {
-            let variants = enum_variants(name, module_source, types, module, diagnostics)?;
+            let variants = enum_variants(
+                name,
+                module_source,
+                annotated,
+                module,
+                field_name,
+                diagnostics,
+            )?;
             Some(OptionsType::Enum {
                 name: name.clone(),
                 variants,
@@ -278,48 +313,112 @@ fn lower_type(
 }
 
 fn nested_struct_descriptor(
-    _struct_name: &str,
-    _struct_module: &ModuleSource,
-    _types: &TypeTable,
+    struct_name: &str,
+    struct_module: &ModuleSource,
+    annotated: &Annotated,
     module: &ModuleSource,
+    field_name: &str,
+    visiting: &mut IndexSet<(ModuleSource, String)>,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<OptionsDescriptor> {
-    // Nested struct descriptors require access to the declaring module's TIR.
-    // v1 declines nested structs rather than re-scanning every module; the
-    // WEP explicitly scopes M4 to the "Options struct plus primitives /
-    // enums / Option<T>" happy path and leaves nested structs as a follow-up.
-    push_unsupported(
-        diagnostics,
-        module,
-        "<nested>",
-        "nested struct options are not yet supported",
-    );
-    None
+    let key = (struct_module.clone(), struct_name.to_string());
+    if visiting.contains(&key) {
+        push_unsupported(
+            diagnostics,
+            module,
+            field_name,
+            &format!("recursive struct `{struct_name}` is not supported in generator options"),
+        );
+        return None;
+    }
+
+    let tir_module = match annotated.tir_modules.get(struct_module) {
+        Some(m) => m,
+        None => {
+            push_unsupported(
+                diagnostics,
+                module,
+                field_name,
+                &format!(
+                    "nested struct `{struct_name}` declaring module {:?} is not available",
+                    struct_module.diagnostic_filename()
+                ),
+            );
+            return None;
+        }
+    };
+
+    let nested_struct = match tir_module.find_struct(struct_name) {
+        Some(s) => s,
+        None => {
+            push_unsupported(
+                diagnostics,
+                module,
+                field_name,
+                &format!("nested struct `{struct_name}` not found in its declaring module"),
+            );
+            return None;
+        }
+    };
+
+    visiting.insert(key.clone());
+    let mut nested_fields = Vec::with_capacity(nested_struct.fields.len());
+    let mut any_failed = false;
+    for field in &nested_struct.fields {
+        match lower_field(field, annotated, struct_module, visiting, diagnostics) {
+            Some(f) => nested_fields.push(f),
+            None => any_failed = true,
+        }
+    }
+    visiting.shift_remove(&key);
+
+    if any_failed {
+        return None;
+    }
+
+    Some(OptionsDescriptor {
+        fields: nested_fields,
+    })
 }
 
 fn enum_variants(
     enum_name: &str,
     enum_module: &ModuleSource,
-    types: &TypeTable,
+    annotated: &Annotated,
     module: &ModuleSource,
+    field_name: &str,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Vec<String>> {
-    // The enum's cases live in the declaring module's TIR. We cannot reach
-    // that from the TypeTable alone, so we keep the information in the
-    // intern'd `ResolvedType` and require the caller's `Annotated` to look it
-    // up. To avoid threading Annotated through everything, we keep an
-    // approximation here: reject enums from non-current modules unless the
-    // `TypeTable` already exposed the variants. v1 only needs flat local
-    // enums, so this is a pragmatic subset.
-    let _ = (enum_name, enum_module, types);
-    push_unsupported(
-        diagnostics,
-        module,
-        enum_name,
-        "enum options are supported only via a future extension; declare \
-         configuration choices as booleans or strings in v1",
-    );
-    None
+    let tir_module = match annotated.tir_modules.get(enum_module) {
+        Some(m) => m,
+        None => {
+            push_unsupported(
+                diagnostics,
+                module,
+                field_name,
+                &format!(
+                    "enum `{enum_name}` declaring module {:?} is not available",
+                    enum_module.diagnostic_filename()
+                ),
+            );
+            return None;
+        }
+    };
+
+    let enum_decl = match tir_module.find_enum(enum_name) {
+        Some(e) => e,
+        None => {
+            push_unsupported(
+                diagnostics,
+                module,
+                field_name,
+                &format!("enum `{enum_name}` not found in its declaring module"),
+            );
+            return None;
+        }
+    };
+
+    Some(enum_decl.cases.iter().map(|c| c.name.clone()).collect())
 }
 
 fn evaluate_literal(
@@ -345,6 +444,52 @@ fn evaluate_literal(
             Some(CanonicalValue::String(s.clone()))
         }
         (TirExprKind::Null, OptionsType::Option(_)) => Some(CanonicalValue::None),
+        (TirExprKind::EnumConstruct { case_name, .. }, OptionsType::Enum { variants, .. }) => {
+            if variants.iter().any(|v| v == case_name) {
+                Some(CanonicalValue::Enum(case_name.clone()))
+            } else {
+                push_unsupported(
+                    diagnostics,
+                    module,
+                    field_name,
+                    &format!("default enum case `{case_name}` not in declared variants"),
+                );
+                None
+            }
+        }
+        (TirExprKind::StructLiteral { fields, .. }, OptionsType::Struct { descriptor, .. }) => {
+            let mut out = Vec::with_capacity(descriptor.fields.len());
+            for desc_field in &descriptor.fields {
+                let matching_field = fields.iter().find(|f| f.name == desc_field.name);
+                let value = match matching_field {
+                    Some(f) => evaluate_literal(
+                        &f.value,
+                        &desc_field.ty,
+                        types,
+                        module,
+                        &desc_field.name,
+                        diagnostics,
+                    )?,
+                    None => match &desc_field.default {
+                        Some(v) => v.clone(),
+                        None => {
+                            push_unsupported(
+                                diagnostics,
+                                module,
+                                field_name,
+                                &format!(
+                                    "nested default omits `{}` which has no field-level default",
+                                    desc_field.name
+                                ),
+                            );
+                            return None;
+                        }
+                    },
+                };
+                out.push((desc_field.name.clone(), value));
+            }
+            Some(CanonicalValue::Struct(out))
+        }
         (_, OptionsType::Option(inner)) => {
             evaluate_literal(expr, inner, types, module, field_name, diagnostics)
                 .map(|v| CanonicalValue::Some(Box::new(v)))

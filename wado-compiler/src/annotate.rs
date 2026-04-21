@@ -667,25 +667,35 @@ pub async fn annotate<H: CompilerHost>(
     host: &H,
     filename: Option<&str>,
 ) -> Result<Annotated, Bail> {
+    annotate_with_invocations(source, host, filename, crate::kiln::InvocationIndex::new()).await
+}
+
+/// Variant of [`annotate`] that seeds the loader with a Kiln
+/// [`crate::kiln::InvocationIndex`] so bare `use { X } from "<schema>"`
+/// clauses can pick up generator-produced entry modules.
+pub async fn annotate_with_invocations<H: CompilerHost>(
+    source: &str,
+    host: &H,
+    filename: Option<&str>,
+    invocations: crate::kiln::InvocationIndex,
+) -> Result<Annotated, Bail> {
     let logger = Logger::new(host, LogLevel::default());
     if let Some(f) = filename {
         logger.set_file(f);
     }
-    annotate_with_logger(source, host, filename, &logger).await
+    annotate_with_logger_invocations(source, host, filename, &logger, invocations).await
 }
 
-/// Internal variant of [`annotate`] that reuses an existing [`Logger`].
-///
-/// `compile_with_options` uses this to run annotate + lower under a single
-/// logger session so diagnostics stay contextualized.
-pub(crate) async fn annotate_with_logger<H: CompilerHost>(
+async fn annotate_with_logger_invocations<H: CompilerHost>(
     source: &str,
     host: &H,
     filename: Option<&str>,
     logger: &Logger<'_, H>,
+    invocations: crate::kiln::InvocationIndex,
 ) -> Result<Annotated, Bail> {
     let load_result = {
-        let module_loader = loader::ModuleLoader::new(host, LogLevel::default());
+        let module_loader =
+            loader::ModuleLoader::new(host, LogLevel::default()).with_invocations(invocations);
         module_loader
             .load_all(source, filename)
             .await
@@ -707,7 +717,7 @@ pub(crate) fn annotate_loaded<H: CompilerHost>(
 ) -> Result<Annotated, Bail> {
     let symbols = {
         let _span = logger.span("analyze");
-        let mut analyzer = Analyzer::new(logger);
+        let mut analyzer = Analyzer::new(logger).with_invocations(load_result.invocations.clone());
         analyzer.analyze_loaded_modules(
             &load_result.modules,
             &load_result.entry_module_source,
@@ -723,6 +733,7 @@ pub(crate) fn annotate_loaded<H: CompilerHost>(
             &load_result.modules,
             &load_result.entry_module_source,
             logger,
+            load_result.invocations.clone(),
         )?
     };
 
