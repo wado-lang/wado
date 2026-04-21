@@ -645,7 +645,7 @@ ID : [a-z]+ ;";
 test "generate left-associative LR alt passes own_prec+1 on right operand" {
     // Baseline without `<assoc=right>`: the recursive right operand runs at
     // `own_prec + 1` so same-precedence operators are left-associative
-    // (handled by the outer `_prec` loop, not by nested recursion).
+    // (handled by the outer precedence loop, not by nested recursion).
     let input = "grammar Test;
 expr : expr '**' expr | NUMBER ;
 NUMBER : [0-9]+ ;
@@ -653,7 +653,7 @@ WS : [ \\t\\r\\n]+ -> skip ;
 ";
     let grammar = parse_grammar(input, "test.g4");
     let output = generate(&grammar, &DEFAULT_OPTIONS);
-    assert str_contains(&output, "parse_expr_prec(p, 2)"),
+    assert str_contains(&output, "parse_expr(p, 2)"),
         "left-assoc '**' alt should recurse with own_prec+1 (=2)";
 }
 
@@ -667,10 +667,10 @@ WS : [ \\t\\r\\n]+ -> skip ;
 ";
     let grammar = parse_grammar(input, "test.g4");
     let output = generate(&grammar, &DEFAULT_OPTIONS);
-    assert str_contains(&output, "parse_expr_prec(p, 1)"),
+    assert str_contains(&output, "parse_expr(p, 1)"),
         "right-assoc '**' alt should recurse with own_prec (=1)";
     // And the scan-side mirror must be kept in sync.
-    assert str_contains(&output, "scan_expr_prec(tokens, pos, 1)"),
+    assert str_contains(&output, "scan_expr(tokens, pos, 1)"),
         "scan-side must mirror the right-assoc precedence";
 }
 

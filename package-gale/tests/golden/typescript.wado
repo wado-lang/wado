@@ -8226,7 +8226,7 @@ fn scan_union_or_intersection_or_primary_type_lr_0(tokens: &Array<Token>, pos: i
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_PIPE { return -1; }
     pos += 1;
-    pos = scan_union_or_intersection_or_primary_type_prec(tokens, pos, 3);
+    pos = scan_union_or_intersection_or_primary_type(tokens, pos, 3);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -8235,12 +8235,12 @@ fn scan_union_or_intersection_or_primary_type_lr_1(tokens: &Array<Token>, pos: i
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_AMP { return -1; }
     pos += 1;
-    pos = scan_union_or_intersection_or_primary_type_prec(tokens, pos, 2);
+    pos = scan_union_or_intersection_or_primary_type(tokens, pos, 2);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_union_or_intersection_or_primary_type_prec(tokens: &Array<Token>, pos: i32, min_prec: i32) -> i32 {
+fn scan_union_or_intersection_or_primary_type(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = scan_union_or_intersection_or_primary_type_atom(tokens, pos);
     if pos < 0 { return -1; }
     loop {
@@ -8264,10 +8264,6 @@ fn scan_union_or_intersection_or_primary_type_prec(tokens: &Array<Token>, pos: i
         }
     }
     return pos;
-}
-
-fn scan_union_or_intersection_or_primary_type(tokens: &Array<Token>, pos: i32) -> i32 {
-    return scan_union_or_intersection_or_primary_type_prec(tokens, pos, 0);
 }
 
 fn scan_primary_type_atom(tokens: &Array<Token>, pos: i32) -> i32 {
@@ -8426,7 +8422,7 @@ fn scan_primary_type_lr_4(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_primary_type_prec(tokens: &Array<Token>, pos: i32, min_prec: i32) -> i32 {
+fn scan_primary_type(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = scan_primary_type_atom(tokens, pos);
     if pos < 0 { return -1; }
     loop {
@@ -8443,10 +8439,6 @@ fn scan_primary_type_prec(tokens: &Array<Token>, pos: i32, min_prec: i32) -> i32
         }
     }
     return pos;
-}
-
-fn scan_primary_type(tokens: &Array<Token>, pos: i32) -> i32 {
-    return scan_primary_type_prec(tokens, pos, 0);
 }
 
 fn scan_predefined_type(tokens: &Array<Token>, pos: i32) -> i32 {
@@ -9750,7 +9742,7 @@ fn scan_decorator_member_expression_lr_1(tokens: &Array<Token>, pos: i32) -> i32
     return pos;
 }
 
-fn scan_decorator_member_expression_prec(tokens: &Array<Token>, pos: i32, min_prec: i32) -> i32 {
+fn scan_decorator_member_expression(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = scan_decorator_member_expression_atom(tokens, pos);
     if pos < 0 { return -1; }
     loop {
@@ -9767,10 +9759,6 @@ fn scan_decorator_member_expression_prec(tokens: &Array<Token>, pos: i32, min_pr
         }
     }
     return pos;
-}
-
-fn scan_decorator_member_expression(tokens: &Array<Token>, pos: i32) -> i32 {
-    return scan_decorator_member_expression_prec(tokens, pos, 0);
 }
 
 fn scan_decorator_call_expression(tokens: &Array<Token>, pos: i32) -> i32 {
@@ -14050,7 +14038,7 @@ fn scan_single_expression_lr_3(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_QUESTIONDOT { return -1; }
     pos += 1;
-    pos = scan_single_expression_prec(tokens, pos, 28);
+    pos = scan_single_expression(tokens, pos, 28);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -14128,7 +14116,7 @@ fn scan_single_expression_lr_21(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_STARSTAR { return -1; }
     pos += 1;
-    pos = scan_single_expression_prec(tokens, pos, 20);
+    pos = scan_single_expression(tokens, pos, 20);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -14157,7 +14145,7 @@ fn scan_single_expression_lr_22(tokens: &Array<Token>, pos: i32) -> i32 {
         }
         return -1;
     }
-    pos = scan_single_expression_prec(tokens, pos, 20);
+    pos = scan_single_expression(tokens, pos, 20);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -14180,7 +14168,7 @@ fn scan_single_expression_lr_23(tokens: &Array<Token>, pos: i32) -> i32 {
         }
         return -1;
     }
-    pos = scan_single_expression_prec(tokens, pos, 19);
+    pos = scan_single_expression(tokens, pos, 19);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -14189,7 +14177,7 @@ fn scan_single_expression_lr_24(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_QUESTIONQUESTION { return -1; }
     pos += 1;
-    pos = scan_single_expression_prec(tokens, pos, 18);
+    pos = scan_single_expression(tokens, pos, 18);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -14229,7 +14217,7 @@ fn scan_single_expression_lr_25(tokens: &Array<Token>, pos: i32) -> i32 {
             pos = gp_103;
         }
     }
-    pos = scan_single_expression_prec(tokens, pos, 17);
+    pos = scan_single_expression(tokens, pos, 17);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -14264,7 +14252,7 @@ fn scan_single_expression_lr_26(tokens: &Array<Token>, pos: i32) -> i32 {
         }
         return -1;
     }
-    pos = scan_single_expression_prec(tokens, pos, 16);
+    pos = scan_single_expression(tokens, pos, 16);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -14273,7 +14261,7 @@ fn scan_single_expression_lr_27(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Instanceof { return -1; }
     pos += 1;
-    pos = scan_single_expression_prec(tokens, pos, 15);
+    pos = scan_single_expression(tokens, pos, 15);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -14282,7 +14270,7 @@ fn scan_single_expression_lr_28(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_In { return -1; }
     pos += 1;
-    pos = scan_single_expression_prec(tokens, pos, 14);
+    pos = scan_single_expression(tokens, pos, 14);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -14317,7 +14305,7 @@ fn scan_single_expression_lr_29(tokens: &Array<Token>, pos: i32) -> i32 {
         }
         return -1;
     }
-    pos = scan_single_expression_prec(tokens, pos, 13);
+    pos = scan_single_expression(tokens, pos, 13);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -14326,7 +14314,7 @@ fn scan_single_expression_lr_30(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_AMP { return -1; }
     pos += 1;
-    pos = scan_single_expression_prec(tokens, pos, 12);
+    pos = scan_single_expression(tokens, pos, 12);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -14335,7 +14323,7 @@ fn scan_single_expression_lr_31(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_CARET { return -1; }
     pos += 1;
-    pos = scan_single_expression_prec(tokens, pos, 11);
+    pos = scan_single_expression(tokens, pos, 11);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -14344,7 +14332,7 @@ fn scan_single_expression_lr_32(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_PIPE { return -1; }
     pos += 1;
-    pos = scan_single_expression_prec(tokens, pos, 10);
+    pos = scan_single_expression(tokens, pos, 10);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -14353,7 +14341,7 @@ fn scan_single_expression_lr_33(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_AMPAMP { return -1; }
     pos += 1;
-    pos = scan_single_expression_prec(tokens, pos, 9);
+    pos = scan_single_expression(tokens, pos, 9);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -14362,7 +14350,7 @@ fn scan_single_expression_lr_34(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_PIPEPIPE { return -1; }
     pos += 1;
-    pos = scan_single_expression_prec(tokens, pos, 8);
+    pos = scan_single_expression(tokens, pos, 8);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -14371,11 +14359,11 @@ fn scan_single_expression_lr_35(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_QUESTION { return -1; }
     pos += 1;
-    pos = scan_single_expression_prec(tokens, pos, 0);
+    pos = scan_single_expression(tokens, pos, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COLON { return -1; }
     pos += 1;
-    pos = scan_single_expression_prec(tokens, pos, 25);
+    pos = scan_single_expression(tokens, pos, 25);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -14384,7 +14372,7 @@ fn scan_single_expression_lr_36(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_EQ { return -1; }
     pos += 1;
-    pos = scan_single_expression_prec(tokens, pos, 6);
+    pos = scan_single_expression(tokens, pos, 6);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -14393,7 +14381,7 @@ fn scan_single_expression_lr_37(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_assignment_operator(tokens, pos);
     if pos < 0 { return -1; }
-    pos = scan_single_expression_prec(tokens, pos, 5);
+    pos = scan_single_expression(tokens, pos, 5);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -14421,7 +14409,7 @@ fn scan_single_expression_lr_52(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_single_expression_prec(tokens: &Array<Token>, pos: i32, min_prec: i32) -> i32 {
+fn scan_single_expression(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = scan_single_expression_atom(tokens, pos);
     if pos < 0 { return -1; }
     loop {
@@ -14690,10 +14678,6 @@ fn scan_single_expression_prec(tokens: &Array<Token>, pos: i32, min_prec: i32) -
         }
     }
     return pos;
-}
-
-fn scan_single_expression(tokens: &Array<Token>, pos: i32) -> i32 {
-    return scan_single_expression_prec(tokens, pos, 0);
 }
 
 fn scan_as_expression(tokens: &Array<Token>, pos: i32) -> i32 {
@@ -16575,7 +16559,7 @@ fn parse_union_or_intersection_or_primary_type_atom(p: &mut Parser) -> Result<Un
 
 fn parse_union_or_intersection_or_primary_type_lr_0(p: &mut Parser, left: UnionOrIntersectionOrPrimaryTypeNode, start: i32) -> Result<UnionOrIntersectionOrPrimaryTypeNode, ParseError> {
     let pipe = p.expect(TK_LIT_PIPE)?;
-    let union_or_intersection_or_primary_type_2 = parse_union_or_intersection_or_primary_type_prec(p, 3)?;
+    let union_or_intersection_or_primary_type_2 = parse_union_or_intersection_or_primary_type(p, 3)?;
     return Result::<UnionOrIntersectionOrPrimaryTypeNode, ParseError>::Ok(UnionOrIntersectionOrPrimaryTypeNode::Union(UnionOrIntersectionOrPrimaryTypeUnion {
         span: Span::new(start, p.last_end()),
         union_or_intersection_or_primary_type: left,
@@ -16586,7 +16570,7 @@ fn parse_union_or_intersection_or_primary_type_lr_0(p: &mut Parser, left: UnionO
 
 fn parse_union_or_intersection_or_primary_type_lr_1(p: &mut Parser, left: UnionOrIntersectionOrPrimaryTypeNode, start: i32) -> Result<UnionOrIntersectionOrPrimaryTypeNode, ParseError> {
     let amp = p.expect(TK_LIT_AMP)?;
-    let union_or_intersection_or_primary_type_2 = parse_union_or_intersection_or_primary_type_prec(p, 2)?;
+    let union_or_intersection_or_primary_type_2 = parse_union_or_intersection_or_primary_type(p, 2)?;
     return Result::<UnionOrIntersectionOrPrimaryTypeNode, ParseError>::Ok(UnionOrIntersectionOrPrimaryTypeNode::Intersection(UnionOrIntersectionOrPrimaryTypeIntersection {
         span: Span::new(start, p.last_end()),
         union_or_intersection_or_primary_type: left,
@@ -16595,7 +16579,7 @@ fn parse_union_or_intersection_or_primary_type_lr_1(p: &mut Parser, left: UnionO
     }));
 }
 
-fn parse_union_or_intersection_or_primary_type_prec(p: &mut Parser, min_prec: i32) -> Result<UnionOrIntersectionOrPrimaryTypeNode, ParseError> {
+fn parse_union_or_intersection_or_primary_type(p: &mut Parser, min_prec: i32 = 0) -> Result<UnionOrIntersectionOrPrimaryTypeNode, ParseError> {
     let start = p.peek().span.start;
     let mut result = parse_union_or_intersection_or_primary_type_atom(p)?;
     loop {
@@ -16617,10 +16601,6 @@ fn parse_union_or_intersection_or_primary_type_prec(p: &mut Parser, min_prec: i3
         }
     }
     return Result::<UnionOrIntersectionOrPrimaryTypeNode, ParseError>::Ok(result);
-}
-
-fn parse_union_or_intersection_or_primary_type(p: &mut Parser) -> Result<UnionOrIntersectionOrPrimaryTypeNode, ParseError> {
-    return parse_union_or_intersection_or_primary_type_prec(p, 0);
 }
 
 fn parse_primary_type_bt_9(p: &mut Parser) -> Result<PrimaryTypeNode, ParseError> {
@@ -16837,7 +16817,7 @@ fn parse_primary_type_lr_4(p: &mut Parser, left: PrimaryTypeNode, start: i32) ->
     }));
 }
 
-fn parse_primary_type_prec(p: &mut Parser, min_prec: i32) -> Result<PrimaryTypeNode, ParseError> {
+fn parse_primary_type(p: &mut Parser, min_prec: i32 = 0) -> Result<PrimaryTypeNode, ParseError> {
     let start = p.peek().span.start;
     let mut result = parse_primary_type_atom(p)?;
     loop {
@@ -16853,10 +16833,6 @@ fn parse_primary_type_prec(p: &mut Parser, min_prec: i32) -> Result<PrimaryTypeN
         }
     }
     return Result::<PrimaryTypeNode, ParseError>::Ok(result);
-}
-
-fn parse_primary_type(p: &mut Parser) -> Result<PrimaryTypeNode, ParseError> {
-    return parse_primary_type_prec(p, 0);
 }
 
 fn parse_predefined_type(p: &mut Parser) -> Result<PredefinedTypeNode, ParseError> {
@@ -18397,7 +18373,7 @@ fn parse_decorator_member_expression_lr_1(p: &mut Parser, left: DecoratorMemberE
     }));
 }
 
-fn parse_decorator_member_expression_prec(p: &mut Parser, min_prec: i32) -> Result<DecoratorMemberExpressionNode, ParseError> {
+fn parse_decorator_member_expression(p: &mut Parser, min_prec: i32 = 0) -> Result<DecoratorMemberExpressionNode, ParseError> {
     let start = p.peek().span.start;
     let mut result = parse_decorator_member_expression_atom(p)?;
     loop {
@@ -18413,10 +18389,6 @@ fn parse_decorator_member_expression_prec(p: &mut Parser, min_prec: i32) -> Resu
         }
     }
     return Result::<DecoratorMemberExpressionNode, ParseError>::Ok(result);
-}
-
-fn parse_decorator_member_expression(p: &mut Parser) -> Result<DecoratorMemberExpressionNode, ParseError> {
-    return parse_decorator_member_expression_prec(p, 0);
 }
 
 fn parse_decorator_call_expression(p: &mut Parser) -> Result<DecoratorCallExpressionNode, ParseError> {
@@ -23014,7 +22986,7 @@ fn parse_single_expression_lr_2(p: &mut Parser, left: SingleExpressionNode, star
 
 fn parse_single_expression_lr_3(p: &mut Parser, left: SingleExpressionNode, start: i32) -> Result<SingleExpressionNode, ParseError> {
     let lit_questiondot = p.expect(TK_LIT_QUESTIONDOT)?;
-    let single_expression_2 = parse_single_expression_prec(p, 28)?;
+    let single_expression_2 = parse_single_expression(p, 28)?;
     return Result::<SingleExpressionNode, ParseError>::Ok(SingleExpressionNode::OptionalChainExpression(SingleExpressionOptionalChainExpression {
         span: Span::new(start, p.last_end()),
         single_expression: left,
@@ -23116,7 +23088,7 @@ fn parse_single_expression_lr_10(p: &mut Parser, left: SingleExpressionNode, sta
 
 fn parse_single_expression_lr_21(p: &mut Parser, left: SingleExpressionNode, start: i32) -> Result<SingleExpressionNode, ParseError> {
     let lit_starstar = p.expect(TK_LIT_STARSTAR)?;
-    let single_expression_2 = parse_single_expression_prec(p, 20)?;
+    let single_expression_2 = parse_single_expression(p, 20)?;
     return Result::<SingleExpressionNode, ParseError>::Ok(SingleExpressionNode::PowerExpression(SingleExpressionPowerExpression {
         span: Span::new(start, p.last_end()),
         single_expression: left,
@@ -23127,7 +23099,7 @@ fn parse_single_expression_lr_21(p: &mut Parser, left: SingleExpressionNode, sta
 
 fn parse_single_expression_lr_22(p: &mut Parser, left: SingleExpressionNode, start: i32) -> Result<SingleExpressionNode, ParseError> {
     let star_or_slash_or_percent = p.advance();
-    let single_expression_2 = parse_single_expression_prec(p, 20)?;
+    let single_expression_2 = parse_single_expression(p, 20)?;
     return Result::<SingleExpressionNode, ParseError>::Ok(SingleExpressionNode::MultiplicativeExpression(SingleExpressionMultiplicativeExpression {
         span: Span::new(start, p.last_end()),
         single_expression: left,
@@ -23138,7 +23110,7 @@ fn parse_single_expression_lr_22(p: &mut Parser, left: SingleExpressionNode, sta
 
 fn parse_single_expression_lr_23(p: &mut Parser, left: SingleExpressionNode, start: i32) -> Result<SingleExpressionNode, ParseError> {
     let plus_or_minus = p.advance();
-    let single_expression_2 = parse_single_expression_prec(p, 19)?;
+    let single_expression_2 = parse_single_expression(p, 19)?;
     return Result::<SingleExpressionNode, ParseError>::Ok(SingleExpressionNode::AdditiveExpression(SingleExpressionAdditiveExpression {
         span: Span::new(start, p.last_end()),
         single_expression: left,
@@ -23149,7 +23121,7 @@ fn parse_single_expression_lr_23(p: &mut Parser, left: SingleExpressionNode, sta
 
 fn parse_single_expression_lr_24(p: &mut Parser, left: SingleExpressionNode, start: i32) -> Result<SingleExpressionNode, ParseError> {
     let lit_questionquestion = p.expect(TK_LIT_QUESTIONQUESTION)?;
-    let single_expression_2 = parse_single_expression_prec(p, 18)?;
+    let single_expression_2 = parse_single_expression(p, 18)?;
     return Result::<SingleExpressionNode, ParseError>::Ok(SingleExpressionNode::CoalesceExpression(SingleExpressionCoalesceExpression {
         span: Span::new(start, p.last_end()),
         single_expression: left,
@@ -23218,7 +23190,7 @@ fn parse_single_expression_lr_25(p: &mut Parser, left: SingleExpressionNode, sta
         }
     }
     let group_0 = group_0_inner;
-    let single_expression_2 = parse_single_expression_prec(p, 17)?;
+    let single_expression_2 = parse_single_expression(p, 17)?;
     return Result::<SingleExpressionNode, ParseError>::Ok(SingleExpressionNode::BitShiftExpression(SingleExpressionBitShiftExpression {
         span: Span::new(start, p.last_end()),
         single_expression: left,
@@ -23229,7 +23201,7 @@ fn parse_single_expression_lr_25(p: &mut Parser, left: SingleExpressionNode, sta
 
 fn parse_single_expression_lr_26(p: &mut Parser, left: SingleExpressionNode, start: i32) -> Result<SingleExpressionNode, ParseError> {
     let lt_or_gt_or_lit_lteq_or_lit_gteq = p.advance();
-    let single_expression_2 = parse_single_expression_prec(p, 16)?;
+    let single_expression_2 = parse_single_expression(p, 16)?;
     return Result::<SingleExpressionNode, ParseError>::Ok(SingleExpressionNode::RelationalExpression(SingleExpressionRelationalExpression {
         span: Span::new(start, p.last_end()),
         single_expression: left,
@@ -23240,7 +23212,7 @@ fn parse_single_expression_lr_26(p: &mut Parser, left: SingleExpressionNode, sta
 
 fn parse_single_expression_lr_27(p: &mut Parser, left: SingleExpressionNode, start: i32) -> Result<SingleExpressionNode, ParseError> {
     let instanceof = p.expect(TK_Instanceof)?;
-    let single_expression_2 = parse_single_expression_prec(p, 15)?;
+    let single_expression_2 = parse_single_expression(p, 15)?;
     return Result::<SingleExpressionNode, ParseError>::Ok(SingleExpressionNode::InstanceofExpression(SingleExpressionInstanceofExpression {
         span: Span::new(start, p.last_end()),
         single_expression: left,
@@ -23251,7 +23223,7 @@ fn parse_single_expression_lr_27(p: &mut Parser, left: SingleExpressionNode, sta
 
 fn parse_single_expression_lr_28(p: &mut Parser, left: SingleExpressionNode, start: i32) -> Result<SingleExpressionNode, ParseError> {
     let in_ = p.expect(TK_In)?;
-    let single_expression_2 = parse_single_expression_prec(p, 14)?;
+    let single_expression_2 = parse_single_expression(p, 14)?;
     return Result::<SingleExpressionNode, ParseError>::Ok(SingleExpressionNode::InExpression(SingleExpressionInExpression {
         span: Span::new(start, p.last_end()),
         single_expression: left,
@@ -23262,7 +23234,7 @@ fn parse_single_expression_lr_28(p: &mut Parser, left: SingleExpressionNode, sta
 
 fn parse_single_expression_lr_29(p: &mut Parser, left: SingleExpressionNode, start: i32) -> Result<SingleExpressionNode, ParseError> {
     let lit_eqeq_or_lit_bangeq_or_lit_eqeqeq_or_lit_bangeqeq = p.advance();
-    let single_expression_2 = parse_single_expression_prec(p, 13)?;
+    let single_expression_2 = parse_single_expression(p, 13)?;
     return Result::<SingleExpressionNode, ParseError>::Ok(SingleExpressionNode::EqualityExpression(SingleExpressionEqualityExpression {
         span: Span::new(start, p.last_end()),
         single_expression: left,
@@ -23273,7 +23245,7 @@ fn parse_single_expression_lr_29(p: &mut Parser, left: SingleExpressionNode, sta
 
 fn parse_single_expression_lr_30(p: &mut Parser, left: SingleExpressionNode, start: i32) -> Result<SingleExpressionNode, ParseError> {
     let amp = p.expect(TK_LIT_AMP)?;
-    let single_expression_2 = parse_single_expression_prec(p, 12)?;
+    let single_expression_2 = parse_single_expression(p, 12)?;
     return Result::<SingleExpressionNode, ParseError>::Ok(SingleExpressionNode::BitAndExpression(SingleExpressionBitAndExpression {
         span: Span::new(start, p.last_end()),
         single_expression: left,
@@ -23284,7 +23256,7 @@ fn parse_single_expression_lr_30(p: &mut Parser, left: SingleExpressionNode, sta
 
 fn parse_single_expression_lr_31(p: &mut Parser, left: SingleExpressionNode, start: i32) -> Result<SingleExpressionNode, ParseError> {
     let caret = p.expect(TK_LIT_CARET)?;
-    let single_expression_2 = parse_single_expression_prec(p, 11)?;
+    let single_expression_2 = parse_single_expression(p, 11)?;
     return Result::<SingleExpressionNode, ParseError>::Ok(SingleExpressionNode::BitXOrExpression(SingleExpressionBitXOrExpression {
         span: Span::new(start, p.last_end()),
         single_expression: left,
@@ -23295,7 +23267,7 @@ fn parse_single_expression_lr_31(p: &mut Parser, left: SingleExpressionNode, sta
 
 fn parse_single_expression_lr_32(p: &mut Parser, left: SingleExpressionNode, start: i32) -> Result<SingleExpressionNode, ParseError> {
     let pipe = p.expect(TK_LIT_PIPE)?;
-    let single_expression_2 = parse_single_expression_prec(p, 10)?;
+    let single_expression_2 = parse_single_expression(p, 10)?;
     return Result::<SingleExpressionNode, ParseError>::Ok(SingleExpressionNode::BitOrExpression(SingleExpressionBitOrExpression {
         span: Span::new(start, p.last_end()),
         single_expression: left,
@@ -23306,7 +23278,7 @@ fn parse_single_expression_lr_32(p: &mut Parser, left: SingleExpressionNode, sta
 
 fn parse_single_expression_lr_33(p: &mut Parser, left: SingleExpressionNode, start: i32) -> Result<SingleExpressionNode, ParseError> {
     let lit_ampamp = p.expect(TK_LIT_AMPAMP)?;
-    let single_expression_2 = parse_single_expression_prec(p, 9)?;
+    let single_expression_2 = parse_single_expression(p, 9)?;
     return Result::<SingleExpressionNode, ParseError>::Ok(SingleExpressionNode::LogicalAndExpression(SingleExpressionLogicalAndExpression {
         span: Span::new(start, p.last_end()),
         single_expression: left,
@@ -23317,7 +23289,7 @@ fn parse_single_expression_lr_33(p: &mut Parser, left: SingleExpressionNode, sta
 
 fn parse_single_expression_lr_34(p: &mut Parser, left: SingleExpressionNode, start: i32) -> Result<SingleExpressionNode, ParseError> {
     let lit_pipepipe = p.expect(TK_LIT_PIPEPIPE)?;
-    let single_expression_2 = parse_single_expression_prec(p, 8)?;
+    let single_expression_2 = parse_single_expression(p, 8)?;
     return Result::<SingleExpressionNode, ParseError>::Ok(SingleExpressionNode::LogicalOrExpression(SingleExpressionLogicalOrExpression {
         span: Span::new(start, p.last_end()),
         single_expression: left,
@@ -23328,9 +23300,9 @@ fn parse_single_expression_lr_34(p: &mut Parser, left: SingleExpressionNode, sta
 
 fn parse_single_expression_lr_35(p: &mut Parser, left: SingleExpressionNode, start: i32) -> Result<SingleExpressionNode, ParseError> {
     let question = p.expect(TK_LIT_QUESTION)?;
-    let single_expression_2 = parse_single_expression_prec(p, 0)?;
+    let single_expression_2 = parse_single_expression(p, 0)?;
     let colon = p.expect(TK_LIT_COLON)?;
-    let single_expression_3 = parse_single_expression_prec(p, 25)?;
+    let single_expression_3 = parse_single_expression(p, 25)?;
     return Result::<SingleExpressionNode, ParseError>::Ok(SingleExpressionNode::TernaryExpression(SingleExpressionTernaryExpression {
         span: Span::new(start, p.last_end()),
         single_expression: left,
@@ -23343,7 +23315,7 @@ fn parse_single_expression_lr_35(p: &mut Parser, left: SingleExpressionNode, sta
 
 fn parse_single_expression_lr_36(p: &mut Parser, left: SingleExpressionNode, start: i32) -> Result<SingleExpressionNode, ParseError> {
     let eq = p.expect(TK_LIT_EQ)?;
-    let single_expression_2 = parse_single_expression_prec(p, 6)?;
+    let single_expression_2 = parse_single_expression(p, 6)?;
     return Result::<SingleExpressionNode, ParseError>::Ok(SingleExpressionNode::AssignmentExpression(SingleExpressionAssignmentExpression {
         span: Span::new(start, p.last_end()),
         single_expression: left,
@@ -23354,7 +23326,7 @@ fn parse_single_expression_lr_36(p: &mut Parser, left: SingleExpressionNode, sta
 
 fn parse_single_expression_lr_37(p: &mut Parser, left: SingleExpressionNode, start: i32) -> Result<SingleExpressionNode, ParseError> {
     let assignment_operator = parse_assignment_operator(p)?;
-    let single_expression_2 = parse_single_expression_prec(p, 5)?;
+    let single_expression_2 = parse_single_expression(p, 5)?;
     return Result::<SingleExpressionNode, ParseError>::Ok(SingleExpressionNode::AssignmentOperatorExpression(SingleExpressionAssignmentOperatorExpression {
         span: Span::new(start, p.last_end()),
         single_expression: left,
@@ -23392,7 +23364,7 @@ fn parse_single_expression_lr_52(p: &mut Parser, left: SingleExpressionNode, sta
     }));
 }
 
-fn parse_single_expression_prec(p: &mut Parser, min_prec: i32) -> Result<SingleExpressionNode, ParseError> {
+fn parse_single_expression(p: &mut Parser, min_prec: i32 = 0) -> Result<SingleExpressionNode, ParseError> {
     let start = p.peek().span.start;
     let mut result = parse_single_expression_atom(p)?;
     loop {
@@ -23622,10 +23594,6 @@ fn parse_single_expression_prec(p: &mut Parser, min_prec: i32) -> Result<SingleE
         }
     }
     return Result::<SingleExpressionNode, ParseError>::Ok(result);
-}
-
-fn parse_single_expression(p: &mut Parser) -> Result<SingleExpressionNode, ParseError> {
-    return parse_single_expression_prec(p, 0);
 }
 
 fn parse_as_expression_bt_1(p: &mut Parser) -> Result<AsExpressionNode, ParseError> {

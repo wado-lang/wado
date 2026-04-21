@@ -12291,7 +12291,7 @@ fn scan_expression_lr_8(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LSQUAREBRACKET { return -1; }
     pos += 1;
-    pos = scan_expression_prec(tokens, pos, 17);
+    pos = scan_expression(tokens, pos, 17);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_RSQUAREBRACKET { return -1; }
     pos += 1;
@@ -12338,7 +12338,7 @@ fn scan_expression_lr_14(tokens: &Array<Token>, pos: i32) -> i32 {
         }
         return -1;
     }
-    pos = scan_expression_prec(tokens, pos, 14);
+    pos = scan_expression(tokens, pos, 14);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -12361,7 +12361,7 @@ fn scan_expression_lr_15(tokens: &Array<Token>, pos: i32) -> i32 {
         }
         return -1;
     }
-    pos = scan_expression_prec(tokens, pos, 13);
+    pos = scan_expression(tokens, pos, 13);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -12387,7 +12387,7 @@ fn scan_expression_lr_16(tokens: &Array<Token>, pos: i32) -> i32 {
             pos = gp_71;
         }
     }
-    pos = scan_expression_prec(tokens, pos, 12);
+    pos = scan_expression(tokens, pos, 12);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -12396,7 +12396,7 @@ fn scan_expression_lr_17(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_AND { return -1; }
     pos += 1;
-    pos = scan_expression_prec(tokens, pos, 11);
+    pos = scan_expression(tokens, pos, 11);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -12405,7 +12405,7 @@ fn scan_expression_lr_18(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_CARET { return -1; }
     pos += 1;
-    pos = scan_expression_prec(tokens, pos, 10);
+    pos = scan_expression(tokens, pos, 10);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -12414,7 +12414,7 @@ fn scan_expression_lr_19(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_OR { return -1; }
     pos += 1;
-    pos = scan_expression_prec(tokens, pos, 9);
+    pos = scan_expression(tokens, pos, 9);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -12423,7 +12423,7 @@ fn scan_expression_lr_20(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_comparison_operator(tokens, pos);
     if pos < 0 { return -1; }
-    pos = scan_expression_prec(tokens, pos, 8);
+    pos = scan_expression(tokens, pos, 8);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -12432,7 +12432,7 @@ fn scan_expression_lr_21(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_ANDAND { return -1; }
     pos += 1;
-    pos = scan_expression_prec(tokens, pos, 7);
+    pos = scan_expression(tokens, pos, 7);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -12441,7 +12441,7 @@ fn scan_expression_lr_22(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_OROR { return -1; }
     pos += 1;
-    pos = scan_expression_prec(tokens, pos, 6);
+    pos = scan_expression(tokens, pos, 6);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -12462,7 +12462,7 @@ fn scan_expression_lr_26(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_DOTDOTEQ { return -1; }
     pos += 1;
-    pos = scan_expression_prec(tokens, pos, 4);
+    pos = scan_expression(tokens, pos, 4);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -12471,7 +12471,7 @@ fn scan_expression_lr_27(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_EQ { return -1; }
     pos += 1;
-    pos = scan_expression_prec(tokens, pos, 3);
+    pos = scan_expression(tokens, pos, 3);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -12480,12 +12480,12 @@ fn scan_expression_lr_28(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_compound_assign_operator(tokens, pos);
     if pos < 0 { return -1; }
-    pos = scan_expression_prec(tokens, pos, 2);
+    pos = scan_expression(tokens, pos, 2);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_expression_prec(tokens: &Array<Token>, pos: i32, min_prec: i32) -> i32 {
+fn scan_expression(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = scan_expression_atom(tokens, pos);
     if pos < 0 { return -1; }
     loop {
@@ -12697,10 +12697,6 @@ fn scan_expression_prec(tokens: &Array<Token>, pos: i32, min_prec: i32) -> i32 {
         }
     }
     return pos;
-}
-
-fn scan_expression(tokens: &Array<Token>, pos: i32) -> i32 {
-    return scan_expression_prec(tokens, pos, 0);
 }
 
 fn scan_comparison_operator(tokens: &Array<Token>, pos: i32) -> i32 {
@@ -21942,7 +21938,7 @@ fn parse_expression_lr_7(p: &mut Parser, left: ExpressionNode, start: i32) -> Re
 
 fn parse_expression_lr_8(p: &mut Parser, left: ExpressionNode, start: i32) -> Result<ExpressionNode, ParseError> {
     let lsquarebracket = p.expect(TK_LSQUAREBRACKET)?;
-    let expression_2 = parse_expression_prec(p, 17)?;
+    let expression_2 = parse_expression(p, 17)?;
     let rsquarebracket = p.expect(TK_RSQUAREBRACKET)?;
     return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::IndexExpression(ExpressionIndexExpression {
         span: Span::new(start, p.last_end()),
@@ -21975,7 +21971,7 @@ fn parse_expression_lr_13(p: &mut Parser, left: ExpressionNode, start: i32) -> R
 
 fn parse_expression_lr_14(p: &mut Parser, left: ExpressionNode, start: i32) -> Result<ExpressionNode, ParseError> {
     let star_or_slash_or_percent = p.advance();
-    let expression_2 = parse_expression_prec(p, 14)?;
+    let expression_2 = parse_expression(p, 14)?;
     return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::ArithmeticOrLogicalExpression0(ExpressionArithmeticOrLogicalExpression0 {
         span: Span::new(start, p.last_end()),
         expression: left,
@@ -21986,7 +21982,7 @@ fn parse_expression_lr_14(p: &mut Parser, left: ExpressionNode, start: i32) -> R
 
 fn parse_expression_lr_15(p: &mut Parser, left: ExpressionNode, start: i32) -> Result<ExpressionNode, ParseError> {
     let plus_or_minus = p.advance();
-    let expression_2 = parse_expression_prec(p, 13)?;
+    let expression_2 = parse_expression(p, 13)?;
     return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::ArithmeticOrLogicalExpression1(ExpressionArithmeticOrLogicalExpression1 {
         span: Span::new(start, p.last_end()),
         expression: left,
@@ -22006,7 +22002,7 @@ fn parse_expression_lr_16(p: &mut Parser, left: ExpressionNode, start: i32) -> R
         shl_or_shr_inner = Option::<ShlOrShrGroup>::Some(ShlOrShrGroup::Shr(shr));
     }
     let shl_or_shr = shl_or_shr_inner;
-    let expression_2 = parse_expression_prec(p, 12)?;
+    let expression_2 = parse_expression(p, 12)?;
     return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::ArithmeticOrLogicalExpression2(ExpressionArithmeticOrLogicalExpression2 {
         span: Span::new(start, p.last_end()),
         expression: left,
@@ -22017,7 +22013,7 @@ fn parse_expression_lr_16(p: &mut Parser, left: ExpressionNode, start: i32) -> R
 
 fn parse_expression_lr_17(p: &mut Parser, left: ExpressionNode, start: i32) -> Result<ExpressionNode, ParseError> {
     let and = p.expect(TK_AND)?;
-    let expression_2 = parse_expression_prec(p, 11)?;
+    let expression_2 = parse_expression(p, 11)?;
     return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::ArithmeticOrLogicalExpression3(ExpressionArithmeticOrLogicalExpression3 {
         span: Span::new(start, p.last_end()),
         expression: left,
@@ -22028,7 +22024,7 @@ fn parse_expression_lr_17(p: &mut Parser, left: ExpressionNode, start: i32) -> R
 
 fn parse_expression_lr_18(p: &mut Parser, left: ExpressionNode, start: i32) -> Result<ExpressionNode, ParseError> {
     let caret = p.expect(TK_CARET)?;
-    let expression_2 = parse_expression_prec(p, 10)?;
+    let expression_2 = parse_expression(p, 10)?;
     return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::ArithmeticOrLogicalExpression4(ExpressionArithmeticOrLogicalExpression4 {
         span: Span::new(start, p.last_end()),
         expression: left,
@@ -22039,7 +22035,7 @@ fn parse_expression_lr_18(p: &mut Parser, left: ExpressionNode, start: i32) -> R
 
 fn parse_expression_lr_19(p: &mut Parser, left: ExpressionNode, start: i32) -> Result<ExpressionNode, ParseError> {
     let or = p.expect(TK_OR)?;
-    let expression_2 = parse_expression_prec(p, 9)?;
+    let expression_2 = parse_expression(p, 9)?;
     return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::ArithmeticOrLogicalExpression5(ExpressionArithmeticOrLogicalExpression5 {
         span: Span::new(start, p.last_end()),
         expression: left,
@@ -22050,7 +22046,7 @@ fn parse_expression_lr_19(p: &mut Parser, left: ExpressionNode, start: i32) -> R
 
 fn parse_expression_lr_20(p: &mut Parser, left: ExpressionNode, start: i32) -> Result<ExpressionNode, ParseError> {
     let comparison_operator = parse_comparison_operator(p)?;
-    let expression_2 = parse_expression_prec(p, 8)?;
+    let expression_2 = parse_expression(p, 8)?;
     return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::ComparisonExpression(ExpressionComparisonExpression {
         span: Span::new(start, p.last_end()),
         expression: left,
@@ -22061,7 +22057,7 @@ fn parse_expression_lr_20(p: &mut Parser, left: ExpressionNode, start: i32) -> R
 
 fn parse_expression_lr_21(p: &mut Parser, left: ExpressionNode, start: i32) -> Result<ExpressionNode, ParseError> {
     let andand = p.expect(TK_ANDAND)?;
-    let expression_2 = parse_expression_prec(p, 7)?;
+    let expression_2 = parse_expression(p, 7)?;
     return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::LazyBooleanExpression0(ExpressionLazyBooleanExpression0 {
         span: Span::new(start, p.last_end()),
         expression: left,
@@ -22072,7 +22068,7 @@ fn parse_expression_lr_21(p: &mut Parser, left: ExpressionNode, start: i32) -> R
 
 fn parse_expression_lr_22(p: &mut Parser, left: ExpressionNode, start: i32) -> Result<ExpressionNode, ParseError> {
     let oror = p.expect(TK_OROR)?;
-    let expression_2 = parse_expression_prec(p, 6)?;
+    let expression_2 = parse_expression(p, 6)?;
     return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::LazyBooleanExpression1(ExpressionLazyBooleanExpression1 {
         span: Span::new(start, p.last_end()),
         expression: left,
@@ -22099,7 +22095,7 @@ fn parse_expression_lr_23(p: &mut Parser, left: ExpressionNode, start: i32) -> R
 
 fn parse_expression_lr_26(p: &mut Parser, left: ExpressionNode, start: i32) -> Result<ExpressionNode, ParseError> {
     let dotdoteq = p.expect(TK_DOTDOTEQ)?;
-    let expression_2 = parse_expression_prec(p, 4)?;
+    let expression_2 = parse_expression(p, 4)?;
     return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::RangeExpression3(ExpressionRangeExpression3 {
         span: Span::new(start, p.last_end()),
         expression: left,
@@ -22110,7 +22106,7 @@ fn parse_expression_lr_26(p: &mut Parser, left: ExpressionNode, start: i32) -> R
 
 fn parse_expression_lr_27(p: &mut Parser, left: ExpressionNode, start: i32) -> Result<ExpressionNode, ParseError> {
     let eq = p.expect(TK_EQ)?;
-    let expression_2 = parse_expression_prec(p, 3)?;
+    let expression_2 = parse_expression(p, 3)?;
     return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::AssignmentExpression(ExpressionAssignmentExpression {
         span: Span::new(start, p.last_end()),
         expression: left,
@@ -22121,7 +22117,7 @@ fn parse_expression_lr_27(p: &mut Parser, left: ExpressionNode, start: i32) -> R
 
 fn parse_expression_lr_28(p: &mut Parser, left: ExpressionNode, start: i32) -> Result<ExpressionNode, ParseError> {
     let compound_assign_operator = parse_compound_assign_operator(p)?;
-    let expression_2 = parse_expression_prec(p, 2)?;
+    let expression_2 = parse_expression(p, 2)?;
     return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::CompoundAssignmentExpression(ExpressionCompoundAssignmentExpression {
         span: Span::new(start, p.last_end()),
         expression: left,
@@ -22130,7 +22126,7 @@ fn parse_expression_lr_28(p: &mut Parser, left: ExpressionNode, start: i32) -> R
     }));
 }
 
-fn parse_expression_prec(p: &mut Parser, min_prec: i32) -> Result<ExpressionNode, ParseError> {
+fn parse_expression(p: &mut Parser, min_prec: i32 = 0) -> Result<ExpressionNode, ParseError> {
     let start = p.peek().span.start;
     let mut result = parse_expression_atom(p)?;
     loop {
@@ -22312,10 +22308,6 @@ fn parse_expression_prec(p: &mut Parser, min_prec: i32) -> Result<ExpressionNode
         }
     }
     return Result::<ExpressionNode, ParseError>::Ok(result);
-}
-
-fn parse_expression(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
-    return parse_expression_prec(p, 0);
 }
 
 fn parse_comparison_operator(p: &mut Parser) -> Result<ComparisonOperatorNode, ParseError> {

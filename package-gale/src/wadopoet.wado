@@ -323,12 +323,13 @@ impl FlagsSpec {
 pub struct ParamSpec {
     pub name: String,
     pub type_str: String,
-    pub is_mut: bool,
+    pub is_mut: bool = false,
+    pub default_value: Option<String> = null,
 }
 
 impl ParamSpec {
     pub fn new(name: &String, type_str: &String) -> ParamSpec {
-        return ParamSpec { name: *name, type_str: *type_str, is_mut: false };
+        return ParamSpec { name: *name, type_str: *type_str };
     }
 
     pub fn new_mut(name: &String, type_str: &String) -> ParamSpec {
@@ -411,6 +412,9 @@ impl FnSpec {
                 sig.push_str("mut ");
             }
             sig.push_str(`{param.name}: {param.type_str}`);
+            if let Some(d) = &param.default_value {
+                sig.push_str(` = {*d}`);
+            }
             first = false;
         }
         sig.push_str(")");

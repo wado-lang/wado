@@ -8793,7 +8793,7 @@ fn scan_expr_lr_4(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_PIPEPIPE { return -1; }
     pos += 1;
-    pos = scan_expr_prec(tokens, pos, 15);
+    pos = scan_expr(tokens, pos, 15);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -8822,7 +8822,7 @@ fn scan_expr_lr_5(tokens: &Array<Token>, pos: i32) -> i32 {
         }
         return -1;
     }
-    pos = scan_expr_prec(tokens, pos, 14);
+    pos = scan_expr(tokens, pos, 14);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -8845,7 +8845,7 @@ fn scan_expr_lr_6(tokens: &Array<Token>, pos: i32) -> i32 {
         }
         return -1;
     }
-    pos = scan_expr_prec(tokens, pos, 13);
+    pos = scan_expr(tokens, pos, 13);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -8880,7 +8880,7 @@ fn scan_expr_lr_7(tokens: &Array<Token>, pos: i32) -> i32 {
         }
         return -1;
     }
-    pos = scan_expr_prec(tokens, pos, 12);
+    pos = scan_expr(tokens, pos, 12);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -8915,7 +8915,7 @@ fn scan_expr_lr_8(tokens: &Array<Token>, pos: i32) -> i32 {
         }
         return -1;
     }
-    pos = scan_expr_prec(tokens, pos, 11);
+    pos = scan_expr(tokens, pos, 11);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -8950,7 +8950,7 @@ fn scan_expr_lr_9(tokens: &Array<Token>, pos: i32) -> i32 {
         }
         return -1;
     }
-    pos = scan_expr_prec(tokens, pos, 10);
+    pos = scan_expr(tokens, pos, 10);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -9045,7 +9045,7 @@ fn scan_expr_lr_11(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_K_AND { return -1; }
     pos += 1;
-    pos = scan_expr_prec(tokens, pos, 8);
+    pos = scan_expr(tokens, pos, 8);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -9054,7 +9054,7 @@ fn scan_expr_lr_12(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_K_OR { return -1; }
     pos += 1;
-    pos = scan_expr_prec(tokens, pos, 7);
+    pos = scan_expr(tokens, pos, 7);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -9103,7 +9103,7 @@ fn scan_expr_lr_17(tokens: &Array<Token>, pos: i32) -> i32 {
         }
         return -1;
     }
-    pos = scan_expr_prec(tokens, pos, 5);
+    pos = scan_expr(tokens, pos, 5);
     if pos < 0 { return -1; }
     if pos < tokens.len() && tokens[pos].kind == TK_K_ESCAPE {
         let sp = pos;
@@ -9163,7 +9163,7 @@ fn scan_expr_lr_19(tokens: &Array<Token>, pos: i32) -> i32 {
         if pos >= tokens.len() || tokens[pos].kind != TK_K_NOT { pos = -1; } else { pos += 1; }
         if pos < 0 { pos = sp; }
     }
-    pos = scan_expr_prec(tokens, pos, 3);
+    pos = scan_expr(tokens, pos, 3);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -9177,16 +9177,16 @@ fn scan_expr_lr_20(tokens: &Array<Token>, pos: i32) -> i32 {
     }
     if pos >= tokens.len() || tokens[pos].kind != TK_K_BETWEEN { return -1; }
     pos += 1;
-    pos = scan_expr_prec(tokens, pos, 8);
+    pos = scan_expr(tokens, pos, 8);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_K_AND { return -1; }
     pos += 1;
-    pos = scan_expr_prec(tokens, pos, 8);
+    pos = scan_expr(tokens, pos, 8);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_expr_prec(tokens: &Array<Token>, pos: i32, min_prec: i32) -> i32 {
+fn scan_expr(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = scan_expr_atom(tokens, pos);
     if pos < 0 { return -1; }
     loop {
@@ -9355,10 +9355,6 @@ fn scan_expr_prec(tokens: &Array<Token>, pos: i32, min_prec: i32) -> i32 {
         }
     }
     return pos;
-}
-
-fn scan_expr(tokens: &Array<Token>, pos: i32) -> i32 {
-    return scan_expr_prec(tokens, pos, 0);
 }
 
 fn scan_foreign_key_clause(tokens: &Array<Token>, pos: i32) -> i32 {
@@ -16663,7 +16659,7 @@ fn parse_expr_atom(p: &mut Parser) -> Result<ExprNode, ParseError> {
 
 fn parse_expr_lr_4(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
     let lit_pipepipe = p.expect(TK_LIT_PIPEPIPE)?;
-    let expr_2 = parse_expr_prec(p, 15)?;
+    let expr_2 = parse_expr(p, 15)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt4(ExprAlt4 {
         span: Span::new(start, p.last_end()),
         expr: left,
@@ -16674,7 +16670,7 @@ fn parse_expr_lr_4(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNod
 
 fn parse_expr_lr_5(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
     let star_or_slash_or_percent = p.advance();
-    let expr_2 = parse_expr_prec(p, 14)?;
+    let expr_2 = parse_expr(p, 14)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt5(ExprAlt5 {
         span: Span::new(start, p.last_end()),
         expr: left,
@@ -16685,7 +16681,7 @@ fn parse_expr_lr_5(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNod
 
 fn parse_expr_lr_6(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
     let plus_or_minus = p.advance();
-    let expr_2 = parse_expr_prec(p, 13)?;
+    let expr_2 = parse_expr(p, 13)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt6(ExprAlt6 {
         span: Span::new(start, p.last_end()),
         expr: left,
@@ -16696,7 +16692,7 @@ fn parse_expr_lr_6(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNod
 
 fn parse_expr_lr_7(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
     let lit_ltlt_or_lit_gtgt_or_amp_or_pipe = p.advance();
-    let expr_2 = parse_expr_prec(p, 12)?;
+    let expr_2 = parse_expr(p, 12)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt7(ExprAlt7 {
         span: Span::new(start, p.last_end()),
         expr: left,
@@ -16707,7 +16703,7 @@ fn parse_expr_lr_7(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNod
 
 fn parse_expr_lr_8(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
     let lt_or_lit_lteq_or_gt_or_lit_gteq = p.advance();
-    let expr_2 = parse_expr_prec(p, 11)?;
+    let expr_2 = parse_expr(p, 11)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt8(ExprAlt8 {
         span: Span::new(start, p.last_end()),
         expr: left,
@@ -16718,7 +16714,7 @@ fn parse_expr_lr_8(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNod
 
 fn parse_expr_lr_9(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
     let eq_or_lit_eqeq_or_lit_bangeq_or_lit_ltgt = p.advance();
-    let expr_2 = parse_expr_prec(p, 10)?;
+    let expr_2 = parse_expr(p, 10)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt9(ExprAlt9 {
         span: Span::new(start, p.last_end()),
         expr: left,
@@ -16845,7 +16841,7 @@ fn parse_expr_lr_10(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNo
 
 fn parse_expr_lr_11(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
     let k_and = p.expect(TK_K_AND)?;
-    let expr_2 = parse_expr_prec(p, 8)?;
+    let expr_2 = parse_expr(p, 8)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt11(ExprAlt11 {
         span: Span::new(start, p.last_end()),
         expr: left,
@@ -16856,7 +16852,7 @@ fn parse_expr_lr_11(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNo
 
 fn parse_expr_lr_12(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
     let k_or = p.expect(TK_K_OR)?;
-    let expr_2 = parse_expr_prec(p, 7)?;
+    let expr_2 = parse_expr(p, 7)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt12(ExprAlt12 {
         span: Span::new(start, p.last_end()),
         expr: left,
@@ -16884,7 +16880,7 @@ fn parse_expr_lr_17(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNo
         null
     };
     let k_like_or_k_glob_or_k_regexp_or_k_match = p.advance();
-    let expr_2 = parse_expr_prec(p, 5)?;
+    let expr_2 = parse_expr(p, 5)?;
     let k_escape_expr: Option<KEscapeExprItem> = if p.peek_kind() == TK_K_ESCAPE {
         let k_escape = p.expect(TK_K_ESCAPE)?;
         let expr = parse_expr(p)?;
@@ -16943,7 +16939,7 @@ fn parse_expr_lr_19(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNo
     } else {
         null
     };
-    let expr_2 = parse_expr_prec(p, 3)?;
+    let expr_2 = parse_expr(p, 3)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt19(ExprAlt19 {
         span: Span::new(start, p.last_end()),
         expr: left,
@@ -16961,9 +16957,9 @@ fn parse_expr_lr_20(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNo
         null
     };
     let k_between = p.expect(TK_K_BETWEEN)?;
-    let expr_2 = parse_expr_prec(p, 8)?;
+    let expr_2 = parse_expr(p, 8)?;
     let k_and = p.expect(TK_K_AND)?;
-    let expr_3 = parse_expr_prec(p, 8)?;
+    let expr_3 = parse_expr(p, 8)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt20(ExprAlt20 {
         span: Span::new(start, p.last_end()),
         expr: left,
@@ -16975,7 +16971,7 @@ fn parse_expr_lr_20(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNo
     }));
 }
 
-fn parse_expr_prec(p: &mut Parser, min_prec: i32) -> Result<ExprNode, ParseError> {
+fn parse_expr(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError> {
     let start = p.peek().span.start;
     let mut result = parse_expr_atom(p)?;
     loop {
@@ -17121,10 +17117,6 @@ fn parse_expr_prec(p: &mut Parser, min_prec: i32) -> Result<ExprNode, ParseError
         }
     }
     return Result::<ExprNode, ParseError>::Ok(result);
-}
-
-fn parse_expr(p: &mut Parser) -> Result<ExprNode, ParseError> {
-    return parse_expr_prec(p, 0);
 }
 
 fn parse_foreign_key_clause(p: &mut Parser) -> Result<ForeignKeyClauseNode, ParseError> {
