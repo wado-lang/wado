@@ -647,9 +647,10 @@ async fn load_input<H: CompilerHost>(
 /// Validate and convert a generator-supplied relative path into an
 /// [`std::path::PathBuf`] suitable for joining onto the output dir.
 ///
-/// Rejects empty paths, absolute paths, paths containing `..`, and paths
-/// that start with `/`. Forward and backward slashes are accepted; the
-/// result uses the host platform's separator via [`Path`].
+/// Rejects empty paths, absolute paths, and paths containing `..`. Only
+/// forward slashes are treated as separators: on Unix, a backslash is a
+/// valid filename byte and this function does not interpret it. Generator
+/// authors should emit forward-slash paths.
 fn validate_rel_output_path(p: &str) -> Result<PathBuf, ExecuteError> {
     if p.is_empty() {
         return Err(ExecuteError::InvalidOutputPath {
@@ -787,9 +788,10 @@ impl From<DriverError> for PipelineError {
 /// compiler host used to load input files and (inside `execute`) to invoke
 /// the runner.
 ///
-/// On success, the manifest's `wado.lock` is updated in place: only the
-/// `[[generator-cache]]` section is affected; all other sections are
-/// preserved verbatim.
+/// On success, the manifest's `wado.lock` is updated in place to persist
+/// the current `[[generator-cache]]` entries. The lockfile is re-serialized
+/// via [`wado_manifest::LockFile::to_toml`], so non-Kiln sections round-trip
+/// through the manifest-crate writer — byte-identity is not guaranteed.
 ///
 /// Returns an empty outcome if the manifest has no `[build.generators]`.
 ///

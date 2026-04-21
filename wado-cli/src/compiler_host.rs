@@ -13,7 +13,7 @@ use wado_compiler::{
 };
 
 use crate::kiln_runtime::{self, KilnRunPolicy};
-use crate::runtime::{ProfileMode, create_engine};
+use crate::runtime::create_kiln_engine;
 
 /// Filesystem-based compiler host for the CLI.
 ///
@@ -150,13 +150,23 @@ impl CompilerHost for FilesystemCompilerHost {
         component_wasm: &[u8],
         request: GeneratorRequest,
     ) -> Result<GeneratorResponse, GeneratorRunnerError> {
-        let engine = self
-            .kiln_engine
-            .get_or_init(|| {
-                create_engine(wasmtime::OptLevel::Speed, &ProfileMode::None)
-                    .expect("failed to create kiln wasmtime engine")
-            })
-            .clone();
+        let engine = if let Some(engine) = self.kiln_engine.get() {
+            engine.clone()
+        } else {
+            let engine = create_kiln_engine(wasmtime::OptLevel::Speed).map_err(|error| {
+                GeneratorRunnerError::Host(format!(
+                    "failed to create kiln wasmtime engine: {error}"
+                ))
+            })?;
+            // Racing callers may both compute an engine; the first `set`
+            // wins and we clone from the stored value. `OnceLock` keeps
+            // at most one.
+            let _ = self.kiln_engine.set(engine);
+            self.kiln_engine
+                .get()
+                .expect("kiln_engine was set above or by a racing caller")
+                .clone()
+        };
         kiln_runtime::run_generator(
             &engine,
             self.inner.clone(),

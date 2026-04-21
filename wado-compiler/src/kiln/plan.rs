@@ -156,6 +156,10 @@ fn topo_sort(invocations: Vec<Invocation>) -> Result<Plan, PlanError> {
     }
 
     if order_idx.len() != n {
+        // Every node Kahn could not process is reported. This over-reports
+        // when a node is merely downstream of a cycle (not part of it); SCC
+        // detection would narrow it but is not worth the extra code until a
+        // real cycle report fires in practice.
         let participants: Vec<DeclSite> = (0..n)
             .filter(|&i| !processed[i])
             .map(|i| invocations[i].decl_site.clone())

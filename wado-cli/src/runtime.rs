@@ -113,6 +113,21 @@ pub fn create_engine(opt_level: OptLevel, profile: &ProfileMode) -> Result<Engin
     Ok(Engine::new(&create_config(opt_level, profile))?)
 }
 
+/// Create a wasmtime Engine tuned for Kiln generator execution.
+///
+/// Differs from [`create_engine`] by enabling fuel consumption so the Kiln
+/// runtime can enforce [`crate::kiln_runtime::KilnRunPolicy::fuel`]. Without
+/// this, `Store::set_fuel` is rejected by the runtime.
+///
+/// # Errors
+///
+/// Returns an error if the engine cannot be created with the given configuration.
+pub fn create_kiln_engine(opt_level: OptLevel) -> Result<Engine> {
+    let mut config = create_config(opt_level, &ProfileMode::None);
+    config.consume_fuel(true);
+    Ok(Engine::new(&config)?)
+}
+
 /// Create a wasmtime Engine for test execution with epoch interruption enabled.
 ///
 /// # Errors

@@ -31,7 +31,9 @@ use self::wado::kiln::types as kiln_types;
 
 /// Host policy for a single generator invocation.
 ///
-/// Defaults per WEP open-question #10: 120s wall clock, 1 GiB of fuel.
+/// WEP open-question #10 targets a 120s wall-clock budget alongside 1 GiB
+/// of fuel; only the fuel half is enforced today (see [`run_generator`]).
+/// A wall-clock epoch-interrupt deadline is deferred.
 pub struct KilnRunPolicy {
     pub fuel: u64,
 }
@@ -54,7 +56,7 @@ impl<H: CompilerHost + 'static> kiln_host::Host for KilnHostState<H> {
     async fn read_file(&mut self, path: String) -> Result<Vec<u8>, kiln_host::HostError> {
         match self.host.load_source(&path).await {
             Ok(bytes) => {
-                let hash = sha256_digest(&bytes);
+                let hash = wado_compiler::kiln::content_hash(&bytes);
                 self.reads.lock().unwrap().push(GeneratorReadRecord {
                     path: path.clone(),
                     content_hash: hash,
@@ -142,7 +144,9 @@ pub async fn run_generator<H: CompilerHost + 'static>(
 
     let mut store = Store::new(engine, state);
     if policy.fuel > 0 {
-        let _ = store.set_fuel(policy.fuel);
+        store
+            .set_fuel(policy.fuel)
+            .map_err(|e| GeneratorRunnerError::Host(format!("set fuel: {e}")))?;
     }
 
     let generator = Generator::instantiate_async(&mut store, &component, &linker)
@@ -196,17 +200,10 @@ fn relay_diagnostic<H: CompilerHost + ?Sized>(host: &H, diag: GeneratorDiagnosti
     });
 }
 
-fn sha256_digest(bytes: &[u8]) -> [u8; 32] {
-    use sha2::{Digest, Sha256};
-    let mut hasher = Sha256::new();
-    hasher.update(bytes);
-    hasher.finalize().into()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::runtime::{ProfileMode, create_engine};
+    use crate::runtime::create_kiln_engine;
     use wado_compiler::{Diagnostic, SourceError};
 
     struct DummyHost;
@@ -227,8 +224,7 @@ mod tests {
             .build()
             .unwrap()
             .block_on(async {
-                let engine =
-                    create_engine(wasmtime::OptLevel::Speed, &ProfileMode::None).expect("engine");
+                let engine = create_kiln_engine(wasmtime::OptLevel::Speed).expect("engine");
                 let host = Arc::new(DummyHost);
                 let request = GeneratorRequest {
                     primary: GeneratorInputFile {
@@ -257,7 +253,7 @@ mod tests {
 
     #[test]
     fn sha256_known_vector_empty() {
-        let digest = sha256_digest(b"");
+        let digest = wado_compiler::kiln::content_hash(b"");
         let expected = [
             0xe3, 0xb0, 0xc4, 0x42, 0x98, 0xfc, 0x1c, 0x14, 0x9a, 0xfb, 0xf4, 0xc8, 0x99, 0x6f,
             0xb9, 0x24, 0x27, 0xae, 0x41, 0xe4, 0x64, 0x9b, 0x93, 0x4c, 0xa4, 0x95, 0x99, 0x1b,
@@ -268,7 +264,7 @@ mod tests {
 
     #[test]
     fn sha256_known_vector_abc() {
-        let digest = sha256_digest(b"abc");
+        let digest = wado_compiler::kiln::content_hash(b"abc");
         let expected = [
             0xba, 0x78, 0x16, 0xbf, 0x8f, 0x01, 0xcf, 0xea, 0x41, 0x41, 0x40, 0xde, 0x5d, 0xae,
             0x22, 0x23, 0xb0, 0x03, 0x61, 0xa3, 0x96, 0x17, 0x7a, 0x9c, 0xb4, 0x10, 0xff, 0x61,
