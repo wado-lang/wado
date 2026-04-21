@@ -10,42 +10,6 @@ exception). The remaining work is mostly about **propagating** parsed
 information into the IR and **using** it in the code generator so that
 generated parsers are semantically correct, not just syntactically accepted.
 
-## A. Driver-level verification (remaining gaps)
-
-All gaps below are now covered by the listed grammar + driver-test pairs.
-
-- [x] **A1. Parser-side `~TOK` / `~(block)`** — `parser_gaps.g4` / `driver_parser_gaps_test.wado`.
-- [x] **A2. List labels `+=`** — `parser_gaps.g4` / `driver_parser_gaps_test.wado`.
-- [x] **A3. `mode(X)` semantics (set_mode)** — `mode_gaps.g4` / `driver_mode_gaps_test.wado`.
-- [x] **A4. `more` semantics** — `mode_gaps.g4` / `driver_mode_gaps_test.wado`.
-- [x] **A5. Wildcard `.` at parser level** — `parser_gaps.g4` / `driver_parser_gaps_test.wado`.
-- [x] **A6. Scalar token/rule labels (`k=ID`, `k=rule_ref`)** — `label_gaps.g4` / `driver_label_gaps_test.wado`.
-- [x] **A7. `<assoc=right>` alt prefix on LR alt** — `right_assoc_gaps.g4` / `driver_right_assoc_gaps_test.wado`.
-- [x] **A8. Non-greedy `.*?` / `TOK*?` at parser level** — `non_greedy_gaps.g4` / `driver_non_greedy_gaps_test.wado`.
-- [x] **A9. `-> type(X)` as sole lexer command** — `lexer_command_gaps.g4` / `driver_lexer_command_gaps_test.wado`.
-- [x] **A10. Rule-level `options { caseInsensitive = false; }` override** — `ci_rule_override.g4` / `driver_ci_rule_override_test.wado`.
-- [x] **A11. Numeric / named `channel(N)` / `channel(USER)`** — `lexer_command_gaps.g4` / `driver_lexer_command_gaps_test.wado`.
-- [x] **A12. `mode(DEFAULT_MODE)` reference** — `lexer_command_gaps.g4` / `driver_lexer_command_gaps_test.wado`.
-- [x] **A13. Recursive lexer fragments** — `recursive_lexer.g4` / `driver_recursive_lexer_test.wado`.
-- [x] **A14. Unicode property escapes `\p{L}` / `\p{Nd}` / `\p{Zs}`** — `unicode_props.g4` / `driver_unicode_props_test.wado`.
-
-## B. Negative tests
-
-The parser test suite is overwhelmingly positive — it verifies that
-well-formed input parses. There are almost no negative tests that pin
-down the parser's **rejection** behavior. Add fixtures for:
-
-- [x] **B1.** Duplicate rule names (`foo : ID ; foo : NUM ;`).
-- [ ] **B2.** References to undefined rules.
-- [x] **B3.** `mode X;` inside a parser grammar (already covered by one test).
-- [x] **B4.** Malformed `channels { }` / `tokens { }` blocks (unclosed brace, trailing junk, etc.).
-- [x] **B5.** `~` applied to something that isn't a set (ANTLR4 rejects `~ruleref`, only tokens / lexer atoms / blocks are allowed).
-- [ ] **B6.** Left-recursion with `assoc` conflicts.
-- [x] **B7.** Lexer commands with unknown names (`foo : 'x' -> totallymadeup ;`).
-
-Each fixture asserts `parse(input) matches { Err(_) }`. This guards
-against regressions where the parser silently accepts garbage.
-
 ## Performance: sqlite-parse Benchmark
 
 ### Next Up: Remove the LR Gate in `is_rule_scannable`

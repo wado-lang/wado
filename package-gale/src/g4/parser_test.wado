@@ -16,7 +16,7 @@ use {
     CharRange,
     Visibility,
 } from "../ir.wado";
-use { parse } from "./parser.wado";
+use { parse, parse_checked } from "./parser.wado";
 
 test "minimal grammar" {
     let g = parse("grammar Foo;").unwrap();
@@ -1355,6 +1355,159 @@ r : A<foo=> ;";
     let g = parse(input).unwrap();
     assert g.parser_rules.len() == 1;
     assert g.parser_rules[0].alternatives.len() == 1;
+}
+
+test "parse_checked rejects undefined parser rule reference" {
+    // ANTLR4 SymbolChecks.checkForUnresolvedRuleRefs: every rule reference
+    // must resolve to a defined rule in the same translation unit
+    // (combined grammar case). `undef_rule` is never declared, so the
+    // semantic pass must reject the grammar.
+    let input = "grammar Test;
+root : undef_rule ;
+ID : [a-z]+ ;";
+    let result = parse_checked(input);
+    assert result matches { Err(_) },
+        "expected undefined parser rule reference to be rejected";
+}
+
+test "parse_checked rejects undefined token reference" {
+    // Combined grammar: `UNDEFINED_TOK` has no lexer rule and no `tokens {}`
+    // entry, so the reference is unresolvable.
+    let input = "grammar Test;
+root : UNDEFINED_TOK ;
+ID : [a-z]+ ;";
+    let result = parse_checked(input);
+    assert result matches { Err(_) },
+        "expected undefined token reference to be rejected";
+}
+
+test "parse_checked rejects undefined lexer rule reference in lexer grammar" {
+    // Lexer-to-lexer refs are always resolvable locally — lexer rules
+    // cannot cross the lexer/parser grammar boundary, so an unresolved
+    // ref here is always an error.
+    let input = "lexer grammar Test;
+FOO : BAR ;";
+    let result = parse_checked(input);
+    assert result matches { Err(_) },
+        "expected undefined lexer rule reference to be rejected";
+}
+
+test "parse_checked rejects undefined fragment reference" {
+    let input = "lexer grammar Test;
+ID : LETTER+ ;
+LETTER : [a-z] ;
+// MISSING is not defined as a fragment or lexer rule
+FOO : MISSING ;";
+    let result = parse_checked(input);
+    assert result matches { Err(_) },
+        "expected undefined fragment reference to be rejected";
+}
+
+test "parse_checked accepts virtual tokens declared in tokens block" {
+    // `tokens { VT }` declares a virtual token that satisfies token-ref
+    // resolution even though there is no matching lexer rule. See
+    // ANTLR4 grammars.md §"tokens {} Section".
+    let input = "grammar Test;
+tokens { VT }
+root : VT ;
+ID : [a-z]+ ;";
+    let result = parse_checked(input);
+    assert result matches { Ok(_) },
+        "expected grammar with tokens-block-declared ref to be accepted";
+}
+
+test "parse_checked accepts EOF token reference" {
+    // `EOF` is a built-in token ref that doesn't require a matching
+    // lexer rule. See ANTLR4 parser-rules.md.
+    let input = "grammar Test;
+root : ID EOF ;
+ID : [a-z]+ ;";
+    let result = parse_checked(input);
+    assert result matches { Ok(_) },
+        "expected grammar ending in EOF to be accepted";
+}
+
+test "parse_checked accepts parser grammar with only parser-rule refs" {
+    // `parser grammar` files reference tokens from a sibling lexer
+    // grammar — we cannot resolve those locally, so `check_references`
+    // must skip the token-ref bucket. Parser-rule refs within the
+    // grammar are still validated.
+    let input = "parser grammar Test;
+root : expr ;
+expr : ID PLUS ID ;";
+    let result = parse_checked(input);
+    assert result matches { Ok(_) },
+        "expected parser grammar with local parser refs to be accepted";
+}
+
+test "parse_checked rejects undefined parser rule ref in parser grammar" {
+    // Parser-to-parser refs within a `parser grammar` are locally
+    // resolvable and must still be checked.
+    let input = "parser grammar Test;
+root : missing_rule ;";
+    let result = parse_checked(input);
+    assert result matches { Err(_) },
+        "expected undefined parser rule in parser grammar to be rejected";
+}
+
+test "bare parse does not run reference checks" {
+    // `parse` keeps the syntactic-only posture (ANTLRParser.g equivalent)
+    // so upstream consumers can still round-trip partial or minimal
+    // grammars that defer symbol resolution. Semantic checks run only
+    // via `parse_checked` / `check_references`.
+    let input = "grammar Test;
+r : undefined ;";
+    let result = parse(input);
+    assert result matches { Ok(_) },
+        "bare parse must accept syntactically-well-formed grammars with undefined refs";
+}
+
+test "parse rejects <assoc> with non-left/right identifier" {
+    // ANTLR4 options.md: `assoc` accepts only the bare identifiers
+    // `left` and `right`. Anything else is an associativity conflict
+    // that must be rejected at parse time; downstream LR codegen
+    // otherwise silently falls back to left-associative and produces
+    // the wrong precedence tree.
+    let input = "grammar Test;
+expr : <assoc=middle> expr '**' expr | INT ;
+INT : [0-9]+ ;";
+    let result = parse(input);
+    assert result matches { Err(_) },
+        "expected <assoc=middle> to be rejected";
+}
+
+test "parse rejects <assoc> with string value" {
+    let input = "grammar Test;
+expr : <assoc='right'> expr '**' expr | INT ;
+INT : [0-9]+ ;";
+    let result = parse(input);
+    assert result matches { Err(_) },
+        "expected <assoc='right'> (string value) to be rejected";
+}
+
+test "parse rejects <assoc> with integer value" {
+    let input = "grammar Test;
+expr : <assoc=1> expr '**' expr | INT ;
+INT : [0-9]+ ;";
+    let result = parse(input);
+    assert result matches { Err(_) },
+        "expected <assoc=1> to be rejected";
+}
+
+test "parse accepts <assoc=left>" {
+    let input = "grammar Test;
+expr : <assoc=left> expr '+' expr | INT ;
+INT : [0-9]+ ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+}
+
+test "parse accepts <assoc=right>" {
+    let input = "grammar Test;
+expr : <assoc=right> expr '**' expr | INT ;
+INT : [0-9]+ ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
 }
 
 fn assert_option_ident(opt: &GrammarOption, expected: String) {
