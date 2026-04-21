@@ -10,7 +10,7 @@ use crate::tir::{
 use crate::token::Span;
 
 use super::Resolver;
-use super::types::{FunctionContext, MethodInfo, TypeError};
+use super::types::{FunctionContext, ResolvedTraitMethod, TypeError};
 use super::util;
 
 impl<H: CompilerHost> Resolver<'_, H> {
@@ -183,8 +183,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
                 // Handle Eq trait (== and !=)
                 if matches!(binary.op, BinaryOp::Eq | BinaryOp::NotEq) {
-                    let Some(trait_info) = self.find_eq_trait_impl(&struct_name, lookup_type_id)
-                    else {
+                    let Some(resolved) = self.resolve_trait_method_for_op(
+                        &struct_name,
+                        lookup_type_id,
+                        "Eq",
+                        "eq",
+                        false,
+                    ) else {
                         let type_name = self.type_table.borrow().type_name(left.type_id);
                         let op_str = if binary.op == BinaryOp::Eq {
                             "=="
@@ -199,35 +204,23 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         });
                         return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, binary.span);
                     };
-                    // `Eq::eq(&self, other: &Self)` requires both sides to have the same type.
-                    // Without this check, a type mismatch slips through to codegen and surfaces
-                    // as an ICE on invalid Wasm.
-                    if let Some(err) =
-                        self.check_trait_op_rhs_type(left.type_id, right.type_id, binary.span)
-                    {
-                        return err;
-                    }
-                    return self.build_eq_method_call(
+                    let call = self.build_trait_op_method_call_on_resolved(
                         left,
                         right,
-                        &MethodInfo {
-                            return_type: TypeTable::BOOL,
-                            self_kind: trait_info.self_kind,
-                            param_types: vec![],
-                            param_is_mut: vec![],
-                            inherited_from_base: None,
-                            cm_name: None,
-                            is_ref_impl: false,
-                            method_type_param_ids: vec![],
-                            param_defaults: vec![],
-                            param_names: vec![],
-                        },
-                        &struct_name,
-                        &trait_info.trait_name,
-                        binary.op == BinaryOp::NotEq,
-                        false,
+                        &resolved,
                         binary.span,
                     );
+                    if binary.op == BinaryOp::NotEq && call.type_id == TypeTable::BOOL {
+                        return TirExpr::new(
+                            TirExprKind::Unary {
+                                op: TirUnaryOp::Not,
+                                expr: Box::new(call),
+                            },
+                            TypeTable::BOOL,
+                            binary.span,
+                        );
+                    }
+                    return call;
                 }
 
                 // Handle Ord trait (<, >, <=, >=)
@@ -235,8 +228,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     binary.op,
                     BinaryOp::Lt | BinaryOp::Gt | BinaryOp::LtEq | BinaryOp::GtEq
                 ) {
-                    let Some(trait_info) = self.find_ord_trait_impl(&struct_name, lookup_type_id)
-                    else {
+                    let Some(resolved) = self.resolve_trait_method_for_op(
+                        &struct_name,
+                        lookup_type_id,
+                        "Ord",
+                        "cmp",
+                        false,
+                    ) else {
                         let type_name = self.type_table.borrow().type_name(left.type_id);
                         let op_str = match binary.op {
                             BinaryOp::Lt => "<",
@@ -253,33 +251,16 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         });
                         return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, binary.span);
                     };
-                    // `Ord::cmp(&self, other: &Self)` requires both sides to have the same type.
-                    if let Some(err) =
-                        self.check_trait_op_rhs_type(left.type_id, right.type_id, binary.span)
-                    {
-                        return err;
-                    }
-                    return self.build_ord_method_call(
+                    let cmp_call = self.build_trait_op_method_call_on_resolved(
                         left,
                         right,
-                        &MethodInfo {
-                            return_type: TypeTable::BOOL,
-                            self_kind: trait_info.self_kind,
-                            param_types: vec![],
-                            param_is_mut: vec![],
-                            inherited_from_base: None,
-                            cm_name: None,
-                            is_ref_impl: false,
-                            method_type_param_ids: vec![],
-                            param_defaults: vec![],
-                            param_names: vec![],
-                        },
-                        &struct_name,
-                        &trait_info.trait_name,
-                        binary.op,
-                        false,
+                        &resolved,
                         binary.span,
                     );
+                    if cmp_call.type_id == TypeTable::ERROR {
+                        return cmp_call;
+                    }
+                    return self.ord_bool_from_cmp(cmp_call, binary.op, binary.span);
                 }
             }
 
@@ -300,16 +281,32 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     && let Some((_trait_name, info)) =
                         self.find_method_in_trait_bounds(&bound_names, "eq", left.type_id)
                 {
-                    return self.build_eq_method_call(
+                    let resolved = ResolvedTraitMethod {
+                        trait_name: "Eq".to_string(),
+                        method_name: "eq".to_string(),
+                        impl_name: name.clone(),
+                        self_kind: info.self_kind,
+                        return_type: info.return_type,
+                        rhs_type: info.param_types.first().copied(),
+                        is_type_param_receiver: true,
+                    };
+                    let call = self.build_trait_op_method_call_on_resolved(
                         left,
                         right,
-                        &info,
-                        &name,
-                        "Eq",
-                        binary.op == BinaryOp::NotEq,
-                        true,
+                        &resolved,
                         binary.span,
                     );
+                    if binary.op == BinaryOp::NotEq && call.type_id == TypeTable::BOOL {
+                        return TirExpr::new(
+                            TirExprKind::Unary {
+                                op: TirUnaryOp::Not,
+                                expr: Box::new(call),
+                            },
+                            TypeTable::BOOL,
+                            binary.span,
+                        );
+                    }
+                    return call;
                 }
                 if matches!(
                     binary.op,
@@ -317,16 +314,25 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 ) && let Some((_trait_name, info)) =
                     self.find_method_in_trait_bounds(&bound_names, "cmp", left.type_id)
                 {
-                    return self.build_ord_method_call(
+                    let resolved = ResolvedTraitMethod {
+                        trait_name: "Ord".to_string(),
+                        method_name: "cmp".to_string(),
+                        impl_name: name.clone(),
+                        self_kind: info.self_kind,
+                        return_type: info.return_type,
+                        rhs_type: info.param_types.first().copied(),
+                        is_type_param_receiver: true,
+                    };
+                    let cmp_call = self.build_trait_op_method_call_on_resolved(
                         left,
                         right,
-                        &info,
-                        &name,
-                        "Ord",
-                        binary.op,
-                        true,
+                        &resolved,
                         binary.span,
                     );
+                    if cmp_call.type_id == TypeTable::ERROR {
+                        return cmp_call;
+                    }
+                    return self.ord_bool_from_cmp(cmp_call, binary.op, binary.span);
                 }
             }
         }
@@ -388,52 +394,19 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         (info, lookup_name.clone())
                     });
                 if let Some(trait_info) = trait_info_opt {
-                    // Adjust receiver for self kind (&self)
-                    let receiver = self.adjust_receiver_for_self_kind(
+                    let resolved = ResolvedTraitMethod {
+                        trait_name: trait_info.trait_name,
+                        method_name: method_name.to_string(),
+                        impl_name,
+                        self_kind: trait_info.self_kind,
+                        return_type: trait_info.output_type,
+                        rhs_type: trait_info.rhs_type,
+                        is_type_param_receiver: false,
+                    };
+                    return self.build_trait_op_method_call_on_resolved(
                         left,
-                        trait_info.self_kind,
-                        false,
-                        binary.span,
-                    );
-
-                    // Create reference type for the argument (rhs: &Self)
-                    let arg_ref_type = self
-                        .type_table
-                        .borrow_mut()
-                        .intern(ResolvedType::Ref(right.type_id));
-
-                    let arg_ref = TirExpr::new(
-                        TirExprKind::Unary {
-                            op: TirUnaryOp::Ref,
-                            expr: Box::new(right),
-                        },
-                        arg_ref_type,
-                        binary.span,
-                    );
-
-                    let mangled_method_name = MethodName::format_local(
-                        &impl_name,
-                        Some(&trait_info.trait_name),
-                        method_name,
-                    );
-
-                    return TirExpr::new(
-                        TirExprKind::MethodCall {
-                            receiver: Box::new(receiver),
-                            func: FunctionRef {
-                                module_source: self.find_struct_module_source(&impl_name),
-                                name: mangled_method_name,
-                                monomorph_info: None,
-                                method_info: Some(LocalMethodName::new(
-                                    impl_name.clone(),
-                                    Some(trait_info.trait_name.clone()),
-                                    method_name.to_string(),
-                                )),
-                            },
-                            type_args: vec![],
-                            args: vec![CallArg::new(arg_ref, false)],
-                        },
-                        trait_info.output_type,
+                        right,
+                        &resolved,
                         binary.span,
                     );
                 }
@@ -459,54 +432,23 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 if let Some((_found_trait, info)) =
                     self.find_method_in_trait_bounds(&bound_names, method_name, left.type_id)
                 {
-                    let receiver = self.adjust_receiver_for_self_kind(
+                    // For type-param arithmetic operators, Output == Self is the common
+                    // case and TypeParam types get properly substituted by monomorphization.
+                    // Using AssocTypeProjection would cause unresolved types for primitives
+                    // that don't register associated types.
+                    let resolved = ResolvedTraitMethod {
+                        trait_name: trait_name.to_string(),
+                        method_name: method_name.to_string(),
+                        impl_name: name.clone(),
+                        self_kind: info.self_kind,
+                        return_type: operand_type_id,
+                        rhs_type: info.param_types.first().copied(),
+                        is_type_param_receiver: true,
+                    };
+                    return self.build_trait_op_method_call_on_resolved(
                         left,
-                        info.self_kind,
-                        false,
-                        binary.span,
-                    );
-
-                    let arg_ref_type = self
-                        .type_table
-                        .borrow_mut()
-                        .intern(ResolvedType::Ref(right.type_id));
-                    let arg_ref = TirExpr::new(
-                        TirExprKind::Unary {
-                            op: TirUnaryOp::Ref,
-                            expr: Box::new(right),
-                        },
-                        arg_ref_type,
-                        binary.span,
-                    );
-
-                    let mangled_method_name =
-                        MethodName::format_local(name, Some(trait_name), method_name);
-
-                    let mut method_info_local = LocalMethodName::new(
-                        name.clone(),
-                        Some(trait_name.to_string()),
-                        method_name.to_string(),
-                    );
-                    method_info_local.is_type_param_receiver = true;
-
-                    return TirExpr::new(
-                        TirExprKind::MethodCall {
-                            receiver: Box::new(receiver),
-                            func: FunctionRef {
-                                module_source: self.find_struct_module_source(name),
-                                name: mangled_method_name,
-                                monomorph_info: None,
-                                method_info: Some(method_info_local),
-                            },
-                            type_args: vec![],
-                            args: vec![CallArg::new(arg_ref, false)],
-                        },
-                        // Use the TypeParam type as the return type, not Self::Output.
-                        // For arithmetic operators, Output == Self is the common case,
-                        // and TypeParam types get properly substituted by monomorphization.
-                        // Using AssocTypeProjection here would cause unresolved types for
-                        // primitives that don't register associated types.
-                        operand_type_id,
+                        right,
+                        &resolved,
                         binary.span,
                     );
                 }
@@ -554,38 +496,22 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         (info, lookup_name.clone())
                     });
                 if let Some(trait_info) = trait_info_opt {
-                    // Adjust receiver for self kind (&self)
-                    let receiver = self.adjust_receiver_for_self_kind(
+                    // Shift traits declare `rhs: u32` (not `&Self`), so the
+                    // shared builder will type-check against u32 and will not
+                    // wrap the operand in `&`.
+                    let resolved = ResolvedTraitMethod {
+                        trait_name: trait_info.trait_name,
+                        method_name: method_name.to_string(),
+                        impl_name,
+                        self_kind: trait_info.self_kind,
+                        return_type: trait_info.output_type,
+                        rhs_type: trait_info.rhs_type,
+                        is_type_param_receiver: false,
+                    };
+                    return self.build_trait_op_method_call_on_resolved(
                         left,
-                        trait_info.self_kind,
-                        false,
-                        binary.span,
-                    );
-
-                    // For shift operations, rhs is u32 (not &Self), so pass directly
-                    let mangled_method_name = MethodName::format_local(
-                        &impl_name,
-                        Some(&trait_info.trait_name),
-                        method_name,
-                    );
-
-                    return TirExpr::new(
-                        TirExprKind::MethodCall {
-                            receiver: Box::new(receiver),
-                            func: FunctionRef {
-                                module_source: self.find_struct_module_source(&impl_name),
-                                name: mangled_method_name,
-                                monomorph_info: None,
-                                method_info: Some(LocalMethodName::new(
-                                    impl_name.clone(),
-                                    Some(trait_info.trait_name.clone()),
-                                    method_name.to_string(),
-                                )),
-                            },
-                            type_args: vec![],
-                            args: vec![CallArg::new(right, false)], // Pass rhs directly (u32)
-                        },
-                        trait_info.output_type,
+                        right,
+                        &resolved,
                         binary.span,
                     );
                 }
@@ -1298,164 +1224,129 @@ impl<H: CompilerHost> Resolver<'_, H> {
         self.resolve_expr(&chain.first, ctx, None)
     }
 
-    /// Verify that `right_type_id` matches `left_type_id` for trait-dispatched
-    /// `==`/`!=`/`<`/`<=`/`>`/`>=` operators. Both sides of `Eq::eq` / `Ord::cmp`
-    /// must be the same type (the signatures take `&Self`), so mixing types is
-    /// rejected here before the method call is built. Returns `Some(err_expr)`
-    /// when a mismatch was reported.
-    fn check_trait_op_rhs_type(
-        &mut self,
-        left_type_id: TypeId,
-        right_type_id: TypeId,
-        span: Span,
-    ) -> Option<TirExpr> {
-        if left_type_id == right_type_id
-            || left_type_id == TypeTable::ERROR
-            || right_type_id == TypeTable::ERROR
-            || left_type_id == TypeTable::NEVER
-            || right_type_id == TypeTable::NEVER
-        {
-            return None;
-        }
-        let type_table = self.type_table.borrow();
-        let left_name = type_table.type_name(left_type_id);
-        let right_name = type_table.type_name(right_type_id);
-        if left_name == right_name {
-            return None;
-        }
-        drop(type_table);
-        let _ = self.logger.error(TypeError::TypeMismatch {
-            expected: left_name,
-            found: right_name,
-            span,
-        });
-        Some(TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, span))
-    }
-
-    /// Build a method call for `Eq::eq` (== / !=) operators.
-    #[allow(clippy::too_many_arguments)]
-    fn build_eq_method_call(
+    /// Single TIR-level builder for every binary operator that dispatches to
+    /// a trait method (`Eq::eq`, `Ord::cmp`, `Add::add`, …, `Shl::shl`).
+    /// Inputs are already resolved [`TirExpr`]s for both operands. The
+    /// [`ResolvedTraitMethod`] provides the substituted rhs type, self kind,
+    /// and return type, so:
+    ///
+    /// 1. The rhs operand is type-checked against the trait's declared
+    ///    parameter type. Mismatch emits `TypeMismatch` and returns an
+    ///    `ERROR` expression; there is no way to skip the check.
+    /// 2. The receiver is adjusted (`&self` / `&mut self`) via
+    ///    [`Self::adjust_receiver_for_self_kind`].
+    /// 3. The rhs operand is wrapped in `&` iff the trait's declared rhs
+    ///    type is a reference (i.e. `&Self` for Eq/Ord/arithmetic, never
+    ///    for `Shl::shl(&self, rhs: u32)`).
+    /// 4. A [`TirExprKind::MethodCall`] is constructed with the correct
+    ///    mangled name and the `ResolvedTraitMethod`'s return type.
+    fn build_trait_op_method_call_on_resolved(
         &mut self,
         left: TirExpr,
         right: TirExpr,
-        info: &MethodInfo,
-        struct_name: &str,
-        trait_name: &str,
-        needs_negation: bool,
-        is_type_param_receiver: bool,
+        resolved: &ResolvedTraitMethod,
         span: Span,
     ) -> TirExpr {
-        let receiver = self.adjust_receiver_for_self_kind(left, info.self_kind, false, span);
+        // Decide whether to wrap rhs in `&` and what value type to expect
+        // for `right`.  The trait's declared rhs type tells us the shape:
+        //
+        //   * `&Self` / `&mut Self` → rhs is passed by reference; the
+        //     caller hands us a value of the receiver's type (so when the
+        //     receiver is a newtype, the rhs is the same newtype — not
+        //     the base).  We therefore typecheck against `left.type_id`.
+        //   * Any other explicit type (e.g. `rhs: u32` for `Shl::shl`) →
+        //     rhs is passed by value and must match `rhs_type` verbatim.
+        let wrap_rhs_as_ref = match resolved.rhs_type {
+            Some(rhs_ty) => matches!(
+                self.type_table.borrow().get(rhs_ty),
+                ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+            ),
+            None => false,
+        };
+        let expected_value_ty: Option<TypeId> = if wrap_rhs_as_ref {
+            Some(left.type_id)
+        } else {
+            resolved.rhs_type
+        };
 
-        let arg_ref_type = self
-            .type_table
-            .borrow_mut()
-            .intern(ResolvedType::Ref(right.type_id));
-        let arg_ref = TirExpr::new(
-            TirExprKind::Unary {
-                op: TirUnaryOp::Ref,
-                expr: Box::new(right),
-            },
-            arg_ref_type,
-            span,
+        if let Some(expected) = expected_value_ty
+            && right.type_id != expected
+            && right.type_id != TypeTable::ERROR
+            && expected != TypeTable::ERROR
+            && right.type_id != TypeTable::NEVER
+        {
+            let type_table = self.type_table.borrow();
+            let expected_name = type_table.type_name(expected);
+            let found_name = type_table.type_name(right.type_id);
+            if expected_name != found_name {
+                drop(type_table);
+                let _ = self.logger.error(TypeError::TypeMismatch {
+                    expected: expected_name,
+                    found: found_name,
+                    span,
+                });
+                return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, span);
+            }
+        }
+
+        let receiver = self.adjust_receiver_for_self_kind(left, resolved.self_kind, false, span);
+
+        let arg_expr = if wrap_rhs_as_ref {
+            let arg_ref_type = self
+                .type_table
+                .borrow_mut()
+                .intern(ResolvedType::Ref(right.type_id));
+            TirExpr::new(
+                TirExprKind::Unary {
+                    op: TirUnaryOp::Ref,
+                    expr: Box::new(right),
+                },
+                arg_ref_type,
+                span,
+            )
+        } else {
+            right
+        };
+
+        let mangled_method_name = MethodName::format_local(
+            &resolved.impl_name,
+            Some(&resolved.trait_name),
+            &resolved.method_name,
         );
-
-        let mangled_method_name = MethodName::format_local(struct_name, Some(trait_name), "eq");
 
         let mut method_info = LocalMethodName::new(
-            struct_name.to_string(),
-            Some(trait_name.to_string()),
-            "eq".to_string(),
+            resolved.impl_name.clone(),
+            Some(resolved.trait_name.clone()),
+            resolved.method_name.clone(),
         );
-        method_info.is_type_param_receiver = is_type_param_receiver;
+        method_info.is_type_param_receiver = resolved.is_type_param_receiver;
 
-        let call_expr = TirExpr::new(
+        TirExpr::new(
             TirExprKind::MethodCall {
                 receiver: Box::new(receiver),
                 func: FunctionRef {
-                    module_source: self.find_struct_module_source(struct_name),
+                    module_source: self.find_struct_module_source(&resolved.impl_name),
                     name: mangled_method_name,
                     monomorph_info: None,
                     method_info: Some(method_info),
                 },
                 type_args: vec![],
-                args: vec![CallArg::new(arg_ref, false)],
+                args: vec![CallArg::new(arg_expr, false)],
             },
-            TypeTable::BOOL,
+            resolved.return_type,
             span,
-        );
-
-        if needs_negation {
-            return TirExpr::new(
-                TirExprKind::Unary {
-                    op: TirUnaryOp::Not,
-                    expr: Box::new(call_expr),
-                },
-                TypeTable::BOOL,
-                span,
-            );
-        }
-        call_expr
+        )
     }
 
-    /// Build a method call for `Ord::cmp` (<, >, <=, >=) operators.
-    #[allow(clippy::too_many_arguments)]
-    fn build_ord_method_call(
-        &mut self,
-        left: TirExpr,
-        right: TirExpr,
-        info: &MethodInfo,
-        struct_name: &str,
-        trait_name: &str,
-        op: BinaryOp,
-        is_type_param_receiver: bool,
-        span: Span,
-    ) -> TirExpr {
-        let receiver = self.adjust_receiver_for_self_kind(left, info.self_kind, false, span);
-
-        let arg_ref_type = self
-            .type_table
-            .borrow_mut()
-            .intern(ResolvedType::Ref(right.type_id));
-        let arg_ref = TirExpr::new(
-            TirExprKind::Unary {
-                op: TirUnaryOp::Ref,
-                expr: Box::new(right),
-            },
-            arg_ref_type,
-            span,
-        );
-
+    /// Wrap an `Ord::cmp` method call into a `bool` by comparing the returned
+    /// `Ordering` variant against the one that makes the operator true.
+    /// `<`   → `cmp == Less`, `>` → `cmp == Greater`,
+    /// `<=`  → `cmp != Greater`, `>=` → `cmp != Less`.
+    fn ord_bool_from_cmp(&mut self, cmp_call: TirExpr, op: BinaryOp, span: Span) -> TirExpr {
         let ordering_type_id = self.type_table.borrow_mut().intern(ResolvedType::Enum {
             name: "Ordering".to_string(),
             module_source: ModuleSource::prelude(),
         });
-
-        let mangled_method_name = MethodName::format_local(struct_name, Some(trait_name), "cmp");
-
-        let mut method_info = LocalMethodName::new(
-            struct_name.to_string(),
-            Some(trait_name.to_string()),
-            "cmp".to_string(),
-        );
-        method_info.is_type_param_receiver = is_type_param_receiver;
-
-        let cmp_call = TirExpr::new(
-            TirExprKind::MethodCall {
-                receiver: Box::new(receiver),
-                func: FunctionRef {
-                    module_source: self.find_struct_module_source(struct_name),
-                    name: mangled_method_name,
-                    monomorph_info: None,
-                    method_info: Some(method_info),
-                },
-                type_args: vec![],
-                args: vec![CallArg::new(arg_ref, false)],
-            },
-            ordering_type_id,
-            span,
-        );
-
         let (compare_op, case_name, case_index): (TirBinaryOp, &str, u32) = match op {
             BinaryOp::Lt => (TirBinaryOp::Eq, "Less", 0),
             BinaryOp::Gt => (TirBinaryOp::Eq, "Greater", 2),
@@ -1463,7 +1354,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
             BinaryOp::GtEq => (TirBinaryOp::NotEq, "Less", 0),
             _ => unreachable!(),
         };
-
         let ordering_variant = TirExpr::new(
             TirExprKind::EnumConstruct {
                 enum_type: ordering_type_id,
@@ -1473,7 +1363,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
             ordering_type_id,
             span,
         );
-
         TirExpr::new(
             TirExprKind::Binary {
                 op: compare_op,

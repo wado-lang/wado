@@ -10,7 +10,7 @@ use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
 use super::Resolver;
-use super::types::{MethodInfo, TypeError};
+use super::types::{MethodInfo, ResolvedTraitMethod, TypeError};
 
 impl<H: CompilerHost> Resolver<'_, H> {
     /// Find a trait declaration by name across all modules.
@@ -1030,5 +1030,58 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
             _ => true,
         }
+    }
+
+    /// Single entry point for resolving a trait method that a binary operator
+    /// dispatches to (Eq / Ord / Add / Sub / Mul / Div / Rem / BitAnd / BitOr /
+    /// BitXor / Shl / Shr). Produces a fully-populated
+    /// [`ResolvedTraitMethod`] with the rhs type already substituted, so
+    /// callers need not reach into the underlying `find_*_trait_impl`
+    /// family and cannot forget to wire `rhs_type` through the typecheck.
+    ///
+    /// `struct_name` / `lookup_type_id` are the name-and-id used for impl
+    /// lookup (for newtypes this may be the ultimate base). `is_type_param`
+    /// is true for `T: Trait` type-param receivers.
+    pub(super) fn resolve_trait_method_for_op(
+        &mut self,
+        struct_name: &str,
+        lookup_type_id: TypeId,
+        trait_name: &str,
+        method_name: &str,
+        is_type_param: bool,
+    ) -> Option<ResolvedTraitMethod> {
+        let info = match trait_name {
+            "Eq" => self.find_eq_trait_impl(struct_name, lookup_type_id)?,
+            "Ord" => self.find_ord_trait_impl(struct_name, lookup_type_id)?,
+            _ => self.find_arithmetic_trait_impl(
+                struct_name,
+                lookup_type_id,
+                trait_name,
+                method_name,
+            )?,
+        };
+        // The Eq / Ord trait decls fix their return types (`bool` and
+        // `Ordering` respectively) regardless of what a user impl writes.
+        // `find_arithmetic_trait_impl` — which backs user-defined Eq/Ord
+        // impls — does not know that and defaults `output_type` to the
+        // receiver type when no `type Output` is declared.  Normalize here
+        // so callers see the real trait return type.
+        let return_type = match trait_name {
+            "Eq" => TypeTable::BOOL,
+            "Ord" => self.type_table.borrow_mut().intern(ResolvedType::Enum {
+                name: "Ordering".to_string(),
+                module_source: ModuleSource::prelude(),
+            }),
+            _ => info.output_type,
+        };
+        Some(ResolvedTraitMethod {
+            trait_name: info.trait_name,
+            method_name: method_name.to_string(),
+            impl_name: struct_name.to_string(),
+            self_kind: info.self_kind,
+            return_type,
+            rhs_type: info.rhs_type,
+            is_type_param_receiver: is_type_param,
+        })
     }
 }
