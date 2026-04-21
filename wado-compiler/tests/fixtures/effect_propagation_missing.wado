@@ -1,0 +1,18 @@
+// Test: a function with no `with` still cannot use resource operations even
+// when a totally unrelated effect would have propagated them. Propagation is
+// per-effect, not global.
+
+use { println, Stdout } from "core:cli";
+
+fn bad() {
+    let [rx, tx] = Stream::<u8>::new();
+    tx.drop();
+    rx.drop();
+}
+
+export fn run() with Stdout {
+    println("should not run");
+}
+
+__DATA__
+{"compile_error": "missing resource 'Stream'"}

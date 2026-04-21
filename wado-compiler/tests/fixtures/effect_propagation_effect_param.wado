@@ -1,0 +1,19 @@
+// Test: effect parameters resolve to concrete effects via function arguments,
+// and those concrete effects then get closure-expanded. `apply<effect E>(f: ...)`
+// called with a closure that needs `Stdout` should resolve E = Stdout, and
+// the caller must hold Stdout (which via propagation also admits Stream etc.).
+
+use { println, Stdout } from "core:cli";
+
+fn apply<effect E>(f: fn() with E) with E {
+    f();
+}
+
+export fn run() with Stdout {
+    apply(|| {
+        println("ok");
+    });
+}
+
+__DATA__
+{"stdout_contains": ["ok"]}

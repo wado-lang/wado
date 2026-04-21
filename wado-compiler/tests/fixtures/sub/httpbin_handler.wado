@@ -51,7 +51,7 @@ fn parse_query_params(query: String) -> TreeMap<String, Value> {
     return params;
 }
 
-fn headers_to_json(headers: &Fields) -> Value {
+fn headers_to_json(headers: &Fields) -> Value with Fields {
     let all = headers.copy_all();
     let mut map = TreeMap::<String, Value>::new();
     for let entry of all {
@@ -61,7 +61,7 @@ fn headers_to_json(headers: &Fields) -> Value {
     return Value::Object(map);
 }
 
-fn get_header(headers: &Fields, name: String) -> String {
+fn get_header(headers: &Fields, name: String) -> String with Fields {
     let values = headers.get(name as FieldName);
     if values.is_empty() {
         return "";
@@ -69,7 +69,7 @@ fn get_header(headers: &Fields, name: String) -> String {
     return String::from_utf8_lossy(values[0]);
 }
 
-pub fn read_body_from_request(request: Request) -> String {
+pub fn read_body_from_request(request: Request) -> String with Request {
     let [res_future, _res_tx] = Future::<Result<(), ErrorCode>>::new();
     let [body_stream, _trailers] = Request::consume_body(request, res_future);
     let mut body = String::with_capacity(256);
@@ -99,7 +99,7 @@ fn parse_status_code(s: String) -> Option<u16> {
     return null;
 }
 
-fn build_request_json(method: String, path: String, query: String, headers: &Fields, body: Option<String>) -> String {
+fn build_request_json(method: String, path: String, query: String, headers: &Fields, body: Option<String>) -> String with Fields {
     let mut obj = TreeMap::<String, Value>::new();
     obj["method"] = Value::String(method);
     obj["path"] = Value::String(path);
@@ -121,7 +121,9 @@ fn json_error(msg: String) -> String {
 }
 
 /// Route an HTTP request. Returns [status, content_type, body].
-pub fn route(request: Request, method_str: String, path: String, query: String) -> [i32, String, String] {
+pub fn route(request: Request, method_str: String, path: String, query: String) -> [i32, String, String]
+    with Request, Fields
+{
     if path == "/" {
         return [200, "text/html; charset=utf-8", "<h1>httpbin</h1>\n"];
     }

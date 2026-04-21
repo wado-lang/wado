@@ -10,7 +10,9 @@
 use { Request, Response, ErrorCode, Fields, RequestOptions, Trailers } from "wasi:http";
 use { Duration } from "wasi:clocks";
 
-export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+export async fn handle(request: Request) -> Result<Response, ErrorCode>
+    with Request, Response
+{
     // Test defaults are None
     let opts = RequestOptions::new();
     assert opts.get_connect_timeout() matches { None };

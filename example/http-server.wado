@@ -8,7 +8,9 @@
 
 use { Request, Response, ErrorCode, Fields, Trailers, StatusCode } from "wasi:http";
 
-export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+export async fn handle(request: Request) -> Result<Response, ErrorCode>
+    with Request, Response, Fields, Stream, StreamWritable, Future, FutureWritable
+{
     let path = request.get_path_with_query();
 
     let [status, body_str]: [StatusCode, String] = if path matches { Some("/") } {

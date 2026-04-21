@@ -31,7 +31,9 @@ fn scheme_name(s: Scheme) -> String {
     };
 }
 
-export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+export async fn handle(request: Request) -> Result<Response, ErrorCode>
+    with Request, Response
+{
     // Test Method::Other construction and matching
     let custom = Method::Other("PURGE");
     assert method_name(custom) == "PURGE";

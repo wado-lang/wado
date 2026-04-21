@@ -396,6 +396,7 @@ pub fn make_synthetic_method(
         stores_aliased_locals: IndexSet::default(),
         is_cm_binding: false,
         is_cm_export: false,
+        is_ambient: false,
         inline_hint: InlineHint::Auto,
         comp_features: 0,
         export_name: None,

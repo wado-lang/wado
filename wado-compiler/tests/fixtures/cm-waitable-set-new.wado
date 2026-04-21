@@ -3,7 +3,9 @@
 
 use { Request, Response, ErrorCode, Fields, Trailers } from "wasi:http";
 
-export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+export async fn handle(request: Request) -> Result<Response, ErrorCode>
+    with Request, Response
+{
     // Create a waitable set
     let ws = WaitableSet::new();
 

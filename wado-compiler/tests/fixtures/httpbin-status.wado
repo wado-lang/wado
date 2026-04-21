@@ -2,7 +2,9 @@
 use { Request, Response, ErrorCode, Fields, FieldName, FieldValue, Trailers, StatusCode } from "wasi:http";
 use { route, method_name, split_path_query } from "./sub/httpbin_handler.wado";
 
-export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+export async fn handle(request: Request) -> Result<Response, ErrorCode>
+    with Request, Response
+{
     let full_path = if let Some(p) = request.get_path_with_query() {
         p;
     } else {

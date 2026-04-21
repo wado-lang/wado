@@ -15,7 +15,7 @@ fn scheme_of(url: Url) -> Scheme {
     };
 }
 
-fn send_get(url: Url) -> Response {
+fn send_get(url: Url) -> Response with Client {
     let headers = Fields::new();
     headers.append("user-agent", #file.as_bytes() as FieldValue);
 
@@ -35,7 +35,7 @@ fn send_get(url: Url) -> Response {
     };
 }
 
-fn read_body(resp: Response) -> String {
+fn read_body(resp: Response) -> String with Response {
     let [res_rx, _res_tx] = Future::<Result<(), ErrorCode>>::new();
     let [body_stream, _trailers] = Response::consume_body(resp, res_rx);
 

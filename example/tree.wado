@@ -93,7 +93,7 @@ fn print_help() with Stdout {
     println("  -h      show this help");
 }
 
-fn collect_entries(dir: &Descriptor, opts: &Options) -> Array<DirectoryEntry> {
+fn collect_entries(dir: &Descriptor, opts: &Options) -> Array<DirectoryEntry> with Descriptor {
     let mut out: Array<DirectoryEntry> = [];
     let [stream, done] = dir.read_directory();
     loop {
@@ -117,7 +117,7 @@ fn collect_entries(dir: &Descriptor, opts: &Options) -> Array<DirectoryEntry> {
     return out;
 }
 
-fn walk(dir: &Descriptor, depth: i32, prefix: String, opts: &Options, stats: &mut Stats) with Stdout, Stderr {
+fn walk(dir: &Descriptor, depth: i32, prefix: String, opts: &Options, stats: &mut Stats) with Stdout, Stderr, Descriptor {
     let entries = collect_entries(dir, opts);
     let n = entries.len();
     for let mut i = 0; i < n; i += 1 {
@@ -162,7 +162,7 @@ fn walk(dir: &Descriptor, depth: i32, prefix: String, opts: &Options, stats: &mu
     }
 }
 
-export fn run() with Stdout, Stderr, Environment, Preopens {
+export fn run() with Stdout, Stderr, Environment, Preopens, Descriptor {
     let opts = match parse_args(args()) {
         Ok(o) => o,
         Err(msg) => {

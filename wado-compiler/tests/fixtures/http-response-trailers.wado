@@ -8,7 +8,9 @@
 
 use { Request, Response, ErrorCode, Fields, FieldName, FieldValue, Trailers } from "wasi:http";
 
-export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+export async fn handle(request: Request) -> Result<Response, ErrorCode>
+    with Request, Response
+{
     // Prepare trailers
     let trailers = Fields::new();
     let _ = trailers.append("x-checksum" as FieldName, "abc123".as_bytes() as FieldValue);

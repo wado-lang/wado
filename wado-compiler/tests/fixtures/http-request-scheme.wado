@@ -4,7 +4,9 @@
 
 use { Request, Response, ErrorCode, Fields, Scheme, Trailers } from "wasi:http";
 
-export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+export async fn handle(request: Request) -> Result<Response, ErrorCode>
+    with Request, Response
+{
     let scheme = request.get_scheme();
     // The e2e test runner injects an HTTP request, so scheme should be present
     if let Some(s) = scheme {

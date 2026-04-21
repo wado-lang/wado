@@ -15,7 +15,9 @@
 use { Request, Response, ErrorCode, Fields, Trailers } from "wasi:http";
 // use { Handler } from "wasi:http/handler.wado";
 
-export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+export async fn handle(request: Request) -> Result<Response, ErrorCode>
+    with Request, Response
+{
     // TODO: Forward to downstream handler (middleware pattern)
     // let result = Handler::handle(request);
     // task return result;

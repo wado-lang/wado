@@ -8,7 +8,7 @@ type Timestamp = Mark;
 type EventTime = Timestamp;
 
 // from newtype_wasi_chained.wado
-fn newtype_wasi_chained() with Stdout {
+fn newtype_wasi_chained() with Stdout, MonotonicClock {
     // Get time as Mark
     let t1: Mark = MonotonicClock::now();
 
@@ -43,7 +43,7 @@ fn newtype_wasi_chained() with Stdout {
 }
 
 // from newtype_wasi_duration.wado
-fn newtype_wasi_duration() with Stdout {
+fn newtype_wasi_duration() with Stdout, MonotonicClock {
     // get_resolution returns Duration (newtype of u64)
     let res: Duration = MonotonicClock::get_resolution();
 
@@ -70,7 +70,7 @@ fn newtype_wasi_duration() with Stdout {
 }
 
 // from newtype_wasi_multiple.wado
-fn newtype_wasi_multiple() with Stdout {
+fn newtype_wasi_multiple() with Stdout, MonotonicClock {
     // Get both newtypes from WASI
     let start: Mark = MonotonicClock::now();
     let res: Duration = MonotonicClock::get_resolution();
@@ -100,7 +100,7 @@ fn newtype_wasi_multiple() with Stdout {
     println("multiple wasi newtype tests passed");
 }
 
-export fn run() with Stdout {
+export fn run() with Stdout, MonotonicClock {
     newtype_wasi_chained();
     newtype_wasi_duration();
     newtype_wasi_multiple();

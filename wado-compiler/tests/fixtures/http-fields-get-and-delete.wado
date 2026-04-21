@@ -3,7 +3,9 @@
 
 use { Request, Response, ErrorCode, Fields, FieldName, FieldValue, Trailers } from "wasi:http";
 
-export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+export async fn handle(request: Request) -> Result<Response, ErrorCode>
+    with Request, Response
+{
     let fields = Fields::new();
 
     let v: Array<u8> = [120 as u8]; // "x"

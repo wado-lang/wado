@@ -32,7 +32,7 @@ pub fn gc_array_to_memory(arr: builtin::array<u8>, ptr: i32, len: i32) {
 ///
 /// Uses write_raw to pass String's internal GC array directly to the stream,
 /// avoiding the intermediate String → Array<u8> byte-by-byte copy.
-pub fn write_string_to_stream(tx: StreamWritable<u8>, message: String, add_newline: bool) {
+pub fn write_string_to_stream(tx: StreamWritable<u8>, message: String, add_newline: bool) with StreamWritable {
     let bytes = message.internal_raw_bytes();
     let len = message.len();
     if add_newline {
@@ -54,7 +54,7 @@ pub fn write_string_to_stream(tx: StreamWritable<u8>, message: String, add_newli
 /// If the upper 28 bits (handle) are nonzero, an async task is in flight.
 /// A subtask transitions through Starting → Started → Returned. Each call to
 /// waitable-set.wait delivers one transition, so we must loop until RETURNED.
-pub fn wait_for_subtask(packed: i32) {
+pub fn wait_for_subtask(packed: i32) with WaitableSet, Subtask {
     let handle = packed >> 4;
     if handle != 0 {
         let subtask = handle as Subtask;
@@ -75,13 +75,14 @@ pub fn wait_for_subtask(packed: i32) {
 /// Drop a write_via_stream Future handle to signal completion.
 /// Uses CLI ErrorCode type for the Future parameterization.
 use { ErrorCode as CliErrorCode } from "wasi:cli/types.wado";
-pub fn drop_cli_write_future(future: Future<Result<(), CliErrorCode>>) {
+pub fn drop_cli_write_future(future: Future<Result<(), CliErrorCode>>) with Future {
     future.drop();
 }
 
 /// Logs a message with newline to stdout (ambient, no effect required).
 /// Uses builtin::call_indirect_* to bypass the effect system — this is
 /// intentional for logging/debugging which must work without effects.
+#[ambient]
 pub fn log_stdout(message: String) {
     let [rx, tx] = Stream::<u8>::new();
 
@@ -93,6 +94,7 @@ pub fn log_stdout(message: String) {
 /// Logs a message with newline to stderr (ambient, no effect required).
 /// Uses builtin::call_indirect_* to bypass the effect system — this is
 /// intentional for logging/debugging which must work without effects.
+#[ambient]
 pub fn log_stderr(message: String) {
     let [rx, tx] = Stream::<u8>::new();
 

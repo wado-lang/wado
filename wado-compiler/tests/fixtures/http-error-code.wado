@@ -4,7 +4,9 @@
 
 use { Request, Response, ErrorCode } from "wasi:http";
 
-export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+export async fn handle(request: Request) -> Result<Response, ErrorCode>
+    with Request, Response
+{
     task return Result::<Response, ErrorCode>::Err(ErrorCode::InternalError(null));
 }
 

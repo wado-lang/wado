@@ -17,7 +17,9 @@ use { Request, Response, ErrorCode, Fields, FieldName, FieldValue, Method, Schem
 use { Client } from "wasi:http/client.wado";
 use { Duration } from "wasi:clocks";
 
-export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+export async fn handle(request: Request) -> Result<Response, ErrorCode>
+    with Request, Response, Client
+{
     // Create RequestOptions with a timeout
     let opts = RequestOptions::new();
     let _ = opts.set_connect_timeout(Option::<Duration>::Some(5000000000));

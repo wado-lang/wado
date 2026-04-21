@@ -3,7 +3,9 @@
 
 use { Request, Response, ErrorCode, Fields, FieldName, FieldValue, HeaderError, Trailers } from "wasi:http";
 
-export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+export async fn handle(request: Request) -> Result<Response, ErrorCode>
+    with Request, Response
+{
     // Build a list of header entries
     let name_bytes: Array<u8> = [118 as u8, 49 as u8]; // "v1"
     let entries: Array<[FieldName, FieldValue]> = [
