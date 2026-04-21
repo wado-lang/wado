@@ -33,6 +33,11 @@ pub struct GeneratorCacheEntry {
     pub inputs: Vec<FileHash>,
     /// Hex SHA-256 of the canonical options encoding.
     pub options_hash: String,
+    /// Files the generator read via `host::read-file` during the last run,
+    /// sorted lexicographically by path and deduplicated. Fed into the next
+    /// run's cache key so transitive schema reads invalidate the cache when
+    /// their contents change. Empty on first run.
+    pub reads: Vec<FileHash>,
     /// Files produced by the last run.
     pub outputs: Vec<OutputHash>,
 }
@@ -239,6 +244,20 @@ fn write_generator_cache_entry(out: &mut String, entry: &GeneratorCacheEntry) {
         out.push_str("]\n");
     }
 
+    if entry.reads.is_empty() {
+        out.push_str("reads = []\n");
+    } else {
+        out.push_str("reads = [\n");
+        for file in &entry.reads {
+            let _ = writeln!(
+                out,
+                "    {{ path = {:?}, hash = {:?} }},",
+                file.path, file.hash
+            );
+        }
+        out.push_str("]\n");
+    }
+
     if entry.outputs.is_empty() {
         out.push_str("outputs = []\n");
     } else {
@@ -306,6 +325,7 @@ struct RawGeneratorCacheEntry {
     inputs: Option<Vec<RawFileHash>>,
     #[serde(rename = "options-hash")]
     options_hash: Option<String>,
+    reads: Option<Vec<RawFileHash>>,
     outputs: Option<Vec<RawOutputHash>>,
 }
 
@@ -364,6 +384,12 @@ fn convert_generator_cache_entry(
         .into_iter()
         .map(|f| convert_file_hash(&invocation, "inputs", f))
         .collect::<Result<Vec<_>, _>>()?;
+    let reads = raw
+        .reads
+        .unwrap_or_default()
+        .into_iter()
+        .map(|f| convert_file_hash(&invocation, "reads", f))
+        .collect::<Result<Vec<_>, _>>()?;
     let outputs = raw
         .outputs
         .unwrap_or_default()
@@ -376,6 +402,7 @@ fn convert_generator_cache_entry(
         primary,
         inputs,
         options_hash,
+        reads,
         outputs,
     })
 }
@@ -600,6 +627,10 @@ options-hash = "sha256:opt1"
 inputs = [
     { path = "schemas/common.proto", hash = "sha256:schema2" },
 ]
+reads = [
+    { path = "schemas/imported.proto", hash = "sha256:read1" },
+    { path = "schemas/shared.proto", hash = "sha256:read2" },
+]
 outputs = [
     { path = "build/kiln/proto-greeter/greeter.wado", hash = "sha256:out1", entry = true },
     { path = "build/kiln/proto-greeter/types.wado", hash = "sha256:out2", entry = false },
@@ -638,6 +669,9 @@ outputs = [
         assert_eq!(proto_entry.primary.path, "schemas/greeter.proto");
         assert_eq!(proto_entry.primary.hash, "sha256:schema1");
         assert_eq!(proto_entry.inputs.len(), 1);
+        assert_eq!(proto_entry.reads.len(), 2);
+        assert_eq!(proto_entry.reads[0].path, "schemas/imported.proto");
+        assert_eq!(proto_entry.reads[1].path, "schemas/shared.proto");
         assert_eq!(proto_entry.outputs.len(), 2);
         assert!(proto_entry.outputs[0].entry);
         assert!(!proto_entry.outputs[1].entry);
@@ -666,6 +700,14 @@ outputs = [
                 .unwrap()
                 .invocation
         );
+        let proto_reparsed = reparsed
+            .generator_cache
+            .iter()
+            .find(|e| e.invocation == "proto-greeter")
+            .unwrap();
+        assert_eq!(proto_reparsed.reads.len(), 2);
+        assert_eq!(proto_reparsed.reads[0].path, "schemas/imported.proto");
+        assert_eq!(proto_reparsed.reads[0].hash, "sha256:read1");
     }
 
     #[test]
@@ -708,6 +750,7 @@ outputs = [
                     },
                     inputs: vec![],
                     options_hash: "sha256:zo".to_string(),
+                    reads: vec![],
                     outputs: vec![],
                 },
                 GeneratorCacheEntry {
@@ -719,6 +762,7 @@ outputs = [
                     },
                     inputs: vec![],
                     options_hash: "sha256:ao".to_string(),
+                    reads: vec![],
                     outputs: vec![],
                 },
             ],
