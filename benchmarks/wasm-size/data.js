@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776730324793,
+  "lastUpdate": 1776736679551,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -15081,6 +15081,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 635680,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3337c0981548575b4f13f53a4673f330b9af0307",
+          "message": "Merge pull request #894 from wado-lang/claude/investigate-perf-regression-eAmKQ\n\nfix(wir-optimize): value_copy elision must see outer-scope uses",
+          "timestamp": "2026-04-21T10:53:41+09:00",
+          "tree_id": "134a277b28be9be61ec75e0413003fde0509cfd9",
+          "url": "https://github.com/wado-lang/wado/commit/3337c0981548575b4f13f53a4673f330b9af0307"
+        },
+        "date": 1776736679314,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8982,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18988,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 635264,
             "unit": "bytes"
           }
         ]
