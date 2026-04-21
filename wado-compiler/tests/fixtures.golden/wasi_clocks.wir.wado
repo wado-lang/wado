@@ -107,11 +107,11 @@ fn "wado-compiler/tests/fixtures/wasi_clocks.wado/run"() with Stdout, MonotonicC
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("all clocks tests passed"), used: 23 });
 }
 
-fn "wado-compiler/tests/fixtures/wasi_clocks.wado/__cm_binding__Stdout_write_via_stream"(data) {
+fn "wado-compiler/tests/fixtures/wasi_clocks.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/wasi_clocks.wado/__cm_binding__MonotonicClock_now"() {
+fn "wado-compiler/tests/fixtures/wasi_clocks.wado/__cm_binding__MonotonicClock_now"() with MonotonicClock {
     return "wasi/wasi:clocks/MonotonicClock::now"();
 }
 

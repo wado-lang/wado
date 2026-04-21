@@ -994,11 +994,11 @@ condition: !fields.has(\"x-temp\" as FieldName)
     drop("mem/realloc"(__fw_write_ptr_2, 40, 8, 0));
 }
 
-fn "wado-compiler/tests/fixtures/http-fields-get-and-delete.wado/__cm_binding__Fields_new"() {
+fn "wado-compiler/tests/fixtures/http-fields-get-and-delete.wado/__cm_binding__Fields_new"() with Fields {
     return "wasi/wasi:http/Fields::new"();
 }
 
-fn "wado-compiler/tests/fixtures/http-fields-get-and-delete.wado/__cm_binding__Fields_append"(self, name, value) {
+fn "wado-compiler/tests/fixtures/http-fields-get-and-delete.wado/__cm_binding__Fields_append"(self, name, value) with Fields {
     let __name_packed: i64;
     let __value_packed: i64;
     let __outptr: i32;
@@ -1058,13 +1058,13 @@ fn "wado-compiler/tests/fixtures/http-fields-get-and-delete.wado/__cm_binding__F
     return __result_val;
 }
 
-fn "wado-compiler/tests/fixtures/http-fields-get-and-delete.wado/__cm_binding__Fields_has"(self, name) {
+fn "wado-compiler/tests/fixtures/http-fields-get-and-delete.wado/__cm_binding__Fields_has"(self, name) with Fields {
     let __name_packed: i64;
     __name_packed = "core:internal/cm_lower_string"(name);
     return "wasi/wasi:http/Fields::has"(self, builtin::i32_wrap_i64(__name_packed), builtin::i32_wrap_i64(__name_packed >> 32_i64));
 }
 
-fn "wado-compiler/tests/fixtures/http-fields-get-and-delete.wado/__cm_binding__Fields_get_and_delete"(self, name) {
+fn "wado-compiler/tests/fixtures/http-fields-get-and-delete.wado/__cm_binding__Fields_get_and_delete"(self, name) with Fields {
     let __name_packed: i64;
     let __outptr: i32;
     let __disc_4: i32;
@@ -1161,7 +1161,7 @@ fn "wado-compiler/tests/fixtures/http-fields-get-and-delete.wado/__cm_binding__F
     return __result_val;
 }
 
-fn "wado-compiler/tests/fixtures/http-fields-get-and-delete.wado/__cm_binding__Response_new"(headers, contents, trailers) {
+fn "wado-compiler/tests/fixtures/http-fields-get-and-delete.wado/__cm_binding__Response_new"(headers, contents, trailers) with Response {
     let __contents_disc: i32;
     let __contents_inner0: i32;
     let __outptr: i32;

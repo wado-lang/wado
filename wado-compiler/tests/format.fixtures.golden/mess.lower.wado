@@ -2578,7 +2578,7 @@ pub fn write_string_to_stream(tx: StreamWritable<u8>, message: String, add_newli
     cm_raw_call stream-drop-writable(&tx as i32);
 }
 
-pub fn wait_for_subtask(packed: i32) {
+pub fn wait_for_subtask(packed: i32) with WaitableSet, Subtask {
     let handle: i32 = (packed >> 4);
     if (handle != 0) {
         let subtask: Subtask = handle as Subtask;
@@ -21257,15 +21257,15 @@ pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: &fn([I::Item, J:
     self."Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(f);
 }
 
-fn __cm_binding__Stdout_write_via_stream(data: i32) -> i32 {
+fn __cm_binding__Stdout_write_via_stream(data: i32) -> i32 with Stdout {
     return cm_raw_call wasi:cli/Stdout::write_via_stream(data);
 }
 
-fn __cm_binding__Stderr_write_via_stream(data: i32) -> i32 {
+fn __cm_binding__Stderr_write_via_stream(data: i32) -> i32 with Stderr {
     return cm_raw_call wasi:cli/Stderr::write_via_stream(data);
 }
 
-fn __cm_binding__Environment_get_environment() -> Array<[String, String]> {
+fn __cm_binding__Environment_get_environment() -> Array<[String, String]> with Environment {
     let __outptr: i32 = core::builtin::realloc(0, 0, 4, 8);
     cm_raw_call wasi:cli/Environment::get_environment(__outptr);
     let __base: i32 = core::builtin::i32_load(__outptr);
@@ -21291,7 +21291,7 @@ fn __cm_binding__Environment_get_environment() -> Array<[String, String]> {
     return __result;
 }
 
-fn __cm_binding__Environment_get_arguments() -> Array<String> {
+fn __cm_binding__Environment_get_arguments() -> Array<String> with Environment {
     let __outptr: i32 = core::builtin::realloc(0, 0, 4, 8);
     cm_raw_call wasi:cli/Environment::get_arguments(__outptr);
     let __base: i32 = core::builtin::i32_load(__outptr);
@@ -21314,7 +21314,7 @@ fn __cm_binding__Environment_get_arguments() -> Array<String> {
     return __result;
 }
 
-fn __cm_binding__Environment_get_initial_cwd() -> Option<String> {
+fn __cm_binding__Environment_get_initial_cwd() -> Option<String> with Environment {
     let __outptr: i32 = core::builtin::realloc(0, 0, 4, 12);
     cm_raw_call wasi:cli/Environment::get_initial_cwd(__outptr);
     let __disc: i32 = core::builtin::i32_load8_u(__outptr);
@@ -21327,11 +21327,11 @@ fn __cm_binding__Environment_get_initial_cwd() -> Option<String> {
     return __option_result;
 }
 
-fn __cm_binding__Exit_exit(status: i32) {
+fn __cm_binding__Exit_exit(status: i32) with Exit {
     cm_raw_call wasi:cli/Exit::exit(status);
 }
 
-fn __cm_binding__Exit_exit_with_code(status_code: i32) {
+fn __cm_binding__Exit_exit_with_code(status_code: i32) with Exit {
     cm_raw_call wasi:cli/Exit::exit_with_code(status_code);
 }
 

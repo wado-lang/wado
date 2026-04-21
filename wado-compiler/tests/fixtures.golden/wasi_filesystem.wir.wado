@@ -163,11 +163,11 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem.wado/run"() with Stdout, Preope
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("all filesystem tests passed"), used: 27 });
 }
 
-fn "wado-compiler/tests/fixtures/wasi_filesystem.wado/__cm_binding__Stdout_write_via_stream"(data) {
+fn "wado-compiler/tests/fixtures/wasi_filesystem.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/wasi_filesystem.wado/__cm_binding__Preopens_get_directories"() {
+fn "wado-compiler/tests/fixtures/wasi_filesystem.wado/__cm_binding__Preopens_get_directories"() with Preopens {
     let __outptr: i32;
     let __base: i32;
     let __count: i32;

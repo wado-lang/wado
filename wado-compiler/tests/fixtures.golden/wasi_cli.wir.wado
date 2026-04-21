@@ -177,15 +177,15 @@ fn "wado-compiler/tests/fixtures/wasi_cli.wado/run"() with Stdout, Stderr, Envir
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("all cli tests passed"), used: 20 });
 }
 
-fn "wado-compiler/tests/fixtures/wasi_cli.wado/__cm_binding__Stdout_write_via_stream"(data) {
+fn "wado-compiler/tests/fixtures/wasi_cli.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/wasi_cli.wado/__cm_binding__Stderr_write_via_stream"(data) {
+fn "wado-compiler/tests/fixtures/wasi_cli.wado/__cm_binding__Stderr_write_via_stream"(data) with Stderr {
     return "wasi/wasi:cli/Stderr::write_via_stream"(data);
 }
 
-fn "wado-compiler/tests/fixtures/wasi_cli.wado/__cm_binding__Environment_get_environment"() {
+fn "wado-compiler/tests/fixtures/wasi_cli.wado/__cm_binding__Environment_get_environment"() with Environment {
     let __outptr: i32;
     let __base: i32;
     let __count: i32;
@@ -240,7 +240,7 @@ fn "wado-compiler/tests/fixtures/wasi_cli.wado/__cm_binding__Environment_get_env
     return __result;
 }
 
-fn "wado-compiler/tests/fixtures/wasi_cli.wado/__cm_binding__Environment_get_arguments"() {
+fn "wado-compiler/tests/fixtures/wasi_cli.wado/__cm_binding__Environment_get_arguments"() with Environment {
     let __outptr: i32;
     let __base: i32;
     let __count: i32;

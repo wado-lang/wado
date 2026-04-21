@@ -368,7 +368,7 @@ import fn wasi/subtask-drop from "wasi/subtask-drop";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-fn "wado-compiler/tests/fixtures/http-client-send-proxy.wado/handle"() {
+fn "wado-compiler/tests/fixtures/http-client-send-proxy.wado/handle"() with Client {
     let headers: i32;
     let trailers_future: i32;
     let trailers_tx: i32;
@@ -585,7 +585,7 @@ fn "wado-compiler/tests/fixtures/http-client-send-proxy.wado/handle"() {
             "core:prelude/string.wado/String::push"(__local_12, 58);
             __local_13 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
             __local_171 = __local_13;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(31, __local_171);
+            "core:prelude/primitive.wado/i32::fmt_decimal"(33, __local_171);
             "core:prelude/string.wado/String::push"(__local_12, 58);
             "core:prelude/string.wado/String::push"(__local_12, 32);
             "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected upstream status 200"), used: 28 });
@@ -915,11 +915,11 @@ condition: status == 200
     }
 }
 
-fn "wado-compiler/tests/fixtures/http-client-send-proxy.wado/__cm_binding__Fields_new"() {
+fn "wado-compiler/tests/fixtures/http-client-send-proxy.wado/__cm_binding__Fields_new"() with Fields {
     return "wasi/wasi:http/Fields::new"();
 }
 
-fn "wado-compiler/tests/fixtures/http-client-send-proxy.wado/__cm_binding__Request_new"(headers, contents, trailers, options) {
+fn "wado-compiler/tests/fixtures/http-client-send-proxy.wado/__cm_binding__Request_new"(headers, contents, trailers, options) with Request {
     let __contents_disc: i32;
     let __contents_inner0: i32;
     let __options_disc: i32;
@@ -945,7 +945,7 @@ fn "wado-compiler/tests/fixtures/http-client-send-proxy.wado/__cm_binding__Reque
     return __lifted_result_11, __lifted_result_12;
 }
 
-fn "wado-compiler/tests/fixtures/http-client-send-proxy.wado/__cm_binding__Request_set_scheme"(self, scheme) {
+fn "wado-compiler/tests/fixtures/http-client-send-proxy.wado/__cm_binding__Request_set_scheme"(self, scheme) with Request {
     let __scheme_disc: i32;
     let __scheme_inner0: i32;
     let __scheme_inner1: i32;
@@ -983,7 +983,7 @@ fn "wado-compiler/tests/fixtures/http-client-send-proxy.wado/__cm_binding__Reque
     return __result_val;
 }
 
-fn "wado-compiler/tests/fixtures/http-client-send-proxy.wado/__cm_binding__Request_set_authority"(self, authority) {
+fn "wado-compiler/tests/fixtures/http-client-send-proxy.wado/__cm_binding__Request_set_authority"(self, authority) with Request {
     let __authority_disc: i32;
     let __authority_inner0: i32;
     let __authority_inner1: i32;
@@ -1008,7 +1008,7 @@ fn "wado-compiler/tests/fixtures/http-client-send-proxy.wado/__cm_binding__Reque
     return __result_val;
 }
 
-fn "wado-compiler/tests/fixtures/http-client-send-proxy.wado/__cm_binding__Request_set_path_with_query"(self, path_with_query) {
+fn "wado-compiler/tests/fixtures/http-client-send-proxy.wado/__cm_binding__Request_set_path_with_query"(self, path_with_query) with Request {
     let __path_with_query_disc: i32;
     let __path_with_query_inner0: i32;
     let __path_with_query_inner1: i32;
@@ -1033,7 +1033,7 @@ fn "wado-compiler/tests/fixtures/http-client-send-proxy.wado/__cm_binding__Reque
     return __result_val;
 }
 
-fn "wado-compiler/tests/fixtures/http-client-send-proxy.wado/__cm_binding__Client_send"(request) {
+fn "wado-compiler/tests/fixtures/http-client-send-proxy.wado/__cm_binding__Client_send"(request) with Client {
     let __async_outptr: i32;
     let __subtask: i32;
     let __disc_3: i32;
@@ -1391,7 +1391,7 @@ fn "wado-compiler/tests/fixtures/http-client-send-proxy.wado/__cm_binding__Clien
     return __result_val;
 }
 
-fn "wado-compiler/tests/fixtures/http-client-send-proxy.wado/__cm_binding__Response_get_status_code"(self) {
+fn "wado-compiler/tests/fixtures/http-client-send-proxy.wado/__cm_binding__Response_get_status_code"(self) with Response {
     return "wasi/wasi:http/Response::get_status_code"(self);
 }
 
@@ -1453,7 +1453,7 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {
     "wasi/stream-drop-writable"(tx);
 }
 
-fn "core:internal/wait_for_subtask"(packed) {
+fn "core:internal/wait_for_subtask"(packed) with WaitableSet, Subtask {
     let handle: i32;
     let subtask: i32;
     let ws: i32;

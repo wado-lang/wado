@@ -36,7 +36,7 @@ import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/subtask-drop from "wasi/subtask-drop";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 
-fn "wado-compiler/tests/fixtures/wasi_newtype_literal.wado/__cm_binding__MonotonicClock_wait_for"(how_long) {
+fn "wado-compiler/tests/fixtures/wasi_newtype_literal.wado/__cm_binding__MonotonicClock_wait_for"(how_long) with MonotonicClock {
     let __subtask: i32;
     __subtask = "wasi/wasi:clocks/MonotonicClock::wait_for"(how_long);
     "core:internal/wait_for_subtask"(__subtask);
@@ -47,7 +47,7 @@ fn "wado-compiler/tests/fixtures/wasi_newtype_literal.wado/__cm_export____test_0
     "wasi/task-return"(0);
 }
 
-fn "core:internal/wait_for_subtask"(packed) {
+fn "core:internal/wait_for_subtask"(packed) with WaitableSet, Subtask {
     let handle: i32;
     let subtask: i32;
     let ws: i32;
