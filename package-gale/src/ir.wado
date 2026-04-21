@@ -1,3 +1,5 @@
+use { Span, ParseError } from "./runtime.wado";
+
 /// OptionValue is the typed right-hand side of an ANTLR4 `key = value` option
 /// entry. ANTLR4 options can be a bare identifier, a dotted qualified name,
 /// a single-quoted string literal, a decimal integer, or an action-block
@@ -41,9 +43,67 @@ pub struct NamedAction {
     pub name: String,
 }
 
+/// GrammarKind records which of ANTLR4's three grammar-header forms the
+/// source used. ANTLR4 spec: `vendor/antlr4/doc/grammars.md`.
+///
+/// The kind gates semantic validation: a bare `parser grammar` cannot
+/// resolve token references locally because the lexer rules live in a
+/// sibling `lexer grammar`, and those refs stay unresolved until
+/// `merge_grammars` combines the two halves. `merge_grammars` always
+/// produces `Combined` since a merged grammar has (or is intended to
+/// have) both sides.
+pub variant GrammarKind {
+    /// `grammar Foo;` — combined grammar (parser + lexer in one file),
+    /// or a grammar produced by `merge_grammars`.
+    Combined,
+    /// `lexer grammar Foo;` — lexer-only translation unit.
+    Lexer,
+    /// `parser grammar Foo;` — parser-only translation unit; token refs
+    /// come from a sibling lexer grammar and are unresolvable until merge.
+    Parser,
+}
+
+/// RefKind distinguishes the three flavors of pending (unresolved)
+/// reference that `parse()` collects. The kind selects which rule table
+/// `check_references` resolves against. See the variants for details.
+pub variant RefKind {
+    /// Reference to another parser rule from inside a parser-rule body.
+    /// Resolves against `Grammar.parser_rules`.
+    ParserRuleRef,
+    /// Reference to a token from inside a parser-rule body (or an
+    /// element like `TOK` in an alternative). Resolves against
+    /// `Grammar.lexer_rules` (which includes virtual tokens from
+    /// `tokens { }` blocks) plus the built-in `EOF` sentinel.
+    TokenRef,
+    /// Reference to another lexer rule (including fragment refs) from
+    /// inside a lexer-rule body. Resolves against `Grammar.lexer_rules`.
+    LexerRuleRef,
+}
+
+/// PendingRef is a single rule-reference occurrence captured during
+/// parse. Each ref is validated by `check_references` against the
+/// grammar's own rule tables — possibly after `merge_grammars` has
+/// combined split-grammar halves, which is why the validator runs as a
+/// separate pass rather than inline during parse.
+pub struct PendingRef {
+    pub kind: RefKind,
+    /// Name of the rule in whose body this reference appeared. Used in
+    /// the diagnostic message so the error report points to the caller,
+    /// not just the missing name.
+    pub containing_rule: String,
+    /// Text of the referenced symbol (what we're trying to resolve).
+    pub referenced_name: String,
+    /// Source span of the reference occurrence, for diagnostics. Span
+    /// positions are relative to the `.g4` file that was parsed; after
+    /// `merge_grammars`, spans from different files coexist but each
+    /// still points into its original source.
+    pub span: Span,
+}
+
 /// Grammar is the top-level IR representing a parsed .g4 file.
 pub struct Grammar {
     pub name: String,
+    pub kind: GrammarKind,
     pub parser_rules: Array<ParserRule>,
     pub lexer_rules: Array<LexerRule>,
     pub mode_names: Array<String>,
@@ -57,11 +117,106 @@ pub struct Grammar {
     /// Grammar-level `@name { ... }` / `@scope::name { ... }` actions,
     /// in declaration order. Action bodies themselves are discarded.
     pub named_actions: Array<NamedAction>,
+    /// Rule / token references encountered during parse that have not
+    /// yet been resolved against a rule table. `check_references`
+    /// walks these and reports undefined refs. Populated by `parse()`;
+    /// concatenated by `merge_grammars` so that a merged Grammar can be
+    /// validated in one pass.
+    pub pending_refs: Array<PendingRef>,
     /// Source `.g4` paths that contributed to this grammar, in the order
     /// they were supplied on the command line. Populated by `cmd_gen` after
     /// parsing — `parse()` itself returns an empty array because it operates
     /// on the file contents, not the path.
     pub source_files: Array<String>,
+}
+
+/// Resolve every reference in `grammar.pending_refs` against
+/// `grammar.parser_rules` / `grammar.lexer_rules`. Returns `Err` on the
+/// first unresolved reference. Mirrors ANTLR4's
+/// `SymbolChecks.checkForUnresolvedRuleRefs`.
+///
+/// The grammar's `kind` gates what can be checked:
+///   - `Combined`: every pending ref is resolvable locally. This is the
+///     post-merge case and the combined-grammar case.
+///   - `Lexer`: only lexer-to-lexer refs exist (no parser bodies in a
+///     `lexer grammar`); token refs and parser refs are vacuously absent.
+///   - `Parser`: parser-rule refs are checked locally; token refs are
+///     skipped because the sibling lexer grammar hasn't been merged yet.
+pub fn check_references(grammar: &Grammar) -> Result<(), ParseError> {
+    for let r of &grammar.pending_refs {
+        match &r.kind {
+            ParserRuleRef => {
+                if grammar.kind matches { Lexer } {
+                    continue;
+                }
+                let mut found = false;
+                for let pr of &grammar.parser_rules {
+                    if pr.name == r.referenced_name {
+                        found = true;
+                        break;
+                    }
+                }
+                if !found {
+                    return Result::<(), ParseError>::Err(
+                        ParseError::new(
+                            `reference to undefined rule "{r.referenced_name}" in "{r.containing_rule}"`,
+                            r.span,
+                            ["defined rule name"],
+                        ),
+                    );
+                }
+            },
+            TokenRef => {
+                // A `parser grammar` cannot resolve token refs until
+                // merged with its sibling lexer grammar.
+                if grammar.kind matches { Parser } {
+                    continue;
+                }
+                // `EOF` is a built-in token recognized without a lexer rule.
+                if r.referenced_name == "EOF" {
+                    continue;
+                }
+                let mut found = false;
+                for let lr of &grammar.lexer_rules {
+                    if lr.name == r.referenced_name {
+                        found = true;
+                        break;
+                    }
+                }
+                if !found {
+                    return Result::<(), ParseError>::Err(
+                        ParseError::new(
+                            `reference to undefined token "{r.referenced_name}" in "{r.containing_rule}"`,
+                            r.span,
+                            ["defined token name"],
+                        ),
+                    );
+                }
+            },
+            LexerRuleRef => {
+                // Lexer-to-lexer refs (including fragment refs) are
+                // always resolvable locally — lexer rules cannot cross
+                // the lexer/parser grammar boundary.
+                let mut found = false;
+                for let lr of &grammar.lexer_rules {
+                    if lr.name == r.referenced_name {
+                        found = true;
+                        break;
+                    }
+                }
+                if !found {
+                    return Result::<(), ParseError>::Err(
+                        ParseError::new(
+                            `reference to undefined lexer rule "{r.referenced_name}" in "{r.containing_rule}"`,
+                            r.span,
+                            ["defined lexer rule name"],
+                        ),
+                    );
+                }
+            },
+        }
+    }
+    return Result::<(), ParseError>::Ok(());
 }
 
 pub global DEFAULT_MODE: i32 = 0;
@@ -341,11 +496,18 @@ pub fn merge_grammars(grammars: Array<Grammar>) -> Grammar {
     let mut channels: Array<String> = [];
     let mut options: Array<GrammarOption> = [];
     let mut named_actions: Array<NamedAction> = [];
+    let mut pending_refs: Array<PendingRef> = [];
     let mut source_files: Array<String> = [];
     for let g of grammars {
         // Concatenate source paths so every input contributes a provenance entry.
         for let sf of &g.source_files {
             source_files.push(*sf);
+        }
+        // Concatenate pending refs from every split so `check_references`
+        // can resolve cross-file references (token refs in a parser grammar
+        // resolve against lexer rules from its sibling lexer grammar).
+        for let pr of &g.pending_refs {
+            pending_refs.push(*pr);
         }
         // Preserve grammar-level options from every split. Later splits
         // override earlier ones on collision — ANTLR4 leaves conflict
@@ -436,12 +598,14 @@ pub fn merge_grammars(grammars: Array<Grammar>) -> Grammar {
     }
     return Grammar {
         name,
+        kind: GrammarKind::Combined,
         parser_rules,
         lexer_rules,
         mode_names,
         channels,
         options,
         named_actions,
+        pending_refs,
         source_files,
     };
 }

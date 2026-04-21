@@ -13,6 +13,7 @@ use {
     CharClass,
     CharRange,
     merge_grammars,
+    check_references,
 } from "../ir.wado";
 use { parse, parse_checked } from "./parser.wado";
 
@@ -517,4 +518,68 @@ test "parse unicode_props.g4" {
     // Exercises \p{L}, \p{Nd}, \p{Zs} — structural parse is the main
     // coverage; driver tests exercise match behaviour end-to-end.
     assert g.lexer_rules.len() >= 3;
+}
+
+// Below tests cover the `gale gen` pipeline stage:
+//   parse() -> merge_grammars() -> check_references()
+// `check_references` is the separate semantic pass `main.wado cmd_gen`
+// runs after merging split-grammar halves. A parser grammar's token
+// refs only resolve once the sibling lexer grammar is merged in, so
+// validation must happen post-merge — exactly the order `cmd_gen` uses.
+
+test "pipeline: split grammars merge and check_references accepts matched pair" {
+    let lexer_input = "lexer grammar SplitLexer;\nID : [a-z]+ ;\nNUM : [0-9]+ ;";
+    let parser_input = "parser grammar SplitParser;\nstmt : ID NUM ;";
+    let lexer = parse(lexer_input).unwrap();
+    let parser = parse(parser_input).unwrap();
+    let merged = merge_grammars([lexer, parser]);
+    let result = check_references(&merged);
+    assert result matches { Ok(_) }, "valid split-grammar pair should pass check_references";
+}
+
+test "pipeline: split grammars merge and check_references rejects undefined token ref" {
+    // The parser refers to `MISSING` but the sibling lexer only defines
+    // `ID`. `parse()` accepts each half individually because a parser
+    // grammar cannot resolve token refs locally. `check_references`
+    // after `merge_grammars` is the pass that catches it — this is the
+    // exact path `gale gen` follows.
+    let lexer_input = "lexer grammar SplitLexer;\nID : [a-z]+ ;";
+    let parser_input = "parser grammar SplitParser;\nstmt : ID MISSING ;";
+    let lexer = parse(lexer_input).unwrap();
+    let parser = parse(parser_input).unwrap();
+    let merged = merge_grammars([lexer, parser]);
+    let result = check_references(&merged);
+    assert result matches { Err(_) }, "undefined cross-file token ref should be rejected post-merge";
+}
+
+test "pipeline: split grammars merge and check_references rejects undefined parser rule ref" {
+    let lexer_input = "lexer grammar SplitLexer;\nID : [a-z]+ ;";
+    let parser_input = "parser grammar SplitParser;\nstmt : ID expr ;";
+    let lexer = parse(lexer_input).unwrap();
+    let parser = parse(parser_input).unwrap();
+    let merged = merge_grammars([lexer, parser]);
+    let result = check_references(&merged);
+    assert result matches { Err(_) }, "undefined parser rule ref should be rejected post-merge";
+}
+
+test "pipeline: combined grammar with undefined ref is rejected by check_references" {
+    // Exercises the same pipeline on a combined grammar: parse()
+    // populates pending_refs, merge_grammars is a no-op for a single
+    // input, and check_references catches the dangling rule ref.
+    let input = "grammar Combined;\nstmt : ID missing_rule ;\nID : [a-z]+ ;";
+    let g = parse(input).unwrap();
+    let merged = merge_grammars([g]);
+    let result = check_references(&merged);
+    assert result matches { Err(_) }, "undefined rule ref should be rejected post-merge";
+}
+
+test "pipeline: parse followed by check_references without merge accepts a combined grammar" {
+    // When `cmd_gen` is invoked with a single combined grammar, the
+    // single-input short-circuit in `merge_grammars` returns the
+    // Grammar unchanged. `check_references` must still validate it.
+    let input = "grammar Combined;\nstmt : ID ;\nID : [a-z]+ ;";
+    let g = parse(input).unwrap();
+    let merged = merge_grammars([g]);
+    let result = check_references(&merged);
+    assert result matches { Ok(_) }, "valid combined grammar should pass check_references";
 }

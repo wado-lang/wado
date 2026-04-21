@@ -1,5 +1,6 @@
 use {
     Grammar,
+    GrammarKind,
     GrammarOption,
     OptionValue,
     NamedAction,
@@ -29,12 +30,14 @@ global DEFAULT_OPTIONS: GenerateOptions = GenerateOptions { highlight: false };
 test "generate header" {
     let grammar = Grammar {
         name: "Test",
+        kind: GrammarKind::Combined,
         parser_rules: [],
         lexer_rules: [],
         mode_names: ["DEFAULT_MODE"],
         channels: [],
         options: [],
         named_actions: [],
+        pending_refs: [],
         source_files: [],
     };
     let output = generate(&grammar, &DEFAULT_OPTIONS);
@@ -50,12 +53,14 @@ test "generate header" {
 test "generate header with multiple source files" {
     let grammar = Grammar {
         name: "Html",
+        kind: GrammarKind::Combined,
         parser_rules: [],
         lexer_rules: [],
         mode_names: ["DEFAULT_MODE"],
         channels: [],
         options: [],
         named_actions: [],
+        pending_refs: [],
         source_files: ["HtmlLexer.g4", "HtmlParser.g4"],
     };
     let output = generate(&grammar, &DEFAULT_OPTIONS);
@@ -68,6 +73,7 @@ test "generate header with multiple source files" {
 test "generate token kind" {
     let grammar = Grammar {
         name: "Test",
+        kind: GrammarKind::Combined,
         parser_rules: [],
         lexer_rules: [
             LexerRule::new("NUMBER", false, false, []),
@@ -78,6 +84,7 @@ test "generate token kind" {
         channels: [],
         options: [],
         named_actions: [],
+        pending_refs: [],
         source_files: [],
     };
     let output = generate(&grammar, &DEFAULT_OPTIONS);
@@ -92,6 +99,7 @@ test "generate token kind" {
 test "generate single-alt struct" {
     let grammar = Grammar {
         name: "Test",
+        kind: GrammarKind::Combined,
         parser_rules: [
             ParserRule {
                 name: "json",
@@ -111,6 +119,7 @@ test "generate single-alt struct" {
         channels: [],
         options: [],
         named_actions: [],
+        pending_refs: [],
         source_files: [],
     };
     let output = generate(&grammar, &DEFAULT_OPTIONS);
@@ -123,6 +132,7 @@ test "generate single-alt struct" {
 test "generate multi-alt variant with labels" {
     let grammar = Grammar {
         name: "Test",
+        kind: GrammarKind::Combined,
         parser_rules: [
             ParserRule {
                 name: "expr",
@@ -147,6 +157,7 @@ test "generate multi-alt variant with labels" {
         channels: [],
         options: [],
         named_actions: [],
+        pending_refs: [],
         source_files: [],
     };
     let output = generate(&grammar, &DEFAULT_OPTIONS);
@@ -163,6 +174,7 @@ test "generate multi-alt variant with labels" {
 test "generate multi-alt variant without labels" {
     let grammar = Grammar {
         name: "Test",
+        kind: GrammarKind::Combined,
         parser_rules: [
             ParserRule {
                 name: "item",
@@ -187,6 +199,7 @@ test "generate multi-alt variant without labels" {
         channels: [],
         options: [],
         named_actions: [],
+        pending_refs: [],
         source_files: [],
     };
     let output = generate(&grammar, &DEFAULT_OPTIONS);
@@ -200,6 +213,7 @@ test "generate multi-alt variant without labels" {
 test "generate repeat fields" {
     let grammar = Grammar {
         name: "Test",
+        kind: GrammarKind::Combined,
         parser_rules: [
             ParserRule {
                 name: "list",
@@ -230,6 +244,7 @@ test "generate repeat fields" {
         channels: [],
         options: [],
         named_actions: [],
+        pending_refs: [],
         source_files: [],
     };
     let output = generate(&grammar, &DEFAULT_OPTIONS);
@@ -240,6 +255,7 @@ test "generate repeat fields" {
 test "generate duplicate field names" {
     let grammar = Grammar {
         name: "Test",
+        kind: GrammarKind::Combined,
         parser_rules: [
             ParserRule {
                 name: "pair",
@@ -259,6 +275,7 @@ test "generate duplicate field names" {
         channels: [],
         options: [],
         named_actions: [],
+        pending_refs: [],
         source_files: [],
     };
     let output = generate(&grammar, &DEFAULT_OPTIONS);
@@ -269,6 +286,7 @@ test "generate duplicate field names" {
 test "generate group variant type for repeated group" {
     let grammar = Grammar {
         name: "Test",
+        kind: GrammarKind::Combined,
         parser_rules: [
             ParserRule {
                 name: "parse",
@@ -298,6 +316,7 @@ test "generate group variant type for repeated group" {
         channels: [],
         options: [],
         named_actions: [],
+        pending_refs: [],
         source_files: [],
     };
     let output = generate(&grammar, &DEFAULT_OPTIONS);
@@ -310,6 +329,7 @@ test "generate group variant type for repeated group" {
 test "generate wildcard element" {
     let grammar = Grammar {
         name: "Test",
+        kind: GrammarKind::Combined,
         parser_rules: [
             ParserRule {
                 name: "any",
@@ -329,6 +349,7 @@ test "generate wildcard element" {
         channels: [],
         options: [],
         named_actions: [],
+        pending_refs: [],
         source_files: [],
     };
     let output = generate(&grammar, &DEFAULT_OPTIONS);
@@ -340,6 +361,7 @@ test "generate wildcard element" {
 test "generate parser not element" {
     let grammar = Grammar {
         name: "Test",
+        kind: GrammarKind::Combined,
         parser_rules: [
             ParserRule {
                 name: "except_comma",
@@ -362,6 +384,7 @@ test "generate parser not element" {
         channels: [],
         options: [],
         named_actions: [],
+        pending_refs: [],
         source_files: [],
     };
     let output = generate(&grammar, &DEFAULT_OPTIONS);
@@ -373,6 +396,7 @@ test "generate parser not element" {
 test "generate list label field" {
     let grammar = Grammar {
         name: "Test",
+        kind: GrammarKind::Combined,
         parser_rules: [
             ParserRule {
                 name: "list",
@@ -403,6 +427,7 @@ test "generate list label field" {
         channels: [],
         options: [],
         named_actions: [],
+        pending_refs: [],
         source_files: [],
     };
     let output = generate(&grammar, &DEFAULT_OPTIONS);
@@ -412,6 +437,7 @@ test "generate list label field" {
 test "generate standalone group as optional field" {
     let grammar = Grammar {
         name: "Test",
+        kind: GrammarKind::Combined,
         parser_rules: [
             ParserRule {
                 name: "cmd",
@@ -437,6 +463,7 @@ test "generate standalone group as optional field" {
         channels: [],
         options: [],
         named_actions: [],
+        pending_refs: [],
         source_files: [],
     };
     let output = generate(&grammar, &DEFAULT_OPTIONS);
@@ -449,6 +476,7 @@ test "generate standalone group as optional field" {
 test "generate lexer set_mode" {
     let grammar = Grammar {
         name: "Test",
+        kind: GrammarKind::Combined,
         parser_rules: [],
         lexer_rules: [
             LexerRule {
@@ -488,6 +516,7 @@ test "generate lexer set_mode" {
         channels: [],
         options: [],
         named_actions: [],
+        pending_refs: [],
         source_files: [],
     };
     let output = generate(&grammar, &DEFAULT_OPTIONS);
@@ -499,6 +528,7 @@ test "generate lexer set_mode" {
 test "generate lexer more" {
     let grammar = Grammar {
         name: "Test",
+        kind: GrammarKind::Combined,
         parser_rules: [],
         lexer_rules: [
             LexerRule {
@@ -522,6 +552,7 @@ test "generate lexer more" {
         channels: [],
         options: [],
         named_actions: [],
+        pending_refs: [],
         source_files: [],
     };
     let output = generate(&grammar, &DEFAULT_OPTIONS);
@@ -533,6 +564,7 @@ test "generate lexer more" {
 test "generate lexer type_override" {
     let grammar = Grammar {
         name: "Test",
+        kind: GrammarKind::Combined,
         parser_rules: [],
         lexer_rules: [
             LexerRule {
@@ -572,6 +604,7 @@ test "generate lexer type_override" {
         channels: [],
         options: [],
         named_actions: [],
+        pending_refs: [],
         source_files: [],
     };
     let output = generate(&grammar, &DEFAULT_OPTIONS);
@@ -585,6 +618,7 @@ test "generate lexer type_override" {
 test "generate lexer channel" {
     let grammar = Grammar {
         name: "Test",
+        kind: GrammarKind::Combined,
         parser_rules: [],
         lexer_rules: [
             LexerRule {
@@ -608,6 +642,7 @@ test "generate lexer channel" {
         channels: [],
         options: [],
         named_actions: [],
+        pending_refs: [],
         source_files: [],
     };
     let output = generate(&grammar, &DEFAULT_OPTIONS);
@@ -864,6 +899,7 @@ SEMI : ';' ;";
 test "metadata comment lists grammar-level options" {
     let grammar = Grammar {
         name: "Test",
+        kind: GrammarKind::Combined,
         parser_rules: [],
         lexer_rules: [],
         mode_names: ["DEFAULT_MODE"],
@@ -875,6 +911,7 @@ test "metadata comment lists grammar-level options" {
             GrammarOption { name: "caseInsensitive", value: OptionValue::Ident("true") },
         ],
         named_actions: [],
+        pending_refs: [],
         source_files: [],
     };
     let output = generate(&grammar, &DEFAULT_OPTIONS);
@@ -893,6 +930,7 @@ test "metadata comment lists grammar-level options" {
 test "metadata comment formats string and int option values" {
     let grammar = Grammar {
         name: "Test",
+        kind: GrammarKind::Combined,
         parser_rules: [],
         lexer_rules: [],
         mode_names: ["DEFAULT_MODE"],
@@ -903,6 +941,7 @@ test "metadata comment formats string and int option values" {
             GrammarOption { name: "init", value: OptionValue::Action("some code;") },
         ],
         named_actions: [],
+        pending_refs: [],
         source_files: [],
     };
     let output = generate(&grammar, &DEFAULT_OPTIONS);
@@ -917,6 +956,7 @@ test "metadata comment formats string and int option values" {
 test "metadata comment lists named actions" {
     let grammar = Grammar {
         name: "Test",
+        kind: GrammarKind::Combined,
         parser_rules: [],
         lexer_rules: [],
         mode_names: ["DEFAULT_MODE"],
@@ -927,6 +967,7 @@ test "metadata comment lists named actions" {
             NamedAction { scope: Option::<String>::Some("parser"), name: "members" },
             NamedAction { scope: Option::<String>::Some("lexer"), name: "members" },
         ],
+        pending_refs: [],
         source_files: [],
     };
     let output = generate(&grammar, &DEFAULT_OPTIONS);
@@ -943,12 +984,14 @@ test "metadata comment lists named actions" {
 test "metadata block omitted when no options and no named actions" {
     let grammar = Grammar {
         name: "Test",
+        kind: GrammarKind::Combined,
         parser_rules: [],
         lexer_rules: [],
         mode_names: ["DEFAULT_MODE"],
         channels: [],
         options: [],
         named_actions: [],
+        pending_refs: [],
         source_files: [],
     };
     let output = generate(&grammar, &DEFAULT_OPTIONS);
@@ -959,6 +1002,7 @@ test "metadata block omitted when no options and no named actions" {
 test "visibility comment emitted on non-default parser rule" {
     let grammar = Grammar {
         name: "Test",
+        kind: GrammarKind::Combined,
         parser_rules: [
             ParserRule {
                 name: "expr",
@@ -990,6 +1034,7 @@ test "visibility comment emitted on non-default parser rule" {
         channels: [],
         options: [],
         named_actions: [],
+        pending_refs: [],
         source_files: [],
     };
     let output = generate(&grammar, &DEFAULT_OPTIONS);
@@ -1005,12 +1050,14 @@ test "visibility comment emitted on non-default lexer rule" {
     id_rule.visibility = Visibility::Protected;
     let grammar = Grammar {
         name: "Test",
+        kind: GrammarKind::Combined,
         parser_rules: [],
         lexer_rules: [id_rule],
         mode_names: ["DEFAULT_MODE"],
         channels: [],
         options: [],
         named_actions: [],
+        pending_refs: [],
         source_files: [],
     };
     let output = generate(&grammar, &DEFAULT_OPTIONS);

@@ -1,9 +1,12 @@
 use { Span, Token, ParseError } from "../runtime.wado";
 use {
     Grammar,
+    GrammarKind,
     GrammarOption,
     OptionValue,
     NamedAction,
+    PendingRef,
+    RefKind,
     ParserRule,
     Alternative,
     Element,
@@ -28,6 +31,7 @@ use {
     NO_MODE,
     DEFAULT_CHANNEL,
     HIDDEN_CHANNEL,
+    check_references,
 } from "../ir.wado";
 use { G4Token, make_token } from "./token.wado";
 use { tokenize } from "./lexer.wado";
@@ -52,40 +56,22 @@ pub struct G4Parser {
     /// Grammar-level `@name { ... }` named actions collected from the
     /// prequel. Action bodies are discarded; only the name/scope is kept.
     named_actions: Array<NamedAction>,
-    /// Parser-rule references encountered while parsing parser rule bodies.
-    /// Collected with their source span so that the post-parse validator
-    /// can report undefined rule references with a usable diagnostic
-    /// location. Only populated for combined grammars where the full rule
-    /// table is known after parsing; for split grammars the entries are
-    /// discarded because cross-grammar refs cannot be resolved locally.
-    pending_parser_rule_refs: Array<PendingRef>,
-    /// Token references encountered while parsing parser rule bodies.
-    /// Validated against the combined lexer-rule table (including virtual
-    /// tokens and the built-in `EOF`) at the end of parsing.
-    pending_token_refs: Array<PendingRef>,
-    /// Lexer-rule references encountered while parsing lexer rule bodies
-    /// (including fragment refs). Validated against the lexer-rule table.
-    pending_lexer_rule_refs: Array<PendingRef>,
+    /// Rule / token references encountered while parsing rule bodies.
+    /// Each entry carries a `RefKind` tag so the post-parse validator
+    /// (`check_references` in `ir.wado`) can resolve it against the right
+    /// rule table. Emitted straight onto `Grammar.pending_refs` when
+    /// `parse_grammar` returns, so a `merge_grammars` over split grammars
+    /// can concatenate cross-file refs into a single validatable table.
+    pending_refs: Array<PendingRef>,
     /// Name of the rule currently being parsed. Used to tag pending refs
     /// so validator error messages can say where the bad reference came
     /// from. Empty outside of a rule body.
     current_rule: String,
-    /// Set to true by `parse_grammar` when the translation unit begins
-    /// with the `lexer grammar` prefix. Read by `check_references`
-    /// afterwards to decide which pending-ref buckets are validatable.
-    is_lexer_grammar: bool,
-    /// Set to true by `parse_grammar` when the translation unit begins
-    /// with the `parser grammar` prefix. See `is_lexer_grammar`.
-    is_parser_grammar: bool,
-}
-
-/// A single rule-reference occurrence captured during parse. The
-/// `containing_rule` field is used to produce a human-readable error
-/// message when the target is undefined.
-struct PendingRef {
-    containing_rule: String,
-    referenced_name: String,
-    span: Span,
+    /// Grammar kind latched from the translation unit's header
+    /// (`lexer grammar`, `parser grammar`, or bare `grammar`). Surfaced
+    /// on the returned `Grammar` so `check_references` can gate which
+    /// `RefKind`s are resolvable locally vs. deferred to merge time.
+    kind: GrammarKind,
 }
 
 /// Accumulator for lexer commands parsed from `-> cmd, cmd, ...`.
@@ -165,12 +151,9 @@ impl G4Parser {
             channels: [],
             options: [],
             named_actions: [],
-            pending_parser_rule_refs: [],
-            pending_token_refs: [],
-            pending_lexer_rule_refs: [],
+            pending_refs: [],
             current_rule: "",
-            is_lexer_grammar: false,
-            is_parser_grammar: false,
+            kind: GrammarKind::Combined,
         };
     }
 
@@ -209,9 +192,10 @@ impl G4Parser {
     }
 
     pub fn parse_grammar(&mut self) -> Result<Grammar, ParseError> {
-        // Detect lexer/parser grammar prefix. Persist on `self` so the
-        // post-parse semantic validator (`check_references`) can skip the
-        // buckets that span-grammar cross-references would leave dangling.
+        // Detect lexer/parser grammar prefix. Persist on `self.kind` and
+        // on the returned `Grammar` so `check_references` can decide
+        // which pending refs are resolvable locally and which have been
+        // deferred to a sibling grammar (split-grammar merge).
         let mut is_lexer_grammar = false;
         let mut is_parser_grammar = false;
         if self.is_kind(G4Token::Identifier) {
@@ -224,8 +208,13 @@ impl G4Parser {
                 self.advance();
             }
         }
-        self.is_lexer_grammar = is_lexer_grammar;
-        self.is_parser_grammar = is_parser_grammar;
+        if is_lexer_grammar {
+            self.kind = GrammarKind::Lexer;
+        } else if is_parser_grammar {
+            self.kind = GrammarKind::Parser;
+        } else {
+            self.kind = GrammarKind::Combined;
+        }
 
         self.expect(G4Token::Grammar)?;
         let name_tok = self.expect(G4Token::Identifier)?;
@@ -356,118 +345,34 @@ impl G4Parser {
         }
 
         // Semantic rule-reference resolution runs as a separate phase
-        // (`check_references`), mirroring ANTLR4's split between the
-        // syntactic parser (`ANTLRParser.g`) and the semantic analyzer
-        // (`SymbolChecks.java`). Callers that want the full tool-level
-        // contract should invoke `parse_checked` (or call
-        // `check_references` themselves); the bare `parse_grammar` keeps
-        // the syntactic posture so minimal fixtures that defer token
-        // definitions (e.g. `tokenVocab` imports, split-grammar halves)
-        // can still round-trip through it.
+        // (`check_references` in `ir.wado`), mirroring ANTLR4's split
+        // between the syntactic parser (`ANTLRParser.g`) and the
+        // semantic analyzer (`SymbolChecks.java`). `parse_grammar`
+        // publishes the raw `pending_refs` onto the returned `Grammar`
+        // so callers can either validate immediately (`parse_checked`)
+        // or first merge split-grammar halves with `merge_grammars` and
+        // then validate the combined result.
 
         let channels = self.channels;
         let options = self.options;
         let named_actions = self.named_actions;
+        let pending_refs = self.pending_refs;
+        let kind = self.kind;
         let source_files: Array<String> = [];
         return Result::<Grammar, ParseError>::Ok(
             Grammar {
                 name,
+                kind,
                 parser_rules,
                 lexer_rules,
                 mode_names,
                 channels,
                 options,
                 named_actions,
+                pending_refs,
                 source_files,
             },
         );
-    }
-
-    /// Post-parse semantic validation: every rule reference encountered
-    /// during parsing must resolve to a rule definition that is visible in
-    /// the same translation unit. Mirrors ANTLR4's
-    /// `SymbolChecks.checkForUnresolvedRuleRefs` — the syntactic parser
-    /// accepts the reference, and this separate pass rejects it if the
-    /// target is not defined.
-    ///
-    /// Split-grammar caveats (read off the `lexer grammar` /
-    /// `parser grammar` prefix that `parse_grammar` latched onto `self`):
-    ///   - combined grammar (`grammar X;`): check parser refs, token
-    ///     refs, and lexer-to-lexer refs.
-    ///   - `lexer grammar X;`: only lexer-to-lexer refs can be resolved
-    ///     locally; parser refs / token refs don't exist here.
-    ///   - `parser grammar X;`: only parser-rule refs can be resolved
-    ///     locally; token refs come from the matching lexer grammar at
-    ///     merge time.
-    pub fn check_references(&self, grammar: &Grammar) -> Result<(), ParseError> {
-        if !self.is_lexer_grammar {
-            for let r of &self.pending_parser_rule_refs {
-                let mut found = false;
-                for let pr of &grammar.parser_rules {
-                    if pr.name == r.referenced_name {
-                        found = true;
-                        break;
-                    }
-                }
-                if !found {
-                    return Result::<(), ParseError>::Err(
-                        ParseError::new(
-                            `reference to undefined rule "{r.referenced_name}" in "{r.containing_rule}"`,
-                            r.span,
-                            ["defined rule name"],
-                        ),
-                    );
-                }
-            }
-        }
-        // Token refs: lexer_rules includes virtual tokens from
-        // `tokens { }` blocks plus the built-in `EOF`. A parser-only
-        // grammar has no local lexer table, so skip.
-        if !self.is_parser_grammar {
-            for let r of &self.pending_token_refs {
-                if r.referenced_name == "EOF" {
-                    continue;
-                }
-                let mut found = false;
-                for let lr of &grammar.lexer_rules {
-                    if lr.name == r.referenced_name {
-                        found = true;
-                        break;
-                    }
-                }
-                if !found {
-                    return Result::<(), ParseError>::Err(
-                        ParseError::new(
-                            `reference to undefined token "{r.referenced_name}" in "{r.containing_rule}"`,
-                            r.span,
-                            ["defined token name"],
-                        ),
-                    );
-                }
-            }
-        }
-        // Lexer-to-lexer refs (including fragment refs): always
-        // resolvable locally — a `parser grammar` never contains lexer
-        // rules.
-        for let r of &self.pending_lexer_rule_refs {
-            let mut found = false;
-            for let lr of &grammar.lexer_rules {
-                if lr.name == r.referenced_name {
-                    found = true;
-                    break;
-                }
-            }
-            if !found {
-                return Result::<(), ParseError>::Err(
-                    ParseError::new(
-                        `reference to undefined lexer rule "{r.referenced_name}" in "{r.containing_rule}"`,
-                        r.span,
-                        ["defined lexer rule name"],
-                    ),
-                );
-            }
-        }
-        return Result::<(), ParseError>::Ok(());
     }
 
     fn skip_preamble_blocks(&mut self, virtual_tokens: &mut Array<String>) -> Result<(), ParseError> {
@@ -1114,7 +1019,8 @@ impl G4Parser {
                 options = self.parse_angle_options()?;
             }
             if is_lexer_rule_name(&name) || name == "EOF" {
-                self.pending_token_refs.push(PendingRef {
+                self.pending_refs.push(PendingRef {
+                    kind: RefKind::TokenRef,
                     containing_rule: self.current_rule,
                     referenced_name: name,
                     span: name_span,
@@ -1123,7 +1029,8 @@ impl G4Parser {
                     Element::TokenRef(TokenRefElement { name, options }),
                 );
             }
-            self.pending_parser_rule_refs.push(PendingRef {
+            self.pending_refs.push(PendingRef {
+                kind: RefKind::ParserRuleRef,
                 containing_rule: self.current_rule,
                 referenced_name: name,
                 span: name_span,
@@ -1470,7 +1377,8 @@ impl G4Parser {
             let tok = self.advance();
             let name = tok.text.to_string();
             let span = tok.span;
-            self.pending_lexer_rule_refs.push(PendingRef {
+            self.pending_refs.push(PendingRef {
+                kind: RefKind::LexerRuleRef,
                 containing_rule: self.current_rule,
                 referenced_name: name,
                 span,
@@ -1780,8 +1688,8 @@ fn parse_int_literal(text: &String) -> i32 {
 ///
 /// If you want the full ANTLR4-tool contract — including rejection of
 /// references to undefined rules / tokens — call `parse_checked`
-/// instead, or follow `parse` with `G4Parser::check_references` on the
-/// merged grammar.
+/// instead, or follow `parse` with `check_references` (from `ir.wado`)
+/// on the merged grammar.
 pub fn parse(input: String) -> Result<Grammar, ParseError> {
     let chars: Array<char> = input.chars().collect();
     let tokens = tokenize(input);
@@ -1790,8 +1698,8 @@ pub fn parse(input: String) -> Result<Grammar, ParseError> {
 }
 
 /// Parse + semantic rule-reference resolution, in one call. Equivalent
-/// to `parse` followed by `G4Parser::check_references`, and mirrors
-/// ANTLR4's full tool-level contract (`ANTLRParser.g` +
+/// to `parse` followed by `ir::check_references`, and mirrors ANTLR4's
+/// full tool-level contract (`ANTLRParser.g` +
 /// `SymbolChecks.checkForUnresolvedRuleRefs`).
 ///
 /// Rejects grammars that `parse` would accept but where a parser-rule
@@ -1811,10 +1719,7 @@ pub fn parse(input: String) -> Result<Grammar, ParseError> {
 /// rely on a sibling translation unit should still go through `parse`
 /// and call `check_references` after `merge_grammars`.
 pub fn parse_checked(input: String) -> Result<Grammar, ParseError> {
-    let chars: Array<char> = input.chars().collect();
-    let tokens = tokenize(input);
-    let mut parser = G4Parser::new(tokens, chars);
-    let grammar = parser.parse_grammar()?;
-    parser.check_references(&grammar)?;
+    let grammar = parse(input)?;
+    check_references(&grammar)?;
     return Result::<Grammar, ParseError>::Ok(grammar);
 }
