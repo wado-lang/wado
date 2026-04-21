@@ -117,7 +117,13 @@ fn dedup_invocations(invocations: Vec<Invocation>) -> Result<Vec<Invocation>, Pl
 /// or prior-reads — passed separately) lies lexically inside B's output
 /// directory. Here we consider only `primary` + `inputs`; prior-reads are
 /// threaded in by the pipeline driver when composing the full graph.
+///
+/// The queue is FIFO (`VecDeque::pop_front`) so that, among invocations whose
+/// relative order is not pinned by edges, the declaration order is preserved.
+/// Downstream consumers (the lockfile writer) rely on this stability.
 fn topo_sort(invocations: Vec<Invocation>) -> Result<Plan, PlanError> {
+    use std::collections::VecDeque;
+
     let n = invocations.len();
     let mut edges: Vec<Vec<usize>> = vec![Vec::new(); n];
     let mut indegree: Vec<usize> = vec![0; n];
@@ -133,49 +139,38 @@ fn topo_sort(invocations: Vec<Invocation>) -> Result<Plan, PlanError> {
         }
     }
 
-    let mut queue: Vec<usize> = indegree
+    let mut queue: VecDeque<usize> = indegree
         .iter()
         .enumerate()
         .filter_map(|(i, &d)| if d == 0 { Some(i) } else { None })
         .collect();
 
     let mut order_idx: Vec<usize> = Vec::with_capacity(n);
-    while let Some(i) = queue.pop() {
+    let mut processed: Vec<bool> = vec![false; n];
+    while let Some(i) = queue.pop_front() {
         order_idx.push(i);
+        processed[i] = true;
         for &succ in &edges[i] {
             indegree[succ] -= 1;
             if indegree[succ] == 0 {
-                queue.push(succ);
+                queue.push_back(succ);
             }
         }
     }
 
     if order_idx.len() != n {
         let participants: Vec<DeclSite> = (0..n)
-            .filter(|i| !order_idx.contains(i))
+            .filter(|&i| !processed[i])
             .map(|i| invocations[i].decl_site.clone())
             .collect();
         return Err(PlanError::Cycle { participants });
     }
 
-    let mut order = Vec::with_capacity(n);
-    let mut taken = vec![false; n];
-    let mut invs = invocations;
-    for i in order_idx {
-        taken[i] = true;
-        let placeholder = Invocation {
-            decl_site: DeclSite::Manifest {
-                name: String::new(),
-            },
-            module: invs[i].module.clone(),
-            from: invs[i].from.clone(),
-            inputs: Vec::new(),
-            output_dir: invs[i].output_dir.clone(),
-            options_canonical: Vec::new(),
-        };
-        order.push(std::mem::replace(&mut invs[i], placeholder));
-    }
-    debug_assert!(taken.into_iter().all(|t| t));
+    let mut slots: Vec<Option<Invocation>> = invocations.into_iter().map(Some).collect();
+    let order: Vec<Invocation> = order_idx
+        .into_iter()
+        .map(|i| slots[i].take().expect("each index is taken exactly once"))
+        .collect();
     Ok(Plan { order })
 }
 
@@ -346,5 +341,58 @@ mod tests {
             }
             other => panic!("expected duplicate, got {other:?}"),
         }
+    }
+
+    fn names(plan: &Plan) -> Vec<String> {
+        plan.order
+            .iter()
+            .map(|i| match &i.decl_site {
+                DeclSite::Manifest { name } => name.clone(),
+                _ => panic!("expected manifest decl site"),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn topo_sort_respects_declaration_order_among_independent_invocations() {
+        let alpha = inv("alpha", "a.proto", &[], "build/kiln/alpha");
+        let beta = inv("beta", "b.proto", &[], "build/kiln/beta");
+        let plan = build_plan(vec![alpha, beta]).unwrap();
+        assert_eq!(names(&plan), vec!["alpha", "beta"]);
+    }
+
+    #[test]
+    fn topo_sort_order_is_deterministic_across_runs() {
+        let build_diamond = || {
+            let producer = inv("producer", "s.proto", &[], "build/kiln/producer");
+            let left = inv(
+                "left",
+                "build/kiln/producer/l.proto",
+                &[],
+                "build/kiln/left",
+            );
+            let right = inv(
+                "right",
+                "build/kiln/producer/r.proto",
+                &[],
+                "build/kiln/right",
+            );
+            let sink = inv(
+                "sink",
+                "build/kiln/left/x.proto",
+                &["build/kiln/right/y.proto"],
+                "build/kiln/sink",
+            );
+            vec![producer, left, right, sink]
+        };
+        let a = build_plan(build_diamond()).unwrap();
+        let b = build_plan(build_diamond()).unwrap();
+        assert_eq!(names(&a), names(&b));
+        let positions = names(&a);
+        let pos = |name: &str| positions.iter().position(|s| s == name).unwrap();
+        assert!(pos("producer") < pos("left"));
+        assert!(pos("producer") < pos("right"));
+        assert!(pos("left") < pos("sink"));
+        assert!(pos("right") < pos("sink"));
     }
 }

@@ -15,10 +15,9 @@ pub mod cache;
 pub mod header;
 pub mod invocation;
 pub mod plan;
-mod sha256;
 
 pub use cache::{
-    CacheKeyInputs, FileHash, compose_cache_key, file_hash, gather_file_hashes,
+    CacheKeyInputs, FileHash, compose_cache_key, content_hash, file_hash, gather_file_hashes,
     generator_identity, hash_options_canonical, hex_digest,
 };
 pub use header::{GeneratedHeader, has_generated_marker, parse_header};

@@ -146,7 +146,8 @@ impl LockFile {
     /// Packages are sorted by `id` then `version` for determinism. Build
     /// dependencies appear as `[[build-dependency]]` sections sorted the same
     /// way. Generator-cache entries appear as `[[generator-cache]]` sections
-    /// sorted by `(invocation, generator)`.
+    /// in declaration order, as supplied — the caller is responsible for
+    /// producing them in the order users see in `wado.toml`.
     #[must_use]
     pub fn to_toml(&self) -> String {
         let mut out = String::new();
@@ -166,13 +167,7 @@ impl LockFile {
             write_locked_package(&mut out, pkg, "[[build-dependency]]");
         }
 
-        let mut sorted_cache: Vec<&GeneratorCacheEntry> = self.generator_cache.iter().collect();
-        sorted_cache.sort_by(|a, b| {
-            a.invocation
-                .cmp(&b.invocation)
-                .then_with(|| a.generator.cmp(&b.generator))
-        });
-        for entry in sorted_cache {
+        for entry in &self.generator_cache {
             write_generator_cache_entry(&mut out, entry);
         }
 
@@ -693,12 +688,16 @@ outputs = [
         assert_eq!(reparsed.build_dependencies.len(), 2);
         assert_eq!(reparsed.generator_cache.len(), 2);
         assert_eq!(
-            reparsed.generator_cache[0].invocation,
+            reparsed
+                .generator_cache
+                .iter()
+                .map(|e| e.invocation.clone())
+                .collect::<Vec<_>>(),
             lock.generator_cache
                 .iter()
-                .min_by_key(|e| (&e.invocation, &e.generator))
-                .unwrap()
-                .invocation
+                .map(|e| e.invocation.clone())
+                .collect::<Vec<_>>(),
+            "generator-cache order must survive round-trip (declaration order)"
         );
         let proto_reparsed = reparsed
             .generator_cache
@@ -771,11 +770,11 @@ outputs = [
         let a_bd = output.find("tools:a-gen").unwrap();
         let z_bd = output.find("tools:z-gen").unwrap();
         assert!(a_bd < z_bd, "build-dependencies should be sorted by id");
-        let a_cache = output.find("a-invoke").unwrap();
         let z_cache = output.find("z-invoke").unwrap();
+        let a_cache = output.find("a-invoke").unwrap();
         assert!(
-            a_cache < z_cache,
-            "generator-cache should be sorted by invocation"
+            z_cache < a_cache,
+            "generator-cache should follow declaration order (as supplied), not alphabetical"
         );
     }
 }

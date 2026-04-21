@@ -29,7 +29,8 @@ use wado_compiler::compiler_host::{
 };
 use wado_compiler::kiln::{
     DeclSite, FileHash, GeneratedHeader, GeneratorModule, Invocation, InvocationPath, Plan,
-    PlanError, build_plan, file_hash, generator_identity, has_generated_marker, hex_digest,
+    PlanError, build_plan, content_hash, file_hash, generator_identity, has_generated_marker,
+    hex_digest,
 };
 use wado_manifest::{
     FileHash as ManifestFileHash, GeneratorCacheEntry, GeneratorInvocation, GeneratorModuleRef,
@@ -516,14 +517,32 @@ pub async fn cache_matches<H: CompilerHost>(
 
     for output in &entry.outputs {
         let abs = manifest_root.join(&output.path);
-        let Ok(bytes) = std::fs::read(&abs) else {
-            return false;
-        };
-        if !hash_matches_bytes(&bytes, &output.hash) {
-            return false;
+        match std::fs::read(&abs) {
+            Ok(bytes) => {
+                if !hash_matches_bytes(&bytes, &output.hash) {
+                    return false;
+                }
+            }
+            Err(source) => {
+                emit_cache_io_warning(host, &abs, &source);
+                return false;
+            }
         }
     }
     true
+}
+
+fn emit_cache_io_warning<H: CompilerHost>(host: &H, path: &Path, source: &std::io::Error) {
+    use wado_compiler::{Code, Diagnostic, Severity};
+    host.emit_diagnostic(Diagnostic {
+        severity: Severity::Warning,
+        code: Code::Log,
+        message: format!(
+            "kiln cache: failed to read {}: {source}; re-running generator",
+            path.display(),
+        ),
+        span: None,
+    });
 }
 
 async fn matches_file<H: CompilerHost>(host: &H, path: &InvocationPath, expected_hex: &str) -> bool {
@@ -534,8 +553,7 @@ async fn matches_file<H: CompilerHost>(host: &H, path: &InvocationPath, expected
 }
 
 fn hash_matches_bytes(bytes: &[u8], expected_hex: &str) -> bool {
-    let fh = file_hash(&InvocationPath::normalize(""), bytes);
-    hex_digest(&fh.hash) == expected_hex
+    hex_digest(&content_hash(bytes)) == expected_hex
 }
 
 /// Delete stale `#![generated]` files under `output_dir`.
@@ -861,8 +879,6 @@ where
     outcome.deleted.sort();
 
     lock.generator_cache = new_cache;
-    lock.generator_cache
-        .sort_by(|a, b| (a.invocation.as_str(), a.generator.as_str()).cmp(&(&b.invocation, &b.generator)));
 
     save_lockfile(manifest_root, &lock)?;
     Ok(outcome)
@@ -898,7 +914,9 @@ where
 fn invocation_id(inv: &Invocation) -> String {
     match &inv.decl_site {
         DeclSite::Manifest { name } => name.clone(),
-        DeclSite::Inline { .. } => format!("kiln-{}", inv.from.as_str()),
+        DeclSite::Inline { .. } => {
+            panic!("inline kiln invocation ids are introduced in M5")
+        }
     }
 }
 

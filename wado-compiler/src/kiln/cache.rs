@@ -16,8 +16,25 @@
 //! Swapping the encoder in one place keeps cache keys stable unless the
 //! user-facing options actually change.
 
+use sha2::{Digest, Sha256};
+
 use super::invocation::{GeneratorModule, Invocation, InvocationPath};
-use super::sha256::{Sha256, digest, hex};
+
+fn digest(bytes: &[u8]) -> [u8; 32] {
+    let mut h = Sha256::new();
+    h.update(bytes);
+    h.finalize().into()
+}
+
+fn hex(bytes: &[u8; 32]) -> String {
+    const CHARS: &[u8; 16] = b"0123456789abcdef";
+    let mut out = String::with_capacity(64);
+    for b in bytes {
+        out.push(CHARS[(b >> 4) as usize] as char);
+        out.push(CHARS[(b & 0x0f) as usize] as char);
+    }
+    out
+}
 
 /// Magic + version prefix. Bump when the canonical layout changes in a way
 /// that must invalidate every existing lockfile entry.
@@ -75,7 +92,7 @@ pub fn compose_cache_key(inputs: &CacheKeyInputs<'_>) -> [u8; 32] {
     }
 
     write_prefixed(&mut h, inputs.options_canonical);
-    h.finalize()
+    h.finalize().into()
 }
 
 /// Hex-encode a 32-byte digest.
@@ -93,13 +110,30 @@ pub fn hash_options_canonical(options_canonical: &[u8]) -> String {
     hex(&digest(options_canonical))
 }
 
+/// Raw SHA-256 of a byte slice. Use when the caller needs a digest
+/// independent of any path (e.g., comparing on-disk contents to a cached
+/// hex digest).
+#[must_use]
+pub fn content_hash(contents: &[u8]) -> [u8; 32] {
+    digest(contents)
+}
+
+impl FileHash {
+    /// Build a [`FileHash`] from a pre-computed content digest. The path is
+    /// normalized. Cheap — no re-hash of the contents.
+    #[must_use]
+    pub fn from_content(path: &InvocationPath, hash: [u8; 32]) -> Self {
+        Self {
+            path: path.as_str().to_string(),
+            hash,
+        }
+    }
+}
+
 /// Build a `FileHash` from raw bytes, normalizing the path.
 #[must_use]
 pub fn file_hash(path: &InvocationPath, contents: &[u8]) -> FileHash {
-    FileHash {
-        path: path.as_str().to_string(),
-        hash: digest(contents),
-    }
+    FileHash::from_content(path, content_hash(contents))
 }
 
 /// Collect the minimal set of hashing inputs for a single invocation.
@@ -271,6 +305,18 @@ mod tests {
         let p = InvocationPath::normalize("./schema.proto");
         let fh = file_hash(&p, b"syntax = \"proto3\";");
         assert_eq!(fh.path, "schema.proto");
+    }
+
+    #[test]
+    fn content_hash_matches_file_hash_content_field() {
+        let p = InvocationPath::normalize("schema.proto");
+        let bytes = b"syntax = \"proto3\";";
+        let via_file_hash = file_hash(&p, bytes).hash;
+        let direct = content_hash(bytes);
+        assert_eq!(direct, via_file_hash);
+        let via_from_content = FileHash::from_content(&p, direct);
+        assert_eq!(via_from_content.path, "schema.proto");
+        assert_eq!(via_from_content.hash, direct);
     }
 
     #[test]
