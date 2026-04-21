@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776718574676,
+  "lastUpdate": 1776730324793,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -15037,6 +15037,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 635559,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "66d06e0e4c52c90d42d2b07c890a8ea096f02703",
+          "message": "Merge pull request #893 from wado-lang/claude/explore-default-values-6a6ft\n\nUse default values in package-gale; fix related compiler bug",
+          "timestamp": "2026-04-21T09:07:59+09:00",
+          "tree_id": "7a58e1e5bdb212631746dba95d000b4b5d3a8030",
+          "url": "https://github.com/wado-lang/wado/commit/66d06e0e4c52c90d42d2b07c890a8ea096f02703"
+        },
+        "date": 1776730324498,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8982,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18988,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 635680,
             "unit": "bytes"
           }
         ]
