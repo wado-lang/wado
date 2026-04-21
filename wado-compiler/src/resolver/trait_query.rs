@@ -1059,46 +1059,42 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // those here. `find_arithmetic_trait_impl` would otherwise default
         // `output_type` to the receiver type when no `type Output` is
         // declared.
-        let (info_trait_name, self_kind, rhs_type, return_type) =
-            if let Some(info) = self.find_arithmetic_trait_impl(
-                struct_name,
-                lookup_type_id,
-                trait_name,
-                method_name,
-            ) {
-                let return_type = match trait_name {
-                    "Eq" => TypeTable::BOOL,
-                    "Ord" => self.type_table.borrow_mut().intern(ResolvedType::Enum {
-                        name: "Ordering".to_string(),
-                        module_source: ModuleSource::prelude(),
-                    }),
-                    _ => info.output_type,
-                };
-                (info.trait_name, info.self_kind, info.rhs_type, return_type)
-            } else if matches!(trait_name, "Eq" | "Ord")
-                && self.type_implements_trait(lookup_type_id, trait_name)
-            {
-                let ref_self_ty = self
-                    .type_table
-                    .borrow_mut()
-                    .intern(ResolvedType::Ref(lookup_type_id));
-                let return_type = match trait_name {
-                    "Eq" => TypeTable::BOOL,
-                    "Ord" => self.type_table.borrow_mut().intern(ResolvedType::Enum {
-                        name: "Ordering".to_string(),
-                        module_source: ModuleSource::prelude(),
-                    }),
-                    _ => unreachable!(),
-                };
-                (
-                    trait_name.to_string(),
-                    ast::SelfKind::Ref,
-                    Some(ref_self_ty),
-                    return_type,
-                )
-            } else {
-                return None;
+        let (info_trait_name, self_kind, rhs_type, return_type) = if let Some(info) =
+            self.find_arithmetic_trait_impl(struct_name, lookup_type_id, trait_name, method_name)
+        {
+            let return_type = match trait_name {
+                "Eq" => TypeTable::BOOL,
+                "Ord" => self.type_table.borrow_mut().intern(ResolvedType::Enum {
+                    name: "Ordering".to_string(),
+                    module_source: ModuleSource::prelude(),
+                }),
+                _ => info.output_type,
             };
+            (info.trait_name, info.self_kind, info.rhs_type, return_type)
+        } else if matches!(trait_name, "Eq" | "Ord")
+            && self.type_implements_trait(lookup_type_id, trait_name)
+        {
+            let ref_self_ty = self
+                .type_table
+                .borrow_mut()
+                .intern(ResolvedType::Ref(lookup_type_id));
+            let return_type = match trait_name {
+                "Eq" => TypeTable::BOOL,
+                "Ord" => self.type_table.borrow_mut().intern(ResolvedType::Enum {
+                    name: "Ordering".to_string(),
+                    module_source: ModuleSource::prelude(),
+                }),
+                _ => unreachable!(),
+            };
+            (
+                trait_name.to_string(),
+                ast::SelfKind::Ref,
+                Some(ref_self_ty),
+                return_type,
+            )
+        } else {
+            return None;
+        };
         Some(ResolvedTraitMethod {
             trait_name: info_trait_name,
             method_name: method_name.to_string(),

@@ -2453,7 +2453,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
         )
     }
 
-
     /// Find operator trait implementation
     pub(super) fn find_arithmetic_trait_impl(
         &mut self,
