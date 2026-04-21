@@ -1,7 +1,4 @@
-#![generated(by = "gale", sources = ["package-gale/tests/grammars/ci_sql.g4"])]
-
-// Grammar metadata from source .g4 prequels:
-//   option caseInsensitive = true
+#![generated(by = "gale", sources = ["package-gale/tests/grammars/recursive_lexer.g4"])]
 
 /// Span represents a byte range in source text.
 pub struct Span {
@@ -472,21 +469,20 @@ fn tree_build_node(events: &Array<TreeEvent>, pos: &mut i32) -> CstNode {
 }
 
 pub enum TokenKind {
-    IF,
+    BLOCK,
     IDENT,
     WS,
     Eof,
     Error,
 }
 
-pub struct StmtNode {
+pub struct FileNode {
     pub span: Span,
-    pub if_: Token,
-    pub ident: Token,
+    pub block_or_ident_list: Array<Token>,
     pub eof: Token,
 }
 
-global TK_IF: i32 = 0;
+global TK_BLOCK: i32 = 0;
 global TK_IDENT: i32 = 1;
 global TK_WS: i32 = 2;
 global TK_EOF: i32 = 3;
@@ -511,11 +507,44 @@ impl Lexer {
     }
 }
 
-fn try_if(chars: &Array<char>, start: i32) -> i32 {
+fn try_block(chars: &Array<char>, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || !chars[pos].eq_ignore_ascii_case(&'i') { return -1; }
+    pos = try_braced(chars, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn try_braced(chars: &Array<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != '{' { return -1; }
     pos += 1;
-    if pos >= chars.len() || !chars[pos].eq_ignore_ascii_case(&'f') { return -1; }
+    loop {
+        let rep_saved_0 = pos;
+        rep_0: {
+            let alts_saved_1 = pos;
+            let mut alts_ok_1 = false;
+            alts_1_0: {
+                pos = alts_saved_1;
+                pos = try_braced(chars, pos);
+                if pos < 0 { break alts_1_0; }
+                alts_ok_1 = true;
+            }
+            if !alts_ok_1 {
+                alts_1_1: {
+                    pos = alts_saved_1;
+                    if pos >= chars.len() { break alts_1_1; }
+                    if false || chars[pos] == '{' || chars[pos] == '}' { break alts_1_1; }
+                    pos += 1;
+                    alts_ok_1 = true;
+                }
+            }
+            if !alts_ok_1 { break rep_0; }
+            continue;
+        }
+        pos = rep_saved_0;
+        break;
+    }
+    if pos >= chars.len() || chars[pos] != '}' { return -1; }
     pos += 1;
     return pos;
 }
@@ -526,14 +555,14 @@ fn try_ident(chars: &Array<char>, start: i32) -> i32 {
     if !(false || 'a' <= chars[pos] <= 'z' || 'A' <= chars[pos] <= 'Z' || chars[pos] == '_') { return -1; }
     pos += 1;
     loop {
-        let rep_saved_0 = pos;
-        rep_0: {
-            if pos >= chars.len() { break rep_0; }
-            if !(false || 'a' <= chars[pos] <= 'z' || 'A' <= chars[pos] <= 'Z' || chars[pos] == '_') { break rep_0; }
+        let rep_saved_2 = pos;
+        rep_2: {
+            if pos >= chars.len() { break rep_2; }
+            if !(false || 'a' <= chars[pos] <= 'z' || 'A' <= chars[pos] <= 'Z' || chars[pos] == '_' || '0' <= chars[pos] <= '9') { break rep_2; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_0;
+        pos = rep_saved_2;
         break;
     }
     return pos;
@@ -542,17 +571,17 @@ fn try_ident(chars: &Array<char>, start: i32) -> i32 {
 fn try_ws(chars: &Array<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
-    if !(false || chars[pos] == ' ' || chars[pos] == '\t') { return -1; }
+    if !(false || chars[pos] == ' ' || chars[pos] == '\t' || chars[pos] == '\r' || chars[pos] == '\n') { return -1; }
     pos += 1;
     loop {
-        let rep_saved_1 = pos;
-        rep_1: {
-            if pos >= chars.len() { break rep_1; }
-            if !(false || chars[pos] == ' ' || chars[pos] == '\t') { break rep_1; }
+        let rep_saved_3 = pos;
+        rep_3: {
+            if pos >= chars.len() { break rep_3; }
+            if !(false || chars[pos] == ' ' || chars[pos] == '\t' || chars[pos] == '\r' || chars[pos] == '\n') { break rep_3; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_1;
+        pos = rep_saved_3;
         break;
     }
     return pos;
@@ -568,17 +597,15 @@ pub fn tokenize(input: &String) -> Array<Token> {
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
-        if first_char == '\t' || first_char == ' ' {
+        if first_char == '\t' || first_char == '\n' || first_char == '\r' || first_char == ' ' {
             end = try_ws(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; }
-        } else if first_char == 'I' || first_char == 'i' {
-            end = try_if(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_IF; }
-            end = try_ident(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_IDENT; }
         } else if first_char == '_' {
             end = try_ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_IDENT; }
+        } else if first_char == '{' {
+            end = try_block(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_BLOCK; }
         } else if 'a' <= first_char <= 'z' {
             end = try_ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_IDENT; }
@@ -613,7 +640,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
 
 pub fn token_kind_name(kind: i32) -> String {
     return match kind {
-        TK_IF => "IF",
+        TK_BLOCK => "BLOCK",
         TK_IDENT => "IDENT",
         TK_WS => "WS",
         TK_EOF => "Eof",
@@ -714,47 +741,111 @@ impl Parser {
     }
 }
 
-fn scan_stmt(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_file(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_IF { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos].kind != TK_IDENT { return -1; }
-    pos += 1;
+    let gp_0 = pos;
+    sg_0: {
+        pos = gp_0;
+        sg_0_0: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_BLOCK { break sg_0_0; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_1: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_IDENT { break sg_0_1; }
+            pos += 1;
+            break sg_0;
+        }
+        return -1;
+    }
+    while pos < tokens.len() && tokens[pos].kind matches { TK_BLOCK | TK_IDENT } {
+        let sp = pos;
+        let gp_1 = pos;
+        sg_1: {
+            pos = gp_1;
+            sg_1_0: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_BLOCK { break sg_1_0; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_1: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_IDENT { break sg_1_1; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = -1;
+        }
+        if pos < 0 { pos = sp; break; }
+        if pos == sp { break; }
+    }
     if pos >= tokens.len() || tokens[pos].kind != TK_EOF { return -1; }
     pos += 1;
     return pos;
 }
 
-fn parse_stmt(p: &mut Parser) -> Result<StmtNode, ParseError> {
+fn parse_file(p: &mut Parser) -> Result<FileNode, ParseError> {
     let start = p.peek().span.start;
-    let if_ = p.expect(TK_IF)?;
-    let ident = p.expect(TK_IDENT)?;
+    let mut block_or_ident_list: Array<Token> = [];
+    let mut _plus_first = true;
+    loop {
+        if !_plus_first {
+            let mut rep_scan_pos: i32 = -1;
+            rep_scan: {
+                let tokens = &p.tokens;
+                let mut pos: i32 = p.pos;
+                let gp_2 = pos;
+                sg_2: {
+                    pos = gp_2;
+                    sg_2_0: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_BLOCK { break sg_2_0; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_1: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_IDENT { break sg_2_1; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    break rep_scan;
+                }
+                if pos <= p.pos { break rep_scan; }
+                rep_scan_pos = pos;
+            }
+            if rep_scan_pos < 0 { break; }
+        }
+        _plus_first = false;
+        let block_or_ident = p.advance();
+        block_or_ident_list.push(block_or_ident);
+    }
     let eof = p.expect(TK_EOF)?;
-    return Result::<StmtNode, ParseError>::Ok(StmtNode {
+    return Result::<FileNode, ParseError>::Ok(FileNode {
         span: Span::new(start, p.last_end()),
-        if_,
-        ident,
+        block_or_ident_list,
         eof,
     });
 }
 
-pub fn parse(input: &String) -> Result<StmtNode, ParseError> {
+pub fn parse(input: &String) -> Result<FileNode, ParseError> {
     let tokens = tokenize(input);
     let mut parser = Parser::new(tokens);
-    return parse_stmt(&mut parser);
+    return parse_file(&mut parser);
 }
 
-pub fn walk_stmt<V: Visitor>(v: &mut V, node: &StmtNode) {
-    v.enter_rule(&"stmt", &node.span);
-    v.visit_token(&node.if_);
-    v.visit_token(&node.ident);
+pub fn walk_file<V: Visitor>(v: &mut V, node: &FileNode) {
+    v.enter_rule(&"file", &node.span);
+    for let item of &node.block_or_ident_list {
+        v.visit_token(item);
+    }
     v.visit_token(&node.eof);
-    v.exit_rule(&"stmt", &node.span);
+    v.exit_rule(&"file", &node.span);
 }
 
-pub fn to_tree(node: &StmtNode) -> CstNode {
+pub fn to_tree(node: &FileNode) -> CstNode {
     let mut recorder = TreeRecorder::new();
-    walk_stmt(&mut recorder, node);
+    walk_file(&mut recorder, node);
     return recorder.build();
 }
 

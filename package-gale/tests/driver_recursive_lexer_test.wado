@@ -1,0 +1,63 @@
+use rl from "./golden/recursive_lexer.wado";
+use { normalize_tree } from "./golden/recursive_lexer.wado";
+
+fn assert_tree(input: &String, expected: &String) {
+    let root = rl::parse(input).unwrap();
+    let tree = rl::to_tree(&root);
+    let actual = tree.to_string_tree();
+    let norm = normalize_tree(expected);
+    assert actual == norm, `\ninput:    {*input}\nexpected: {norm}\nactual:   {actual}`;
+}
+
+fn assert_parses(input: &String) {
+    let result = rl::parse(input);
+    if let Err(e) = &result {
+        panic(`parse failed for \`{input}\`: {e.message}`);
+    }
+}
+
+test "ident alone" {
+    assert_parses(&"foo");
+}
+
+test "empty block matches" {
+    assert_tree(&"{}", &"
+        (file {})
+    ");
+}
+
+test "block with plain contents" {
+    assert_tree(&"{abc}", &"
+        (file {abc})
+    ");
+}
+
+test "nested block once" {
+    // The recursive fragment BRACED descends into the nested `{}` so
+    // the outer `{ a {b} c }` is a single BLOCK token, not three.
+    assert_tree(&"{a{b}c}", &"
+        (file {a{b}c})
+    ");
+}
+
+test "deeply nested blocks" {
+    assert_parses(&"{{{{deep}}}}");
+}
+
+test "multiple top-level tokens mixing BLOCK and IDENT" {
+    assert_parses(&"foo {a {b} c} bar {d} baz");
+}
+
+test "BLOCK token text preserves full nested content" {
+    // Exercise that the recursive fragment match consumed all inner
+    // braces — the lexer slice for the outer BLOCK must include the
+    // whole nested string, not just `{` + first balanced span.
+    let root = rl::parse(&"{a{b}c}").unwrap();
+    let tree = rl::to_tree(&root);
+    let actual = tree.to_string_tree();
+    // The BLOCK token should appear as a single flat child whose
+    // text is `{a{b}c}`. `to_string_tree` renders token text verbatim
+    // between the `(` and rule children, so the full brace body is in
+    // the tree output.
+    assert actual == "(file {a{b}c})", `actual: {actual}`;
+}

@@ -1,0 +1,52 @@
+use mg from "./golden/mode_gaps.wado";
+use { normalize_tree } from "./golden/mode_gaps.wado";
+
+fn assert_tree(input: &String, expected: &String) {
+    let root = mg::parse(input).unwrap();
+    let tree = mg::to_tree(&root);
+    let actual = tree.to_string_tree();
+    let norm = normalize_tree(expected);
+    assert actual == norm, `\ninput:    {*input}\nexpected: {norm}\nactual:   {actual}`;
+}
+
+test "A4: plain identifier tokenizes outside any string mode" {
+    assert_tree(&"foo", &"
+        (text foo)
+    ");
+}
+
+test "A4: pushMode + more — opening quote merges into STRING token" {
+    assert_tree(&"\"hello\"", &"
+        (text \"hello\")
+    ");
+}
+
+test "A4: accumulate multiple chars via more" {
+    assert_tree(&"\"abc\"", &"
+        (text \"abc\")
+    ");
+}
+
+test "A3: mode(X) replaces top of stack — escape returns to IN_STRING" {
+    assert_tree(&"\"a\\nb\"", &"
+        (text \"a\\nb\")
+    ");
+}
+
+test "A3: multiple escapes bounce between IN_STRING and ESC_IN_STRING" {
+    assert_tree(&"\"\\t\\n\\\\\"", &"
+        (text \"\\t\\n\\\\\")
+    ");
+}
+
+test "mixed PLAIN and STRING tokens" {
+    assert_tree(&"foo \"bar\" baz", &"
+        (text foo \"bar\" baz)
+    ");
+}
+
+test "empty string literal" {
+    assert_tree(&"\"\"", &"
+        (text \"\")
+    ");
+}

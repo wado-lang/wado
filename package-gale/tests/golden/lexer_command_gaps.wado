@@ -1,7 +1,4 @@
-#![generated(by = "gale", sources = ["package-gale/tests/grammars/ci_sql.g4"])]
-
-// Grammar metadata from source .g4 prequels:
-//   option caseInsensitive = true
+#![generated(by = "gale", sources = ["package-gale/tests/grammars/lexer_command_gaps.g4"])]
 
 /// Span represents a byte range in source text.
 pub struct Span {
@@ -472,25 +469,36 @@ fn tree_build_node(events: &Array<TreeEvent>, pos: &mut i32) -> CstNode {
 }
 
 pub enum TokenKind {
-    IF,
-    IDENT,
+    WORD,
+    ZERO,
+    NUMBER,
+    COMMENT,
+    PRAGMA_OPEN,
     WS,
+    PRAGMA,
+    PRAGMA_WS,
+    PRAGMA_END,
     Eof,
     Error,
 }
 
-pub struct StmtNode {
+pub struct TextNode {
     pub span: Span,
-    pub if_: Token,
-    pub ident: Token,
+    pub word_or_number_or_pragma_list: Array<Token>,
     pub eof: Token,
 }
 
-global TK_IF: i32 = 0;
-global TK_IDENT: i32 = 1;
-global TK_WS: i32 = 2;
-global TK_EOF: i32 = 3;
-global TK_ERROR: i32 = 4;
+global TK_WORD: i32 = 0;
+global TK_ZERO: i32 = 1;
+global TK_NUMBER: i32 = 2;
+global TK_COMMENT: i32 = 3;
+global TK_PRAGMA_OPEN: i32 = 4;
+global TK_WS: i32 = 5;
+global TK_PRAGMA: i32 = 6;
+global TK_PRAGMA_WS: i32 = 7;
+global TK_PRAGMA_END: i32 = 8;
+global TK_EOF: i32 = 9;
+global TK_ERROR: i32 = 10;
 
 struct Lexer {
     chars: Array<char>,
@@ -511,25 +519,16 @@ impl Lexer {
     }
 }
 
-fn try_if(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || !chars[pos].eq_ignore_ascii_case(&'i') { return -1; }
-    pos += 1;
-    if pos >= chars.len() || !chars[pos].eq_ignore_ascii_case(&'f') { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_ident(chars: &Array<char>, start: i32) -> i32 {
+fn try_word(chars: &Array<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
-    if !(false || 'a' <= chars[pos] <= 'z' || 'A' <= chars[pos] <= 'Z' || chars[pos] == '_') { return -1; }
+    if !(false || 'a' <= chars[pos] <= 'z') { return -1; }
     pos += 1;
     loop {
         let rep_saved_0 = pos;
         rep_0: {
             if pos >= chars.len() { break rep_0; }
-            if !(false || 'a' <= chars[pos] <= 'z' || 'A' <= chars[pos] <= 'Z' || chars[pos] == '_') { break rep_0; }
+            if !(false || 'a' <= chars[pos] <= 'z') { break rep_0; }
             pos += 1;
             continue;
         }
@@ -539,16 +538,29 @@ fn try_ident(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_ws(chars: &Array<char>, start: i32) -> i32 {
+fn try_zero(chars: &Array<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != 'z' { return -1; }
+    pos += 1;
+    if pos >= chars.len() || chars[pos] != 'e' { return -1; }
+    pos += 1;
+    if pos >= chars.len() || chars[pos] != 'r' { return -1; }
+    pos += 1;
+    if pos >= chars.len() || chars[pos] != 'o' { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn try_number(chars: &Array<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
-    if !(false || chars[pos] == ' ' || chars[pos] == '\t') { return -1; }
+    if !(false || '0' <= chars[pos] <= '9') { return -1; }
     pos += 1;
     loop {
         let rep_saved_1 = pos;
         rep_1: {
             if pos >= chars.len() { break rep_1; }
-            if !(false || chars[pos] == ' ' || chars[pos] == '\t') { break rep_1; }
+            if !(false || '0' <= chars[pos] <= '9') { break rep_1; }
             pos += 1;
             continue;
         }
@@ -558,36 +570,145 @@ fn try_ws(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
+fn try_comment(chars: &Array<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != '/' { return -1; }
+    pos += 1;
+    if pos >= chars.len() || chars[pos] != '/' { return -1; }
+    pos += 1;
+    loop {
+        let rep_saved_2 = pos;
+        rep_2: {
+            if pos >= chars.len() { break rep_2; }
+            if false || chars[pos] == '\r' || chars[pos] == '\n' { break rep_2; }
+            pos += 1;
+            continue;
+        }
+        pos = rep_saved_2;
+        break;
+    }
+    return pos;
+}
+
+fn try_pragma_open(chars: &Array<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != '#' { return -1; }
+    pos += 1;
+    if pos >= chars.len() || chars[pos] != 'p' { return -1; }
+    pos += 1;
+    if pos >= chars.len() || chars[pos] != 'r' { return -1; }
+    pos += 1;
+    if pos >= chars.len() || chars[pos] != 'a' { return -1; }
+    pos += 1;
+    if pos >= chars.len() || chars[pos] != 'g' { return -1; }
+    pos += 1;
+    if pos >= chars.len() || chars[pos] != 'm' { return -1; }
+    pos += 1;
+    if pos >= chars.len() || chars[pos] != 'a' { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn try_ws(chars: &Array<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() { return -1; }
+    if !(false || chars[pos] == ' ' || chars[pos] == '\t' || chars[pos] == '\r' || chars[pos] == '\n') { return -1; }
+    pos += 1;
+    loop {
+        let rep_saved_3 = pos;
+        rep_3: {
+            if pos >= chars.len() { break rep_3; }
+            if !(false || chars[pos] == ' ' || chars[pos] == '\t' || chars[pos] == '\r' || chars[pos] == '\n') { break rep_3; }
+            pos += 1;
+            continue;
+        }
+        pos = rep_saved_3;
+        break;
+    }
+    return pos;
+}
+
+fn try_pragma(chars: &Array<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() { return -1; }
+    if !(false || 'a' <= chars[pos] <= 'z' || 'A' <= chars[pos] <= 'Z' || chars[pos] == '_') { return -1; }
+    pos += 1;
+    loop {
+        let rep_saved_4 = pos;
+        rep_4: {
+            if pos >= chars.len() { break rep_4; }
+            if !(false || 'a' <= chars[pos] <= 'z' || 'A' <= chars[pos] <= 'Z' || chars[pos] == '_') { break rep_4; }
+            pos += 1;
+            continue;
+        }
+        pos = rep_saved_4;
+        break;
+    }
+    return pos;
+}
+
+fn try_pragma_ws(chars: &Array<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() { return -1; }
+    if !(false || chars[pos] == ' ' || chars[pos] == '\t') { return -1; }
+    pos += 1;
+    loop {
+        let rep_saved_5 = pos;
+        rep_5: {
+            if pos >= chars.len() { break rep_5; }
+            if !(false || chars[pos] == ' ' || chars[pos] == '\t') { break rep_5; }
+            pos += 1;
+            continue;
+        }
+        pos = rep_saved_5;
+        break;
+    }
+    return pos;
+}
+
+fn try_pragma_end(chars: &Array<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != '\n' { return -1; }
+    pos += 1;
+    return pos;
+}
+
 pub fn tokenize(input: &String) -> Array<Token> {
     let mut lexer = Lexer::new(input);
     let mut tokens: Array<Token> = [];
     let mut trivia: Array<Token> = [];
+    let mut mode_stack: Array<i32> = [];
+    let mut current_mode: i32 = 0;
     while !lexer.at_end() {
         let start = lexer.pos;
         let mut best_end: i32 = -1;
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
-        if first_char == '\t' || first_char == ' ' {
+        let mut best_push_mode: i32 = -1;
+        let mut best_pop_mode = false;
+        let mut best_set_mode: i32 = -1;
+        let mut best_channel: i32 = 0;
+        if current_mode == 0 {
+            end = try_word(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_WORD; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_channel = 0; }
+            end = try_zero(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_NUMBER; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_channel = 0; }
+            end = try_number(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_NUMBER; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_channel = 0; }
+            end = try_comment(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_COMMENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_channel = 2; }
+            end = try_pragma_open(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_PRAGMA_OPEN; best_push_mode = 1; best_pop_mode = false; best_set_mode = -1; best_channel = 0; }
             end = try_ws(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WS; }
-        } else if first_char == 'I' || first_char == 'i' {
-            end = try_if(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_IF; }
-            end = try_ident(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_IDENT; }
-        } else if first_char == '_' {
-            end = try_ident(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_IDENT; }
-        } else if 'a' <= first_char <= 'z' {
-            end = try_ident(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_IDENT; }
-        } else if 'A' <= first_char <= 'Z' {
-            end = try_ident(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_IDENT; }
-        } else {
-            end = try_ident(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_IDENT; }
+            if end > best_end { best_end = end; best_kind = TK_WS; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_channel = 0; }
+        } else if current_mode == 1 {
+            end = try_pragma(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_PRAGMA; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_channel = 0; }
+            end = try_pragma_ws(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_PRAGMA_WS; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_channel = 0; }
+            end = try_pragma_end(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_PRAGMA_END; best_push_mode = -1; best_pop_mode = false; best_set_mode = 0; best_channel = 0; }
         }
         if best_end <= start {
             let tok = Token::with_trivia(TK_ERROR, lexer.slice(start, start + 1), Span::new(start, start + 1), trivia);
@@ -596,13 +717,33 @@ pub fn tokenize(input: &String) -> Array<Token> {
             lexer.pos = start + 1;
         } else {
             let tok_start = start;
-            let is_skip = best_kind matches { TK_WS };
+            let is_skip = best_kind matches { TK_PRAGMA_OPEN | TK_WS | TK_PRAGMA_WS | TK_PRAGMA_END };
             if is_skip {
                 trivia.push(Token::new(best_kind, lexer.slice(tok_start, best_end), Span::new(tok_start, best_end)));
+            } else if best_channel != 0 {
+                trivia.push(Token::with_channel(best_kind, lexer.slice(tok_start, best_end), Span::new(tok_start, best_end), [], best_channel));
             } else {
                 let tok = Token::with_trivia(best_kind, lexer.slice(tok_start, best_end), Span::new(tok_start, best_end), trivia);
                 tokens.push(tok);
                 trivia = [];
+            }
+            if best_push_mode >= 0 {
+                mode_stack.push(current_mode);
+                current_mode = best_push_mode;
+                best_push_mode = -1;
+            }
+            if best_pop_mode {
+                if mode_stack.is_empty() {
+                    current_mode = 0;
+                } else {
+                    current_mode = mode_stack[mode_stack.len() - 1];
+                    mode_stack.pop();
+                }
+                best_pop_mode = false;
+            }
+            if best_set_mode >= 0 {
+                current_mode = best_set_mode;
+                best_set_mode = -1;
             }
             lexer.pos = best_end;
         }
@@ -613,9 +754,15 @@ pub fn tokenize(input: &String) -> Array<Token> {
 
 pub fn token_kind_name(kind: i32) -> String {
     return match kind {
-        TK_IF => "IF",
-        TK_IDENT => "IDENT",
+        TK_WORD => "WORD",
+        TK_ZERO => "ZERO",
+        TK_NUMBER => "NUMBER",
+        TK_COMMENT => "COMMENT",
+        TK_PRAGMA_OPEN => "PRAGMA_OPEN",
         TK_WS => "WS",
+        TK_PRAGMA => "PRAGMA",
+        TK_PRAGMA_WS => "PRAGMA_WS",
+        TK_PRAGMA_END => "PRAGMA_END",
         TK_EOF => "Eof",
         TK_ERROR => "Error",
         _ => "Unknown",
@@ -714,47 +861,103 @@ impl Parser {
     }
 }
 
-fn scan_stmt(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_text(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_IF { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos].kind != TK_IDENT { return -1; }
-    pos += 1;
+    while pos < tokens.len() && tokens[pos].kind matches { TK_WORD | TK_NUMBER | TK_PRAGMA } {
+        let sp = pos;
+        let gp_0 = pos;
+        sg_0: {
+            pos = gp_0;
+            sg_0_0: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_WORD { break sg_0_0; }
+                pos += 1;
+                break sg_0;
+            }
+            pos = gp_0;
+            sg_0_1: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_NUMBER { break sg_0_1; }
+                pos += 1;
+                break sg_0;
+            }
+            pos = gp_0;
+            sg_0_2: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_PRAGMA { break sg_0_2; }
+                pos += 1;
+                break sg_0;
+            }
+            pos = -1;
+        }
+        if pos < 0 { pos = sp; break; }
+        if pos == sp { break; }
+    }
     if pos >= tokens.len() || tokens[pos].kind != TK_EOF { return -1; }
     pos += 1;
     return pos;
 }
 
-fn parse_stmt(p: &mut Parser) -> Result<StmtNode, ParseError> {
+fn parse_text(p: &mut Parser) -> Result<TextNode, ParseError> {
     let start = p.peek().span.start;
-    let if_ = p.expect(TK_IF)?;
-    let ident = p.expect(TK_IDENT)?;
+    let mut word_or_number_or_pragma_list: Array<Token> = [];
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            let gp_1 = pos;
+            sg_1: {
+                pos = gp_1;
+                sg_1_0: {
+                    if pos >= tokens.len() || tokens[pos].kind != TK_WORD { break sg_1_0; }
+                    pos += 1;
+                    break sg_1;
+                }
+                pos = gp_1;
+                sg_1_1: {
+                    if pos >= tokens.len() || tokens[pos].kind != TK_NUMBER { break sg_1_1; }
+                    pos += 1;
+                    break sg_1;
+                }
+                pos = gp_1;
+                sg_1_2: {
+                    if pos >= tokens.len() || tokens[pos].kind != TK_PRAGMA { break sg_1_2; }
+                    pos += 1;
+                    break sg_1;
+                }
+                break rep_scan;
+            }
+            if pos <= p.pos { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
+        let word_or_number_or_pragma = p.advance();
+        word_or_number_or_pragma_list.push(word_or_number_or_pragma);
+    }
     let eof = p.expect(TK_EOF)?;
-    return Result::<StmtNode, ParseError>::Ok(StmtNode {
+    return Result::<TextNode, ParseError>::Ok(TextNode {
         span: Span::new(start, p.last_end()),
-        if_,
-        ident,
+        word_or_number_or_pragma_list,
         eof,
     });
 }
 
-pub fn parse(input: &String) -> Result<StmtNode, ParseError> {
+pub fn parse(input: &String) -> Result<TextNode, ParseError> {
     let tokens = tokenize(input);
     let mut parser = Parser::new(tokens);
-    return parse_stmt(&mut parser);
+    return parse_text(&mut parser);
 }
 
-pub fn walk_stmt<V: Visitor>(v: &mut V, node: &StmtNode) {
-    v.enter_rule(&"stmt", &node.span);
-    v.visit_token(&node.if_);
-    v.visit_token(&node.ident);
+pub fn walk_text<V: Visitor>(v: &mut V, node: &TextNode) {
+    v.enter_rule(&"text", &node.span);
+    for let item of &node.word_or_number_or_pragma_list {
+        v.visit_token(item);
+    }
     v.visit_token(&node.eof);
-    v.exit_rule(&"stmt", &node.span);
+    v.exit_rule(&"text", &node.span);
 }
 
-pub fn to_tree(node: &StmtNode) -> CstNode {
+pub fn to_tree(node: &TextNode) -> CstNode {
     let mut recorder = TreeRecorder::new();
-    walk_stmt(&mut recorder, node);
+    walk_text(&mut recorder, node);
     return recorder.build();
 }
 

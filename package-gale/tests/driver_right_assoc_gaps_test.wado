@@ -1,0 +1,40 @@
+use ra from "./golden/right_assoc_gaps.wado";
+use { normalize_tree } from "./golden/right_assoc_gaps.wado";
+
+fn assert_tree(input: &String, expected: &String) {
+    let root = ra::parse(input).unwrap();
+    let tree = ra::to_tree(&root);
+    let actual = tree.to_string_tree();
+    let norm = normalize_tree(expected);
+    assert actual == norm, `\ninput:    {*input}\nexpected: {norm}\nactual:   {actual}`;
+}
+
+test "single INT atom" {
+    assert_tree(&"42", &"
+        (expr 42)
+    ");
+}
+
+test "left-associative + parses 1 + 2 + 3 as (1+2)+3" {
+    assert_tree(&"1 + 2 + 3", &"
+        (expr (expr (expr 1) + (expr 2)) + (expr 3))
+    ");
+}
+
+test "right-associative ^ parses 2 ^ 3 ^ 4 as 2^(3^4)" {
+    assert_tree(&"2 ^ 3 ^ 4", &"
+        (expr (expr 2) ^ (expr (expr 3) ^ (expr 4)))
+    ");
+}
+
+test "four-level right-assoc chain 2^3^4^5 = 2^(3^(4^5))" {
+    assert_tree(&"2 ^ 3 ^ 4 ^ 5", &"
+        (expr (expr 2) ^ (expr (expr 3) ^ (expr (expr 4) ^ (expr 5))))
+    ");
+}
+
+test "mixed + and ^: 1 + 2 ^ 3 ^ 4" {
+    assert_tree(&"1 + 2 ^ 3 ^ 4", &"
+        (expr (expr 1) + (expr (expr 2) ^ (expr (expr 3) ^ (expr 4))))
+    ");
+}

@@ -1,0 +1,80 @@
+use up from "./golden/unicode_props.wado";
+use { normalize_tree } from "./golden/unicode_props.wado";
+
+fn assert_tree(input: &String, expected: &String) {
+    let root = up::parse(input).unwrap();
+    let tree = up::to_tree(&root);
+    let actual = tree.to_string_tree();
+    let norm = normalize_tree(expected);
+    assert actual == norm, `\ninput:    {*input}\nexpected: {norm}\nactual:   {actual}`;
+}
+
+fn assert_parses(input: &String) {
+    let result = up::parse(input);
+    if let Err(e) = &result {
+        panic(`parse failed for \`{input}\`: {e.message}`);
+    }
+}
+
+test "ASCII letters match \\p{L}" {
+    assert_tree(&"hello", &"
+        (line hello)
+    ");
+}
+
+test "ASCII digits match \\p{Nd}" {
+    assert_tree(&"12345", &"
+        (line 12345)
+    ");
+}
+
+test "ASCII space (\\p{Zs}) is skipped" {
+    assert_tree(&"foo 42", &"
+        (line foo 42)
+    ");
+}
+
+test "Latin letters with diacritics match \\p{L}" {
+    assert_parses(&"café");
+    assert_parses(&"naïve");
+    assert_parses(&"résumé");
+}
+
+test "Greek letters match \\p{L}" {
+    assert_parses(&"αβγδε");
+    assert_parses(&"ΑΒΓΔΕ");
+}
+
+test "Cyrillic letters match \\p{L}" {
+    assert_parses(&"Привет");
+}
+
+test "CJK ideographs match \\p{L}" {
+    assert_parses(&"世界");
+    assert_parses(&"日本語");
+}
+
+test "hiragana and katakana match \\p{L}" {
+    assert_parses(&"ひらがな");
+    assert_parses(&"カタカナ");
+}
+
+test "Arabic-Indic digits match \\p{Nd}" {
+    // U+0660..U+0669 ARABIC-INDIC DIGIT ZERO..NINE
+    assert_parses(&"٠١٢٣٤٥٦٧٨٩");
+}
+
+test "Devanagari digits match \\p{Nd}" {
+    // U+0966..U+096F DEVANAGARI DIGIT ZERO..NINE
+    assert_parses(&"०१२३४५६७८९");
+}
+
+test "Unicode space separators (\\p{Zs}) are skipped" {
+    // U+00A0 NO-BREAK SPACE, U+2003 EM SPACE
+    assert_parses(&"foo bar");
+    assert_parses(&"foo bar");
+}
+
+test "mixed scripts, letters, and digits in one line" {
+    assert_parses(&"hello 世界 αβγ 123 ٠١٢");
+}

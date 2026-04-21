@@ -1,5 +1,6 @@
 use {
     Grammar,
+    GrammarKind,
     ParserRule,
     Alternative,
     Element,
@@ -17,12 +18,14 @@ use {
 test "Grammar construction" {
     let g = Grammar {
         name: "JSON",
+        kind: GrammarKind::Combined,
         parser_rules: [],
         lexer_rules: [],
         mode_names: ["DEFAULT_MODE"],
         channels: [],
         options: [],
         named_actions: [],
+        pending_refs: [],
         source_files: [],
     };
     assert g.name == "JSON";

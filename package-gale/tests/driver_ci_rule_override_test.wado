@@ -1,0 +1,61 @@
+use ci from "./golden/ci_rule_override.wado";
+use { normalize_tree } from "./golden/ci_rule_override.wado";
+
+fn assert_tree(input: &String, expected: &String) {
+    let root = ci::parse(input).unwrap();
+    let tree = ci::to_tree(&root);
+    let actual = tree.to_string_tree();
+    let norm = normalize_tree(expected);
+    assert actual == norm, `\ninput:    {*input}\nexpected: {norm}\nactual:   {actual}`;
+}
+
+fn assert_parses(input: &String) {
+    let result = ci::parse(input);
+    if let Err(e) = &result {
+        panic(`parse failed for \`{input}\`: {e.message}`);
+    }
+}
+
+test "grammar-level CI: lowercase keyword matches KEYWORD" {
+    // `'if'` is folded case-insensitively by the grammar-level option,
+    // so any casing is accepted as KEYWORD.
+    assert_parses(&"if foo");
+    assert_parses(&"IF foo");
+    assert_parses(&"If foo");
+    assert_parses(&"iF foo");
+}
+
+test "rule-level override: uppercase 'EXACT' matches EXACT" {
+    assert_tree(&"EXACT", &"
+        (line EXACT)
+    ");
+}
+
+test "rule-level override: lowercase 'exact' does NOT match EXACT" {
+    // Because EXACT has `options { caseInsensitive = false; }`, the
+    // pattern `'EXACT'` is compiled case-sensitively. `exact` must
+    // therefore fall through to the IDENT rule. The tree shows `exact`
+    // as an IDENT child, not as EXACT.
+    assert_tree(&"exact", &"
+        (line exact)
+    ");
+}
+
+test "rule-level override: mixed-case does NOT match EXACT" {
+    // `Exact`, `eXact`, etc. also fall through to IDENT.
+    assert_tree(&"Exact", &"
+        (line Exact)
+    ");
+}
+
+test "mixed: EXACT (exact match) next to exact (IDENT)" {
+    // The parser rule `(KEYWORD | IDENT | EXACT)+` accepts both in
+    // any order. The tree shows each token under the rule name chosen
+    // by the lexer.
+    assert_parses(&"EXACT exact");
+    assert_parses(&"exact EXACT");
+}
+
+test "grammar-level CI + rule-level override coexist" {
+    assert_parses(&"if EXACT IF exact iF");
+}

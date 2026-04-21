@@ -1,7 +1,7 @@
 use { args, print, eprintln, Stdout, Stderr, Environment } from "core:cli";
 use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
 use { parse } from "./g4/parser.wado";
-use { Grammar, merge_grammars } from "./ir.wado";
+use { Grammar, merge_grammars, check_references } from "./ir.wado";
 use { generate, GenerateOptions } from "./generator.wado";
 
 export fn run() with Stdout, Stderr, Environment, Preopens {
@@ -89,6 +89,15 @@ fn cmd_gen(paths: Array<String>, options: &GenerateOptions) with Stdout, Stderr,
     }
 
     let merged = merge_grammars(grammars);
+    // Run ANTLR4-compatible semantic rule-reference validation after the
+    // split-grammar halves are combined. This is the same check ANTLR4's
+    // `SymbolChecks.checkForUnresolvedRuleRefs` performs; we defer it
+    // until post-merge so cross-grammar refs (parser-grammar token refs
+    // resolving against a sibling lexer grammar) validate cleanly.
+    if let Err(e) = check_references(&merged) {
+        eprintln(`gale: {e.message}`);
+        return;
+    }
     print(generate(&merged, options));
 }
 

@@ -1,0 +1,47 @@
+use lg from "./golden/label_gaps.wado";
+use { normalize_tree } from "./golden/label_gaps.wado";
+
+fn assert_tree(input: &String, expected: &String) {
+    let root = lg::parse(input).unwrap();
+    let tree = lg::to_tree(&root);
+    let actual = tree.to_string_tree();
+    let norm = normalize_tree(expected);
+    assert actual == norm, `\ninput:    {*input}\nexpected: {norm}\nactual:   {actual}`;
+}
+
+test "scalar token label: key=ID, value=STRING" {
+    assert_tree(&"foo = \"bar\" ;", &"
+        (program
+          (stmt (assign_stmt foo = \"bar\" ;)))
+    ");
+}
+
+test "scalar rule label: k=key_rule" {
+    assert_tree(&"pair alpha : beta ;", &"
+        (program
+          (stmt (pair_stmt pair (key_rule alpha) : beta ;)))
+    ");
+}
+
+test "scalar + list labels in the same alternative" {
+    assert_tree(&"list x , y , z ;", &"
+        (program
+          (stmt (mix_stmt list x , y , z ;)))
+    ");
+}
+
+test "mix_stmt with only head (no rest)" {
+    assert_tree(&"list only ;", &"
+        (program
+          (stmt (mix_stmt list only ;)))
+    ");
+}
+
+test "multiple labeled statements interleaved" {
+    assert_tree(&"a = \"1\" ; pair b : c ; list d , e ;", &"
+        (program
+          (stmt (assign_stmt a = \"1\" ;))
+          (stmt (pair_stmt pair (key_rule b) : c ;))
+          (stmt (mix_stmt list d , e ;)))
+    ");
+}

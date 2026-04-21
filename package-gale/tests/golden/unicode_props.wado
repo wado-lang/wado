@@ -1,7 +1,4 @@
-#![generated(by = "gale", sources = ["package-gale/tests/grammars/ci_sql.g4"])]
-
-// Grammar metadata from source .g4 prequels:
-//   option caseInsensitive = true
+#![generated(by = "gale", sources = ["package-gale/tests/grammars/unicode_props.g4"])]
 
 /// Span represents a byte range in source text.
 pub struct Span {
@@ -472,23 +469,22 @@ fn tree_build_node(events: &Array<TreeEvent>, pos: &mut i32) -> CstNode {
 }
 
 pub enum TokenKind {
-    IF,
-    IDENT,
-    WS,
+    WORD,
+    NUM,
+    SPACE,
     Eof,
     Error,
 }
 
-pub struct StmtNode {
+pub struct LineNode {
     pub span: Span,
-    pub if_: Token,
-    pub ident: Token,
+    pub word_or_num_or_space_list: Array<Token>,
     pub eof: Token,
 }
 
-global TK_IF: i32 = 0;
-global TK_IDENT: i32 = 1;
-global TK_WS: i32 = 2;
+global TK_WORD: i32 = 0;
+global TK_NUM: i32 = 1;
+global TK_SPACE: i32 = 2;
 global TK_EOF: i32 = 3;
 global TK_ERROR: i32 = 4;
 
@@ -511,25 +507,16 @@ impl Lexer {
     }
 }
 
-fn try_if(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || !chars[pos].eq_ignore_ascii_case(&'i') { return -1; }
-    pos += 1;
-    if pos >= chars.len() || !chars[pos].eq_ignore_ascii_case(&'f') { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_ident(chars: &Array<char>, start: i32) -> i32 {
+fn try_word(chars: &Array<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
-    if !(false || 'a' <= chars[pos] <= 'z' || 'A' <= chars[pos] <= 'Z' || chars[pos] == '_') { return -1; }
+    if !(false || 'A' <= chars[pos] <= 'Z' || 'a' <= chars[pos] <= 'z' || '\u{c0}' <= chars[pos] <= '\u{d6}' || '\u{d8}' <= chars[pos] <= '\u{f6}' || '\u{f8}' <= chars[pos] <= '\u{ff}' || '\u{100}' <= chars[pos] <= '\u{24f}' || '\u{370}' <= chars[pos] <= '\u{3ff}' || '\u{400}' <= chars[pos] <= '\u{4ff}' || '\u{600}' <= chars[pos] <= '\u{6ff}' || '\u{900}' <= chars[pos] <= '\u{97f}' || '\u{4e00}' <= chars[pos] <= '\u{9fff}' || '\u{3040}' <= chars[pos] <= '\u{309f}' || '\u{30a0}' <= chars[pos] <= '\u{30ff}' || '\u{ac00}' <= chars[pos] <= '\u{d7af}') { return -1; }
     pos += 1;
     loop {
         let rep_saved_0 = pos;
         rep_0: {
             if pos >= chars.len() { break rep_0; }
-            if !(false || 'a' <= chars[pos] <= 'z' || 'A' <= chars[pos] <= 'Z' || chars[pos] == '_') { break rep_0; }
+            if !(false || 'A' <= chars[pos] <= 'Z' || 'a' <= chars[pos] <= 'z' || '\u{c0}' <= chars[pos] <= '\u{d6}' || '\u{d8}' <= chars[pos] <= '\u{f6}' || '\u{f8}' <= chars[pos] <= '\u{ff}' || '\u{100}' <= chars[pos] <= '\u{24f}' || '\u{370}' <= chars[pos] <= '\u{3ff}' || '\u{400}' <= chars[pos] <= '\u{4ff}' || '\u{600}' <= chars[pos] <= '\u{6ff}' || '\u{900}' <= chars[pos] <= '\u{97f}' || '\u{4e00}' <= chars[pos] <= '\u{9fff}' || '\u{3040}' <= chars[pos] <= '\u{309f}' || '\u{30a0}' <= chars[pos] <= '\u{30ff}' || '\u{ac00}' <= chars[pos] <= '\u{d7af}') { break rep_0; }
             pos += 1;
             continue;
         }
@@ -539,22 +526,30 @@ fn try_ident(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_ws(chars: &Array<char>, start: i32) -> i32 {
+fn try_num(chars: &Array<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
-    if !(false || chars[pos] == ' ' || chars[pos] == '\t') { return -1; }
+    if !(false || '0' <= chars[pos] <= '9' || '\u{660}' <= chars[pos] <= '\u{669}' || '\u{6f0}' <= chars[pos] <= '\u{6f9}' || '\u{966}' <= chars[pos] <= '\u{96f}') { return -1; }
     pos += 1;
     loop {
         let rep_saved_1 = pos;
         rep_1: {
             if pos >= chars.len() { break rep_1; }
-            if !(false || chars[pos] == ' ' || chars[pos] == '\t') { break rep_1; }
+            if !(false || '0' <= chars[pos] <= '9' || '\u{660}' <= chars[pos] <= '\u{669}' || '\u{6f0}' <= chars[pos] <= '\u{6f9}' || '\u{966}' <= chars[pos] <= '\u{96f}') { break rep_1; }
             pos += 1;
             continue;
         }
         pos = rep_saved_1;
         break;
     }
+    return pos;
+}
+
+fn try_space(chars: &Array<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() { return -1; }
+    if !(false || chars[pos] == ' ' || chars[pos] == '\u{a0}' || chars[pos] == '\u{1680}' || '\u{2000}' <= chars[pos] <= '\u{200a}' || chars[pos] == '\u{202f}' || chars[pos] == '\u{205f}' || chars[pos] == '\u{3000}') { return -1; }
+    pos += 1;
     return pos;
 }
 
@@ -568,26 +563,73 @@ pub fn tokenize(input: &String) -> Array<Token> {
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
-        if first_char == '\t' || first_char == ' ' {
-            end = try_ws(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WS; }
-        } else if first_char == 'I' || first_char == 'i' {
-            end = try_if(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_IF; }
-            end = try_ident(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_IDENT; }
-        } else if first_char == '_' {
-            end = try_ident(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_IDENT; }
-        } else if 'a' <= first_char <= 'z' {
-            end = try_ident(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_IDENT; }
+        if first_char == ' ' || first_char == '\u{a0}' || first_char == '\u{1680}' || first_char == '\u{202f}' || first_char == '\u{205f}' || first_char == '\u{3000}' {
+            end = try_space(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_SPACE; }
         } else if 'A' <= first_char <= 'Z' {
-            end = try_ident(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_IDENT; }
+            end = try_word(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_WORD; }
+        } else if 'a' <= first_char <= 'z' {
+            end = try_word(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_WORD; }
+        } else if '\u{c0}' <= first_char <= '\u{d6}' {
+            end = try_word(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_WORD; }
+        } else if '\u{d8}' <= first_char <= '\u{f6}' {
+            end = try_word(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_WORD; }
+        } else if '\u{f8}' <= first_char <= '\u{ff}' {
+            end = try_word(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_WORD; }
+        } else if '\u{100}' <= first_char <= '\u{24f}' {
+            end = try_word(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_WORD; }
+        } else if '\u{370}' <= first_char <= '\u{3ff}' {
+            end = try_word(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_WORD; }
+        } else if '\u{400}' <= first_char <= '\u{4ff}' {
+            end = try_word(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_WORD; }
+        } else if '\u{600}' <= first_char <= '\u{6ff}' {
+            end = try_word(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_WORD; }
+        } else if '\u{900}' <= first_char <= '\u{97f}' {
+            end = try_word(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_WORD; }
+        } else if '\u{4e00}' <= first_char <= '\u{9fff}' {
+            end = try_word(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_WORD; }
+        } else if '\u{3040}' <= first_char <= '\u{309f}' {
+            end = try_word(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_WORD; }
+        } else if '\u{30a0}' <= first_char <= '\u{30ff}' {
+            end = try_word(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_WORD; }
+        } else if '\u{ac00}' <= first_char <= '\u{d7af}' {
+            end = try_word(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_WORD; }
+        } else if '0' <= first_char <= '9' {
+            end = try_num(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_NUM; }
+        } else if '\u{660}' <= first_char <= '\u{669}' {
+            end = try_num(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_NUM; }
+        } else if '\u{6f0}' <= first_char <= '\u{6f9}' {
+            end = try_num(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_NUM; }
+        } else if '\u{966}' <= first_char <= '\u{96f}' {
+            end = try_num(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_NUM; }
+        } else if '\u{2000}' <= first_char <= '\u{200a}' {
+            end = try_space(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_SPACE; }
         } else {
-            end = try_ident(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_IDENT; }
+            end = try_word(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_WORD; }
+            end = try_num(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_NUM; }
+            end = try_space(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_SPACE; }
         }
         if best_end <= start {
             let tok = Token::with_trivia(TK_ERROR, lexer.slice(start, start + 1), Span::new(start, start + 1), trivia);
@@ -596,7 +638,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             lexer.pos = start + 1;
         } else {
             let tok_start = start;
-            let is_skip = best_kind matches { TK_WS };
+            let is_skip = best_kind matches { TK_SPACE };
             if is_skip {
                 trivia.push(Token::new(best_kind, lexer.slice(tok_start, best_end), Span::new(tok_start, best_end)));
             } else {
@@ -613,9 +655,9 @@ pub fn tokenize(input: &String) -> Array<Token> {
 
 pub fn token_kind_name(kind: i32) -> String {
     return match kind {
-        TK_IF => "IF",
-        TK_IDENT => "IDENT",
-        TK_WS => "WS",
+        TK_WORD => "WORD",
+        TK_NUM => "NUM",
+        TK_SPACE => "SPACE",
         TK_EOF => "Eof",
         TK_ERROR => "Error",
         _ => "Unknown",
@@ -714,47 +756,129 @@ impl Parser {
     }
 }
 
-fn scan_stmt(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_line(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_IF { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos].kind != TK_IDENT { return -1; }
-    pos += 1;
+    let gp_0 = pos;
+    sg_0: {
+        pos = gp_0;
+        sg_0_0: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_WORD { break sg_0_0; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_1: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_NUM { break sg_0_1; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_2: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_SPACE { break sg_0_2; }
+            pos += 1;
+            break sg_0;
+        }
+        return -1;
+    }
+    while pos < tokens.len() && tokens[pos].kind matches { TK_WORD | TK_NUM | TK_SPACE } {
+        let sp = pos;
+        let gp_1 = pos;
+        sg_1: {
+            pos = gp_1;
+            sg_1_0: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_WORD { break sg_1_0; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_1: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_NUM { break sg_1_1; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_2: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_SPACE { break sg_1_2; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = -1;
+        }
+        if pos < 0 { pos = sp; break; }
+        if pos == sp { break; }
+    }
     if pos >= tokens.len() || tokens[pos].kind != TK_EOF { return -1; }
     pos += 1;
     return pos;
 }
 
-fn parse_stmt(p: &mut Parser) -> Result<StmtNode, ParseError> {
+fn parse_line(p: &mut Parser) -> Result<LineNode, ParseError> {
     let start = p.peek().span.start;
-    let if_ = p.expect(TK_IF)?;
-    let ident = p.expect(TK_IDENT)?;
+    let mut word_or_num_or_space_list: Array<Token> = [];
+    let mut _plus_first = true;
+    loop {
+        if !_plus_first {
+            let mut rep_scan_pos: i32 = -1;
+            rep_scan: {
+                let tokens = &p.tokens;
+                let mut pos: i32 = p.pos;
+                let gp_2 = pos;
+                sg_2: {
+                    pos = gp_2;
+                    sg_2_0: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_WORD { break sg_2_0; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_1: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_NUM { break sg_2_1; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_2: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_SPACE { break sg_2_2; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    break rep_scan;
+                }
+                if pos <= p.pos { break rep_scan; }
+                rep_scan_pos = pos;
+            }
+            if rep_scan_pos < 0 { break; }
+        }
+        _plus_first = false;
+        let word_or_num_or_space = p.advance();
+        word_or_num_or_space_list.push(word_or_num_or_space);
+    }
     let eof = p.expect(TK_EOF)?;
-    return Result::<StmtNode, ParseError>::Ok(StmtNode {
+    return Result::<LineNode, ParseError>::Ok(LineNode {
         span: Span::new(start, p.last_end()),
-        if_,
-        ident,
+        word_or_num_or_space_list,
         eof,
     });
 }
 
-pub fn parse(input: &String) -> Result<StmtNode, ParseError> {
+pub fn parse(input: &String) -> Result<LineNode, ParseError> {
     let tokens = tokenize(input);
     let mut parser = Parser::new(tokens);
-    return parse_stmt(&mut parser);
+    return parse_line(&mut parser);
 }
 
-pub fn walk_stmt<V: Visitor>(v: &mut V, node: &StmtNode) {
-    v.enter_rule(&"stmt", &node.span);
-    v.visit_token(&node.if_);
-    v.visit_token(&node.ident);
+pub fn walk_line<V: Visitor>(v: &mut V, node: &LineNode) {
+    v.enter_rule(&"line", &node.span);
+    for let item of &node.word_or_num_or_space_list {
+        v.visit_token(item);
+    }
     v.visit_token(&node.eof);
-    v.exit_rule(&"stmt", &node.span);
+    v.exit_rule(&"line", &node.span);
 }
 
-pub fn to_tree(node: &StmtNode) -> CstNode {
+pub fn to_tree(node: &LineNode) -> CstNode {
     let mut recorder = TreeRecorder::new();
-    walk_stmt(&mut recorder, node);
+    walk_line(&mut recorder, node);
     return recorder.build();
 }
 
