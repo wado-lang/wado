@@ -21,7 +21,7 @@ pub enum PlanError {
     /// involved with its decl site for diagnostics.
     Cycle { participants: Vec<DeclSite> },
     /// Two invocations share a `from` path but disagree on configuration
-    /// (module / inputs / options / output_dir). Per WEP line 368-371 such
+    /// (module / inputs / options / `output_dir`). Per WEP line 368-371 such
     /// declarations must be merged; when they cannot the compiler refuses.
     DuplicateGenerator {
         from: String,
