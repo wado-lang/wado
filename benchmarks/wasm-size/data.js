@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776809825308,
+  "lastUpdate": 1776814160969,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -15281,6 +15281,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/205557aea56232de89ce3f4da3209a2b5cf24e8f"
         },
         "date": 1776809825001,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8982,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18988,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 635264,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d6cd03e8bb7c9b529049942a73d7eb09b2a19e05",
+          "message": "Merge pull request #899 from wado-lang/claude/complete-kiln-web-mUELl\n\nKiln WEP M4/M5/M7 + M6 skeleton — typed Options, inline `with`, consume-only pipeline",
+          "timestamp": "2026-04-22T08:25:09+09:00",
+          "tree_id": "1fbc093ea3daa0f6b525c7fc48d745583294d730",
+          "url": "https://github.com/wado-lang/wado/commit/d6cd03e8bb7c9b529049942a73d7eb09b2a19e05"
+        },
+        "date": 1776814160655,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
