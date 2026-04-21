@@ -107,6 +107,8 @@ fn roundtrip_preserves_data() {
                 deps: vec![],
             },
         ],
+        build_dependencies: vec![],
+        generator_cache: vec![],
     };
 
     let serialized = lock.to_toml();

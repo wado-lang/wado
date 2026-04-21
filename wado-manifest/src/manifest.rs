@@ -14,7 +14,43 @@ pub struct Manifest {
     pub registries: IndexMap<String, String>,
     pub dependencies: IndexMap<String, Dependency>,
     pub dev_dependencies: IndexMap<String, Dependency>,
+    pub build_dependencies: IndexMap<String, Dependency>,
+    pub build: Option<BuildSection>,
     pub workspace: Option<Workspace>,
+}
+
+/// The `[build]` section of `wado.toml` (introduced by WEP 2026-04-12 Kiln).
+#[derive(Debug, Clone, Default)]
+pub struct BuildSection {
+    /// Kiln generator invocations declared under `[build.generators.<name>]`.
+    pub generators: IndexMap<String, GeneratorInvocation>,
+}
+
+/// A single `[build.generators.<name>]` entry: a Kiln generator invocation.
+#[derive(Debug, Clone)]
+pub struct GeneratorInvocation {
+    /// Which generator module to run.
+    pub module: GeneratorModuleRef,
+    /// Primary schema file (literal path relative to the manifest directory).
+    pub from: String,
+    /// Supplementary schema files.
+    pub inputs: Vec<String>,
+    /// Output directory; defaults to `build/kiln/<name>` when `None`.
+    pub output_dir: Option<String>,
+    /// Generator-typed options, parsed but not type-checked at this layer.
+    pub options: toml::Value,
+}
+
+/// Reference to a generator module.
+#[derive(Debug, Clone)]
+pub enum GeneratorModuleRef {
+    /// `module = "ns:name@version"`, optionally with a `/<submodule>` suffix.
+    ///
+    /// The `ns:name@version` prefix must match an entry in `[build-dependencies]`.
+    /// Validation checks that reference at manifest load time.
+    Spec(String),
+    /// Inline dependency record: `module = { path = "..." }` etc.
+    Inline(Dependency),
 }
 
 /// The `[package]` section of `wado.toml`.
@@ -117,6 +153,22 @@ pub enum ManifestError {
     },
     /// Registry dependency without a default registry defined.
     NoDefaultRegistry { dep_name: String },
+    /// Two `[build.generators.*]` entries share the same `from` path.
+    DuplicateGeneratorFrom {
+        first: String,
+        second: String,
+        from: String,
+    },
+    /// Malformed `module = "..."` spec string for a `[build.generators.*]` entry.
+    InvalidGeneratorModule {
+        invocation: String,
+        value: String,
+        reason: String,
+    },
+    /// `[build.generators.*]` has an empty or otherwise invalid `from`.
+    InvalidGeneratorFrom { invocation: String, reason: String },
+    /// `module = "ns:name@ver"` does not match any `[build-dependencies]` entry.
+    UnknownGeneratorModule { invocation: String, spec: String },
 }
 
 impl fmt::Display for ManifestError {
@@ -157,6 +209,29 @@ impl fmt::Display for ManifestError {
                     "dependency {dep_name:?}: registry dependency requires [registries].default"
                 )
             }
+            ManifestError::DuplicateGeneratorFrom {
+                first,
+                second,
+                from,
+            } => write!(
+                f,
+                "[build.generators] {first:?} and {second:?} both declare from = {from:?}"
+            ),
+            ManifestError::InvalidGeneratorModule {
+                invocation,
+                value,
+                reason,
+            } => write!(
+                f,
+                "[build.generators.{invocation}] invalid module {value:?}: {reason}"
+            ),
+            ManifestError::InvalidGeneratorFrom { invocation, reason } => {
+                write!(f, "[build.generators.{invocation}] invalid from: {reason}")
+            }
+            ManifestError::UnknownGeneratorModule { invocation, spec } => write!(
+                f,
+                "[build.generators.{invocation}] module {spec:?} is not declared in [build-dependencies]"
+            ),
         }
     }
 }
@@ -172,7 +247,38 @@ struct RawManifest {
     dependencies: Option<IndexMap<String, RawDependency>>,
     #[serde(rename = "dev-dependencies")]
     dev_dependencies: Option<IndexMap<String, RawDependency>>,
+    #[serde(rename = "build-dependencies")]
+    build_dependencies: Option<IndexMap<String, RawDependency>>,
+    build: Option<RawBuildSection>,
     workspace: Option<RawWorkspace>,
+}
+
+#[derive(Deserialize)]
+struct RawBuildSection {
+    generators: Option<IndexMap<String, RawGeneratorInvocation>>,
+}
+
+#[derive(Deserialize)]
+struct RawGeneratorInvocation {
+    module: RawGeneratorModule,
+    from: String,
+    #[serde(default)]
+    inputs: Vec<String>,
+    #[serde(rename = "output-dir")]
+    output_dir: Option<String>,
+    #[serde(default = "empty_options_table")]
+    options: toml::Value,
+}
+
+fn empty_options_table() -> toml::Value {
+    toml::Value::Table(toml::Table::new())
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum RawGeneratorModule {
+    Spec(String),
+    Inline(RawDependency),
 }
 
 #[derive(Deserialize)]
@@ -210,6 +316,8 @@ fn convert_raw(raw: RawManifest) -> Result<Manifest, ManifestError> {
     let registries = raw.registries.unwrap_or_default();
     let dependencies = convert_deps(raw.dependencies.unwrap_or_default())?;
     let dev_dependencies = convert_deps(raw.dev_dependencies.unwrap_or_default())?;
+    let build_dependencies = convert_deps(raw.build_dependencies.unwrap_or_default())?;
+    let build = raw.build.map(convert_build).transpose()?;
     let workspace = raw.workspace.map(convert_workspace).transpose()?;
 
     Ok(Manifest {
@@ -217,7 +325,39 @@ fn convert_raw(raw: RawManifest) -> Result<Manifest, ManifestError> {
         registries,
         dependencies,
         dev_dependencies,
+        build_dependencies,
+        build,
         workspace,
+    })
+}
+
+fn convert_build(raw: RawBuildSection) -> Result<BuildSection, ManifestError> {
+    let mut generators = IndexMap::new();
+    for (name, raw_inv) in raw.generators.unwrap_or_default() {
+        let invocation = convert_generator_invocation(&name, raw_inv)?;
+        generators.insert(name, invocation);
+    }
+    Ok(BuildSection { generators })
+}
+
+fn convert_generator_invocation(
+    name: &str,
+    raw: RawGeneratorInvocation,
+) -> Result<GeneratorInvocation, ManifestError> {
+    let module = match raw.module {
+        RawGeneratorModule::Spec(s) => GeneratorModuleRef::Spec(s),
+        RawGeneratorModule::Inline(raw_dep) => {
+            // Reuse dependency conversion; key into errors is the invocation name.
+            let dep = convert_dep(name, raw_dep)?;
+            GeneratorModuleRef::Inline(dep)
+        }
+    };
+    Ok(GeneratorInvocation {
+        module,
+        from: raw.from,
+        inputs: raw.inputs,
+        output_dir: raw.output_dir,
+        options: raw.options,
     })
 }
 
@@ -507,6 +647,158 @@ shared = { path = "../shared", package = "myorg:shared", version = "^0.1.0" }
             }
             other => panic!("expected Path, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn parse_build_section_registry_module() {
+        let toml = r#"
+[package]
+name = "app"
+version = "0.1.0"
+command = "main.wado"
+
+[registries]
+default = "https://wa.dev"
+
+[build-dependencies]
+proto-codegen = { package = "example:proto-codegen", version = "^1.2.0" }
+
+[build.generators.user-proto]
+module = "example:proto-codegen@1.2.0"
+from = "schemas/user.proto"
+options = { style = "rpc", emit_comments = true }
+"#;
+        let m = toml.parse::<Manifest>().unwrap();
+        assert_eq!(m.build_dependencies.len(), 1);
+        let build = m.build.expect("build section");
+        assert_eq!(build.generators.len(), 1);
+        let inv = &build.generators["user-proto"];
+        assert!(
+            matches!(&inv.module, GeneratorModuleRef::Spec(s) if s == "example:proto-codegen@1.2.0")
+        );
+        assert_eq!(inv.from, "schemas/user.proto");
+        assert!(inv.inputs.is_empty());
+        assert!(inv.output_dir.is_none());
+        let opts = inv.options.as_table().unwrap();
+        assert_eq!(opts.get("style").unwrap().as_str().unwrap(), "rpc");
+        assert!(opts.get("emit_comments").unwrap().as_bool().unwrap());
+    }
+
+    #[test]
+    fn parse_build_section_inputs_and_output_dir() {
+        let toml = r#"
+[package]
+name = "app"
+version = "0.1.0"
+command = "main.wado"
+
+[registries]
+default = "https://wa.dev"
+
+[build-dependencies]
+gale = { package = "wado:gale", version = "^0.1.0" }
+
+[build.generators.rust-grammar]
+module = "wado:gale@0.1.0"
+from = "grammars/Rust.g4"
+inputs = ["grammars/RustLexer.g4"]
+output-dir = "build/gen/rust"
+"#;
+        let m = toml.parse::<Manifest>().unwrap();
+        let inv = &m.build.unwrap().generators["rust-grammar"];
+        assert_eq!(inv.inputs, vec!["grammars/RustLexer.g4"]);
+        assert_eq!(inv.output_dir.as_deref(), Some("build/gen/rust"));
+    }
+
+    #[test]
+    fn build_generator_inline_path_module() {
+        let toml = r#"
+[package]
+name = "app"
+version = "0.1.0"
+command = "main.wado"
+
+[build.generators.local]
+module = { path = "../tools/my-gen" }
+from = "schemas/thing.idl"
+"#;
+        let m = toml.parse::<Manifest>().unwrap();
+        let inv = &m.build.unwrap().generators["local"];
+        match &inv.module {
+            GeneratorModuleRef::Inline(dep) => match &dep.source {
+                DependencySource::Path { path, .. } => assert_eq!(path, "../tools/my-gen"),
+                other => panic!("expected Path, got {other:?}"),
+            },
+            other => panic!("expected Inline, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn build_generator_unknown_module_rejected() {
+        let toml = r#"
+[package]
+name = "app"
+version = "0.1.0"
+command = "main.wado"
+
+[build.generators.bad]
+module = "nobody:nothing@1.0.0"
+from = "schemas/a.idl"
+"#;
+        let err = toml.parse::<Manifest>().unwrap_err();
+        assert!(matches!(err, ManifestError::UnknownGeneratorModule { .. }));
+    }
+
+    #[test]
+    fn build_generator_duplicate_from_rejected() {
+        let toml = r#"
+[package]
+name = "app"
+version = "0.1.0"
+command = "main.wado"
+
+[build.generators.a]
+module = { path = "../gen-a" }
+from = "schemas/thing.idl"
+
+[build.generators.b]
+module = { path = "../gen-b" }
+from = "schemas/thing.idl"
+"#;
+        let err = toml.parse::<Manifest>().unwrap_err();
+        assert!(matches!(err, ManifestError::DuplicateGeneratorFrom { .. }));
+    }
+
+    #[test]
+    fn build_generator_empty_from_rejected() {
+        let toml = r#"
+[package]
+name = "app"
+version = "0.1.0"
+command = "main.wado"
+
+[build.generators.bad]
+module = { path = "../gen" }
+from = ""
+"#;
+        let err = toml.parse::<Manifest>().unwrap_err();
+        assert!(matches!(err, ManifestError::InvalidGeneratorFrom { .. }));
+    }
+
+    #[test]
+    fn build_generator_malformed_module_spec_rejected() {
+        let toml = r#"
+[package]
+name = "app"
+version = "0.1.0"
+command = "main.wado"
+
+[build.generators.bad]
+module = "not-a-valid-spec"
+from = "schemas/thing.idl"
+"#;
+        let err = toml.parse::<Manifest>().unwrap_err();
+        assert!(matches!(err, ManifestError::InvalidGeneratorModule { .. }));
     }
 
     #[test]

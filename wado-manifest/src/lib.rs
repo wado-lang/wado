@@ -4,9 +4,12 @@ mod provider;
 mod validate;
 mod version;
 
-pub use lockfile::{LockFile, LockFileError, LockedPackage};
+pub use lockfile::{
+    FileHash, GeneratorCacheEntry, LockFile, LockFileError, LockedPackage, OutputHash,
+};
 pub use manifest::{
-    Dependency, DependencySource, GitPin, Manifest, ManifestError, Package, Workspace,
+    BuildSection, Dependency, DependencySource, GeneratorInvocation, GeneratorModuleRef, GitPin,
+    Manifest, ManifestError, Package, Workspace,
 };
 pub use provider::{
     DependencyProvider, GitTagInfo, InMemoryDependencyProvider, ProviderError, RegistryPackageInfo,
