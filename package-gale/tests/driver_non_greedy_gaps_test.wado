@@ -1,0 +1,68 @@
+use ng from "./golden/non_greedy_gaps.wado";
+use { normalize_tree } from "./golden/non_greedy_gaps.wado";
+
+fn assert_parses(input: &String) {
+    let result = ng::parse(input);
+    if let Err(e) = &result {
+        panic(`parse failed for \`{input}\`: {e.message}`);
+    }
+}
+
+fn assert_tree(input: &String, expected: &String) {
+    let root = ng::parse(input).unwrap();
+    let tree = ng::to_tree(&root);
+    let actual = tree.to_string_tree();
+    let norm = normalize_tree(expected);
+    assert actual == norm, `\ninput:    {*input}\nexpected: {norm}\nactual:   {actual}`;
+}
+
+test "single constant with no surrounding junk" {
+    assert_parses(&"public static final int X");
+}
+
+test "constant after junk tokens" {
+    assert_parses(&"foo bar = 1 ; public static final int Y");
+}
+
+test "constant followed by junk (.*? after constant)" {
+    assert_parses(&"public static final int A ; garbage here");
+}
+
+test "multiple constants interleaved with junk" {
+    assert_parses(&"int x ; public static final int A ; x = 1 ; public static final int B ; end");
+}
+
+test "tree: bare constant" {
+    assert_tree(&"public static final int X", &"
+        (file (constant public static final int X))
+    ");
+}
+
+test "tree: constant after leading junk" {
+    assert_tree(&"x = 1 ; public static final int A", &"
+        (file x = 1 ; (constant public static final int A))
+    ");
+}
+
+test "single constant is captured in constant_item_list" {
+    // Verify the non-greedy parse actually builds a typed CST, not just
+    // succeeds parsing. This exercises the field-generation path through
+    // `has_field(Wildcard) == true` for parser-level `.*?`.
+    let input = "pre = 1 ; public static final int A";
+    let root = ng::parse(&input).unwrap();
+    assert root.constant_item_list.len() == 1,
+        `expected exactly 1 constant, got {root.constant_item_list.len()}`;
+    assert LexerSlice::eq_str(&"A", &root.constant_item_list[0].constant.id.text);
+}
+
+test "two constants separated by junk are both captured" {
+    // Exercises the outer_follow propagation: the inner `.*?` inside
+    // `(constant .*?)+` must stop at the next iteration's first token
+    // (`public`) so the repetition can consume the second constant.
+    let input = "pre = 1 ; public static final int A ; middle ; public static final int B ; end";
+    let root = ng::parse(&input).unwrap();
+    assert root.constant_item_list.len() == 2,
+        `expected exactly 2 constants, got {root.constant_item_list.len()}`;
+    assert LexerSlice::eq_str(&"A", &root.constant_item_list[0].constant.id.text);
+    assert LexerSlice::eq_str(&"B", &root.constant_item_list[1].constant.id.text);
+}

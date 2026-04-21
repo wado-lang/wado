@@ -12,16 +12,22 @@ generated parsers are semantically correct, not just syntactically accepted.
 
 ## A. Driver-level verification (remaining gaps)
 
-All five gaps are now covered by `tests/grammars/parser_gaps.g4` +
-`tests/driver_parser_gaps_test.wado` (A1, A2, A5) and
-`tests/grammars/mode_gaps.g4` + `tests/driver_mode_gaps_test.wado`
-(A3, A4).
+All gaps below are now covered by the listed grammar + driver-test pairs.
 
-- [x] **A1. Parser-side `~TOK` / `~(block)`** — `not_stmt : NOT ~ITEM SEMI | SET ~(ITEM | NUMBER) SEMI`.
-- [x] **A2. List labels `+=`** — `list_stmt : LIST items += ITEM (COMMA items += ITEM)* SEMI`.
-- [x] **A3. `mode(X)` semantics (set_mode)** — `STR_ESC_BEGIN` / `ESC_CHAR` bounce between `IN_STRING` and `ESC_IN_STRING` via bare `mode(...)`.
-- [x] **A4. `more` semantics** — `QUOTE : '"' -> more, pushMode(IN_STRING)` followed by `STR_CHAR : ~[\\"] -> more`.
-- [x] **A5. Wildcard `.` at parser level** — `any_stmt : ANY . SEMI`.
+- [x] **A1. Parser-side `~TOK` / `~(block)`** — `parser_gaps.g4` / `driver_parser_gaps_test.wado`.
+- [x] **A2. List labels `+=`** — `parser_gaps.g4` / `driver_parser_gaps_test.wado`.
+- [x] **A3. `mode(X)` semantics (set_mode)** — `mode_gaps.g4` / `driver_mode_gaps_test.wado`.
+- [x] **A4. `more` semantics** — `mode_gaps.g4` / `driver_mode_gaps_test.wado`.
+- [x] **A5. Wildcard `.` at parser level** — `parser_gaps.g4` / `driver_parser_gaps_test.wado`.
+- [x] **A6. Scalar token/rule labels (`k=ID`, `k=rule_ref`)** — `label_gaps.g4` / `driver_label_gaps_test.wado`.
+- [x] **A7. `<assoc=right>` alt prefix on LR alt** — `right_assoc_gaps.g4` / `driver_right_assoc_gaps_test.wado`.
+- [x] **A8. Non-greedy `.*?` / `TOK*?` at parser level** — `non_greedy_gaps.g4` / `driver_non_greedy_gaps_test.wado`.
+- [x] **A9. `-> type(X)` as sole lexer command** — `lexer_command_gaps.g4` / `driver_lexer_command_gaps_test.wado`.
+- [x] **A10. Rule-level `options { caseInsensitive = false; }` override** — `ci_rule_override.g4` / `driver_ci_rule_override_test.wado`.
+- [x] **A11. Numeric / named `channel(N)` / `channel(USER)`** — `lexer_command_gaps.g4` / `driver_lexer_command_gaps_test.wado`.
+- [x] **A12. `mode(DEFAULT_MODE)` reference** — `lexer_command_gaps.g4` / `driver_lexer_command_gaps_test.wado`.
+- [x] **A13. Recursive lexer fragments** — `recursive_lexer.g4` / `driver_recursive_lexer_test.wado`.
+- [x] **A14. Unicode property escapes `\p{L}` / `\p{Nd}` / `\p{Zs}`** — `unicode_props.g4` / `driver_unicode_props_test.wado`.
 
 ## B. Negative tests
 

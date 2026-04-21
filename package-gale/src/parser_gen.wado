@@ -2446,14 +2446,16 @@ fn gen_alt_body_skip(w: &mut CodeWriter, type_name: &String, variant_case: Optio
                     let follow = ctx.first_of_elements_from(&alt.elements, i + 1);
                     gen_repeat_with_follow(w, rep, ctx, &follow, &mut name_counts);
                 } else {
-                    gen_repeat(w, rep, ctx, &mut name_counts);
+                    let follow = ctx.first_of_elements_from(&alt.elements, i + 1);
+                    gen_repeat(w, rep, ctx, &mut name_counts, &follow);
                 }
             } else if rep.non_greedy {
                 let follow = ctx.first_of_elements_from(&alt.elements, i + 1);
                 let follow_second = compute_follow_second(&alt.elements, i + 1, ctx);
                 gen_repeat_non_greedy(w, rep, ctx, &follow, &follow_second, &mut name_counts);
             } else {
-                gen_repeat(w, rep, ctx, &mut name_counts);
+                let follow = ctx.first_of_elements_from(&alt.elements, i + 1);
+                gen_repeat(w, rep, ctx, &mut name_counts, &follow);
             }
         } else {
             gen_element(w, elem, ctx, &mut name_counts);
@@ -2531,14 +2533,16 @@ fn gen_alt_elements(w: &mut CodeWriter, elements: &Array<Element>, ctx: &mut Gen
                     let follow = ctx.first_of_elements_from(elements, i + 1);
                     gen_repeat_with_follow(w, rep, ctx, &follow, &mut name_counts);
                 } else {
-                    gen_repeat(w, rep, ctx, &mut name_counts);
+                    let follow = ctx.first_of_elements_from(elements, i + 1);
+                    gen_repeat(w, rep, ctx, &mut name_counts, &follow);
                 }
             } else if rep.non_greedy {
                 let follow = ctx.first_of_elements_from(elements, i + 1);
                 let follow_second = compute_follow_second(elements, i + 1, ctx);
                 gen_repeat_non_greedy(w, rep, ctx, &follow, &follow_second, &mut name_counts);
             } else {
-                gen_repeat(w, rep, ctx, &mut name_counts);
+                let follow = ctx.first_of_elements_from(elements, i + 1);
+                gen_repeat(w, rep, ctx, &mut name_counts, &follow);
             }
         } else {
             gen_element(w, elem, ctx, &mut name_counts);
@@ -2546,16 +2550,24 @@ fn gen_alt_elements(w: &mut CodeWriter, elements: &Array<Element>, ctx: &mut Gen
     }
 }
 
-fn gen_elements_with_non_greedy(w: &mut CodeWriter, elements: &Array<Element>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+fn gen_elements_with_non_greedy(w: &mut CodeWriter, elements: &Array<Element>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, outer_follow: &Array<String>) {
     for let mut i = 0; i < elements.len(); i += 1 {
         let elem = &elements[i];
         if let Repeat(rep) = elem {
             if rep.non_greedy {
-                let follow = ctx.first_of_elements_from(elements, i + 1);
+                // follow(e_i) = first(e_{i+1..}) ∪ (outer_follow if suffix nullable)
+                let mut follow = ctx.first_of_elements_from(elements, i + 1);
+                if ctx.tail_is_nullable_deep(elements, i + 1) {
+                    follow = union_sets(&follow, outer_follow);
+                }
                 let follow_second = compute_follow_second(elements, i + 1, ctx);
                 gen_repeat_non_greedy(w, rep, ctx, &follow, &follow_second, name_counts);
             } else {
-                gen_element(w, elem, ctx, name_counts);
+                let mut rep_follow = ctx.first_of_elements_from(elements, i + 1);
+                if ctx.tail_is_nullable_deep(elements, i + 1) {
+                    rep_follow = union_sets(&rep_follow, outer_follow);
+                }
+                gen_repeat(w, rep, ctx, name_counts, &rep_follow);
             }
         } else {
             gen_element(w, elem, ctx, name_counts);
@@ -2605,7 +2617,7 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_co
         return;
     }
     if let Repeat(rep) = elem {
-        gen_repeat(w, rep, ctx, name_counts);
+        gen_repeat(w, rep, ctx, name_counts, &([] as Array<String>));
         return;
     }
     if let Group(g) = elem {
@@ -2614,7 +2626,7 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_co
         } else if is_token_only_group(&g.alternatives) {
             gen_consume_token_group(w, &g.alternatives, ctx, name_counts);
         } else if is_single_alt_group(&g.alternatives) {
-            gen_consume_single_alt_group(w, &g.alternatives[0], ctx, name_counts);
+            gen_consume_single_alt_group(w, &g.alternatives[0], ctx, name_counts, &([] as Array<String>));
         } else if is_general_group(&g.alternatives) {
             gen_general_group_store_optional(w, &g.alternatives, ctx, name_counts);
         } else {
@@ -2634,17 +2646,30 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_co
             w.line(`{lab_name}.push({inner_info.0});`);
             return;
         }
-        gen_element(w, &lab.element, ctx, name_counts);
+        // Scalar label `name = element`: parse the inner element into a
+        // private binding, then re-bind it under the label name so the
+        // struct initializer (which uses the label name) resolves.
+        let lab_name = dedup_name(&escape_ident(&to_snake_case(&lab.name)), name_counts);
+        let inner_info = element_field_info(&lab.element, ctx);
+        let mut nc: Array<[String, i32]> = [];
+        gen_element(w, &lab.element, ctx, &mut nc);
+        w.line(`let {lab_name} = {inner_info.0};`);
         return;
     }
 }
 
-fn gen_repeat(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+fn gen_repeat(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, outer_follow: &Array<String>) {
     let inner = &rep.element;
     let mut visiting: Array<String> = [];
     let first = ctx.first_of_element(inner, &mut visiting);
     let mut visiting_scan: Array<String> = [];
     let scannable = ctx.is_element_scannable(inner, &mut visiting_scan);
+
+    // For Plus/Star with a single-alt Group inner, the body's "end-of-iteration
+    // follow" is: first(group) (next iteration can start here) ∪ outer_follow
+    // (the repeat can also exit). Non-greedy repeats at the tail of the group
+    // need this to stop before the next iteration's first token.
+    let iter_follow = compute_iter_follow(inner, &first, outer_follow);
 
     // `(items+=item)*` / `items+=item+` / `items+=item?` — the list label
     // already implies Array, so use the label name directly and push the
@@ -2725,7 +2750,7 @@ fn gen_repeat(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext, nam
                 let mut nc: Array<[String, i32]> = [];
                 if is_group_store {
                     ctx.group_counter = gc_before;
-                    gen_group_store_any(w, inner, ctx, &mut nc);
+                    gen_group_store_any(w, inner, ctx, &mut nc, &iter_follow);
                 } else {
                     gen_element(w, inner, ctx, &mut nc);
                 }
@@ -2736,7 +2761,7 @@ fn gen_repeat(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext, nam
                 let mut nc: Array<[String, i32]> = [];
                 if is_group_store {
                     ctx.group_counter = gc_before;
-                    gen_group_store_any(w, inner, ctx, &mut nc);
+                    gen_group_store_any(w, inner, ctx, &mut nc, &iter_follow);
                 } else {
                     gen_element(w, inner, ctx, &mut nc);
                 }
@@ -2759,7 +2784,7 @@ fn gen_repeat(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext, nam
                 let mut nc: Array<[String, i32]> = [];
                 if is_group_store {
                     ctx.group_counter = gc_before;
-                    gen_group_store_any(w, inner, ctx, &mut nc);
+                    gen_group_store_any(w, inner, ctx, &mut nc, &iter_follow);
                 } else {
                     gen_element(w, inner, ctx, &mut nc);
                 }
@@ -2773,7 +2798,7 @@ fn gen_repeat(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext, nam
                 let mut nc: Array<[String, i32]> = [];
                 if is_group_store {
                     ctx.group_counter = gc_before;
-                    gen_group_store_any(w, inner, ctx, &mut nc);
+                    gen_group_store_any(w, inner, ctx, &mut nc, &iter_follow);
                 } else {
                     gen_element(w, inner, ctx, &mut nc);
                 }
@@ -2859,7 +2884,58 @@ fn compute_follow_second(elements: &Array<Element>, follow_start: i32, ctx: &mut
     return [];
 }
 
+fn compute_iter_follow(inner: &Element, first_of_inner: &Array<String>, outer_follow: &Array<String>) -> Array<String> {
+    // For a Plus/Star whose inner is a single-alt Group, each iteration can
+    // be followed by either another iteration (first(inner)) or the exit
+    // (outer_follow). For non-Group inners we use outer_follow alone — the
+    // inner has no sub-structure that could host a nested non-greedy tail.
+    if let Group(g) = inner {
+        if g.alternatives.len() == 1 {
+            return union_sets(first_of_inner, outer_follow);
+        }
+    }
+    return *outer_follow;
+}
+
+fn wildcard_non_greedy_condition(follow_first: &Array<String>) -> String {
+    // Continue while peek is not EOF and not in the follow set. `follow_first`
+    // may already contain TK_EOF (e.g. when the follow is the final `EOF`
+    // token). Dedup into a single exclusion set so we emit one check.
+    let mut excluded: Array<String> = ["TK_EOF"];
+    for let tk of follow_first {
+        let mut seen = false;
+        for let e of &excluded {
+            if *e == *tk { seen = true; break; }
+        }
+        if !seen { excluded.push(*tk); }
+    }
+    if excluded.len() == 1 {
+        return `p.peek_kind() != {excluded[0]}`;
+    }
+    let mut result = String::with_capacity(64);
+    result.push_str("!(p.peek_kind() matches { ");
+    for let mut i = 0; i < excluded.len(); i += 1 {
+        if i > 0 {
+            result.push_str(" | ");
+        }
+        result.push_str(excluded[i]);
+    }
+    result.push_str(" })");
+    return result;
+}
+
 fn compute_non_greedy_condition(inner: &Element, follow_first: &Array<String>, follow_second: &Array<String>, ctx: &mut GenContext) -> String {
+    // Wildcard (`.*?`) and Not (`~TOK*?`) inner: `first_of_element` returns
+    // `[]` because their match set is open-ended. Handle them explicitly:
+    // keep looping while the current token is not EOF and not in the follow
+    // set (i.e. the continuation can't yet fire).
+    if let Wildcard(_) = inner {
+        return wildcard_non_greedy_condition(follow_first);
+    }
+    if let Not(_) = inner {
+        return wildcard_non_greedy_condition(follow_first);
+    }
+
     let mut visiting: Array<String> = [];
     let raw_first = ctx.first_of_element(inner, &mut visiting);
     let continue_first = subtract_sets(&raw_first, follow_first);
@@ -3400,7 +3476,7 @@ fn gen_element_failable(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext
         return;
     }
     if let Repeat(rep) = elem {
-        gen_repeat(w, rep, ctx, name_counts);
+        gen_repeat(w, rep, ctx, name_counts, &([] as Array<String>));
         return;
     }
     if let Group(g) = elem {
@@ -3446,7 +3522,7 @@ fn gen_storable_optional(w: &mut CodeWriter, inner: &Element, ctx: &mut GenConte
         }
         w.begin(`let {opt_name}: Option<{type_str}> = if {cond}`);
         let mut nc: Array<[String, i32]> = [];
-        gen_group_store_any(w, inner, ctx, &mut nc);
+        gen_group_store_any(w, inner, ctx, &mut nc, &([] as Array<String>));
         w.line(`Option::<{type_str}>::Some({field_name})`);
         w.else_begin("else");
         w.line("null");
@@ -3616,7 +3692,7 @@ fn gen_storable_optional_with_backtrack(w: &mut CodeWriter, inner: &Element, ctx
                 w.line(`Option::<{type_str}>::Some({field_name})`);
             } else {
                 let mut nc: Array<[String, i32]> = [];
-                gen_group_store_any(w, inner, ctx, &mut nc);
+                gen_group_store_any(w, inner, ctx, &mut nc, &([] as Array<String>));
                 w.line(`Option::<{type_str}>::Some({field_name})`);
             }
         }
@@ -3663,7 +3739,7 @@ fn gen_storable_optional_with_backtrack(w: &mut CodeWriter, inner: &Element, ctx
             // For other storable patterns (simple_cst_group, token_only_group),
             // they should be safe without backtracking. Generate normally.
             let mut nc: Array<[String, i32]> = [];
-            gen_group_store_any(w, inner, ctx, &mut nc);
+            gen_group_store_any(w, inner, ctx, &mut nc, &([] as Array<String>));
             w.line(`{result_var} = Option::<{type_str}>::Some({field_name});`);
         }
     }
@@ -3727,7 +3803,7 @@ fn gen_element_failable_named(w: &mut CodeWriter, elem: &Element, ctx: &mut GenC
         return;
     }
     if let Repeat(rep) = elem {
-        gen_repeat(w, rep, ctx, name_counts);
+        gen_repeat(w, rep, ctx, name_counts, &([] as Array<String>));
         return;
     }
     if let Group(g) = elem {
@@ -3736,7 +3812,7 @@ fn gen_element_failable_named(w: &mut CodeWriter, elem: &Element, ctx: &mut GenC
         } else if is_token_only_group(&g.alternatives) {
             gen_consume_token_group(w, &g.alternatives, ctx, name_counts);
         } else if is_single_alt_group(&g.alternatives) {
-            gen_consume_single_alt_group(w, &g.alternatives[0], ctx, name_counts);
+            gen_consume_single_alt_group(w, &g.alternatives[0], ctx, name_counts, &([] as Array<String>));
         } else if is_general_group(&g.alternatives) {
             gen_general_group_store_optional(w, &g.alternatives, ctx, name_counts);
         } else {
@@ -4050,7 +4126,7 @@ fn gen_consume_group(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &mut Ge
         return;
     }
     if alts.len() == 1 {
-        gen_elements_with_non_greedy(w, &alts[0].elements, ctx, name_counts);
+        gen_elements_with_non_greedy(w, &alts[0].elements, ctx, name_counts, &([] as Array<String>));
         return;
     }
 
@@ -4082,7 +4158,7 @@ fn gen_consume_group(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &mut Ge
         if group.len() == 1 {
             let alt_idx = group[0];
             let mut nc: Array<[String, i32]> = [];
-            gen_elements_with_non_greedy(w, &alts[alt_idx].elements, ctx, &mut nc);
+            gen_elements_with_non_greedy(w, &alts[alt_idx].elements, ctx, &mut nc, &([] as Array<String>));
         } else {
             let mut sorted_group = group.sorted();
             sort_group_by_element_count(&mut sorted_group, alts);
@@ -4351,7 +4427,7 @@ fn gen_consume_group_store_optional(w: &mut CodeWriter, alts: &Array<Alternative
     w.line(`let {var_name} = {inner_var};`);
 }
 
-fn gen_group_store_any(w: &mut CodeWriter, inner: &Element, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+fn gen_group_store_any(w: &mut CodeWriter, inner: &Element, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, outer_follow: &Array<String>) {
     if let Group(g) = inner {
         let alts = &g.alternatives;
         if is_simple_cst_group(alts) {
@@ -4359,7 +4435,7 @@ fn gen_group_store_any(w: &mut CodeWriter, inner: &Element, ctx: &mut GenContext
         } else if is_token_only_group(alts) {
             gen_consume_token_group(w, alts, ctx, name_counts);
         } else if is_single_alt_group(alts) {
-            gen_consume_single_alt_group(w, &alts[0], ctx, name_counts);
+            gen_consume_single_alt_group(w, &alts[0], ctx, name_counts, outer_follow);
         } else if is_general_group(alts) {
             gen_general_group_store(w, alts, ctx, name_counts);
         }
@@ -4371,7 +4447,7 @@ fn gen_consume_token_group(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &
     w.line(`let {var_name} = p.advance();`);
 }
 
-fn gen_consume_single_alt_group(w: &mut CodeWriter, alt: &Alternative, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+fn gen_consume_single_alt_group(w: &mut CodeWriter, alt: &Alternative, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, outer_follow: &Array<String>) {
     let type_name = single_alt_group_type_name(alt);
     let field_name = dedup_name(&single_alt_group_field_name(alt), name_counts);
     // Use the owning rule's name for general group types inside shared single-alt groups
@@ -4379,9 +4455,7 @@ fn gen_consume_single_alt_group(w: &mut CodeWriter, alt: &Alternative, ctx: &mut
     ctx.current_rule_name = ctx.general_group_rule_name(&type_name);
     let nc_snapshot = *name_counts;
     let gc_start = ctx.group_counter;
-    for let elem of &alt.elements {
-        gen_element(w, elem, ctx, name_counts);
-    }
+    gen_elements_with_non_greedy(w, &alt.elements, ctx, name_counts, outer_follow);
     w.line(`let {field_name} = {type_name} \{`);
     w.indent();
     ctx.group_counter = gc_start;
@@ -4542,7 +4616,7 @@ fn gen_general_alt_parse_and_store(w: &mut CodeWriter, alts: &Array<Alternative>
 
     let mut nc: Array<[String, i32]> = [];
     let gc_start = ctx.group_counter;
-    gen_elements_with_non_greedy(w, &alt.elements, ctx, &mut nc);
+    gen_elements_with_non_greedy(w, &alt.elements, ctx, &mut nc, &([] as Array<String>));
 
     w.line(`{inner_var} = Option::<{type_name}>::Some({type_name}::Alt{alt_idx}({struct_name} \{`);
     w.indent();
@@ -4562,7 +4636,7 @@ fn gen_general_alt_construct(w: &mut CodeWriter, alts: &Array<Alternative>, alt_
 
     let mut nc: Array<[String, i32]> = [];
     let gc_start = ctx.group_counter;
-    gen_elements_with_non_greedy(w, &alt.elements, ctx, &mut nc);
+    gen_elements_with_non_greedy(w, &alt.elements, ctx, &mut nc, &([] as Array<String>));
 
     w.line(`{type_name}::Alt{alt_idx}({struct_name} \{`);
     w.indent();
@@ -4623,7 +4697,7 @@ fn gen_general_group_backtrack(w: &mut CodeWriter, alts: &Array<Alternative>, so
             w.begin(`if !{done}`);
             let mut nc: Array<[String, i32]> = [];
             let gc_last = ctx.group_counter;
-            gen_elements_with_non_greedy(w, &alt.elements, ctx, &mut nc);
+            gen_elements_with_non_greedy(w, &alt.elements, ctx, &mut nc, &([] as Array<String>));
             w.line(`{inner_var} = Option::<{type_name}>::Some({type_name}::Alt{alt_idx}({struct_name} \{`);
             w.indent();
             ctx.group_counter = gc_last;
@@ -4707,7 +4781,7 @@ fn gen_general_group_scan_dispatch(w: &mut CodeWriter, alts: &Array<Alternative>
         ctx.group_counter = gc_entry;
         let mut nc: Array<[String, i32]> = [];
         let gc_alt = ctx.group_counter;
-        gen_elements_with_non_greedy(w, &alt.elements, ctx, &mut nc);
+        gen_elements_with_non_greedy(w, &alt.elements, ctx, &mut nc, &([] as Array<String>));
         w.line(`{inner_var} = Option::<{type_name}>::Some({type_name}::Alt{alt_idx}({struct_name} \{`);
         w.indent();
         ctx.group_counter = gc_alt;
@@ -5092,7 +5166,7 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
                     gen_element(w, elem, ctx, &mut name_counts);
                 }
             } else if let Repeat(rep) = elem {
-                gen_repeat(w, rep, ctx, &mut name_counts);
+                gen_repeat(w, rep, ctx, &mut name_counts, &([] as Array<String>));
             } else {
                 gen_element(w, elem, ctx, &mut name_counts);
             }

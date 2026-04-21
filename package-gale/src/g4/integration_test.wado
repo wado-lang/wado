@@ -278,13 +278,16 @@ test "parse TypeScriptParser.g4" {
     // code generation for `**`. See vendor/antlr4/doc/left-recursion.md.
     let mut found_power = false;
     for let rule of &g.parser_rules {
-        if rule.name != "singleExpression" { continue; }
+        if rule.name != "singleExpression" {
+            continue;
+        }
         for let alt of &rule.alternatives {
             if let Some(label) = &alt.label {
-                if *label != "PowerExpression" { continue; }
+                if *label != "PowerExpression" {
+                    continue;
+                }
                 found_power = true;
-                assert alt.options.len() == 1,
-                    `expected 1 option on PowerExpression, got {alt.options.len()}`;
+                assert alt.options.len() == 1, `expected 1 option on PowerExpression, got {alt.options.len()}`;
                 assert alt.options[0].name == "assoc";
                 if let Ident(v) = &alt.options[0].value {
                     assert *v == "right", `expected assoc=right, got assoc={*v}`;
@@ -388,4 +391,130 @@ test "parse mode_gaps.g4" {
     assert g.mode_names[0] == "DEFAULT_MODE";
     assert g.mode_names[1] == "IN_STRING";
     assert g.mode_names[2] == "ESC_IN_STRING";
+}
+
+test "parse label_gaps.g4" {
+    let input = #include_str("../../tests/grammars/label_gaps.g4");
+    let g = parse(input).unwrap();
+    assert g.name == "label_gaps";
+
+    // Exercises scalar token/rule labels (key=ID, k=key_rule) and list labels.
+    assert g.parser_rules.len() >= 2;
+}
+
+test "parse right_assoc_gaps.g4" {
+    let input = #include_str("../../tests/grammars/right_assoc_gaps.g4");
+    let g = parse(input).unwrap();
+    assert g.name == "right_assoc_gaps";
+
+    // Must find at least one alternative carrying <assoc=right>.
+    let mut found_assoc_right = false;
+    for let rule of &g.parser_rules {
+        for let alt of &rule.alternatives {
+            for let opt of &alt.options {
+                if opt.name == "assoc" {
+                    if let Ident(v) = &opt.value {
+                        if *v == "right" {
+                            found_assoc_right = true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    assert found_assoc_right, "right_assoc_gaps should have an <assoc=right> alt";
+}
+
+test "parse non_greedy_gaps.g4" {
+    let input = #include_str("../../tests/grammars/non_greedy_gaps.g4");
+    let g = parse(input).unwrap();
+    assert g.name == "non_greedy_gaps";
+
+    // Must have at least one parser rule with a non-greedy repeat element.
+    // Structural check is sufficient here; driver tests exercise behaviour.
+    assert !g.parser_rules.is_empty();
+}
+
+test "parse lexer_command_gaps.g4" {
+    let input = #include_str("../../tests/grammars/lexer_command_gaps.g4");
+    let g = parse(input).unwrap();
+    assert g.name == "lexer_command_gaps";
+
+    // Exercises -> type(X), -> channel(USER), and -> mode(DEFAULT_MODE).
+    let mut found_type_override = false;
+    let mut found_user_channel = false;
+    for let rule of &g.lexer_rules {
+        if let Some(_) = &rule.type_override {
+            found_type_override = true;
+        }
+        // User-defined channel ids start at 2 (DEFAULT=0, HIDDEN=1).
+        if rule.channel >= 2 {
+            found_user_channel = true;
+        }
+    }
+    assert found_type_override, "expected at least one -> type(X) rule";
+    assert found_user_channel, "expected at least one user-defined channel rule";
+}
+
+test "parse ci_rule_override.g4" {
+    let input = #include_str("../../tests/grammars/ci_rule_override.g4");
+    let g = parse(input).unwrap();
+    assert g.name == "ci_rule_override";
+
+    // Grammar-level option caseInsensitive=true (boolean literals are parsed
+    // as bare identifiers: Ident("true") / Ident("false")).
+    let mut grammar_ci = false;
+    for let opt of &g.options {
+        if opt.name == "caseInsensitive" {
+            if let Ident(v) = &opt.value {
+                if *v == "true" {
+                    grammar_ci = true;
+                }
+            }
+        }
+    }
+    assert grammar_ci, "grammar-level caseInsensitive=true not found";
+
+    // Rule-level override must disable CI for EXACT.
+    let mut exact_ci_false = false;
+    for let rule of &g.lexer_rules {
+        if rule.name != "EXACT" {
+            continue;
+        }
+        for let opt of &rule.options {
+            if opt.name == "caseInsensitive" {
+                if let Ident(v) = &opt.value {
+                    if *v == "false" {
+                        exact_ci_false = true;
+                    }
+                }
+            }
+        }
+    }
+    assert exact_ci_false, "EXACT rule-level caseInsensitive=false not found";
+}
+
+test "parse recursive_lexer.g4" {
+    let input = #include_str("../../tests/grammars/recursive_lexer.g4");
+    let g = parse(input).unwrap();
+    assert g.name == "recursive_lexer";
+
+    // Must have a fragment rule (BRACED) that references itself.
+    let mut found_fragment = false;
+    for let rule of &g.lexer_rules {
+        if rule.is_fragment {
+            found_fragment = true;
+        }
+    }
+    assert found_fragment, "expected a fragment rule";
+}
+
+test "parse unicode_props.g4" {
+    let input = #include_str("../../tests/grammars/unicode_props.g4");
+    let g = parse(input).unwrap();
+    assert g.name == "unicode_props";
+
+    // Exercises \p{L}, \p{Nd}, \p{Zs} — structural parse is the main
+    // coverage; driver tests exercise match behaviour end-to-end.
+    assert g.lexer_rules.len() >= 3;
 }

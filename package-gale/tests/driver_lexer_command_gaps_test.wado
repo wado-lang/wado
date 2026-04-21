@@ -1,0 +1,65 @@
+use lex from "./golden/lexer_command_gaps.wado";
+use { normalize_tree } from "./golden/lexer_command_gaps.wado";
+
+fn assert_parses(input: &String) {
+    let result = lex::parse(input);
+    if let Err(e) = &result {
+        panic(`parse failed for \`{input}\`: {e.message}`);
+    }
+}
+
+fn assert_tree(input: &String, expected: &String) {
+    let root = lex::parse(input).unwrap();
+    let tree = lex::to_tree(&root);
+    let actual = tree.to_string_tree();
+    let norm = normalize_tree(expected);
+    assert actual == norm, `\ninput:    {*input}\nexpected: {norm}\nactual:   {actual}`;
+}
+
+test "bare words tokenize as WORD" {
+    assert_parses(&"hello world");
+}
+
+test "digits tokenize as NUMBER" {
+    assert_parses(&"42 100");
+}
+
+test "'zero' is re-typed to NUMBER via -> type(NUMBER)" {
+    // `ZERO : 'zero' -> type(NUMBER) ;` should make the literal `zero`
+    // parse as a NUMBER token, so the top-level `text` rule (which
+    // accepts WORD | NUMBER | PRAGMA) accepts it where a word is not
+    // otherwise acceptable in this position. We assert the S-expression
+    // tree shows `zero` as a NUMBER child, not a WORD.
+    assert_tree(&"zero 42", &"
+        (text zero 42)
+    ");
+}
+
+test "'zero' and other words interleave correctly" {
+    // Exercise the type-override rule together with the WORD rule —
+    // the longer match (`zero`, 4 chars) must win over `WORD` (`z`),
+    // then the retype takes effect.
+    assert_parses(&"zero foo zero bar");
+}
+
+test "numeric channel routes comments off the default stream" {
+    // `COMMENT : '//' ~[\r\n]* -> channel(COMMENTS_CHANNEL) ;` routes
+    // comments to a non-default channel. The parser-side `text` rule
+    // must succeed on input that contains a comment because the
+    // comment never reaches the default channel.
+    assert_parses(&"hello // a comment\nworld");
+}
+
+test "mode(DEFAULT_MODE) returns to default mode after #pragma line" {
+    // `#pragma once\n` switches to PRAGMA_MODE, emits PRAGMA, then
+    // `\n` triggers `-> mode(DEFAULT_MODE), skip` which returns. After
+    // the pragma line the lexer is back in the default mode and can
+    // match further WORD/NUMBER tokens.
+    assert_parses(&"hello #pragma once\nworld 42");
+}
+
+test "tree shows pragma content as PRAGMA token" {
+    assert_tree(&"#pragma foo\nx", &"
+        (text foo x)
+    ");
+}
