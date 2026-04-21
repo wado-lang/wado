@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776766492191,
+  "lastUpdate": 1776781492351,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -15149,6 +15149,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c57f02296540892ea36d13a9964773b7070b360e"
         },
         "date": 1776766491886,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8982,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18988,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 635264,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c275978be7e20d5e1e966315d3795ccc51c26e87",
+          "message": "Merge pull request #896 from wado-lang/claude/review-todo-tasks-Wa6dO\n\ngale: close ANTLR4 compatibility gaps (TODO sections A and B)",
+          "timestamp": "2026-04-21T23:20:43+09:00",
+          "tree_id": "4f61c19b8513b4a40e06774a72759b09c3e50a56",
+          "url": "https://github.com/wado-lang/wado/commit/c275978be7e20d5e1e966315d3795ccc51c26e87"
+        },
+        "date": 1776781492053,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
