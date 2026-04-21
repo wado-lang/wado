@@ -1,3 +1,4 @@
+#![TODO]
 // TODO: generic effect parameter `<effect E>` does not propagate to
 // concrete resources inside the function body.
 //
@@ -10,8 +11,8 @@
 // lookup fails.
 //
 // When body-effect inference lands (deferred WEP), this fixture
-// should compile and emit "inside\n" / "ok". Remove the
-// `compile_error` line at that point.
+// will start passing and the runner will flag that `#![TODO]` must
+// be removed.
 
 use { println, Stdout } from "core:cli";
 
@@ -28,4 +29,4 @@ export fn run() with Stdout {
 }
 
 __DATA__
-{"compile_error": "missing resource 'Stream'"}
+{"stdout_contains": ["inside", "ok"]}
