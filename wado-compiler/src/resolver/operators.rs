@@ -568,9 +568,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
         }
 
-        // If the left operand is a non-primitive type (Struct, GenericInstance, or a
-        // Newtype whose ultimate base is non-primitive), we should have dispatched via
-        // a trait above.  Reaching here means the required trait is not implemented.
+        // If the left operand is a non-primitive type that cannot fall through
+        // to a native Wasm binary instruction, it must dispatch through a
+        // trait implementation.  Reaching here with such a type means no
+        // matching trait impl was found — emit a diagnostic before we can
+        // accidentally build a TIR `Binary` node that would crash codegen
+        // with "type mismatch: expected ... found (ref $type)" on Wasm
+        // validation (see regression fixture `typecheck_binop_fn_eq.wado`).
         {
             let requires_trait = match &left_type {
                 ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. } => true,
@@ -582,6 +586,15 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. }
                     )
                 }
+                // Types with no native Wasm binary-op support and no trait
+                // implementation in the prelude.  Without this rejection,
+                // codegen emits `ref.eq` / `i32.eq` against a GC reference
+                // and fails validation.
+                ResolvedType::Function { .. }
+                | ResolvedType::Resource { .. }
+                | ResolvedType::GenericResource { .. }
+                | ResolvedType::Reactive(_)
+                | ResolvedType::AssocTypeProjection { .. } => true,
                 _ => false,
             };
             if requires_trait
@@ -1188,32 +1201,30 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
 
         // For each argument, decide whether the trait parameter is by
-        // reference, and validate against the correct expected value type.
+        // reference, compute the logical expected value type for the arg,
+        // and delegate to `Resolver::typecheck` — the same helper that
+        // `resolve_method_call` uses at its own argument-typecheck tail.
+        //
+        // Using the shared primitive means operator dispatch and direct
+        // method calls apply identical `check_assignable` rules
+        // (Unknown/Error deferral, newtype propagation, reference
+        // unwrapping) and any divergence there is impossible by
+        // construction.  We no longer early-return on mismatch; errors
+        // are accumulated via the logger and compilation fails at the
+        // end, matching method-call behavior.
         let mut wrap_flags: Vec<bool> = Vec::with_capacity(args.len());
         for (arg, &param_ty) in args.iter().zip(resolved.param_types.iter()) {
             let wrap = matches!(
                 self.type_table.borrow().get(param_ty),
                 ResolvedType::Ref(_) | ResolvedType::MutRef(_)
             );
+            // For `&Self` parameters the "value-level" expected type is
+            // the receiver's type (preserving newtype identity when an
+            // impl on the base is dispatched through a newtype receiver).
+            // For concrete parameter types (e.g. `rhs: u32` on
+            // `Shl::shl`) the expected type is the parameter type itself.
             let expected = if wrap { receiver.type_id } else { param_ty };
-            if arg.type_id != expected
-                && arg.type_id != TypeTable::ERROR
-                && expected != TypeTable::ERROR
-                && arg.type_id != TypeTable::NEVER
-            {
-                let type_table = self.type_table.borrow();
-                let expected_name = type_table.type_name(expected);
-                let found_name = type_table.type_name(arg.type_id);
-                if expected_name != found_name {
-                    drop(type_table);
-                    let _ = self.logger.error(TypeError::TypeMismatch {
-                        expected: expected_name,
-                        found: found_name,
-                        span,
-                    });
-                    return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, span);
-                }
-            }
+            self.typecheck(arg.type_id, expected, span);
             wrap_flags.push(wrap);
         }
 

@@ -1113,13 +1113,37 @@ impl<H: CompilerHost> Resolver<'_, H> {
     /// a [`TraitMethodMatch`] whose [`MethodInfo`] has the receiver type
     /// fully substituted into `Self` positions. This is the single pathway
     /// that makes auto-derived methods discoverable via method-call
-    /// resolution, mirroring what operator dispatch already got from
-    /// [`Self::find_eq_trait_impl`] and [`Self::find_ord_trait_impl`].
+    /// resolution, mirroring what operator dispatch already got from the
+    /// arithmetic-trait lookup's own auto-derive branch.
     ///
     /// Only method bodies actually produced by the trait-synthesis phase
     /// (`synthesis::traits`) are returned here; primitives are excluded
     /// because their equality/comparison lowers to Wasm instructions, not
     /// to a method body.
+    ///
+    /// FIXME: this function has two places where it hard-codes knowledge
+    /// that should live on the trait declarations themselves:
+    ///
+    ///   1. `method_name -> trait_name` is a closed `match` against `"eq"`
+    ///      and `"cmp"`.  Adding auto-derive method-call support for
+    ///      `Inspect::inspect` / `Display::fmt` / any new auto-derived
+    ///      trait requires extending this arm. The right design is a
+    ///      reverse-index built from `trait_env.decl_index` that answers
+    ///      "which traits declare a method named `X`?" and then filters
+    ///      by those that have an auto-derive rule.
+    ///
+    ///   2. The synthesized [`MethodInfo`] is built with a fixed shape
+    ///      (`self_kind: Ref`, single `&Self` parameter named `"other"`,
+    ///      no defaults, no method type params).  If the prelude ever
+    ///      evolves the `Eq` or `Ord` trait declaration (e.g. renames
+    ///      the parameter, adds a default arg, takes `&mut self`), this
+    ///      shape drifts silently.  The right design is to look the
+    ///      real `ast::Function` up via `find_trait_decl_methods` and
+    ///      substitute `Self` through the same path as user-written
+    ///      impls (via `trait_ctx.self_type`).
+    ///
+    /// Tracked as a post-PR cleanup; the shape is stable enough for the
+    /// current two traits that it does not cause observable bugs today.
     pub(super) fn try_auto_derived_method_match(
         &mut self,
         struct_name: &str,

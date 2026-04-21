@@ -2534,64 +2534,75 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 }
             }
 
-            // Build type parameter mapping from impl_ty to concrete types
+            // Build type parameter mapping from impl_ty to concrete types.
+            // `Self` is NOT inserted into this mapping — it is substituted
+            // through `trait_ctx.self_type` (set just below) via the
+            // fallback path in `resolve_type_with_param_mapping`.  This
+            // keeps Self substitution on a single mechanism shared with
+            // `find_trait_method_for_type`.
             let impl_block = self.get_impl_block(impl_ref);
-            let mut type_param_mapping = Self::build_type_param_mapping(
+            let type_param_mapping = Self::build_type_param_mapping(
                 &impl_block.ty,
                 &concrete_type_args,
                 &IndexSet::default(),
             );
-            // Map `Self` to the concrete base type so `&Self` parameters resolve correctly
-            type_param_mapping.insert("Self".to_string(), base_type_id);
 
-            // Find the method
+            // Gather everything we need from the impl block up front, then
+            // drop the borrow on `self` before touching `trait_ctx.self_type`
+            // (which requires a mutable borrow).
             let impl_block = self.get_impl_block(impl_ref);
-            if let Some(method) = impl_block.methods.iter().find(|m| m.name == method_name) {
-                // Set up associated type bindings
-                let mut assoc_type_map: IndexMap<String, TypeId> = IndexMap::default();
+            let Some(method) = impl_block.methods.iter().find(|m| m.name == method_name) else {
+                continue;
+            };
+            let assoc_types: Vec<(String, ast::Type)> = impl_block
+                .associated_types
+                .iter()
+                .map(|a| (a.name.clone(), a.ty.clone()))
+                .collect();
+            let self_kind = method
+                .params
+                .first()
+                .map(|p| p.self_kind)
+                .unwrap_or(ast::SelfKind::None);
+            let rhs_param_ty = method
+                .params
+                .iter()
+                .find(|p| p.self_kind == ast::SelfKind::None)
+                .map(|p| p.ty.clone());
 
-                // Process associated types (e.g., `type Output = Self`)
-                // Clone just the associated type info we need (small, not methods)
-                let assoc_types: Vec<(String, ast::Type)> = impl_block
-                    .associated_types
-                    .iter()
-                    .map(|a| (a.name.clone(), a.ty.clone()))
-                    .collect();
-                let self_kind = method
-                    .params
-                    .first()
-                    .map(|p| p.self_kind)
-                    .unwrap_or(ast::SelfKind::None);
-                let rhs_param_ty = method
-                    .params
-                    .iter()
-                    .find(|p| p.self_kind == ast::SelfKind::None)
-                    .map(|p| p.ty.clone());
+            // Bind `Self` for the duration of signature resolution. The
+            // single-source-of-truth for `Self` substitution is
+            // `trait_ctx.self_type` (consulted by both `resolve_type` and
+            // the `resolve_type_with_param_mapping` fallback above).
+            let saved_self_type = self.trait_ctx.self_type;
+            self.trait_ctx.self_type = Some(base_type_id);
 
-                for (name, ty) in &assoc_types {
-                    let resolved_type =
-                        self.resolve_type_with_param_mapping(ty, &type_param_mapping);
-                    assoc_type_map.insert(name.clone(), resolved_type);
-                }
-
-                // Get the output type from associated types
-                let output_type = assoc_type_map
-                    .get("Output")
-                    .copied()
-                    .unwrap_or(base_type_id);
-
-                // Resolve the rhs parameter type (first non-self parameter)
-                let rhs_type = rhs_param_ty
-                    .as_ref()
-                    .map(|ty| self.resolve_type_with_param_mapping(ty, &type_param_mapping));
-
-                return Some(ArithmeticTraitInfo {
-                    output_type,
-                    self_kind,
-                    trait_name: trait_name.to_string(),
-                    rhs_type,
-                });
+            // Process associated types (e.g., `type Output = Self`)
+            let mut assoc_type_map: IndexMap<String, TypeId> = IndexMap::default();
+            for (name, ty) in &assoc_types {
+                let resolved_type = self.resolve_type_with_param_mapping(ty, &type_param_mapping);
+                assoc_type_map.insert(name.clone(), resolved_type);
             }
+
+            // Get the output type from associated types
+            let output_type = assoc_type_map
+                .get("Output")
+                .copied()
+                .unwrap_or(base_type_id);
+
+            // Resolve the rhs parameter type (first non-self parameter)
+            let rhs_type = rhs_param_ty
+                .as_ref()
+                .map(|ty| self.resolve_type_with_param_mapping(ty, &type_param_mapping));
+
+            self.trait_ctx.self_type = saved_self_type;
+
+            return Some(ArithmeticTraitInfo {
+                output_type,
+                self_kind,
+                trait_name: trait_name.to_string(),
+                rhs_type,
+            });
         }
 
         None
@@ -2864,6 +2875,20 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 // Check if this is a type parameter that should be substituted
                 if let Some(&type_id) = type_param_mapping.get(&n.name) {
                     return type_id;
+                }
+                // `Self` is the single cross-site substitution key: both this
+                // mapping-based resolver and `resolve_type` (via
+                // `resolve_named_type`) read it from `trait_ctx.self_type`.
+                // Previously `find_arithmetic_trait_impl` eagerly inserted
+                // "Self" into the mapping and `find_trait_method_for_type`
+                // went through `trait_ctx.self_type`, which meant the two
+                // lookup families had parallel Self-substitution mechanisms
+                // that could drift.  Channeling Self through `trait_ctx`
+                // here closes that gap.
+                if n.name == "Self"
+                    && let Some(self_type) = self.trait_ctx.self_type
+                {
+                    return self_type;
                 }
                 // Otherwise, resolve normally
                 self.resolve_type(ty)
@@ -3219,12 +3244,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         span: crate::token::Span,
     ) -> TirExpr {
         TirExpr::new(
-            TirExprKind::MethodCall {
-                receiver: Box::new(receiver),
-                func,
-                type_args,
-                args,
-            },
+            TirExprKind::method_call(Box::new(receiver), func, type_args, args),
             return_type,
             span,
         )

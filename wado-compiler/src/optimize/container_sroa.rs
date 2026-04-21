@@ -1456,12 +1456,12 @@ fn build_element_writer_call(
         /*mut_ref=*/ true,
         span,
     );
-    let kind = TirExprKind::MethodCall {
-        receiver: Box::new(receiver),
+    let kind = TirExprKind::method_call(
+        Box::new(receiver),
         func,
-        type_args: Vec::new(),
-        args: vec![CallArg::new(value, false)],
-    };
+        Vec::new(),
+        vec![CallArg::new(value, false)],
+    );
     TirExpr::new(kind, TypeTable::UNIT, span)
 }
 
@@ -1490,12 +1490,12 @@ fn build_index_writer_call(
         /*mut_ref=*/ true,
         span,
     );
-    let kind = TirExprKind::MethodCall {
-        receiver: Box::new(receiver),
+    let kind = TirExprKind::method_call(
+        Box::new(receiver),
         func,
-        type_args: Vec::new(),
-        args: vec![CallArg::new(index, false), CallArg::new(value, false)],
-    };
+        Vec::new(),
+        vec![CallArg::new(index, false), CallArg::new(value, false)],
+    );
     TirExpr::new(kind, TypeTable::UNIT, span)
 }
 
@@ -1524,12 +1524,12 @@ fn build_index_reader_call(
         /*mut_ref=*/ false,
         span,
     );
-    let kind = TirExprKind::MethodCall {
-        receiver: Box::new(receiver),
+    let kind = TirExprKind::method_call(
+        Box::new(receiver),
         func,
-        type_args: Vec::new(),
-        args: vec![CallArg::new(index, false)],
-    };
+        Vec::new(),
+        vec![CallArg::new(index, false)],
+    );
     TirExpr::new(kind, elem_ty, span)
 }
 
@@ -1721,12 +1721,8 @@ fn rewrite_expr_inplace(expr: &mut TirExpr, ctx: &RewriteCtx) {
             /*mut_ref=*/ false,
             expr.span,
         );
-        let kind = TirExprKind::MethodCall {
-            receiver: Box::new(new_receiver),
-            func: new_func,
-            type_args: Vec::new(),
-            args: Vec::new(),
-        };
+        let kind =
+            TirExprKind::method_call(Box::new(new_receiver), new_func, Vec::new(), Vec::new());
         expr.kind = kind;
         return;
     }

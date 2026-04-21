@@ -1,0 +1,15 @@
+// `==` on function types has no Wasm native op and no trait impl.  The
+// resolver used to fall through to `TirExprKind::Binary { op: Eq, … }`,
+// producing invalid Wasm that triggered an ICE during codegen
+// validation.  It must be rejected at resolve time instead.
+
+fn takes_fn(f: fn() -> i32, g: fn() -> i32) -> bool {
+    return f == g;
+}
+
+export fn run() {
+    let _ = takes_fn(|| 1, || 2);
+}
+
+__DATA__
+{"compile_error": "cannot be applied"}

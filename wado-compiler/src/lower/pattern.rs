@@ -1315,9 +1315,9 @@ impl<'a> PatternLowerer<'a> {
         // so we pass the values directly and let translate handle self-kind adjustment.
         // However, the arg explicitly needs &String since that's the method signature.
         TirExpr::new(
-            TirExprKind::MethodCall {
-                receiver: Box::new(receiver),
-                func: FunctionRef {
+            TirExprKind::method_call(
+                Box::new(receiver),
+                FunctionRef {
                     module_source: ModuleSource::string(),
                     name: "String^Eq::eq".to_string(),
                     monomorph_info: None,
@@ -1327,8 +1327,8 @@ impl<'a> PatternLowerer<'a> {
                         "eq".to_string(),
                     )),
                 },
-                type_args: vec![],
-                args: vec![CallArg::new(
+                vec![],
+                vec![CallArg::new(
                     TirExpr::new(
                         TirExprKind::Unary {
                             op: TirUnaryOp::Ref,
@@ -1339,7 +1339,7 @@ impl<'a> PatternLowerer<'a> {
                     ),
                     false,
                 )],
-            },
+            ),
             TypeTable::BOOL,
             span,
         )

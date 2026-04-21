@@ -2814,20 +2814,20 @@ fn synthesize_adapter(
                     elem_local,
                     elem_type_id,
                     TirExpr::new(
-                        TirExprKind::MethodCall {
-                            receiver: Box::new(local_ref(param_local, param_name, array_type_id)),
-                            func: FunctionRef {
+                        TirExprKind::method_call(
+                            Box::new(local_ref(param_local, param_name, array_type_id)),
+                            FunctionRef {
                                 module_source: ModuleSource::array(),
                                 name: iv_mangled,
                                 monomorph_info: None,
                                 method_info: Some(iv_info),
                             },
-                            type_args: vec![],
-                            args: vec![CallArg::new(
+                            vec![],
+                            vec![CallArg::new(
                                 local_ref(i_local, &format!("__{param_name}_i"), TypeTable::I32),
                                 false,
                             )],
-                        },
+                        ),
                         elem_type_id,
                         synth_span(),
                     ),
@@ -6362,9 +6362,9 @@ fn synthesize_stream_read_func(
     loop_body_stmts.push(let_stmt("elem", elem_idx, elem_type_id, lifted_elem));
 
     let push_call = TirExpr::new(
-        TirExprKind::MethodCall {
-            receiver: Box::new(local_ref(arr_idx, "arr", array_type_id)),
-            func: FunctionRef {
+        TirExprKind::method_call(
+            Box::new(local_ref(arr_idx, "arr", array_type_id)),
+            FunctionRef {
                 module_source: ModuleSource::array(),
                 name: format!("Array<{elem_name}>::push"),
                 monomorph_info: Some(MonomorphInfo {
@@ -6384,12 +6384,12 @@ fn synthesize_stream_read_func(
                     cm_name: None,
                 }),
             },
-            type_args: vec![],
-            args: vec![CallArg::new(
+            vec![],
+            vec![CallArg::new(
                 local_ref(elem_idx, "elem", elem_type_id),
                 false,
             )],
-        },
+        ),
         TypeTable::UNIT,
         synth_span(),
     );

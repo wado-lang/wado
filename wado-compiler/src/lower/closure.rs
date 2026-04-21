@@ -1662,6 +1662,7 @@ impl ClosureLowerer {
                 func,
                 type_args,
                 args,
+                ..
             } => {
                 let new_receiver = self.transform_closure_body(
                     receiver,
@@ -1686,12 +1687,12 @@ impl ClosureLowerer {
                     })
                     .collect();
                 TirExpr::new(
-                    TirExprKind::MethodCall {
-                        receiver: Box::new(new_receiver),
-                        func: func.clone(),
-                        type_args: type_args.clone(),
-                        args: new_args,
-                    },
+                    TirExprKind::method_call(
+                        Box::new(new_receiver),
+                        func.clone(),
+                        type_args.clone(),
+                        new_args,
+                    ),
                     expr.type_id,
                     expr.span,
                 )
@@ -3145,17 +3146,17 @@ impl ClosureLowerer {
                             .map(|(expr, is_mut)| CallArg::new(expr, is_mut))
                             .collect();
                         return TirExpr::new(
-                            TirExprKind::MethodCall {
-                                receiver: Box::new(new_callee),
-                                func: FunctionRef {
+                            TirExprKind::method_call(
+                                Box::new(new_callee),
+                                FunctionRef {
                                     module_source: self.module_source.clone(),
                                     name: call_method_name,
                                     monomorph_info: None,
                                     method_info: Some(call_method_info),
                                 },
-                                args: call_args,
-                                type_args: Vec::new(),
-                            },
+                                Vec::new(),
+                                call_args,
+                            ),
                             expr.type_id,
                             expr.span,
                         );
@@ -3245,16 +3246,13 @@ impl ClosureLowerer {
                 func,
                 args,
                 type_args,
+                ..
             } => TirExpr::new(
-                TirExprKind::MethodCall {
-                    receiver: Box::new(self.specialize_expr(
-                        receiver,
-                        param_to_functor,
-                        type_table,
-                    )),
-                    func: func.clone(),
-                    args: args
-                        .iter()
+                TirExprKind::method_call(
+                    Box::new(self.specialize_expr(receiver, param_to_functor, type_table)),
+                    func.clone(),
+                    type_args.clone(),
+                    args.iter()
                         .map(|a| {
                             let original_type_id = a.expr.type_id;
                             let specialized =
@@ -3270,8 +3268,7 @@ impl ClosureLowerer {
                             )
                         })
                         .collect(),
-                    type_args: type_args.clone(),
-                },
+                ),
                 expr.type_id,
                 expr.span,
             ),
@@ -3821,15 +3818,15 @@ impl ClosureLowerer {
                         .zip(params_is_mut.into_iter().chain(std::iter::repeat(false)))
                         .map(|(expr, is_mut)| CallArg::new(expr, is_mut))
                         .collect();
-                    expr.kind = TirExprKind::MethodCall {
-                        receiver: Box::new(callee_owned),
-                        func: FunctionRef::from_resolved(
+                    expr.kind = TirExprKind::method_call(
+                        Box::new(callee_owned),
+                        FunctionRef::from_resolved(
                             &functor.call_method.borrow(),
                             self.module_source.clone(),
                         ),
-                        type_args: Vec::new(),
-                        args: call_args,
-                    };
+                        Vec::new(),
+                        call_args,
+                    );
                     expr.type_id = return_type;
                 }
             }

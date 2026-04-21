@@ -198,6 +198,31 @@ export fn run() {
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
+// Missing trait reports a clean diagnostic
+// ---------------------------------------------------------------------------
+
+#[test]
+fn operator_on_fn_type_gives_targeted_error() {
+    // Function types have no native Wasm binary-op support and no trait
+    // impl; resolve_trait_method_for_op must return None and
+    // resolve_binary's "requires_trait" fallthrough must reject before
+    // reaching the primitive `TirExprKind::Binary` construction.  Before
+    // the fix in stage 7a this ICEd at codegen validation.
+    compile_err_contains(
+        r#"
+fn takes_fn(f: fn() -> i32, g: fn() -> i32) -> bool {
+    return f == g;
+}
+
+export fn run() {
+    let _ = takes_fn(|| 1, || 2);
+}
+"#,
+        "cannot be applied",
+    );
+}
+
+// ---------------------------------------------------------------------------
 // Unary trait operators (Neg, BitNot) go through the same subsystem
 // ---------------------------------------------------------------------------
 

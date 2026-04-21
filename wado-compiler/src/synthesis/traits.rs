@@ -2591,9 +2591,9 @@ fn formatter_call(
         None => vec![],
     };
     let call = TirExpr::new(
-        TirExprKind::MethodCall {
-            receiver: Box::new(fmt),
-            func: FunctionRef {
+        TirExprKind::method_call(
+            Box::new(fmt),
+            FunctionRef {
                 module_source: ModuleSource::format(),
                 name: format!("Formatter::{method_name}"),
                 monomorph_info: None,
@@ -2603,9 +2603,9 @@ fn formatter_call(
                     method_name.to_string(),
                 )),
             },
-            type_args: vec![],
+            vec![],
             args,
-        },
+        ),
         TypeTable::UNIT,
         span,
     );
@@ -3892,17 +3892,17 @@ fn trait_call_on_type(
 
     let fn_name = info.to_mangled_name();
     TirExpr::new(
-        TirExprKind::MethodCall {
-            receiver: Box::new(receiver),
-            func: FunctionRef {
+        TirExprKind::method_call(
+            Box::new(receiver),
+            FunctionRef {
                 module_source: impl_module,
                 name: fn_name,
                 monomorph_info,
                 method_info: Some(info),
             },
-            type_args: vec![],
-            args: args.into_iter().map(|e| CallArg::new(e, false)).collect(),
-        },
+            vec![],
+            args.into_iter().map(|e| CallArg::new(e, false)).collect(),
+        ),
         return_type,
         span,
     )
