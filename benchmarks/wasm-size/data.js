@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776736679551,
+  "lastUpdate": 1776766492191,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -15105,6 +15105,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/3337c0981548575b4f13f53a4673f330b9af0307"
         },
         "date": 1776736679314,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8982,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18988,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 635264,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c57f02296540892ea36d13a9964773b7070b360e",
+          "message": "Merge pull request #895 from wado-lang/claude/enable-treemap-serde-test-fL7BF\n\nUnify trait-method dispatch: one substitution path, one MethodCall constructor",
+          "timestamp": "2026-04-21T19:10:43+09:00",
+          "tree_id": "cdd1a80b1e51f57d1a8b06631f21f33a5896efb2",
+          "url": "https://github.com/wado-lang/wado/commit/c57f02296540892ea36d13a9964773b7070b360e"
+        },
+        "date": 1776766491886,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
