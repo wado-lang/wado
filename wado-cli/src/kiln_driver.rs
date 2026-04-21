@@ -657,6 +657,276 @@ fn validate_rel_output_path(p: &str) -> Result<PathBuf, ExecuteError> {
     Ok(candidate.to_path_buf())
 }
 
+/// Resolves a generator's component bytes for execution.
+///
+/// The runner is deliberately decoupled from how a given module becomes a
+/// component `.wasm`. Two concrete providers land in later commits:
+///
+/// - A production `TargetDirProvider` that compiles and caches generator
+///   components under `target/kiln/generators/…` (ships with the M3d /
+///   M6 fixtures, when there is a real generator to compile).
+/// - A test provider that returns pre-built bytes.
+pub trait GeneratorProvider {
+    /// Resolve `module` to component bytes. Called at most once per unique
+    /// module in a pipeline run.
+    fn get_component(
+        &self,
+        module: &GeneratorModule,
+    ) -> impl std::future::Future<Output = Result<Vec<u8>, ProviderError>> + Send;
+}
+
+/// Error returned by a [`GeneratorProvider`].
+#[derive(Debug)]
+pub enum ProviderError {
+    /// The provider cannot resolve the module (e.g. build-dependency
+    /// resolution not yet wired). The message should guide the user.
+    Unsupported { message: String },
+    /// The provider failed while compiling or reading the generator.
+    Internal { message: String },
+}
+
+impl std::fmt::Display for ProviderError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ProviderError::Unsupported { message } => write!(f, "{message}"),
+            ProviderError::Internal { message } => write!(f, "{message}"),
+        }
+    }
+}
+
+impl std::error::Error for ProviderError {}
+
+/// Summary of a [`run_pipeline`] invocation.
+#[derive(Debug, Default, Clone)]
+pub struct PipelineOutcome {
+    /// Invocation ids whose cache entry was still valid; no generator run
+    /// was performed.
+    pub cached: Vec<String>,
+    /// Invocation ids whose generator was invoked this run.
+    pub executed: Vec<String>,
+    /// Project-root-relative paths of stale `#![generated]` files deleted
+    /// across all invocation output directories.
+    pub deleted: Vec<String>,
+}
+
+/// Failure modes from [`run_pipeline`].
+#[derive(Debug)]
+pub enum PipelineError {
+    /// Planning (dedup, cycle, unsupported module form) failed.
+    Driver(DriverError),
+    /// A generator invocation failed to execute.
+    Execute {
+        invocation: String,
+        source: ExecuteError,
+    },
+    /// The provider failed to resolve a generator module.
+    Provider {
+        invocation: String,
+        source: ProviderError,
+    },
+    /// Reading or writing `wado.lock` or an output directory failed.
+    Io {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+    /// Parsing an existing `wado.lock` failed.
+    LockParse {
+        source: wado_manifest::LockFileError,
+    },
+}
+
+impl std::fmt::Display for PipelineError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PipelineError::Driver(e) => write!(f, "{e}"),
+            PipelineError::Execute { invocation, source } => {
+                write!(f, "kiln[{invocation}]: {source}")
+            }
+            PipelineError::Provider { invocation, source } => {
+                write!(f, "kiln[{invocation}]: {source}")
+            }
+            PipelineError::Io { path, source } => {
+                write!(f, "kiln: I/O error at {}: {source}", path.display())
+            }
+            PipelineError::LockParse { source } => write!(f, "kiln: invalid wado.lock: {source}"),
+        }
+    }
+}
+
+impl std::error::Error for PipelineError {}
+
+impl From<DriverError> for PipelineError {
+    fn from(e: DriverError) -> Self {
+        PipelineError::Driver(e)
+    }
+}
+
+/// Run the full Kiln pipeline for a manifest: plan → per-invocation cache
+/// check → execute on miss → reconcile stale outputs → persist lockfile.
+///
+/// `provider` resolves generator module bytes on demand. `host` is the
+/// compiler host used to load input files and (inside `execute`) to invoke
+/// the runner.
+///
+/// On success, the manifest's `wado.lock` is updated in place: only the
+/// `[[generator-cache]]` section is affected; all other sections are
+/// preserved verbatim.
+///
+/// Returns an empty outcome if the manifest has no `[build.generators]`.
+///
+/// # Errors
+/// See [`PipelineError`].
+pub async fn run_pipeline<H, P>(
+    manifest: &Manifest,
+    manifest_root: &Path,
+    host: &H,
+    provider: &P,
+) -> Result<PipelineOutcome, PipelineError>
+where
+    H: CompilerHost,
+    P: GeneratorProvider,
+{
+    let planned = plan(manifest, manifest_root)?;
+    if planned.plan.order.is_empty() {
+        return Ok(PipelineOutcome::default());
+    }
+
+    let mut lock = load_lockfile(manifest_root)?;
+    let mut new_cache: Vec<GeneratorCacheEntry> = Vec::with_capacity(planned.plan.order.len());
+    let mut outcome = PipelineOutcome::default();
+    let mut kept_by_dir: indexmap::IndexMap<String, Vec<String>> = indexmap::IndexMap::new();
+
+    for invocation in &planned.plan.order {
+        let invocation_name = invocation_id(invocation);
+
+        let existing = lock
+            .generator_cache
+            .iter()
+            .find(|e| e.invocation == invocation_name)
+            .cloned();
+
+        let options_hash = wado_compiler::kiln::hash_options_canonical(&invocation.options_canonical);
+
+        let entry = if let Some(prior) = existing.filter(|e| e.options_hash == options_hash) {
+            if cache_matches(&prior, invocation, manifest_root, host).await {
+                outcome.cached.push(invocation_name.clone());
+                prior
+            } else {
+                run_and_build_entry(
+                    &invocation_name,
+                    invocation,
+                    manifest_root,
+                    host,
+                    provider,
+                    options_hash,
+                )
+                .await
+                .inspect(|_| {
+                    outcome.executed.push(invocation_name.clone());
+                })?
+            }
+        } else {
+            run_and_build_entry(
+                &invocation_name,
+                invocation,
+                manifest_root,
+                host,
+                provider,
+                options_hash,
+            )
+            .await
+            .inspect(|_| {
+                outcome.executed.push(invocation_name.clone());
+            })?
+        };
+
+        let dir = invocation.output_dir.as_str().to_string();
+        let kept = kept_by_dir.entry(dir).or_default();
+        for o in &entry.outputs {
+            kept.push(o.path.clone());
+        }
+        new_cache.push(entry);
+    }
+
+    for (dir, kept) in &kept_by_dir {
+        let abs = manifest_root.join(dir);
+        let deleted = reconcile_outputs(manifest_root, &abs, kept).map_err(|source| {
+            PipelineError::Io {
+                path: abs.clone(),
+                source,
+            }
+        })?;
+        outcome.deleted.extend(deleted);
+    }
+    outcome.deleted.sort();
+
+    lock.generator_cache = new_cache;
+    lock.generator_cache
+        .sort_by(|a, b| (a.invocation.as_str(), a.generator.as_str()).cmp(&(&b.invocation, &b.generator)));
+
+    save_lockfile(manifest_root, &lock)?;
+    Ok(outcome)
+}
+
+async fn run_and_build_entry<H, P>(
+    invocation_name: &str,
+    invocation: &Invocation,
+    manifest_root: &Path,
+    host: &H,
+    provider: &P,
+    options_hash: String,
+) -> Result<GeneratorCacheEntry, PipelineError>
+where
+    H: CompilerHost,
+    P: GeneratorProvider,
+{
+    let component = provider.get_component(&invocation.module).await.map_err(|source| {
+        PipelineError::Provider {
+            invocation: invocation_name.to_string(),
+            source,
+        }
+    })?;
+    let run = execute(invocation, &component, manifest_root, host)
+        .await
+        .map_err(|source| PipelineError::Execute {
+            invocation: invocation_name.to_string(),
+            source,
+        })?;
+    Ok(build_cache_entry(invocation_name, invocation, &run, options_hash))
+}
+
+fn invocation_id(inv: &Invocation) -> String {
+    match &inv.decl_site {
+        DeclSite::Manifest { name } => name.clone(),
+        DeclSite::Inline { .. } => format!("kiln-{}", inv.from.as_str()),
+    }
+}
+
+fn load_lockfile(manifest_root: &Path) -> Result<wado_manifest::LockFile, PipelineError> {
+    let path = manifest_root.join("wado.lock");
+    let content = match std::fs::read_to_string(&path) {
+        Ok(s) => s,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(wado_manifest::LockFile {
+                version: 1,
+                deps_hash: String::new(),
+                packages: Vec::new(),
+                build_dependencies: Vec::new(),
+                generator_cache: Vec::new(),
+            });
+        }
+        Err(source) => {
+            return Err(PipelineError::Io { path, source });
+        }
+    };
+    content.parse().map_err(|source| PipelineError::LockParse { source })
+}
+
+fn save_lockfile(manifest_root: &Path, lock: &wado_manifest::LockFile) -> Result<(), PipelineError> {
+    let path = manifest_root.join("wado.lock");
+    std::fs::write(&path, lock.to_toml()).map_err(|source| PipelineError::Io { path, source })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1451,6 +1721,266 @@ output-dir = "build/kiln/second"
             )
             .unwrap();
             assert_eq!(deleted, vec!["build/kiln/proto/sub/orphan.wado".to_string()]);
+        }
+    }
+
+    mod pipeline_tests {
+        use super::*;
+        use indexmap::IndexMap;
+        use std::sync::Mutex;
+        use wado_compiler::compiler_host::{
+            Diagnostic, GeneratorOutputFile, GeneratorResponse, GeneratorRunnerError,
+        };
+
+        struct StaticProvider {
+            bytes: Vec<u8>,
+            calls: Mutex<u32>,
+        }
+
+        impl StaticProvider {
+            fn new(bytes: Vec<u8>) -> Self {
+                Self {
+                    bytes,
+                    calls: Mutex::new(0),
+                }
+            }
+        }
+
+        impl GeneratorProvider for StaticProvider {
+            async fn get_component(&self, _: &GeneratorModule) -> Result<Vec<u8>, ProviderError> {
+                *self.calls.lock().unwrap() += 1;
+                Ok(self.bytes.clone())
+            }
+        }
+
+        struct FailingProvider;
+
+        impl GeneratorProvider for FailingProvider {
+            async fn get_component(&self, _: &GeneratorModule) -> Result<Vec<u8>, ProviderError> {
+                Err(ProviderError::Unsupported {
+                    message: "nope".to_string(),
+                })
+            }
+        }
+
+        struct PipelineHost {
+            sources: IndexMap<String, Vec<u8>>,
+            response: Mutex<Vec<Result<GeneratorResponse, GeneratorRunnerError>>>,
+        }
+
+        impl PipelineHost {
+            fn new(
+                sources: &[(&str, &[u8])],
+                responses: Vec<Result<GeneratorResponse, GeneratorRunnerError>>,
+            ) -> Self {
+                Self {
+                    sources: sources
+                        .iter()
+                        .map(|(k, v)| ((*k).to_string(), (*v).to_vec()))
+                        .collect(),
+                    response: Mutex::new(responses),
+                }
+            }
+        }
+
+        impl CompilerHost for PipelineHost {
+            async fn load_source(&self, path: &str) -> Result<Vec<u8>, SourceError> {
+                self.sources
+                    .get(path)
+                    .cloned()
+                    .ok_or_else(|| SourceError::NotFound {
+                        path: path.to_string(),
+                    })
+            }
+            fn emit_diagnostic(&self, _d: Diagnostic) {}
+            async fn run_generator(
+                &self,
+                _wasm: &[u8],
+                _request: GeneratorRequest,
+            ) -> Result<GeneratorResponse, GeneratorRunnerError> {
+                self.response
+                    .lock()
+                    .unwrap()
+                    .remove(0)
+            }
+        }
+
+        fn runtime() -> tokio::runtime::Runtime {
+            tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap()
+        }
+
+        fn manifest_with_one_generator() -> Manifest {
+            let toml_str = r#"
+[package]
+name = "host"
+version = "0.1.0"
+
+[registries]
+default = "https://wa.dev"
+
+[build-dependencies]
+proto = { package = "ns:proto", version = "^1.0.0" }
+
+[build.generators.greeter]
+module = "ns:proto@1.0.0"
+from = "./schema.proto"
+"#;
+            toml_str.parse().unwrap()
+        }
+
+        #[test]
+        fn empty_generators_returns_empty_outcome_without_lockfile() {
+            let tmp = tempfile::tempdir().unwrap();
+            let m: Manifest = "[package]\nname=\"a\"\nversion=\"0.1.0\"".parse().unwrap();
+            let host = PipelineHost::new(&[], vec![]);
+            let provider = FailingProvider;
+            let outcome = runtime()
+                .block_on(async { run_pipeline(&m, tmp.path(), &host, &provider).await })
+                .unwrap();
+            assert!(outcome.cached.is_empty());
+            assert!(outcome.executed.is_empty());
+            assert!(!tmp.path().join("wado.lock").exists());
+        }
+
+        #[test]
+        fn first_run_executes_and_writes_lockfile_and_outputs() {
+            let tmp = tempfile::tempdir().unwrap();
+            let m = manifest_with_one_generator();
+            let response = GeneratorResponse {
+                files: vec![GeneratorOutputFile {
+                    path: "greeter.wado".to_string(),
+                    content: "pub fn greet() {}\n".to_string(),
+                    is_entry: true,
+                }],
+                reads: vec![],
+            };
+            let host = PipelineHost::new(&[("schema.proto", b"schema")], vec![Ok(response)]);
+            let provider = StaticProvider::new(b"component-bytes".to_vec());
+
+            let outcome = runtime()
+                .block_on(async { run_pipeline(&m, tmp.path(), &host, &provider).await })
+                .unwrap();
+            assert_eq!(outcome.executed, vec!["greeter".to_string()]);
+            assert!(outcome.cached.is_empty());
+
+            let lib = tmp.path().join("build/kiln/greeter/greeter.wado");
+            assert!(lib.exists());
+
+            let lock_content = std::fs::read_to_string(tmp.path().join("wado.lock")).unwrap();
+            let lock: wado_manifest::LockFile = lock_content.parse().unwrap();
+            assert_eq!(lock.generator_cache.len(), 1);
+            assert_eq!(lock.generator_cache[0].invocation, "greeter");
+            assert_eq!(lock.generator_cache[0].outputs.len(), 1);
+            assert_eq!(*provider.calls.lock().unwrap(), 1);
+        }
+
+        #[test]
+        fn second_run_with_matching_sources_hits_cache() {
+            let tmp = tempfile::tempdir().unwrap();
+            let m = manifest_with_one_generator();
+            let response = GeneratorResponse {
+                files: vec![GeneratorOutputFile {
+                    path: "greeter.wado".to_string(),
+                    content: "pub fn greet() {}\n".to_string(),
+                    is_entry: true,
+                }],
+                reads: vec![],
+            };
+
+            let host = PipelineHost::new(&[("schema.proto", b"schema")], vec![Ok(response)]);
+            let provider = StaticProvider::new(b"component-bytes".to_vec());
+            runtime()
+                .block_on(async { run_pipeline(&m, tmp.path(), &host, &provider).await })
+                .unwrap();
+
+            let host2 = PipelineHost::new(&[("schema.proto", b"schema")], vec![]);
+            let provider2 = StaticProvider::new(b"component-bytes".to_vec());
+            let outcome = runtime()
+                .block_on(async { run_pipeline(&m, tmp.path(), &host2, &provider2).await })
+                .unwrap();
+            assert_eq!(outcome.cached, vec!["greeter".to_string()]);
+            assert!(outcome.executed.is_empty());
+            assert_eq!(*provider2.calls.lock().unwrap(), 0);
+        }
+
+        #[test]
+        fn changing_primary_reruns_generator() {
+            let tmp = tempfile::tempdir().unwrap();
+            let m = manifest_with_one_generator();
+            let response1 = GeneratorResponse {
+                files: vec![GeneratorOutputFile {
+                    path: "greeter.wado".to_string(),
+                    content: "pub fn greet() {}\n".to_string(),
+                    is_entry: true,
+                }],
+                reads: vec![],
+            };
+            let host1 = PipelineHost::new(&[("schema.proto", b"original")], vec![Ok(response1)]);
+            let provider = StaticProvider::new(b"c".to_vec());
+            runtime()
+                .block_on(async { run_pipeline(&m, tmp.path(), &host1, &provider).await })
+                .unwrap();
+
+            let response2 = GeneratorResponse {
+                files: vec![GeneratorOutputFile {
+                    path: "greeter.wado".to_string(),
+                    content: "pub fn greet_v2() {}\n".to_string(),
+                    is_entry: true,
+                }],
+                reads: vec![],
+            };
+            let host2 = PipelineHost::new(&[("schema.proto", b"mutated")], vec![Ok(response2)]);
+            let outcome = runtime()
+                .block_on(async { run_pipeline(&m, tmp.path(), &host2, &provider).await })
+                .unwrap();
+            assert_eq!(outcome.executed, vec!["greeter".to_string()]);
+        }
+
+        #[test]
+        fn pipeline_reconciles_orphan_generated_files() {
+            let tmp = tempfile::tempdir().unwrap();
+            let m = manifest_with_one_generator();
+            let out_dir = tmp.path().join("build/kiln/greeter");
+            std::fs::create_dir_all(&out_dir).unwrap();
+            std::fs::write(
+                out_dir.join("leftover.wado"),
+                "#![generated(by = \"old\", sources = [])]\n",
+            )
+            .unwrap();
+
+            let response = GeneratorResponse {
+                files: vec![GeneratorOutputFile {
+                    path: "greeter.wado".to_string(),
+                    content: "pub fn greet() {}\n".to_string(),
+                    is_entry: true,
+                }],
+                reads: vec![],
+            };
+            let host = PipelineHost::new(&[("schema.proto", b"s")], vec![Ok(response)]);
+            let provider = StaticProvider::new(b"c".to_vec());
+            let outcome = runtime()
+                .block_on(async { run_pipeline(&m, tmp.path(), &host, &provider).await })
+                .unwrap();
+            assert_eq!(outcome.deleted, vec!["build/kiln/greeter/leftover.wado".to_string()]);
+            assert!(!out_dir.join("leftover.wado").exists());
+            assert!(out_dir.join("greeter.wado").exists());
+        }
+
+        #[test]
+        fn provider_failure_surfaces_with_invocation_name() {
+            let tmp = tempfile::tempdir().unwrap();
+            let m = manifest_with_one_generator();
+            let host = PipelineHost::new(&[("schema.proto", b"s")], vec![]);
+            let err = runtime()
+                .block_on(async { run_pipeline(&m, tmp.path(), &host, &FailingProvider).await })
+                .unwrap_err();
+            match err {
+                PipelineError::Provider { invocation, .. } => assert_eq!(invocation, "greeter"),
+                other => panic!("expected Provider, got {other:?}"),
+            }
         }
     }
 }
