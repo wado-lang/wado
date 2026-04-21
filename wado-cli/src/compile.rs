@@ -8,6 +8,8 @@ use wado_compiler::LogLevel;
 
 use crate::args::{self, CliExit};
 use crate::compiler_host::FilesystemCompilerHost;
+use crate::kiln_driver::{PipelineError, PipelineOutcome, run_pipeline};
+use crate::kiln_provider::CliGeneratorProvider;
 use crate::manifest;
 
 /// Optimization level
@@ -335,9 +337,12 @@ pub async fn try_compile_with_full_opts(
         ..Default::default()
     };
 
-    // TODO(M6): before compile_with_options, resolve the manifest and call
-    //   wado_cli::kiln_driver::run_pipeline(manifest, base_path, &host, &provider).await?;
-    // See docs/wep-2026-04-12-kiln.md §"M6 — Gale migration".
+    if let Err(e) = maybe_run_pipeline(path, &host).await {
+        eprintln!("{e}");
+        return Err(wado_compiler::CompileFailure {
+            is_todo_module: false,
+        });
+    }
     wado_compiler::compile_with_options(&source, &host, Some(filename), options).await
 }
 
@@ -382,9 +387,10 @@ pub async fn compile_with_full_opts(
         ..Default::default()
     };
 
-    // TODO(M6): before compile_with_options, resolve the manifest and call
-    //   wado_cli::kiln_driver::run_pipeline(manifest, base_path, &host, &provider).await?;
-    // See docs/wep-2026-04-12-kiln.md §"M6 — Gale migration".
+    if let Err(e) = maybe_run_pipeline(path, &host).await {
+        eprintln!("{e}");
+        process::exit(1);
+    }
     // Compile using async API
     let result = wado_compiler::compile_with_options(&source, &host, Some(filename), options).await;
 
@@ -393,6 +399,61 @@ pub async fn compile_with_full_opts(
         Err(_bail) => {
             // Errors already printed by host via emit_diagnostic
             process::exit(1);
+        }
+    }
+}
+
+/// Walk up from `entry_file` to find an adjacent `wado.toml`, then drive the
+/// Kiln pipeline via [`run_pipeline`]. Returns `Ok(PipelineOutcome)` when a
+/// manifest is found and the pipeline ran (possibly a no-op when the manifest
+/// has no `[build.generators]` section). Returns `Ok(PipelineOutcome::default())`
+/// when there is no adjacent manifest — single-file scripts don't need Kiln.
+///
+/// Errors from [`run_pipeline`] are surfaced unchanged; the caller decides
+/// whether to abort or continue (e.g. for consume-only mode, a stale-cache
+/// warning is not fatal).
+async fn maybe_run_pipeline(
+    entry_file: &Path,
+    host: &FilesystemCompilerHost,
+) -> Result<PipelineOutcome, PipelineError> {
+    let Some((manifest, manifest_root)) = load_nearest_manifest(entry_file) else {
+        return Ok(PipelineOutcome::default());
+    };
+    if manifest
+        .build
+        .as_ref()
+        .is_none_or(|b| b.generators.is_empty())
+    {
+        return Ok(PipelineOutcome::default());
+    }
+    let provider = CliGeneratorProvider::new(manifest_root.clone());
+    run_pipeline(&manifest, &manifest_root, host, &provider).await
+}
+
+/// Walk up from `entry_file` looking for the nearest `wado.toml`. Returns the
+/// parsed manifest plus the directory that contains it (the Kiln pipeline's
+/// `manifest_root`). Silently returns `None` when no manifest is found or the
+/// manifest cannot be parsed — the caller treats this as "no Kiln config" and
+/// continues.
+fn load_nearest_manifest(
+    entry_file: &Path,
+) -> Option<(wado_manifest::Manifest, std::path::PathBuf)> {
+    let mut dir = entry_file
+        .parent()
+        .map(std::path::Path::to_path_buf)
+        .unwrap_or_else(|| std::path::PathBuf::from("."));
+    if dir.as_os_str().is_empty() {
+        dir = std::path::PathBuf::from(".");
+    }
+    loop {
+        let candidate = dir.join("wado.toml");
+        if candidate.is_file() {
+            let text = fs::read_to_string(&candidate).ok()?;
+            let manifest: wado_manifest::Manifest = text.parse().ok()?;
+            return Some((manifest, dir));
+        }
+        if !dir.pop() {
+            return None;
         }
     }
 }

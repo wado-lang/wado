@@ -891,6 +891,10 @@ impl Parser {
     }
 
     /// Parse import attributes: `{ version: "1.0", integrity: "sha384-..." }`
+    ///
+    /// Attribute values are a generic scalar/array/object tree. Unknown
+    /// top-level keys are accepted here and validated downstream (e.g. the
+    /// Kiln inline-generator collector rejects non-`generator` siblings).
     fn parse_import_attributes(&mut self) -> ParseResult<ImportAttributes> {
         self.expect(&TokenKind::LBrace)?;
 
@@ -900,19 +904,8 @@ impl Parser {
             loop {
                 let key = self.consume_ident()?;
                 self.expect(&TokenKind::Colon)?;
-                let value = self.consume_string()?;
-
-                match key.as_str() {
-                    "version" => attrs.version = Some(value),
-                    "integrity" => attrs.integrity = Some(value),
-                    "type" => attrs.type_hint = Some(value),
-                    _ => {
-                        return Err(ParseError {
-                            message: format!("unknown import attribute: {key}"),
-                            span: self.peek().span,
-                        });
-                    }
-                }
+                let value = self.parse_attr_value()?;
+                attrs.entries.insert(key, value);
 
                 if !self.check(&TokenKind::Comma) {
                     break;
@@ -926,6 +919,112 @@ impl Parser {
 
         self.expect(&TokenKind::RBrace)?;
         Ok(attrs)
+    }
+
+    /// Parse a single [`AttrValue`]: scalar, array, or nested object.
+    fn parse_attr_value(&mut self) -> ParseResult<crate::ast::AttrValue> {
+        let span = self.peek().span;
+        // Handle unary minus on numeric literals (e.g. `-3`, `-1.5`).
+        let negate = if matches!(self.peek_kind(), TokenKind::Minus) {
+            self.advance();
+            true
+        } else {
+            false
+        };
+        match self.peek_kind().clone() {
+            TokenKind::StringLit(_) => {
+                if negate {
+                    return Err(ParseError {
+                        message: "cannot negate a string literal".to_string(),
+                        span,
+                    });
+                }
+                let s = self.consume_string()?;
+                Ok(crate::ast::AttrValue::String(s))
+            }
+            TokenKind::NumberLit(repr) => {
+                self.advance();
+                parse_attr_number(&repr, negate, span)
+            }
+            TokenKind::True => {
+                if negate {
+                    return Err(ParseError {
+                        message: "cannot negate a boolean".to_string(),
+                        span,
+                    });
+                }
+                self.advance();
+                Ok(crate::ast::AttrValue::Bool(true))
+            }
+            TokenKind::False => {
+                if negate {
+                    return Err(ParseError {
+                        message: "cannot negate a boolean".to_string(),
+                        span,
+                    });
+                }
+                self.advance();
+                Ok(crate::ast::AttrValue::Bool(false))
+            }
+            TokenKind::LBracket => {
+                if negate {
+                    return Err(ParseError {
+                        message: "cannot negate an array".to_string(),
+                        span,
+                    });
+                }
+                self.advance();
+                let mut items = Vec::new();
+                if !self.check(&TokenKind::RBracket) {
+                    loop {
+                        items.push(self.parse_attr_value()?);
+                        if !self.check(&TokenKind::Comma) {
+                            break;
+                        }
+                        self.advance();
+                        if self.check(&TokenKind::RBracket) {
+                            break;
+                        }
+                    }
+                }
+                self.expect(&TokenKind::RBracket)?;
+                Ok(crate::ast::AttrValue::Array(items))
+            }
+            TokenKind::LBrace => {
+                if negate {
+                    return Err(ParseError {
+                        message: "cannot negate an object".to_string(),
+                        span,
+                    });
+                }
+                self.advance();
+                let mut obj: crate::hashmap::IndexMap<String, crate::ast::AttrValue> =
+                    crate::hashmap::IndexMap::default();
+                if !self.check(&TokenKind::RBrace) {
+                    loop {
+                        let key = self.consume_ident()?;
+                        self.expect(&TokenKind::Colon)?;
+                        let v = self.parse_attr_value()?;
+                        obj.insert(key, v);
+                        if !self.check(&TokenKind::Comma) {
+                            break;
+                        }
+                        self.advance();
+                        if self.check(&TokenKind::RBrace) {
+                            break;
+                        }
+                    }
+                }
+                self.expect(&TokenKind::RBrace)?;
+                Ok(crate::ast::AttrValue::Object(obj))
+            }
+            other => Err(ParseError {
+                message: format!(
+                    "expected attribute value (string, number, bool, array, or object), got {other:?}"
+                ),
+                span,
+            }),
+        }
     }
 
     /// Consume a string literal and return its raw text (escape sequences not interpreted).
@@ -4717,6 +4816,48 @@ impl Parser {
     }
 }
 
+fn parse_attr_number(repr: &str, negate: bool, span: Span) -> ParseResult<crate::ast::AttrValue> {
+    // Strip numeric underscores for parsing; keep them in the original repr for errors.
+    let cleaned: String = repr.chars().filter(|c| *c != '_').collect();
+    // Float if it contains '.' or 'e'/'E' (but not hex prefix).
+    let is_hex = cleaned.starts_with("0x") || cleaned.starts_with("0X");
+    let is_float =
+        !is_hex && (cleaned.contains('.') || cleaned.contains('e') || cleaned.contains('E'));
+    if is_float {
+        let f: f64 = cleaned.parse().map_err(|_| ParseError {
+            message: format!("invalid numeric attribute value: {repr}"),
+            span,
+        })?;
+        let v = if negate { -f } else { f };
+        Ok(crate::ast::AttrValue::Float(v))
+    } else {
+        let n: i64 = if let Some(hex) = cleaned
+            .strip_prefix("0x")
+            .or_else(|| cleaned.strip_prefix("0X"))
+        {
+            i64::from_str_radix(hex, 16)
+        } else if let Some(oct) = cleaned
+            .strip_prefix("0o")
+            .or_else(|| cleaned.strip_prefix("0O"))
+        {
+            i64::from_str_radix(oct, 8)
+        } else if let Some(bin) = cleaned
+            .strip_prefix("0b")
+            .or_else(|| cleaned.strip_prefix("0B"))
+        {
+            i64::from_str_radix(bin, 2)
+        } else {
+            cleaned.parse()
+        }
+        .map_err(|_| ParseError {
+            message: format!("invalid integer attribute value: {repr}"),
+            span,
+        })?;
+        let v = if negate { -n } else { n };
+        Ok(crate::ast::AttrValue::Int(v))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -4795,7 +4936,7 @@ mod tests {
             assert_eq!(use_decl.source, "wasi:cli");
             assert!(use_decl.attributes.is_some());
             let attrs = use_decl.attributes.as_ref().unwrap();
-            assert_eq!(attrs.version, Some("0.3.0".to_string()));
+            assert_eq!(attrs.version(), Some("0.3.0".to_string()));
         } else {
             panic!("expected use declaration");
         }

@@ -128,6 +128,14 @@ pub enum Code {
     // General logging
     /// Generic log message (info, debug, etc.)
     Log,
+
+    // Kiln errors
+    /// A generator's `Options` struct uses a shape not supported by Kiln.
+    GeneratorOptionsUnsupported,
+    /// A generator invocation's options value failed typed validation.
+    GeneratorOptionsInvalid,
+    /// Generator cache is stale and host cannot re-run generators (consume-only mode).
+    KilnStaleCache,
 }
 
 impl std::fmt::Display for Code {
@@ -157,6 +165,9 @@ impl std::fmt::Display for Code {
             Code::SpanStart => "SPAN_START",
             Code::SpanEnd => "SPAN_END",
             Code::Log => "LOG",
+            Code::GeneratorOptionsUnsupported => "GENERATOR_OPTIONS_UNSUPPORTED",
+            Code::GeneratorOptionsInvalid => "GENERATOR_OPTIONS_INVALID",
+            Code::KilnStaleCache => "KILN_STALE_CACHE",
         };
         write!(f, "{name}")
     }

@@ -267,20 +267,65 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_import_attributes(&mut self, attrs: &ImportAttributes) {
-        let mut parts = Vec::new();
-        if let Some(v) = &attrs.version {
-            parts.push(format!("version: \"{v}\""));
+        if attrs.entries.is_empty() {
+            return;
         }
-        if let Some(t) = &attrs.type_hint {
-            parts.push(format!("type: \"{t}\""));
+        self.output.push_str(" with { ");
+        let mut first = true;
+        for (k, v) in &attrs.entries {
+            if !first {
+                self.output.push_str(", ");
+            }
+            first = false;
+            self.output.push_str(k);
+            self.output.push_str(": ");
+            self.unparse_attr_value(v);
         }
-        if let Some(i) = &attrs.integrity {
-            parts.push(format!("integrity: \"{i}\""));
-        }
-        if !parts.is_empty() {
-            self.output.push_str(" with { ");
-            self.output.push_str(&parts.join(", "));
-            self.output.push_str(" }");
+        self.output.push_str(" }");
+    }
+
+    fn unparse_attr_value(&mut self, v: &crate::ast::AttrValue) {
+        match v {
+            crate::ast::AttrValue::String(s) => {
+                self.output.push('"');
+                self.output.push_str(s);
+                self.output.push('"');
+            }
+            crate::ast::AttrValue::Int(n) => {
+                self.output.push_str(&n.to_string());
+            }
+            crate::ast::AttrValue::Float(f) => {
+                let s = format!("{f}");
+                self.output.push_str(&s);
+                if !s.contains('.') && !s.contains('e') && !s.contains('E') {
+                    self.output.push_str(".0");
+                }
+            }
+            crate::ast::AttrValue::Bool(b) => {
+                self.output.push_str(if *b { "true" } else { "false" });
+            }
+            crate::ast::AttrValue::Array(items) => {
+                self.output.push('[');
+                for (i, item) in items.iter().enumerate() {
+                    if i > 0 {
+                        self.output.push_str(", ");
+                    }
+                    self.unparse_attr_value(item);
+                }
+                self.output.push(']');
+            }
+            crate::ast::AttrValue::Object(obj) => {
+                self.output.push_str("{ ");
+                for (i, (k, v)) in obj.iter().enumerate() {
+                    if i > 0 {
+                        self.output.push_str(", ");
+                    }
+                    self.output.push_str(k);
+                    self.output.push_str(": ");
+                    self.unparse_attr_value(v);
+                }
+                self.output.push_str(" }");
+            }
         }
     }
 

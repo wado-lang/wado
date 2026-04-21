@@ -1028,6 +1028,38 @@ pub fn resolve_import(from_module: &ModuleSource, import_source: &str) -> Module
     resolve_import_with_entry(from_module, import_source, None)
 }
 
+/// Resolve an import source, consulting a Kiln [`crate::kiln::InvocationIndex`]
+/// first.
+///
+/// When the `(from_module, import_source)` pair matches a recorded invocation,
+/// the returned [`ModuleSource`] points at the invocation's generated entry
+/// module (under `build/kiln/…`). Otherwise falls back to
+/// [`resolve_import_with_entry`] unchanged.
+///
+/// Call this in place of [`resolve_import`] wherever an `InvocationIndex` is
+/// available — typically the CLI and LSP compile entry points, after the
+/// Kiln pipeline has populated the index.
+pub fn resolve_import_with_invocations(
+    from_module: &ModuleSource,
+    import_source: &str,
+    entry_module: Option<&ModuleSource>,
+    invocations: &crate::kiln::InvocationIndex,
+) -> ModuleSource {
+    if !invocations.is_empty() {
+        let decl_file = match from_module {
+            ModuleSource::Local { path } => path.as_str(),
+            ModuleSource::EntryPoint { filename } => filename.as_str(),
+            _ => "",
+        };
+        if let Some(entry_path) = invocations.redirect(decl_file, import_source) {
+            return ModuleSource::Local {
+                path: normalize_module_path(entry_path),
+            };
+        }
+    }
+    resolve_import_with_entry(from_module, import_source, entry_module)
+}
+
 pub fn resolve_import_with_entry(
     from_module: &ModuleSource,
     import_source: &str,
