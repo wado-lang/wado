@@ -1,0 +1,26 @@
+// Test: when a resource type appears in a function's parameter list, the
+// function implicitly has that resource in its `with` set. `consume` here
+// takes `Stream<u8>` as a parameter and its body calls `Stream::<u8>::new()`,
+// which requires `with Stream`. Without signature inference this would fail
+// with "missing resource 'Stream'"; with inference the resource is granted
+// implicitly from the signature.
+
+use { println, Stdout } from "core:cli";
+
+// No `with Stream` declared — Stream is implied by the `Stream<u8>` param.
+pub fn consume(rx: Stream<u8>) {
+    let [rx2, tx2] = Stream::<u8>::new();
+    tx2.drop();
+    rx2.drop();
+    rx.drop();
+}
+
+export fn run() with Stdout {
+    let [rx, tx] = Stream::<u8>::new();
+    tx.drop();
+    consume(rx);
+    println("ok");
+}
+
+__DATA__
+{"stdout_contains": ["ok"]}

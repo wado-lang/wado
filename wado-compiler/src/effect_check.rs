@@ -197,6 +197,13 @@ struct EffectChecker<'a, H: CompilerHost> {
     /// (i.e. `(module_source, name)`), matching how every other resolved
     /// symbol identifies itself.
     closure: IndexMap<EffectRef, IndexSet<EffectRef>>,
+    /// Pre-indexed struct field types, keyed by `(module_source, struct_name)`.
+    /// Shared by `build_propagation_closure` and signature-resource inference so
+    /// both paths can walk nested resource references inside struct values.
+    struct_fields: IndexMap<(ModuleSource, String), Vec<TypeId>>,
+    /// Pre-indexed variant case payload types, keyed by `(module_source,
+    /// variant_name)`. Same role as `struct_fields` for variant payloads.
+    variant_payloads: IndexMap<(ModuleSource, String), Vec<TypeId>>,
 }
 
 impl<'a, H: CompilerHost> EffectChecker<'a, H> {
@@ -250,7 +257,26 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
                 }
             }
         }
-        let closure = build_propagation_closure(modules, type_table.as_ref());
+        let mut struct_fields: IndexMap<(ModuleSource, String), Vec<TypeId>> =
+            IndexMap::default();
+        let mut variant_payloads: IndexMap<(ModuleSource, String), Vec<TypeId>> =
+            IndexMap::default();
+        for (module_source, module) in modules {
+            for s in &module.structs {
+                let tids: Vec<TypeId> = s.fields.iter().map(|f| f.type_id).collect();
+                struct_fields.insert((module_source.clone(), s.name.clone()), tids);
+            }
+            for v in &module.variants {
+                let tids: Vec<TypeId> = v.cases.iter().map(|c| c.payload).collect();
+                variant_payloads.insert((module_source.clone(), v.name.clone()), tids);
+            }
+        }
+        let closure = build_propagation_closure(
+            modules,
+            type_table.as_ref(),
+            &struct_fields,
+            &variant_payloads,
+        );
         Self {
             modules,
             logger,
@@ -262,6 +288,8 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
             func_index,
             resource_names,
             closure,
+            struct_fields,
+            variant_payloads,
         }
     }
 
@@ -304,6 +332,38 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
                 }
             }
         }
+        out
+    }
+
+    /// Resources that appear anywhere in the function's signature — parameter
+    /// types or the return type, recursively through containers, struct fields
+    /// and variant payloads. These are unioned with the declared `with` set so
+    /// `fn f(s: Stream<u8>)` does not need to repeat `with Stream`.
+    fn signature_resources(&self, func: &TirFunction) -> IndexSet<EffectRef> {
+        let mut out: IndexSet<EffectRef> = IndexSet::default();
+        let Some(tt_rc) = &self.type_table else {
+            return out;
+        };
+        let tt = tt_rc.borrow();
+        let mut visited: IndexSet<TypeId> = IndexSet::default();
+        for p in &func.params {
+            collect_resource_refs(
+                p.type_id,
+                &tt,
+                &self.struct_fields,
+                &self.variant_payloads,
+                &mut out,
+                &mut visited,
+            );
+        }
+        collect_resource_refs(
+            func.return_type,
+            &tt,
+            &self.struct_fields,
+            &self.variant_payloads,
+            &mut out,
+            &mut visited,
+        );
         out
     }
 
@@ -369,12 +429,17 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
             return Ok(());
         }
 
-        // Set current context. Expand concrete effects through the propagation
-        // closure so resources referenced by an effect's operations (e.g.
+        // Set current context. Start with the user-declared `with` set, add
+        // resources that appear anywhere in the signature (param / return types,
+        // recursively through containers, struct fields, variant payloads) so
+        // the user does not need to repeat `with R` when `R` is already visible
+        // in the signature, then expand through the propagation closure so
+        // resources referenced by an effect's operations (e.g.
         // `Stdout::write_via_stream` references `Stream`, `Future`) are
         // implicitly admitted.
-        let declared: IndexSet<EffectRef> = func.effects.iter().cloned().collect();
-        self.current_effects = self.expand_effects(&declared);
+        let mut effects: IndexSet<EffectRef> = func.effects.iter().cloned().collect();
+        effects.extend(self.signature_resources(func));
+        self.current_effects = self.expand_effects(&effects);
         self.current_stores = func.stores.iter().cloned().collect();
 
         // Track which parameters are reference types (only for stores checking)
@@ -1210,27 +1275,14 @@ fn check_pure_stmt<H: CompilerHost>(
 fn build_propagation_closure(
     modules: &IndexMap<ModuleSource, TirModule>,
     type_table: Option<&Rc<RefCell<TypeTable>>>,
+    struct_fields: &IndexMap<(ModuleSource, String), Vec<TypeId>>,
+    variant_payloads: &IndexMap<(ModuleSource, String), Vec<TypeId>>,
 ) -> IndexMap<EffectRef, IndexSet<EffectRef>> {
     let mut direct: IndexMap<EffectRef, IndexSet<EffectRef>> = IndexMap::default();
     let Some(tt_rc) = type_table else {
         return direct;
     };
     let tt = tt_rc.borrow();
-
-    // Pre-index struct fields and variant case payloads so
-    // `collect_resource_refs` can walk nested resource references.
-    let mut struct_fields: IndexMap<(ModuleSource, String), Vec<TypeId>> = IndexMap::default();
-    let mut variant_payloads: IndexMap<(ModuleSource, String), Vec<TypeId>> = IndexMap::default();
-    for (module_source, module) in modules {
-        for s in &module.structs {
-            let tids: Vec<TypeId> = s.fields.iter().map(|f| f.type_id).collect();
-            struct_fields.insert((module_source.clone(), s.name.clone()), tids);
-        }
-        for v in &module.variants {
-            let tids: Vec<TypeId> = v.cases.iter().map(|c| c.payload).collect();
-            variant_payloads.insert((module_source.clone(), v.name.clone()), tids);
-        }
-    }
 
     for (module_source, module) in modules {
         for effect in &module.effects {

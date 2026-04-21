@@ -1,0 +1,29 @@
+// Test: signature-resource inference walks into composite types (struct
+// fields) so that a function taking `Holder { stream: Stream<u8> }` implicitly
+// has `with Stream` in its effect set — enough for the body to call
+// `Stream::<u8>::new()` which itself requires `with Stream`.
+
+use { println, Stdout } from "core:cli";
+
+pub struct Holder {
+    pub stream: Stream<u8>,
+}
+
+// No `with Stream` declared — Stream reached transitively via the Holder
+// struct field in the parameter type.
+pub fn unwrap(h: Holder) {
+    let [rx, tx] = Stream::<u8>::new();
+    tx.drop();
+    rx.drop();
+    h.stream.drop();
+}
+
+export fn run() with Stdout {
+    let [rx, tx] = Stream::<u8>::new();
+    tx.drop();
+    unwrap(Holder { stream: rx });
+    println("ok");
+}
+
+__DATA__
+{"stdout_contains": ["ok"]}

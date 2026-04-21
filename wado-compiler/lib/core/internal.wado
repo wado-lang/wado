@@ -32,7 +32,7 @@ pub fn gc_array_to_memory(arr: builtin::array<u8>, ptr: i32, len: i32) {
 ///
 /// Uses write_raw to pass String's internal GC array directly to the stream,
 /// avoiding the intermediate String → Array<u8> byte-by-byte copy.
-pub fn write_string_to_stream(tx: StreamWritable<u8>, message: String, add_newline: bool) with StreamWritable {
+pub fn write_string_to_stream(tx: StreamWritable<u8>, message: String, add_newline: bool) {
     let bytes = message.internal_raw_bytes();
     let len = message.len();
     if add_newline {
@@ -75,7 +75,7 @@ pub fn wait_for_subtask(packed: i32) with WaitableSet, Subtask {
 /// Drop a write_via_stream Future handle to signal completion.
 /// Uses CLI ErrorCode type for the Future parameterization.
 use { ErrorCode as CliErrorCode } from "wasi:cli/types.wado";
-pub fn drop_cli_write_future(future: Future<Result<(), CliErrorCode>>) with Future {
+pub fn drop_cli_write_future(future: Future<Result<(), CliErrorCode>>) {
     future.drop();
 }
 
