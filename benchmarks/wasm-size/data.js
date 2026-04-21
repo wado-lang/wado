@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776781492351,
+  "lastUpdate": 1776786870266,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -15193,6 +15193,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c275978be7e20d5e1e966315d3795ccc51c26e87"
         },
         "date": 1776781492053,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8982,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18988,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 635264,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "57f0ef61c4eb417a604b9db2105cfd902be4036c",
+          "message": "Merge pull request #897 from wado-lang/claude/kiln-web-planning-EgSoA\n\nKiln: M1–M3 + M3 hardening pass",
+          "timestamp": "2026-04-22T00:50:12+09:00",
+          "tree_id": "70c46a42b984fa0f9bde412aad9632b8f8248530",
+          "url": "https://github.com/wado-lang/wado/commit/57f0ef61c4eb417a604b9db2105cfd902be4036c"
+        },
+        "date": 1776786870164,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
