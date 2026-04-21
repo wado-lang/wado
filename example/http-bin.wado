@@ -170,7 +170,7 @@ fn build_request_json(
     args: TreeMap<String, String>,
     headers: &Headers,
     body: Option<String>,
-) -> String with Fields {
+) -> String {
     let origin = match get_header(headers, "x-forwarded-for") {
         Some(s) => s,
         None => "",
@@ -196,7 +196,7 @@ fn handle_fallback(
     url: String,
     path: String,
     args: TreeMap<String, String>,
-) -> [StatusCode, String, String] with Request, Fields, Future, FutureWritable, Stream {
+) -> [StatusCode, String, String] {
     if let Some(code_str) = strip_prefix(path, "/status/") {
         if let Some(code) = parse_status_code(code_str) {
             return [code as StatusCode, "text/plain", ""];
@@ -237,7 +237,7 @@ fn echo_if_method(
     url: String,
     path: String,
     args: TreeMap<String, String>,
-) -> [StatusCode, String, Option<String>] with Request, Fields, Future, FutureWritable, Stream {
+) -> [StatusCode, String, Option<String>] {
     if method != expected {
         return [
             405,
@@ -264,7 +264,7 @@ fn echo_if_method(
 global HOMEPAGE: String = #include_str("./http-bin-index.html");
 
 export async fn handle(request: Request) -> Result<Response, ErrorCode>
-    with MonotonicClock, Response
+    with MonotonicClock
 {
     let start_mark = MonotonicClock::now();
     let method = request.get_method();
