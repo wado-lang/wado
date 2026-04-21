@@ -90,16 +90,20 @@ fn "wado-compiler/tests/fixtures/enum-match-if-let.wado/run"() with Stdout {
     } else {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("not left"), used: 8 });
     }
-    label = value_copy "core:prelude/string.wado//String"(let __match_scrut_2: "wado-compiler/tests/fixtures/enum-match-if-let.wado//enum:Direction"; __match_scrut_2 = d; (if __match_scrut_2 == 0 -> ref "core:prelude/string.wado//String" {
+    let __match_scrut_2: "wado-compiler/tests/fixtures/enum-match-if-let.wado//enum:Direction";
+    __match_scrut_2 = d;
+    label = (if __match_scrut_2 == 0 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("up!"), used: 3 };
     } else if __match_scrut_2 == 1 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("down!"), used: 5 };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("other"), used: 5 };
-    }));
+    });
     "core:cli/println"(label);
     x = 3;
-    msg = value_copy "core:prelude/string.wado//String"(let __match_scrut_3: "wado-compiler/tests/fixtures/enum-match-if-let.wado//enum:Direction"; __match_scrut_3 = x; (if __match_scrut_3 == 3 -> ref "core:prelude/string.wado//String" {
+    let __match_scrut_3: "wado-compiler/tests/fixtures/enum-match-if-let.wado//enum:Direction";
+    __match_scrut_3 = x;
+    msg = (if __match_scrut_3 == 3 -> ref "core:prelude/string.wado//String" {
         block -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("right and big"), used: 13 };
         };
@@ -107,7 +111,7 @@ fn "wado-compiler/tests/fixtures/enum-match-if-let.wado/run"() with Stdout {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("right and small"), used: 15 };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("other"), used: 5 };
-    }));
+    });
     "core:cli/println"(msg);
 }
 

@@ -357,7 +357,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/run"() with Stdout
     }
     readlink_result = "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Descriptor_readlink_at"(dir, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test_symlink"), used: 12 });
     if ref.test "core:prelude/types.wado//Result<String,ErrorCode>::Ok"(readlink_result) {
-        target = value_copy "core:prelude/string.wado//String"(ref.cast "core:prelude/types.wado//Result<String,ErrorCode>::Ok"(readlink_result).payload_0);
+        target = ref.cast "core:prelude/types.wado//Result<String,ErrorCode>::Ok"(readlink_result).payload_0;
         if "core:prelude/string.wado/String^Eq::eq"(target, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello.txt"), used: 9 }) {
             "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("readlink_at: target is hello.txt (correct)"), used: 42 });
         } else {

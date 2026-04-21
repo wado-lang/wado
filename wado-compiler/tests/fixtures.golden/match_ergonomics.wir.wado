@@ -339,7 +339,9 @@ fn "wado-compiler/tests/fixtures/match_ergonomics.wado/match_ergonomics_match"()
     let __local_43: ref "core:prelude/format.wado//Formatter";
     let __sroa_opt_value: ref "core:prelude/types.wado//Option<i32>";
     c = 0;
-    name = value_copy "core:prelude/string.wado//String"(let __match_scrut_0: "wado-compiler/tests/fixtures/match_ergonomics.wado//enum:Color"; __match_scrut_0 = c; (if __match_scrut_0 == 0 -> ref "core:prelude/string.wado//String" {
+    let __match_scrut_0: "wado-compiler/tests/fixtures/match_ergonomics.wado//enum:Color";
+    __match_scrut_0 = c;
+    name = (if __match_scrut_0 == 0 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("red"), used: 3 };
     } else if __match_scrut_0 == 1 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("green"), used: 5 };
@@ -347,7 +349,7 @@ fn "wado-compiler/tests/fixtures/match_ergonomics.wado/match_ergonomics_match"()
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("blue"), used: 4 };
     } else {
         unreachable;
-    }));
+    });
     __v0_3 = name;
     __cond_4 = "core:prelude/string.wado/String^Eq::eq"(__v0_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("red"), used: 3 });
     if __cond_4 == 0 {
@@ -426,11 +428,11 @@ condition: val == 42
         });
         unreachable;
     }
-    label = value_copy "core:prelude/string.wado//String"(let __match_scrut_2: i32; __match_scrut_2 = 50; block -> ref "core:prelude/string.wado//String" {
+    label = block -> ref "core:prelude/string.wado//String" {
         block -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("medium"), used: 6 };
         };
-    });
+    };
     __v0_14 = label;
     __cond_15 = "core:prelude/string.wado/String^Eq::eq"(__v0_14, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("medium"), used: 6 });
     if __cond_15 == 0 {
@@ -960,7 +962,7 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     let __local_8: ref "core:prelude/string.wado//String";
     let _licm_buf_33: ref "core:prelude/string.wado//String";
     "core:prelude/string.wado/String::push"(f.buf, 34);
-    __iter_2 = value_copy "core:prelude/string.wado//StrCharIter"(__inline_StrCharIter_IntoIterator__into_iter_1: block -> ref "core:prelude/string.wado//StrCharIter" {
+    __iter_2 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref "core:prelude/string.wado//StrCharIter" {
         __local_7 = __inline_String__chars_2: block -> ref "core:prelude/string.wado//StrCharIter" {
             __local_8 = self;
             break __inline_String__chars_2: struct.new "core:prelude/string.wado//StrCharIter" { repr: __local_8.repr, used: __local_8.used, byte_index: 0 };
@@ -968,7 +970,7 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
         };
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
         unreachable;
-    });
+    };
     _licm_buf_33 = f.buf;
     b75: block {
         l76: loop {

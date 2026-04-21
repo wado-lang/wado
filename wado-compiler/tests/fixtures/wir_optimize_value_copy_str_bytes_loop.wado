@@ -1,0 +1,33 @@
+// Regression test for PR #891 fts benchmark slowdown.
+//
+// The hot loop of `fts.wado` iterates a String's bytes with
+// `for let b of s.bytes()`. Before the fix, a stale `value_copy
+// StrUtf8ByteIter` was left inside the body of the byte loop (the
+// for-let desugars to `__iter = value_copy(source.into_iter())`).
+// That copy happens on every iteration of the *outer* 500K-iteration
+// loop, which is the regression.
+//
+// The copy is unnecessary because `s.bytes()` returns a fresh value
+// (Call result) and the iterator's mutation of its own `index` field
+// is observable only through `__iter` itself — the source local is
+// dead after the copy.
+
+use { println } from "core:cli";
+
+export fn run() with Stdout {
+    let mut byte_sum: u64 = 0;
+    for let mut i = 0; i < 3; i += 1 {
+        let s = `hello-{i}`;
+        for let b of s.bytes() {
+            byte_sum += b as u64;
+        }
+    }
+    println(`{byte_sum}`);
+}
+
+__DATA__
+{
+    "stdout": "1878\n",
+    "wir_not_expect:O1": ["value_copy \"core:prelude/string.wado//StrUtf8ByteIter\""],
+    "wir_not_expect:O2": ["value_copy \"core:prelude/string.wado//StrUtf8ByteIter\""]
+}

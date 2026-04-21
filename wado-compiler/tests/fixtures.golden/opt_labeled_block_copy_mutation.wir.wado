@@ -73,12 +73,12 @@ fn "wado-compiler/tests/fixtures/opt_labeled_block_copy_mutation.wado/run"() wit
     let __local_3: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/string.wado//String";
     s = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("a"), used: 1 };
-    t = value_copy "core:prelude/string.wado//String"(l: block -> ref "core:prelude/string.wado//String" {
+    t = l: block -> ref "core:prelude/string.wado//String" {
         __local_1 = value_copy "core:prelude/string.wado//String"(s);
         "core:prelude/string.wado/String::push_str"(s, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("b"), used: 1 });
         break l: __local_1;
         unreachable;
-    });
+    };
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 };
         "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("s="), used: 2 });

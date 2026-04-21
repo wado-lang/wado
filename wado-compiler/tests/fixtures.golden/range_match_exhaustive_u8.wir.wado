@@ -114,13 +114,15 @@ fn "wado-compiler/tests/fixtures/range_match_exhaustive_u8.wado/__test_0_exhaust
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
     let __local_9: ref "core:prelude/format.wado//Formatter";
-    name = value_copy "core:prelude/string.wado//String"(let __match_scrut_0: u8; __match_scrut_0 = 42; (if __match_scrut_0 == 0 -> ref "core:prelude/string.wado//String" {
+    let __match_scrut_0: u8;
+    __match_scrut_0 = 42;
+    name = (if __match_scrut_0 == 0 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("zero"), used: 4 };
     } else if (__match_scrut_0 >=u 1) & (__match_scrut_0 <=u 255) -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("nonzero"), used: 7 };
     } else {
         unreachable;
-    }));
+    });
     __v0 = name;
     __cond = "core:prelude/string.wado/String^Eq::eq"(__v0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("nonzero"), used: 7 });
     if __cond == 0 {
@@ -579,7 +581,7 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     let __local_8: ref "core:prelude/string.wado//String";
     let _licm_buf_33: ref "core:prelude/string.wado//String";
     "core:prelude/string.wado/String::push"(f.buf, 34);
-    __iter_2 = value_copy "core:prelude/string.wado//StrCharIter"(__inline_StrCharIter_IntoIterator__into_iter_1: block -> ref "core:prelude/string.wado//StrCharIter" {
+    __iter_2 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref "core:prelude/string.wado//StrCharIter" {
         __local_7 = __inline_String__chars_2: block -> ref "core:prelude/string.wado//StrCharIter" {
             __local_8 = self;
             break __inline_String__chars_2: struct.new "core:prelude/string.wado//StrCharIter" { repr: __local_8.repr, used: __local_8.used, byte_index: 0 };
@@ -587,7 +589,7 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
         };
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
         unreachable;
-    });
+    };
     _licm_buf_33 = f.buf;
     b54: block {
         l55: loop {

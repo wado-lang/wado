@@ -733,7 +733,7 @@ condition: fmt_int(&x, '*', Alignment::Center, false, false, 10) == \"****42****
     buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(64), used: 0 };
     f = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 0, sign_plus: 0, zero_pad: 0, width: 8, precision: -1, indent: 0, buf: buf };
     "core:prelude/format.wado/Formatter::pad"(f, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("true"), used: 4 });
-    __v0_19 = value_copy "core:prelude/string.wado//String"(buf);
+    __v0_19 = buf;
     __cond_20 = "core:prelude/string.wado/String^Eq::eq"(__v0_19, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("true    "), used: 8 });
     if __cond_20 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -9531,7 +9531,7 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     let __local_8: ref "core:prelude/string.wado//String";
     let _licm_buf_33: ref "core:prelude/string.wado//String";
     "core:prelude/string.wado/String::push"(f.buf, 34);
-    __iter_2 = value_copy "core:prelude/string.wado//StrCharIter"(__inline_StrCharIter_IntoIterator__into_iter_1: block -> ref "core:prelude/string.wado//StrCharIter" {
+    __iter_2 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref "core:prelude/string.wado//StrCharIter" {
         __local_7 = __inline_String__chars_2: block -> ref "core:prelude/string.wado//StrCharIter" {
             __local_8 = self;
             break __inline_String__chars_2: struct.new "core:prelude/string.wado//StrCharIter" { repr: __local_8.repr, used: __local_8.used, byte_index: 0 };
@@ -9539,7 +9539,7 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
         };
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
         unreachable;
-    });
+    };
     _licm_buf_33 = f.buf;
     b476: block {
         l477: loop {

@@ -106,6 +106,12 @@ fn rename_locals_in_instr(instr: &mut WirInstr, copies: &IndexMap<String, String
 ///
 /// First descends into nested instruction bodies (Block, Loop, If, Seq),
 /// then applies flat-level optimizations on the current list.
+///
+/// Value-copy elision is a single whole-function pass (see
+/// `elide_value_copies_whole_function`) rather than per-scope, because safe
+/// elision requires knowing every trailing instruction reachable after the
+/// copy — including those in enclosing scopes — and recursive per-scope calls
+/// cannot observe them.
 pub(super) fn run_peephole(instrs: &mut Vec<WirInstr>, types: &[WirTypeDef]) {
     for instr in instrs.iter_mut() {
         optimize_nested(instr, types);
@@ -118,13 +124,18 @@ pub(super) fn run_peephole(instrs: &mut Vec<WirInstr>, types: &[WirTypeDef]) {
     }
     fold_eqz_patterns(instrs);
     fold_branchless_increment(instrs);
-    elide_redundant_value_copies(instrs);
     elide_copy_used_only_for_field_reads(instrs);
-    // Cross-scope copy elision: traces LocalGet through parent scope definitions.
-    // Runs after the recursive peephole so nested blocks are already optimized.
-    elide_value_copies_cross_scope(instrs, &IndexMap::default());
     elide_multi_value_structs(instrs, types);
     relax_gc_operand_nullability(instrs);
+}
+
+/// Whole-function `value_copy` elision.
+///
+/// Runs once per function body (not per nested scope) so that the safety
+/// predicate sees every reachable instruction — including those in enclosing
+/// scopes, which would be invisible to a per-scope pass.
+pub(super) fn elide_value_copies_whole_function(instrs: &mut [WirInstr]) {
+    elide_value_copies_cross_scope(instrs, &IndexMap::default(), &[]);
 }
 
 /// Recurse into nested instruction bodies and eliminate dead branches.
@@ -559,40 +570,147 @@ fn is_boolean_valued(instr: &WirInstr) -> bool {
     )
 }
 
-/// Remove unnecessary `ValueCopy` wrappers from `LocalSet` instructions.
+/// Determine whether eliding the `value_copy` wrapping `expr` (producing `dest`)
+/// preserves observable behavior, given every instruction reachable after the
+/// copy — the rest of the current scope plus the trailing slices of every
+/// enclosing scope (`outer_tails`).
 ///
-/// A `ValueCopy` deep-copies a GC value to maintain Wado's value semantics.
-/// This copy is unnecessary when the source expression provably produces a
-/// **fresh** value — one with no pre-existing aliases. Fresh values include
-/// GC constructors (`StructNew`, `ArrayNew*`), function call return values,
-/// and block expressions whose result is itself fresh.
-fn elide_redundant_value_copies(instrs: &mut [WirInstr]) {
-    for i in 0..instrs.len() {
-        let (left, right) = instrs.split_at_mut(i + 1);
-        let instr = &mut left[i];
-        let WirInstr::LocalSet { name, value } = instr else {
-            continue;
-        };
-        let can_elide = if let WirInstr::ValueCopy { expr, .. } = value.as_ref() {
-            is_fresh_wir_value(expr)
-                // `value_copy(local)` is not always redundant even when the local
-                // currently holds a fresh value: removing it may create an alias
-                // that later mutations through the destination local can observe
-                // via the source local (e.g. inlined `mut` parameter bindings).
-                && value_copy_source_local(expr).is_none()
-                // Keep the existing destination safety guard used by cross-scope
-                // copy-elision to avoid dropping defensive copies that isolate a
-                // local later used in mutating/escaping positions.
-                && right.iter().all(|instr| uses_of_var_are_reads_only(instr, name))
-        } else {
-            false
-        };
-        if can_elide {
-            let old = std::mem::replace(value.as_mut(), WirInstr::Nop);
-            if let WirInstr::ValueCopy { expr, .. } = old {
-                *value = expr;
+/// ### Alias safety
+///
+/// After eliding, `dest` and every `src_local` that contributes the final value
+/// of `expr` all reference the same object. The elision is observably
+/// equivalent to preserving the copy iff no later instruction exposes this
+/// aliasing. That holds when:
+///
+/// 1. Every `src_local` is **not mutated and not escaped** after the copy
+///    (otherwise an external mutation could leak through the alias to any
+///    subsequent read of `dest`), AND
+/// 2. Either the destination is **read-only** after the copy (no mutation via
+///    `dest` can leak through the alias) **or** every `src_local` is **dead**
+///    (never read after the copy, so aliased mutations through `dest` are
+///    unobservable).
+///
+/// `outer_tails` is a stack of slices, innermost first, covering every
+/// trailing instruction sequence in enclosing scopes. WIR locals are
+/// function-scoped, so a `src_local` declared inside a nested block remains
+/// observable to any outer instruction that reads it.
+fn value_copy_elision_safe(
+    expr: &WirInstr,
+    dest: &str,
+    remaining: &[WirInstr],
+    outer_tails: &[&[WirInstr]],
+) -> bool {
+    let mut src_locals: Vec<String> = Vec::new();
+    collect_source_locals(expr, &mut src_locals);
+
+    let all_tails = |f: &dyn Fn(&WirInstr) -> bool| -> bool {
+        remaining.iter().all(&f) && outer_tails.iter().all(|slice| slice.iter().all(&f))
+    };
+
+    let src_safe = src_locals
+        .iter()
+        .all(|src| all_tails(&|i| no_potential_source_mutation_or_escape(i, src)));
+    if !src_safe {
+        return false;
+    }
+
+    let dest_safe = all_tails(&|i| uses_of_var_are_reads_only(i, dest));
+    if dest_safe {
+        return true;
+    }
+
+    // Fallback: even when `dest` is later mutated, elision is still safe if
+    // every source local is dead after the copy — nobody observes the aliased
+    // mutations. This is the fts-hot-loop pattern:
+    //     __dest = value_copy T(block -> ref T {
+    //         __src = fresh_call(...);
+    //         break __src;
+    //     })
+    //     __dest.field = ...;  // dest mutation, but __src is never read again
+    src_locals
+        .iter()
+        .all(|src| all_tails(&|i| !instr_contains_local_get(i, src)))
+}
+
+/// Walk `expr` and push every function-level local whose value contributes to
+/// the final value produced by `expr`. The collected set is the closure of:
+///
+/// - `LocalGet(x)` ⇒ include `x` and trace its assignment within the
+///   enclosing block (so `Block { x = fresh_call(); break x; }` contributes
+///   `x` — after elision, `x` aliases the copied value at the function level).
+/// - `RefAsNonNull(inner)`, `RefCast(inner)` ⇒ trace `inner`.
+/// - `Block { body, result: Some(_) }` / `Seq(body)` ⇒ trace the break value
+///   (or the block's tail instruction), plus also walk the body to pick up any
+///   `LocalSet`s whose rhs ultimately aliases the result.
+/// - `If { then_body, else_body, result: Some(_) }` ⇒ trace both branches.
+/// - Everything else (constants, `StructNew`, `ArrayNew*`, `Call`, …) produces
+///   a fresh value with no contributing source local.
+fn collect_source_locals(expr: &WirInstr, out: &mut Vec<String>) {
+    match expr {
+        WirInstr::LocalGet { name, .. } => {
+            if !out.iter().any(|n| n == name) {
+                out.push(name.clone());
             }
         }
+        WirInstr::RefAsNonNull(inner) | WirInstr::RefCast { expr: inner, .. } => {
+            collect_source_locals(inner, out);
+        }
+        WirInstr::Block {
+            body,
+            result: Some(_),
+            ..
+        } => {
+            collect_block_source_locals(body, out);
+        }
+        WirInstr::Seq(body) => {
+            collect_block_source_locals(body, out);
+        }
+        WirInstr::If {
+            then_body,
+            else_body,
+            result: Some(_),
+            ..
+        } => {
+            collect_body_source_locals(then_body, out);
+            if let Some(eb) = else_body {
+                collect_body_source_locals(eb, out);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Trace the result of a block (or Seq) body — either the value carried by a
+/// trailing `Br` or the tail instruction — and accumulate every source local
+/// that contributes to it.
+fn collect_block_source_locals(body: &[WirInstr], out: &mut Vec<String>) {
+    let result_instr = match body.last() {
+        Some(WirInstr::Seq(seq)) => find_seq_result(seq),
+        Some(instr) => Some(instr),
+        None => return,
+    };
+    match result_instr {
+        Some(WirInstr::LocalGet { name, .. }) => {
+            // `break label: local` — the block's result is whatever `local`
+            // holds when the break fires. After elision, `local` and `dest`
+            // alias the same object; track `local` and also trace through
+            // its most recent assignment.
+            if !out.iter().any(|n| n == name) {
+                out.push(name.clone());
+            }
+            if let Some(value) = find_local_set_value(body, name) {
+                collect_source_locals(value, out);
+            }
+        }
+        Some(instr) => collect_source_locals(instr, out),
+        None => {}
+    }
+}
+
+/// Trace the tail instruction of an `If` branch body.
+fn collect_body_source_locals(body: &[WirInstr], out: &mut Vec<String>) {
+    if let Some(instr) = body.last() {
+        collect_source_locals(instr, out);
     }
 }
 
@@ -611,6 +729,7 @@ fn elide_redundant_value_copies(instrs: &mut [WirInstr]) {
 fn elide_value_copies_cross_scope(
     instrs: &mut [WirInstr],
     parent_defs: &IndexMap<String, FreshDef>,
+    outer_tails: &[&[WirInstr]],
 ) {
     let mut defs = parent_defs.clone();
 
@@ -650,7 +769,7 @@ fn elide_value_copies_cross_scope(
         // local is never mutated after this point.
         let remaining_start = i + 1;
         let (left, right) = instrs.split_at_mut(remaining_start);
-        elide_value_copies_in_instr(&mut left[i], right, &defs);
+        elide_value_copies_in_instr(&mut left[i], right, outer_tails, &defs);
     }
 }
 
@@ -719,9 +838,18 @@ fn no_potential_source_mutation_or_escape(instr: &WirInstr, var_name: &str) -> b
 
 /// Recursively walk a single instruction, eliding `value_copies` and descending
 /// into nested blocks/ifs/seqs.
+///
+/// When descending into a nested body, `remaining` (the trailing slice of the
+/// current scope) is pushed onto the `outer_tails` stack so the safety check
+/// at any nested point sees every instruction reachable from that point.
+///
+/// For `Loop`, a snapshot of the full body is additionally pushed as an outer
+/// tail because the loop re-enters from the top: any instruction in the body
+/// may execute after any position within this iteration.
 fn elide_value_copies_in_instr(
     instr: &mut WirInstr,
     remaining: &[WirInstr],
+    outer_tails: &[&[WirInstr]],
     defs: &IndexMap<String, FreshDef>,
 ) {
     match instr {
@@ -729,71 +857,92 @@ fn elide_value_copies_in_instr(
             // Check if the value is a value_copy that can be elided.
             if let WirInstr::ValueCopy { expr, .. } = value.as_ref()
                 && is_fresh_via_defs(expr, defs)
+                && value_copy_elision_safe(expr, name, remaining, outer_tails)
             {
-                // Safety check: only elide if:
-                // 1. The destination local is never mutated in the remaining
-                //    instructions (no StructSet, no mutable call args, etc.).
-                // 2. The source local is not mutated after the copy point.
-                //    Eliding the copy creates an alias; any subsequent mutation
-                //    of the source would corrupt the destination's value.
-                let dest_safe = remaining
-                    .iter()
-                    .all(|i| uses_of_var_are_reads_only(i, name));
-                let source_safe = value_copy_source_local(expr).is_none_or(|src| {
-                    remaining
-                        .iter()
-                        .all(|i| no_potential_source_mutation_or_escape(i, src))
-                });
-                if dest_safe && source_safe {
-                    let old = std::mem::replace(value.as_mut(), WirInstr::Nop);
-                    if let WirInstr::ValueCopy { expr, .. } = old {
-                        *value = expr;
-                    }
-                    return;
+                let old = std::mem::replace(value.as_mut(), WirInstr::Nop);
+                if let WirInstr::ValueCopy { expr, .. } = old {
+                    *value = expr;
                 }
+                return;
             }
-            // Recurse into the value expression for nested blocks.
-            elide_value_copies_in_instr_inner(value.as_mut(), defs);
+            // Recurse into the value expression for nested blocks. Inside the
+            // value expression, after it evaluates, `remaining` + outer_tails
+            // still execute — thread them through.
+            let mut nested_tails: Vec<&[WirInstr]> = Vec::with_capacity(outer_tails.len() + 1);
+            nested_tails.push(remaining);
+            nested_tails.extend_from_slice(outer_tails);
+            elide_value_copies_in_instr_inner(value.as_mut(), defs, &nested_tails);
         }
-        WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
-            elide_value_copies_cross_scope(body, defs);
+        WirInstr::Block { body, .. } => {
+            let mut nested_tails: Vec<&[WirInstr]> = Vec::with_capacity(outer_tails.len() + 1);
+            nested_tails.push(remaining);
+            nested_tails.extend_from_slice(outer_tails);
+            elide_value_copies_cross_scope(body, defs, &nested_tails);
+        }
+        WirInstr::Loop { body, .. } => {
+            // Loop re-enters body from the top; take a snapshot of the full
+            // body so the source-dead check can see reads in any iteration.
+            let body_snapshot: Vec<WirInstr> = body.clone();
+            let mut nested_tails: Vec<&[WirInstr]> = Vec::with_capacity(outer_tails.len() + 2);
+            nested_tails.push(body_snapshot.as_slice());
+            nested_tails.push(remaining);
+            nested_tails.extend_from_slice(outer_tails);
+            elide_value_copies_cross_scope(body, defs, &nested_tails);
         }
         WirInstr::If {
             then_body,
             else_body,
             ..
         } => {
-            elide_value_copies_cross_scope(then_body, defs);
+            let mut nested_tails: Vec<&[WirInstr]> = Vec::with_capacity(outer_tails.len() + 1);
+            nested_tails.push(remaining);
+            nested_tails.extend_from_slice(outer_tails);
+            elide_value_copies_cross_scope(then_body, defs, &nested_tails);
             if let Some(eb) = else_body {
-                elide_value_copies_cross_scope(eb, defs);
+                elide_value_copies_cross_scope(eb, defs, &nested_tails);
             }
         }
         WirInstr::Seq(body) => {
-            elide_value_copies_cross_scope(body, defs);
+            let mut nested_tails: Vec<&[WirInstr]> = Vec::with_capacity(outer_tails.len() + 1);
+            nested_tails.push(remaining);
+            nested_tails.extend_from_slice(outer_tails);
+            elide_value_copies_cross_scope(body, defs, &nested_tails);
         }
         _ => {}
     }
 }
 
-/// Like `elide_value_copies_in_instr` but without the remaining-slice context
-/// (for recursing into value expressions where we can't check use safety).
-fn elide_value_copies_in_instr_inner(instr: &mut WirInstr, defs: &IndexMap<String, FreshDef>) {
+/// Like `elide_value_copies_in_instr` but without the current-scope remaining
+/// (for recursing into value expressions that are embedded inside another
+/// instruction; all surviving context lives in `outer_tails`).
+fn elide_value_copies_in_instr_inner(
+    instr: &mut WirInstr,
+    defs: &IndexMap<String, FreshDef>,
+    outer_tails: &[&[WirInstr]],
+) {
     match instr {
-        WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
-            elide_value_copies_cross_scope(body, defs);
+        WirInstr::Block { body, .. } => {
+            elide_value_copies_cross_scope(body, defs, outer_tails);
+        }
+        WirInstr::Loop { body, .. } => {
+            let body_snapshot: Vec<WirInstr> = body.clone();
+            let mut nested_tails: Vec<&[WirInstr]> = Vec::with_capacity(outer_tails.len() + 1);
+            nested_tails.push(body_snapshot.as_slice());
+            nested_tails.extend_from_slice(outer_tails);
+            elide_value_copies_cross_scope(body, defs, &nested_tails);
         }
         WirInstr::If {
             then_body,
             else_body,
             ..
         } => {
-            elide_value_copies_cross_scope(then_body, defs);
+            elide_value_copies_cross_scope(then_body, defs, outer_tails);
             if let Some(eb) = else_body {
-                elide_value_copies_cross_scope(eb, defs);
+                elide_value_copies_cross_scope(eb, defs, outer_tails);
             }
         }
         WirInstr::Seq(body) => {
-            elide_value_copies_cross_scope(body, defs);
+            elide_value_copies_cross_scope(body, defs, outer_tails);
         }
         _ => {}
     }

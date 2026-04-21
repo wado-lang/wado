@@ -127,7 +127,9 @@ fn "wado-compiler/tests/fixtures/match_nested_variant_in_variant.wado/run"() wit
     let __local_20: ref "core:prelude/types.wado//Option<i32>";
     let __local_21: ref "core:prelude/types.wado//Option<i32>";
     nested = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 42 };
-    result = value_copy "core:prelude/string.wado//String"(let __match_scrut_0: ref null "core:prelude/types.wado//Option<i32>"; __match_scrut_0 = nested; (if ref.is_null(__match_scrut_0) == 0 -> ref "core:prelude/string.wado//String" {
+    let __match_scrut_0: ref null "core:prelude/types.wado//Option<i32>";
+    __match_scrut_0 = nested;
+    result = (if ref.is_null(__match_scrut_0) == 0 -> ref "core:prelude/string.wado//String" {
         let __cast_4: ref null "core:prelude/types.wado//Option<i32>";
         __cast_4 = ref.as_non_null(__match_scrut_0);
         __local_16 = ref.as_non_null(__cast_4);
@@ -191,11 +193,13 @@ fn "wado-compiler/tests/fixtures/match_nested_variant_in_variant.wado/run"() wit
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("none"), used: 4 };
     } else {
         unreachable;
-    }));
+    });
     "core:cli/println"(result);
     inner = struct.new "core:prelude/types.wado//Option<i32>" { 1 };
     outer_some = inner;
-    result2 = value_copy "core:prelude/string.wado//String"(let __match_scrut_1: ref null "core:prelude/types.wado//Option<i32>"; __match_scrut_1 = outer_some; (if ref.is_null(__match_scrut_1) == 0 -> ref "core:prelude/string.wado//String" {
+    let __match_scrut_1: ref null "core:prelude/types.wado//Option<i32>";
+    __match_scrut_1 = outer_some;
+    result2 = (if ref.is_null(__match_scrut_1) == 0 -> ref "core:prelude/string.wado//String" {
         let __cast_8: ref null "core:prelude/types.wado//Option<i32>";
         __cast_8 = ref.as_non_null(__match_scrut_1);
         __local_18 = ref.as_non_null(__cast_8);
@@ -259,10 +263,12 @@ fn "wado-compiler/tests/fixtures/match_nested_variant_in_variant.wado/run"() wit
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("none"), used: 4 };
     } else {
         unreachable;
-    }));
+    });
     "core:cli/println"(result2);
     outer_none = ref.null none;
-    result3 = value_copy "core:prelude/string.wado//String"(let __match_scrut_2: ref null "core:prelude/types.wado//Option<i32>"; __match_scrut_2 = outer_none; (if ref.is_null(__match_scrut_2) == 0 -> ref "core:prelude/string.wado//String" {
+    let __match_scrut_2: ref null "core:prelude/types.wado//Option<i32>";
+    __match_scrut_2 = outer_none;
+    result3 = (if ref.is_null(__match_scrut_2) == 0 -> ref "core:prelude/string.wado//String" {
         let __cast_12: ref null "core:prelude/types.wado//Option<i32>";
         __cast_12 = ref.as_non_null(__match_scrut_2);
         __local_20 = ref.as_non_null(__cast_12);
@@ -326,7 +332,7 @@ fn "wado-compiler/tests/fixtures/match_nested_variant_in_variant.wado/run"() wit
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("none"), used: 4 };
     } else {
         unreachable;
-    }));
+    });
     "core:cli/println"(result3);
 }
 

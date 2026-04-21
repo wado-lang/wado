@@ -421,7 +421,7 @@ fn "wado-compiler/tests/fixtures/treemap_btree2.wado/run"() with Stdout {
 === After compaction ==="), used: 25 });
     if "wado-compiler/tests/fixtures/treemap_btree2.wado/TreeMap<String,i32>::needs_compaction"(map) {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Compaction needed, running..."), used: 29 });
-        __pattern_temp_0_96 = value_copy "core:prelude/types.wado//Option<BTreeNode<String,i32>>"(map.root);
+        __pattern_temp_0_96 = map.root;
         if ref.is_null(__pattern_temp_0_96) == 0 {
             root = ref.as_non_null(__pattern_temp_0_96);
             "wado-compiler/tests/fixtures/treemap_btree2.wado/BTreeNode<String,i32>::compact"(root);
@@ -981,7 +981,7 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     let __local_8: ref "core:prelude/string.wado//String";
     let _licm_buf_33: ref "core:prelude/string.wado//String";
     "core:prelude/string.wado/String::push"(f.buf, 34);
-    __iter_2 = value_copy "core:prelude/string.wado//StrCharIter"(__inline_StrCharIter_IntoIterator__into_iter_1: block -> ref "core:prelude/string.wado//StrCharIter" {
+    __iter_2 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref "core:prelude/string.wado//StrCharIter" {
         __local_7 = __inline_String__chars_2: block -> ref "core:prelude/string.wado//StrCharIter" {
             __local_8 = self;
             break __inline_String__chars_2: struct.new "core:prelude/string.wado//StrCharIter" { repr: __local_8.repr, used: __local_8.used, byte_index: 0 };
@@ -989,7 +989,7 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
         };
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
         unreachable;
-    });
+    };
     _licm_buf_33 = f.buf;
     b68: block {
         l69: loop {

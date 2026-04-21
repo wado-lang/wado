@@ -192,8 +192,6 @@ fn "wado-compiler/tests/fixtures/newtype_operator_trait.wado/run"() with Stdout 
     let __v1_22: ref "wado-compiler/tests/fixtures/newtype_operator_trait.wado//Vec2";
     let __v2: bool;
     let __cond_24: bool;
-    let v1: ref "wado-compiler/tests/fixtures/newtype_operator_trait.wado//Vec2";
-    let v2: ref "wado-compiler/tests/fixtures/newtype_operator_trait.wado//Vec2";
     let __cond_29: bool;
     let __local_30: ref "core:prelude/string.wado//String";
     let __local_31: ref "core:prelude/format.wado//Formatter";
@@ -261,8 +259,8 @@ fn "wado-compiler/tests/fixtures/newtype_operator_trait.wado/run"() with Stdout 
         "wado-compiler/tests/fixtures/newtype_operator_trait.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
-    p1 = value_copy "wado-compiler/tests/fixtures/newtype_operator_trait.wado//Vec2"(struct.new "wado-compiler/tests/fixtures/newtype_operator_trait.wado//Vec2" { x: 1, y: 2 });
-    p2 = value_copy "wado-compiler/tests/fixtures/newtype_operator_trait.wado//Vec2"(struct.new "wado-compiler/tests/fixtures/newtype_operator_trait.wado//Vec2" { x: 3, y: 4 });
+    p1 = struct.new "wado-compiler/tests/fixtures/newtype_operator_trait.wado//Vec2" { x: 1, y: 2 };
+    p2 = struct.new "wado-compiler/tests/fixtures/newtype_operator_trait.wado//Vec2" { x: 3, y: 4 };
     __sroa_p3_x = p1.x + p2.x;
     __sroa_p3_y = p1.y + p2.y;
     __cond_4 = __sroa_p3_x == 4;
@@ -539,7 +537,7 @@ condition: neg.y == -2.0
         break __tmpl: __local_46;
         unreachable;
     });
-    same = value_copy "wado-compiler/tests/fixtures/newtype_operator_trait.wado//Vec2"(struct.new "wado-compiler/tests/fixtures/newtype_operator_trait.wado//Vec2" { x: 1, y: 2 });
+    same = struct.new "wado-compiler/tests/fixtures/newtype_operator_trait.wado//Vec2" { x: 1, y: 2 };
     __v0_18 = p1;
     __v1_19 = same;
     __cond_20 = (if __v0_18.x == __v1_19.x -> i32 {
@@ -643,10 +641,8 @@ condition: !p1 == p2
         unreachable;
     }
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("eq: true"), used: 8 });
-    v1 = value_copy "wado-compiler/tests/fixtures/newtype_operator_trait.wado//Vec2"(struct.new "wado-compiler/tests/fixtures/newtype_operator_trait.wado//Vec2" { x: 5, y: 6 });
-    v2 = value_copy "wado-compiler/tests/fixtures/newtype_operator_trait.wado//Vec2"(struct.new "wado-compiler/tests/fixtures/newtype_operator_trait.wado//Vec2" { x: 1, y: 1 });
-    __sroa_v3_x = v1.x + v2.x;
-    __sroa_v3_y = v1.y + v2.y;
+    __sroa_v3_x = 5 + 1;
+    __sroa_v3_y = 6 + 1;
     __cond_29 = __sroa_v3_x == 6;
     if __cond_29 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {

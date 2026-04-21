@@ -655,7 +655,9 @@ fn "wado-compiler/tests/fixtures/nested_array.wado/nested_array_option_access_te
             __pattern_temp_2 = "core:prelude/array.wado/ArrayIter<Option<i32>>^Iterator::next"(__iter_6);
             if ref.is_null(__pattern_temp_2) == 0 {
                 item = value_copy "core:prelude/types.wado//Option<i32>"(ref.as_non_null(__pattern_temp_2));
-                s = value_copy "core:prelude/string.wado//String"(let __match_scrut_0: ref "core:prelude/types.wado//Option<i32>"; __match_scrut_0 = item; (if ref.test "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_0) -> ref "core:prelude/string.wado//String" {
+                let __match_scrut_0: ref "core:prelude/types.wado//Option<i32>";
+                __match_scrut_0 = item;
+                s = (if ref.test "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_0) -> ref "core:prelude/string.wado//String" {
                     let __cast_1: ref "core:prelude/types.wado//Option<i32>::Some";
                     __cast_1 = ref.cast "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_0);
                     __local_8 = __cast_1.payload_0;
@@ -676,7 +678,7 @@ fn "wado-compiler/tests/fixtures/nested_array.wado/nested_array_option_access_te
                     struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("None"), used: 4 };
                 } else {
                     unreachable;
-                }));
+                });
                 "core:cli/println"(s);
             } else {
                 break b31;
