@@ -582,6 +582,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
             method_info: None,        // Not a method
             params,
             return_type,
+            task_return_type: if func.is_async {
+                Some(declared_return_type)
+            } else {
+                None
+            },
             effects,
             stores: func.stores.clone(),
             body,
@@ -664,6 +669,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             method_info: None,
             params: vec![], // Tests have no parameters
             return_type,
+            task_return_type: None,
             effects: vec![], // Tests can have any effects (they're allowed to do I/O)
             stores: vec![],
             body: Some(body),
@@ -1048,6 +1054,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }),
             params,
             return_type,
+            task_return_type: None,
             effects,
             stores: func.stores.clone(),
             body,

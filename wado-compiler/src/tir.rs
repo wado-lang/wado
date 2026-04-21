@@ -2762,6 +2762,11 @@ pub struct TirFunction {
     pub method_info: Option<LocalMethodName>,
     pub params: Vec<TirParam>,
     pub return_type: TypeId,
+    /// Declared return type for `async fn` (where `return_type` is erased to unit
+    /// because the result is delivered via `task return`). `None` for non-async fns
+    /// and for CM-binding / synthesized wrappers. Preserved so the effect checker
+    /// can infer signature resources from the user-visible return type.
+    pub task_return_type: Option<TypeId>,
     pub effects: Vec<EffectRef>,
     /// Parameter names declared in `stores[...]` — the function may store these references.
     pub stores: Vec<String>,

@@ -5,9 +5,7 @@
 
 use { Request, Response, ErrorCode, Fields, Trailers } from "wasi:http";
 
-export async fn handle(request: Request) -> Result<Response, ErrorCode>
-    with Request, Response
-{
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     // Create a future pair for i32
     let [future_rx, future_tx] = Future::<i32>::new();
 

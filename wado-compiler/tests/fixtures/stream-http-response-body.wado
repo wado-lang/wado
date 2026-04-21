@@ -2,9 +2,7 @@
 // Creates a body stream, writes data through it, and returns it as the response body.
 use { Request, Response, ErrorCode, Fields, Trailers } from "wasi:http";
 
-export async fn handle(request: Request) -> Result<Response, ErrorCode>
-    with Request, Response
-{
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
 
     // Create the body stream pair

@@ -3,9 +3,7 @@
 
 use { Request, Response, ErrorCode, Fields, Method, Trailers } from "wasi:http";
 
-export async fn handle(request: Request) -> Result<Response, ErrorCode>
-    with Request, Response
-{
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     let method = request.get_method();
     assert method matches { Put };
 

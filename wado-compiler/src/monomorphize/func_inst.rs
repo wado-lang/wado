@@ -860,6 +860,7 @@ impl Monomorphizer {
             }),
             params,
             return_type,
+            task_return_type: None,
             effects: generic.effects.clone(),
             stores: generic.stores.clone(),
             body,

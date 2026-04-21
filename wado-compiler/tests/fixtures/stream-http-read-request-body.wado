@@ -2,9 +2,7 @@
 // Consumes the request body stream and echoes the length in the response body.
 use { Request, Response, ErrorCode, Fields, Trailers } from "wasi:http";
 
-export async fn handle(request: Request) -> Result<Response, ErrorCode>
-    with Request, Response
-{
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     // Consume the request body
     let [res_future, _res_tx] = Future::<Result<(), ErrorCode>>::new();
     let [body_stream, _trailers] = Request::consume_body(request, res_future);

@@ -1,16 +1,15 @@
-// HTTP request authority test
-// Tests that request.get_authority() returns the host:port authority.
+// Test: `async fn` erases its declared return type to unit (the result
+// travels through `task return`), but the *declared* return type is still
+// visible for signature-resource inference. So an `async fn` returning
+// `Result<Response, ErrorCode>` does not need to repeat `with Response`.
 
 use { Request, Response, ErrorCode, Fields, Trailers } from "wasi:http";
 
 export async fn handle(request: Request) -> Result<Response, ErrorCode> {
-    let authority = request.get_authority();
-    // Just verify it compiles and runs without trapping.
-    // The authority value depends on the test runner configuration.
-
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let headers = Fields::new();
     let [response, _tx_future] = Response::new(headers, null, trailers_future);
+
     task return Result::<Response, ErrorCode>::Ok(response);
     trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
 }

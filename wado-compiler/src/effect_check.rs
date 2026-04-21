@@ -364,6 +364,18 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
             &mut out,
             &mut visited,
         );
+        // Async functions erase `return_type` to unit (the result travels via
+        // `task return`), so walk the declared task return type too.
+        if let Some(task_ret) = func.task_return_type {
+            collect_resource_refs(
+                task_ret,
+                &tt,
+                &self.struct_fields,
+                &self.variant_payloads,
+                &mut out,
+                &mut visited,
+            );
+        }
         out
     }
 

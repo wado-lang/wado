@@ -2348,6 +2348,7 @@ fn make_binding_function(
         method_info: None,
         params,
         return_type,
+        task_return_type: None,
         effects: vec![],
         stores: vec![],
         body: Some(body),
@@ -6506,6 +6507,7 @@ fn synthesize_stream_read_func(
             },
         ],
         return_type: array_type_id,
+        task_return_type: None,
         effects: vec![],
         stores: vec![],
         body: Some(TirBlock {

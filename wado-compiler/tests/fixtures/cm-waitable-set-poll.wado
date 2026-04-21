@@ -3,9 +3,7 @@
 
 use { Request, Response, ErrorCode, Fields, Trailers } from "wasi:http";
 
-export async fn handle(request: Request) -> Result<Response, ErrorCode>
-    with Request, Response
-{
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     // Create a waitable set and poll it (should get None since nothing is joined)
     let ws = WaitableSet::new();
     let event = ws.poll();

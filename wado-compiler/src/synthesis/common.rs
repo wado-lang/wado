@@ -386,6 +386,7 @@ pub fn make_synthetic_method(
         method_info: Some(method_info),
         params,
         return_type,
+        task_return_type: None,
         effects: Vec::new(),
         stores: vec![],
         body: Some(body),
