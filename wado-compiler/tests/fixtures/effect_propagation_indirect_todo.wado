@@ -1,0 +1,29 @@
+// TODO: effect propagation through function types.
+//
+// When a closure's body uses a resource (e.g. `Stream::new`) that should be
+// granted via propagation from the surrounding `with Stdout` context, the
+// closure's inferred function type carries the concrete resource effects
+// (e.g. `[Stream]`). Assigning that closure to a variable declared as
+// `fn() with Stdout` currently fails type-check because the function-type
+// effect list is compared literally — propagation is only applied to
+// `current_effects` at function entry, not to function-type positions.
+//
+// When propagation is extended to function types (or body-effect inference
+// normalizes the closure type back to the declared `fn() with Stdout`),
+// this fixture should compile and emit "ok". Remove the `compile_error`
+// line and switch to `stdout_contains` at that point.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let c: fn() with Stdout = || {
+        let [rx, tx] = Stream::<u8>::new();
+        rx.drop();
+        tx.drop();
+    };
+    c();
+    println("ok");
+}
+
+__DATA__
+{"compile_error": "type mismatch"}

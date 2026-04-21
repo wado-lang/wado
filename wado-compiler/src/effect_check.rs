@@ -1217,14 +1217,43 @@ fn build_propagation_closure(
     };
     let tt = tt_rc.borrow();
 
+    // Pre-index struct fields and variant case payloads so
+    // `collect_resource_refs` can walk nested resource references.
+    let mut struct_fields: IndexMap<(ModuleSource, String), Vec<TypeId>> = IndexMap::default();
+    let mut variant_payloads: IndexMap<(ModuleSource, String), Vec<TypeId>> = IndexMap::default();
+    for (module_source, module) in modules {
+        for s in &module.structs {
+            let tids: Vec<TypeId> = s.fields.iter().map(|f| f.type_id).collect();
+            struct_fields.insert((module_source.clone(), s.name.clone()), tids);
+        }
+        for v in &module.variants {
+            let tids: Vec<TypeId> = v.cases.iter().map(|c| c.payload).collect();
+            variant_payloads.insert((module_source.clone(), v.name.clone()), tids);
+        }
+    }
+
     for (module_source, module) in modules {
         for effect in &module.effects {
             let mut refs: IndexSet<EffectRef> = IndexSet::default();
             for op in &effect.operations {
                 for param in &op.params {
-                    collect_resource_refs(param.type_id, &tt, &mut refs, &mut IndexSet::default());
+                    collect_resource_refs(
+                        param.type_id,
+                        &tt,
+                        &struct_fields,
+                        &variant_payloads,
+                        &mut refs,
+                        &mut IndexSet::default(),
+                    );
                 }
-                collect_resource_refs(op.return_type, &tt, &mut refs, &mut IndexSet::default());
+                collect_resource_refs(
+                    op.return_type,
+                    &tt,
+                    &struct_fields,
+                    &variant_payloads,
+                    &mut refs,
+                    &mut IndexSet::default(),
+                );
             }
             // Do not include the effect itself (effects are not resources).
             let key = EffectRef::Concrete {
@@ -1237,9 +1266,23 @@ fn build_propagation_closure(
             let mut refs: IndexSet<EffectRef> = IndexSet::default();
             for op in &resource.operations {
                 for param in &op.params {
-                    collect_resource_refs(param.type_id, &tt, &mut refs, &mut IndexSet::default());
+                    collect_resource_refs(
+                        param.type_id,
+                        &tt,
+                        &struct_fields,
+                        &variant_payloads,
+                        &mut refs,
+                        &mut IndexSet::default(),
+                    );
                 }
-                collect_resource_refs(op.return_type, &tt, &mut refs, &mut IndexSet::default());
+                collect_resource_refs(
+                    op.return_type,
+                    &tt,
+                    &struct_fields,
+                    &variant_payloads,
+                    &mut refs,
+                    &mut IndexSet::default(),
+                );
             }
             // Drop the self-reference: holding `with R` already implies `R`.
             let self_ref = EffectRef::Concrete {
@@ -1291,11 +1334,13 @@ fn merge_sets(dst: &mut IndexSet<EffectRef>, src: &IndexSet<EffectRef>) {
 /// `GenericResource`) reference as an `EffectRef::Concrete`.
 ///
 /// Handles nested containers (`Option<T>`, `Result<T,E>`, tuples, `Array<T>`,
-/// function types, refs, newtypes). Uses `visited` to stop at cycles (e.g.
-/// recursive struct types).
+/// function types, refs, newtypes, struct fields, variant case payloads).
+/// Uses `visited` to stop at cycles (e.g. recursive struct types).
 fn collect_resource_refs(
     type_id: TypeId,
     tt: &TypeTable,
+    struct_fields: &IndexMap<(ModuleSource, String), Vec<TypeId>>,
+    variant_payloads: &IndexMap<(ModuleSource, String), Vec<TypeId>>,
     out: &mut IndexSet<EffectRef>,
     visited: &mut IndexSet<TypeId>,
 ) {
@@ -1319,20 +1364,20 @@ fn collect_resource_refs(
             });
             if let ResolvedType::GenericResource { type_args, .. } = ty {
                 for ta in type_args {
-                    collect_resource_refs(*ta, tt, out, visited);
+                    collect_resource_refs(*ta, tt, struct_fields, variant_payloads, out, visited);
                 }
             }
         }
         ResolvedType::GenericInstance { type_args, .. } => {
             for ta in type_args {
-                collect_resource_refs(*ta, tt, out, visited);
+                collect_resource_refs(*ta, tt, struct_fields, variant_payloads, out, visited);
             }
         }
         ResolvedType::Ref(t)
         | ResolvedType::MutRef(t)
         | ResolvedType::Reactive(t)
         | ResolvedType::BuiltinArray(t) => {
-            collect_resource_refs(*t, tt, out, visited);
+            collect_resource_refs(*t, tt, struct_fields, variant_payloads, out, visited);
         }
         ResolvedType::Function {
             params,
@@ -1340,15 +1385,50 @@ fn collect_resource_refs(
             ..
         } => {
             for p in params {
-                collect_resource_refs(*p, tt, out, visited);
+                collect_resource_refs(*p, tt, struct_fields, variant_payloads, out, visited);
             }
-            collect_resource_refs(*return_type, tt, out, visited);
+            collect_resource_refs(
+                *return_type,
+                tt,
+                struct_fields,
+                variant_payloads,
+                out,
+                visited,
+            );
         }
         ResolvedType::Newtype { base_type, .. } => {
-            collect_resource_refs(*base_type, tt, out, visited);
+            collect_resource_refs(
+                *base_type,
+                tt,
+                struct_fields,
+                variant_payloads,
+                out,
+                visited,
+            );
         }
-        // Primitives, Unit, Never, Struct, Enum, Variant, TypeParam, TypePack,
-        // AssocTypeProjection, Flags, Unknown, Error — no resource refs.
+        ResolvedType::Struct {
+            name,
+            module_source,
+            ..
+        } => {
+            if let Some(fields) = struct_fields.get(&(module_source.clone(), name.clone())) {
+                for ft in fields {
+                    collect_resource_refs(*ft, tt, struct_fields, variant_payloads, out, visited);
+                }
+            }
+        }
+        ResolvedType::Variant {
+            name,
+            module_source,
+        } => {
+            if let Some(payloads) = variant_payloads.get(&(module_source.clone(), name.clone())) {
+                for pt in payloads {
+                    collect_resource_refs(*pt, tt, struct_fields, variant_payloads, out, visited);
+                }
+            }
+        }
+        // Primitives, Unit, Never, Enum, Flags, TypeParam, TypePack,
+        // AssocTypeProjection, Unknown, Error — no resource refs.
         _ => {}
     }
 }
