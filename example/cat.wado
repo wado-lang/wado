@@ -16,7 +16,7 @@ use { args, eprintln, Stdout, Stderr, Environment } from "core:cli";
 use { Stdin } from "wasi:cli";
 use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
 
-export fn run() with Stdout, Stderr, Environment, Preopens, Stdin, Descriptor {
+export fn run() with Stdout, Stderr, Environment, Preopens, Stdin {
     let arguments = args();
 
     if arguments.len() == 0 {
@@ -39,7 +39,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Stdin, Descriptor {
     }
 }
 
-fn cat_file(dir: &Descriptor, path: String) with Stdout, Stderr, Descriptor {
+fn cat_file(dir: &Descriptor, path: String) with Stdout, Stderr {
     let open_result = dir.open_at(
         PathFlags::none(),
         path,
