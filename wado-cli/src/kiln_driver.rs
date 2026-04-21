@@ -1,5 +1,5 @@
-//! Kiln pipeline driver — manifest-lowering, plan computation, and
-//! generator execution.
+//! Kiln pipeline driver — manifest-lowering, plan computation, generator
+//! execution, and cache bookkeeping.
 //!
 //! This is the CLI-side glue between [`wado_manifest::Manifest`] and the
 //! pure-data algorithmic module at [`wado_compiler::kiln`]. Its
@@ -12,10 +12,14 @@
 //!    writing the response to disk under the invocation's output
 //!    directory, with a canonical `#![generated]` header stamped on each
 //!    file — see [`execute`].
+//! 3. Convert an [`InvocationRun`] into a [`wado_manifest::GeneratorCacheEntry`]
+//!    for persistence (`build_cache_entry`), check a recorded entry for
+//!    freshness against the current filesystem + sources (`cache_matches`),
+//!    and delete orphaned `#![generated]` files left over from an earlier
+//!    run (`reconcile_outputs`).
 //!
-//! Cache-key composition, lockfile bookkeeping, and stale-output GC land
-//! in later commits; this module is kept deliberately thin so each layer
-//! can be reviewed in isolation.
+//! Wiring into the top-level `wado compile` flow lands in a subsequent
+//! commit; this module stays agnostic of where the driver is called from.
 
 use std::path::{Path, PathBuf};
 
@@ -24,10 +28,13 @@ use wado_compiler::compiler_host::{
     SourceError,
 };
 use wado_compiler::kiln::{
-    DeclSite, GeneratedHeader, GeneratorModule, Invocation, InvocationPath, Plan, PlanError,
-    build_plan, file_hash, generator_identity,
+    DeclSite, FileHash, GeneratedHeader, GeneratorModule, Invocation, InvocationPath, Plan,
+    PlanError, build_plan, file_hash, generator_identity, has_generated_marker, hex_digest,
 };
-use wado_manifest::{GeneratorInvocation, GeneratorModuleRef, Manifest};
+use wado_manifest::{
+    FileHash as ManifestFileHash, GeneratorCacheEntry, GeneratorInvocation, GeneratorModuleRef,
+    Manifest, OutputHash as ManifestOutputHash,
+};
 
 /// Output directory default when `[build.generators.<name>].output_dir` is
 /// unset: `build/kiln/<name>`.
@@ -234,6 +241,11 @@ fn write_len(out: &mut Vec<u8>, n: usize) {
 /// made during this run.
 #[derive(Debug, Clone)]
 pub struct InvocationRun {
+    /// Content hash of the primary schema at invocation time. Recorded in
+    /// the lockfile so subsequent runs can detect input drift.
+    pub primary: FileHash,
+    /// Content hashes for each declared input, in declaration order.
+    pub inputs: Vec<FileHash>,
     /// One entry per output file the generator produced. Paths are
     /// project-root-relative, normalized (`output_dir` joined with the
     /// generator-relative path and forward-slash-only).
@@ -327,9 +339,13 @@ pub async fn execute<H: CompilerHost>(
     host: &H,
 ) -> Result<InvocationRun, ExecuteError> {
     let primary = load_input(host, &invocation.from).await?;
+    let primary_hash = file_hash(&invocation.from, &primary.content);
     let mut inputs = Vec::with_capacity(invocation.inputs.len());
+    let mut input_hashes = Vec::with_capacity(invocation.inputs.len());
     for p in &invocation.inputs {
-        inputs.push(load_input(host, p).await?);
+        let file = load_input(host, p).await?;
+        input_hashes.push(file_hash(p, &file.content));
+        inputs.push(file);
     }
 
     let request = GeneratorRequest {
@@ -384,9 +400,212 @@ pub async fn execute<H: CompilerHost>(
     }
 
     Ok(InvocationRun {
+        primary: primary_hash,
+        inputs: input_hashes,
         outputs,
         reads: response.reads,
     })
+}
+
+/// Convert an [`InvocationRun`] into a [`GeneratorCacheEntry`] ready to be
+/// written to `wado.lock`.
+///
+/// `invocation_name` is the lockfile-facing key (the `[build.generators.<k>]`
+/// name for manifest invocations; `kiln-<hex>` for inline clauses landing in
+/// M5). `options_hash` is the hex SHA-256 of the canonical options encoding —
+/// produced by [`wado_compiler::kiln::hash_options_canonical`] so it stays
+/// stable across the M3 provisional encoder and the M4 lifted-form encoder.
+///
+/// The emitted entry contains hex-encoded hashes (as required by
+/// `wado-manifest`'s TOML form) and sorts the `reads` list lexicographically
+/// by path, mirroring what [`cache_matches`] expects on the next run.
+#[must_use]
+pub fn build_cache_entry(
+    invocation_name: &str,
+    invocation: &Invocation,
+    run: &InvocationRun,
+    options_hash: String,
+) -> GeneratorCacheEntry {
+    let generator = generator_identity(&invocation.module);
+    let primary = to_manifest_file_hash(&run.primary);
+    let inputs: Vec<ManifestFileHash> = run.inputs.iter().map(to_manifest_file_hash).collect();
+
+    let mut reads: Vec<ManifestFileHash> = run
+        .reads
+        .iter()
+        .map(|r| ManifestFileHash {
+            path: InvocationPath::normalize(&r.path).as_str().to_string(),
+            hash: hex_digest(&r.content_hash),
+        })
+        .collect();
+    reads.sort_by(|a, b| a.path.cmp(&b.path));
+    reads.dedup_by(|a, b| a.path == b.path);
+
+    let outputs: Vec<ManifestOutputHash> = run
+        .outputs
+        .iter()
+        .map(|o| ManifestOutputHash {
+            path: o.path.clone(),
+            hash: hex_digest(&o.hash),
+            entry: o.is_entry,
+        })
+        .collect();
+
+    GeneratorCacheEntry {
+        invocation: invocation_name.to_string(),
+        generator,
+        primary,
+        inputs,
+        options_hash,
+        reads,
+        outputs,
+    }
+}
+
+fn to_manifest_file_hash(f: &FileHash) -> ManifestFileHash {
+    ManifestFileHash {
+        path: f.path.clone(),
+        hash: hex_digest(&f.hash),
+    }
+}
+
+/// Check whether a recorded cache entry is still valid for the given
+/// invocation.
+///
+/// Re-hashes the primary + declared inputs via `host.load_source`, then
+/// re-hashes every `reads` entry the same way, then re-hashes every output
+/// file from disk (via `manifest_root` joined with the recorded output
+/// path). Returns `true` iff every hash matches the lockfile record.
+///
+/// Any load or read failure — missing file, permissions, content drift —
+/// is treated as a cache miss and surfaces as `Ok(false)`. Callers that
+/// need to distinguish "stale cache" from "I/O broken" should fall through
+/// to [`execute`]; it will surface the underlying error if the file is
+/// genuinely missing at run time.
+pub async fn cache_matches<H: CompilerHost>(
+    entry: &GeneratorCacheEntry,
+    invocation: &Invocation,
+    manifest_root: &Path,
+    host: &H,
+) -> bool {
+    if entry.primary.path != invocation.from.as_str() {
+        return false;
+    }
+    if !matches_file(host, &invocation.from, &entry.primary.hash).await {
+        return false;
+    }
+
+    if entry.inputs.len() != invocation.inputs.len() {
+        return false;
+    }
+    for (declared, recorded) in invocation.inputs.iter().zip(&entry.inputs) {
+        if declared.as_str() != recorded.path {
+            return false;
+        }
+        if !matches_file(host, declared, &recorded.hash).await {
+            return false;
+        }
+    }
+
+    for read in &entry.reads {
+        let normalized = InvocationPath::normalize(&read.path);
+        if !matches_file(host, &normalized, &read.hash).await {
+            return false;
+        }
+    }
+
+    for output in &entry.outputs {
+        let abs = manifest_root.join(&output.path);
+        let Ok(bytes) = std::fs::read(&abs) else {
+            return false;
+        };
+        if !hash_matches_bytes(&bytes, &output.hash) {
+            return false;
+        }
+    }
+    true
+}
+
+async fn matches_file<H: CompilerHost>(host: &H, path: &InvocationPath, expected_hex: &str) -> bool {
+    match host.load_source(path.as_str()).await {
+        Ok(bytes) => hash_matches_bytes(&bytes, expected_hex),
+        Err(_) => false,
+    }
+}
+
+fn hash_matches_bytes(bytes: &[u8], expected_hex: &str) -> bool {
+    let fh = file_hash(&InvocationPath::normalize(""), bytes);
+    hex_digest(&fh.hash) == expected_hex
+}
+
+/// Delete stale `#![generated]` files under `output_dir`.
+///
+/// Walks `output_dir` recursively. For every regular file whose contents
+/// open with a `#![generated]` attribute (see [`has_generated_marker`]),
+/// the file is deleted unless its project-root-relative path appears in
+/// `kept_paths`. Files without the marker — i.e. anything a user may have
+/// placed under `output_dir` by hand — are left alone.
+///
+/// Returns the list of deleted paths (project-root-relative, forward-slash
+/// normalized), ready for a human-facing diagnostic.
+///
+/// `manifest_root` is used only to derive the relative path of each file
+/// for the `kept_paths` comparison; `output_dir` must be an absolute path
+/// inside `manifest_root`.
+///
+/// # Errors
+/// Propagates `std::io::Error` from directory traversal and file removal.
+/// A missing `output_dir` is not an error — returns an empty list.
+pub fn reconcile_outputs(
+    manifest_root: &Path,
+    output_dir: &Path,
+    kept_paths: &[String],
+) -> std::io::Result<Vec<String>> {
+    if !output_dir.exists() {
+        return Ok(Vec::new());
+    }
+    let kept: indexmap::IndexSet<&str> = kept_paths.iter().map(String::as_str).collect();
+    let mut deleted = Vec::new();
+    walk_and_delete(manifest_root, output_dir, &kept, &mut deleted)?;
+    deleted.sort();
+    Ok(deleted)
+}
+
+fn walk_and_delete(
+    manifest_root: &Path,
+    dir: &Path,
+    kept: &indexmap::IndexSet<&str>,
+    deleted: &mut Vec<String>,
+) -> std::io::Result<()> {
+    for entry in std::fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        let ft = entry.file_type()?;
+        if ft.is_dir() {
+            walk_and_delete(manifest_root, &path, kept, deleted)?;
+            continue;
+        }
+        if !ft.is_file() {
+            continue;
+        }
+        let Ok(content) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        if !has_generated_marker(&content) {
+            continue;
+        }
+        let rel = match path.strip_prefix(manifest_root) {
+            Ok(r) => r,
+            Err(_) => continue,
+        };
+        let rel_str = rel.to_string_lossy().replace('\\', "/");
+        if kept.contains(rel_str.as_str()) {
+            continue;
+        }
+        std::fs::remove_file(&path)?;
+        deleted.push(rel_str);
+    }
+    Ok(())
 }
 
 async fn load_input<H: CompilerHost>(
@@ -874,6 +1093,364 @@ output-dir = "build/kiln/second"
                 .unwrap();
             assert_eq!(run.reads.len(), 1);
             assert_eq!(run.reads[0].path, "extra.proto");
+        }
+    }
+
+    mod cache_tests {
+        use super::*;
+        use indexmap::IndexMap;
+        use std::sync::Mutex;
+        use wado_compiler::compiler_host::{
+            Diagnostic, GeneratorOutputFile, GeneratorResponse, GeneratorRunnerError,
+        };
+
+        struct HashOnlyHost {
+            sources: IndexMap<String, Vec<u8>>,
+        }
+
+        impl HashOnlyHost {
+            fn new(sources: &[(&str, &[u8])]) -> Self {
+                Self {
+                    sources: sources
+                        .iter()
+                        .map(|(k, v)| ((*k).to_string(), (*v).to_vec()))
+                        .collect(),
+                }
+            }
+        }
+
+        impl CompilerHost for HashOnlyHost {
+            async fn load_source(&self, path: &str) -> Result<Vec<u8>, SourceError> {
+                self.sources
+                    .get(path)
+                    .cloned()
+                    .ok_or_else(|| SourceError::NotFound {
+                        path: path.to_string(),
+                    })
+            }
+
+            fn emit_diagnostic(&self, _d: Diagnostic) {}
+        }
+
+        fn runtime() -> tokio::runtime::Runtime {
+            tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap()
+        }
+
+        fn sample_invocation() -> Invocation {
+            Invocation {
+                decl_site: DeclSite::Manifest {
+                    name: "proto".to_string(),
+                },
+                module: GeneratorModule::Spec("ns:proto@1.0.0".to_string()),
+                from: InvocationPath::normalize("schema.proto"),
+                inputs: vec![InvocationPath::normalize("dep.proto")],
+                output_dir: InvocationPath::normalize("build/kiln/proto"),
+                options_canonical: vec![],
+            }
+        }
+
+        fn run_execute_and_return(
+            tmp: &std::path::Path,
+            response: GeneratorResponse,
+            sources: &[(&str, &[u8])],
+        ) -> InvocationRun {
+            struct H {
+                sources: IndexMap<String, Vec<u8>>,
+                response: Mutex<Option<Result<GeneratorResponse, GeneratorRunnerError>>>,
+            }
+            impl CompilerHost for H {
+                async fn load_source(&self, path: &str) -> Result<Vec<u8>, SourceError> {
+                    self.sources
+                        .get(path)
+                        .cloned()
+                        .ok_or_else(|| SourceError::NotFound {
+                            path: path.to_string(),
+                        })
+                }
+                fn emit_diagnostic(&self, _d: Diagnostic) {}
+                async fn run_generator(
+                    &self,
+                    _wasm: &[u8],
+                    _request: GeneratorRequest,
+                ) -> Result<GeneratorResponse, GeneratorRunnerError> {
+                    self.response
+                        .lock()
+                        .unwrap()
+                        .take()
+                        .expect("already consumed")
+                }
+            }
+            let host = H {
+                sources: sources
+                    .iter()
+                    .map(|(k, v)| ((*k).to_string(), (*v).to_vec()))
+                    .collect(),
+                response: Mutex::new(Some(Ok(response))),
+            };
+            runtime()
+                .block_on(async { execute(&sample_invocation(), b"wasm", tmp, &host).await })
+                .unwrap()
+        }
+
+        #[test]
+        fn build_cache_entry_round_trips_paths_and_hashes() {
+            let tmp = tempfile::tempdir().unwrap();
+            let response = GeneratorResponse {
+                files: vec![GeneratorOutputFile {
+                    path: "lib.wado".to_string(),
+                    content: "pub fn hello() {}\n".to_string(),
+                    is_entry: true,
+                }],
+                reads: vec![GeneratorReadRecord {
+                    path: "imported.proto".to_string(),
+                    content_hash: [7u8; 32],
+                }],
+            };
+            let run = run_execute_and_return(
+                tmp.path(),
+                response,
+                &[("schema.proto", b"primary"), ("dep.proto", b"dep")],
+            );
+            let entry = build_cache_entry(
+                "proto",
+                &sample_invocation(),
+                &run,
+                "sha256:optdigest".to_string(),
+            );
+
+            assert_eq!(entry.invocation, "proto");
+            assert_eq!(entry.generator, "ns:proto@1.0.0");
+            assert_eq!(entry.primary.path, "schema.proto");
+            assert_eq!(entry.primary.hash.len(), 64);
+            assert!(entry.primary.hash.chars().all(|c| c.is_ascii_hexdigit()));
+            assert_eq!(entry.inputs.len(), 1);
+            assert_eq!(entry.inputs[0].path, "dep.proto");
+            assert_eq!(entry.reads.len(), 1);
+            assert_eq!(entry.reads[0].path, "imported.proto");
+            assert_eq!(entry.options_hash, "sha256:optdigest");
+            assert_eq!(entry.outputs.len(), 1);
+            assert_eq!(entry.outputs[0].path, "build/kiln/proto/lib.wado");
+            assert!(entry.outputs[0].entry);
+        }
+
+        #[test]
+        fn build_cache_entry_sorts_reads_lexicographically() {
+            let tmp = tempfile::tempdir().unwrap();
+            let response = GeneratorResponse {
+                files: vec![],
+                reads: vec![
+                    GeneratorReadRecord {
+                        path: "z.proto".to_string(),
+                        content_hash: [1u8; 32],
+                    },
+                    GeneratorReadRecord {
+                        path: "a.proto".to_string(),
+                        content_hash: [2u8; 32],
+                    },
+                    GeneratorReadRecord {
+                        path: "a.proto".to_string(),
+                        content_hash: [2u8; 32],
+                    },
+                ],
+            };
+            let run = run_execute_and_return(
+                tmp.path(),
+                response,
+                &[("schema.proto", b"p"), ("dep.proto", b"d")],
+            );
+            let entry = build_cache_entry(
+                "proto",
+                &sample_invocation(),
+                &run,
+                "sha256:o".to_string(),
+            );
+            assert_eq!(entry.reads.len(), 2);
+            assert_eq!(entry.reads[0].path, "a.proto");
+            assert_eq!(entry.reads[1].path, "z.proto");
+        }
+
+        #[test]
+        fn cache_matches_hits_when_everything_lines_up() {
+            let tmp = tempfile::tempdir().unwrap();
+            let response = GeneratorResponse {
+                files: vec![GeneratorOutputFile {
+                    path: "lib.wado".to_string(),
+                    content: "pub fn hello() {}\n".to_string(),
+                    is_entry: true,
+                }],
+                reads: vec![],
+            };
+            let run = run_execute_and_return(
+                tmp.path(),
+                response,
+                &[("schema.proto", b"p"), ("dep.proto", b"d")],
+            );
+            let entry = build_cache_entry(
+                "proto",
+                &sample_invocation(),
+                &run,
+                "sha256:o".to_string(),
+            );
+            let host = HashOnlyHost::new(&[("schema.proto", b"p"), ("dep.proto", b"d")]);
+            let hit = runtime().block_on(async {
+                cache_matches(&entry, &sample_invocation(), tmp.path(), &host).await
+            });
+            assert!(hit);
+        }
+
+        #[test]
+        fn cache_matches_misses_when_primary_changed() {
+            let tmp = tempfile::tempdir().unwrap();
+            let response = GeneratorResponse {
+                files: vec![],
+                reads: vec![],
+            };
+            let run = run_execute_and_return(
+                tmp.path(),
+                response,
+                &[("schema.proto", b"p"), ("dep.proto", b"d")],
+            );
+            let entry = build_cache_entry(
+                "proto",
+                &sample_invocation(),
+                &run,
+                "sha256:o".to_string(),
+            );
+            let host = HashOnlyHost::new(&[("schema.proto", b"different"), ("dep.proto", b"d")]);
+            let hit = runtime().block_on(async {
+                cache_matches(&entry, &sample_invocation(), tmp.path(), &host).await
+            });
+            assert!(!hit);
+        }
+
+        #[test]
+        fn cache_matches_misses_when_output_deleted() {
+            let tmp = tempfile::tempdir().unwrap();
+            let response = GeneratorResponse {
+                files: vec![GeneratorOutputFile {
+                    path: "lib.wado".to_string(),
+                    content: "pub fn hello() {}\n".to_string(),
+                    is_entry: true,
+                }],
+                reads: vec![],
+            };
+            let run = run_execute_and_return(
+                tmp.path(),
+                response,
+                &[("schema.proto", b"p"), ("dep.proto", b"d")],
+            );
+            let entry = build_cache_entry(
+                "proto",
+                &sample_invocation(),
+                &run,
+                "sha256:o".to_string(),
+            );
+            std::fs::remove_file(tmp.path().join("build/kiln/proto/lib.wado")).unwrap();
+            let host = HashOnlyHost::new(&[("schema.proto", b"p"), ("dep.proto", b"d")]);
+            let hit = runtime().block_on(async {
+                cache_matches(&entry, &sample_invocation(), tmp.path(), &host).await
+            });
+            assert!(!hit);
+        }
+
+        #[test]
+        fn cache_matches_misses_when_reads_drift() {
+            let tmp = tempfile::tempdir().unwrap();
+            let response = GeneratorResponse {
+                files: vec![],
+                reads: vec![GeneratorReadRecord {
+                    path: "imported.proto".to_string(),
+                    content_hash: wado_compiler::kiln::file_hash(
+                        &InvocationPath::normalize("imported.proto"),
+                        b"original",
+                    )
+                    .hash,
+                }],
+            };
+            let run = run_execute_and_return(
+                tmp.path(),
+                response,
+                &[("schema.proto", b"p"), ("dep.proto", b"d")],
+            );
+            let entry = build_cache_entry(
+                "proto",
+                &sample_invocation(),
+                &run,
+                "sha256:o".to_string(),
+            );
+            let host = HashOnlyHost::new(&[
+                ("schema.proto", b"p"),
+                ("dep.proto", b"d"),
+                ("imported.proto", b"mutated"),
+            ]);
+            let hit = runtime().block_on(async {
+                cache_matches(&entry, &sample_invocation(), tmp.path(), &host).await
+            });
+            assert!(!hit);
+        }
+
+        #[test]
+        fn reconcile_outputs_deletes_orphaned_generated_files() {
+            let tmp = tempfile::tempdir().unwrap();
+            let out_dir = tmp.path().join("build/kiln/proto");
+            std::fs::create_dir_all(&out_dir).unwrap();
+
+            let kept_path = out_dir.join("kept.wado");
+            let orphan_path = out_dir.join("orphan.wado");
+            let hand_written_path = out_dir.join("hand.wado");
+            std::fs::write(
+                &kept_path,
+                "#![generated(by = \"gen\", sources = [])]\npub fn k() {}\n",
+            )
+            .unwrap();
+            std::fs::write(
+                &orphan_path,
+                "#![generated(by = \"gen\", sources = [])]\npub fn o() {}\n",
+            )
+            .unwrap();
+            std::fs::write(&hand_written_path, "pub fn h() {}\n").unwrap();
+
+            let deleted = reconcile_outputs(
+                tmp.path(),
+                &out_dir,
+                &["build/kiln/proto/kept.wado".to_string()],
+            )
+            .unwrap();
+
+            assert_eq!(deleted, vec!["build/kiln/proto/orphan.wado".to_string()]);
+            assert!(kept_path.exists());
+            assert!(!orphan_path.exists());
+            assert!(hand_written_path.exists());
+        }
+
+        #[test]
+        fn reconcile_outputs_missing_dir_is_empty() {
+            let tmp = tempfile::tempdir().unwrap();
+            let deleted =
+                reconcile_outputs(tmp.path(), &tmp.path().join("no-such-dir"), &[]).unwrap();
+            assert!(deleted.is_empty());
+        }
+
+        #[test]
+        fn reconcile_outputs_descends_into_subdirs() {
+            let tmp = tempfile::tempdir().unwrap();
+            let nested = tmp.path().join("build/kiln/proto/sub");
+            std::fs::create_dir_all(&nested).unwrap();
+            std::fs::write(
+                nested.join("orphan.wado"),
+                "#![generated(by = \"gen\", sources = [])]\n",
+            )
+            .unwrap();
+            let deleted = reconcile_outputs(
+                tmp.path(),
+                &tmp.path().join("build/kiln/proto"),
+                &[],
+            )
+            .unwrap();
+            assert_eq!(deleted, vec!["build/kiln/proto/sub/orphan.wado".to_string()]);
         }
     }
 }
