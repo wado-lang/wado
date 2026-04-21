@@ -1130,19 +1130,20 @@ fn gen_parser_struct(w: &mut CodeWriter) {
     w.end();
     w.blank();
 
-    // `p.match_not(&[TK_A, TK_B, ...])` — consumes one token whose kind is
+    // `p.match_not([TK_A, TK_B, ...])` — consumes one token whose kind is
     // not in the exclusion set (for parser-side `~ X`). Fails at EOF or when
-    // the current token is in the exclusion set.
+    // the current token is in the exclusion set. The exclusion set is passed
+    // by value so the caller can use tuple-to-Array coercion on a literal.
     let mut f10 = FnSpec::new("match_not");
     f10.set_receiver("&mut self");
-    f10.add_param("excluded", "&Array<i32>");
+    f10.add_param("excluded", "Array<i32>");
     f10.set_return_type("Result<Token, ParseError>");
     f10.emit_begin(w);
     w.line("let k = self.tokens[self.pos].kind;");
     w.begin("if k != TK_EOF");
     w.line("let mut blocked = false;");
     w.begin("for let x of excluded");
-    w.begin("if *x == k");
+    w.begin("if x == k");
     w.line("blocked = true;");
     w.line("break;");
     w.end();
@@ -3750,15 +3751,16 @@ fn gen_element_failable_named(w: &mut CodeWriter, elem: &Element, ctx: &mut GenC
 }
 
 /// Emit the Parser call expression for `~ X` (set complement). Returns a
-/// `Result<Token, ParseError>` at runtime.
+/// `Result<Token, ParseError>` at runtime. The exclusion set is a tuple
+/// literal that coerces to `Array<i32>` at the call site.
 fn not_match_call(inner: &Element) -> String {
     if let TokenRef(t) = inner {
         let const_name = `TK_{t.name}`;
-        return `p.match_not(&[{const_name}])`;
+        return `p.match_not([{const_name}])`;
     }
     if let Literal(l) = inner {
         let const_name = literal_const_name(&l.text);
-        return `p.match_not(&[{const_name}])`;
+        return `p.match_not([{const_name}])`;
     }
     if let Group(g) = inner {
         let mut kinds: Array<String> = [];
@@ -3770,7 +3772,7 @@ fn not_match_call(inner: &Element) -> String {
                 }
                 list.push_str(kinds[i]);
             }
-            return `p.match_not(&[{list}])`;
+            return `p.match_not([{list}])`;
         }
     }
     panic("not_match_call: unsupported inner element for parser-side ~");

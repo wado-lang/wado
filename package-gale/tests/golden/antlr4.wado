@@ -3798,12 +3798,12 @@ impl Parser {
         ));
     }
 
-    fn match_not(&mut self, excluded: &Array<i32>) -> Result<Token, ParseError> {
+    fn match_not(&mut self, excluded: Array<i32>) -> Result<Token, ParseError> {
         let k = self.tokens[self.pos].kind;
         if k != TK_EOF {
             let mut blocked = false;
             for let x of excluded {
-                if *x == k {
+                if x == k {
                     blocked = true;
                     break;
                 }

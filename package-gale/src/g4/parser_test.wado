@@ -964,6 +964,110 @@ expr : ID ;";
     assert result matches { Err(_) }, "expected mode in parser grammar to be rejected";
 }
 
+test "tilde applied to rule reference is rejected" {
+    // ANTLR4 spec: `notSet : NOT setElement | NOT blockSet` where setElement is
+    // TOKEN_REF / STRING_LITERAL (/ charSet / LEXER_CHAR_SET in lexer rules).
+    // A rule reference is not a set element, so `~ruleref` must be rejected.
+    // Spec: vendor/antlr4/tool/src/org/antlr/v4/parse/ANTLRParser.g (notSet).
+    let input = "grammar Test;
+a : ~b ;
+b : 'x' ;";
+    let result = parse(input);
+    assert result matches { Err(_) }, "expected ~ruleref to be rejected";
+}
+
+test "tilde applied to wildcard is rejected" {
+    // `.` is not a set element either — rejecting `~.` matches ANTLR4.
+    let input = "grammar Test;
+a : ~. ;";
+    let result = parse(input);
+    assert result matches { Err(_) }, "expected ~. to be rejected";
+}
+
+test "tilde applied to block containing rule ref is rejected" {
+    // Block-sets must contain only TOKEN_REF / STRING_LITERAL alternatives.
+    let input = "grammar Test;
+a : ~( 'x' | b ) ;
+b : 'y' ;";
+    let result = parse(input);
+    assert result matches { Err(_) }, "expected ~(block with rule ref) to be rejected";
+}
+
+test "unknown lexer command is rejected" {
+    // ANTLR4's lexer-command set is fixed: skip, more, channel, type, pushMode,
+    // popMode, mode. Any other identifier after `->` is a hard error.
+    // Spec: vendor/antlr4/doc/lexer-rules.md §"Lexer Commands".
+    let input = "lexer grammar Test;
+FOO : 'x' -> totallymadeup ;";
+    let result = parse(input);
+    assert result matches { Err(_) }, "expected unknown lexer command to be rejected";
+}
+
+test "unknown lexer command in combined grammar is rejected" {
+    let input = "grammar Test;
+r : X ;
+X : 'x' -> bogusCommand ;";
+    let result = parse(input);
+    assert result matches { Err(_) }, "expected unknown lexer command in combined grammar to be rejected";
+}
+
+test "duplicate parser rule names are rejected" {
+    // ANTLR4 requires each rule name to be unique within its namespace.
+    // Spec: vendor/antlr4/doc/grammars.md.
+    let input = "grammar Test;
+foo : ID ;
+foo : NUM ;";
+    let result = parse(input);
+    assert result matches { Err(_) }, "expected duplicate parser rule to be rejected";
+}
+
+test "duplicate lexer rule names are rejected" {
+    let input = "lexer grammar Test;
+FOO : 'a' ;
+FOO : 'b' ;";
+    let result = parse(input);
+    assert result matches { Err(_) }, "expected duplicate lexer rule to be rejected";
+}
+
+test "duplicate rules across lexer and parser namespaces are allowed" {
+    // Parser rules (lowercase) and lexer rules (uppercase) occupy separate
+    // namespaces — a parser `foo` and a lexer `FOO` never collide.
+    let input = "grammar Test;
+foo : FOO ;
+FOO : 'x' ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+    assert g.lexer_rules.len() == 1;
+}
+
+test "unterminated tokens block is rejected" {
+    // ANTLR4 spec (grammars.md §"tokens {} Section"): the block must be
+    // closed with `}`. A file that runs out of input before that is malformed.
+    let input = "grammar Test;
+tokens { FOO, BAR
+";
+    let result = parse(input);
+    assert result matches { Err(_) }, "expected unterminated tokens block to be rejected";
+}
+
+test "unterminated channels block is rejected" {
+    let input = "lexer grammar Test;
+channels { FOO, BAR
+";
+    let result = parse(input);
+    assert result matches { Err(_) }, "expected unterminated channels block to be rejected";
+}
+
+test "tokens block trailing junk is tolerated then closed" {
+    // Permissive recovery: non-identifier junk inside `tokens { }` is
+    // silently skipped (existing behavior) as long as the block is closed.
+    let input = "grammar Test;
+tokens { FOO, 42, BAR }
+r : FOO ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+}
+
 test "parser rule tilde applied to block" {
     // ANTLR4 allows `~` on a set expressed as a block of alternatives, not
     // just a single token reference: `~( 'a' | 'b' | 'c' )`.

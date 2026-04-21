@@ -1,0 +1,71 @@
+use pg from "./golden/parser_gaps.wado";
+use { normalize_tree } from "./golden/parser_gaps.wado";
+
+fn assert_tree(input: &String, expected: &String) {
+    let root = pg::parse(input).unwrap();
+    let tree = pg::to_tree(&root);
+    let actual = tree.to_string_tree();
+    let norm = normalize_tree(expected);
+    assert actual == norm, `\ninput:    {*input}\nexpected: {norm}\nactual:   {actual}`;
+}
+
+test "A2: list label collects single item" {
+    assert_tree(&"list a ;", &"
+        (program
+          (stmt (list_stmt list a ;)))
+    ");
+}
+
+test "A2: list label collects multiple items via repetition" {
+    assert_tree(&"list a , b , c ;", &"
+        (program
+          (stmt (list_stmt list a , b , c ;)))
+    ");
+}
+
+test "A1: token-complement ~ITEM matches a non-ITEM token" {
+    assert_tree(&"not 123 ;", &"
+        (program
+          (stmt (not_stmt not 123 ;)))
+    ");
+}
+
+test "A1: set-complement ~(ITEM | NUMBER) matches neither" {
+    assert_tree(&"set , ;", &"
+        (program
+          (stmt (not_stmt set , ;)))
+    ");
+}
+
+test "A1: token-complement ~ITEM rejects an ITEM" {
+    let result = pg::parse(&"not foo ;");
+    assert result matches { Err(_) }, "expected parse failure when ~ITEM sees an ITEM";
+}
+
+test "A1: set-complement rejects an excluded kind" {
+    let result = pg::parse(&"set foo ;");
+    assert result matches { Err(_) }, "expected parse failure when ~(ITEM|NUMBER) sees an ITEM";
+}
+
+test "A5: parser-level wildcard . matches a single token" {
+    assert_tree(&"any foo ;", &"
+        (program
+          (stmt (any_stmt any foo ;)))
+    ");
+}
+
+test "A5: wildcard matches a number too" {
+    assert_tree(&"any 42 ;", &"
+        (program
+          (stmt (any_stmt any 42 ;)))
+    ");
+}
+
+test "multiple statements in a program" {
+    assert_tree(&"list a , b ; not 1 ; any x ;", &"
+        (program
+          (stmt (list_stmt list a , b ;))
+          (stmt (not_stmt not 1 ;))
+          (stmt (any_stmt any x ;)))
+    ");
+}

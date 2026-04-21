@@ -92,6 +92,36 @@ fn is_lexer_rule_name(name: &String) -> bool {
     return false;
 }
 
+/// ANTLR4 spec (`notSet : NOT setElement | NOT blockSet`) restricts `~` in
+/// parser rules to a token reference, string literal, or a parenthesised
+/// block whose alternatives are themselves set elements. Rule references,
+/// wildcards, and EBNF-suffixed elements are rejected. Spec:
+/// `vendor/antlr4/tool/src/org/antlr/v4/parse/ANTLRParser.g`.
+fn is_valid_not_set_element(elem: &Element) -> bool {
+    if let TokenRef(_) = elem {
+        return true;
+    }
+    if let Literal(_) = elem {
+        return true;
+    }
+    if let Group(g) = elem {
+        for let alt of &g.alternatives {
+            if alt.elements.len() != 1 {
+                return false;
+            }
+            if let TokenRef(_) = alt.elements[0] {
+                continue;
+            }
+            if let Literal(_) = alt.elements[0] {
+                continue;
+            }
+            return false;
+        }
+        return true;
+    }
+    return false;
+}
+
 impl G4Parser {
     pub fn new(tokens: Array<Token>, chars: Array<char>) -> G4Parser {
         return G4Parser {
@@ -159,7 +189,7 @@ impl G4Parser {
         self.expect(G4Token::Semicolon)?;
 
         let mut virtual_tokens: Array<String> = [];
-        self.skip_preamble_blocks(&mut virtual_tokens);
+        self.skip_preamble_blocks(&mut virtual_tokens)?;
 
         let mut parser_rules: Array<ParserRule> = [];
         let mut lexer_rules: Array<LexerRule> = [];
@@ -226,12 +256,38 @@ impl G4Parser {
 
             let rule_name_tok = self.expect(G4Token::Identifier)?;
             let rule_name = rule_name_tok.text.to_string();
+            let rule_name_span = rule_name_tok.span;
 
             if is_lexer_grammar || is_frag || is_lexer_rule_name(&rule_name) {
+                // ANTLR4 rejects duplicate lexer rule names within a grammar.
+                // Spec: vendor/antlr4/doc/grammars.md — each rule name is
+                // unique in its namespace (lexer / parser).
+                for let existing of &lexer_rules {
+                    if existing.name == rule_name {
+                        return Result::<Grammar, ParseError>::Err(
+                            ParseError::new(
+                                `duplicate rule "{rule_name}"`,
+                                rule_name_span,
+                                ["unique rule name"],
+                            ),
+                        );
+                    }
+                }
                 let mut rule = self.parse_lexer_rule(rule_name, is_frag, current_mode, &mut mode_names)?;
                 rule.visibility = visibility;
                 lexer_rules.push(rule);
             } else {
+                for let existing of &parser_rules {
+                    if existing.name == rule_name {
+                        return Result::<Grammar, ParseError>::Err(
+                            ParseError::new(
+                                `duplicate rule "{rule_name}"`,
+                                rule_name_span,
+                                ["unique rule name"],
+                            ),
+                        );
+                    }
+                }
                 let mut rule = self.parse_parser_rule(rule_name)?;
                 rule.visibility = visibility;
                 parser_rules.push(rule);
@@ -273,7 +329,7 @@ impl G4Parser {
         );
     }
 
-    fn skip_preamble_blocks(&mut self, virtual_tokens: &mut Array<String>) {
+    fn skip_preamble_blocks(&mut self, virtual_tokens: &mut Array<String>) -> Result<(), ParseError> {
         // ANTLR4 grammar prequel constructs (any order, repeatable):
         //   optionsSpec      : 'options'  '{' ... '}'
         //   delegateGrammars : 'import' id ('=' id)? (',' id ('=' id)?)* ';'
@@ -285,12 +341,12 @@ impl G4Parser {
                 let text = &self.peek().text;
                 if LexerSlice::eq_str(&"tokens", text) {
                     self.advance();
-                    self.parse_tokens_block(virtual_tokens);
+                    self.parse_tokens_block(virtual_tokens)?;
                     continue;
                 }
                 if LexerSlice::eq_str(&"channels", text) {
                     self.advance();
-                    self.parse_channels_block();
+                    self.parse_channels_block()?;
                     continue;
                 }
                 if LexerSlice::eq_str(&"options", text) {
@@ -314,15 +370,25 @@ impl G4Parser {
             }
             break;
         }
+        return Result::<(), ParseError>::Ok(());
     }
 
     /// Parse `channels { NAME, NAME, ... }` and collect channel names into
     /// `self.channels`. Duplicate declarations collapse silently — ANTLR4
     /// also tolerates repeated channels blocks; the name list is the union.
-    fn parse_channels_block(&mut self) {
+    /// Unclosed blocks (EOF before `}`) are rejected.
+    fn parse_channels_block(&mut self) -> Result<(), ParseError> {
         if !self.is_kind(G4Token::LBrace) {
-            return;
+            let tok = self.peek();
+            return Result::<(), ParseError>::Err(
+                ParseError::new(
+                    "expected `{` after `channels`",
+                    tok.span,
+                    ["{"],
+                ),
+            );
         }
+        let brace_span = self.peek().span;
         self.advance();  // skip '{'
         while !self.at_eof() && !self.is_kind(G4Token::RBrace) {
             if self.is_kind(G4Token::Identifier) {
@@ -342,9 +408,17 @@ impl G4Parser {
                 self.advance();
             }
         }
-        if self.is_kind(G4Token::RBrace) {
-            self.advance();
+        if !self.is_kind(G4Token::RBrace) {
+            return Result::<(), ParseError>::Err(
+                ParseError::new(
+                    "unterminated `channels { ... }` block — expected `}` before end of file",
+                    brace_span,
+                    ["}"],
+                ),
+            );
         }
+        self.advance();
+        return Result::<(), ParseError>::Ok(());
     }
 
     /// Parse `import id ('=' id)? (',' id ('=' id)?)* ';'`. We discard the
@@ -492,10 +566,18 @@ impl G4Parser {
     /// permissive parsing of legacy `.g4` files ported without cleanup.
     /// The assigned integer is discarded — Gale assigns token ids based on
     /// declaration order internally.
-    fn parse_tokens_block(&mut self, virtual_tokens: &mut Array<String>) {
+    fn parse_tokens_block(&mut self, virtual_tokens: &mut Array<String>) -> Result<(), ParseError> {
         if !self.is_kind(G4Token::LBrace) {
-            return;
+            let tok = self.peek();
+            return Result::<(), ParseError>::Err(
+                ParseError::new(
+                    "expected `{` after `tokens`",
+                    tok.span,
+                    ["{"],
+                ),
+            );
         }
+        let brace_span = self.peek().span;
         self.advance();  // skip '{'
         while !self.at_eof() && !self.is_kind(G4Token::RBrace) {
             if self.is_kind(G4Token::Identifier) {
@@ -520,9 +602,17 @@ impl G4Parser {
                 self.advance();
             }
         }
-        if self.is_kind(G4Token::RBrace) {
-            self.advance();
+        if !self.is_kind(G4Token::RBrace) {
+            return Result::<(), ParseError>::Err(
+                ParseError::new(
+                    "unterminated `tokens { ... }` block — expected `}` before end of file",
+                    brace_span,
+                    ["}"],
+                ),
+            );
         }
+        self.advance();
+        return Result::<(), ParseError>::Ok(());
     }
 
     /// Skip a `{ ... }` block of host-language code. The G4 lexer is unaware
@@ -899,8 +989,19 @@ impl G4Parser {
             );
         }
         if self.is_kind(G4Token::Tilde) {
+            let tilde_tok = self.peek();
+            let tilde_span = tilde_tok.span;
             self.advance();
             let inner = self.parse_atom()?;
+            if !is_valid_not_set_element(&inner) {
+                return Result::<Element, ParseError>::Err(
+                    ParseError::new(
+                        `\`~\` must be applied to a token reference, string literal, or parenthesised set — not a rule reference or wildcard`,
+                        tilde_span,
+                        ["TOKEN_REF", "STRING_LITERAL", "(set)"],
+                    ),
+                );
+            }
             return Result::<Element, ParseError>::Ok(
                 Element::Not(NotElement { element: inner }),
             );
@@ -989,7 +1090,7 @@ impl G4Parser {
         let mut actions = LexerActions::empty();
         if self.is_kind(G4Token::Arrow) {
             self.advance();
-            self.parse_lexer_actions(&mut actions, mode_names);
+            self.parse_lexer_actions(&mut actions, mode_names)?;
         }
 
         self.expect(G4Token::Semicolon)?;
@@ -1013,10 +1114,12 @@ impl G4Parser {
         );
     }
 
-    fn parse_lexer_actions(&mut self, actions: &mut LexerActions, mode_names: &mut Array<String>) {
+    fn parse_lexer_actions(&mut self, actions: &mut LexerActions, mode_names: &mut Array<String>) -> Result<(), ParseError> {
         loop {
             let action_tok = self.advance();
             let action_text = &action_tok.text;
+            let action_span = action_tok.span;
+            let action_name = action_tok.text.to_string();
             if LexerSlice::eq_str(&"skip", action_text) {
                 actions.skip = true;
             } else if LexerSlice::eq_str(&"pushMode", action_text) {
@@ -1069,12 +1172,24 @@ impl G4Parser {
                 actions.type_override = Option::<String>::Some(target.text.to_string());
             } else if LexerSlice::eq_str(&"more", action_text) {
                 actions.more = true;
+            } else {
+                // Unknown lexer command. ANTLR4's command set is fixed:
+                // skip, more, channel(X), type(X), pushMode(X), popMode, mode(X).
+                // Spec: vendor/antlr4/doc/lexer-rules.md §"Lexer Commands".
+                return Result::<(), ParseError>::Err(
+                    ParseError::new(
+                        `unknown lexer command "{action_name}" — expected one of: skip, more, channel, type, pushMode, popMode, mode`,
+                        action_span,
+                        ["skip", "more", "channel", "type", "pushMode", "popMode", "mode"],
+                    ),
+                );
             }
             if !self.is_kind(G4Token::Comma) {
                 break;
             }
             self.advance();
         }
+        return Result::<(), ParseError>::Ok(());
     }
 
     fn parse_lexer_alternatives(&mut self) -> Result<Array<LexerAlt>, ParseError> {

@@ -12,23 +12,16 @@ generated parsers are semantically correct, not just syntactically accepted.
 
 ## A. Driver-level verification (remaining gaps)
 
-- **Parser-side `~TOK` / `~(block)`.** No driver-test grammar currently
-  uses a parser-level complement. Either add a minimal new grammar, or
-  extend `sexpression.g4` to exercise `~TOK`.
-- **List labels `+=`.** None of the existing test grammars use list
-  labels in the label sense — all `+=` matches are literal `'+='`
-  operator tokens. Add a minimal new grammar or extend an existing one
-  (a `list : items += item (',' items += item)*` pattern).
-- **`mode(X)` semantics (set_mode).** No existing test grammar uses the
-  bare `mode(X)` command — everything uses `pushMode` / `popMode`. Need
-  a new fixture that actually calls `mode(X)`.
-- **`more` semantics.** `ANTLRv4Lexer.LexerCharSet` mode uses `more`,
-  but that mode is only entered from an action block (which Gale
-  skips), so the rule is never actually triggered end-to-end. Need a
-  fixture that enters a `more`-bearing mode via a lexer-command-only
-  `pushMode`.
-- **Wildcard `.` at parser level.** Only lexer-level `.` is exercised
-  today. A parser rule like `any : . ;` has no driver-level test.
+All five gaps are now covered by `tests/grammars/parser_gaps.g4` +
+`tests/driver_parser_gaps_test.wado` (A1, A2, A5) and
+`tests/grammars/mode_gaps.g4` + `tests/driver_mode_gaps_test.wado`
+(A3, A4).
+
+- [x] **A1. Parser-side `~TOK` / `~(block)`** — `not_stmt : NOT ~ITEM SEMI | SET ~(ITEM | NUMBER) SEMI`.
+- [x] **A2. List labels `+=`** — `list_stmt : LIST items += ITEM (COMMA items += ITEM)* SEMI`.
+- [x] **A3. `mode(X)` semantics (set_mode)** — `STR_ESC_BEGIN` / `ESC_CHAR` bounce between `IN_STRING` and `ESC_IN_STRING` via bare `mode(...)`.
+- [x] **A4. `more` semantics** — `QUOTE : '"' -> more, pushMode(IN_STRING)` followed by `STR_CHAR : ~[\\"] -> more`.
+- [x] **A5. Wildcard `.` at parser level** — `any_stmt : ANY . SEMI`.
 
 ## B. Negative tests
 
@@ -36,20 +29,16 @@ The parser test suite is overwhelmingly positive — it verifies that
 well-formed input parses. There are almost no negative tests that pin
 down the parser's **rejection** behavior. Add fixtures for:
 
-- Duplicate rule names (`foo : ID ; foo : NUM ;`).
-- References to undefined rules.
-- `mode X;` inside a parser grammar (already covered by one test — use
-  it as a template for the rest).
-- Malformed `channels { }` / `tokens { }` blocks (unclosed brace,
-  trailing junk, etc.).
-- `~` applied to something that isn't a set (ANTLR4 rejects
-  `~ruleref`, only tokens / lexer atoms / blocks are allowed).
-- Left-recursion with `assoc` conflicts.
-- Lexer commands with unknown names (`foo : 'x' -> totallymadeup ;`).
+- [x] **B1.** Duplicate rule names (`foo : ID ; foo : NUM ;`).
+- [ ] **B2.** References to undefined rules.
+- [x] **B3.** `mode X;` inside a parser grammar (already covered by one test).
+- [x] **B4.** Malformed `channels { }` / `tokens { }` blocks (unclosed brace, trailing junk, etc.).
+- [x] **B5.** `~` applied to something that isn't a set (ANTLR4 rejects `~ruleref`, only tokens / lexer atoms / blocks are allowed).
+- [ ] **B6.** Left-recursion with `assoc` conflicts.
+- [x] **B7.** Lexer commands with unknown names (`foo : 'x' -> totallymadeup ;`).
 
-Each fixture should assert `parse(input) matches { Err(_) }` with a
-useful error message (not just "unexpected token"). This guards against
-regressions where the parser silently accepts garbage.
+Each fixture asserts `parse(input) matches { Err(_) }`. This guards
+against regressions where the parser silently accepts garbage.
 
 ## Performance: sqlite-parse Benchmark
 

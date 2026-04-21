@@ -340,3 +340,52 @@ test "parse calculator.g4" {
     assert last_rule.name == "WS";
     assert last_rule.skip == true;
 }
+
+test "parse parser_gaps.g4" {
+    let input = #include_str("../../tests/grammars/parser_gaps.g4");
+    let g = parse(input).unwrap();
+    assert g.name == "parser_gaps";
+
+    // Parser rules: program, stmt, list_stmt, not_stmt, any_stmt
+    assert g.parser_rules.len() == 5;
+    assert g.parser_rules[0].name == "program";
+    assert g.parser_rules[1].name == "stmt";
+    assert g.parser_rules[2].name == "list_stmt";
+    assert g.parser_rules[3].name == "not_stmt";
+    assert g.parser_rules[4].name == "any_stmt";
+
+    // list_stmt: LIST items += ITEM (COMMA items += ITEM)* SEMI — single alt, 4 elements
+    assert g.parser_rules[2].alternatives.len() == 1;
+    assert g.parser_rules[2].alternatives[0].elements.len() == 4;
+
+    // not_stmt has 2 alts: NOT ~ITEM SEMI | SET ~( ITEM | NUMBER ) SEMI
+    assert g.parser_rules[3].alternatives.len() == 2;
+
+    // any_stmt: ANY . SEMI — single alt with wildcard
+    assert g.parser_rules[4].alternatives.len() == 1;
+
+    // Lexer rules: LIST, NOT, SET, ANY, ITEM, NUMBER, COMMA, SEMI, WS
+    assert g.lexer_rules.len() == 9;
+    let ws = &g.lexer_rules[g.lexer_rules.len() - 1];
+    assert ws.name == "WS";
+    assert ws.skip == true;
+}
+
+test "parse mode_gaps.g4" {
+    let input = #include_str("../../tests/grammars/mode_gaps.g4");
+    let g = parse(input).unwrap();
+    assert g.name == "mode_gaps";
+
+    // Single parser rule: text
+    assert g.parser_rules.len() == 1;
+    assert g.parser_rules[0].name == "text";
+
+    // Lexer rules across modes: PLAIN, QUOTE, WS, STR_ESC_BEGIN, STR_CHAR, STRING, ESC_CHAR
+    assert g.lexer_rules.len() == 7;
+
+    // Modes: DEFAULT_MODE, IN_STRING, ESC_IN_STRING
+    assert g.mode_names.len() == 3;
+    assert g.mode_names[0] == "DEFAULT_MODE";
+    assert g.mode_names[1] == "IN_STRING";
+    assert g.mode_names[2] == "ESC_IN_STRING";
+}

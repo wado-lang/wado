@@ -16,6 +16,7 @@ use {
     token_group_field_name,
     single_alt_group_field_name,
     count_element_groups,
+    not_element_field_name,
 } from "./gen_util.wado";
 use { CodeWriter } from "./wadopoet.wado";
 
@@ -258,7 +259,26 @@ fn element_to_walk_field(elem: &Element, rule_name: &String, group_counter: &mut
             wrapper: WalkWrapper::Direct,
         });
     }
+    if let Wildcard(_) = elem {
+        return Option::Some(WalkField {
+            name: "wildcard",
+            action: WalkAction::VisitToken,
+            wrapper: WalkWrapper::Direct,
+        });
+    }
+    if let Not(ne) = elem {
+        return Option::Some(WalkField {
+            name: not_element_field_name(&ne.element),
+            action: WalkAction::VisitToken,
+            wrapper: WalkWrapper::Direct,
+        });
+    }
     if let Repeat(rep) = elem {
+        if let Label(lab) = &rep.element {
+            if lab.list {
+                return element_to_walk_field(&rep.element, rule_name, group_counter);
+            }
+        }
         let inner_field = repeat_inner_walk_field(&rep.element, rule_name, group_counter);
         if let Some(inner) = inner_field {
             match rep.kind {
@@ -282,10 +302,11 @@ fn element_to_walk_field(elem: &Element, rule_name: &String, group_counter: &mut
     }
     if let Label(lab) = elem {
         if let Some(inner) = element_to_walk_field(&lab.element, rule_name, group_counter) {
+            let wrapper = if lab.list { WalkWrapper::ArrayWrap } else { inner.wrapper };
             return Option::Some(WalkField {
                 name: escape_ident(&to_snake_case(&lab.name)),
                 action: inner.action,
-                wrapper: inner.wrapper,
+                wrapper,
             });
         }
         return null;
