@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776786870266,
+  "lastUpdate": 1776809825308,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -15237,6 +15237,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/57f0ef61c4eb417a604b9db2105cfd902be4036c"
         },
         "date": 1776786870164,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8982,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18988,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 635264,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "205557aea56232de89ce3f4da3209a2b5cf24e8f",
+          "message": "Merge pull request #898 from wado-lang/claude/resource-effects-propagation-9ZKeQ\n\nResource-as-effect and transitive effect propagation",
+          "timestamp": "2026-04-22T07:09:09+09:00",
+          "tree_id": "1530b95b9cba09d4dfb93c835e49f286d1c707ee",
+          "url": "https://github.com/wado-lang/wado/commit/205557aea56232de89ce3f4da3209a2b5cf24e8f"
+        },
+        "date": 1776809825001,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
