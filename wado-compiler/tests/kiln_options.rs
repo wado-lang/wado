@@ -21,7 +21,7 @@ fn entry() -> ModuleSource {
 
 #[test]
 fn descriptor_primitive_fields_and_defaults() {
-    let source = r#"
+    let source = r"
 pub struct Options {
     pub highlight: bool = false,
     pub depth: i32 = 3,
@@ -29,7 +29,7 @@ pub struct Options {
 }
 
 pub fn generate() {}
-"#;
+";
     let host = InMemoryHost::new();
     let annotated = block_on(annotate(source, &host, Some("entry.wado"))).unwrap();
     let desc = extract_options_descriptor(&annotated, &entry()).unwrap();
@@ -50,13 +50,13 @@ pub fn generate() {}
 
 #[test]
 fn descriptor_option_string_accepts_null_default() {
-    let source = r#"
+    let source = r"
 pub struct Options {
     pub rule: Option<String> = null,
 }
 
 pub fn generate() {}
-"#;
+";
     let host = InMemoryHost::new();
     let annotated = block_on(annotate(source, &host, Some("entry.wado"))).unwrap();
     let desc = extract_options_descriptor(&annotated, &entry()).unwrap();
@@ -70,7 +70,7 @@ pub fn generate() {}
 
 #[test]
 fn descriptor_enum_field_extracts_variants() {
-    let source = r#"
+    let source = r"
 pub enum Style {
     Rpc,
     Oneway,
@@ -81,7 +81,7 @@ pub struct Options {
 }
 
 pub fn generate() {}
-"#;
+";
     let host = InMemoryHost::new();
     let annotated = block_on(annotate(source, &host, Some("entry.wado"))).unwrap();
     let desc = extract_options_descriptor(&annotated, &entry()).unwrap();
@@ -101,7 +101,7 @@ pub fn generate() {}
 
 #[test]
 fn descriptor_nested_struct_descends_and_cycles_reject() {
-    let source = r#"
+    let source = r"
 pub struct Inner {
     pub flag: bool = true,
     pub count: i64 = 7,
@@ -112,7 +112,7 @@ pub struct Options {
 }
 
 pub fn generate() {}
-"#;
+";
     let host = InMemoryHost::new();
     let annotated = block_on(annotate(source, &host, Some("entry.wado"))).unwrap();
     let desc = extract_options_descriptor(&annotated, &entry()).unwrap();
@@ -134,9 +134,9 @@ pub fn generate() {}
 
 #[test]
 fn descriptor_missing_options_struct_errors() {
-    let source = r#"
+    let source = r"
 pub fn generate() {}
-"#;
+";
     let host = InMemoryHost::new();
     let annotated = block_on(annotate(source, &host, Some("entry.wado"))).unwrap();
     let err = extract_options_descriptor(&annotated, &entry()).unwrap_err();
@@ -148,11 +148,11 @@ pub fn generate() {}
 
 #[test]
 fn descriptor_missing_generate_fn_errors() {
-    let source = r#"
+    let source = r"
 pub struct Options {
     pub foo: bool = false,
 }
-"#;
+";
     let host = InMemoryHost::new();
     let annotated = block_on(annotate(source, &host, Some("entry.wado"))).unwrap();
     let err = extract_options_descriptor(&annotated, &entry()).unwrap_err();

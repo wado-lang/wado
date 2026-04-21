@@ -1029,17 +1029,16 @@ where
 }
 
 fn is_unsupported(err: &PipelineError) -> bool {
-    match err {
+    matches!(
+        err,
         PipelineError::Execute {
             source: ExecuteError::Runner(GeneratorRunnerError::Unsupported),
             ..
-        }
-        | PipelineError::Provider {
+        } | PipelineError::Provider {
             source: ProviderError::Unsupported { .. },
             ..
-        } => true,
-        _ => false,
-    }
+        }
+    )
 }
 
 fn emit_stale_warning<H: CompilerHost>(host: &H, invocation: &str) {

@@ -431,10 +431,8 @@ async fn maybe_run_pipeline(
 
     let (manifest, manifest_root) = match manifest_pair {
         Some(pair) => pair,
+        None if inline.is_empty() => return Ok(PipelineOutcome::default()),
         None => {
-            if inline.is_empty() {
-                return Ok(PipelineOutcome::default());
-            }
             let manifest = wado_manifest::Manifest {
                 package: None,
                 registries: indexmap::IndexMap::new(),

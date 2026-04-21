@@ -118,36 +118,30 @@ pub fn extract_options_descriptor(
 ) -> Result<OptionsDescriptor, Vec<Diagnostic>> {
     let mut diagnostics = Vec::new();
 
-    let tir_module = match annotated.tir_modules.get(module) {
-        Some(m) => m,
-        None => {
-            diagnostics.push(Diagnostic {
-                severity: Severity::Error,
-                code: Code::GeneratorOptionsUnsupported,
-                message: format!(
-                    "kiln: generator module {:?} has no TIR available",
-                    module.diagnostic_filename()
-                ),
-                span: None,
-            });
-            return Err(diagnostics);
-        }
+    let Some(tir_module) = annotated.tir_modules.get(module) else {
+        diagnostics.push(Diagnostic {
+            severity: Severity::Error,
+            code: Code::GeneratorOptionsUnsupported,
+            message: format!(
+                "kiln: generator module {:?} has no TIR available",
+                module.diagnostic_filename()
+            ),
+            span: None,
+        });
+        return Err(diagnostics);
     };
 
-    let options_struct = match tir_module.find_struct("Options") {
-        Some(s) => s,
-        None => {
-            diagnostics.push(Diagnostic {
-                severity: Severity::Error,
-                code: Code::GeneratorOptionsUnsupported,
-                message: format!(
-                    "kiln: generator {:?} does not declare `pub struct Options`",
-                    module.diagnostic_filename()
-                ),
-                span: None,
-            });
-            return Err(diagnostics);
-        }
+    let Some(options_struct) = tir_module.find_struct("Options") else {
+        diagnostics.push(Diagnostic {
+            severity: Severity::Error,
+            code: Code::GeneratorOptionsUnsupported,
+            message: format!(
+                "kiln: generator {:?} does not declare `pub struct Options`",
+                module.diagnostic_filename()
+            ),
+            span: None,
+        });
+        return Err(diagnostics);
     };
 
     if !options_struct.is_pub {
@@ -175,12 +169,12 @@ pub fn extract_options_descriptor(
     visiting.insert((module.clone(), "Options".to_string()));
     let mut descriptor_fields = Vec::with_capacity(options_struct.fields.len());
     for field in &options_struct.fields {
-        match lower_field(field, annotated, module, &mut visiting, &mut diagnostics) {
-            Some(desc_field) => descriptor_fields.push(desc_field),
-            None => {
-                // Diagnostic already pushed by lower_field; continue so other
-                // fields also get reported.
-            }
+        // Diagnostic already pushed by lower_field on `None`; continue so
+        // every bad field surfaces in one pass.
+        if let Some(desc_field) =
+            lower_field(field, annotated, module, &mut visiting, &mut diagnostics)
+        {
+            descriptor_fields.push(desc_field);
         }
     }
 
@@ -332,33 +326,31 @@ fn nested_struct_descriptor(
         return None;
     }
 
-    let tir_module = match annotated.tir_modules.get(struct_module) {
-        Some(m) => m,
-        None => {
-            push_unsupported(
-                diagnostics,
-                module,
-                field_name,
-                &format!(
-                    "nested struct `{struct_name}` declaring module {:?} is not available",
-                    struct_module.diagnostic_filename()
-                ),
-            );
-            return None;
-        }
+    let tir_module = if let Some(m) = annotated.tir_modules.get(struct_module) {
+        m
+    } else {
+        push_unsupported(
+            diagnostics,
+            module,
+            field_name,
+            &format!(
+                "nested struct `{struct_name}` declaring module {:?} is not available",
+                struct_module.diagnostic_filename()
+            ),
+        );
+        return None;
     };
 
-    let nested_struct = match tir_module.find_struct(struct_name) {
-        Some(s) => s,
-        None => {
-            push_unsupported(
-                diagnostics,
-                module,
-                field_name,
-                &format!("nested struct `{struct_name}` not found in its declaring module"),
-            );
-            return None;
-        }
+    let nested_struct = if let Some(s) = tir_module.find_struct(struct_name) {
+        s
+    } else {
+        push_unsupported(
+            diagnostics,
+            module,
+            field_name,
+            &format!("nested struct `{struct_name}` not found in its declaring module"),
+        );
+        return None;
     };
 
     visiting.insert(key.clone());
@@ -389,33 +381,31 @@ fn enum_variants(
     field_name: &str,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Vec<String>> {
-    let tir_module = match annotated.tir_modules.get(enum_module) {
-        Some(m) => m,
-        None => {
-            push_unsupported(
-                diagnostics,
-                module,
-                field_name,
-                &format!(
-                    "enum `{enum_name}` declaring module {:?} is not available",
-                    enum_module.diagnostic_filename()
-                ),
-            );
-            return None;
-        }
+    let tir_module = if let Some(m) = annotated.tir_modules.get(enum_module) {
+        m
+    } else {
+        push_unsupported(
+            diagnostics,
+            module,
+            field_name,
+            &format!(
+                "enum `{enum_name}` declaring module {:?} is not available",
+                enum_module.diagnostic_filename()
+            ),
+        );
+        return None;
     };
 
-    let enum_decl = match tir_module.find_enum(enum_name) {
-        Some(e) => e,
-        None => {
-            push_unsupported(
-                diagnostics,
-                module,
-                field_name,
-                &format!("enum `{enum_name}` not found in its declaring module"),
-            );
-            return None;
-        }
+    let enum_decl = if let Some(e) = tir_module.find_enum(enum_name) {
+        e
+    } else {
+        push_unsupported(
+            diagnostics,
+            module,
+            field_name,
+            &format!("enum `{enum_name}` not found in its declaring module"),
+        );
+        return None;
     };
 
     Some(enum_decl.cases.iter().map(|c| c.name.clone()).collect())
@@ -470,9 +460,10 @@ fn evaluate_literal(
                         &desc_field.name,
                         diagnostics,
                     )?,
-                    None => match &desc_field.default {
-                        Some(v) => v.clone(),
-                        None => {
+                    None => {
+                        if let Some(v) = &desc_field.default {
+                            v.clone()
+                        } else {
                             push_unsupported(
                                 diagnostics,
                                 module,
@@ -484,7 +475,7 @@ fn evaluate_literal(
                             );
                             return None;
                         }
-                    },
+                    }
                 };
                 out.push((desc_field.name.clone(), value));
             }

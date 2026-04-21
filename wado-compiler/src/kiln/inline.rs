@@ -131,22 +131,22 @@ pub fn collect_inline_invocations(
                         continue;
                     }
                     let from_key = invocation.from.as_str().to_string();
-                    if let Some((prior, prior_mod)) = by_from.get(&from_key) {
-                        if identity_key(prior) != tuple_key {
-                            diagnostics.push(Diagnostic {
-                                severity: Severity::Error,
-                                code: Code::GeneratorOptionsInvalid,
-                                message: format!(
-                                    "kiln: two inline generator clauses disagree for `from = \"{}\"` \
+                    if let Some((prior, prior_mod)) = by_from.get(&from_key)
+                        && identity_key(prior) != tuple_key
+                    {
+                        diagnostics.push(Diagnostic {
+                            severity: Severity::Error,
+                            code: Code::GeneratorOptionsInvalid,
+                            message: format!(
+                                "kiln: two inline generator clauses disagree for `from = \"{}\"` \
                                      (first in {}, second in {})",
-                                    invocation.from.as_str(),
-                                    prior_mod,
-                                    module_path,
-                                ),
-                                span: Some(span_of(module_path, use_decl)),
-                            });
-                            continue;
-                        }
+                                invocation.from.as_str(),
+                                prior_mod,
+                                module_path,
+                            ),
+                            span: Some(span_of(module_path, use_decl)),
+                        });
+                        continue;
                     }
                     by_tuple.insert(tuple_key.clone(), invocation.clone());
                     by_from.insert(from_key, (invocation, module_path.clone()));

@@ -94,7 +94,7 @@ impl GeneratorProvider for CliGeneratorProvider {
                 let abs = self.resolve_path(path.as_str());
                 if !abs.exists() {
                     return Err(ProviderError::Internal {
-                        message: format!("kiln: generator path `{}` does not exist", path.as_str(),),
+                        message: format!("kiln: generator path `{}` does not exist", path.as_str()),
                     });
                 }
                 Err(ProviderError::Unsupported {

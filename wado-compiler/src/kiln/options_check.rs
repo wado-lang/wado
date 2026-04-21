@@ -106,7 +106,7 @@ fn check_value(
         (OptionsType::Bool, AttrValue::Bool(b)) => Some(CanonicalValue::Bool(*b)),
         (OptionsType::I32 | OptionsType::I64, AttrValue::Int(n)) => {
             let bounded = if matches!(ty, OptionsType::I32) {
-                if !(i32::MIN as i64..=i32::MAX as i64).contains(n) {
+                if !(i64::from(i32::MIN)..=i64::from(i32::MAX)).contains(n) {
                     push_mismatch(diagnostics, path, ty, supplied);
                     return None;
                 }
@@ -122,7 +122,7 @@ fn check_value(
                 return None;
             }
             let v = *n as u64;
-            if matches!(ty, OptionsType::U32) && v > u32::MAX as u64 {
+            if matches!(ty, OptionsType::U32) && v > u64::from(u32::MAX) {
                 push_mismatch(diagnostics, path, ty, supplied);
                 return None;
             }

@@ -62,9 +62,9 @@ export fn run() {
     greet();
 }
 "#;
-    let generated = r#"
+    let generated = r"
 pub fn greet() {}
-"#;
+";
     let host = MapHost::new(&[("build/kiln/test-invocation/sample.wado", generated)]);
 
     let mut idx = InvocationIndex::new();
@@ -74,20 +74,19 @@ pub fn greet() {}
         "build/kiln/test-invocation/sample.wado",
     );
 
-    let annotated = match block_on(annotate_with_invocations(
+    let annotated = if let Ok(a) = block_on(annotate_with_invocations(
         entry,
         &host,
         Some("entry.wado"),
         idx,
     )) {
-        Ok(a) => a,
-        Err(_) => {
-            let diags = host.diagnostics.lock().unwrap().clone();
-            panic!(
-                "annotate failed; diagnostics: {:#?}",
-                diags.iter().map(|d| &d.message).collect::<Vec<_>>()
-            );
-        }
+        a
+    } else {
+        let diags = host.diagnostics.lock().unwrap().clone();
+        panic!(
+            "annotate failed; diagnostics: {:#?}",
+            diags.iter().map(|d| &d.message).collect::<Vec<_>>()
+        );
     };
 
     let redirected = ModuleSource::Local {
@@ -102,9 +101,9 @@ pub fn greet() {}
 
 #[test]
 fn empty_invocation_index_preserves_default_resolution() {
-    let entry = r#"
+    let entry = r"
 export fn run() {}
-"#;
+";
     let host = MapHost::new(&[]);
     let idx = InvocationIndex::new();
     let annotated = block_on(annotate_with_invocations(
