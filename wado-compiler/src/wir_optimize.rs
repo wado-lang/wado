@@ -56,7 +56,7 @@ use elide_struct::{
 };
 use init_guard::remove_trivial_init_globals;
 use nullable_ref::optimize_nullable_refs;
-use peephole::run_peephole;
+use peephole::{elide_value_copies_whole_function, run_peephole};
 use sroa_param::sroa_single_field_parameters;
 use sroa_return::sroa_multi_value_returns;
 use string::simplify_short_string_pushes;
@@ -134,6 +134,10 @@ pub fn optimize_wir(module: &mut WirPackage, opt_level: OptLevel, profiler: &dyn
     for func in &mut module.functions {
         if let Some(body) = &mut func.body {
             run_peephole(body, types);
+            // Whole-function value_copy elision runs once per function (not
+            // per nested scope) so the safety predicate can see every
+            // trailing instruction reachable from any candidate position.
+            elide_value_copies_whole_function(body);
         }
     }
     cleanup(module);
