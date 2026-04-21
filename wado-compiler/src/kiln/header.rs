@@ -253,8 +253,7 @@ mod tests {
 
     #[test]
     fn parse_tolerates_unknown_key() {
-        let src =
-            "#![generated(by = \"x\", sources = [\"s\"], future_field = \"irrelevant\")]\n";
+        let src = "#![generated(by = \"x\", sources = [\"s\"], future_field = \"irrelevant\")]\n";
         let h = parse_header(src).unwrap();
         assert_eq!(h.by, "x");
         assert_eq!(h.sources, vec!["s".to_string()]);

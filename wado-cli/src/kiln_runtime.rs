@@ -51,10 +51,7 @@ struct KilnHostState<H: CompilerHost> {
 }
 
 impl<H: CompilerHost + 'static> kiln_host::Host for KilnHostState<H> {
-    async fn read_file(
-        &mut self,
-        path: String,
-    ) -> Result<Vec<u8>, kiln_host::HostError> {
+    async fn read_file(&mut self, path: String) -> Result<Vec<u8>, kiln_host::HostError> {
         match self.host.load_source(&path).await {
             Ok(bytes) => {
                 let hash = sha256_digest(&bytes);
@@ -64,15 +61,16 @@ impl<H: CompilerHost + 'static> kiln_host::Host for KilnHostState<H> {
                 });
                 Ok(bytes)
             }
-            Err(wado_compiler::SourceError::NotFound { .. }) => {
-                Err(kiln_host::HostError::NotFound)
-            }
+            Err(wado_compiler::SourceError::NotFound { .. }) => Err(kiln_host::HostError::NotFound),
             Err(e) => Err(kiln_host::HostError::Io(e.to_string())),
         }
     }
 
     async fn emit_diagnostic(&mut self, diagnostic: kiln_host::Diagnostic) {
-        self.diagnostics.lock().unwrap().push(lift_diagnostic(diagnostic));
+        self.diagnostics
+            .lock()
+            .unwrap()
+            .push(lift_diagnostic(diagnostic));
     }
 }
 
@@ -229,8 +227,8 @@ mod tests {
             .build()
             .unwrap()
             .block_on(async {
-                let engine = create_engine(wasmtime::OptLevel::Speed, &ProfileMode::None)
-                    .expect("engine");
+                let engine =
+                    create_engine(wasmtime::OptLevel::Speed, &ProfileMode::None).expect("engine");
                 let host = Arc::new(DummyHost);
                 let request = GeneratorRequest {
                     primary: GeneratorInputFile {

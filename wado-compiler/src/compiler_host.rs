@@ -468,8 +468,7 @@ pub struct GeneratorDiagnostic {
 /// The Kiln WIT world, embedded so the compiler can treat its byte identity
 /// as part of every cache key. The single source of truth; `wado-cli` reads
 /// the same file via `wasmtime::component::bindgen!(path = "...")`.
-pub const KILN_GENERATOR_WIT: &str =
-    include_str!("../lib/wado/kiln/generator.wit");
+pub const KILN_GENERATOR_WIT: &str = include_str!("../lib/wado/kiln/generator.wit");
 
 /// A simple in-memory compiler host for testing
 ///

@@ -275,10 +275,7 @@ pub struct OutputHash {
 #[derive(Debug)]
 pub enum ExecuteError {
     /// Failed to load the primary schema or a declared input.
-    LoadInput {
-        path: String,
-        source: SourceError,
-    },
+    LoadInput { path: String, source: SourceError },
     /// The runner surfaced an error. `Unsupported` bubbles up here and is
     /// the signal a future consume-only layer (M7) watches for.
     Runner(GeneratorRunnerError),
@@ -545,7 +542,11 @@ fn emit_cache_io_warning<H: CompilerHost>(host: &H, path: &Path, source: &std::i
     });
 }
 
-async fn matches_file<H: CompilerHost>(host: &H, path: &InvocationPath, expected_hex: &str) -> bool {
+async fn matches_file<H: CompilerHost>(
+    host: &H,
+    path: &InvocationPath,
+    expected_hex: &str,
+) -> bool {
     match host.load_source(path.as_str()).await {
         Ok(bytes) => hash_matches_bytes(&bytes, expected_hex),
         Err(_) => false,
@@ -630,13 +631,13 @@ async fn load_input<H: CompilerHost>(
     host: &H,
     path: &InvocationPath,
 ) -> Result<GeneratorInputFile, ExecuteError> {
-    let content = host
-        .load_source(path.as_str())
-        .await
-        .map_err(|source| ExecuteError::LoadInput {
-            path: path.as_str().to_string(),
-            source,
-        })?;
+    let content =
+        host.load_source(path.as_str())
+            .await
+            .map_err(|source| ExecuteError::LoadInput {
+                path: path.as_str().to_string(),
+                source,
+            })?;
     Ok(GeneratorInputFile {
         path: path.as_str().to_string(),
         content,
@@ -823,7 +824,8 @@ where
             .find(|e| e.invocation == invocation_name)
             .cloned();
 
-        let options_hash = wado_compiler::kiln::hash_options_canonical(&invocation.options_canonical);
+        let options_hash =
+            wado_compiler::kiln::hash_options_canonical(&invocation.options_canonical);
 
         let entry = if let Some(prior) = existing.filter(|e| e.options_hash == options_hash) {
             if cache_matches(&prior, invocation, manifest_root, host).await {
@@ -868,12 +870,11 @@ where
 
     for (dir, kept) in &kept_by_dir {
         let abs = manifest_root.join(dir);
-        let deleted = reconcile_outputs(manifest_root, &abs, kept).map_err(|source| {
-            PipelineError::Io {
+        let deleted =
+            reconcile_outputs(manifest_root, &abs, kept).map_err(|source| PipelineError::Io {
                 path: abs.clone(),
                 source,
-            }
-        })?;
+            })?;
         outcome.deleted.extend(deleted);
     }
     outcome.deleted.sort();
@@ -896,19 +897,25 @@ where
     H: CompilerHost,
     P: GeneratorProvider,
 {
-    let component = provider.get_component(&invocation.module).await.map_err(|source| {
-        PipelineError::Provider {
+    let component = provider
+        .get_component(&invocation.module)
+        .await
+        .map_err(|source| PipelineError::Provider {
             invocation: invocation_name.to_string(),
             source,
-        }
-    })?;
+        })?;
     let run = execute(invocation, &component, manifest_root, host)
         .await
         .map_err(|source| PipelineError::Execute {
             invocation: invocation_name.to_string(),
             source,
         })?;
-    Ok(build_cache_entry(invocation_name, invocation, &run, options_hash))
+    Ok(build_cache_entry(
+        invocation_name,
+        invocation,
+        &run,
+        options_hash,
+    ))
 }
 
 fn invocation_id(inv: &Invocation) -> String {
@@ -937,10 +944,15 @@ fn load_lockfile(manifest_root: &Path) -> Result<wado_manifest::LockFile, Pipeli
             return Err(PipelineError::Io { path, source });
         }
     };
-    content.parse().map_err(|source| PipelineError::LockParse { source })
+    content
+        .parse()
+        .map_err(|source| PipelineError::LockParse { source })
 }
 
-fn save_lockfile(manifest_root: &Path, lock: &wado_manifest::LockFile) -> Result<(), PipelineError> {
+fn save_lockfile(
+    manifest_root: &Path,
+    lock: &wado_manifest::LockFile,
+) -> Result<(), PipelineError> {
     let path = manifest_root.join("wado.lock");
     std::fs::write(&path, lock.to_toml()).map_err(|source| PipelineError::Io { path, source })
 }
@@ -1250,7 +1262,8 @@ output-dir = "build/kiln/second"
             assert_eq!(run.outputs[1].path, "build/kiln/proto/sub/mod.wado");
             assert!(!run.outputs[1].is_entry);
 
-            let lib = std::fs::read_to_string(tmp.path().join("build/kiln/proto/lib.wado")).unwrap();
+            let lib =
+                std::fs::read_to_string(tmp.path().join("build/kiln/proto/lib.wado")).unwrap();
             assert!(lib.starts_with("#![generated(by = \"ns:proto@1.0.0\""));
             assert!(lib.contains("\"schema.proto\""));
             assert!(lib.contains("\"dep.proto\""));
@@ -1265,16 +1278,11 @@ output-dir = "build/kiln/second"
         fn unsupported_runner_error_bubbles_up() {
             let tmp = tempfile::tempdir().unwrap();
             let host = MockHost::new(
-                &[
-                    ("schema.proto", b"x"),
-                    ("dep.proto", b"y"),
-                ],
+                &[("schema.proto", b"x"), ("dep.proto", b"y")],
                 Err(GeneratorRunnerError::Unsupported),
             );
             let err = runtime()
-                .block_on(async {
-                    execute(&sample_invocation(), b"wasm", tmp.path(), &host).await
-                })
+                .block_on(async { execute(&sample_invocation(), b"wasm", tmp.path(), &host).await })
                 .unwrap_err();
             assert!(matches!(
                 err,
@@ -1290,9 +1298,7 @@ output-dir = "build/kiln/second"
                 Err(GeneratorRunnerError::Unsupported),
             );
             let err = runtime()
-                .block_on(async {
-                    execute(&sample_invocation(), b"wasm", tmp.path(), &host).await
-                })
+                .block_on(async { execute(&sample_invocation(), b"wasm", tmp.path(), &host).await })
                 .unwrap_err();
             match err {
                 ExecuteError::LoadInput { path, .. } => assert_eq!(path, "schema.proto"),
@@ -1311,17 +1317,9 @@ output-dir = "build/kiln/second"
                 }],
                 reads: vec![],
             };
-            let host = MockHost::new(
-                &[
-                    ("schema.proto", b"x"),
-                    ("dep.proto", b"y"),
-                ],
-                Ok(response),
-            );
+            let host = MockHost::new(&[("schema.proto", b"x"), ("dep.proto", b"y")], Ok(response));
             let err = runtime()
-                .block_on(async {
-                    execute(&sample_invocation(), b"wasm", tmp.path(), &host).await
-                })
+                .block_on(async { execute(&sample_invocation(), b"wasm", tmp.path(), &host).await })
                 .unwrap_err();
             match err {
                 ExecuteError::InvalidOutputPath { path } => assert_eq!(path, "../escape.wado"),
@@ -1336,13 +1334,7 @@ output-dir = "build/kiln/second"
                 files: vec![],
                 reads: vec![],
             };
-            let host = MockHost::new(
-                &[
-                    ("schema.proto", b"x"),
-                    ("dep.proto", b"y"),
-                ],
-                Ok(response),
-            );
+            let host = MockHost::new(&[("schema.proto", b"x"), ("dep.proto", b"y")], Ok(response));
             let mut inv = sample_invocation();
             inv.options_canonical = vec![0xde, 0xad, 0xbe, 0xef];
 
@@ -1367,17 +1359,9 @@ output-dir = "build/kiln/second"
                     content_hash: [7u8; 32],
                 }],
             };
-            let host = MockHost::new(
-                &[
-                    ("schema.proto", b"x"),
-                    ("dep.proto", b"y"),
-                ],
-                Ok(response),
-            );
+            let host = MockHost::new(&[("schema.proto", b"x"), ("dep.proto", b"y")], Ok(response));
             let run = runtime()
-                .block_on(async {
-                    execute(&sample_invocation(), b"wasm", tmp.path(), &host).await
-                })
+                .block_on(async { execute(&sample_invocation(), b"wasm", tmp.path(), &host).await })
                 .unwrap();
             assert_eq!(run.reads.len(), 1);
             assert_eq!(run.reads[0].path, "extra.proto");
@@ -1549,12 +1533,8 @@ output-dir = "build/kiln/second"
                 response,
                 &[("schema.proto", b"p"), ("dep.proto", b"d")],
             );
-            let entry = build_cache_entry(
-                "proto",
-                &sample_invocation(),
-                &run,
-                "sha256:o".to_string(),
-            );
+            let entry =
+                build_cache_entry("proto", &sample_invocation(), &run, "sha256:o".to_string());
             assert_eq!(entry.reads.len(), 2);
             assert_eq!(entry.reads[0].path, "a.proto");
             assert_eq!(entry.reads[1].path, "z.proto");
@@ -1576,12 +1556,8 @@ output-dir = "build/kiln/second"
                 response,
                 &[("schema.proto", b"p"), ("dep.proto", b"d")],
             );
-            let entry = build_cache_entry(
-                "proto",
-                &sample_invocation(),
-                &run,
-                "sha256:o".to_string(),
-            );
+            let entry =
+                build_cache_entry("proto", &sample_invocation(), &run, "sha256:o".to_string());
             let host = HashOnlyHost::new(&[("schema.proto", b"p"), ("dep.proto", b"d")]);
             let hit = runtime().block_on(async {
                 cache_matches(&entry, &sample_invocation(), tmp.path(), &host).await
@@ -1601,12 +1577,8 @@ output-dir = "build/kiln/second"
                 response,
                 &[("schema.proto", b"p"), ("dep.proto", b"d")],
             );
-            let entry = build_cache_entry(
-                "proto",
-                &sample_invocation(),
-                &run,
-                "sha256:o".to_string(),
-            );
+            let entry =
+                build_cache_entry("proto", &sample_invocation(), &run, "sha256:o".to_string());
             let host = HashOnlyHost::new(&[("schema.proto", b"different"), ("dep.proto", b"d")]);
             let hit = runtime().block_on(async {
                 cache_matches(&entry, &sample_invocation(), tmp.path(), &host).await
@@ -1630,12 +1602,8 @@ output-dir = "build/kiln/second"
                 response,
                 &[("schema.proto", b"p"), ("dep.proto", b"d")],
             );
-            let entry = build_cache_entry(
-                "proto",
-                &sample_invocation(),
-                &run,
-                "sha256:o".to_string(),
-            );
+            let entry =
+                build_cache_entry("proto", &sample_invocation(), &run, "sha256:o".to_string());
             std::fs::remove_file(tmp.path().join("build/kiln/proto/lib.wado")).unwrap();
             let host = HashOnlyHost::new(&[("schema.proto", b"p"), ("dep.proto", b"d")]);
             let hit = runtime().block_on(async {
@@ -1663,12 +1631,8 @@ output-dir = "build/kiln/second"
                 response,
                 &[("schema.proto", b"p"), ("dep.proto", b"d")],
             );
-            let entry = build_cache_entry(
-                "proto",
-                &sample_invocation(),
-                &run,
-                "sha256:o".to_string(),
-            );
+            let entry =
+                build_cache_entry("proto", &sample_invocation(), &run, "sha256:o".to_string());
             let host = HashOnlyHost::new(&[
                 ("schema.proto", b"p"),
                 ("dep.proto", b"d"),
@@ -1732,13 +1696,12 @@ output-dir = "build/kiln/second"
                 "#![generated(by = \"gen\", sources = [])]\n",
             )
             .unwrap();
-            let deleted = reconcile_outputs(
-                tmp.path(),
-                &tmp.path().join("build/kiln/proto"),
-                &[],
-            )
-            .unwrap();
-            assert_eq!(deleted, vec!["build/kiln/proto/sub/orphan.wado".to_string()]);
+            let deleted =
+                reconcile_outputs(tmp.path(), &tmp.path().join("build/kiln/proto"), &[]).unwrap();
+            assert_eq!(
+                deleted,
+                vec!["build/kiln/proto/sub/orphan.wado".to_string()]
+            );
         }
     }
 
@@ -1816,10 +1779,7 @@ output-dir = "build/kiln/second"
                 _wasm: &[u8],
                 _request: GeneratorRequest,
             ) -> Result<GeneratorResponse, GeneratorRunnerError> {
-                self.response
-                    .lock()
-                    .unwrap()
-                    .remove(0)
+                self.response.lock().unwrap().remove(0)
             }
         }
 
@@ -1982,7 +1942,10 @@ from = "./schema.proto"
             let outcome = runtime()
                 .block_on(async { run_pipeline(&m, tmp.path(), &host, &provider).await })
                 .unwrap();
-            assert_eq!(outcome.deleted, vec!["build/kiln/greeter/leftover.wado".to_string()]);
+            assert_eq!(
+                outcome.deleted,
+                vec!["build/kiln/greeter/leftover.wado".to_string()]
+            );
             assert!(!out_dir.join("leftover.wado").exists());
             assert!(out_dir.join("greeter.wado").exists());
         }

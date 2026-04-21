@@ -178,17 +178,17 @@ pub fn generator_identity(module: &GeneratorModule) -> String {
 }
 
 fn write_prefixed(h: &mut Sha256, bytes: &[u8]) {
-    h.update(&(bytes.len() as u64).to_be_bytes());
+    h.update((bytes.len() as u64).to_be_bytes());
     h.update(bytes);
 }
 
 fn write_u32(h: &mut Sha256, n: u32) {
-    h.update(&n.to_be_bytes());
+    h.update(n.to_be_bytes());
 }
 
 fn write_file_hash(h: &mut Sha256, f: &FileHash) {
     write_prefixed(h, f.path.as_bytes());
-    h.update(&f.hash);
+    h.update(f.hash);
 }
 
 #[cfg(test)]
@@ -266,7 +266,7 @@ mod tests {
             generator_identity: "ns:proto@1.0.0",
             generator_source_hash: &zero,
             primary: &primary,
-            inputs: &[extra.clone()],
+            inputs: std::slice::from_ref(&extra),
             prior_reads: &[],
             options_canonical: b"",
         });

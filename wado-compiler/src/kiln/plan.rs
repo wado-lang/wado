@@ -23,10 +23,7 @@ pub enum PlanError {
     /// Two invocations share a `from` path but disagree on configuration
     /// (module / inputs / options / `output_dir`). Per WEP line 368-371 such
     /// declarations must be merged; when they cannot the compiler refuses.
-    DuplicateGenerator {
-        from: String,
-        sites: Vec<DeclSite>,
-    },
+    DuplicateGenerator { from: String, sites: Vec<DeclSite> },
 }
 
 impl core::fmt::Display for PlanError {
@@ -266,12 +263,7 @@ mod tests {
 
     #[test]
     fn a_depends_on_b_when_a_reads_b_output() {
-        let a = inv(
-            "a",
-            "build/kiln/b/schema.proto",
-            &[],
-            "build/kiln/a",
-        );
+        let a = inv("a", "build/kiln/b/schema.proto", &[], "build/kiln/a");
         let b = inv("b", "s2.proto", &[], "build/kiln/b");
         assert!(depends_on(&a, &b));
     }
@@ -293,7 +285,7 @@ mod tests {
             "build/kiln/consumer",
         );
         let producer = inv("producer", "s.proto", &[], "build/kiln/producer");
-        let plan = build_plan(vec![consumer.clone(), producer.clone()]).unwrap();
+        let plan = build_plan(vec![consumer, producer]).unwrap();
         let positions: Vec<_> = plan
             .order
             .iter()

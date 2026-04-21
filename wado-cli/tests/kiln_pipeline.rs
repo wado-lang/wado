@@ -9,9 +9,7 @@ use std::path::Path;
 use std::sync::Mutex;
 
 use indexmap::IndexMap;
-use wado_cli::kiln_driver::{
-    GeneratorProvider, PipelineOutcome, ProviderError, run_pipeline,
-};
+use wado_cli::kiln_driver::{GeneratorProvider, PipelineOutcome, ProviderError, run_pipeline};
 use wado_compiler::compiler_host::{
     CompilerHost, Diagnostic, GeneratorOutputFile, GeneratorReadRecord, GeneratorRequest,
     GeneratorResponse, GeneratorRunnerError, SourceError,
