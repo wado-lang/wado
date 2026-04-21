@@ -9,7 +9,9 @@ use std::path::Path;
 use std::sync::Mutex;
 
 use indexmap::IndexMap;
-use wado_cli::kiln_driver::{GeneratorProvider, PipelineOutcome, ProviderError, run_pipeline};
+use wado_cli::kiln_driver::{
+    GeneratorProvider, PipelineOutcome, ProviderError, run_pipeline, run_pipeline_with_inline,
+};
 use wado_compiler::compiler_host::{
     CompilerHost, Diagnostic, GeneratorOutputFile, GeneratorReadRecord, GeneratorRequest,
     GeneratorResponse, GeneratorRunnerError, SourceError,
@@ -336,4 +338,113 @@ fn cache_miss_on_output_io_error_emits_warning() {
             && d.message.contains("alpha.wado")
     });
     assert!(saw_warning, "expected warning diagnostic, got: {diags:?}");
+}
+
+#[test]
+fn pipeline_invocations_feed_compiler_options_for_use_redirect() {
+    use wado_compiler::CompilerOptions;
+    use wado_compiler::kiln::{DeclSite, GeneratorModule, Invocation, InvocationPath};
+
+    let tmp = tempfile::tempdir().unwrap();
+    let toml_str = r#"
+[package]
+name = "redirect-test"
+version = "0.1.0"
+"#;
+    let m: Manifest = toml_str.parse().unwrap();
+
+    let inline_inv = Invocation {
+        decl_site: DeclSite::Inline {
+            module: "entry.wado".to_string(),
+            synthetic_id: "kiln-abc12345".to_string(),
+        },
+        module: GeneratorModule::LocalPath(InvocationPath::normalize("../gen")),
+        from: InvocationPath::normalize("./schema.proto"),
+        inputs: vec![],
+        output_dir: InvocationPath::normalize("build/kiln/kiln-abc12345"),
+        options_canonical: Vec::new(),
+    };
+
+    let generated_content = "pub fn greet() {}\n";
+    let host = StubHost::new(
+        &[("schema.proto", b"schema-content")],
+        vec![(
+            "schema.proto",
+            GeneratorResponse {
+                files: vec![GeneratorOutputFile {
+                    path: "schema.wado".to_string(),
+                    content: generated_content.to_string(),
+                    is_entry: true,
+                }],
+                reads: Vec::<GeneratorReadRecord>::new(),
+            },
+        )],
+    );
+    let provider = StubProvider::new(b"component-bytes".to_vec());
+
+    let outcome = runtime()
+        .block_on(async {
+            run_pipeline_with_inline(&m, tmp.path(), &host, &provider, vec![inline_inv]).await
+        })
+        .unwrap();
+
+    assert!(!outcome.invocations.is_empty());
+
+    let options = CompilerOptions {
+        invocations: outcome.invocations,
+        ..CompilerOptions::default()
+    };
+    assert!(!options.invocations.is_empty());
+    assert_eq!(
+        options.invocations.redirect("entry.wado", "./schema.proto"),
+        Some("build/kiln/kiln-abc12345/schema.wado"),
+    );
+}
+
+#[test]
+fn inline_invocation_populates_invocation_index_for_redirect() {
+    use wado_compiler::kiln::{DeclSite, GeneratorModule, Invocation, InvocationPath};
+
+    let tmp = tempfile::tempdir().unwrap();
+    let toml_str = r#"
+[package]
+name = "inline-consumer"
+version = "0.1.0"
+"#;
+    let m: Manifest = toml_str.parse().unwrap();
+
+    let inline_inv = Invocation {
+        decl_site: DeclSite::Inline {
+            module: "entry.wado".to_string(),
+            synthetic_id: "kiln-deadbeef".to_string(),
+        },
+        module: GeneratorModule::LocalPath(InvocationPath::normalize("../gen")),
+        from: InvocationPath::normalize("./sample.proto"),
+        inputs: vec![],
+        output_dir: InvocationPath::normalize("build/kiln/kiln-deadbeef"),
+        options_canonical: Vec::new(),
+    };
+
+    let host = StubHost::new(
+        &[("sample.proto", b"inline-schema")],
+        vec![("sample.proto", simple_response("sample.wado"))],
+    );
+    let provider = StubProvider::new(b"component-bytes".to_vec());
+
+    let outcome = runtime()
+        .block_on(async {
+            run_pipeline_with_inline(&m, tmp.path(), &host, &provider, vec![inline_inv]).await
+        })
+        .unwrap();
+
+    assert_eq!(outcome.executed.len(), 1, "inline should have executed");
+    assert!(
+        !outcome.invocations.is_empty(),
+        "inline outcome must populate InvocationIndex"
+    );
+    assert_eq!(
+        outcome.invocations.redirect("entry.wado", "./sample.proto"),
+        Some("build/kiln/kiln-deadbeef/sample.wado"),
+        "inline decl_file + from should redirect to the generated entry path"
+    );
 }

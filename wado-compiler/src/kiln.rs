@@ -13,13 +13,21 @@
 
 pub mod cache;
 pub mod header;
+pub mod inline;
 pub mod invocation;
+pub mod options;
+pub mod options_check;
 pub mod plan;
 
 pub use cache::{
-    CacheKeyInputs, FileHash, compose_cache_key, content_hash, file_hash, gather_file_hashes,
-    generator_identity, hash_options_canonical, hex_digest,
+    CacheKeyInputs, FileHash, compose_cache_key, content_hash, encode_options_canonical, file_hash,
+    gather_file_hashes, generator_identity, hash_options_canonical, hex_digest,
 };
 pub use header::{GeneratedHeader, has_generated_marker, parse_header};
+pub use inline::{InvocationIndex, collect_inline_invocations, merge_manifest_and_inline};
 pub use invocation::{DeclSite, GeneratorModule, Invocation, InvocationPath};
+pub use options::{
+    CanonicalValue, OptionsDescriptor, OptionsField, OptionsType, extract_options_descriptor,
+};
+pub use options_check::{CanonicalOptions, validate as validate_options};
 pub use plan::{Plan, PlanError, build_plan, depends_on};

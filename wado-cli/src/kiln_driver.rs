@@ -23,14 +23,16 @@
 
 use std::path::{Path, PathBuf};
 
+use wado_compiler::ast::AttrValue;
 use wado_compiler::compiler_host::{
     CompilerHost, GeneratorInputFile, GeneratorReadRecord, GeneratorRequest, GeneratorRunnerError,
     SourceError,
 };
+use wado_compiler::hashmap::IndexMap as CompilerIndexMap;
 use wado_compiler::kiln::{
-    DeclSite, FileHash, GeneratedHeader, GeneratorModule, Invocation, InvocationPath, Plan,
-    PlanError, build_plan, content_hash, file_hash, generator_identity, has_generated_marker,
-    hex_digest,
+    DeclSite, FileHash, GeneratedHeader, GeneratorModule, Invocation, InvocationPath,
+    OptionsDescriptor, Plan, PlanError, build_plan, content_hash, encode_options_canonical,
+    file_hash, generator_identity, has_generated_marker, hex_digest, validate_options,
 };
 use wado_manifest::{
     FileHash as ManifestFileHash, GeneratorCacheEntry, GeneratorInvocation, GeneratorModuleRef,
@@ -57,9 +59,11 @@ pub struct PlanOutcome {
 /// lowering step.
 #[derive(Debug)]
 pub enum DriverError {
-    /// The manifest's `module = { ... }` inline form is not yet supported by
-    /// the driver. M3c ships with `module = "ns:name@ver"` only; inline
-    /// records land together with build-dependency resolution.
+    /// The manifest's `module = { foo = ... }` inline record form with
+    /// keys other than `path` is not supported. `module = "ns:name@ver"`
+    /// (spec form) and `module = { path = "..." }` (local path) are
+    /// accepted; other shapes surface this error so registry/git/workspace
+    /// forms remain an explicit, actionable v1 limitation.
     UnsupportedInlineModule { invocation: String },
     /// Dedup / cycle error from the planner.
     Plan(PlanError),
@@ -232,6 +236,35 @@ fn write_str(out: &mut Vec<u8>, s: &str) {
 
 fn write_len(out: &mut Vec<u8>, n: usize) {
     out.extend_from_slice(&(n as u64).to_be_bytes());
+}
+
+/// Convert a `toml::Value` to the compiler-side generic [`AttrValue`] tree so
+/// the driver can hand a user-supplied options table to
+/// [`wado_compiler::kiln::validate_options`] without leaking `toml` into the
+/// compiler crate.
+///
+/// Datetime values are rendered as their RFC-3339 string form (matching the
+/// provisional encoder's tag 6). Floats are preserved; integers stay
+/// `i64`-typed. Tables preserve declaration order via
+/// [`wado_compiler::hashmap::IndexMap`] so downstream validation is
+/// deterministic.
+#[must_use]
+pub fn toml_to_attr_value(v: &toml::Value) -> AttrValue {
+    match v {
+        toml::Value::Boolean(b) => AttrValue::Bool(*b),
+        toml::Value::Integer(i) => AttrValue::Int(*i),
+        toml::Value::Float(f) => AttrValue::Float(*f),
+        toml::Value::String(s) => AttrValue::String(s.clone()),
+        toml::Value::Datetime(dt) => AttrValue::String(dt.to_string()),
+        toml::Value::Array(a) => AttrValue::Array(a.iter().map(toml_to_attr_value).collect()),
+        toml::Value::Table(t) => {
+            let mut entries: CompilerIndexMap<String, AttrValue> = CompilerIndexMap::default();
+            for (k, val) in t {
+                entries.insert(k.clone(), toml_to_attr_value(val));
+            }
+            AttrValue::Object(entries)
+        }
+    }
 }
 
 /// Outcome of [`execute`] for a single invocation.
@@ -693,6 +726,27 @@ pub trait GeneratorProvider {
         &self,
         module: &GeneratorModule,
     ) -> impl std::future::Future<Output = Result<Vec<u8>, ProviderError>> + Send;
+
+    /// Resolve `module` to its typed [`OptionsDescriptor`]. Used by the
+    /// driver to validate a user-supplied options table before calling the
+    /// generator — see
+    /// [`wado_compiler::kiln::validate_options`]. When a provider cannot
+    /// introspect the generator (e.g. consume-only mode on the LSP), it
+    /// returns [`ProviderError::Unsupported`] and the driver falls back to
+    /// the provisional TOML encoder on the raw options table.
+    fn descriptor(
+        &self,
+        module: &GeneratorModule,
+    ) -> impl std::future::Future<Output = Result<OptionsDescriptor, ProviderError>> + Send {
+        let _ = module;
+        async {
+            Err(ProviderError::Unsupported {
+                message:
+                    "kiln: provider does not expose OptionsDescriptor (typed options unavailable)"
+                        .to_string(),
+            })
+        }
+    }
 }
 
 /// Error returned by a [`GeneratorProvider`].
@@ -727,6 +781,18 @@ pub struct PipelineOutcome {
     /// Project-root-relative paths of stale `#![generated]` files deleted
     /// across all invocation output directories.
     pub deleted: Vec<String>,
+    /// Invocation ids that fell through to consume-only mode because the
+    /// provider or runner reported `Unsupported`. See the consume-only
+    /// contract documented on [`run_pipeline`]: when this list is non-empty
+    /// the pipeline emits [`wado_compiler::Code::KilnStaleCache`] warnings
+    /// and skips lockfile / output-directory writes so committed artifacts
+    /// are preserved.
+    pub stale: Vec<String>,
+    /// Redirect index for the resolver: `(decl_file, from)` → entry path.
+    /// Populated from every invocation (cached, executed, or stale) so the
+    /// compiler can redirect `use { X } from "<schema>"` to the generated
+    /// entry module. Empty when no invocations ran.
+    pub invocations: wado_compiler::kiln::InvocationIndex,
 }
 
 /// Failure modes from [`run_pipeline`].
@@ -807,10 +873,49 @@ where
     H: CompilerHost,
     P: GeneratorProvider,
 {
-    let planned = plan(manifest, manifest_root)?;
+    run_pipeline_with_inline(manifest, manifest_root, host, provider, Vec::new()).await
+}
+
+/// Like [`run_pipeline`] but also accepts pre-collected inline invocations
+/// (from `use ... with { generator: ... }` clauses). The inline set is merged
+/// with the manifest-declared set before planning.
+///
+/// # Errors
+/// See [`PipelineError`].
+pub async fn run_pipeline_with_inline<H, P>(
+    manifest: &Manifest,
+    manifest_root: &Path,
+    host: &H,
+    provider: &P,
+    inline_invocations: Vec<wado_compiler::kiln::Invocation>,
+) -> Result<PipelineOutcome, PipelineError>
+where
+    H: CompilerHost,
+    P: GeneratorProvider,
+{
+    let manifest_plan = plan(manifest, manifest_root)?;
+    let merged = match wado_compiler::kiln::merge_manifest_and_inline(
+        manifest_plan.plan.order,
+        inline_invocations,
+    ) {
+        Ok(v) => v,
+        Err(diags) => {
+            for d in diags {
+                host.emit_diagnostic(d);
+            }
+            return Ok(PipelineOutcome::default());
+        }
+    };
+    let plan_order = wado_compiler::kiln::build_plan(merged).map_err(DriverError::Plan)?;
+    let mut planned = PlanOutcome {
+        plan: plan_order,
+        manifest_root: manifest_root.to_path_buf(),
+    };
     if planned.plan.order.is_empty() {
         return Ok(PipelineOutcome::default());
     }
+
+    typed_encode_options(manifest, &mut planned.plan.order, provider, host).await;
 
     let mut lock = load_lockfile(manifest_root)?;
     let mut new_cache: Vec<GeneratorCacheEntry> = Vec::with_capacity(planned.plan.order.len());
@@ -829,12 +934,36 @@ where
         let options_hash =
             wado_compiler::kiln::hash_options_canonical(&invocation.options_canonical);
 
-        let entry = if let Some(prior) = existing.filter(|e| e.options_hash == options_hash) {
-            if cache_matches(&prior, invocation, manifest_root, host).await {
-                outcome.cached.push(invocation_name.clone());
-                prior
+        let (entry, executed) =
+            if let Some(prior) = existing.clone().filter(|e| e.options_hash == options_hash) {
+                if cache_matches(&prior, invocation, manifest_root, host).await {
+                    outcome.cached.push(invocation_name.clone());
+                    (Some(prior), false)
+                } else {
+                    match run_and_build_entry(
+                        &invocation_name,
+                        invocation,
+                        manifest_root,
+                        host,
+                        provider,
+                        options_hash.clone(),
+                    )
+                    .await
+                    {
+                        Ok(entry) => {
+                            outcome.executed.push(invocation_name.clone());
+                            (Some(entry), true)
+                        }
+                        Err(e) if is_unsupported(&e) => {
+                            emit_stale_warning(host, &invocation_name);
+                            outcome.stale.push(invocation_name.clone());
+                            (Some(prior), false)
+                        }
+                        Err(e) => return Err(e),
+                    }
+                }
             } else {
-                run_and_build_entry(
+                match run_and_build_entry(
                     &invocation_name,
                     invocation,
                     manifest_root,
@@ -843,31 +972,43 @@ where
                     options_hash,
                 )
                 .await
-                .inspect(|_| {
-                    outcome.executed.push(invocation_name.clone());
-                })?
-            }
-        } else {
-            run_and_build_entry(
-                &invocation_name,
-                invocation,
-                manifest_root,
-                host,
-                provider,
-                options_hash,
-            )
-            .await
-            .inspect(|_| {
-                outcome.executed.push(invocation_name.clone());
-            })?
-        };
+                {
+                    Ok(entry) => {
+                        outcome.executed.push(invocation_name.clone());
+                        (Some(entry), true)
+                    }
+                    Err(e) if is_unsupported(&e) => {
+                        emit_stale_warning(host, &invocation_name);
+                        outcome.stale.push(invocation_name.clone());
+                        (existing, false)
+                    }
+                    Err(e) => return Err(e),
+                }
+            };
 
-        let dir = invocation.output_dir.as_str().to_string();
-        let kept = kept_by_dir.entry(dir).or_default();
-        for o in &entry.outputs {
-            kept.push(o.path.clone());
+        if let Some(entry) = entry {
+            if executed {
+                let dir = invocation.output_dir.as_str().to_string();
+                let kept = kept_by_dir.entry(dir).or_default();
+                for o in &entry.outputs {
+                    kept.push(o.path.clone());
+                }
+            }
+            if let Some(entry_path) = entry.outputs.iter().find(|o| o.entry).map(|o| &o.path) {
+                let decl_file = match &invocation.decl_site {
+                    wado_compiler::kiln::DeclSite::Manifest { .. } => String::new(),
+                    wado_compiler::kiln::DeclSite::Inline { module, .. } => module.clone(),
+                };
+                outcome
+                    .invocations
+                    .insert(&decl_file, invocation.from.as_str(), entry_path);
+            }
+            new_cache.push(entry);
         }
-        new_cache.push(entry);
+    }
+
+    if !outcome.stale.is_empty() {
+        return Ok(outcome);
     }
 
     for (dir, kept) in &kept_by_dir {
@@ -885,6 +1026,110 @@ where
 
     save_lockfile(manifest_root, &lock)?;
     Ok(outcome)
+}
+
+fn is_unsupported(err: &PipelineError) -> bool {
+    matches!(
+        err,
+        PipelineError::Execute {
+            source: ExecuteError::Runner(GeneratorRunnerError::Unsupported),
+            ..
+        } | PipelineError::Provider {
+            source: ProviderError::Unsupported { .. },
+            ..
+        }
+    )
+}
+
+fn emit_stale_warning<H: CompilerHost>(host: &H, invocation: &str) {
+    use wado_compiler::{Code, Diagnostic, Severity};
+    host.emit_diagnostic(Diagnostic {
+        severity: Severity::Warning,
+        code: Code::KilnStaleCache,
+        message: format!(
+            "kiln[{invocation}]: generator execution is not available in this host; \
+             re-run `wado compile` natively to refresh `build/kiln/` and `wado.lock`",
+        ),
+        span: None,
+    });
+}
+
+/// Re-encode each invocation's `options_canonical` bytes using the typed
+/// pipeline from [`wado_compiler::kiln::encode_options_canonical`] when the
+/// provider exposes a descriptor. Falls back silently to the provisional
+/// bytes already produced by [`lower`] when:
+///
+/// - the invocation is anonymous (inline `use ... with`) — M5 clauses already
+///   encode via the typed path when they are built, so this code path skips
+///   them;
+/// - the provider returns [`ProviderError::Unsupported`] (e.g. consume-only
+///   LSP mode);
+/// - the provider returns [`ProviderError::Internal`] — a warning diagnostic
+///   is surfaced through `host.emit_diagnostic`, but the pipeline continues.
+///
+/// Validation failures (unknown / missing / type-mismatched fields) surface
+/// as error diagnostics on `host`; the provisional bytes remain in place so
+/// downstream layers still see a consistent invocation. The caller's next
+/// step — `run_and_build_entry` — will fail fast when the generator rejects
+/// the options blob, so the user sees both the compiler-side validation
+/// error and the generator-side trap in the same run.
+async fn typed_encode_options<H, P>(
+    manifest: &Manifest,
+    invocations: &mut [Invocation],
+    provider: &P,
+    host: &H,
+) where
+    H: CompilerHost,
+    P: GeneratorProvider,
+{
+    use wado_compiler::{Code, Diagnostic, Severity};
+
+    let Some(build) = manifest.build.as_ref() else {
+        return;
+    };
+
+    for inv in invocations.iter_mut() {
+        let name = match &inv.decl_site {
+            DeclSite::Manifest { name } => name.clone(),
+            DeclSite::Inline { .. } => continue,
+        };
+        let Some(gi) = build.generators.get(&name) else {
+            continue;
+        };
+
+        let descriptor = match provider.descriptor(&inv.module).await {
+            Ok(d) => d,
+            Err(ProviderError::Unsupported { .. }) => continue,
+            Err(ProviderError::Internal { message }) => {
+                host.emit_diagnostic(Diagnostic {
+                    severity: Severity::Warning,
+                    code: Code::Log,
+                    message: format!(
+                        "kiln[{name}]: failed to introspect generator options schema ({message}); \
+                         falling back to raw TOML encoding",
+                    ),
+                    span: None,
+                });
+                continue;
+            }
+        };
+
+        let attr = toml_to_attr_value(&gi.options);
+        let supplied: Option<&AttrValue> = match &attr {
+            AttrValue::Object(obj) if obj.is_empty() => None,
+            other => Some(other),
+        };
+        match validate_options(&descriptor, supplied) {
+            Ok(canonical) => {
+                inv.options_canonical = encode_options_canonical(&canonical);
+            }
+            Err(diagnostics) => {
+                for d in diagnostics {
+                    host.emit_diagnostic(d);
+                }
+            }
+        }
+    }
 }
 
 async fn run_and_build_entry<H, P>(
@@ -923,9 +1168,7 @@ where
 fn invocation_id(inv: &Invocation) -> String {
     match &inv.decl_site {
         DeclSite::Manifest { name } => name.clone(),
-        DeclSite::Inline { .. } => {
-            panic!("inline kiln invocation ids are introduced in M5")
-        }
+        DeclSite::Inline { synthetic_id, .. } => synthetic_id.clone(),
     }
 }
 
@@ -1150,6 +1393,315 @@ output-dir = "build/kiln/second"
         );
     }
 
+    #[test]
+    fn typed_encoder_byte_identical_to_provisional_on_common_subset() {
+        use wado_compiler::kiln::{CanonicalValue, OptionsDescriptor, OptionsField, OptionsType};
+        use wado_compiler::token::Span;
+
+        let desc = OptionsDescriptor {
+            fields: vec![
+                OptionsField {
+                    name: "a_bool".to_string(),
+                    ty: OptionsType::Bool,
+                    default: None,
+                    span: Span::new(0, 0, 1, 1),
+                },
+                OptionsField {
+                    name: "b_int".to_string(),
+                    ty: OptionsType::I64,
+                    default: None,
+                    span: Span::new(0, 0, 1, 1),
+                },
+                OptionsField {
+                    name: "c_float".to_string(),
+                    ty: OptionsType::F64,
+                    default: None,
+                    span: Span::new(0, 0, 1, 1),
+                },
+                OptionsField {
+                    name: "d_string".to_string(),
+                    ty: OptionsType::String,
+                    default: None,
+                    span: Span::new(0, 0, 1, 1),
+                },
+            ],
+        };
+
+        let toml_val: toml::Value = toml::from_str(
+            r#"
+a_bool = true
+b_int = 42
+c_float = 3.14
+d_string = "hi"
+"#,
+        )
+        .unwrap();
+        let provisional_bytes = encode_options_canonical_provisional(&toml_val);
+
+        let attr = toml_to_attr_value(&toml_val);
+        let canonical = validate_options(&desc, Some(&attr)).unwrap();
+        let typed_bytes = encode_options_canonical(&canonical);
+
+        assert_eq!(
+            provisional_bytes, typed_bytes,
+            "typed encoder must produce byte-identical output to provisional on the common subset"
+        );
+        let _ = CanonicalValue::Bool(true);
+    }
+
+    #[test]
+    fn typed_encoder_option_some_transparent_to_provisional() {
+        use wado_compiler::kiln::{OptionsDescriptor, OptionsField, OptionsType};
+        use wado_compiler::token::Span;
+
+        let desc = OptionsDescriptor {
+            fields: vec![OptionsField {
+                name: "rule".to_string(),
+                ty: OptionsType::Option(Box::new(OptionsType::String)),
+                default: None,
+                span: Span::new(0, 0, 1, 1),
+            }],
+        };
+
+        let toml_val: toml::Value = toml::from_str(r#"rule = "expr""#).unwrap();
+        let provisional_bytes = encode_options_canonical_provisional(&toml_val);
+
+        let attr = toml_to_attr_value(&toml_val);
+        let canonical = validate_options(&desc, Some(&attr)).unwrap();
+        let typed_bytes = encode_options_canonical(&canonical);
+
+        assert_eq!(
+            provisional_bytes, typed_bytes,
+            "Option::Some(x) must encode identically to a bare x field"
+        );
+    }
+
+    #[test]
+    fn typed_encoder_enum_matches_bare_string() {
+        use wado_compiler::kiln::{OptionsDescriptor, OptionsField, OptionsType};
+        use wado_compiler::token::Span;
+
+        let desc = OptionsDescriptor {
+            fields: vec![OptionsField {
+                name: "style".to_string(),
+                ty: OptionsType::Enum {
+                    name: "Style".to_string(),
+                    variants: vec!["Rpc".to_string(), "Rest".to_string()],
+                },
+                default: None,
+                span: Span::new(0, 0, 1, 1),
+            }],
+        };
+
+        let toml_val: toml::Value = toml::from_str(r#"style = "Rpc""#).unwrap();
+        let provisional_bytes = encode_options_canonical_provisional(&toml_val);
+
+        let attr = toml_to_attr_value(&toml_val);
+        let canonical = validate_options(&desc, Some(&attr)).unwrap();
+        let typed_bytes = encode_options_canonical(&canonical);
+
+        assert_eq!(
+            provisional_bytes, typed_bytes,
+            "enum variant must encode identically to a bare string",
+        );
+    }
+
+    #[test]
+    fn typed_encoder_key_order_independent() {
+        use wado_compiler::kiln::{OptionsDescriptor, OptionsField, OptionsType};
+        use wado_compiler::token::Span;
+
+        let desc = OptionsDescriptor {
+            fields: vec![
+                OptionsField {
+                    name: "a".to_string(),
+                    ty: OptionsType::I64,
+                    default: None,
+                    span: Span::new(0, 0, 1, 1),
+                },
+                OptionsField {
+                    name: "b".to_string(),
+                    ty: OptionsType::String,
+                    default: None,
+                    span: Span::new(0, 0, 1, 1),
+                },
+                OptionsField {
+                    name: "c".to_string(),
+                    ty: OptionsType::Bool,
+                    default: None,
+                    span: Span::new(0, 0, 1, 1),
+                },
+            ],
+        };
+
+        let order1: toml::Value = toml::from_str("a = 1\nb = \"x\"\nc = true").unwrap();
+        let order2: toml::Value = toml::from_str("c = true\na = 1\nb = \"x\"").unwrap();
+
+        let canonical1 = validate_options(&desc, Some(&toml_to_attr_value(&order1))).unwrap();
+        let canonical2 = validate_options(&desc, Some(&toml_to_attr_value(&order2))).unwrap();
+        assert_eq!(
+            encode_options_canonical(&canonical1),
+            encode_options_canonical(&canonical2),
+            "typed encoder must be key-order independent like the provisional one",
+        );
+    }
+
+    #[test]
+    fn typed_encoder_distinguishes_numeric_widths() {
+        use wado_compiler::kiln::{OptionsDescriptor, OptionsField, OptionsType};
+        use wado_compiler::token::Span;
+
+        let make_desc = |ty: OptionsType| OptionsDescriptor {
+            fields: vec![OptionsField {
+                name: "n".to_string(),
+                ty,
+                default: None,
+                span: Span::new(0, 0, 1, 1),
+            }],
+        };
+
+        let toml_val: toml::Value = toml::from_str("n = 42").unwrap();
+        let attr = toml_to_attr_value(&toml_val);
+
+        let as_i32 = encode_options_canonical(
+            &validate_options(&make_desc(OptionsType::I32), Some(&attr)).unwrap(),
+        );
+        let as_i64 = encode_options_canonical(
+            &validate_options(&make_desc(OptionsType::I64), Some(&attr)).unwrap(),
+        );
+        let as_u64 = encode_options_canonical(
+            &validate_options(&make_desc(OptionsType::U64), Some(&attr)).unwrap(),
+        );
+        assert_eq!(
+            as_i32, as_i64,
+            "integer widths must collapse into a single canonical int",
+        );
+        assert_eq!(
+            as_i64, as_u64,
+            "signed and unsigned integers must encode identically at the same width",
+        );
+    }
+
+    #[test]
+    fn typed_encoder_float_preserves_zero_and_negative() {
+        use wado_compiler::kiln::{OptionsDescriptor, OptionsField, OptionsType};
+        use wado_compiler::token::Span;
+
+        let desc = OptionsDescriptor {
+            fields: vec![OptionsField {
+                name: "x".to_string(),
+                ty: OptionsType::F64,
+                default: None,
+                span: Span::new(0, 0, 1, 1),
+            }],
+        };
+
+        let pos_zero: toml::Value = toml::from_str("x = 0.0").unwrap();
+        let neg: toml::Value = toml::from_str("x = -3.14").unwrap();
+        let pos: toml::Value = toml::from_str("x = 3.14").unwrap();
+
+        let bytes_pos_zero = encode_options_canonical(
+            &validate_options(&desc, Some(&toml_to_attr_value(&pos_zero))).unwrap(),
+        );
+        let bytes_neg = encode_options_canonical(
+            &validate_options(&desc, Some(&toml_to_attr_value(&neg))).unwrap(),
+        );
+        let bytes_pos = encode_options_canonical(
+            &validate_options(&desc, Some(&toml_to_attr_value(&pos))).unwrap(),
+        );
+        assert_ne!(bytes_pos_zero, bytes_neg);
+        assert_ne!(bytes_neg, bytes_pos);
+    }
+
+    #[test]
+    fn typed_encoder_mixed_fields_match_provisional() {
+        use wado_compiler::kiln::{OptionsDescriptor, OptionsField, OptionsType};
+        use wado_compiler::token::Span;
+
+        let desc = OptionsDescriptor {
+            fields: vec![
+                OptionsField {
+                    name: "emit".to_string(),
+                    ty: OptionsType::Bool,
+                    default: None,
+                    span: Span::new(0, 0, 1, 1),
+                },
+                OptionsField {
+                    name: "name".to_string(),
+                    ty: OptionsType::String,
+                    default: None,
+                    span: Span::new(0, 0, 1, 1),
+                },
+                OptionsField {
+                    name: "n".to_string(),
+                    ty: OptionsType::U32,
+                    default: None,
+                    span: Span::new(0, 0, 1, 1),
+                },
+                OptionsField {
+                    name: "opt".to_string(),
+                    ty: OptionsType::Option(Box::new(OptionsType::I32)),
+                    default: None,
+                    span: Span::new(0, 0, 1, 1),
+                },
+            ],
+        };
+
+        let with_opt: toml::Value =
+            toml::from_str("emit = false\nname = \"gen\"\nn = 7\nopt = 9").unwrap();
+        let provisional = encode_options_canonical_provisional(&with_opt);
+        let typed = encode_options_canonical(
+            &validate_options(&desc, Some(&toml_to_attr_value(&with_opt))).unwrap(),
+        );
+        assert_eq!(provisional, typed);
+
+        let without_opt: toml::Value =
+            toml::from_str("emit = false\nname = \"gen\"\nn = 7").unwrap();
+        let provisional2 = encode_options_canonical_provisional(&without_opt);
+        let typed2 = encode_options_canonical(
+            &validate_options(&desc, Some(&toml_to_attr_value(&without_opt))).unwrap(),
+        );
+        assert_eq!(
+            provisional2, typed2,
+            "Option::None fields must be invisible in the canonical byte stream",
+        );
+    }
+
+    #[test]
+    fn typed_encoder_option_none_omitted_from_table() {
+        use wado_compiler::kiln::{OptionsDescriptor, OptionsField, OptionsType};
+        use wado_compiler::token::Span;
+
+        let desc = OptionsDescriptor {
+            fields: vec![
+                OptionsField {
+                    name: "name".to_string(),
+                    ty: OptionsType::String,
+                    default: None,
+                    span: Span::new(0, 0, 1, 1),
+                },
+                OptionsField {
+                    name: "rule".to_string(),
+                    ty: OptionsType::Option(Box::new(OptionsType::String)),
+                    default: None,
+                    span: Span::new(0, 0, 1, 1),
+                },
+            ],
+        };
+
+        let toml_with_none: toml::Value = toml::from_str(r#"name = "x""#).unwrap();
+        let provisional_bytes = encode_options_canonical_provisional(&toml_with_none);
+
+        let attr = toml_to_attr_value(&toml_with_none);
+        let canonical = validate_options(&desc, Some(&attr)).unwrap();
+        let typed_bytes = encode_options_canonical(&canonical);
+
+        assert_eq!(
+            provisional_bytes, typed_bytes,
+            "Option::None must be omitted from the enclosing table to match TOML omission"
+        );
+    }
+
     mod execute_tests {
         use super::*;
         use indexmap::IndexMap;
@@ -1277,7 +1829,7 @@ output-dir = "build/kiln/second"
         }
 
         #[test]
-        fn unsupported_runner_error_bubbles_up() {
+        fn execute_surfaces_runner_unsupported_verbatim() {
             let tmp = tempfile::tempdir().unwrap();
             let host = MockHost::new(
                 &[("schema.proto", b"x"), ("dep.proto", b"y")],
@@ -1740,8 +2292,18 @@ output-dir = "build/kiln/second"
 
         impl GeneratorProvider for FailingProvider {
             async fn get_component(&self, _: &GeneratorModule) -> Result<Vec<u8>, ProviderError> {
-                Err(ProviderError::Unsupported {
+                Err(ProviderError::Internal {
                     message: "nope".to_string(),
+                })
+            }
+        }
+
+        struct UnsupportedProvider;
+
+        impl GeneratorProvider for UnsupportedProvider {
+            async fn get_component(&self, _: &GeneratorModule) -> Result<Vec<u8>, ProviderError> {
+                Err(ProviderError::Unsupported {
+                    message: "consume-only".to_string(),
                 })
             }
         }
@@ -1749,6 +2311,7 @@ output-dir = "build/kiln/second"
         struct PipelineHost {
             sources: IndexMap<String, Vec<u8>>,
             response: Mutex<Vec<Result<GeneratorResponse, GeneratorRunnerError>>>,
+            diagnostics: Mutex<Vec<Diagnostic>>,
         }
 
         impl PipelineHost {
@@ -1762,6 +2325,7 @@ output-dir = "build/kiln/second"
                         .map(|(k, v)| ((*k).to_string(), (*v).to_vec()))
                         .collect(),
                     response: Mutex::new(responses),
+                    diagnostics: Mutex::new(Vec::new()),
                 }
             }
         }
@@ -1775,7 +2339,9 @@ output-dir = "build/kiln/second"
                         path: path.to_string(),
                     })
             }
-            fn emit_diagnostic(&self, _d: Diagnostic) {}
+            fn emit_diagnostic(&self, d: Diagnostic) {
+                self.diagnostics.lock().unwrap().push(d);
+            }
             async fn run_generator(
                 &self,
                 _wasm: &[u8],
@@ -1964,6 +2530,126 @@ from = "./schema.proto"
                 PipelineError::Provider { invocation, .. } => assert_eq!(invocation, "greeter"),
                 other => panic!("expected Provider, got {other:?}"),
             }
+        }
+
+        #[test]
+        fn consume_only_cache_miss_warns_and_skips_writes() {
+            let tmp = tempfile::tempdir().unwrap();
+            let m = manifest_with_one_generator();
+            let host = PipelineHost::new(&[("schema.proto", b"s")], vec![]);
+            let outcome = runtime()
+                .block_on(async { run_pipeline(&m, tmp.path(), &host, &UnsupportedProvider).await })
+                .unwrap();
+            assert_eq!(outcome.stale, vec!["greeter".to_string()]);
+            assert!(outcome.executed.is_empty());
+            assert!(outcome.cached.is_empty());
+            assert!(!tmp.path().join("wado.lock").exists());
+            assert!(!tmp.path().join("build/kiln/greeter").exists());
+            let diags = host.diagnostics.lock().unwrap();
+            assert_eq!(diags.len(), 1);
+            assert_eq!(diags[0].code, wado_compiler::Code::KilnStaleCache);
+            assert_eq!(diags[0].severity, wado_compiler::Severity::Warning);
+        }
+
+        #[test]
+        fn consume_only_cache_hit_silent_and_preserves_lockfile() {
+            let tmp = tempfile::tempdir().unwrap();
+            let m = manifest_with_one_generator();
+            let response = GeneratorResponse {
+                files: vec![GeneratorOutputFile {
+                    path: "greeter.wado".to_string(),
+                    content: "pub fn greet() {}\n".to_string(),
+                    is_entry: true,
+                }],
+                reads: vec![],
+            };
+            let host = PipelineHost::new(&[("schema.proto", b"schema")], vec![Ok(response)]);
+            let provider = StaticProvider::new(b"component-bytes".to_vec());
+            runtime()
+                .block_on(async { run_pipeline(&m, tmp.path(), &host, &provider).await })
+                .unwrap();
+
+            let lock_path = tmp.path().join("wado.lock");
+            let original_lock = std::fs::read(&lock_path).unwrap();
+            let original_output =
+                std::fs::read(tmp.path().join("build/kiln/greeter/greeter.wado")).unwrap();
+
+            let host2 = PipelineHost::new(&[("schema.proto", b"schema")], vec![]);
+            let outcome = runtime()
+                .block_on(async {
+                    run_pipeline(&m, tmp.path(), &host2, &UnsupportedProvider).await
+                })
+                .unwrap();
+            assert_eq!(outcome.cached, vec!["greeter".to_string()]);
+            assert!(outcome.stale.is_empty());
+            assert!(outcome.executed.is_empty());
+            assert!(host2.diagnostics.lock().unwrap().is_empty());
+            assert_eq!(std::fs::read(&lock_path).unwrap(), original_lock);
+            assert_eq!(
+                std::fs::read(tmp.path().join("build/kiln/greeter/greeter.wado")).unwrap(),
+                original_output,
+            );
+        }
+
+        #[test]
+        fn consume_only_cache_miss_preserves_existing_build_kiln() {
+            let tmp = tempfile::tempdir().unwrap();
+            let m = manifest_with_one_generator();
+            let response = GeneratorResponse {
+                files: vec![GeneratorOutputFile {
+                    path: "greeter.wado".to_string(),
+                    content: "pub fn greet() {}\n".to_string(),
+                    is_entry: true,
+                }],
+                reads: vec![],
+            };
+            let host = PipelineHost::new(&[("schema.proto", b"original")], vec![Ok(response)]);
+            let provider = StaticProvider::new(b"c".to_vec());
+            runtime()
+                .block_on(async { run_pipeline(&m, tmp.path(), &host, &provider).await })
+                .unwrap();
+
+            let lock_path = tmp.path().join("wado.lock");
+            let original_lock = std::fs::read(&lock_path).unwrap();
+            let original_output =
+                std::fs::read(tmp.path().join("build/kiln/greeter/greeter.wado")).unwrap();
+
+            let host2 = PipelineHost::new(&[("schema.proto", b"mutated")], vec![]);
+            let outcome = runtime()
+                .block_on(async {
+                    run_pipeline(&m, tmp.path(), &host2, &UnsupportedProvider).await
+                })
+                .unwrap();
+            assert_eq!(outcome.stale, vec!["greeter".to_string()]);
+            assert!(outcome.cached.is_empty());
+            assert!(outcome.executed.is_empty());
+            let diags = host2.diagnostics.lock().unwrap();
+            assert_eq!(diags.len(), 1);
+            assert_eq!(diags[0].code, wado_compiler::Code::KilnStaleCache);
+            assert_eq!(std::fs::read(&lock_path).unwrap(), original_lock);
+            assert_eq!(
+                std::fs::read(tmp.path().join("build/kiln/greeter/greeter.wado")).unwrap(),
+                original_output,
+            );
+        }
+
+        #[test]
+        fn consume_only_runner_unsupported_on_cache_miss_warns() {
+            let tmp = tempfile::tempdir().unwrap();
+            let m = manifest_with_one_generator();
+            let host = PipelineHost::new(
+                &[("schema.proto", b"s")],
+                vec![Err(GeneratorRunnerError::Unsupported)],
+            );
+            let provider = StaticProvider::new(b"c".to_vec());
+            let outcome = runtime()
+                .block_on(async { run_pipeline(&m, tmp.path(), &host, &provider).await })
+                .unwrap();
+            assert_eq!(outcome.stale, vec!["greeter".to_string()]);
+            assert!(!tmp.path().join("wado.lock").exists());
+            let diags = host.diagnostics.lock().unwrap();
+            assert_eq!(diags.len(), 1);
+            assert_eq!(diags[0].code, wado_compiler::Code::KilnStaleCache);
         }
     }
 }

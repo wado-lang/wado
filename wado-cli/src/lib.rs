@@ -20,6 +20,7 @@ pub mod dump;
 pub mod format;
 pub mod init;
 pub mod kiln_driver;
+pub mod kiln_provider;
 pub mod kiln_runtime;
 pub mod lsp;
 pub mod manifest;

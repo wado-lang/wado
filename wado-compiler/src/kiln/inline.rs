@@ -1,0 +1,613 @@
+//! Inline-invocation collection for `use ... with { generator: { ... } }`.
+//!
+//! An inline clause declares a Kiln invocation directly at the import site
+//! instead of inside `wado.toml`. This module walks the parsed [`UseDecl`]s,
+//! extracts the `generator: {...}` object from
+//! [`crate::ast::ImportAttributes`], and builds matching
+//! [`crate::kiln::Invocation`]s. The result can be merged with manifest-lowered
+//! invocations before [`crate::kiln::plan::build_plan`] runs.
+//!
+//! Two clauses with identical `(module, from, inputs, output_dir,
+//! options_canonical)` tuples are merged into a single invocation; this is the
+//! same dedup contract as the manifest path. Two clauses that share `from` but
+//! disagree on any other field produce a diagnostic citing both spans.
+
+use sha2::{Digest, Sha256};
+
+use crate::ast::{AttrValue, Module, UseDecl};
+use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
+use crate::hashmap::IndexMap;
+
+use super::cache::{encode_options_canonical, hex_digest};
+use super::invocation::{DeclSite, GeneratorModule, Invocation, InvocationPath};
+use super::options::OptionsDescriptor;
+use super::options_check::{CanonicalOptions, validate};
+
+/// Default output-directory prefix for inline invocations: each clause lands
+/// under `build/kiln/<synthetic_id>` unless it declares its own `output_dir`.
+pub const DEFAULT_INLINE_OUTPUT_DIR_PREFIX: &str = "build/kiln";
+
+/// Resolver-side lookup table that redirects a `use ... from "<from>"` whose
+/// `<from>` path matches a Kiln invocation's primary source to the
+/// invocation's generated entry module.
+///
+/// Built once per compilation unit from the merged manifest + inline
+/// invocation set, after the pipeline has populated `build/kiln/…` so the
+/// entry module's on-disk location is known. For consume-only mode (no
+/// pipeline run), the index is built from the last recorded lockfile entry's
+/// `output.entry = true` path — that path lives on disk already or the
+/// cache check failed.
+///
+/// Lookups are keyed by `(declaring_file_normalized, from_path_normalized)`.
+/// Two clauses declared in different files can redirect to the same entry
+/// iff the manifest + inline merge keeps them under a single invocation.
+#[derive(Debug, Default, Clone)]
+pub struct InvocationIndex {
+    /// Entries mapping `(decl_file, from_path)` → entry module path (relative
+    /// to the project root, forward-slash normalized).
+    entries: IndexMap<(String, String), String>,
+}
+
+impl InvocationIndex {
+    /// Create an empty index.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            entries: IndexMap::default(),
+        }
+    }
+
+    /// Record that a `use ... from "<from>"` inside `decl_file` should
+    /// redirect to `entry_path` (project-root-relative). Paths are
+    /// normalized before insertion so callers may pass raw user input.
+    ///
+    /// Silently overwrites a prior entry with the same key. The caller is
+    /// responsible for ensuring the set of recorded invocations is
+    /// conflict-free (see [`merge_manifest_and_inline`]).
+    pub fn insert(&mut self, decl_file: &str, from: &str, entry_path: &str) {
+        let decl = InvocationPath::normalize(decl_file).as_str().to_string();
+        let from = InvocationPath::normalize(from).as_str().to_string();
+        let entry = InvocationPath::normalize(entry_path).as_str().to_string();
+        self.entries.insert((decl, from), entry);
+    }
+
+    /// Look up the entry module path for a `(decl_file, from)` pair. Returns
+    /// the project-root-relative path of the entry module, or `None` if no
+    /// invocation matches.
+    #[must_use]
+    pub fn redirect(&self, decl_file: &str, from: &str) -> Option<&str> {
+        let decl = InvocationPath::normalize(decl_file).as_str().to_string();
+        let from = InvocationPath::normalize(from).as_str().to_string();
+        self.entries.get(&(decl, from)).map(String::as_str)
+    }
+
+    /// Returns `true` when no invocations have been recorded. Consumers
+    /// (e.g. the resolver) can short-circuit the redirect check.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+}
+
+/// Scan every `UseDecl` in `modules` for an inline
+/// `with { generator: { ... } }` clause and lower it to a canonical
+/// [`Invocation`].
+///
+/// `descriptors` is a per-module-spec lookup — when present, the inline
+/// clause's `options` object is validated and encoded through the typed
+/// pipeline. Missing descriptors fall through to an empty canonical options
+/// blob (matching the behavior for a generator without a declared
+/// `Options` struct).
+///
+/// Diagnostics are batched: a single malformed clause does not prevent the
+/// rest of the tree from being collected. Returns `Err` only when at least
+/// one `Severity::Error` diagnostic was emitted.
+///
+/// # Errors
+/// Every shape mismatch, options-validation error, and dedup conflict is
+/// reported through the returned `Vec<Diagnostic>`.
+pub fn collect_inline_invocations(
+    modules: &IndexMap<String, Module>,
+    descriptors: &IndexMap<String, OptionsDescriptor>,
+) -> Result<Vec<Invocation>, Vec<Diagnostic>> {
+    let mut diagnostics: Vec<Diagnostic> = Vec::new();
+    let mut by_tuple: IndexMap<String, Invocation> = IndexMap::default();
+    let mut by_from: IndexMap<String, (Invocation, String)> = IndexMap::default();
+
+    for (module_path, module) in modules {
+        for use_decl in use_decls_of(module) {
+            let Some(attrs) = use_decl.attributes.as_ref() else {
+                continue;
+            };
+            let Some(gen_cfg) = attrs.generator() else {
+                continue;
+            };
+
+            match lower_inline(module_path, use_decl, gen_cfg, descriptors) {
+                Ok(invocation) => {
+                    let tuple_key = identity_key(&invocation);
+                    if let Some(existing) = by_tuple.get(&tuple_key) {
+                        let _ = existing;
+                        continue;
+                    }
+                    let from_key = invocation.from.as_str().to_string();
+                    if let Some((prior, prior_mod)) = by_from.get(&from_key)
+                        && identity_key(prior) != tuple_key
+                    {
+                        diagnostics.push(Diagnostic {
+                            severity: Severity::Error,
+                            code: Code::GeneratorOptionsInvalid,
+                            message: format!(
+                                "kiln: two inline generator clauses disagree for `from = \"{}\"` \
+                                     (first in {}, second in {})",
+                                invocation.from.as_str(),
+                                prior_mod,
+                                module_path,
+                            ),
+                            span: Some(span_of(module_path, use_decl)),
+                        });
+                        continue;
+                    }
+                    by_tuple.insert(tuple_key.clone(), invocation.clone());
+                    by_from.insert(from_key, (invocation, module_path.clone()));
+                }
+                Err(mut errs) => diagnostics.append(&mut errs),
+            }
+        }
+    }
+
+    if diagnostics.iter().any(|d| d.severity == Severity::Error) {
+        return Err(diagnostics);
+    }
+    Ok(by_tuple.into_iter().map(|(_, v)| v).collect())
+}
+
+/// Merge manifest-declared invocations with inline-collected ones.
+///
+/// Cross-source `from` conflicts — a manifest invocation and an inline
+/// clause both targeting the same primary source with different
+/// `(module, inputs, output_dir, options_canonical)` — surface as error
+/// diagnostics. Identical tuples are deduplicated.
+///
+/// # Errors
+/// Every cross-source conflict is reported. Returns `Err` when any error
+/// diagnostic is emitted.
+pub fn merge_manifest_and_inline(
+    manifest: Vec<Invocation>,
+    inline: Vec<Invocation>,
+) -> Result<Vec<Invocation>, Vec<Diagnostic>> {
+    let mut diagnostics: Vec<Diagnostic> = Vec::new();
+    let mut out: Vec<Invocation> = Vec::with_capacity(manifest.len() + inline.len());
+    let mut by_tuple: IndexMap<String, usize> = IndexMap::default();
+    let mut by_from: IndexMap<String, usize> = IndexMap::default();
+
+    for inv in manifest.into_iter().chain(inline) {
+        let tuple_key = identity_key(&inv);
+        if by_tuple.contains_key(&tuple_key) {
+            continue;
+        }
+        let from_key = inv.from.as_str().to_string();
+        if let Some(&idx) = by_from.get(&from_key) {
+            let prior = &out[idx];
+            diagnostics.push(Diagnostic {
+                severity: Severity::Error,
+                code: Code::GeneratorOptionsInvalid,
+                message: format!(
+                    "kiln: generator invocations for `from = \"{}\"` disagree between {} and {}",
+                    inv.from.as_str(),
+                    prior.decl_site,
+                    inv.decl_site,
+                ),
+                span: None,
+            });
+            continue;
+        }
+        by_tuple.insert(tuple_key, out.len());
+        by_from.insert(from_key, out.len());
+        out.push(inv);
+    }
+
+    if diagnostics.iter().any(|d| d.severity == Severity::Error) {
+        return Err(diagnostics);
+    }
+    Ok(out)
+}
+
+fn use_decls_of(module: &Module) -> impl Iterator<Item = &UseDecl> {
+    module.items.iter().filter_map(|it| match it {
+        crate::ast::Item::Use(u) => Some(u),
+        _ => None,
+    })
+}
+
+fn lower_inline(
+    module_path: &str,
+    use_decl: &UseDecl,
+    cfg: &IndexMap<String, AttrValue>,
+    descriptors: &IndexMap<String, OptionsDescriptor>,
+) -> Result<Invocation, Vec<Diagnostic>> {
+    let mut errors: Vec<Diagnostic> = Vec::new();
+
+    let module = match cfg.get("module") {
+        Some(AttrValue::String(s)) => Some(GeneratorModule::Spec(s.clone())),
+        Some(AttrValue::Object(obj)) => {
+            lower_module_object(module_path, use_decl, obj, &mut errors)
+        }
+        Some(other) => {
+            errors.push(Diagnostic {
+                severity: Severity::Error,
+                code: Code::GeneratorOptionsInvalid,
+                message: format!(
+                    "kiln: `generator.module` must be a string (\"ns:name@ver\") or an object with \
+                     a `path` field, got {}",
+                    attr_kind(other),
+                ),
+                span: Some(span_of(module_path, use_decl)),
+            });
+            None
+        }
+        None => {
+            errors.push(Diagnostic {
+                severity: Severity::Error,
+                code: Code::GeneratorOptionsInvalid,
+                message: "kiln: inline `with { generator: {...} }` requires a `module` field"
+                    .to_string(),
+                span: Some(span_of(module_path, use_decl)),
+            });
+            None
+        }
+    };
+
+    let from = InvocationPath::normalize(&use_decl.source);
+    let inputs = match cfg.get("inputs") {
+        None => Vec::new(),
+        Some(AttrValue::Array(items)) => items
+            .iter()
+            .enumerate()
+            .filter_map(|(i, v)| match v {
+                AttrValue::String(s) => Some(InvocationPath::normalize(s)),
+                other => {
+                    errors.push(Diagnostic {
+                        severity: Severity::Error,
+                        code: Code::GeneratorOptionsInvalid,
+                        message: format!(
+                            "kiln: `generator.inputs[{i}]` must be a string, got {}",
+                            attr_kind(other),
+                        ),
+                        span: Some(span_of(module_path, use_decl)),
+                    });
+                    None
+                }
+            })
+            .collect(),
+        Some(other) => {
+            errors.push(Diagnostic {
+                severity: Severity::Error,
+                code: Code::GeneratorOptionsInvalid,
+                message: format!(
+                    "kiln: `generator.inputs` must be an array of strings, got {}",
+                    attr_kind(other),
+                ),
+                span: Some(span_of(module_path, use_decl)),
+            });
+            Vec::new()
+        }
+    };
+
+    let options_canonical = if let Some(module) = module.as_ref() {
+        encode_options(
+            module,
+            cfg.get("options"),
+            use_decl,
+            module_path,
+            descriptors,
+            &mut errors,
+        )
+    } else {
+        Vec::new()
+    };
+
+    if !errors.is_empty() {
+        return Err(errors);
+    }
+    let module = module.expect("module was validated above");
+
+    let synthetic_id = {
+        let mut h = Sha256::new();
+        h.update(module_key(&module).as_bytes());
+        h.update(from.as_str().as_bytes());
+        for p in &inputs {
+            h.update(p.as_str().as_bytes());
+            h.update([0u8]);
+        }
+        h.update(&options_canonical);
+        let digest: [u8; 32] = h.finalize().into();
+        format!("kiln-{}", &hex_digest(&digest)[..16])
+    };
+
+    let output_dir = InvocationPath::normalize(&format!(
+        "{DEFAULT_INLINE_OUTPUT_DIR_PREFIX}/{synthetic_id}"
+    ));
+
+    Ok(Invocation {
+        decl_site: DeclSite::Inline {
+            module: module_path.to_string(),
+            synthetic_id,
+        },
+        module,
+        from,
+        inputs,
+        output_dir,
+        options_canonical,
+    })
+}
+
+fn lower_module_object(
+    module_path: &str,
+    use_decl: &UseDecl,
+    obj: &IndexMap<String, AttrValue>,
+    errors: &mut Vec<Diagnostic>,
+) -> Option<GeneratorModule> {
+    if let Some(AttrValue::String(p)) = obj.get("path") {
+        return Some(GeneratorModule::LocalPath(InvocationPath::normalize(p)));
+    }
+    errors.push(Diagnostic {
+        severity: Severity::Error,
+        code: Code::GeneratorOptionsInvalid,
+        message: "kiln: object-form `generator.module` must carry a `path: \"...\"` field \
+                  (registry/git forms are not yet supported in v1)"
+            .to_string(),
+        span: Some(span_of(module_path, use_decl)),
+    });
+    None
+}
+
+fn encode_options(
+    module: &GeneratorModule,
+    options_value: Option<&AttrValue>,
+    use_decl: &UseDecl,
+    module_path: &str,
+    descriptors: &IndexMap<String, OptionsDescriptor>,
+    errors: &mut Vec<Diagnostic>,
+) -> Vec<u8> {
+    let key = module_key(module);
+    let Some(descriptor) = descriptors.get(&key) else {
+        return Vec::new();
+    };
+
+    let canonical: CanonicalOptions = match validate(descriptor, options_value) {
+        Ok(c) => c,
+        Err(mut errs) => {
+            for d in &mut errs {
+                if d.span.is_none() {
+                    d.span = Some(span_of(module_path, use_decl));
+                }
+            }
+            errors.append(&mut errs);
+            return Vec::new();
+        }
+    };
+    encode_options_canonical(&canonical)
+}
+
+fn module_key(module: &GeneratorModule) -> String {
+    match module {
+        GeneratorModule::Spec(s) => format!("spec:{s}"),
+        GeneratorModule::LocalPath(p) => format!("path:{}", p.as_str()),
+    }
+}
+
+fn identity_key(inv: &Invocation) -> String {
+    let mut h = Sha256::new();
+    h.update(module_key(&inv.module).as_bytes());
+    h.update(inv.from.as_str().as_bytes());
+    for p in &inv.inputs {
+        h.update(p.as_str().as_bytes());
+        h.update([0u8]);
+    }
+    h.update(inv.output_dir.as_str().as_bytes());
+    h.update(&inv.options_canonical);
+    let digest: [u8; 32] = h.finalize().into();
+    hex_digest(&digest)
+}
+
+fn span_of(module_path: &str, use_decl: &UseDecl) -> DiagnosticSpan {
+    DiagnosticSpan::from_span(&use_decl.span, Some(module_path))
+}
+
+fn attr_kind(v: &AttrValue) -> &'static str {
+    match v {
+        AttrValue::String(_) => "string",
+        AttrValue::Int(_) => "integer",
+        AttrValue::Float(_) => "float",
+        AttrValue::Bool(_) => "bool",
+        AttrValue::Array(_) => "array",
+        AttrValue::Object(_) => "object",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ast::{AstId, ImportAttributes, Item, UseDecl, UseItem};
+    use crate::token::Span;
+
+    fn span() -> Span {
+        Span::new(0, 0, 1, 1)
+    }
+
+    fn module_with_use(source: &str, attrs: ImportAttributes) -> Module {
+        let use_decl = UseDecl {
+            id: AstId(0),
+            is_pub: false,
+            source: source.to_string(),
+            source_span: span(),
+            source_id: AstId(1),
+            items: vec![UseItem::Wildcard],
+            attributes: Some(attrs),
+            span: span(),
+        };
+        Module::new(vec![Item::Use(use_decl)])
+    }
+
+    fn attr_with_generator(entries: &[(&str, AttrValue)]) -> ImportAttributes {
+        let mut gen_obj: IndexMap<String, AttrValue> = IndexMap::default();
+        for (k, v) in entries {
+            gen_obj.insert((*k).to_string(), v.clone());
+        }
+        let mut entries_map: IndexMap<String, AttrValue> = IndexMap::default();
+        entries_map.insert("generator".to_string(), AttrValue::Object(gen_obj));
+        ImportAttributes {
+            entries: entries_map,
+        }
+    }
+
+    #[test]
+    fn extracts_invocation_from_inline_clause() {
+        let attrs =
+            attr_with_generator(&[("module", AttrValue::String("ns:gen@1.0.0".to_string()))]);
+        let module = module_with_use("./schema.proto", attrs);
+        let mut mods: IndexMap<String, Module> = IndexMap::default();
+        mods.insert("src/main.wado".to_string(), module);
+
+        let result = collect_inline_invocations(&mods, &IndexMap::default()).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].from.as_str(), "schema.proto");
+        assert!(matches!(&result[0].module, GeneratorModule::Spec(s) if s == "ns:gen@1.0.0"));
+        assert!(
+            matches!(&result[0].decl_site, DeclSite::Inline { module, .. } if module == "src/main.wado")
+        );
+    }
+
+    #[test]
+    fn missing_module_field_rejected() {
+        let attrs = attr_with_generator(&[]);
+        let module = module_with_use("./x.proto", attrs);
+        let mut mods: IndexMap<String, Module> = IndexMap::default();
+        mods.insert("src/main.wado".to_string(), module);
+
+        let errs = collect_inline_invocations(&mods, &IndexMap::default()).unwrap_err();
+        assert!(
+            errs.iter()
+                .any(|d| d.message.contains("requires a `module` field"))
+        );
+    }
+
+    #[test]
+    fn dedup_merges_identical_clauses() {
+        let mk = || {
+            let attrs =
+                attr_with_generator(&[("module", AttrValue::String("ns:gen@1.0.0".to_string()))]);
+            module_with_use("./schema.proto", attrs)
+        };
+        let mut mods: IndexMap<String, Module> = IndexMap::default();
+        mods.insert("src/a.wado".to_string(), mk());
+        mods.insert("src/b.wado".to_string(), mk());
+
+        let result = collect_inline_invocations(&mods, &IndexMap::default()).unwrap();
+        assert_eq!(result.len(), 1);
+    }
+
+    #[test]
+    fn conflict_detected_when_same_from_different_module() {
+        let a = module_with_use(
+            "./schema.proto",
+            attr_with_generator(&[("module", AttrValue::String("ns:a@1.0.0".to_string()))]),
+        );
+        let b = module_with_use(
+            "./schema.proto",
+            attr_with_generator(&[("module", AttrValue::String("ns:b@1.0.0".to_string()))]),
+        );
+        let mut mods: IndexMap<String, Module> = IndexMap::default();
+        mods.insert("src/a.wado".to_string(), a);
+        mods.insert("src/b.wado".to_string(), b);
+
+        let errs = collect_inline_invocations(&mods, &IndexMap::default()).unwrap_err();
+        assert!(errs.iter().any(|d| d.message.contains("disagree")));
+    }
+
+    #[test]
+    fn object_module_path_lowered_to_local_path() {
+        let mut mod_obj: IndexMap<String, AttrValue> = IndexMap::default();
+        mod_obj.insert("path".to_string(), AttrValue::String("../gen".to_string()));
+        let attrs = attr_with_generator(&[("module", AttrValue::Object(mod_obj))]);
+        let module = module_with_use("./x.proto", attrs);
+        let mut mods: IndexMap<String, Module> = IndexMap::default();
+        mods.insert("src/main.wado".to_string(), module);
+
+        let result = collect_inline_invocations(&mods, &IndexMap::default()).unwrap();
+        assert_eq!(result.len(), 1);
+        match &result[0].module {
+            GeneratorModule::LocalPath(p) => assert_eq!(p.as_str(), "../gen"),
+            other => panic!("expected LocalPath, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn merge_reports_cross_source_conflict() {
+        let manifest_inv = Invocation {
+            decl_site: DeclSite::Manifest {
+                name: "proto".to_string(),
+            },
+            module: GeneratorModule::Spec("ns:a@1.0.0".to_string()),
+            from: InvocationPath::normalize("./schema.proto"),
+            inputs: vec![],
+            output_dir: InvocationPath::normalize("build/kiln/proto"),
+            options_canonical: vec![],
+        };
+        let inline_inv = Invocation {
+            decl_site: DeclSite::Inline {
+                module: "src/main.wado".to_string(),
+                synthetic_id: "kiln-deadbeef".to_string(),
+            },
+            module: GeneratorModule::Spec("ns:b@1.0.0".to_string()),
+            from: InvocationPath::normalize("./schema.proto"),
+            inputs: vec![],
+            output_dir: InvocationPath::normalize("build/kiln/kiln-deadbeef"),
+            options_canonical: vec![],
+        };
+        let errs = merge_manifest_and_inline(vec![manifest_inv], vec![inline_inv]).unwrap_err();
+        assert!(errs.iter().any(|d| d.message.contains("disagree between")));
+    }
+
+    #[test]
+    fn invocation_index_redirects_on_match() {
+        let mut idx = InvocationIndex::new();
+        idx.insert(
+            "src/main.wado",
+            "./grammar.g4",
+            "build/kiln/proto/grammar.wado",
+        );
+        assert_eq!(
+            idx.redirect("src/main.wado", "./grammar.g4"),
+            Some("build/kiln/proto/grammar.wado"),
+        );
+        assert_eq!(idx.redirect("src/main.wado", "./other.g4"), None);
+    }
+
+    #[test]
+    fn invocation_index_normalizes_paths() {
+        let mut idx = InvocationIndex::new();
+        idx.insert("./src/main.wado", "./grammar.g4", "./build/kiln/x/g.wado");
+        assert_eq!(
+            idx.redirect("src/main.wado", "grammar.g4"),
+            Some("build/kiln/x/g.wado"),
+        );
+    }
+
+    #[test]
+    fn merge_dedups_identical_invocations() {
+        let a = Invocation {
+            decl_site: DeclSite::Manifest {
+                name: "proto".to_string(),
+            },
+            module: GeneratorModule::Spec("ns:a@1.0.0".to_string()),
+            from: InvocationPath::normalize("./schema.proto"),
+            inputs: vec![],
+            output_dir: InvocationPath::normalize("build/kiln/proto"),
+            options_canonical: vec![],
+        };
+        let merged = merge_manifest_and_inline(vec![a.clone()], vec![a]).unwrap();
+        assert_eq!(merged.len(), 1);
+    }
+}

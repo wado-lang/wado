@@ -1,6 +1,6 @@
 // AST definitions for Wado
 
-use crate::hashmap::IndexSet;
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::token::Span;
 
 /// Module-local, parse-stable identifier for AST nodes that bear semantic
@@ -1126,12 +1126,97 @@ pub struct UseItemSimple {
     pub alias: Option<String>,
 }
 
-/// Import attributes for `with { ... }` clause
+/// Generic attribute-value tree produced by `with { ... }` clauses.
+///
+/// Scalars and containers only — no identifier references or expressions,
+/// per WEP 2026-04-12 (Kiln) §M5. Deterministic insertion order via
+/// [`IndexMap`] keeps round-tripping and cache-key encoding stable.
+#[derive(Debug, Clone, PartialEq)]
+pub enum AttrValue {
+    String(String),
+    Int(i64),
+    Float(f64),
+    Bool(bool),
+    Array(Vec<AttrValue>),
+    Object(IndexMap<String, AttrValue>),
+}
+
+impl AttrValue {
+    /// Borrow the inner string, if this is a [`AttrValue::String`].
+    #[must_use]
+    pub fn as_str(&self) -> Option<&str> {
+        match self {
+            AttrValue::String(s) => Some(s.as_str()),
+            _ => None,
+        }
+    }
+
+    /// Borrow the inner object, if this is a [`AttrValue::Object`].
+    #[must_use]
+    pub fn as_object(&self) -> Option<&IndexMap<String, AttrValue>> {
+        match self {
+            AttrValue::Object(o) => Some(o),
+            _ => None,
+        }
+    }
+
+    /// Borrow the inner array, if this is a [`AttrValue::Array`].
+    #[must_use]
+    pub fn as_array(&self) -> Option<&[AttrValue]> {
+        match self {
+            AttrValue::Array(a) => Some(a.as_slice()),
+            _ => None,
+        }
+    }
+}
+
+/// Import attributes for `with { ... }` clause.
+///
+/// Stores every key/value pair as a generic [`AttrValue`] tree. The three
+/// historical keys (`version`, `integrity`, `type_hint`) are still accessed
+/// via thin accessor methods so older call sites compile unchanged. New
+/// consumers (e.g. Kiln inline generators) read raw entries via
+/// [`ImportAttributes::get`] and [`ImportAttributes::generator`].
 #[derive(Debug, Clone, Default)]
 pub struct ImportAttributes {
-    pub version: Option<String>,
-    pub integrity: Option<String>,
-    pub type_hint: Option<String>,
+    /// Top-level key/value entries, in parse order.
+    pub entries: IndexMap<String, AttrValue>,
+}
+
+impl ImportAttributes {
+    fn get_str(&self, key: &str) -> Option<String> {
+        self.entries
+            .get(key)
+            .and_then(AttrValue::as_str)
+            .map(str::to_string)
+    }
+
+    #[must_use]
+    pub fn version(&self) -> Option<String> {
+        self.get_str("version")
+    }
+
+    #[must_use]
+    pub fn integrity(&self) -> Option<String> {
+        self.get_str("integrity")
+    }
+
+    #[must_use]
+    pub fn type_hint(&self) -> Option<String> {
+        self.get_str("type")
+    }
+
+    /// Inline Kiln generator configuration (`with { generator: { ... } }`).
+    #[must_use]
+    pub fn generator(&self) -> Option<&IndexMap<String, AttrValue>> {
+        self.entries.get("generator").and_then(AttrValue::as_object)
+    }
+
+    /// Raw lookup for any top-level attribute.
+    #[must_use]
+    pub fn get(&self, key: &str) -> Option<&AttrValue> {
+        self.entries.get(key)
+    }
 }
 
 /// Use declaration with ESM-like syntax:

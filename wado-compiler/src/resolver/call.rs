@@ -1011,6 +1011,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             m,
                             callee_module,
                             Some(&self.entry_module_source),
+                            &self.invocations,
                         )
                     },
                 );
@@ -1442,6 +1443,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                     module,
                                     &src,
                                     Some(&self.entry_module_source),
+                                    &self.invocations,
                                 )
                             } else {
                                 (IndexMap::default(), IndexMap::default())

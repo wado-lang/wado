@@ -42,7 +42,7 @@ pub mod wir_visitor;
 pub mod world_registry;
 
 pub use analyze::Analyzer;
-pub use annotate::{Annotated, Definition, annotate};
+pub use annotate::{Annotated, Definition, annotate, annotate_with_invocations};
 pub use ast::{AstId, AstNodeKind, AstPtr};
 pub use bind::{BindError, Binder};
 pub use compiler_host::{
@@ -165,6 +165,10 @@ pub struct CompilerOptions {
     /// Matches `#[allocator("...")]` attributes in `core:allocator`.
     /// When `None`, the compiler auto-selects: `"debug"` for test world, `"bump"` otherwise.
     pub allocator: Option<String>,
+    /// Kiln invocation redirects consulted by the module loader. Callers
+    /// that have run the Kiln pipeline (wado-cli, wado-lsp) populate this;
+    /// everyone else leaves it empty.
+    pub invocations: kiln::InvocationIndex,
 }
 
 /// Compile Wado source code with a `CompilerHost` for I/O operations.
@@ -224,7 +228,8 @@ pub async fn compile_with_options<H: CompilerHost>(
     // Loader performs: lex → parse → bind → desugar for each module
     // Also preserves the original (non-desugared) entry AST for tooling
     let load_result = {
-        let module_loader = loader::ModuleLoader::new(host, log_level);
+        let module_loader = loader::ModuleLoader::new(host, log_level)
+            .with_invocations(options.invocations.clone());
         module_loader
             .load_all(source, filename.as_deref())
             .await
@@ -581,6 +586,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             load_result.entry_module_source.clone(),
             &logger,
             &load_result.included_files,
+            load_result.invocations.clone(),
         )
         .ok()
     };

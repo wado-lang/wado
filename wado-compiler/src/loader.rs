@@ -189,6 +189,10 @@ pub struct LoadResult {
     /// Included file contents from `#include_str` and `#include_bytes`.
     /// Key is `(module_source_display, raw_path)`, value is raw bytes.
     pub included_files: IndexMap<[String; 2], Vec<u8>>,
+    /// Kiln invocation redirects propagated from the loader so later phases
+    /// (analyze, resolver) can also rewrite `use ... from "<schema>"`
+    /// clauses consistently.
+    pub invocations: crate::kiln::InvocationIndex,
 }
 
 use crate::compiler_host::LogLevel;
@@ -375,6 +379,10 @@ pub struct ModuleLoader<'a, H: CompilerHost> {
     entry_module_source: Option<ModuleSource>,
     /// Canonical name of the entry module (e.g., "./`cross_module_type_identity.wado`")
     entry_canonical_name: Option<String>,
+    /// Kiln invocation redirects: `(decl_file, from_path)` → generated entry
+    /// module path. Consulted by `resolve_import` so a bare `use { X } from
+    /// "<schema>"` picks up the generator's output.
+    invocations: crate::kiln::InvocationIndex,
 }
 
 impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
@@ -389,7 +397,17 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             implicit_modules: IndexSet::default(),
             entry_module_source: None,
             entry_canonical_name: None,
+            invocations: crate::kiln::InvocationIndex::new(),
         }
+    }
+
+    /// Seed the loader with a Kiln invocation index. Must be called before
+    /// [`Self::load_all`] so the index is available when imports are
+    /// resolved.
+    #[must_use]
+    pub fn with_invocations(mut self, invocations: crate::kiln::InvocationIndex) -> Self {
+        self.invocations = invocations;
+        self
     }
 
     /// Load all modules starting from the entry source
@@ -509,6 +527,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             entry_ast: entry_ast_original,
             implicit_modules: self.implicit_modules,
             included_files,
+            invocations: self.invocations,
         })
     }
 
@@ -579,6 +598,24 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         from_module_source: &ModuleSource,
         import_source: &str,
     ) -> Result<ModuleSource, LoadError> {
+        // Kiln invocation redirect: `use { X } from "./grammar.g4"` picks up
+        // the generated entry module when the `(decl_file, from_path)` pair
+        // is recorded on the loader.
+        if !self.invocations.is_empty() {
+            let decl_file = match from_module_source {
+                ModuleSource::Local { path } => path.as_str(),
+                ModuleSource::EntryPoint { filename } => filename.as_str(),
+                _ => "",
+            };
+            if !decl_file.is_empty()
+                && let Some(entry_path) = self.invocations.redirect(decl_file, import_source)
+            {
+                return Ok(ModuleSource::Local {
+                    path: entry_path.to_string(),
+                });
+            }
+        }
+
         // Handle known namespaces
         // Top-level: "core:cli" → Core { name: "cli" }
         // Sub-module: "core:prelude/traits.wado" → Core { name: "prelude/traits.wado" }

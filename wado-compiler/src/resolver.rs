@@ -182,6 +182,10 @@ pub struct Resolver<'a, H: CompilerHost> {
     /// preserves the callee's lexical scope for defaults that reference
     /// module-private items (see WEP 2026-04-11).
     pub(super) default_scope_module: Option<ModuleSource>,
+    /// Kiln invocation redirects consulted by `use` resolution sites. Shared
+    /// by `Rc` so per-module Resolver instances can read the single
+    /// compilation-unit-wide redirect map cheaply.
+    pub(super) invocations: Rc<crate::kiln::InvocationIndex>,
 }
 
 impl<'a, H: CompilerHost> Resolver<'a, H> {
@@ -247,6 +251,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             references: Rc::new(RefCell::new(IndexMap::default())),
             local_symbols: Rc::new(RefCell::new(IndexMap::default())),
             default_scope_module: None,
+            invocations: Rc::new(crate::kiln::InvocationIndex::new()),
         }
     }
 
@@ -406,12 +411,18 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     fn build_effect_sources(
         module: &Module,
         module_source: &ModuleSource,
+        invocations: &crate::kiln::InvocationIndex,
     ) -> IndexMap<String, ModuleSource> {
         let mut sources = IndexMap::default();
         for item in &module.items {
             match item {
                 Item::Use(use_decl) => {
-                    let source = name::resolve_import(module_source, &use_decl.source);
+                    let source = name::resolve_import_with_invocations(
+                        module_source,
+                        &use_decl.source,
+                        None,
+                        invocations,
+                    );
                     for use_item in &use_decl.items {
                         match use_item {
                             ast::UseItem::EffectFunctions { effect_name, .. } => {
@@ -514,10 +525,11 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     fn record_use_specifier_references(&self, module: &Module) {
         for item in &module.items {
             let Item::Use(use_decl) = item else { continue };
-            let source = name::resolve_import_with_entry(
+            let source = name::resolve_import_with_invocations(
                 &self.current_module_source,
                 &use_decl.source,
                 Some(&self.entry_module_source),
+                &self.invocations,
             );
             for use_item in &use_decl.items {
                 match use_item {
@@ -549,7 +561,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         // Clear trait lookup caches (current_module_items changed)
         self.indexing_trait_cache.clear();
         // Build effect source map from imports
-        self.effect_sources = Self::build_effect_sources(module, &module_source);
+        self.effect_sources = Self::build_effect_sources(module, &module_source, &self.invocations);
 
         // Record use→def edges for names that appear inside `use { ... }` specifiers.
         // These power LSP jump-to-definition when the cursor is on an imported
@@ -582,7 +594,12 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         // Also collect imported globals from use declarations
         for item in &module.items {
             if let Item::Use(use_decl) = item {
-                let source_module_source = name::resolve_import(&module_source, &use_decl.source);
+                let source_module_source = name::resolve_import_with_invocations(
+                    &module_source,
+                    &use_decl.source,
+                    None,
+                    &self.invocations,
+                );
 
                 // Look up the source module to find global declarations
                 if let Some(source_module) = self.loaded_modules.get(&source_module_source) {

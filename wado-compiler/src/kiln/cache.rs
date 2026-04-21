@@ -19,6 +19,8 @@
 use sha2::{Digest, Sha256};
 
 use super::invocation::{GeneratorModule, Invocation, InvocationPath};
+use super::options::CanonicalValue;
+use super::options_check::CanonicalOptions;
 
 fn digest(bytes: &[u8]) -> [u8; 32] {
     let mut h = Sha256::new();
@@ -101,6 +103,89 @@ pub fn compose_cache_key(inputs: &CacheKeyInputs<'_>) -> [u8; 32] {
 #[must_use]
 pub fn hex_digest(digest: &[u8; 32]) -> String {
     hex(digest)
+}
+
+/// Encode a [`CanonicalOptions`] to the canonical cache-key byte string.
+///
+/// Format is a direct superset of the provisional TOML encoder's layout so
+/// cache keys for inputs expressible in both encoders stay byte-identical:
+///
+/// - `0` bool, 1 byte (0 / 1)
+/// - `1` integer, 8 BE bytes (signed)
+/// - `2` float, 8 BE bytes (IEEE-754 bits)
+/// - `3` string, u64 BE length-prefix + UTF-8 bytes
+/// - `5` table, u64 BE count + each (key string + value), keys sorted
+///
+/// `Option<T>` is encoded transparently: `Some(x)` emits exactly what `x`
+/// alone would emit; `None` is omitted from the enclosing table (and the
+/// table's entry count is reduced accordingly). This matches the provisional
+/// encoder's behavior where a missing field in TOML simply does not appear.
+/// Enums map to strings (tag 3). Unsigned integers are cast to signed before
+/// the big-endian write, matching TOML's single integer tag.
+#[must_use]
+pub fn encode_options_canonical(options: &CanonicalOptions) -> Vec<u8> {
+    let mut out = Vec::new();
+    encode_options_table(&mut out, &options.values);
+    out
+}
+
+fn encode_options_table(out: &mut Vec<u8>, entries: &[(String, CanonicalValue)]) {
+    out.push(5);
+    let mut indices: Vec<usize> = (0..entries.len())
+        .filter(|i| !matches!(entries[*i].1, CanonicalValue::None))
+        .collect();
+    indices.sort_by(|a, b| entries[*a].0.cmp(&entries[*b].0));
+    write_u64(out, indices.len() as u64);
+    for i in indices {
+        let (k, v) = &entries[i];
+        write_vec_str(out, k);
+        encode_canonical_value(out, v);
+    }
+}
+
+fn encode_canonical_value(out: &mut Vec<u8>, v: &CanonicalValue) {
+    match v {
+        CanonicalValue::Bool(b) => {
+            out.push(0);
+            out.push(u8::from(*b));
+        }
+        CanonicalValue::I64(n) => {
+            out.push(1);
+            out.extend_from_slice(&n.to_be_bytes());
+        }
+        CanonicalValue::U64(n) => {
+            out.push(1);
+            out.extend_from_slice(&(*n as i64).to_be_bytes());
+        }
+        CanonicalValue::F64(f) => {
+            out.push(2);
+            out.extend_from_slice(&f.to_bits().to_be_bytes());
+        }
+        CanonicalValue::String(s) | CanonicalValue::Enum(s) => {
+            out.push(3);
+            write_vec_str(out, s);
+        }
+        CanonicalValue::None => {
+            // Caller must suppress the enclosing entry; reaching here
+            // indicates a bug in the options walker.
+            panic!("kiln: encode_options_canonical reached bare None value");
+        }
+        CanonicalValue::Some(inner) => {
+            encode_canonical_value(out, inner);
+        }
+        CanonicalValue::Struct(fields) => {
+            encode_options_table(out, fields);
+        }
+    }
+}
+
+fn write_u64(out: &mut Vec<u8>, n: u64) {
+    out.extend_from_slice(&n.to_be_bytes());
+}
+
+fn write_vec_str(out: &mut Vec<u8>, s: &str) {
+    write_u64(out, s.len() as u64);
+    out.extend_from_slice(s.as_bytes());
 }
 
 /// Hex SHA-256 of the canonical options encoding.

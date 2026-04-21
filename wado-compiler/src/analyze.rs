@@ -8,7 +8,7 @@
 use crate::ast::{Item, Module, UseItem};
 use crate::compiler_host::CompilerHost;
 use crate::logger::{Bail, Logger};
-use crate::name::{ModuleSource, resolve_import, validate_module_path};
+use crate::name::{ModuleSource, validate_module_path};
 use crate::symbol::{
     EffectSymbol, EnumSymbol, FlagsSymbol, FunctionSymbol, GlobalSymbol, NewtypeSymbol,
     ResourceSymbol, StructSymbol, Symbol, SymbolKey, SymbolKind, SymbolTable, TraitSymbol,
@@ -182,6 +182,10 @@ pub struct Analyzer<'a, H: CompilerHost> {
     /// Modules loaded implicitly by the compiler (not by user imports)
     implicit_modules: crate::hashmap::IndexSet<ModuleSource>,
     entry_module_source: ModuleSource,
+    /// Kiln invocation redirects consulted by the import-resolution paths
+    /// (`validate_imports`, re-export registration). Empty when the
+    /// compilation did not run the Kiln pipeline.
+    invocations: crate::kiln::InvocationIndex,
 }
 
 impl<'a, H: CompilerHost> Analyzer<'a, H> {
@@ -192,7 +196,17 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
             logger,
             implicit_modules: crate::hashmap::IndexSet::default(),
             entry_module_source: ModuleSource::entry_point_with_filename("<uninitialized>"),
+            invocations: crate::kiln::InvocationIndex::new(),
         }
+    }
+
+    /// Seed the analyzer with a Kiln invocation index. Call before
+    /// [`Self::analyze_loaded_modules`] so import-site redirects line up
+    /// with the loader's redirects.
+    #[must_use]
+    pub fn with_invocations(mut self, invocations: crate::kiln::InvocationIndex) -> Self {
+        self.invocations = invocations;
+        self
     }
 
     /// Define a top-level symbol, emitting a `DuplicateDefinition` diagnostic
@@ -587,8 +601,14 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                     continue; // Error already collected in validate_imports
                 }
 
-                // Resolve the source path to ModuleSource
-                let source_module = resolve_import(module_source, &use_decl.source);
+                // Resolve the source path to ModuleSource, honoring any
+                // Kiln invocation redirects before the plain name lookup.
+                let source_module = crate::name::resolve_import_with_invocations(
+                    module_source,
+                    &use_decl.source,
+                    Some(&self.entry_module_source),
+                    &self.invocations,
+                );
 
                 // Check the module exists
                 if !all_modules.contains_key(&source_module) {
@@ -651,11 +671,13 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                     continue;
                 }
 
-                // Resolve the import path to ModuleSource
-                let module_source = crate::name::resolve_import_with_entry(
+                // Resolve the import path to ModuleSource, honoring any
+                // Kiln invocation redirects before the plain name lookup.
+                let module_source = crate::name::resolve_import_with_invocations(
                     from_module_source,
                     &use_decl.source,
                     Some(&self.entry_module_source),
+                    &self.invocations,
                 );
 
                 // Check the module exists in pre-loaded modules
