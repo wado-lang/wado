@@ -265,11 +265,6 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
         }
     }
 
-    /// Expand a set of effects through the propagation closure.
-    ///
-    /// For each concrete effect in the input, unions in the closure entries.
-    /// `Param` effects are passed through unchanged — they are resolved at
-    /// call sites via function-typed arguments.
     /// Classify an effect reference as a `resource` or `effect` for diagnostic
     /// wording. Looks up `(module_source, name)` in the resource index; falls
     /// back to `Effect` for anything not registered as a resource.
@@ -292,6 +287,11 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
         }
     }
 
+    /// Expand a set of effects through the propagation closure.
+    ///
+    /// For each concrete effect in the input, unions in the closure entries.
+    /// `Param` effects are passed through unchanged — they are resolved at
+    /// call sites via function-typed arguments.
     fn expand_effects(&self, effects: &IndexSet<EffectRef>) -> IndexSet<EffectRef> {
         let mut out: IndexSet<EffectRef> = IndexSet::default();
         for eff in effects {
@@ -503,15 +503,17 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
                 }
                 // Check effects from the callee's function type.
                 //
-                // TODO(effect-propagation): the function type's `effects` list
-                // is the exact set the type checker stored at the closure
-                // expression — it is NOT closure-expanded. `current_effects`
-                // *is* expanded at function entry, so a caller that declares
-                // `with Stdout` can invoke an indirect closure that internally
-                // needs `Stream` (via Stdout propagation). Cases where the
-                // function-type effect list itself should be augmented with
-                // propagation (e.g. handing such a closure further down) are
-                // not yet handled; see fixture `effect_propagation_indirect_xfail`.
+                // The function type's `effects` list is the exact set the type
+                // checker stored at the closure expression — it is NOT
+                // closure-expanded. `current_effects` *is* expanded at function
+                // entry, so a caller that declares `with Stdout` can invoke an
+                // indirect closure that internally needs `Stream` (via Stdout
+                // propagation). Cases where the function-type effect list
+                // itself should be augmented with propagation (e.g. handing
+                // such a closure further down) are not yet handled; any such
+                // call that actually leaks a resource through propagation
+                // would need to re-resolve the callee's concrete effects
+                // first.
                 if self.mode == CheckMode::EffectsOnly
                     && let Some(tt) = &self.type_table
                 {
