@@ -1790,15 +1790,15 @@ fn remap_expr_inner(
             func,
             type_args,
             args,
-        } => TirExprKind::MethodCall {
-            receiver: re_box(receiver),
-            func: func.clone(),
-            type_args: type_args.clone(),
-            args: args
-                .iter()
+            ..
+        } => TirExprKind::method_call(
+            re_box(receiver),
+            func.clone(),
+            type_args.clone(),
+            args.iter()
                 .map(|a| CallArg::new(re(&a.expr), a.is_mut))
                 .collect(),
-        },
+        ),
         TirExprKind::CmRawCall { local_name, args } => TirExprKind::CmRawCall {
             local_name: local_name.clone(),
             args: args.iter().map(&re).collect(),

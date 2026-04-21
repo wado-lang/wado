@@ -114,9 +114,9 @@ fn create_i128_eq_call(
     // Create method call: receiver.eq(&right)
     let mangled_method_name = "i128^Eq::eq".to_string();
     TirExpr::new(
-        TirExprKind::MethodCall {
-            receiver: Box::new(receiver),
-            func: FunctionRef {
+        TirExprKind::method_call(
+            Box::new(receiver),
+            FunctionRef {
                 module_source: ModuleSource::int128(),
                 name: mangled_method_name,
                 monomorph_info: None,
@@ -126,9 +126,9 @@ fn create_i128_eq_call(
                     "eq".to_string(),
                 )),
             },
-            type_args: vec![],
-            args: vec![CallArg::new(arg_ref, false)],
-        },
+            vec![],
+            vec![CallArg::new(arg_ref, false)],
+        ),
         TypeTable::BOOL,
         span,
     )
@@ -171,9 +171,9 @@ fn create_u128_eq_call(
     // Create method call: receiver.eq(&right)
     let mangled_method_name = "u128^Eq::eq".to_string();
     TirExpr::new(
-        TirExprKind::MethodCall {
-            receiver: Box::new(receiver),
-            func: FunctionRef {
+        TirExprKind::method_call(
+            Box::new(receiver),
+            FunctionRef {
                 module_source: ModuleSource::int128(),
                 name: mangled_method_name,
                 monomorph_info: None,
@@ -183,9 +183,9 @@ fn create_u128_eq_call(
                     "eq".to_string(),
                 )),
             },
-            type_args: vec![],
-            args: vec![CallArg::new(arg_ref, false)],
-        },
+            vec![],
+            vec![CallArg::new(arg_ref, false)],
+        ),
         TypeTable::BOOL,
         span,
     )

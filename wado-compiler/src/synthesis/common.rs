@@ -347,17 +347,17 @@ pub fn generic_method_call(
     let mangled_name = info.to_mangled_name();
     let _n = args.len();
     TirExpr::new(
-        TirExprKind::MethodCall {
-            receiver: Box::new(receiver),
-            func: FunctionRef {
+        TirExprKind::method_call(
+            Box::new(receiver),
+            FunctionRef {
                 module_source: method_module_source,
                 name: mangled_name,
                 monomorph_info: None,
                 method_info: Some(info),
             },
-            type_args: vec![],
-            args: args.into_iter().map(|e| CallArg::new(e, false)).collect(),
-        },
+            vec![],
+            args.into_iter().map(|e| CallArg::new(e, false)).collect(),
+        ),
         return_type,
         synth_span(),
     )
@@ -411,9 +411,9 @@ pub fn write_str_stmt(
     span: Span,
 ) -> TirStmt {
     let call = TirExpr::new(
-        TirExprKind::MethodCall {
-            receiver: Box::new(fmt),
-            func: FunctionRef {
+        TirExprKind::method_call(
+            Box::new(fmt),
+            FunctionRef {
                 module_source: ModuleSource::format(),
                 name: "Formatter::write_str".to_string(),
                 monomorph_info: None,
@@ -423,12 +423,12 @@ pub fn write_str_stmt(
                     "write_str".to_string(),
                 )),
             },
-            type_args: vec![],
-            args: vec![CallArg::new(
+            vec![],
+            vec![CallArg::new(
                 TirExpr::new(TirExprKind::StringLiteral(text.into()), string_type, span),
                 false,
             )],
-        },
+        ),
         TypeTable::UNIT,
         span,
     );
@@ -446,17 +446,17 @@ pub fn trait_method_call(
     let fn_name = method_info.to_mangled_name();
     let _n = args.len();
     let call = TirExpr::new(
-        TirExprKind::MethodCall {
-            receiver: Box::new(receiver),
-            func: FunctionRef {
+        TirExprKind::method_call(
+            Box::new(receiver),
+            FunctionRef {
                 module_source,
                 name: fn_name,
                 monomorph_info: None,
                 method_info: Some(method_info),
             },
-            type_args: vec![],
-            args: args.into_iter().map(|e| CallArg::new(e, false)).collect(),
-        },
+            vec![],
+            args.into_iter().map(|e| CallArg::new(e, false)).collect(),
+        ),
         TypeTable::UNIT,
         span,
     );

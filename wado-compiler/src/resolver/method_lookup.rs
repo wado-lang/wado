@@ -1923,6 +1923,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     }
                 }
 
+                // Make `Self` in the method signature resolve to the concrete
+                // receiver type (e.g. `&Self` → `&Result<String, i32>` when
+                // calling through `impl<T: Eq, E: Eq> Eq for Result<T, E>`).
+                // Without this, `resolve_type("Self")` falls through to
+                // UNKNOWN and the caller's argument typecheck silently
+                // accepts anything, surfacing as an ICE at codegen.
+                let old_self_type = scope.trait_ctx.self_type;
+                if let Some(recv_id) = receiver_type_id {
+                    scope.trait_ctx.self_type = Some(recv_id);
+                }
+
                 let return_type = return_type_ast
                     .as_ref()
                     .map(|t| scope.resolve_type(t))
@@ -1932,6 +1943,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 // in scope — otherwise `&T` in a parameter would not resolve to
                 // the proper `TypeParam` id that inference expects.
                 let param_types = scope.extract_param_types(&params);
+
+                scope.trait_ctx.self_type = old_self_type;
 
                 // Remove method-level type params from scope
                 for type_param in &method_type_params {
@@ -2128,7 +2141,20 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // Return the first one found (if there are multiple, it would be ambiguous,
         // but we'll handle that later with explicit disambiguation syntax)
-        found_traits.into_iter().next()
+        if let Some(m) = found_traits.into_iter().next() {
+            return Some(m);
+        }
+
+        // Auto-derived Eq / Ord: no user-written impl exists, but the type
+        // satisfies the field-wise / case-wise eligibility rules and
+        // `synthesis::traits` will emit a body. Synthesize a `TraitMethodMatch`
+        // so method-call resolution (and everything downstream of it) sees
+        // the same view of "does this type have `.eq` / `.cmp`?" that
+        // operator dispatch gets via `find_eq_trait_impl` / `find_ord_trait_impl`.
+        if let Some(recv_id) = receiver_type_id {
+            return self.try_auto_derived_method_match(struct_name, method_name, recv_id);
+        }
+        None
     }
 
     /// Find Index trait implementation for a type
@@ -2427,65 +2453,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
         )
     }
 
-    /// Find `Eq` trait implementation for a type.
-    ///
-    /// Falls back to auto-derived Eq for structs whose fields all implement Eq.
-    pub(super) fn find_eq_trait_impl(
-        &mut self,
-        struct_name: &str,
-        base_type_id: TypeId,
-    ) -> Option<ArithmeticTraitInfo> {
-        if let Some(info) = self.find_arithmetic_trait_impl(struct_name, base_type_id, "Eq", "eq") {
-            return Some(info);
-        }
-        // Auto-derive: check if all fields implement Eq
-        if self.type_implements_trait(base_type_id, "Eq") {
-            let ref_type = self
-                .type_table
-                .borrow_mut()
-                .intern(ResolvedType::Ref(base_type_id));
-            return Some(ArithmeticTraitInfo {
-                output_type: TypeTable::BOOL,
-                self_kind: ast::SelfKind::Ref,
-                trait_name: "Eq".to_string(),
-                rhs_type: Some(ref_type),
-            });
-        }
-        None
-    }
-
-    /// Find `Ord` trait implementation for a type.
-    ///
-    /// Falls back to auto-derived Ord for structs whose fields all implement Ord.
-    pub(super) fn find_ord_trait_impl(
-        &mut self,
-        struct_name: &str,
-        base_type_id: TypeId,
-    ) -> Option<ArithmeticTraitInfo> {
-        if let Some(info) = self.find_arithmetic_trait_impl(struct_name, base_type_id, "Ord", "cmp")
-        {
-            return Some(info);
-        }
-        // Auto-derive: check if all fields implement Ord
-        if self.type_implements_trait(base_type_id, "Ord") {
-            let ordering_type = self.type_table.borrow_mut().intern(ResolvedType::Enum {
-                name: "Ordering".to_string(),
-                module_source: ModuleSource::prelude(),
-            });
-            let ref_type = self
-                .type_table
-                .borrow_mut()
-                .intern(ResolvedType::Ref(base_type_id));
-            return Some(ArithmeticTraitInfo {
-                output_type: ordering_type,
-                self_kind: ast::SelfKind::Ref,
-                trait_name: "Ord".to_string(),
-                rhs_type: Some(ref_type),
-            });
-        }
-        None
-    }
-
     /// Find operator trait implementation
     pub(super) fn find_arithmetic_trait_impl(
         &mut self,
@@ -2567,64 +2534,75 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 }
             }
 
-            // Build type parameter mapping from impl_ty to concrete types
+            // Build type parameter mapping from impl_ty to concrete types.
+            // `Self` is NOT inserted into this mapping — it is substituted
+            // through `trait_ctx.self_type` (set just below) via the
+            // fallback path in `resolve_type_with_param_mapping`.  This
+            // keeps Self substitution on a single mechanism shared with
+            // `find_trait_method_for_type`.
             let impl_block = self.get_impl_block(impl_ref);
-            let mut type_param_mapping = Self::build_type_param_mapping(
+            let type_param_mapping = Self::build_type_param_mapping(
                 &impl_block.ty,
                 &concrete_type_args,
                 &IndexSet::default(),
             );
-            // Map `Self` to the concrete base type so `&Self` parameters resolve correctly
-            type_param_mapping.insert("Self".to_string(), base_type_id);
 
-            // Find the method
+            // Gather everything we need from the impl block up front, then
+            // drop the borrow on `self` before touching `trait_ctx.self_type`
+            // (which requires a mutable borrow).
             let impl_block = self.get_impl_block(impl_ref);
-            if let Some(method) = impl_block.methods.iter().find(|m| m.name == method_name) {
-                // Set up associated type bindings
-                let mut assoc_type_map: IndexMap<String, TypeId> = IndexMap::default();
+            let Some(method) = impl_block.methods.iter().find(|m| m.name == method_name) else {
+                continue;
+            };
+            let assoc_types: Vec<(String, ast::Type)> = impl_block
+                .associated_types
+                .iter()
+                .map(|a| (a.name.clone(), a.ty.clone()))
+                .collect();
+            let self_kind = method
+                .params
+                .first()
+                .map(|p| p.self_kind)
+                .unwrap_or(ast::SelfKind::None);
+            let rhs_param_ty = method
+                .params
+                .iter()
+                .find(|p| p.self_kind == ast::SelfKind::None)
+                .map(|p| p.ty.clone());
 
-                // Process associated types (e.g., `type Output = Self`)
-                // Clone just the associated type info we need (small, not methods)
-                let assoc_types: Vec<(String, ast::Type)> = impl_block
-                    .associated_types
-                    .iter()
-                    .map(|a| (a.name.clone(), a.ty.clone()))
-                    .collect();
-                let self_kind = method
-                    .params
-                    .first()
-                    .map(|p| p.self_kind)
-                    .unwrap_or(ast::SelfKind::None);
-                let rhs_param_ty = method
-                    .params
-                    .iter()
-                    .find(|p| p.self_kind == ast::SelfKind::None)
-                    .map(|p| p.ty.clone());
+            // Bind `Self` for the duration of signature resolution. The
+            // single-source-of-truth for `Self` substitution is
+            // `trait_ctx.self_type` (consulted by both `resolve_type` and
+            // the `resolve_type_with_param_mapping` fallback above).
+            let saved_self_type = self.trait_ctx.self_type;
+            self.trait_ctx.self_type = Some(base_type_id);
 
-                for (name, ty) in &assoc_types {
-                    let resolved_type =
-                        self.resolve_type_with_param_mapping(ty, &type_param_mapping);
-                    assoc_type_map.insert(name.clone(), resolved_type);
-                }
-
-                // Get the output type from associated types
-                let output_type = assoc_type_map
-                    .get("Output")
-                    .copied()
-                    .unwrap_or(base_type_id);
-
-                // Resolve the rhs parameter type (first non-self parameter)
-                let rhs_type = rhs_param_ty
-                    .as_ref()
-                    .map(|ty| self.resolve_type_with_param_mapping(ty, &type_param_mapping));
-
-                return Some(ArithmeticTraitInfo {
-                    output_type,
-                    self_kind,
-                    trait_name: trait_name.to_string(),
-                    rhs_type,
-                });
+            // Process associated types (e.g., `type Output = Self`)
+            let mut assoc_type_map: IndexMap<String, TypeId> = IndexMap::default();
+            for (name, ty) in &assoc_types {
+                let resolved_type = self.resolve_type_with_param_mapping(ty, &type_param_mapping);
+                assoc_type_map.insert(name.clone(), resolved_type);
             }
+
+            // Get the output type from associated types
+            let output_type = assoc_type_map
+                .get("Output")
+                .copied()
+                .unwrap_or(base_type_id);
+
+            // Resolve the rhs parameter type (first non-self parameter)
+            let rhs_type = rhs_param_ty
+                .as_ref()
+                .map(|ty| self.resolve_type_with_param_mapping(ty, &type_param_mapping));
+
+            self.trait_ctx.self_type = saved_self_type;
+
+            return Some(ArithmeticTraitInfo {
+                output_type,
+                self_kind,
+                trait_name: trait_name.to_string(),
+                rhs_type,
+            });
         }
 
         None
@@ -2898,6 +2876,20 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 if let Some(&type_id) = type_param_mapping.get(&n.name) {
                     return type_id;
                 }
+                // `Self` is the single cross-site substitution key: both this
+                // mapping-based resolver and `resolve_type` (via
+                // `resolve_named_type`) read it from `trait_ctx.self_type`.
+                // Previously `find_arithmetic_trait_impl` eagerly inserted
+                // "Self" into the mapping and `find_trait_method_for_type`
+                // went through `trait_ctx.self_type`, which meant the two
+                // lookup families had parallel Self-substitution mechanisms
+                // that could drift.  Channeling Self through `trait_ctx`
+                // here closes that gap.
+                if n.name == "Self"
+                    && let Some(self_type) = self.trait_ctx.self_type
+                {
+                    return self_type;
+                }
                 // Otherwise, resolve normally
                 self.resolve_type(ty)
             }
@@ -3149,22 +3141,20 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .borrow_mut()
             .make_mut_ref(index_mut_info.output_type);
 
-        let index_mut_call = TirExpr::new(
-            TirExprKind::MethodCall {
-                receiver: Box::new(receiver_for_index_mut),
-                func: FunctionRef {
-                    module_source: index_mut_info.impl_module_source.clone(),
-                    name: mangled_index_mut_name,
-                    monomorph_info: None,
-                    method_info: Some(LocalMethodName::new(
-                        struct_name.clone(),
-                        Some(index_mut_info.trait_name),
-                        "index_mut".to_string(),
-                    )),
-                },
-                type_args: vec![],
-                args: vec![CallArg::new(index_resolved, false)],
+        let index_mut_call = Self::build_tir_method_call(
+            receiver_for_index_mut,
+            FunctionRef {
+                module_source: index_mut_info.impl_module_source.clone(),
+                name: mangled_index_mut_name,
+                monomorph_info: None,
+                method_info: Some(LocalMethodName::new(
+                    struct_name.clone(),
+                    Some(index_mut_info.trait_name),
+                    "index_mut".to_string(),
+                )),
             },
+            vec![],
+            vec![CallArg::new(index_resolved, false)],
             mut_ref_output_type,
             index_expr.span,
         );
@@ -3202,32 +3192,61 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let method_call_module_source =
             method_trait_impl_source.unwrap_or_else(|| self.current_module_source.clone());
 
-        Some(TirExpr::new(
-            TirExprKind::MethodCall {
-                receiver: Box::new(receiver_for_method),
-                func: FunctionRef {
-                    module_source: method_call_module_source,
-                    name: mangled_method_name,
-                    monomorph_info: None,
-                    method_info: Some(LocalMethodName::new(
-                        output_struct_name,
-                        method_trait_name,
-                        method_call.method.clone(),
-                    )),
-                },
-                type_args,
-                args: args
-                    .into_iter()
-                    .zip(
-                        method_param_is_mut
-                            .into_iter()
-                            .chain(std::iter::repeat(false)),
-                    )
-                    .map(|(expr, is_mut)| CallArg::new(expr, is_mut))
-                    .collect(),
+        Some(Self::build_tir_method_call(
+            receiver_for_method,
+            FunctionRef {
+                module_source: method_call_module_source,
+                name: mangled_method_name,
+                monomorph_info: None,
+                method_info: Some(LocalMethodName::new(
+                    output_struct_name,
+                    method_trait_name,
+                    method_call.method.clone(),
+                )),
             },
+            type_args,
+            args.into_iter()
+                .zip(
+                    method_param_is_mut
+                        .into_iter()
+                        .chain(std::iter::repeat(false)),
+                )
+                .map(|(expr, is_mut)| CallArg::new(expr, is_mut))
+                .collect(),
             return_type,
             method_call.span,
         ))
+    }
+
+    /// Sole resolver-side constructor of [`TirExprKind::MethodCall`].
+    ///
+    /// Centralizing construction here establishes a single audit point for
+    /// the invariant "every resolver-emitted method call has been
+    /// typechecked against the callee's declared parameter types before
+    /// it flows into TIR".  Typecheck is the caller's responsibility —
+    /// the helper exists so that any future machine-enforced invariant
+    /// (e.g. privatizing the enum variant's fields, adding a debug
+    /// assertion, wiring a `LocalMethodName` witness type) can plug in
+    /// here without having to chase down scattered `TirExprKind::MethodCall
+    /// { … }` literals.
+    ///
+    /// Post-resolve phases (monomorphize / lower / optimize / codegen)
+    /// rebuild `TirExprKind::MethodCall` nodes from already-checked
+    /// expressions and legitimately bypass this helper; they operate on
+    /// TIR that is guaranteed to have been produced through this path
+    /// originally.
+    pub(super) fn build_tir_method_call(
+        receiver: TirExpr,
+        func: FunctionRef,
+        type_args: Vec<TypeId>,
+        args: Vec<CallArg>,
+        return_type: TypeId,
+        span: crate::token::Span,
+    ) -> TirExpr {
+        TirExpr::new(
+            TirExprKind::method_call(Box::new(receiver), func, type_args, args),
+            return_type,
+            span,
+        )
     }
 }

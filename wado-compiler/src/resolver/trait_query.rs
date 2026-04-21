@@ -10,7 +10,7 @@ use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
 use super::Resolver;
-use super::types::{MethodInfo, TypeError};
+use super::types::{MethodInfo, ResolvedTraitMethod, TraitMethodMatch, TypeError};
 
 impl<H: CompilerHost> Resolver<'_, H> {
     /// Find a trait declaration by name across all modules.
@@ -1030,5 +1030,185 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
             _ => true,
         }
+    }
+
+    /// Single entry point for resolving a trait method that a binary operator
+    /// dispatches to (Eq / Ord / Add / Sub / Mul / Div / Rem / `BitAnd` / `BitOr` /
+    /// `BitXor` / Shl / Shr). Produces a fully-populated
+    /// [`ResolvedTraitMethod`] with the rhs type already substituted, so
+    /// callers need not reach into the underlying `find_*_trait_impl`
+    /// family and cannot forget to wire `rhs_type` through the typecheck.
+    ///
+    /// `struct_name` / `lookup_type_id` are the name-and-id used for impl
+    /// lookup (for newtypes this may be the ultimate base). `is_type_param`
+    /// is true for `T: Trait` type-param receivers.
+    pub(super) fn resolve_trait_method_for_op(
+        &mut self,
+        struct_name: &str,
+        lookup_type_id: TypeId,
+        trait_name: &str,
+        method_name: &str,
+        is_type_param: bool,
+    ) -> Option<ResolvedTraitMethod> {
+        // 1. User-written impl via the shared arithmetic-trait lookup.
+        // 2. Auto-derive fallback (Eq / Ord only; other operator traits
+        //    have no auto-derive rules).
+        //
+        // Eq / Ord trait decls fix their return types (`bool` and `Ordering`
+        // respectively) regardless of what a user impl writes, so normalize
+        // those here. `find_arithmetic_trait_impl` would otherwise default
+        // `output_type` to the receiver type when no `type Output` is
+        // declared.
+        let (info_trait_name, self_kind, param_types, return_type) = if let Some(info) =
+            self.find_arithmetic_trait_impl(struct_name, lookup_type_id, trait_name, method_name)
+        {
+            let return_type = match trait_name {
+                "Eq" => TypeTable::BOOL,
+                "Ord" => self.type_table.borrow_mut().intern(ResolvedType::Enum {
+                    name: "Ordering".to_string(),
+                    module_source: ModuleSource::prelude(),
+                }),
+                _ => info.output_type,
+            };
+            let param_types = info.rhs_type.map(|t| vec![t]).unwrap_or_default();
+            (info.trait_name, info.self_kind, param_types, return_type)
+        } else if matches!(trait_name, "Eq" | "Ord")
+            && self.type_implements_trait(lookup_type_id, trait_name)
+        {
+            let ref_self_ty = self
+                .type_table
+                .borrow_mut()
+                .intern(ResolvedType::Ref(lookup_type_id));
+            let return_type = match trait_name {
+                "Eq" => TypeTable::BOOL,
+                "Ord" => self.type_table.borrow_mut().intern(ResolvedType::Enum {
+                    name: "Ordering".to_string(),
+                    module_source: ModuleSource::prelude(),
+                }),
+                _ => unreachable!(),
+            };
+            (
+                trait_name.to_string(),
+                ast::SelfKind::Ref,
+                vec![ref_self_ty],
+                return_type,
+            )
+        } else {
+            return None;
+        };
+        Some(ResolvedTraitMethod {
+            trait_name: info_trait_name,
+            method_name: method_name.to_string(),
+            impl_name: struct_name.to_string(),
+            self_kind,
+            return_type,
+            param_types,
+            is_type_param_receiver: is_type_param,
+        })
+    }
+
+    /// Fallback for [`Self::find_trait_method_for_type`]: when no user-written
+    /// impl of `trait_name::method_name` exists for a type that is still
+    /// auto-derive-eligible (per [`Self::type_implements_trait`]), synthesize
+    /// a [`TraitMethodMatch`] whose [`MethodInfo`] has the receiver type
+    /// fully substituted into `Self` positions. This is the single pathway
+    /// that makes auto-derived methods discoverable via method-call
+    /// resolution, mirroring what operator dispatch already got from the
+    /// arithmetic-trait lookup's own auto-derive branch.
+    ///
+    /// Only method bodies actually produced by the trait-synthesis phase
+    /// (`synthesis::traits`) are returned here; primitives are excluded
+    /// because their equality/comparison lowers to Wasm instructions, not
+    /// to a method body.
+    ///
+    /// FIXME: this function has two places where it hard-codes knowledge
+    /// that should live on the trait declarations themselves:
+    ///
+    ///   1. `method_name -> trait_name` is a closed `match` against `"eq"`
+    ///      and `"cmp"`.  Adding auto-derive method-call support for
+    ///      `Inspect::inspect` / `Display::fmt` / any new auto-derived
+    ///      trait requires extending this arm. The right design is a
+    ///      reverse-index built from `trait_env.decl_index` that answers
+    ///      "which traits declare a method named `X`?" and then filters
+    ///      by those that have an auto-derive rule.
+    ///
+    ///   2. The synthesized [`MethodInfo`] is built with a fixed shape
+    ///      (`self_kind: Ref`, single `&Self` parameter named `"other"`,
+    ///      no defaults, no method type params).  If the prelude ever
+    ///      evolves the `Eq` or `Ord` trait declaration (e.g. renames
+    ///      the parameter, adds a default arg, takes `&mut self`), this
+    ///      shape drifts silently.  The right design is to look the
+    ///      real `ast::Function` up via `find_trait_decl_methods` and
+    ///      substitute `Self` through the same path as user-written
+    ///      impls (via `trait_ctx.self_type`).
+    ///
+    /// Tracked as a post-PR cleanup; the shape is stable enough for the
+    /// current two traits that it does not cause observable bugs today.
+    pub(super) fn try_auto_derived_method_match(
+        &mut self,
+        struct_name: &str,
+        method_name: &str,
+        receiver_type_id: TypeId,
+    ) -> Option<TraitMethodMatch> {
+        let trait_name = match method_name {
+            "eq" => "Eq",
+            "cmp" => "Ord",
+            _ => return None,
+        };
+        let base_type_id = self.get_base_type(receiver_type_id);
+        if !self.auto_derive_eligible_kind(base_type_id) {
+            return None;
+        }
+        if !self.type_implements_trait(base_type_id, trait_name) {
+            return None;
+        }
+        let ref_self_ty = self
+            .type_table
+            .borrow_mut()
+            .intern(ResolvedType::Ref(base_type_id));
+        let return_type = match trait_name {
+            "Eq" => TypeTable::BOOL,
+            "Ord" => self.type_table.borrow_mut().intern(ResolvedType::Enum {
+                name: "Ordering".to_string(),
+                module_source: ModuleSource::prelude(),
+            }),
+            _ => unreachable!(),
+        };
+        let method_info = MethodInfo {
+            return_type,
+            self_kind: ast::SelfKind::Ref,
+            param_types: vec![ref_self_ty],
+            param_is_mut: vec![false],
+            param_defaults: vec![None],
+            param_names: vec!["other".to_string()],
+            inherited_from_base: None,
+            cm_name: None,
+            is_ref_impl: false,
+            method_type_param_ids: vec![],
+        };
+        let impl_module_source = self.find_struct_module_source(struct_name);
+        Some(TraitMethodMatch {
+            trait_name: trait_name.to_string(),
+            method_info,
+            impl_module_source,
+            blanket_type_param: None,
+            impl_struct_name: struct_name.to_string(),
+            is_blanket_ref_impl: false,
+        })
+    }
+
+    /// Whether the given type is a kind for which `synthesis::traits` emits
+    /// auto-derived `Eq` / `Ord` method bodies: named structs, variants, and
+    /// enums (including generic instances thereof). Primitives and reference
+    /// types are excluded because their equality lowers to Wasm instructions
+    /// rather than a callable method.
+    fn auto_derive_eligible_kind(&self, type_id: TypeId) -> bool {
+        matches!(
+            self.type_table.borrow().get(type_id),
+            ResolvedType::Struct { .. }
+                | ResolvedType::Variant { .. }
+                | ResolvedType::Enum { .. }
+                | ResolvedType::GenericInstance { .. }
+        )
     }
 }

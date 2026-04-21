@@ -1149,22 +1149,20 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .borrow_mut()
                     .make_ref(trait_info.output_type);
 
-                let method_call = TirExpr::new(
-                    TirExprKind::MethodCall {
-                        receiver: Box::new(receiver),
-                        func: FunctionRef {
-                            module_source: trait_info.impl_module_source.clone(),
-                            name: mangled_method_name,
-                            monomorph_info: None,
-                            method_info: Some(LocalMethodName::new(
-                                lookup_name,
-                                Some(trait_info.trait_name.clone()),
-                                "index".to_string(),
-                            )),
-                        },
-                        type_args: vec![],
-                        args: vec![CallArg::new(index_expr, false)],
+                let method_call = Self::build_tir_method_call(
+                    receiver,
+                    FunctionRef {
+                        module_source: trait_info.impl_module_source.clone(),
+                        name: mangled_method_name,
+                        monomorph_info: None,
+                        method_info: Some(LocalMethodName::new(
+                            lookup_name,
+                            Some(trait_info.trait_name.clone()),
+                            "index".to_string(),
+                        )),
                     },
+                    vec![],
+                    vec![CallArg::new(index_expr, false)],
                     ref_output_type,
                     index.span,
                 );
@@ -1202,22 +1200,20 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 );
 
                 // IndexValue returns Output directly (not a reference)
-                return TirExpr::new(
-                    TirExprKind::MethodCall {
-                        receiver: Box::new(receiver),
-                        func: FunctionRef {
-                            module_source: trait_info.impl_module_source.clone(),
-                            name: mangled_method_name,
-                            monomorph_info: None,
-                            method_info: Some(LocalMethodName::new(
-                                lookup_name,
-                                Some(trait_info.trait_name.clone()),
-                                "index_value".to_string(),
-                            )),
-                        },
-                        type_args: vec![],
-                        args: vec![CallArg::new(index_expr, false)],
+                return Self::build_tir_method_call(
+                    receiver,
+                    FunctionRef {
+                        module_source: trait_info.impl_module_source.clone(),
+                        name: mangled_method_name,
+                        monomorph_info: None,
+                        method_info: Some(LocalMethodName::new(
+                            lookup_name,
+                            Some(trait_info.trait_name.clone()),
+                            "index_value".to_string(),
+                        )),
                     },
+                    vec![],
+                    vec![CallArg::new(index_expr, false)],
                     trait_info.output_type,
                     index.span,
                 );

@@ -3688,17 +3688,17 @@ fn try_lower_comparison(
         let mangled_name = method_info.to_mangled_name();
         let method_module = resolve_module(&mangled_name, type_module_source);
 
-        let method_call = TirExprKind::MethodCall {
-            receiver: Box::new(receiver),
-            func: FunctionRef {
+        let method_call = TirExprKind::method_call(
+            Box::new(receiver),
+            FunctionRef {
                 module_source: method_module,
                 name: mangled_name,
                 monomorph_info: None,
                 method_info: Some(method_info),
             },
-            type_args: vec![],
-            args: vec![CallArg::new(arg_ref, false)],
-        };
+            vec![],
+            vec![CallArg::new(arg_ref, false)],
+        );
 
         if op == TirBinaryOp::NotEq {
             return Some(TirExprKind::Unary {
@@ -3726,17 +3726,17 @@ fn try_lower_comparison(
         let method_module = resolve_module(&mangled_name, type_module_source);
 
         let cmp_call = TirExpr::new(
-            TirExprKind::MethodCall {
-                receiver: Box::new(receiver),
-                func: FunctionRef {
+            TirExprKind::method_call(
+                Box::new(receiver),
+                FunctionRef {
                     module_source: method_module,
                     name: mangled_name,
                     monomorph_info: None,
                     method_info: Some(method_info),
                 },
-                type_args: vec![],
-                args: vec![CallArg::new(arg_ref, false)],
-            },
+                vec![],
+                vec![CallArg::new(arg_ref, false)],
+            ),
             ordering_type_id,
             span,
         );

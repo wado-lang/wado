@@ -418,9 +418,9 @@ fn build_template_block(
                     span,
                 );
                 let push_str_call = TirExpr::new(
-                    TirExprKind::MethodCall {
-                        receiver: Box::new(buf_ref),
-                        func: FunctionRef {
+                    TirExprKind::method_call(
+                        Box::new(buf_ref),
+                        FunctionRef {
                             module_source: ModuleSource::string(),
                             name: "String::push_str".to_string(),
                             monomorph_info: None,
@@ -430,12 +430,12 @@ fn build_template_block(
                                 "push_str".to_string(),
                             )),
                         },
-                        type_args: vec![],
-                        args: vec![CallArg::new(
+                        vec![],
+                        vec![CallArg::new(
                             TirExpr::new(TirExprKind::StringLiteral(s), string_type, span),
                             false,
                         )],
-                    },
+                    ),
                     TypeTable::UNIT,
                     span,
                 );
@@ -461,9 +461,9 @@ fn build_template_block(
                     // Deref if needed (&String → String)
                     let derefed = deref_to_inner(*resolved, string_type, span);
                     let push_str_call = TirExpr::new(
-                        TirExprKind::MethodCall {
-                            receiver: Box::new(buf_ref),
-                            func: FunctionRef {
+                        TirExprKind::method_call(
+                            Box::new(buf_ref),
+                            FunctionRef {
                                 module_source: ModuleSource::string(),
                                 name: "String::push_str".to_string(),
                                 monomorph_info: None,
@@ -473,9 +473,9 @@ fn build_template_block(
                                     "push_str".to_string(),
                                 )),
                             },
-                            type_args: vec![],
-                            args: vec![CallArg::new(derefed, false)],
-                        },
+                            vec![],
+                            vec![CallArg::new(derefed, false)],
+                        ),
                         TypeTable::UNIT,
                         span,
                     );
@@ -931,17 +931,17 @@ fn trait_fmt_call(
             );
 
             let call = TirExpr::new(
-                TirExprKind::MethodCall {
-                    receiver: Box::new(receiver),
-                    func: FunctionRef {
+                TirExprKind::method_call(
+                    Box::new(receiver),
+                    FunctionRef {
                         module_source: impl_module,
                         name: mangled,
                         monomorph_info,
                         method_info: Some(local_name),
                     },
-                    type_args: vec![],
-                    args: vec![CallArg::new(fmt, false)],
-                },
+                    vec![],
+                    vec![CallArg::new(fmt, false)],
+                ),
                 TypeTable::UNIT,
                 span,
             );
@@ -1103,9 +1103,9 @@ fn write_str_stmt(text: &str, fmt: TirExpr, tt: &Rc<RefCell<TypeTable>>, span: S
         .borrow_mut()
         .make_struct("String".to_string(), ModuleSource::string());
     let call = TirExpr::new(
-        TirExprKind::MethodCall {
-            receiver: Box::new(fmt),
-            func: FunctionRef {
+        TirExprKind::method_call(
+            Box::new(fmt),
+            FunctionRef {
                 module_source: ModuleSource::format(),
                 name: "Formatter::write_str".to_string(),
                 monomorph_info: None,
@@ -1115,8 +1115,8 @@ fn write_str_stmt(text: &str, fmt: TirExpr, tt: &Rc<RefCell<TypeTable>>, span: S
                     "write_str".into(),
                 )),
             },
-            type_args: vec![],
-            args: vec![CallArg::new(
+            vec![],
+            vec![CallArg::new(
                 TirExpr::new(
                     TirExprKind::StringLiteral(text.to_string()),
                     string_type,
@@ -1124,7 +1124,7 @@ fn write_str_stmt(text: &str, fmt: TirExpr, tt: &Rc<RefCell<TypeTable>>, span: S
                 ),
                 false,
             )],
-        },
+        ),
         TypeTable::UNIT,
         span,
     );

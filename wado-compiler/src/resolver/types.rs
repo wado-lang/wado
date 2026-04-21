@@ -1182,6 +1182,41 @@ pub(super) struct ArithmeticTraitInfo {
     pub(super) rhs_type: Option<TypeId>,
 }
 
+/// Complete, Self-substituted description of a trait method lookup.
+///
+/// Produced by [`Resolver::resolve_trait_method_for_op`][rtq] and consumed
+/// by [`Resolver::build_trait_op_method_call_on_resolved`][bop]. Having a
+/// single, always-populated data type for trait-method dispatch eliminates
+/// the `param_types: vec![]` anti-pattern that previously caused codegen
+/// ICEs when operator dispatch built `TirExprKind::MethodCall` without any
+/// argument-type check.
+///
+/// [rtq]: crate::resolver::Resolver::resolve_trait_method_for_op
+/// [bop]: crate::resolver::Resolver::build_trait_op_method_call_on_resolved
+pub(super) struct ResolvedTraitMethod {
+    /// Trait name (e.g., "Eq", "Ord", "Add", "Shl", "Neg", "`BitNot`").
+    pub(super) trait_name: String,
+    /// Method name (e.g., "eq", "cmp", "add", "shl", "neg", "bitnot").
+    pub(super) method_name: String,
+    /// Struct name used for method mangling. For newtypes this may be the
+    /// ultimate base-type name when dispatch falls back to the base impl.
+    pub(super) impl_name: String,
+    /// `self_kind` from the method signature (almost always `Ref`).
+    pub(super) self_kind: ast::SelfKind,
+    /// Return type of the method, with `Self` and impl type params
+    /// substituted to the concrete receiver instance.
+    pub(super) return_type: TypeId,
+    /// Expected parameter types (excluding `self`), already substituted.
+    /// Length is 0 for unary operator traits (`Neg`, `BitNot`), 1 for
+    /// binary operator traits (`Eq`, `Ord`, `Add`, `Shl`, …).  For
+    /// `Eq::eq` / `Ord::cmp` this is `[&Self]` substituted to `[&Receiver]`.
+    pub(super) param_types: Vec<TypeId>,
+    /// True when the receiver is a type parameter (`T: Ord`) rather than a
+    /// concrete type. Propagated into `LocalMethodName::is_type_param_receiver`
+    /// so monomorphization substitutes it correctly.
+    pub(super) is_type_param_receiver: bool,
+}
+
 /// Info about a `KeyValueLiteralBuilder` trait implementation
 pub(super) struct KeyValueLiteralTraitInfo {
     /// The Value associated type (element type for literal values)

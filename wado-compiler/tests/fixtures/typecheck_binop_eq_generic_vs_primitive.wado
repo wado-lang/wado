@@ -1,0 +1,11 @@
+// Comparing a GenericInstance (Result<String, i32>) with a primitive (String) must
+// produce a clean compile error, not an ICE. Regression test for a crash where the
+// Eq trait dispatch path did not validate the RHS type against `&Self`.
+
+export fn run() {
+    let r: Result<String, i32> = Result::Ok("hi");
+    let _ = r == "";
+}
+
+__DATA__
+{"compile_error": "type mismatch"}

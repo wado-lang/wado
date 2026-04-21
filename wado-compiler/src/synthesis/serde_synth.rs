@@ -184,17 +184,17 @@ fn type_param_method_call(
     };
     let fn_name = info.to_mangled_name();
     TirExpr::new(
-        TirExprKind::MethodCall {
-            receiver: Box::new(receiver),
-            func: FunctionRef {
+        TirExprKind::method_call(
+            Box::new(receiver),
+            FunctionRef {
                 module_source,
                 name: fn_name,
                 monomorph_info: None,
                 method_info: Some(info),
             },
             type_args,
-            args: args.into_iter().map(|e| CallArg::new(e, false)).collect(),
-        },
+            args.into_iter().map(|e| CallArg::new(e, false)).collect(),
+        ),
         return_type,
         span,
     )
@@ -1241,17 +1241,17 @@ fn generate_struct_deserialize(
 fn key_get_byte_as_i32_expr(string_ref: TirExpr, index_expr: TirExpr, span: Span) -> TirExpr {
     let get_byte_method = LocalMethodName::new("String".to_string(), None, "get_byte".to_string());
     let get_byte_call = TirExpr::new(
-        TirExprKind::MethodCall {
-            receiver: Box::new(string_ref),
-            func: FunctionRef {
+        TirExprKind::method_call(
+            Box::new(string_ref),
+            FunctionRef {
                 module_source: ModuleSource::string(),
                 name: get_byte_method.to_mangled_name(),
                 monomorph_info: None,
                 method_info: Some(get_byte_method),
             },
-            type_args: vec![],
-            args: vec![CallArg::new(index_expr, false)],
-        },
+            vec![],
+            vec![CallArg::new(index_expr, false)],
+        ),
         TypeTable::U8,
         span,
     );
@@ -1782,17 +1782,17 @@ fn generate_enum_deserialize(
             "eq".to_string(),
         );
         let condition = TirExpr::new(
-            TirExprKind::MethodCall {
-                receiver: Box::new(key_ref),
-                func: FunctionRef {
+            TirExprKind::method_call(
+                Box::new(key_ref),
+                FunctionRef {
                     module_source: ModuleSource::string(),
                     name: eq_method.to_mangled_name(),
                     monomorph_info: None,
                     method_info: Some(eq_method),
                 },
-                type_args: vec![],
-                args: vec![CallArg::new(lit_ref, false)],
-            },
+                vec![],
+                vec![CallArg::new(lit_ref, false)],
+            ),
             TypeTable::BOOL,
             span,
         );
@@ -2513,17 +2513,17 @@ fn generate_variant_deserialize(
             "eq".to_string(),
         );
         let condition = TirExpr::new(
-            TirExprKind::MethodCall {
-                receiver: Box::new(key_ref),
-                func: FunctionRef {
+            TirExprKind::method_call(
+                Box::new(key_ref),
+                FunctionRef {
                     module_source: ModuleSource::string(),
                     name: eq_method.to_mangled_name(),
                     monomorph_info: None,
                     method_info: Some(eq_method),
                 },
-                type_args: vec![],
-                args: vec![CallArg::new(lit_ref, false)],
-            },
+                vec![],
+                vec![CallArg::new(lit_ref, false)],
+            ),
             TypeTable::BOOL,
             span,
         );
@@ -3154,17 +3154,17 @@ fn generate_flags_deserialize(
             "eq".to_string(),
         );
         let condition = TirExpr::new(
-            TirExprKind::MethodCall {
-                receiver: Box::new(key_ref),
-                func: FunctionRef {
+            TirExprKind::method_call(
+                Box::new(key_ref),
+                FunctionRef {
                     module_source: ModuleSource::string(),
                     name: eq_method.to_mangled_name(),
                     monomorph_info: None,
                     method_info: Some(eq_method),
                 },
-                type_args: vec![],
-                args: vec![CallArg::new(lit_ref, false)],
-            },
+                vec![],
+                vec![CallArg::new(lit_ref, false)],
+            ),
             TypeTable::BOOL,
             span,
         );
