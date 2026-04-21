@@ -2128,7 +2128,20 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // Return the first one found (if there are multiple, it would be ambiguous,
         // but we'll handle that later with explicit disambiguation syntax)
-        found_traits.into_iter().next()
+        if let Some(m) = found_traits.into_iter().next() {
+            return Some(m);
+        }
+
+        // Auto-derived Eq / Ord: no user-written impl exists, but the type
+        // satisfies the field-wise / case-wise eligibility rules and
+        // `synthesis::traits` will emit a body. Synthesize a `TraitMethodMatch`
+        // so method-call resolution (and everything downstream of it) sees
+        // the same view of "does this type have `.eq` / `.cmp`?" that
+        // operator dispatch gets via `find_eq_trait_impl` / `find_ord_trait_impl`.
+        if let Some(recv_id) = receiver_type_id {
+            return self.try_auto_derived_method_match(struct_name, method_name, recv_id);
+        }
+        None
     }
 
     /// Find Index trait implementation for a type
