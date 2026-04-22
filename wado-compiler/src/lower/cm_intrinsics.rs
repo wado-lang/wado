@@ -98,10 +98,13 @@ impl TirMutVisitor for Rewriter<'_> {
             TirExprKind::Call { args, .. } => args[0].expr.clone(),
             _ => unreachable!(),
         };
-        let ast_type = {
+        let (ast_type, wasi_pkg) = {
             let tt = self.type_table.borrow();
             match type_id_to_ast_type(expr.type_id, &tt) {
-                Some(t) => t,
+                Some(t) => {
+                    let pkg = infer_wasi_package(expr.type_id, &tt);
+                    (t, pkg)
+                }
                 None => return,
             }
         };
@@ -115,7 +118,7 @@ impl TirMutVisitor for Rewriter<'_> {
             &LiftContext {
                 wasi_registry: self.wasi_registry,
                 type_table: self.type_table,
-                wasi_package: None,
+                wasi_package: wasi_pkg.as_deref(),
             },
         );
 
@@ -214,6 +217,56 @@ fn type_id_to_ast_type_resolved(resolved: &ResolvedType, type_table: &TypeTable)
         | ResolvedType::AssocTypeProjection { .. }
         | ResolvedType::Unknown
         | ResolvedType::Error => None,
+    }
+}
+
+/// Infer the WASI package (e.g. `"http"`) associated with a type by
+/// walking into its structure and returning the first `ModuleSource::Wasi`
+/// interface's package part.
+///
+/// Used to disambiguate WASI types that share a name across packages —
+/// for example `wasi:cli/ErrorCode` vs `wasi:http/ErrorCode`. Without
+/// a package hint, `synthesize_lift_with_context` falls back to
+/// unscoped lookup and picks an arbitrary match.
+fn infer_wasi_package(type_id: TypeId, type_table: &TypeTable) -> Option<String> {
+    let resolved = type_table.get(type_id).clone();
+    match resolved {
+        ResolvedType::Struct { module_source, .. }
+        | ResolvedType::Variant { module_source, .. }
+        | ResolvedType::Enum { module_source, .. }
+        | ResolvedType::Flags { module_source, .. }
+        | ResolvedType::Newtype { module_source, .. }
+        | ResolvedType::Resource { module_source, .. } => {
+            wasi_package_from_module_source(&module_source)
+        }
+        ResolvedType::GenericInstance { type_args, .. }
+        | ResolvedType::GenericResource { type_args, .. } => type_args
+            .iter()
+            .find_map(|&arg| infer_wasi_package(arg, type_table)),
+        ResolvedType::BuiltinArray(inner)
+        | ResolvedType::Ref(inner)
+        | ResolvedType::MutRef(inner)
+        | ResolvedType::Reactive(inner) => infer_wasi_package(inner, type_table),
+        _ => None,
+    }
+}
+
+fn wasi_package_from_module_source(module_source: &ModuleSource) -> Option<String> {
+    // `Wasi { interface: "http/types.wado" }` → `"http"`.
+    // `Wasi { interface: "cli.wado" }` (the umbrella file) is not scoped
+    // to a specific package but the interface file `cli/types.wado`
+    // encodes the `cli` package — take the leading path component.
+    match module_source {
+        ModuleSource::Wasi { interface } => {
+            let head = interface.split('/').next()?;
+            let head = head.strip_suffix(".wado").unwrap_or(head);
+            if head.is_empty() {
+                None
+            } else {
+                Some(head.to_string())
+            }
+        }
+        _ => None,
     }
 }
 
