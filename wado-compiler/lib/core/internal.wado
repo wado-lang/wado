@@ -54,10 +54,10 @@ pub fn write_string_to_stream(tx: StreamWritable<u8>, message: String, add_newli
 /// If the upper 28 bits (handle) are nonzero, an async task is in flight.
 /// A subtask transitions through Starting → Started → Returned. Each call to
 /// waitable-set.wait delivers one transition, so we must loop until RETURNED.
-pub fn wait_for_subtask(packed: i32) with WaitableSet, Subtask {
+pub fn wait_for_subtask(packed: i32) with WaitableSet, RawSubtask {
     let handle = packed >> 4;
     if handle != 0 {
-        let subtask = handle as Subtask;
+        let subtask = handle as RawSubtask;
         let ws = WaitableSet::new();
         subtask.join(&ws);
         loop {
