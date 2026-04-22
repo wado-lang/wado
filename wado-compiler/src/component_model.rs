@@ -288,10 +288,7 @@ pub struct WasiRegistry {
     /// `(cm_name, fields with CM names, fields with Wado names)`.
     /// Fields: Vec<(`cm_field_name`, `field_type`)>
     /// Wado fields: Vec<(`wado_field_name`, `cm_field_name`, `field_type`)>
-    structs: IndexMap<
-        (String, String),
-        (String, Vec<(String, Type)>, Vec<(String, String, Type)>),
-    >,
+    structs: IndexMap<(String, String), (String, Vec<(String, Type)>, Vec<(String, String, Type)>)>,
 }
 
 /// Insert into a `(source_interface, name)`-keyed map, panicking on duplicate
@@ -306,13 +303,13 @@ fn register_unique<V>(
     value: V,
 ) {
     let key = (source_interface, name);
-    if map.contains_key(&key) {
-        panic!(
-            "WasiRegistry: duplicate {kind} registration for `{}` in interface `{}`. \
-             Each (interface, name) pair must be registered exactly once.",
-            key.1, key.0,
-        );
-    }
+    assert!(
+        !map.contains_key(&key),
+        "WasiRegistry: duplicate {kind} registration for `{}` in interface `{}`. \
+         Each (interface, name) pair must be registered exactly once.",
+        key.1,
+        key.0,
+    );
     map.insert(key, value);
 }
 
@@ -1011,8 +1008,7 @@ impl WasiRegistry {
             .chain(self.flags.keys())
             .map(|(_, n)| n.as_str())
             .collect();
-        let resources: IndexSet<&str> =
-            self.resources.keys().map(|(_, n)| n.as_str()).collect();
+        let resources: IndexSet<&str> = self.resources.keys().map(|(_, n)| n.as_str()).collect();
         let structs: IndexSet<&str> = self.structs.keys().map(|(_, n)| n.as_str()).collect();
 
         // Check all parameter types
