@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776847434877,
+  "lastUpdate": 1776859318456,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -15369,6 +15369,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/30ae9832a28ffc60f3ee2e74631e962be6784044"
         },
         "date": 1776847434577,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8982,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18988,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 635264,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f544fc2eb59bdea9b7f68711aa83d14ac8a7abe9",
+          "message": "Merge pull request #901 from wado-lang/claude/plan-m6-implementation-EjIlV\n\nfeat(kiln): M6.1–M6.5 stage 1 + gale EOF fix",
+          "timestamp": "2026-04-22T20:57:47+09:00",
+          "tree_id": "cbcfc3d96e80e10313546a9b7ab82d1489fd5847",
+          "url": "https://github.com/wado-lang/wado/commit/f544fc2eb59bdea9b7f68711aa83d14ac8a7abe9"
+        },
+        "date": 1776859318260,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
