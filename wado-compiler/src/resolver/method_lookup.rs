@@ -2647,9 +2647,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
     /// Look up the type parameters of a function from its AST definition.
     pub(super) fn lookup_function_type_params(
         &self,
-        callee_module: &ModuleSource,
-        func_name: &str,
+        callee: &super::callee::CalleeRef,
     ) -> Vec<ast::GenericParam> {
+        let callee_module = &callee.module;
+        let func_name = callee.name.as_str();
         // Try local functions
         if callee_module.is_entry_point() {
             for item in self.current_module_items {

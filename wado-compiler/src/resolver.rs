@@ -9,6 +9,7 @@
 //! resolved types on every expression, making code generation mechanical.
 
 mod call;
+mod callee;
 mod closure;
 mod coercion;
 mod expr;
