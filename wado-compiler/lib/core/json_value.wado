@@ -126,7 +126,7 @@ impl Visitor for ValueVisitor {
     fn visit_seq<A: DeserializeSeq>(&mut self, seq: &mut A) -> Result<Value, DeserializeError> {
         let mut items: Array<Value> = [];
         loop {
-            let next_opt = seq.next_element::<Value>()?; // FIXME: removing turbofish causes ICE
+            let next_opt = seq.next_element::<Value>()?;  // FIXME: removing turbofish causes ICE
             match next_opt {
                 Some(item) => {
                     items.push(item);

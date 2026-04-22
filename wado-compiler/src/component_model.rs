@@ -301,45 +301,177 @@ pub struct WasiRegistry {
     /// Track which WASI function names are used to detect collisions
     used_names: BTreeSet<String>,
 
-    /// Newtypes collected from WASI modules (e.g., Instant -> u64)
-    newtypes: IndexMap<String, Type>,
+    /// Newtypes collected from WASI modules (e.g., Instant -> u64).
+    /// Key: `(source_interface, wado_name)` where `source_interface` is the
+    /// `#[cm("...")]` fragment before the `#` (e.g.
+    /// `"wasi:clocks/types@0.3.0-rc-2026-03-15"`). Keying by interface makes
+    /// same-named types from distinct interfaces structurally distinct.
+    newtypes: IndexMap<(String, String), Type>,
 
-    /// Resource types collected from WASI modules (e.g., `TerminalInput`, `TerminalOutput`)
-    /// Maps resource name -> (CM resource name kebab-case, source interface path)
-    /// e.g., "`TerminalInput`" -> ("terminal-input", "wasi:cli/terminal-input@0.3.0-rc-2026-01-06")
-    resources: IndexMap<String, (String, String)>,
+    /// Resource types collected from WASI modules (e.g., `TerminalInput`).
+    /// Key: `(source_interface, wado_name)`. Value: CM kebab-case name.
+    resources: IndexMap<(String, String), String>,
 
-    /// Flags types collected from WASI modules (e.g., `PathFlags`, `OpenFlags`)
-    /// Maps Wado flags name -> (CM flags name kebab-case, member names in kebab-case)
-    flags: IndexMap<String, (String, Vec<String>)>,
+    /// Flags types collected from WASI modules (e.g., `PathFlags`, `OpenFlags`).
+    /// Key: `(source_interface, wado_name)`. Value:
+    /// `(cm_name, member names in kebab-case)`.
+    flags: IndexMap<(String, String), (String, Vec<String>)>,
 
-    /// Enum types collected from WASI modules (e.g., `ErrorCode`, `IpAddressFamily`)
-    /// Maps Wado enum name -> (CM enum name kebab-case, variant names in kebab-case)
-    enums: IndexMap<String, (String, Vec<String>)>,
+    /// Enum types collected from WASI modules (e.g., `ErrorCode`, `IpAddressFamily`).
+    /// Key: `(source_interface, wado_name)`. Value:
+    /// `(cm_name, variant names in kebab-case)`.
+    enums: IndexMap<(String, String), (String, Vec<String>)>,
 
-    /// Variant types collected from WASI modules (e.g., `HeaderError`)
-    /// Maps Wado variant name -> (CM variant name, cases)
-    variants: IndexMap<String, (String, Vec<CmVariantCase>)>,
+    /// Variant types collected from WASI modules (e.g., `HeaderError`).
+    /// Key: `(source_interface, wado_name)`. Value: `(cm_name, cases)`.
+    variants: IndexMap<(String, String), (String, Vec<CmVariantCase>)>,
 
-    /// Struct types collected from WASI modules (e.g., `DnsErrorPayload`)
-    /// Maps Wado struct name -> (CM record name kebab-case, source interface path, fields with CM names, fields with Wado names)
+    /// Struct types collected from WASI modules (e.g., `DnsErrorPayload`).
+    /// Key: `(source_interface, wado_name)`. Value:
+    /// `(cm_name, fields with CM names, fields with Wado names)`.
     /// Fields: Vec<(`cm_field_name`, `field_type`)>
     /// Wado fields: Vec<(`wado_field_name`, `cm_field_name`, `field_type`)>
-    structs: IndexMap<
-        String,
-        (
-            String,
-            String,
-            Vec<(String, Type)>,
-            Vec<(String, String, Type)>,
-        ),
-    >,
+    structs: IndexMap<(String, String), (String, Vec<(String, Type)>, Vec<(String, String, Type)>)>,
+}
+
+/// Insert into a `(source_interface, name)`-keyed map, panicking on duplicate
+/// registration. Two registrations of the same `(interface, name)` pair
+/// indicate a stdlib bug (the same declaration emitted twice) — we want a
+/// loud failure instead of a silent overwrite.
+fn register_unique<V>(
+    map: &mut IndexMap<(String, String), V>,
+    kind: &str,
+    source_interface: String,
+    name: String,
+    value: V,
+) {
+    let key = (source_interface, name);
+    assert!(
+        !map.contains_key(&key),
+        "WasiRegistry: duplicate {kind} registration for `{}` in interface `{}`. \
+         Each (interface, name) pair must be registered exactly once.",
+        key.1,
+        key.0,
+    );
+    map.insert(key, value);
+}
+
+/// Return the value for `name` in a `(source_interface, name)`-keyed map
+/// when exactly one interface defines it. Returns `None` for zero or multiple
+/// matches — ambiguous same-named types must be disambiguated via an
+/// interface- or package-scoped accessor.
+fn find_unique_in<'a, V>(map: &'a IndexMap<(String, String), V>, name: &str) -> Option<&'a V> {
+    let mut found: Option<&V> = None;
+    for ((_, n), v) in map {
+        if n != name {
+            continue;
+        }
+        if found.is_some() {
+            return None;
+        }
+        found = Some(v);
+    }
+    found
+}
+
+/// Return true if any interface registers `name` in a
+/// `(source_interface, name)`-keyed map.
+fn has_any_in<V>(map: &IndexMap<(String, String), V>, name: &str) -> bool {
+    map.keys().any(|(_, n)| n == name)
+}
+
+/// Return the `source_interface` when `name` has exactly one registrant,
+/// ignoring empty source strings.
+fn find_unique_source_in<'a, V>(
+    map: &'a IndexMap<(String, String), V>,
+    name: &str,
+) -> Option<&'a str> {
+    let mut found: Option<&str> = None;
+    for ((src, n), _) in map {
+        if n != name {
+            continue;
+        }
+        if found.is_some() {
+            return None;
+        }
+        if !src.is_empty() {
+            found = Some(src.as_str());
+        }
+    }
+    found
 }
 
 impl WasiRegistry {
     /// Create a new empty registry
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Return the canonical source interface that owns `(kind, name)` — i.e.
+    /// the `#[cm("...")]` fragment before the `#` (e.g.
+    /// `"wasi:filesystem/types@0.3.0-rc-2026-03-15"`). `kind` is one of
+    /// `"variants"`, `"enums"`, `"resources"`, `"structs"`, `"flags"`, or
+    /// `"newtypes"`.
+    ///
+    /// Returns `Some` only when exactly one WASI interface declares the bare
+    /// name. Same-named types from multiple interfaces (e.g. `ErrorCode` in
+    /// `wasi:filesystem/types` vs `wasi:http/types`) return `None` — callers
+    /// must then disambiguate with the package-scoped accessor (e.g.
+    /// `get_variant_cases_by_package`).
+    pub fn bare_name_owner(&self, kind: &str, name: &str) -> Option<&str> {
+        let candidates: Vec<&str> = match kind {
+            "variants" => self
+                .variants
+                .keys()
+                .filter_map(|(src, n)| (n == name && !src.is_empty()).then_some(src.as_str()))
+                .collect(),
+            "enums" => self
+                .enums
+                .keys()
+                .filter_map(|(src, n)| (n == name && !src.is_empty()).then_some(src.as_str()))
+                .collect(),
+            "resources" => self
+                .resources
+                .keys()
+                .filter_map(|(src, n)| (n == name && !src.is_empty()).then_some(src.as_str()))
+                .collect(),
+            "structs" => self
+                .structs
+                .keys()
+                .filter_map(|(src, n)| (n == name && !src.is_empty()).then_some(src.as_str()))
+                .collect(),
+            "flags" => self
+                .flags
+                .keys()
+                .filter_map(|(src, n)| (n == name && !src.is_empty()).then_some(src.as_str()))
+                .collect(),
+            "newtypes" => self
+                .newtypes
+                .keys()
+                .filter_map(|(src, n)| (n == name && !src.is_empty()).then_some(src.as_str()))
+                .collect(),
+            _ => return None,
+        };
+        if candidates.len() == 1 {
+            Some(candidates[0])
+        } else {
+            None
+        }
+    }
+
+    /// Extract the source interface (the part before the `#` fragment,
+    /// e.g. `"wasi:cli/stdout@0.3.0-rc-2026-03-15"`) from the
+    /// first `#[cm("...")]` attribute on a stdlib item. Returns an
+    /// empty string if no attribute is present (user-authored items
+    /// don't carry this).
+    fn cm_source_interface(attrs: &[crate::ast::Attribute]) -> String {
+        attrs
+            .iter()
+            .find(|a| a.name == "cm")
+            .and_then(|a| a.args.first())
+            .and_then(|arg| arg.as_str().split('#').next())
+            .unwrap_or("")
+            .to_string()
     }
 
     /// Build the registry from the embedded stdlib
@@ -381,6 +513,19 @@ impl WasiRegistry {
             registry.register_module(&module, &mut world_registry);
         }
 
+        // Register the `core:kiln/generator` world. Only the world is
+        // registered — not the types (WasiRegistry's struct map is keyed
+        // by bare name and would shadow `wasi:http/types::Response` with
+        // `core:kiln::Response`). Kiln types participate as regular Wado
+        // imports via `use { ... } from "core:kiln"` and don't need the
+        // WasiRegistry bookkeeping.
+        let kiln_worlds_module = parse_module(stdlib::CORE_KILN_WORLDS);
+        for item in &kiln_worlds_module.items {
+            if let crate::ast::Item::World(world) = item {
+                world_registry.register(world);
+            }
+        }
+
         (registry, world_registry)
     }
 
@@ -395,7 +540,14 @@ impl WasiRegistry {
         // First, collect newtypes from this module
         for item in &module.items {
             if let Item::Newtype(alias) = item {
-                self.newtypes.insert(alias.name.clone(), alias.ty.clone());
+                let source_interface = Self::cm_source_interface(&alias.attrs);
+                register_unique(
+                    &mut self.newtypes,
+                    "newtype",
+                    source_interface,
+                    alias.name.clone(),
+                    alias.ty.clone(),
+                );
             }
         }
 
@@ -406,16 +558,14 @@ impl WasiRegistry {
                 let cm_name = cm_attr_cm_name(&resource.attrs, &resource.name);
                 // Extract source interface path from #[cm] attribute
                 // Format: #[cm("wasi:cli/terminal-input@0.3.0-rc-2026-01-06#terminal-input")]
-                let source_interface = resource
-                    .attrs
-                    .iter()
-                    .find(|a| a.name == "cm")
-                    .and_then(|a| a.args.first())
-                    .and_then(|arg| arg.as_str().split('#').next())
-                    .unwrap_or("")
-                    .to_string();
-                self.resources
-                    .insert(resource.name.clone(), (cm_name, source_interface));
+                let source_interface = Self::cm_source_interface(&resource.attrs);
+                register_unique(
+                    &mut self.resources,
+                    "resource",
+                    source_interface,
+                    resource.name.clone(),
+                    cm_name,
+                );
             }
         }
 
@@ -424,15 +574,7 @@ impl WasiRegistry {
             if let Item::Struct(struct_def) = item {
                 // Use the #[cm] fragment as the CM name (preserves acronym casing)
                 let cm_name = cm_attr_cm_name(&struct_def.attrs, &struct_def.name);
-                // Extract source interface path (part before #) from #[cm] attribute
-                let source_interface = struct_def
-                    .attrs
-                    .iter()
-                    .find(|a| a.name == "cm")
-                    .and_then(|a| a.args.first())
-                    .and_then(|arg| arg.as_str().split('#').next())
-                    .unwrap_or("")
-                    .to_string();
+                let source_interface = Self::cm_source_interface(&struct_def.attrs);
                 let fields: Vec<(String, Type)> = struct_def
                     .fields
                     .iter()
@@ -449,9 +591,12 @@ impl WasiRegistry {
                         )
                     })
                     .collect();
-                self.structs.insert(
+                register_unique(
+                    &mut self.structs,
+                    "struct",
+                    source_interface,
                     struct_def.name.clone(),
-                    (cm_name, source_interface, fields, wado_fields),
+                    (cm_name, fields, wado_fields),
                 );
             }
         }
@@ -459,24 +604,27 @@ impl WasiRegistry {
         // Collect flags types from this module
         for item in &module.items {
             if let Item::Flags(flags_def) = item {
+                let attrs = flags_def.attributes.as_deref().unwrap_or(&[]);
                 // Use the #[cm] fragment as the CM name (preserves acronym casing)
-                let cm_name = cm_attr_cm_name(
-                    flags_def.attributes.as_deref().unwrap_or(&[]),
-                    &flags_def.name,
-                );
+                let cm_name = cm_attr_cm_name(attrs, &flags_def.name);
+                let source_interface = Self::cm_source_interface(attrs);
                 // Use per-member #[cm] attr for CM name
                 let member_names: Vec<String> = flags_def
                     .flags
                     .iter()
                     .map(|m| cm_attr_cm_name(&m.attrs, &m.name))
                     .collect();
-                self.flags
-                    .insert(flags_def.name.clone(), (cm_name, member_names));
+                register_unique(
+                    &mut self.flags,
+                    "flags",
+                    source_interface,
+                    flags_def.name.clone(),
+                    (cm_name, member_names),
+                );
             }
         }
 
         // Collect enum types from this module
-        // Use interface path from #[cm] attribute as key to distinguish same-named enums
         for item in &module.items {
             if let Item::Enum(enum_def) = item {
                 // Use the #[cm] fragment as the CM name (preserves acronym casing)
@@ -490,26 +638,14 @@ impl WasiRegistry {
 
                 // Extract interface path from #[cm] attribute if present
                 // Format: #[cm("wasi:sockets/types@0.3.0-rc-2025-09-16#error-code")]
-                let interface_path = enum_def
-                    .attrs
-                    .iter()
-                    .find(|a| a.name == "cm")
-                    .and_then(|a| a.args.first())
-                    .and_then(|arg| arg.as_str().split('#').next())
-                    .map(str::to_string);
-
-                // Store by Wado name for backward compatibility
-                // but also store by interface path for interface-specific lookups
-                self.enums.insert(
+                let source_interface = Self::cm_source_interface(&enum_def.attrs);
+                register_unique(
+                    &mut self.enums,
+                    "enum",
+                    source_interface,
                     enum_def.name.clone(),
-                    (cm_name.clone(), variant_names.clone()),
+                    (cm_name, variant_names),
                 );
-
-                // Also store by interface path + name for disambiguation
-                if let Some(path) = interface_path {
-                    let full_key = format!("{path}#{}", enum_def.name);
-                    self.enums.insert(full_key, (cm_name, variant_names));
-                }
             }
         }
 
@@ -518,6 +654,7 @@ impl WasiRegistry {
             if let Item::Variant(variant_def) = item {
                 // Use the #[cm] fragment as the CM name (preserves acronym casing)
                 let cm_name = cm_attr_cm_name(&variant_def.attrs, &variant_def.name);
+                let source_interface = Self::cm_source_interface(&variant_def.attrs);
                 // Store both CM and Wado names for each case
                 let cases: Vec<CmVariantCase> = variant_def
                     .cases
@@ -529,29 +666,23 @@ impl WasiRegistry {
                     })
                     .collect();
 
-                self.variants
-                    .insert(variant_def.name.clone(), (cm_name.clone(), cases.clone()));
-
-                // Also store by interface path + name for disambiguation
-                let interface_path = variant_def
-                    .attrs
-                    .iter()
-                    .find(|a| a.name == "cm")
-                    .and_then(|a| a.args.first())
-                    .and_then(|arg| arg.as_str().split('#').next())
-                    .map(str::to_string);
-                if let Some(path) = interface_path {
-                    let full_key = format!("{path}#{}", variant_def.name);
-                    self.variants.insert(full_key, (cm_name, cases));
-                }
+                register_unique(
+                    &mut self.variants,
+                    "variant",
+                    source_interface,
+                    variant_def.name.clone(),
+                    (cm_name, cases),
+                );
             }
         }
 
-        // Helper closure to resolve types through aliases
-        let resolve_type = |ty: &Type, aliases: &IndexMap<String, Type>| -> Type {
+        // Helper closure to resolve types through aliases (scan the
+        // `(source_interface, name)`-keyed newtypes map by name; skip
+        // resolution when the name is ambiguous across interfaces).
+        let resolve_type = |ty: &Type, aliases: &IndexMap<(String, String), Type>| -> Type {
             match ty {
                 Type::Named(named) => {
-                    if let Some(resolved) = aliases.get(&named.name) {
+                    if let Some(resolved) = find_unique_in(aliases, &named.name) {
                         resolved.clone()
                     } else {
                         ty.clone()
@@ -666,189 +797,170 @@ impl WasiRegistry {
         }
     }
 
-    /// Get a newtype by name
+    /// Get a newtype by name, when unambiguous across interfaces.
     pub fn get_newtype(&self, name: &str) -> Option<&Type> {
-        self.newtypes.get(name)
+        find_unique_in(&self.newtypes, name)
     }
 
-    /// Get all newtypes
-    pub fn newtypes(&self) -> &IndexMap<String, Type> {
+    /// Iterate all newtypes as `((source_interface, name), type)`.
+    pub fn newtypes(&self) -> &IndexMap<(String, String), Type> {
         &self.newtypes
     }
 
-    /// Check if a type name is a registered resource
+    /// Check if a type name is a registered resource (in any interface).
     pub fn is_resource(&self, name: &str) -> bool {
-        self.resources.contains_key(name)
+        has_any_in(&self.resources, name)
     }
 
-    /// Get the CM kebab-case name for a resource
+    /// Get the CM kebab-case name for a resource, when unambiguous.
     pub fn get_resource_cm_name(&self, name: &str) -> Option<&str> {
-        self.resources
-            .get(name)
-            .map(|(cm_name, _)| cm_name.as_str())
+        find_unique_in(&self.resources, name).map(String::as_str)
     }
 
-    /// Get the source interface path for a resource
-    /// e.g., "`TerminalInput`" -> "wasi:cli/terminal-input@0.3.0-rc-2026-01-06"
+    /// Get the source interface path for a resource, when unambiguous.
+    /// e.g., `TerminalInput` -> `"wasi:cli/terminal-input@0.3.0-rc-2026-01-06"`.
     pub fn get_resource_source_interface(&self, name: &str) -> Option<&str> {
-        self.resources
-            .get(name)
-            .map(|(_, path)| path.as_str())
-            .filter(|p| !p.is_empty())
+        find_unique_source_in(&self.resources, name)
     }
 
-    /// Check if a type name is a registered enum
+    /// Check if a type name is a registered enum (in any interface).
     pub fn is_enum(&self, name: &str) -> bool {
-        self.enums.contains_key(name)
+        has_any_in(&self.enums, name)
     }
 
-    /// Get the CM kebab-case name for an enum
+    /// Get the CM kebab-case name for an enum, when unambiguous.
     pub fn get_enum_cm_name(&self, name: &str) -> Option<&str> {
-        self.enums.get(name).map(|(cm_name, _)| cm_name.as_str())
+        find_unique_in(&self.enums, name).map(|(cm_name, _)| cm_name.as_str())
     }
 
-    /// Get the CM enum variant names (in kebab-case)
+    /// Get the CM enum variant names (in kebab-case), when unambiguous.
     pub fn get_enum_variants(&self, name: &str) -> Option<&[String]> {
-        self.enums
-            .get(name)
-            .map(|(_, variants)| variants.as_slice())
+        find_unique_in(&self.enums, name).map(|(_, variants)| variants.as_slice())
     }
 
-    /// Get the CM enum variant names by interface path + name
-    /// This is used to disambiguate enums with the same Wado name but different interfaces
-    /// (e.g., wasi:cli/types#ErrorCode vs wasi:sockets/types#ErrorCode)
+    /// Get the CM enum variant names scoped to a specific source interface
+    /// (e.g. `"wasi:cli/types@0.3.0-rc-2026-03-15"`). Disambiguates enums
+    /// sharing a Wado name across interfaces. Falls back to the unscoped
+    /// lookup when only one interface defines the name.
     pub fn get_enum_variants_by_interface(
         &self,
         interface_path: &str,
         name: &str,
     ) -> Option<&[String]> {
-        let full_key = format!("{interface_path}#{name}");
         self.enums
-            .get(&full_key)
-            .or_else(|| self.enums.get(name))
+            .get(&(interface_path.to_string(), name.to_string()))
             .map(|(_, variants)| variants.as_slice())
+            .or_else(|| self.get_enum_variants(name))
     }
 
-    /// Get the CM enum name by interface path + name
+    /// Get the CM enum name scoped to a specific source interface.
     pub fn get_enum_cm_name_by_interface(&self, interface_path: &str, name: &str) -> Option<&str> {
-        let full_key = format!("{interface_path}#{name}");
         self.enums
-            .get(&full_key)
-            .or_else(|| self.enums.get(name))
+            .get(&(interface_path.to_string(), name.to_string()))
             .map(|(cm_name, _)| cm_name.as_str())
+            .or_else(|| self.get_enum_cm_name(name))
     }
 
-    /// Check if an interface defines its own enum type (exact interface path match, no fallback)
+    /// Check if a specific interface defines its own enum type (exact match, no fallback).
     pub fn has_enum_in_interface(&self, interface_path: &str, name: &str) -> bool {
-        let full_key = format!("{interface_path}#{name}");
-        self.enums.contains_key(&full_key)
+        self.enums
+            .contains_key(&(interface_path.to_string(), name.to_string()))
     }
 
-    /// Check if a type name is a registered flags type
+    /// Check if a type name is a registered flags type (in any interface).
     pub fn is_flags(&self, name: &str) -> bool {
-        self.flags.contains_key(name)
+        has_any_in(&self.flags, name)
     }
 
-    /// Get the CM kebab-case name for a flags type
+    /// Get the CM kebab-case name for a flags type, when unambiguous.
     pub fn get_flags_cm_name(&self, name: &str) -> Option<&str> {
-        self.flags.get(name).map(|(cm_name, _)| cm_name.as_str())
+        find_unique_in(&self.flags, name).map(|(cm_name, _)| cm_name.as_str())
     }
 
-    /// Get the CM member names (in kebab-case) for a flags type
+    /// Get the CM member names (in kebab-case) for a flags type, when unambiguous.
     pub fn get_flags_members(&self, name: &str) -> Option<&[String]> {
-        self.flags.get(name).map(|(_, members)| members.as_slice())
+        find_unique_in(&self.flags, name).map(|(_, members)| members.as_slice())
     }
 
-    /// Check if a type name is a registered variant
+    /// Check if a type name is a registered variant (in any interface).
     pub fn is_variant(&self, name: &str) -> bool {
-        self.variants.contains_key(name)
+        has_any_in(&self.variants, name)
     }
 
-    /// Get the CM kebab-case name for a variant
+    /// Get the CM kebab-case name for a variant, when unambiguous.
     pub fn get_variant_cm_name(&self, name: &str) -> Option<&str> {
-        self.variants.get(name).map(|(cm_name, _)| cm_name.as_str())
+        find_unique_in(&self.variants, name).map(|(cm_name, _)| cm_name.as_str())
     }
 
-    /// Get the variant cases (CM kebab-case name, payload type if any)
+    /// Get the variant cases, when unambiguous.
     pub fn get_variant_cases(&self, name: &str) -> Option<&[CmVariantCase]> {
-        self.variants.get(name).map(|(_, cases)| cases.as_slice())
+        find_unique_in(&self.variants, name).map(|(_, cases)| cases.as_slice())
     }
 
-    /// Get the variant cases by WASI package name (e.g., "http") for disambiguation.
-    /// Searches for a full-key entry matching `wasi:{package}/...#{name}`.
-    /// Falls back to unqualified name lookup if no scoped entry is found.
+    /// Get the variant cases scoped to a WASI package (e.g., `"http"`).
+    /// Prefers an interface whose source starts with `"wasi:{package}/"`.
     pub fn get_variant_cases_by_package(
         &self,
         package: &str,
         name: &str,
     ) -> Option<&[CmVariantCase]> {
         let prefix = format!("wasi:{package}/");
-        let suffix = format!("#{name}");
         self.variants
             .iter()
-            .find(|(key, _)| key.starts_with(&prefix) && key.ends_with(&suffix))
+            .find(|((src, n), _)| n == name && src.starts_with(&prefix))
             .map(|(_, (_, cases))| cases.as_slice())
             .or_else(|| self.get_variant_cases(name))
     }
 
-    /// Get the variant cases by interface path + name for disambiguation.
-    /// Tries interface-qualified key first, falls back to unqualified name.
+    /// Get the variant cases scoped to a specific source interface.
     pub fn get_variant_cases_by_interface(
         &self,
         interface_path: &str,
         name: &str,
     ) -> Option<&[CmVariantCase]> {
-        let full_key = format!("{interface_path}#{name}");
         self.variants
-            .get(&full_key)
-            .or_else(|| self.variants.get(name))
+            .get(&(interface_path.to_string(), name.to_string()))
             .map(|(_, cases)| cases.as_slice())
+            .or_else(|| self.get_variant_cases(name))
     }
 
-    /// Get the CM variant name by interface path + name for disambiguation.
+    /// Get the CM variant name scoped to a specific source interface.
     pub fn get_variant_cm_name_by_interface(
         &self,
         interface_path: &str,
         name: &str,
     ) -> Option<&str> {
-        let full_key = format!("{interface_path}#{name}");
         self.variants
-            .get(&full_key)
-            .or_else(|| self.variants.get(name))
+            .get(&(interface_path.to_string(), name.to_string()))
             .map(|(cm_name, _)| cm_name.as_str())
+            .or_else(|| self.get_variant_cm_name(name))
     }
 
-    /// Check if a type name is a registered struct (WIT record)
+    /// Check if a type name is a registered struct (WIT record, in any interface).
     pub fn is_struct(&self, name: &str) -> bool {
-        self.structs.contains_key(name)
+        has_any_in(&self.structs, name)
     }
 
-    /// Get the CM kebab-case name for a struct (WIT record)
+    /// Get the CM kebab-case name for a struct, when unambiguous.
     pub fn get_struct_cm_name(&self, name: &str) -> Option<&str> {
-        self.structs
-            .get(name)
-            .map(|(cm_name, _, _, _)| cm_name.as_str())
+        find_unique_in(&self.structs, name).map(|(cm_name, _, _)| cm_name.as_str())
     }
 
-    /// Get the fields of a struct (CM kebab-case field name, field type)
+    /// Get the fields of a struct (CM kebab-case field name, field type), when unambiguous.
     pub fn get_struct_fields(&self, name: &str) -> Option<&[(String, Type)]> {
-        self.structs
-            .get(name)
-            .map(|(_, _, fields, _)| fields.as_slice())
+        find_unique_in(&self.structs, name).map(|(_, fields, _)| fields.as_slice())
     }
 
-    /// Get the source interface path for a struct
+    /// Get the source interface path for a struct, when unambiguous.
     pub fn get_struct_source_interface(&self, name: &str) -> Option<&str> {
-        self.structs
-            .get(name)
-            .map(|(_, source, _, _)| source.as_str())
+        find_unique_source_in(&self.structs, name)
     }
 
-    /// Find the interface name (e.g., "types") for a struct given its CM name
-    /// (e.g., "directory-entry"). Used by the component builder to alias types
-    /// from WASI interface imports.
+    /// Find the interface name (e.g., `"types"`) for a struct given its CM name
+    /// (e.g., `"directory-entry"`). Used by the component builder to alias
+    /// types from WASI interface imports.
     pub fn find_interface_for_struct_cm_name(&self, cm_name: &str) -> Option<String> {
-        for (wado_name, (struct_cm_name, source_path, _, _)) in &self.structs {
+        for ((source_path, wado_name), (struct_cm_name, _, _)) in &self.structs {
             if struct_cm_name == cm_name || wado_name == cm_name {
                 let wasi = CmImport::parse(source_path)?;
                 return Some(wasi.interface);
@@ -857,17 +969,15 @@ impl WasiRegistry {
         None
     }
 
-    /// Get the fields with Wado names (`wado_name`, `cm_name`, `field_type`)
+    /// Get the fields with Wado names, when unambiguous.
     pub fn get_struct_fields_with_wado_names(
         &self,
         name: &str,
     ) -> Option<&[(String, String, Type)]> {
-        self.structs
-            .get(name)
-            .map(|(_, _, _, wado_fields)| wado_fields.as_slice())
+        find_unique_in(&self.structs, name).map(|(_, _, wado_fields)| wado_fields.as_slice())
     }
 
-    /// Iterate over all structs from a specific interface (matched by prefix)
+    /// Iterate over all structs from a specific interface (matched by prefix).
     /// Returns (`wado_name`, `cm_name`, fields) in insertion order.
     pub fn structs_for_interface(
         &self,
@@ -875,7 +985,7 @@ impl WasiRegistry {
     ) -> impl Iterator<Item = (&str, &str, &[(String, Type)])> {
         self.structs
             .iter()
-            .filter_map(move |(name, (cm_name, source, fields, _))| {
+            .filter_map(move |((source, name), (cm_name, fields, _))| {
                 if source.starts_with(interface_prefix) {
                     Some((name.as_str(), cm_name.as_str(), fields.as_slice()))
                 } else {
@@ -884,21 +994,18 @@ impl WasiRegistry {
             })
     }
 
-    /// Iterate over variants from a specific interface using full-key entries.
-    /// Full-key format: `"interface_path#WadoName"` (inserted by `register_module`).
-    /// Returns (`wado_name`, `cm_name`, cases) in insertion order.
+    /// Iterate over variants from a specific interface (matched by prefix on
+    /// the source interface). Returns (`wado_name`, `cm_name`, cases) in
+    /// insertion order.
     pub fn variants_for_interface(
         &self,
         interface_prefix: &str,
     ) -> impl Iterator<Item = (&str, &str, &[CmVariantCase])> {
-        let prefix = format!("{interface_prefix}#");
         self.variants
             .iter()
-            .filter_map(move |(key, (cm_name, cases))| {
-                if key.starts_with(&prefix) {
-                    // key = "interface_path#WadoName"
-                    let wado_name = key.split('#').nth(1).unwrap_or(key.as_str());
-                    Some((wado_name, cm_name.as_str(), cases.as_slice()))
+            .filter_map(move |((source, name), (cm_name, cases))| {
+                if source.starts_with(interface_prefix) {
+                    Some((name.as_str(), cm_name.as_str(), cases.as_slice()))
                 } else {
                     None
                 }
@@ -913,7 +1020,7 @@ impl WasiRegistry {
     ) -> impl Iterator<Item = (&str, &str)> {
         self.resources
             .iter()
-            .filter_map(move |(name, (cm_name, source))| {
+            .filter_map(move |((source, name), cm_name)| {
                 if source.starts_with(interface_prefix) {
                     Some((name.as_str(), cm_name.as_str()))
                 } else {
@@ -935,7 +1042,7 @@ impl WasiRegistry {
             && g.name == "Option"
             && g.args.len() == 1
             && let Type::Named(inner) = &g.args[0]
-            && let Some((cm_name, _)) = self.resources.get(&inner.name)
+            && let Some(cm_name) = find_unique_in(&self.resources, &inner.name)
         {
             return Some((inner.name.clone(), cm_name.clone()));
         }
@@ -949,15 +1056,16 @@ impl WasiRegistry {
     /// all types in the function signature are supported.
     pub fn is_function_supported(&self, func: &WasiFunctionInfo) -> bool {
         // Build sets of known enum, variant, flags, and resource names
+        // (bare name is enough here — the sets are only used as a membership check).
         let enums: IndexSet<&str> = self
             .enums
             .keys()
             .chain(self.variants.keys())
             .chain(self.flags.keys())
-            .map(String::as_str)
+            .map(|(_, n)| n.as_str())
             .collect();
-        let resources: IndexSet<&str> = self.resources.keys().map(String::as_str).collect();
-        let structs: IndexSet<&str> = self.structs.keys().map(String::as_str).collect();
+        let resources: IndexSet<&str> = self.resources.keys().map(|(_, n)| n.as_str()).collect();
+        let structs: IndexSet<&str> = self.structs.keys().map(|(_, n)| n.as_str()).collect();
 
         // Check all parameter types
         for (_, _, ty) in &func.params {

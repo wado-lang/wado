@@ -8,7 +8,7 @@
 //! #4 — registry/git module sources are deferred to a follow-up.
 //!
 //! Actual component compilation (`path -> .wasm`) depends on compiler-side
-//! work that is not yet landed (the `wado:kiln/generator` world, WIT type
+//! work that is not yet landed (the `core:kiln/generator` world, WIT type
 //! surface, and stdlib additions). Until those land,
 //! [`CliGeneratorProvider::get_component`] returns
 //! [`ProviderError::Unsupported`] with an actionable message.
@@ -22,9 +22,15 @@ use wado_compiler::kiln::{GeneratorModule, OptionsDescriptor};
 
 use crate::kiln_driver::{GeneratorProvider, ProviderError};
 
-/// Cache directory under the project root where resolved generator
-/// components are stored: `target/kiln/generators/`.
-pub const CACHE_DIR: &str = "target/kiln/generators";
+/// Directory under the project root where compiled generator
+/// components are cached: `build/kiln/generators/`. See WEP 2026-04-12
+/// §"`build/kiln/` directory layout".
+pub const CACHE_DIR: &str = "build/kiln/generators";
+
+/// Directory under the project root for generator metadata extracted
+/// by the compiler (e.g. serialized `OptionsDescriptor`):
+/// `build/kiln/metadata/`. Reserved for M6.6 provider work.
+pub const METADATA_DIR: &str = "build/kiln/metadata";
 
 /// CLI-side generator provider.
 ///
@@ -72,7 +78,7 @@ impl GeneratorProvider for CliGeneratorProvider {
                 Err(ProviderError::Unsupported {
                     message: format!(
                         "kiln: local generator at `{}` cannot be compiled yet — \
-                         the `wado:kiln/generator` world is scheduled for a follow-up PR. \
+                         the `core:kiln/generator` world is scheduled for a follow-up PR. \
                          Commit `build/kiln/` and `wado.lock` to use consume-only mode.",
                         path.as_str(),
                     ),

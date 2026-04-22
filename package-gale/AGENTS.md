@@ -84,7 +84,7 @@ wado run package-gale -- dump --rule expr path/to/Grammar.g4
 wado test package-gale/**/*.wado
 
 # Run a specific file
-wado test package-gale/src/generator_test.wado
+wado test package-gale/src/codegen_test.wado
 ```
 
 ## E2E Test Architecture
@@ -137,7 +137,7 @@ test "parse JSON.g4" {
 }
 ```
 
-### Layer 2: Golden Tests (`generator_test.wado`)
+### Layer 2: Golden Tests (`codegen_test.wado`)
 
 Verify that code generation from `Grammar` IR produces the expected `.wado` output. Each test compares `generate(parse(...))` against a golden file in `tests/golden/`.
 
@@ -182,13 +182,13 @@ Grammars with actions/predicates (ANTLR4, Rust, TypeScript) contain `{...}` acti
 
 1. Add the `.g4` file to `tests/grammars/` (include `// Source:` and `// License:` headers)
 2. Add a parse test in `g4/integration_test.wado`
-3. For golden tests: add an entry in `mise.toml` under `[tasks.update-gale-golden]`, run `mise run update-gale-golden`, and add a test case in `generator_test.wado`
+3. For golden tests: add an entry in `mise.toml` under `[tasks.update-gale-golden]`, run `mise run update-gale-golden`, and add a test case in `codegen_test.wado`
 
 ## Golden Fixtures
 
 Golden fixtures live in `tests/golden/` and contain the expected `.wado` output generated from the `.g4` grammars in `tests/grammars/`.
 
-**When to regenerate**: whenever `generator.wado`, `lexer_gen.wado`, `parser_gen.wado`, or `runtime.wado` changes in a way that affects generated output:
+**When to regenerate**: whenever `codegen.wado`, `lexer_gen.wado`, `parser_gen.wado`, or `runtime.wado` changes in a way that affects generated output:
 
 ```sh
 mise run update-gale-golden
@@ -198,7 +198,7 @@ Commit the updated golden files.
 
 ## Inlined Runtime
 
-`runtime.wado` is included verbatim into every generated file via `#include_str` in `generator.wado`. It must remain self-contained (no imports from other source files). See [WEP: Compile-Time File Inclusion](../docs/wep-2026-03-02-include-str.md).
+`runtime.wado` is included verbatim into every generated file via `#include_str` in `codegen.wado`. It must remain self-contained (no imports from other source files). See [WEP: Compile-Time File Inclusion](../docs/wep-2026-03-02-include-str.md).
 
 ## Generated Parser Rules
 

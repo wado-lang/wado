@@ -1193,8 +1193,12 @@ expr : ID ;";
     let mut saw_foo = false;
     let mut saw_bar = false;
     for let r of &g.lexer_rules {
-        if r.name == "FOO" && r.is_virtual { saw_foo = true; }
-        if r.name == "BAR" && r.is_virtual { saw_bar = true; }
+        if r.name == "FOO" && r.is_virtual {
+            saw_foo = true;
+        }
+        if r.name == "BAR" && r.is_virtual {
+            saw_bar = true;
+        }
     }
     assert saw_foo, "tokens{} block must still register FOO as virtual token";
     assert saw_bar, "tokens{} block must still register BAR as virtual token";
@@ -1366,8 +1370,7 @@ test "parse_checked rejects undefined parser rule reference" {
 root : undef_rule ;
 ID : [a-z]+ ;";
     let result = parse_checked(input);
-    assert result matches { Err(_) },
-        "expected undefined parser rule reference to be rejected";
+    assert result matches { Err(_) }, "expected undefined parser rule reference to be rejected";
 }
 
 test "parse_checked rejects undefined token reference" {
@@ -1377,8 +1380,7 @@ test "parse_checked rejects undefined token reference" {
 root : UNDEFINED_TOK ;
 ID : [a-z]+ ;";
     let result = parse_checked(input);
-    assert result matches { Err(_) },
-        "expected undefined token reference to be rejected";
+    assert result matches { Err(_) }, "expected undefined token reference to be rejected";
 }
 
 test "parse_checked rejects undefined lexer rule reference in lexer grammar" {
@@ -1388,8 +1390,7 @@ test "parse_checked rejects undefined lexer rule reference in lexer grammar" {
     let input = "lexer grammar Test;
 FOO : BAR ;";
     let result = parse_checked(input);
-    assert result matches { Err(_) },
-        "expected undefined lexer rule reference to be rejected";
+    assert result matches { Err(_) }, "expected undefined lexer rule reference to be rejected";
 }
 
 test "parse_checked rejects undefined fragment reference" {
@@ -1399,8 +1400,7 @@ LETTER : [a-z] ;
 // MISSING is not defined as a fragment or lexer rule
 FOO : MISSING ;";
     let result = parse_checked(input);
-    assert result matches { Err(_) },
-        "expected undefined fragment reference to be rejected";
+    assert result matches { Err(_) }, "expected undefined fragment reference to be rejected";
 }
 
 test "parse_checked accepts virtual tokens declared in tokens block" {
@@ -1412,8 +1412,7 @@ tokens { VT }
 root : VT ;
 ID : [a-z]+ ;";
     let result = parse_checked(input);
-    assert result matches { Ok(_) },
-        "expected grammar with tokens-block-declared ref to be accepted";
+    assert result matches { Ok(_) }, "expected grammar with tokens-block-declared ref to be accepted";
 }
 
 test "parse_checked accepts EOF token reference" {
@@ -1423,8 +1422,18 @@ test "parse_checked accepts EOF token reference" {
 root : ID EOF ;
 ID : [a-z]+ ;";
     let result = parse_checked(input);
-    assert result matches { Ok(_) },
-        "expected grammar ending in EOF to be accepted";
+    assert result matches { Ok(_) }, "expected grammar ending in EOF to be accepted";
+}
+
+test "parse_checked accepts EOF reference inside a lexer rule" {
+    // `EOF` is also a built-in inside lexer rules (commonly used to
+    // tolerate unterminated comments: `'/*' .*? ('*/' | EOF)`). It has
+    // no defining lexer rule and must not be flagged as undefined.
+    let input = "grammar Test;
+root : COMMENT ;
+COMMENT : '/*' .*? ('*/' | EOF) ;";
+    let result = parse_checked(input);
+    assert result matches { Ok(_) }, "expected EOF inside lexer rule to be accepted";
 }
 
 test "parse_checked accepts parser grammar with only parser-rule refs" {
@@ -1436,8 +1445,7 @@ test "parse_checked accepts parser grammar with only parser-rule refs" {
 root : expr ;
 expr : ID PLUS ID ;";
     let result = parse_checked(input);
-    assert result matches { Ok(_) },
-        "expected parser grammar with local parser refs to be accepted";
+    assert result matches { Ok(_) }, "expected parser grammar with local parser refs to be accepted";
 }
 
 test "parse_checked rejects undefined parser rule ref in parser grammar" {
@@ -1446,8 +1454,7 @@ test "parse_checked rejects undefined parser rule ref in parser grammar" {
     let input = "parser grammar Test;
 root : missing_rule ;";
     let result = parse_checked(input);
-    assert result matches { Err(_) },
-        "expected undefined parser rule in parser grammar to be rejected";
+    assert result matches { Err(_) }, "expected undefined parser rule in parser grammar to be rejected";
 }
 
 test "bare parse does not run reference checks" {
@@ -1458,8 +1465,7 @@ test "bare parse does not run reference checks" {
     let input = "grammar Test;
 r : undefined ;";
     let result = parse(input);
-    assert result matches { Ok(_) },
-        "bare parse must accept syntactically-well-formed grammars with undefined refs";
+    assert result matches { Ok(_) }, "bare parse must accept syntactically-well-formed grammars with undefined refs";
 }
 
 test "parse rejects <assoc> with non-left/right identifier" {
@@ -1472,8 +1478,7 @@ test "parse rejects <assoc> with non-left/right identifier" {
 expr : <assoc=middle> expr '**' expr | INT ;
 INT : [0-9]+ ;";
     let result = parse(input);
-    assert result matches { Err(_) },
-        "expected <assoc=middle> to be rejected";
+    assert result matches { Err(_) }, "expected <assoc=middle> to be rejected";
 }
 
 test "parse rejects <assoc> with string value" {
@@ -1481,8 +1486,7 @@ test "parse rejects <assoc> with string value" {
 expr : <assoc='right'> expr '**' expr | INT ;
 INT : [0-9]+ ;";
     let result = parse(input);
-    assert result matches { Err(_) },
-        "expected <assoc='right'> (string value) to be rejected";
+    assert result matches { Err(_) }, "expected <assoc='right'> (string value) to be rejected";
 }
 
 test "parse rejects <assoc> with integer value" {
@@ -1490,8 +1494,7 @@ test "parse rejects <assoc> with integer value" {
 expr : <assoc=1> expr '**' expr | INT ;
 INT : [0-9]+ ;";
     let result = parse(input);
-    assert result matches { Err(_) },
-        "expected <assoc=1> to be rejected";
+    assert result matches { Err(_) }, "expected <assoc=1> to be rejected";
 }
 
 test "parse accepts <assoc=left>" {
@@ -1512,8 +1515,7 @@ INT : [0-9]+ ;";
 
 fn assert_option_ident(opt: &GrammarOption, expected: String) {
     if let Ident(v) = &opt.value {
-        assert *v == expected,
-            `option '{opt.name}': expected Ident('{expected}'), got Ident('{*v}')`;
+        assert *v == expected, `option '{opt.name}': expected Ident('{expected}'), got Ident('{*v}')`;
     } else {
         panic(`option '{opt.name}': expected Ident, got other`);
     }
@@ -1521,8 +1523,7 @@ fn assert_option_ident(opt: &GrammarOption, expected: String) {
 
 fn assert_option_str(opt: &GrammarOption, expected: String) {
     if let Str(v) = &opt.value {
-        assert *v == expected,
-            `option '{opt.name}': expected Str('{expected}'), got Str('{*v}')`;
+        assert *v == expected, `option '{opt.name}': expected Str('{expected}'), got Str('{*v}')`;
     } else {
         panic(`option '{opt.name}': expected Str, got other`);
     }
@@ -1530,8 +1531,7 @@ fn assert_option_str(opt: &GrammarOption, expected: String) {
 
 fn assert_option_int(opt: &GrammarOption, expected: i64) {
     if let Int(n) = &opt.value {
-        assert *n == expected,
-            `option '{opt.name}': expected Int({expected}), got Int({*n})`;
+        assert *n == expected, `option '{opt.name}': expected Int({expected}), got Int({*n})`;
     } else {
         panic(`option '{opt.name}': expected Int, got other`);
     }
@@ -1539,11 +1539,9 @@ fn assert_option_int(opt: &GrammarOption, expected: i64) {
 
 fn assert_option_qualified(opt: &GrammarOption, expected: Array<String>) {
     if let Qualified(parts) = &opt.value {
-        assert parts.len() == expected.len(),
-            `option '{opt.name}': expected {expected.len()} parts, got {parts.len()}`;
+        assert parts.len() == expected.len(), `option '{opt.name}': expected {expected.len()} parts, got {parts.len()}`;
         for let mut i = 0; i < parts.len(); i += 1 {
-            assert parts[i] == expected[i],
-                `option '{opt.name}': part {i}: expected '{expected[i]}', got '{parts[i]}'`;
+            assert parts[i] == expected[i], `option '{opt.name}': part {i}: expected '{expected[i]}', got '{parts[i]}'`;
         }
     } else {
         panic(`option '{opt.name}': expected Qualified, got other`);

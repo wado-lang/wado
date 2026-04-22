@@ -330,7 +330,7 @@ pub trait CompilerHost: Send + Sync {
     /// Execute a Kiln generator component and return its response.
     ///
     /// `component_wasm` is the compiled generator component. The host is
-    /// responsible for instantiating it, linking `wado:kiln/host` so that
+    /// responsible for instantiating it, linking `core:kiln/host` so that
     /// `read-file` and `emit-diagnostic` forward back into this same host,
     /// and returning the generator's response.
     ///
@@ -351,25 +351,27 @@ pub trait CompilerHost: Send + Sync {
 
 /// Request handed to a Kiln generator by the compiler.
 ///
-/// Mirrors `wado:kiln/types::request` 1:1 but does not depend on wasmtime;
-/// hosts lift/lower at their own boundary.
+/// Mirrors `core:kiln/types::raw-request` 1:1 but does not depend on
+/// wasmtime; hosts lift/lower at their own boundary.
 #[derive(Debug, Clone)]
 pub struct GeneratorRequest {
     /// The schema file named by `from` in the invocation.
     pub primary: GeneratorInputFile,
     /// Supplementary schema files.
     pub inputs: Vec<GeneratorInputFile>,
-    /// Canonical-encoded generator options, produced by the compiler.
-    ///
-    /// Empty in M2; the typed encoder lands in M4.
-    pub options: Vec<u8>,
+    /// Canonical JSON encoding of the user's `options = { ... }`.
+    /// The generator-side compiler-synthesized adapter decodes this
+    /// into the typed `Options` struct before user code runs.
+    pub options: String,
 }
 
 /// One schema file passed to a Kiln generator.
 #[derive(Debug, Clone)]
 pub struct GeneratorInputFile {
     pub path: String,
-    pub content: Vec<u8>,
+    /// UTF-8 content of the file. Kiln schemas are text (proto,
+    /// graphql, g4, wit, ...), so string is the natural wire form.
+    pub content: String,
 }
 
 /// Response returned by a Kiln generator.
@@ -402,7 +404,7 @@ pub struct GeneratorReadRecord {
     pub content_hash: [u8; 32],
 }
 
-/// Generator-side error, mirroring `wado:kiln/types::error`.
+/// Generator-side error, mirroring `core:kiln/types::error`.
 #[derive(Debug, Clone)]
 pub enum GeneratorError {
     /// The generator rejected the schema it was given.
@@ -450,7 +452,7 @@ impl std::fmt::Display for GeneratorRunnerError {
 
 impl std::error::Error for GeneratorRunnerError {}
 
-/// Severity mirrored from `wado:kiln/host::diagnostic-level`.
+/// Severity mirrored from `core:kiln/host::diagnostic-level`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GeneratorDiagnosticLevel {
     Error,
@@ -479,7 +481,7 @@ pub struct GeneratorDiagnostic {
 /// The Kiln WIT world, embedded so the compiler can treat its byte identity
 /// as part of every cache key. The single source of truth; `wado-cli` reads
 /// the same file via `wasmtime::component::bindgen!(path = "...")`.
-pub const KILN_GENERATOR_WIT: &str = include_str!("../lib/wado/kiln/generator.wit");
+pub const KILN_GENERATOR_WIT: &str = include_str!("../lib/core/kiln/generator.wit");
 
 /// A simple in-memory compiler host for testing
 ///
@@ -579,10 +581,10 @@ mod tests {
                 let req = GeneratorRequest {
                     primary: GeneratorInputFile {
                         path: "schema.proto".to_string(),
-                        content: b"syntax = \"proto3\";".to_vec(),
+                        content: "syntax = \"proto3\";".to_string(),
                     },
                     inputs: vec![],
-                    options: vec![],
+                    options: String::new(),
                 };
                 let result = host.run_generator(b"\0asm", req).await;
                 assert!(matches!(result, Err(GeneratorRunnerError::Unsupported)));
@@ -591,7 +593,7 @@ mod tests {
 
     #[test]
     fn kiln_generator_wit_is_embedded() {
-        assert!(KILN_GENERATOR_WIT.contains("package wado:kiln"));
+        assert!(KILN_GENERATOR_WIT.contains("package core:kiln"));
         assert!(KILN_GENERATOR_WIT.contains("world generator"));
         assert!(KILN_GENERATOR_WIT.contains("export generate"));
     }

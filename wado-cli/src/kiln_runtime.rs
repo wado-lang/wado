@@ -1,6 +1,6 @@
 //! Native wasmtime runtime for Kiln generators.
 //!
-//! Instantiates a compiled generator component against the `wado:kiln/generator`
+//! Instantiates a compiled generator component against the `core:kiln/generator`
 //! world, linking only the two host imports (`read-file` and `emit-diagnostic`).
 //! Everything else — WASI, clocks, random, http — is unlinked; a generator that
 //! imports any of those fails at link time, which is the determinism guarantee.
@@ -20,14 +20,14 @@ use wado_compiler::{
 };
 
 wasmtime::component::bindgen!({
-    path: "../wado-compiler/lib/wado/kiln/generator.wit",
+    path: "../wado-compiler/lib/core/kiln/generator.wit",
     world: "generator",
     imports: { default: async },
     exports: { default: async },
 });
 
-use self::wado::kiln::host as kiln_host;
-use self::wado::kiln::types as kiln_types;
+use self::core::kiln::kiln_host;
+use self::core::kiln::types as kiln_types;
 
 /// Host policy for a single generator invocation.
 ///
@@ -53,7 +53,7 @@ struct KilnHostState<H: CompilerHost> {
 }
 
 impl<H: CompilerHost + 'static> kiln_host::Host for KilnHostState<H> {
-    async fn read_file(&mut self, path: String) -> Result<Vec<u8>, kiln_host::HostError> {
+    async fn read_file(&mut self, path: String) -> Result<String, kiln_host::HostError> {
         match self.host.load_source(&path).await {
             Ok(bytes) => {
                 let hash = wado_compiler::kiln::content_hash(&bytes);
@@ -61,7 +61,8 @@ impl<H: CompilerHost + 'static> kiln_host::Host for KilnHostState<H> {
                     path: path.clone(),
                     content_hash: hash,
                 });
-                Ok(bytes)
+                String::from_utf8(bytes)
+                    .map_err(|e| kiln_host::HostError::Io(format!("{path}: not UTF-8: {e}")))
             }
             Err(wado_compiler::SourceError::NotFound { .. }) => Err(kiln_host::HostError::NotFound),
             Err(e) => Err(kiln_host::HostError::Io(e.to_string())),
@@ -116,7 +117,7 @@ fn lift_error(e: kiln_types::Error) -> GeneratorError {
     }
 }
 
-/// Instantiate `component_wasm` against the `wado:kiln/generator` world, call
+/// Instantiate `component_wasm` against the `core:kiln/generator` world, call
 /// its exported `generate`, and return the response plus the list of every
 /// file the generator read via `host::read-file`.
 pub async fn run_generator<H: CompilerHost + 'static>(
@@ -153,7 +154,7 @@ pub async fn run_generator<H: CompilerHost + 'static>(
         .await
         .map_err(|e| GeneratorRunnerError::Host(format!("instantiate: {e}")))?;
 
-    let wit_request = kiln_types::Request {
+    let wit_request = kiln_types::RawRequest {
         primary: lower_input_file(&request.primary),
         inputs: request.inputs.iter().map(lower_input_file).collect(),
         options: request.options,
@@ -229,10 +230,10 @@ mod tests {
                 let request = GeneratorRequest {
                     primary: GeneratorInputFile {
                         path: "schema.proto".to_string(),
-                        content: b"syntax = \"proto3\";".to_vec(),
+                        content: "syntax = \"proto3\";".to_string(),
                     },
                     inputs: vec![],
-                    options: vec![],
+                    options: String::new(),
                 };
                 let result = run_generator(
                     &engine,

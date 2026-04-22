@@ -207,7 +207,7 @@ fn char_hex_name(c: char) -> String {
     let mut result = String::with_capacity(6);
     let mut started = false;
     for let mut shift = 28; shift >= 0; shift -= 4 {
-        let nibble = (code >> shift) & 0xf;
+        let nibble = code >> shift & 0xf;
         if nibble != 0 || started || shift == 0 {
             started = true;
             if nibble < 10 {

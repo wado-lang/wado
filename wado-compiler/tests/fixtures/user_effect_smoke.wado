@@ -1,0 +1,26 @@
+#![TODO]
+// Smoke test: a single module declares `pub effect` and a function
+// that requires it. Does not call effect methods — we only want
+// type-level acceptance.
+//
+// TODO: user-defined `pub effect` at the user level currently ICEs
+// during core-Wasm validation:
+//   "type mismatch: expected i32, found (ref (exact $type))"
+// The compiler's codegen path has only been exercised against stdlib
+// effects. Remove `#![TODO]` once user-level effects compile cleanly.
+
+pub effect Logger {
+    fn log(msg: String);
+}
+
+pub fn greet(name: String) with Logger {
+    let _ = name;
+}
+
+test "user-defined effect compiles" {
+    let _g = greet;
+    assert true;
+}
+
+__DATA__
+{"test": {}}

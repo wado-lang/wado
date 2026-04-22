@@ -10,7 +10,7 @@ use anyhow::{Context, Result};
 use lexopt::Arg::Long;
 use wit_parser::Resolve;
 
-use wado_from_idl::{Transformer, WadoCodeGenerator};
+use wado_from_idl::{Transformer, WadoCodeGenerator, naming::to_snake_case};
 
 // Helper functions for lexopt argument parsing
 
@@ -49,6 +49,9 @@ struct Cli {
     package_name: String,
     package_version: String,
     skip_unstable: bool,
+    /// Skip writing the package-level flat re-export file
+    /// (`<pkg>.wado`). Use when the caller provides a hand-written facade.
+    skip_flat_reexport: bool,
 }
 
 fn print_usage() {
@@ -72,6 +75,7 @@ fn print_usage() {
     eprintln!("  --package-name <NAME>     Package name for filter mode (default: \"wasi\")");
     eprintln!("  --package-version <VER>   Package version for filter mode (default: \"0.0.0\")");
     eprintln!("  --skip-unstable           Skip @unstable items");
+    eprintln!("  --skip-flat-reexport      Do not write the per-package flat re-export file");
     eprintln!("  --help                    Show this help message");
 }
 
@@ -83,6 +87,7 @@ fn parse_args() -> Cli {
         package_name: "wasi".to_string(),
         package_version: "0.0.0".to_string(),
         skip_unstable: false,
+        skip_flat_reexport: false,
     };
 
     let mut parser = lexopt::Parser::from_env();
@@ -99,6 +104,7 @@ fn parse_args() -> Cli {
             Long("package-name") => cli.package_name = require_string(&mut parser),
             Long("package-version") => cli.package_version = require_string(&mut parser),
             Long("skip-unstable") => cli.skip_unstable = true,
+            Long("skip-flat-reexport") => cli.skip_flat_reexport = true,
             _ => {
                 eprintln!("Error: unexpected argument");
                 print_usage();
@@ -124,6 +130,7 @@ fn main() -> Result<()> {
             output_dir,
             cli.package.as_deref(),
             cli.skip_unstable,
+            cli.skip_flat_reexport,
         )
     } else {
         // Filter mode: stdin -> stdout
@@ -178,6 +185,7 @@ fn run_directory_mode(
     output_dir: &PathBuf,
     package_filter: Option<&str>,
     skip_unstable: bool,
+    skip_flat_reexport: bool,
 ) -> Result<()> {
     // Parse WIT files from directory
     // Include @unstable items by default (unless --skip-unstable is specified)
@@ -249,8 +257,11 @@ fn run_directory_mode(
 
             let code = generator.generate(&module);
 
-            // Write per-interface file (e.g., wasi/filesystem/types.wado)
-            let output_path = pkg_dir.join(format!("{iface_name}.wado"));
+            // Write per-interface file. WIT kebab-case interface names
+            // are converted to Wado's snake_case filename convention
+            // (e.g. `kiln-host` -> `kiln_host.wado`).
+            let file_stem = to_snake_case(iface_name);
+            let output_path = pkg_dir.join(format!("{file_stem}.wado"));
             fs::write(&output_path, code)
                 .with_context(|| format!("Failed to write {}", output_path.display()))?;
 
@@ -286,18 +297,21 @@ fn run_directory_mode(
             eprintln!("Generated: {}", output_path.display());
         }
 
-        if !flat_reexports.is_empty() {
-            write_flat_reexport_file(output_dir, pkg_name, &flat_reexports)?;
+        if !flat_reexports.is_empty() && !skip_flat_reexport {
+            write_flat_reexport_file(output_dir, &pkg.name.namespace, pkg_name, &flat_reexports)?;
         }
     }
 
     Ok(())
 }
 
-/// Generate a flat package-level re-exporting file (e.g., wasi/filesystem.wado).
-/// Re-exports all types from sub-interface files for backward compatibility.
+/// Generate a flat package-level re-exporting file (e.g., wasi/filesystem.wado,
+/// core/kiln.wado). Re-exports all types from sub-interface files so consumers
+/// import a single module (`wasi:filesystem`, `core:kiln`) rather than individual
+/// sub-interfaces.
 fn write_flat_reexport_file(
     output_dir: &Path,
+    namespace: &str,
     pkg_name: &str,
     flat_reexports: &[(String, Vec<String>)],
 ) -> Result<()> {
@@ -321,9 +335,10 @@ fn write_flat_reexport_file(
             .map(|n| n.as_str())
             .collect::<Vec<_>>()
             .join(", ");
+        let file_stem = to_snake_case(iface_name);
         writeln!(
             flat_code,
-            "pub use {{ {names_str} }} from \"wasi:{pkg_name}/{iface_name}.wado\";"
+            "pub use {{ {names_str} }} from \"{namespace}:{pkg_name}/{file_stem}.wado\";"
         )
         .unwrap();
         for n in new_names {

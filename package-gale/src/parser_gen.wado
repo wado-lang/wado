@@ -1,4 +1,19 @@
-use { Grammar, ParserRule, Alternative, Element, RepeatElement, RepeatKind, LabelElement, NotElement, RuleRefElement, TokenRefElement, LiteralElement, WildcardElement, GroupElement, OptionValue } from "./ir.wado";
+use {
+    Grammar,
+    ParserRule,
+    Alternative,
+    Element,
+    RepeatElement,
+    RepeatKind,
+    LabelElement,
+    NotElement,
+    RuleRefElement,
+    TokenRefElement,
+    LiteralElement,
+    WildcardElement,
+    GroupElement,
+    OptionValue,
+} from "./ir.wado";
 use {
     to_lower,
     to_snake_case,
@@ -980,7 +995,7 @@ fn count_backtrack_nodes(node: &PredictionNode) -> i32 {
             for let b of &d.branches {
                 count += count_backtrack_nodes(&b.child);
             }
-            count
+            count;
         },
         Consume(c) => count_backtrack_nodes(&c.child),
         Leaf(_) => 0,
@@ -995,7 +1010,7 @@ fn count_leaf_nodes(node: &PredictionNode) -> i32 {
             for let b of &d.branches {
                 count += count_leaf_nodes(&b.child);
             }
-            count
+            count;
         },
         Consume(c) => count_leaf_nodes(&c.child),
         Backtrack(_) => 0,
@@ -2175,7 +2190,9 @@ fn gen_scan_group(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &mut GenCo
     }
     for let mut i = 0; i < n; i += 1 {
         for let mut j = 0; j < n; j += 1 {
-            if i == j { continue; }
+            if i == j {
+                continue;
+            }
             if sets_overlap(&first_sets[i], &first_sets[j]) {
                 is_ambiguous[i] = true;
                 is_ambiguous[j] = true;
@@ -2184,7 +2201,9 @@ fn gen_scan_group(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &mut GenCo
     }
     let mut any_ambiguous = false;
     for let mut i = 0; i < n; i += 1 {
-        if is_ambiguous[i] { any_ambiguous = true; }
+        if is_ambiguous[i] {
+            any_ambiguous = true;
+        }
     }
 
     // For lenient groups, mirror the parse-side first-set gate: if peek is not
@@ -2905,9 +2924,14 @@ fn wildcard_non_greedy_condition(follow_first: &Array<String>) -> String {
     for let tk of follow_first {
         let mut seen = false;
         for let e of &excluded {
-            if *e == *tk { seen = true; break; }
+            if *e == *tk {
+                seen = true;
+                break;
+            }
         }
-        if !seen { excluded.push(*tk); }
+        if !seen {
+            excluded.push(*tk);
+        }
     }
     if excluded.len() == 1 {
         return `p.peek_kind() != {excluded[0]}`;
@@ -3340,7 +3364,14 @@ fn emit_scan_guard_with_prefix(w: &mut CodeWriter, inner: &Element, ctx: &mut Ge
     let fail = `break {scan_label};`;
     if let Group(g) = inner {
         if g.alternatives.len() == 1 {
-            gen_scan_elements_in_block(w, &g.alternatives[0].elements, 0, g.alternatives[0].elements.len(), ctx, &scan_label);
+            gen_scan_elements_in_block(
+                w,
+                &g.alternatives[0].elements,
+                0,
+                g.alternatives[0].elements.len(),
+                ctx,
+                &scan_label,
+            );
         } else {
             // Rep guard: must be strict so scan failure terminates the rep loop.
             gen_scan_group(w, &g.alternatives, ctx, &fail, false);
@@ -4972,9 +5003,13 @@ fn gen_group_scan_dispatch(w: &mut CodeWriter, sorted: &Array<i32>, alts: &Array
 /// `| <assoc=right> ...` prefixes; see `vendor/antlr4/doc/options.md`.
 fn is_right_associative(alt: &Alternative) -> bool {
     for let opt of &alt.options {
-        if opt.name != "assoc" { continue; }
+        if opt.name != "assoc" {
+            continue;
+        }
         if let Ident(v) = &opt.value {
-            if *v == "right" { return true; }
+            if *v == "right" {
+                return true;
+            }
         }
     }
     return false;

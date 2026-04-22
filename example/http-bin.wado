@@ -17,7 +17,18 @@
 //   GET  /base64/:val   — decodes base64-encoded value
 //   *    /anything      — returns request info for any method
 
-use { Request, Response, ErrorCode, Fields, FieldName, FieldValue, Trailers, StatusCode, Method, Scheme } from "wasi:http";
+use {
+    Request,
+    Response,
+    ErrorCode,
+    Fields,
+    FieldName,
+    FieldValue,
+    Trailers,
+    StatusCode,
+    Method,
+    Scheme,
+} from "wasi:http";
 use { TreeMap } from "core:collections";
 use { decode } from "core:base64";
 use { Serialize } from "core:serde";
@@ -163,14 +174,7 @@ fn parse_status_code(s: String) -> Option<u16> {
     return null;
 }
 
-fn build_request_json(
-    method: Method,
-    url: String,
-    path: String,
-    args: TreeMap<String, String>,
-    headers: &Headers,
-    body: Option<String>,
-) -> String {
+fn build_request_json(method: Method, url: String, path: String, args: TreeMap<String, String>, headers: &Headers, body: Option<String>) -> String {
     let origin = match get_header(headers, "x-forwarded-for") {
         Some(s) => s,
         None => "",
@@ -190,13 +194,7 @@ fn json_error(msg: String) -> String {
     return json::to_string_pretty(&ErrorResponse { error: msg }).unwrap() + "\n";
 }
 
-fn handle_fallback(
-    request: Request,
-    method: Method,
-    url: String,
-    path: String,
-    args: TreeMap<String, String>,
-) -> [StatusCode, String, String] {
+fn handle_fallback(request: Request, method: Method, url: String, path: String, args: TreeMap<String, String>) -> [StatusCode, String, String] {
     if let Some(code_str) = strip_prefix(path, "/status/") {
         if let Some(code) = parse_status_code(code_str) {
             return [code as StatusCode, "text/plain", ""];
@@ -213,59 +211,28 @@ fn handle_fallback(
         let h = request.get_headers();
         if method matches { Post | Put | Patch } {
             let data = read_body_from_request(request);
-            return [
-                200,
-                "application/json",
-                build_request_json(method, url, path, args, &h, Option::Some(data)) + "\n",
-            ];
+            return [200, "application/json", build_request_json(method, url, path, args, &h, Option::Some(data)) + "\n"];
         }
-        return [
-            200,
-            "application/json",
-            build_request_json(method, url, path, args, &h, null) + "\n",
-        ];
+        return [200, "application/json", build_request_json(method, url, path, args, &h, null) + "\n"];
     }
     return [404, "application/json", json_error("Not Found")];
 }
 
-fn echo_if_method(
-    request: Request,
-    method: Method,
-    expected: Method,
-    label: String,
-    read_body: bool,
-    url: String,
-    path: String,
-    args: TreeMap<String, String>,
-) -> [StatusCode, String, Option<String>] {
+fn echo_if_method(request: Request, method: Method, expected: Method, label: String, read_body: bool, url: String, path: String, args: TreeMap<String, String>) -> [StatusCode, String, Option<String>] {
     if method != expected {
-        return [
-            405,
-            json_error(`Method Not Allowed. Use {label}.`),
-            Option::Some(label),
-        ];
+        return [405, json_error(`Method Not Allowed. Use {label}.`), Option::Some(label)];
     }
     let h = request.get_headers();
     if read_body {
         let data = read_body_from_request(request);
-        return [
-            200,
-            build_request_json(method, url, path, args, &h, Option::Some(data)),
-            null,
-        ];
+        return [200, build_request_json(method, url, path, args, &h, Option::Some(data)), null];
     }
-    return [
-        200,
-        build_request_json(method, url, path, args, &h, null),
-        null,
-    ];
+    return [200, build_request_json(method, url, path, args, &h, null), null];
 }
 
 global HOMEPAGE: String = #include_str("./http-bin-index.html");
 
-export async fn handle(request: Request) -> Result<Response, ErrorCode>
-    with MonotonicClock
-{
+export async fn handle(request: Request) -> Result<Response, ErrorCode> with MonotonicClock {
     let start_mark = MonotonicClock::now();
     let method = request.get_method();
     let scheme = scheme_name(request.get_scheme());
@@ -298,7 +265,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode>
             status = s;
             body_str = b;
             allow = a;
-       },
+        },
         "/put" => {
             let [s, b, a] = echo_if_method(request, method, Method::Put, "PUT", true, url, path, args);
             status = s;
@@ -333,7 +300,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode>
             content_type = c;
             body_str = b;
         },
-    };
+    }
 
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let [body_rx, body_tx] = Stream::<u8>::new();
@@ -357,7 +324,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode>
     // clients can see it without re-running. Only delivered to clients that
     // sent `TE: trailers` per RFC 7230 §4.3.
     let elapsed = MonotonicClock::now() - start_mark;
-    let elapsed_ms = (elapsed as f64) / 1_000_000.0;
+    let elapsed_ms = elapsed as f64 / 1_000_000.0;
     let trailers = Trailers::new() as Trailers;
     trailers.append(
         "server-timing",
@@ -373,6 +340,6 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode>
         path,
         user_agent,
         status,
-        duration_us: (elapsed as u64) / 1000,
+        duration_us: elapsed as u64 / 1000,
     }).unwrap());
 }

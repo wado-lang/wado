@@ -38,41 +38,32 @@ use super::common::{
 pub struct LiftContext<'a> {
     pub wasi_registry: &'a WasiRegistry,
     pub type_table: &'a RefCell<TypeTable>,
-    /// WASI package hint for scoped type resolution (e.g., "http").
-    /// When set, named types are first looked up within this package to avoid
-    /// name collisions (e.g., wasi:cli/ErrorCode vs wasi:http/ErrorCode).
-    pub wasi_package: Option<&'a str>,
+    /// WASI package owning the binding being synthesized (e.g., `"http"`).
+    /// Required: every WASI binding is emitted inside a known package, and
+    /// named-type lookups are always scoped by `(name, wasi_package)` to
+    /// prevent collisions such as `wasi:cli/ErrorCode` vs. `wasi:http/ErrorCode`.
+    pub wasi_package: &'a str,
 }
 
 /// Convert a WASI AST `Type` to a `TypeId` in the type table.
 ///
+/// Every WASI binding is emitted inside a known package (e.g. `"http"`), so
+/// both the registry and the owning package are required — there is no
+/// unscoped variant. Named types are resolved by `(name, wasi_package)`; if
+/// the primary scope misses we consult the registry for the canonical owner
+/// of the bare name (e.g. `ErrorCode` is declared in `filesystem/types.wado`
+/// but referenced from `http` bindings). Same-named types from distinct
+/// interfaces are always distinct `TypeId`s.
+///
 /// This is needed for synthesized binding code that calls generic methods
 /// (e.g., `Array::<String>::with_capacity()`). The monomorphizer requires
-/// concrete `TypeId`s in `MonomorphInfo::type_args` to instantiate generic methods.
-pub fn wasi_type_to_type_id(ty: &Type, type_table: &mut TypeTable) -> TypeId {
-    wasi_type_to_type_id_scoped(ty, type_table, None, None)
-}
-
-/// Convert a WASI AST `Type` to a `TypeId`, with optional registry access for struct resolution.
-pub fn wasi_type_to_type_id_with_registry(
+/// concrete `TypeId`s in `MonomorphInfo::type_args` to instantiate generic
+/// methods.
+pub fn wasi_type_to_type_id(
     ty: &Type,
     type_table: &mut TypeTable,
-    registry: Option<&WasiRegistry>,
-) -> TypeId {
-    wasi_type_to_type_id_scoped(ty, type_table, registry, None)
-}
-
-/// Convert a WASI AST `Type` to a `TypeId`, with optional WASI package scope.
-///
-/// When `wasi_package` is provided (e.g., `"http"`), named types are first
-/// looked up within that WASI package before falling back to the unscoped
-/// lookup.  This prevents name collisions such as `wasi:cli/ErrorCode` (enum)
-/// shadowing `wasi:http/ErrorCode` (variant).
-pub fn wasi_type_to_type_id_scoped(
-    ty: &Type,
-    type_table: &mut TypeTable,
-    registry: Option<&WasiRegistry>,
-    wasi_package: Option<&str>,
+    registry: &WasiRegistry,
+    wasi_package: &str,
 ) -> TypeId {
     match ty {
         Type::Named(named) => match named.name.as_str() {
@@ -91,78 +82,43 @@ pub fn wasi_type_to_type_id_scoped(
             // Unit type written as a named type "()"
             "()" => TypeTable::UNIT,
             "String" => type_table.make_struct("String".to_string(), ModuleSource::string()),
-            // Resource/enum/variant types - look up the already-resolved TypeId if available.
-            // When a WASI package hint is available, try scoped lookup first to avoid
-            // name collisions (e.g. wasi:cli/ErrorCode vs wasi:http/ErrorCode).
-            _ => wasi_package
-                .and_then(|pkg| {
-                    type_table.find_named_type_by_wasi_package(named.name.as_str(), pkg)
-                })
-                .or_else(|| type_table.find_resource_type_by_name(named.name.as_str()))
-                .or_else(|| type_table.find_variant_type_by_name(named.name.as_str()))
+            // Resource/enum/variant types - look up the already-resolved TypeId.
+            // Lookups are strictly scoped by `(name, wasi_package)`. If the
+            // primary scope misses, we consult the registry for the canonical
+            // owning package and retry — never a bare-name scan, which would
+            // conflate same-named types from distinct interfaces (e.g.
+            // `wasi:filesystem/ErrorCode` vs. `wasi:http/ErrorCode`).
+            _ => type_table
+                .find_named_type_by_wasi_package(named.name.as_str(), wasi_package)
                 .or_else(|| {
-                    // Create variant from WASI registry when it exists in a
-                    // different module but not yet in this type_table.
-                    // Checked BEFORE find_enum_type_by_name to prevent a
-                    // same-named enum (e.g. cli ErrorCode) from shadowing
-                    // a package-scoped variant (e.g. filesystem ErrorCode).
-                    if let Some(reg) = registry
-                        && let Some(pkg) = wasi_package
-                        && reg.is_variant(&named.name)
-                    {
-                        Some(type_table.make_variant(
-                            named.name.clone(),
-                            ModuleSource::Wasi {
-                                interface: format!("{pkg}/types.wado"),
-                            },
-                        ))
-                    } else {
-                        None
-                    }
-                })
-                .or_else(|| type_table.find_enum_type_by_name(named.name.as_str()))
-                .or_else(|| {
-                    // Check WASI struct registry
-                    if let Some(reg) = registry
-                        && reg.is_struct(&named.name)
-                    {
-                        let package = wasi_struct_package(reg, &named.name);
-                        Some(type_table.make_struct(
-                            named.name.clone(),
-                            ModuleSource::Wasi { interface: package },
-                        ))
-                    } else {
-                        None
-                    }
+                    canonical_wasi_package(registry, named.name.as_str()).and_then(|pkg| {
+                        type_table.find_named_type_by_wasi_package(named.name.as_str(), pkg)
+                    })
                 })
                 .unwrap_or(TypeTable::I32),
         },
         Type::Generic(g) => match g.name.as_str() {
             "Array" if g.args.len() == 1 => {
                 let elem_type =
-                    wasi_type_to_type_id_scoped(&g.args[0], type_table, registry, wasi_package);
+                    wasi_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
                 type_table.make_array(elem_type)
             }
             "Option" if g.args.len() == 1 => {
                 let inner_type =
-                    wasi_type_to_type_id_scoped(&g.args[0], type_table, registry, wasi_package);
+                    wasi_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
                 type_table.make_option(inner_type)
             }
             "Result" if g.args.len() == 2 => {
-                let ok_type =
-                    wasi_type_to_type_id_scoped(&g.args[0], type_table, registry, wasi_package);
-                let err_type =
-                    wasi_type_to_type_id_scoped(&g.args[1], type_table, registry, wasi_package);
+                let ok_type = wasi_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
+                let err_type = wasi_type_to_type_id(&g.args[1], type_table, registry, wasi_package);
                 type_table.make_result(ok_type, err_type)
             }
             "Stream" if g.args.len() == 1 => {
-                let inner =
-                    wasi_type_to_type_id_scoped(&g.args[0], type_table, registry, wasi_package);
+                let inner = wasi_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
                 type_table.make_stream(inner)
             }
             "Future" if g.args.len() == 1 => {
-                let inner =
-                    wasi_type_to_type_id_scoped(&g.args[0], type_table, registry, wasi_package);
+                let inner = wasi_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
                 type_table.make_future(inner)
             }
             "Subtask" if g.args.len() == 1 => {
@@ -178,7 +134,7 @@ pub fn wasi_type_to_type_id_scoped(
         Type::Tuple(types) => {
             let resolved: Vec<TypeId> = types
                 .iter()
-                .map(|t| wasi_type_to_type_id_scoped(t, type_table, registry, wasi_package))
+                .map(|t| wasi_type_to_type_id(t, type_table, registry, wasi_package))
                 .collect();
             type_table.make_tuple(resolved)
         }
@@ -186,15 +142,54 @@ pub fn wasi_type_to_type_id_scoped(
     }
 }
 
-/// Extract the WASI sub-module interface path for a struct from the registry.
-/// Returns e.g. "clocks/system-clock.wado" from "wasi:clocks/system-clock@0.3.0-rc-...".
-fn wasi_struct_package(registry: &WasiRegistry, name: &str) -> String {
-    if let Some(source) = registry.get_struct_source_interface(name) {
-        // Format: "wasi:clocks/system-clock@0.3.0-rc-..." -> "clocks/system-clock.wado"
-        if let Some(after_colon) = source.strip_prefix("wasi:") {
-            let without_version = after_colon.split('@').next().unwrap_or(after_colon);
-            return format!("{without_version}.wado");
+/// Extract the WASI package (e.g. `"filesystem"`) from a CM source string like
+/// `"wasi:filesystem/types@0.3.0-rc-2026-03-15"`. Returns `None` for
+/// non-`wasi:` sources or malformed strings.
+fn wasi_package_from_cm_source(source: &str) -> Option<&str> {
+    let after_colon = source.strip_prefix("wasi:")?;
+    let without_version = after_colon.split('@').next().unwrap_or(after_colon);
+    without_version.split('/').next()
+}
+
+/// Given a bare type name, ask the registry for its canonical owner and return
+/// the WASI package (e.g. `"filesystem"`). Used to disambiguate name lookups
+/// for types whose canonical owner differs from the currently-processed WASI
+/// package (e.g. `ErrorCode` is owned by `filesystem` but referenced from
+/// `http` bindings).
+fn canonical_wasi_package<'a>(registry: &'a WasiRegistry, name: &str) -> Option<&'a str> {
+    for kind in [
+        "variants",
+        "enums",
+        "resources",
+        "structs",
+        "flags",
+        "newtypes",
+    ] {
+        if let Some(source) = registry.bare_name_owner(kind, name)
+            && let Some(pkg) = wasi_package_from_cm_source(source)
+        {
+            return Some(pkg);
         }
+    }
+    None
+}
+
+/// Extract the WASI sub-module interface path for a struct from the registry.
+/// Returns e.g. "`clocks/system_clock.wado`" from "wasi:clocks/system-clock@0.3.0-rc-...".
+/// The WIT kebab-case interface name is converted to Wado's `snake_case`
+/// filename convention (matching `wado-from-idl`'s output).
+fn wasi_struct_package(registry: &WasiRegistry, name: &str) -> String {
+    if let Some(source) = registry.get_struct_source_interface(name)
+        && let Some(after_colon) = source.strip_prefix("wasi:")
+    {
+        let without_version = after_colon.split('@').next().unwrap_or(after_colon);
+        // Split "pkg/iface" into pkg and iface; convert only the iface part
+        // from kebab-case to snake_case. WIT interface identifiers are
+        // kebab-case only, so a plain `-` -> `_` substitution is sufficient.
+        if let Some((pkg, iface)) = without_version.split_once('/') {
+            return format!("{pkg}/{}.wado", iface.replace('-', "_"));
+        }
+        return format!("{without_version}.wado");
     }
     String::new()
 }
@@ -412,16 +407,19 @@ fn try_lift_wasi_variant_or_enum(
     let tt = ctx.type_table.borrow();
 
     // Check WASI variants (e.g., HeaderError with cases InvalidSyntax, Forbidden, Immutable)
-    // Use package-scoped lookup when available to avoid name collisions
+    // Use package-scoped lookup to avoid name collisions
     // (e.g., wasi:http/ErrorCode vs wasi:sockets/ErrorCode).
-    let cases_opt = if let Some(pkg) = ctx.wasi_package {
-        ctx.wasi_registry.get_variant_cases_by_package(pkg, name)
-    } else {
-        ctx.wasi_registry.get_variant_cases(name)
-    };
+    let cases_opt = ctx
+        .wasi_registry
+        .get_variant_cases_by_package(ctx.wasi_package, name);
     if let Some(cases) = cases_opt {
         let cases = cases.to_vec();
-        let variant_type = tt.find_variant_type_by_name(name)?;
+        let variant_type = tt
+            .find_named_type_by_wasi_package(name, ctx.wasi_package)
+            .or_else(|| {
+                canonical_wasi_package(ctx.wasi_registry, name)
+                    .and_then(|pkg| tt.find_named_type_by_wasi_package(name, pkg))
+            })?;
         drop(tt);
         return Some(synthesize_lift_wasi_variant(
             name,
@@ -438,7 +436,12 @@ fn try_lift_wasi_variant_or_enum(
     // Check WASI enums (e.g., ErrorCode)
     if let Some(case_names) = ctx.wasi_registry.get_enum_variants(name) {
         let case_names = case_names.to_vec();
-        let enum_type = tt.find_enum_type_by_name(name)?;
+        let enum_type = tt
+            .find_named_type_by_wasi_package(name, ctx.wasi_package)
+            .or_else(|| {
+                canonical_wasi_package(ctx.wasi_registry, name)
+                    .and_then(|pkg| tt.find_named_type_by_wasi_package(name, pkg))
+            })?;
         drop(tt);
         return Some(synthesize_lift_wasi_enum(
             name,
@@ -597,7 +600,7 @@ fn synthesize_lift_wasi_variant(
     ));
 
     // Compute max payload alignment for payload offset calculation
-    let wasi_package = ctx.and_then(|c| c.wasi_package);
+    let wasi_package = ctx.map(|c| c.wasi_package);
     let max_payload_align = cases
         .iter()
         .filter_map(|case| case.payload.as_ref())
@@ -795,7 +798,7 @@ fn synthesize_lift_list(
     // These are needed by the monomorphizer to instantiate Array::with_capacity and .push().
     let (elem_type_id, array_type_id) = if let Some(ctx) = ctx {
         let mut tt = ctx.type_table.borrow_mut();
-        let elem_tid = wasi_type_to_type_id(elem_ty, &mut tt);
+        let elem_tid = wasi_type_to_type_id(elem_ty, &mut tt, ctx.wasi_registry, ctx.wasi_package);
         let array_tid = tt.make_array(elem_tid);
         (elem_tid, array_tid)
     } else {
@@ -950,7 +953,7 @@ fn synthesize_lift_option_inner(
     ctx: Option<&LiftContext<'_>>,
 ) -> TirExpr {
     let layout = if let Some(c) = ctx {
-        cm_abi::layout_option_with_registry_scoped(inner_ty, c.wasi_registry, c.wasi_package)
+        cm_abi::layout_option_with_registry_scoped(inner_ty, c.wasi_registry, Some(c.wasi_package))
     } else {
         cm_abi::layout_option(inner_ty)
     };
@@ -961,7 +964,7 @@ fn synthesize_lift_option_inner(
     let option_type_id = if let Some(c) = ctx {
         let mut tt = c.type_table.borrow_mut();
         let inner_type_id =
-            wasi_type_to_type_id_scoped(inner_ty, &mut tt, Some(c.wasi_registry), c.wasi_package);
+            wasi_type_to_type_id(inner_ty, &mut tt, c.wasi_registry, c.wasi_package);
         tt.make_option(inner_type_id)
     } else {
         TypeTable::I32 // placeholder when no context
@@ -1027,7 +1030,12 @@ fn synthesize_lift_result_inner(
     ctx: Option<&LiftContext<'_>>,
 ) -> TirExpr {
     let layout = if let Some(c) = ctx {
-        cm_abi::layout_result_with_registry_scoped(ok_ty, err_ty, c.wasi_registry, c.wasi_package)
+        cm_abi::layout_result_with_registry_scoped(
+            ok_ty,
+            err_ty,
+            c.wasi_registry,
+            Some(c.wasi_package),
+        )
     } else {
         cm_abi::layout_result(ok_ty, err_ty)
     };
@@ -1048,10 +1056,19 @@ fn synthesize_lift_result_inner(
     // i32 but initialized with `ref.null none` (a reference type).
     let result_type_id = if let Some(ctx) = ctx {
         let mut tt = ctx.type_table.borrow_mut();
+<<<<<<< HEAD
         let ok_type_id =
             wasi_type_to_type_id_scoped(ok_ty, &mut tt, Some(ctx.wasi_registry), ctx.wasi_package);
         let err_type_id =
             wasi_type_to_type_id_scoped(err_ty, &mut tt, Some(ctx.wasi_registry), ctx.wasi_package);
+||||||| 30ae983
+        let ok_type_id = wasi_type_to_type_id_scoped(ok_ty, &mut tt, None, ctx.wasi_package);
+        let err_type_id = wasi_type_to_type_id_scoped(err_ty, &mut tt, None, ctx.wasi_package);
+=======
+        let ok_type_id = wasi_type_to_type_id(ok_ty, &mut tt, ctx.wasi_registry, ctx.wasi_package);
+        let err_type_id =
+            wasi_type_to_type_id(err_ty, &mut tt, ctx.wasi_registry, ctx.wasi_package);
+>>>>>>> origin/main
         tt.make_result(ok_type_id, err_type_id)
     } else {
         TypeTable::I32 // placeholder when no context
@@ -1165,9 +1182,7 @@ fn synthesize_lift_tuple(
         let mut tt = ctx.type_table.borrow_mut();
         let elem_type_ids: Vec<TypeId> = elems
             .iter()
-            .map(|t| {
-                wasi_type_to_type_id_scoped(t, &mut tt, Some(ctx.wasi_registry), ctx.wasi_package)
-            })
+            .map(|t| wasi_type_to_type_id(t, &mut tt, ctx.wasi_registry, ctx.wasi_package))
             .collect();
         tt.make_tuple(elem_type_ids)
     } else {
@@ -1419,6 +1434,8 @@ fn synthesize_lower_tuple(
     addr: TirExpr,
     next_local: &mut u32,
     local_types: &mut Vec<TypeId>,
+    wasi_registry: &WasiRegistry,
+    wasi_package: &str,
     type_table: &RefCell<TypeTable>,
 ) -> Vec<TirStmt> {
     let layout = cm_abi::layout_tuple(elems);
@@ -1441,7 +1458,7 @@ fn synthesize_lower_tuple(
         // Determine the type_id for this field
         let field_type_id = {
             let mut tt = type_table.borrow_mut();
-            wasi_type_to_type_id(elem_ty, &mut tt)
+            wasi_type_to_type_id(elem_ty, &mut tt, wasi_registry, wasi_package)
         };
 
         // Extract the i-th field from the tuple using FieldAccess
@@ -1467,6 +1484,8 @@ fn synthesize_lower_tuple(
                 field_addr,
                 next_local,
                 local_types,
+                wasi_registry,
+                wasi_package,
                 type_table,
             )
         } else {
@@ -1632,6 +1651,7 @@ fn synthesize_lower_wasi_variant_to_memory(
     stmts: &mut Vec<TirStmt>,
     local_types: &mut Vec<TypeId>,
     wasi_registry: &crate::component_model::WasiRegistry,
+    wasi_package: &str,
     type_table: &RefCell<TypeTable>,
 ) {
     let cases = if let Some(c) = wasi_registry.get_variant_cases(name) {
@@ -1684,7 +1704,7 @@ fn synthesize_lower_wasi_variant_to_memory(
         if let Some(payload_ty) = &case.payload {
             let payload_type_id = {
                 let mut tt = type_table.borrow_mut();
-                wasi_type_to_type_id_with_registry(payload_ty, &mut tt, Some(wasi_registry))
+                wasi_type_to_type_id(payload_ty, &mut tt, wasi_registry, wasi_package)
             };
 
             let payload_expr = variant_payload(
@@ -1701,6 +1721,7 @@ fn synthesize_lower_wasi_variant_to_memory(
                 next_local,
                 local_types,
                 wasi_registry,
+                wasi_package,
                 type_table,
             );
 
@@ -1730,6 +1751,7 @@ fn synthesize_lower_option_to_memory(
     stmts: &mut Vec<TirStmt>,
     local_types: &mut Vec<TypeId>,
     wasi_registry: &crate::component_model::WasiRegistry,
+    wasi_package: &str,
     type_table: &RefCell<TypeTable>,
 ) {
     let value_type_id = value.type_id;
@@ -1767,7 +1789,7 @@ fn synthesize_lower_option_to_memory(
     // If Some: lower payload to memory
     let inner_type_id = {
         let mut tt = type_table.borrow_mut();
-        wasi_type_to_type_id_with_registry(inner_type, &mut tt, Some(wasi_registry))
+        wasi_type_to_type_id(inner_type, &mut tt, wasi_registry, wasi_package)
     };
     let payload_expr = variant_payload(
         local_ref(value_local, "__opt_val", value_type_id),
@@ -1782,6 +1804,7 @@ fn synthesize_lower_option_to_memory(
         next_local,
         local_types,
         wasi_registry,
+        wasi_package,
         type_table,
     );
 
@@ -1810,6 +1833,7 @@ fn synthesize_flatten_value_to_flat_args(
     local_types: &mut Vec<TypeId>,
     flat_args: &mut Vec<TirExpr>,
     wasi_registry: &crate::component_model::WasiRegistry,
+    wasi_package: &str,
     type_table: &RefCell<TypeTable>,
 ) {
     let resolved = wasi_registry.resolve_type(ty);
@@ -1888,11 +1912,7 @@ fn synthesize_flatten_value_to_flat_args(
                     if let Some(payload_ty) = &case.payload {
                         let payload_type_id = {
                             let mut tt = type_table.borrow_mut();
-                            wasi_type_to_type_id_with_registry(
-                                payload_ty,
-                                &mut tt,
-                                Some(wasi_registry),
-                            )
+                            wasi_type_to_type_id(payload_ty, &mut tt, wasi_registry, wasi_package)
                         };
                         let payload_expr = variant_payload(
                             local_ref(val_local, &format!("{prefix}_val"), vt),
@@ -1911,6 +1931,7 @@ fn synthesize_flatten_value_to_flat_args(
                             local_types,
                             &mut case_flat,
                             wasi_registry,
+                            wasi_package,
                             type_table,
                         );
                         // Assign case flat values to shared payload locals
@@ -1962,6 +1983,7 @@ fn synthesize_flatten_option_to_flat_args(
     local_types: &mut Vec<TypeId>,
     flat_args: &mut Vec<TirExpr>,
     wasi_registry: &crate::component_model::WasiRegistry,
+    wasi_package: &str,
     type_table: &RefCell<TypeTable>,
 ) {
     let vt = value.type_id;
@@ -2009,7 +2031,7 @@ fn synthesize_flatten_option_to_flat_args(
     // If Some: extract payload and flatten it
     let inner_type_id = {
         let mut tt = type_table.borrow_mut();
-        wasi_type_to_type_id_with_registry(inner_type, &mut tt, Some(wasi_registry))
+        wasi_type_to_type_id(inner_type, &mut tt, wasi_registry, wasi_package)
     };
     let payload_expr = variant_payload(
         local_ref(val_local, &format!("{prefix}_optval"), vt),
@@ -2028,6 +2050,7 @@ fn synthesize_flatten_option_to_flat_args(
         local_types,
         &mut some_flat,
         wasi_registry,
+        wasi_package,
         type_table,
     );
     // Assign flattened values to the mutable locals
@@ -2064,6 +2087,7 @@ fn synthesize_lower_wasi_type_to_memory(
     next_local: &mut u32,
     local_types: &mut Vec<TypeId>,
     wasi_registry: &crate::component_model::WasiRegistry,
+    wasi_package: &str,
     type_table: &RefCell<TypeTable>,
 ) -> Vec<TirStmt> {
     let resolved = wasi_registry.resolve_type(ty);
@@ -2089,7 +2113,7 @@ fn synthesize_lower_wasi_type_to_memory(
                     offset = crate::cm_abi::align_to(offset, fa);
                     let field_type_id = {
                         let mut tt = type_table.borrow_mut();
-                        wasi_type_to_type_id(field_ty, &mut tt)
+                        wasi_type_to_type_id(field_ty, &mut tt, wasi_registry, wasi_package)
                     };
                     let field_expr = TirExpr {
                         kind: crate::tir::TirExprKind::FieldAccess {
@@ -2112,6 +2136,7 @@ fn synthesize_lower_wasi_type_to_memory(
                         next_local,
                         local_types,
                         wasi_registry,
+                        wasi_package,
                         type_table,
                     ));
                     offset += fs;
@@ -2546,7 +2571,7 @@ fn synthesize_adapter(
             Type::Named(n) if wasi_registry.is_struct(&n.name) => {
                 let struct_type_id = {
                     let mut tt = type_table.borrow_mut();
-                    wasi_type_to_type_id_with_registry(param_type, &mut tt, Some(wasi_registry))
+                    wasi_type_to_type_id(param_type, &mut tt, wasi_registry, &func_info.package)
                 };
                 params.push(TirParam {
                     name: param_name.clone(),
@@ -2564,7 +2589,7 @@ fn synthesize_adapter(
             Type::Named(n) if wasi_registry.is_variant(&n.name) => {
                 let variant_type_id = {
                     let mut tt = type_table.borrow_mut();
-                    wasi_type_to_type_id_with_registry(param_type, &mut tt, Some(wasi_registry))
+                    wasi_type_to_type_id(param_type, &mut tt, wasi_registry, &func_info.package)
                 };
                 params.push(TirParam {
                     name: param_name.clone(),
@@ -2582,7 +2607,7 @@ fn synthesize_adapter(
             Type::Generic(g) if g.name == "Option" && g.args.len() == 1 => {
                 let option_type_id = {
                     let mut tt = type_table.borrow_mut();
-                    wasi_type_to_type_id_with_registry(param_type, &mut tt, Some(wasi_registry))
+                    wasi_type_to_type_id(param_type, &mut tt, wasi_registry, &func_info.package)
                 };
                 params.push(TirParam {
                     name: param_name.clone(),
@@ -2731,7 +2756,8 @@ fn synthesize_adapter(
                 // Resolve proper TypeIds for the element and array types
                 let (elem_type_id, array_type_id) = {
                     let mut tt = type_table.borrow_mut();
-                    let elem_tid = wasi_type_to_type_id(elem_type, &mut tt);
+                    let elem_tid =
+                        wasi_type_to_type_id(elem_type, &mut tt, wasi_registry, &func_info.package);
                     let array_tid = tt.make_array(elem_tid);
                     (elem_tid, array_tid)
                 };
@@ -2860,6 +2886,8 @@ fn synthesize_adapter(
                         addr_ref,
                         &mut next_local,
                         &mut local_types,
+                        wasi_registry,
+                        &func_info.package,
                         type_table,
                     )
                 } else {
@@ -2906,7 +2934,7 @@ fn synthesize_adapter(
                 for (field_idx, (wado_name, _, field_ty)) in wado_fields.iter().enumerate() {
                     let field_type_id = {
                         let mut tt = type_table.borrow_mut();
-                        wasi_type_to_type_id(field_ty, &mut tt)
+                        wasi_type_to_type_id(field_ty, &mut tt, wasi_registry, &func_info.package)
                     };
                     flat_args.push(TirExpr {
                         kind: crate::tir::TirExprKind::FieldAccess {
@@ -2935,6 +2963,7 @@ fn synthesize_adapter(
                         &mut local_types,
                         &mut flat_args,
                         wasi_registry,
+                        &func_info.package,
                         type_table,
                     );
                 }
@@ -2955,6 +2984,7 @@ fn synthesize_adapter(
                         &mut local_types,
                         &mut flat_args,
                         wasi_registry,
+                        &func_info.package,
                         type_table,
                     );
                 }
@@ -3115,6 +3145,7 @@ fn synthesize_adapter(
                         &mut body_stmts,
                         &mut local_types,
                         wasi_registry,
+                        &func_info.package,
                         type_table,
                     );
                     continue;
@@ -3142,6 +3173,7 @@ fn synthesize_adapter(
                         &mut body_stmts,
                         &mut local_types,
                         wasi_registry,
+                        &func_info.package,
                         type_table,
                     );
                     continue;
@@ -3242,10 +3274,36 @@ fn synthesize_adapter(
             raw_call_expr,
         ));
 
+<<<<<<< HEAD
         // Assemble the Subtask<T> struct fields.
         let (outptr_expr, size_expr, align_expr) =
             if let Some((outptr_local, outptr_size, outptr_align)) = async_outptr_info {
                 (
+||||||| 30ae983
+        if let Some((outptr_local, outptr_size, outptr_align)) = async_outptr_info {
+            if let Some(return_type) = &func_info.return_type {
+                // Async with result: lift from the dynamically allocated results buffer.
+                let resolved = wasi_registry.resolve_type(return_type);
+                let lift_ctx = LiftContext {
+                    wasi_registry,
+                    type_table,
+                    wasi_package: Some(&func_info.package),
+                };
+                let lifted = synthesize_lift_with_context(
+                    &resolved,
+=======
+        if let Some((outptr_local, outptr_size, outptr_align)) = async_outptr_info {
+            if let Some(return_type) = &func_info.return_type {
+                // Async with result: lift from the dynamically allocated results buffer.
+                let resolved = wasi_registry.resolve_type(return_type);
+                let lift_ctx = LiftContext {
+                    wasi_registry,
+                    type_table,
+                    wasi_package: &func_info.package,
+                };
+                let lifted = synthesize_lift_with_context(
+                    &resolved,
+>>>>>>> origin/main
                     local_ref(outptr_local, "__async_outptr", TypeTable::I32),
                     i32_const(outptr_size as i32),
                     i32_const(outptr_align as i32),
@@ -3315,7 +3373,7 @@ fn synthesize_adapter(
         let lift_ctx = LiftContext {
             wasi_registry,
             type_table,
-            wasi_package: Some(&func_info.package),
+            wasi_package: &func_info.package,
         };
         let lifted = synthesize_lift_with_context(
             &resolved,
@@ -3372,7 +3430,7 @@ fn synthesize_adapter(
             let lift_ctx = LiftContext {
                 wasi_registry,
                 type_table,
-                wasi_package: Some(&func_info.package),
+                wasi_package: &func_info.package,
             };
             let lifted = synthesize_lift_flat_result(
                 &resolved,
@@ -3424,25 +3482,56 @@ fn synthesize_adapter(
     binding
 }
 
-/// Build a name → module source map for every effect/resource declared in the
-/// loaded TIR modules. The CM binding synthesizer uses this to attach the
+/// Build a `(module_source, name)` set for every effect/resource declared in
+/// the loaded TIR modules. The CM binding synthesizer uses this to attach the
 /// owning effect to each generated binding using the same `module_source` the
 /// resolver assigns to user-written `with E` clauses.
+///
+/// Keying by `(module_source, name)` (rather than name alone) prevents
+/// collisions when two modules declare an effect or resource with the same
+/// name — `lookup_effect_owner` selects the canonical WASI module.
 fn effect_owner_module_sources(
     modules: &IndexMap<ModuleSource, crate::tir::TirModule>,
-) -> IndexMap<String, ModuleSource> {
-    let mut out: IndexMap<String, ModuleSource> = IndexMap::default();
+) -> IndexMap<(ModuleSource, String), ()> {
+    let mut out: IndexMap<(ModuleSource, String), ()> = IndexMap::default();
     for (module_source, module) in modules {
         for effect in &module.effects {
-            out.entry(effect.name.clone())
-                .or_insert_with(|| module_source.clone());
+            out.insert((module_source.clone(), effect.name.clone()), ());
         }
         for resource in &module.resources {
-            out.entry(resource.name.clone())
-                .or_insert_with(|| module_source.clone());
+            out.insert((module_source.clone(), resource.name.clone()), ());
         }
     }
     out
+}
+
+/// Look up the canonical owning module for an effect/resource named `name`
+/// whose binding targets WASI `package` (e.g. `"cli"`).
+///
+/// Preferred match: a `ModuleSource::Wasi { interface }` whose interface starts
+/// with `"{package}/"` (e.g. `wasi:cli/stdio.wado` for package `"cli"`).
+/// Falls back to any other owner with the same name if no WASI match exists.
+fn lookup_effect_owner(
+    owners: &IndexMap<(ModuleSource, String), ()>,
+    name: &str,
+    package: &str,
+) -> Option<ModuleSource> {
+    let wasi_prefix = format!("{package}/");
+    let mut fallback: Option<ModuleSource> = None;
+    for ((ms, n), ()) in owners {
+        if n != name {
+            continue;
+        }
+        if let ModuleSource::Wasi { interface } = ms
+            && interface.starts_with(&wasi_prefix)
+        {
+            return Some(ms.clone());
+        }
+        if fallback.is_none() {
+            fallback = Some(ms.clone());
+        }
+    }
+    fallback
 }
 
 /// Compute flat CM ABI types for an export return type, resolving variant and
@@ -5707,10 +5796,9 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                 let func_info = func_info.clone();
                 let binding_name =
                     binding_func_name(&func_info.effect_name, &func_info.method_name);
-                let owner_module = owner_sources
-                    .get(&func_info.effect_name)
-                    .cloned()
-                    .unwrap_or_else(|| ModuleSource::wasi(&func_info.package));
+                let owner_module =
+                    lookup_effect_owner(&owner_sources, &func_info.effect_name, &func_info.package)
+                        .unwrap_or_else(|| ModuleSource::wasi(&func_info.package));
                 let adapter = synthesize_adapter(
                     &func_info,
                     project.wasi_registry,
@@ -6415,7 +6503,7 @@ fn synthesize_stream_read_func(
     let lift_ctx = LiftContext {
         wasi_registry,
         type_table,
-        wasi_package: Some("filesystem"),
+        wasi_package: "filesystem",
     };
     let ast_type = crate::ast::Type::Named(crate::ast::NamedType {
         id: crate::ast::AstId::fresh(),
@@ -6928,11 +7016,13 @@ fn replace_wasi_derived_type_recursive(
     adapter: &mut TirFunction,
     wasi_type: &Type,
     user_type: TypeId,
+    wasi_registry: &WasiRegistry,
+    wasi_package: &str,
     type_table: &RefCell<TypeTable>,
 ) {
     let old_type = {
         let mut tt = type_table.borrow_mut();
-        wasi_type_to_type_id(wasi_type, &mut tt)
+        wasi_type_to_type_id(wasi_type, &mut tt, wasi_registry, wasi_package)
     };
     if old_type != user_type && old_type != TypeTable::I32 && old_type != TypeTable::UNIT {
         // Skip replacement if the user type resolves to the same base type
@@ -6965,14 +7055,28 @@ fn replace_wasi_derived_type_recursive(
             {
                 let new_elem = new_elem_args[0];
                 drop(tt);
-                replace_wasi_derived_type_recursive(adapter, &g.args[0], new_elem, type_table);
+                replace_wasi_derived_type_recursive(
+                    adapter,
+                    &g.args[0],
+                    new_elem,
+                    wasi_registry,
+                    wasi_package,
+                    type_table,
+                );
             }
         }
         Type::Tuple(elems) => {
             // Get the user's tuple field types
             if let Some(user_elems) = type_table.borrow().as_tuple(user_type) {
                 for (wasi_elem, &user_elem) in elems.iter().zip(user_elems.iter()) {
-                    replace_wasi_derived_type_recursive(adapter, wasi_elem, user_elem, type_table);
+                    replace_wasi_derived_type_recursive(
+                        adapter,
+                        wasi_elem,
+                        user_elem,
+                        wasi_registry,
+                        wasi_package,
+                        type_table,
+                    );
                 }
             }
         }
@@ -6983,7 +7087,14 @@ fn replace_wasi_derived_type_recursive(
             {
                 let new_inner = new_args[0];
                 drop(tt);
-                replace_wasi_derived_type_recursive(adapter, &g.args[0], new_inner, type_table);
+                replace_wasi_derived_type_recursive(
+                    adapter,
+                    &g.args[0],
+                    new_inner,
+                    wasi_registry,
+                    wasi_package,
+                    type_table,
+                );
             }
         }
         Type::Generic(g) if g.name == "Result" && g.args.len() == 2 => {
@@ -6994,8 +7105,22 @@ fn replace_wasi_derived_type_recursive(
                 let new_ok = new_args[0];
                 let new_err = new_args[1];
                 drop(tt);
-                replace_wasi_derived_type_recursive(adapter, &g.args[0], new_ok, type_table);
-                replace_wasi_derived_type_recursive(adapter, &g.args[1], new_err, type_table);
+                replace_wasi_derived_type_recursive(
+                    adapter,
+                    &g.args[0],
+                    new_ok,
+                    wasi_registry,
+                    wasi_package,
+                    type_table,
+                );
+                replace_wasi_derived_type_recursive(
+                    adapter,
+                    &g.args[1],
+                    new_err,
+                    wasi_registry,
+                    wasi_package,
+                    type_table,
+                );
             }
         }
         _ => {}
@@ -7016,6 +7141,7 @@ fn fixup_wasi_derived_types_in_adapter(
     wasi_registry: &crate::component_model::WasiRegistry,
     skip_self: bool,
 ) {
+    let wasi_package = func_info.package.as_str();
     let params_iter: Box<dyn Iterator<Item = &(String, String, Type)>> = if skip_self {
         Box::new(func_info.params.iter().skip(1))
     } else {
@@ -7028,7 +7154,14 @@ fn fixup_wasi_derived_types_in_adapter(
         let new_type = call_args[i].type_id;
         // Resolve newtypes (e.g., FieldName → String) before computing WASI-derived TypeId
         let resolved = wasi_registry.resolve_type(param_type);
-        replace_wasi_derived_type_recursive(adapter, &resolved, new_type, type_table);
+        replace_wasi_derived_type_recursive(
+            adapter,
+            &resolved,
+            new_type,
+            wasi_registry,
+            wasi_package,
+            type_table,
+        );
     }
     // Also fix up return type's WASI-derived sub-types — but skip for CM bindings
     // that return non-flat types (tuples, variants). Their return TypeId was set
@@ -7039,7 +7172,14 @@ fn fixup_wasi_derived_types_in_adapter(
         && let Some(return_type) = &func_info.return_type
     {
         let resolved = wasi_registry.resolve_type(return_type);
-        replace_wasi_derived_type_recursive(adapter, &resolved, user_return_type, type_table);
+        replace_wasi_derived_type_recursive(
+            adapter,
+            &resolved,
+            user_return_type,
+            wasi_registry,
+            wasi_package,
+            type_table,
+        );
     }
 }
 
@@ -7982,10 +8122,11 @@ fn rewrite_calls_in_expr(
                         if matches!(arg.expr.kind, TirExprKind::Null) {
                             let option_type_id = {
                                 let mut tt = type_table.borrow_mut();
-                                wasi_type_to_type_id_with_registry(
+                                wasi_type_to_type_id(
                                     param_type,
                                     &mut tt,
-                                    Some(wasi_registry),
+                                    wasi_registry,
+                                    &func_info.package,
                                 )
                             };
                             flat.push(option_none(option_type_id));
@@ -8129,10 +8270,11 @@ fn rewrite_calls_in_expr(
                         if matches!(arg.kind, TirExprKind::Null) {
                             let option_type_id = {
                                 let mut tt = type_table.borrow_mut();
-                                wasi_type_to_type_id_with_registry(
+                                wasi_type_to_type_id(
                                     param_type,
                                     &mut tt,
-                                    Some(wasi_registry),
+                                    wasi_registry,
+                                    &func_info.package,
                                 )
                             };
                             flat.push(option_none(option_type_id));

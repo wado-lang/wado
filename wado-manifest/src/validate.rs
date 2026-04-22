@@ -30,13 +30,6 @@ fn validate_package(pkg: &crate::manifest::Package) -> Result<(), ManifestError>
         version: pkg.version.clone(),
         reason: e.to_string(),
     })?;
-    if let Some(world) = &pkg.build_world
-        && world != "wado:kiln/generator"
-    {
-        return Err(ManifestError::InvalidBuildWorld {
-            value: world.clone(),
-        });
-    }
     Ok(())
 }
 

@@ -387,6 +387,20 @@ cargo run -p wado-from-idl -- \
     --output-dir wado-compiler/lib/wasi
 """
 
+[tasks.update-stdlib-kiln]
+description = "Regenerate core:kiln stdlib submodules from WIT file (facade is hand-written)"
+run = """
+#!/usr/bin/env bash
+set -xe -o pipefail
+# Clean the auto-generated submodules; the facade `lib/core/kiln.wado`
+# is hand-written and must be preserved.
+rm -f wado-compiler/lib/core/kiln/*.wado
+cargo run -p wado-from-idl -- \
+    --wit-dir wado-compiler/lib/core/kiln \
+    --output-dir wado-compiler/lib/core \
+    --skip-flat-reexport
+"""
+
 [tasks.update-bundled]
 description = "Rebuild bundled libm Wasm module"
 run = """

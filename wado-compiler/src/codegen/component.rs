@@ -2024,10 +2024,18 @@ fn import_http_types_for_service(
             ComponentExportKind::Type,
         );
     }
+    // `ErrorCode` is defined in multiple wasi interfaces (filesystem, http,
+    // sockets, sockets/ip-name-lookup) — bare-name lookup would shadow.
+    // The HTTP error type is unambiguous: pin it to wasi:http/types via the
+    // source-disambiguated lookup.
     let http_error_code_cm = project
         .wasi_registry
-        .get_variant_cm_name("ErrorCode")
-        .or_else(|| project.wasi_registry.get_enum_cm_name("ErrorCode"))
+        .get_variant_cm_name_by_interface(&http_types_import_path, "ErrorCode")
+        .or_else(|| {
+            project
+                .wasi_registry
+                .get_enum_cm_name_by_interface(&http_types_import_path, "ErrorCode")
+        })
         .expect("ErrorCode CM name not found for HTTP");
     ctx.register_type("http-error-code");
     builder.alias_export(
@@ -2778,10 +2786,21 @@ fn append_http_handler_export(
         .wasi_registry
         .get_resource_cm_name("Response")
         .unwrap();
+    // Pin `ErrorCode` to wasi:http/types — same disambiguation as the
+    // import side a few hundred lines up.
+    let http_version_for_error = project
+        .wasi_registry
+        .get_package_version("http")
+        .expect("WASI HTTP version not found in registry");
+    let http_types_iface = format!("wasi:http/types@{http_version_for_error}");
     let error_code_cm = project
         .wasi_registry
-        .get_variant_cm_name("ErrorCode")
-        .or_else(|| project.wasi_registry.get_enum_cm_name("ErrorCode"))
+        .get_variant_cm_name_by_interface(&http_types_iface, "ErrorCode")
+        .or_else(|| {
+            project
+                .wasi_registry
+                .get_enum_cm_name_by_interface(&http_types_iface, "ErrorCode")
+        })
         .unwrap();
 
     let request_type_idx = ctx.type_idx(&format!("http-{request_cm}-resource"));

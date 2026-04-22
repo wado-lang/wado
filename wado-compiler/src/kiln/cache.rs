@@ -42,11 +42,11 @@ fn hex(bytes: &[u8; 32]) -> String {
 /// that must invalidate every existing lockfile entry.
 const MAGIC: &[u8] = b"kiln-cache-key-v1\0";
 
-/// The wado:kiln world version the generator was built against. Part of the
+/// The core:kiln world version the generator was built against. Part of the
 /// cache key so a future world-version bump invalidates every cached entry.
-/// Kept in sync with `wado-compiler/lib/wado/kiln/generator.wit`'s
-/// `package wado:kiln@...;` declaration.
-const WORLD_VERSION: &[u8] = b"wado:kiln@0.1.0\0";
+/// Kept in sync with `wado-compiler/lib/core/kiln/generator.wit`'s
+/// `package core:kiln@...;` declaration.
+const WORLD_VERSION: &[u8] = b"core:kiln@0.1.0\0";
 
 /// Ingredients for [`compose_cache_key`].
 ///

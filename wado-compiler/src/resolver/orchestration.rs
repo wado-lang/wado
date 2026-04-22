@@ -181,6 +181,10 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             type_table.borrow_mut().range_inclusive_module_source =
                                 Some(module_source.clone());
                         }
+                        if comp_features & crate::wir::COMP_FEATURE_KILN_REQUEST != 0 {
+                            type_table.borrow_mut().kiln_request_module_source =
+                                Some(module_source.clone());
+                        }
                     }
                     Item::Variant(variant_decl) => {
                         // Insert with empty cases first - will be populated in second sub-pass

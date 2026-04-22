@@ -608,7 +608,7 @@ enum InflateMode {
 }
 
 // Permutation of code lengths for dynamic blocks
-global INFLATE_ORDER: Array<i32> =  [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
+global INFLATE_ORDER: Array<i32> = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
 
 struct InflateState {
     mode: InflateMode,
@@ -2362,16 +2362,36 @@ struct DeflateConfig {
 
 fn get_deflate_config(level: i32) -> DeflateConfig {
     match level {
-        0 => return DeflateConfig { good_length: 0, max_lazy: 0, nice_length: 0, max_chain: 0, use_lazy: false },
-        1 => return DeflateConfig { good_length: 4, max_lazy: 4, nice_length: 8, max_chain: 4, use_lazy: false },
-        2 => return DeflateConfig { good_length: 4, max_lazy: 5, nice_length: 16, max_chain: 8, use_lazy: false },
-        3 => return DeflateConfig { good_length: 4, max_lazy: 6, nice_length: 32, max_chain: 32, use_lazy: false },
-        4 => return DeflateConfig { good_length: 4, max_lazy: 4, nice_length: 16, max_chain: 16, use_lazy: true },
-        5 => return DeflateConfig { good_length: 8, max_lazy: 16, nice_length: 32, max_chain: 32, use_lazy: true },
-        6 => return DeflateConfig { good_length: 8, max_lazy: 16, nice_length: 128, max_chain: 128, use_lazy: true },
-        7 => return DeflateConfig { good_length: 8, max_lazy: 32, nice_length: 128, max_chain: 256, use_lazy: true },
-        8 => return DeflateConfig { good_length: 32, max_lazy: 128, nice_length: 258, max_chain: 1024, use_lazy: true },
-        _ => return DeflateConfig { good_length: 32, max_lazy: 258, nice_length: 258, max_chain: 4096, use_lazy: true }, // level 9
+        0 => {
+            return DeflateConfig { good_length: 0, max_lazy: 0, nice_length: 0, max_chain: 0, use_lazy: false };
+        },
+        1 => {
+            return DeflateConfig { good_length: 4, max_lazy: 4, nice_length: 8, max_chain: 4, use_lazy: false };
+        },
+        2 => {
+            return DeflateConfig { good_length: 4, max_lazy: 5, nice_length: 16, max_chain: 8, use_lazy: false };
+        },
+        3 => {
+            return DeflateConfig { good_length: 4, max_lazy: 6, nice_length: 32, max_chain: 32, use_lazy: false };
+        },
+        4 => {
+            return DeflateConfig { good_length: 4, max_lazy: 4, nice_length: 16, max_chain: 16, use_lazy: true };
+        },
+        5 => {
+            return DeflateConfig { good_length: 8, max_lazy: 16, nice_length: 32, max_chain: 32, use_lazy: true };
+        },
+        6 => {
+            return DeflateConfig { good_length: 8, max_lazy: 16, nice_length: 128, max_chain: 128, use_lazy: true };
+        },
+        7 => {
+            return DeflateConfig { good_length: 8, max_lazy: 32, nice_length: 128, max_chain: 256, use_lazy: true };
+        },
+        8 => {
+            return DeflateConfig { good_length: 32, max_lazy: 128, nice_length: 258, max_chain: 1024, use_lazy: true };
+        },
+        _ => {
+            return DeflateConfig { good_length: 32, max_lazy: 258, nice_length: 258, max_chain: 4096, use_lazy: true };  // level 9
+        },
     }
 }
 
@@ -2476,7 +2496,11 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
                 let mut best_dist = 0;
 
                 if pos + 2 < input_len {
-                    let h = hash3(builtin::i32_load8_u(scratch + pos), builtin::i32_load8_u(scratch + pos + 1), builtin::i32_load8_u(scratch + pos + 2));
+                    let h = hash3(
+                        builtin::i32_load8_u(scratch + pos),
+                        builtin::i32_load8_u(scratch + pos + 1),
+                        builtin::i32_load8_u(scratch + pos + 2),
+                    );
                     let mut chain = head[h];
                     let mut chain_count = 0;
                     let max_chain = if match_available && prev_match_len >= config.good_length {
@@ -2493,7 +2517,11 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
                         }
 
                         // Early termination: skip if can't beat current best
-                        if best_len >= 3 && best_len < max_len && builtin::i32_load8_u(scratch + chain + best_len) != builtin::i32_load8_u(scratch + pos + best_len) {
+                        if best_len >= 3
+                            && best_len < max_len
+                            && builtin::i32_load8_u(scratch + chain + best_len) != builtin::i32_load8_u(
+                            scratch + pos + best_len,
+                        ) {
                             chain = prev[chain & 32767];
                             chain_count += 1;
                             continue;
@@ -2505,7 +2533,9 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
                         let mut match_len = 0;
                         let word_limit = max_len - 7;
                         while match_len < word_limit {
-                            let diff: i64 = builtin::i64_load(scratch + chain + match_len) ^ builtin::i64_load(scratch + pos + match_len);
+                            let diff: i64 = builtin::i64_load(scratch + chain + match_len) ^ builtin::i64_load(
+                                scratch + pos + match_len,
+                            );
                             if diff == 0 {
                                 match_len += 8;
                             } else {
@@ -2514,7 +2544,10 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
                             }
                         }
                         if match_len >= word_limit {
-                            while match_len < max_len && builtin::i32_load8_u(scratch + chain + match_len) == builtin::i32_load8_u(scratch + pos + match_len) {
+                            while match_len < max_len
+                                && builtin::i32_load8_u(scratch + chain + match_len) == builtin::i32_load8_u(
+                                scratch + pos + match_len,
+                            ) {
                                 match_len += 1;
                             }
                         }
@@ -2554,7 +2587,9 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
                         let skip = prev_match_len - 1;
                         for let mut i = 0; i < skip - 1; i += 1 {
                             if pos + i + 2 < input_len {
-                                let mh = hash3(builtin::i32_load8_u(scratch + pos + i), builtin::i32_load8_u(scratch + pos + i + 1), builtin::i32_load8_u(scratch + pos + i + 2));
+                                let mh = hash3(builtin::i32_load8_u(scratch + pos + i), builtin::i32_load8_u(
+                                    scratch + pos + i + 1,
+                                ), builtin::i32_load8_u(scratch + pos + i + 2));
                                 prev[pos + i & 32767] = head[mh];
                                 head[mh] = pos + i;
                             }
@@ -2577,7 +2612,9 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
                         distances.push(best_dist);
                         for let mut i = 1; i < best_len; i += 1 {
                             if pos + i + 2 < input_len {
-                                let mh = hash3(builtin::i32_load8_u(scratch + pos + i), builtin::i32_load8_u(scratch + pos + i + 1), builtin::i32_load8_u(scratch + pos + i + 2));
+                                let mh = hash3(builtin::i32_load8_u(scratch + pos + i), builtin::i32_load8_u(
+                                    scratch + pos + i + 1,
+                                ), builtin::i32_load8_u(scratch + pos + i + 2));
                                 prev[pos + i & 32767] = head[mh];
                                 head[mh] = pos + i;
                             }
@@ -2606,7 +2643,11 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
                 let mut best_dist = 0;
 
                 if pos + 2 < input_len {
-                    let h = hash3(builtin::i32_load8_u(scratch + pos), builtin::i32_load8_u(scratch + pos + 1), builtin::i32_load8_u(scratch + pos + 2));
+                    let h = hash3(
+                        builtin::i32_load8_u(scratch + pos),
+                        builtin::i32_load8_u(scratch + pos + 1),
+                        builtin::i32_load8_u(scratch + pos + 2),
+                    );
                     let mut chain = head[h];
                     let mut chain_count = 0;
 
@@ -2618,7 +2659,11 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
                         }
 
                         // Early termination: skip if can't beat current best
-                        if best_len >= 3 && best_len < max_len && builtin::i32_load8_u(scratch + chain + best_len) != builtin::i32_load8_u(scratch + pos + best_len) {
+                        if best_len >= 3
+                            && best_len < max_len
+                            && builtin::i32_load8_u(scratch + chain + best_len) != builtin::i32_load8_u(
+                            scratch + pos + best_len,
+                        ) {
                             chain = prev[chain & 32767];
                             chain_count += 1;
                             continue;
@@ -2627,7 +2672,9 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
                         let mut match_len = 0;
                         let word_limit = max_len - 7;
                         while match_len < word_limit {
-                            let diff: i64 = builtin::i64_load(scratch + chain + match_len) ^ builtin::i64_load(scratch + pos + match_len);
+                            let diff: i64 = builtin::i64_load(scratch + chain + match_len) ^ builtin::i64_load(
+                                scratch + pos + match_len,
+                            );
                             if diff == 0 {
                                 match_len += 8;
                             } else {
@@ -2636,7 +2683,10 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
                             }
                         }
                         if match_len >= word_limit {
-                            while match_len < max_len && builtin::i32_load8_u(scratch + chain + match_len) == builtin::i32_load8_u(scratch + pos + match_len) {
+                            while match_len < max_len
+                                && builtin::i32_load8_u(scratch + chain + match_len) == builtin::i32_load8_u(
+                                scratch + pos + match_len,
+                            ) {
                                 match_len += 1;
                             }
                         }
@@ -2665,7 +2715,9 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
                     distances.push(best_dist);
                     for let mut i = 1; i < best_len; i += 1 {
                         if pos + i + 2 < input_len {
-                            let mh = hash3(builtin::i32_load8_u(scratch + pos + i), builtin::i32_load8_u(scratch + pos + i + 1), builtin::i32_load8_u(scratch + pos + i + 2));
+                            let mh = hash3(builtin::i32_load8_u(scratch + pos + i), builtin::i32_load8_u(
+                                scratch + pos + i + 1,
+                            ), builtin::i32_load8_u(scratch + pos + i + 2));
                             prev[pos + i & 32767] = head[mh];
                             head[mh] = pos + i;
                         }
@@ -3127,7 +3179,7 @@ pub fn uncompress(input: &Array<u8>, max_output: i32 = i32::MAX) -> Result<Array
     if input[0] == GZIP_MAGIC1 && input[1] == GZIP_MAGIC2 {
         let result = inflate_gzip(input)?;
         if result.len() > max_output {
-        return Result::Err(ZlibError::OutputExceedsMax);
+            return Result::Err(ZlibError::OutputExceedsMax);
         }
         return Result::Ok(result);
     }

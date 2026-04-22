@@ -179,28 +179,26 @@ pub fn parse_i64_radix(s: String, radix: u32, max: i64, min_abs: u64) -> Result<
     assert_radix(radix);
     let [is_negative, start] = match parse_signed_prefix(s) {
         Ok(p) => p,
-        Err(k) => return Result::Err(ParseIntError::new(k)),
+        Err(k) => {
+            return Result::Err(ParseIntError::new(k));
+        },
     };
     return match parse_u64_digits(s, start, s.len(), radix) {
         Ok(v) => if is_negative {
             if v > min_abs {
-                Result::Err(ParseIntError::new(IntErrorKind::NegOverflow))
+                Result::Err(ParseIntError::new(IntErrorKind::NegOverflow));
             } else {
                 // (0 - v) as i64 wraps correctly, including at i64::MIN.
-                Result::Ok((0 - v) as i64)
+                Result::Ok((0 - v) as i64);
             }
         } else if v > max as u64 {
-            Result::Err(ParseIntError::new(IntErrorKind::PosOverflow))
+            Result::Err(ParseIntError::new(IntErrorKind::PosOverflow));
         } else {
-            Result::Ok(v as i64)
+            Result::Ok(v as i64);
         },
         Err(k) => {
-            let kind = if is_negative && k == IntErrorKind::PosOverflow {
-                IntErrorKind::NegOverflow
-            } else {
-                k
-            };
-            Result::Err(ParseIntError::new(kind))
+            let kind = if is_negative && k == IntErrorKind::PosOverflow { IntErrorKind::NegOverflow } else { k };
+            Result::Err(ParseIntError::new(kind));
         },
     };
 }
@@ -210,14 +208,12 @@ pub fn parse_u64_radix(s: String, radix: u32, max: u64) -> Result<u64, ParseIntE
     assert_radix(radix);
     let start = match parse_unsigned_prefix(s) {
         Ok(i) => i,
-        Err(k) => return Result::Err(ParseIntError::new(k)),
+        Err(k) => {
+            return Result::Err(ParseIntError::new(k));
+        },
     };
     return match parse_u64_digits(s, start, s.len(), radix) {
-        Ok(v) => if v > max {
-            Result::Err(ParseIntError::new(IntErrorKind::PosOverflow))
-        } else {
-            Result::Ok(v)
-        },
+        Ok(v) => if v > max { Result::Err(ParseIntError::new(IntErrorKind::PosOverflow)) } else { Result::Ok(v) },
         Err(k) => Result::Err(ParseIntError::new(k)),
     };
 }
