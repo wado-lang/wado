@@ -715,9 +715,9 @@ fn validate_rel_output_path(p: &str) -> Result<PathBuf, ExecuteError> {
 /// The runner is deliberately decoupled from how a given module becomes a
 /// component `.wasm`. Two concrete providers land in later commits:
 ///
-/// - A production `TargetDirProvider` that compiles and caches generator
-///   components under `target/kiln/generators/…` (ships with the M3d /
-///   M6 fixtures, when there is a real generator to compile).
+/// - A production `CliGeneratorProvider` that compiles and caches generator
+///   components under `build/kiln/generators/…` (ships with M6.6,
+///   when there is a real generator to compile).
 /// - A test provider that returns pre-built bytes.
 pub trait GeneratorProvider {
     /// Resolve `module` to component bytes. Called at most once per unique
