@@ -21,6 +21,10 @@ pub use {
 /// wire-form `raw-request` (with `options` as a canonical JSON string)
 /// into `Request<Options>` with a typed `options` field. Generator
 /// authors never touch the JSON.
+///
+/// `#[comp_feature("kiln_request")]` marks this as the canonical wrapper
+/// so the adapter can construct instances via the comp-feature lookup.
+#[comp_feature("kiln_request")]
 pub struct Request<T> {
     pub primary: InputFile,
     pub inputs: Array<InputFile>,

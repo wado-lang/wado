@@ -13,6 +13,7 @@
 pub mod cm_binding;
 pub mod common;
 pub mod from_synth;
+pub mod kiln_synth;
 pub mod serde_synth;
 pub mod template;
 pub mod traits;
@@ -34,6 +35,12 @@ pub fn synthesize(project: Package) -> Result<Package, String> {
     for module in project.tir_modules.values_mut() {
         from_synth::synthesize_from(module);
     }
+
+    // Kiln generators need `Options::deserialize` to decode the canonical
+    // JSON wire form, but the author does not write
+    // `impl Deserialize for Options;` explicitly. Inject the synthesis
+    // request here so the following `serde_synth` pass picks it up.
+    kiln_synth::prepare_kiln(&mut project);
 
     // Generate Serialize/Deserialize impls from `impl Trait for Type;` requests.
     serde_synth::synthesize_serde(&mut project);

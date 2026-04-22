@@ -338,6 +338,19 @@ impl WasiRegistry {
             registry.register_module(&module, &mut world_registry);
         }
 
+        // Register the `core:kiln/generator` world. Only the world is
+        // registered — not the types (WasiRegistry's struct map is keyed
+        // by bare name and would shadow `wasi:http/types::Response` with
+        // `core:kiln::Response`). Kiln types participate as regular Wado
+        // imports via `use { ... } from "core:kiln"` and don't need the
+        // WasiRegistry bookkeeping.
+        let kiln_worlds_module = parse_module(stdlib::CORE_KILN_WORLDS);
+        for item in &kiln_worlds_module.items {
+            if let crate::ast::Item::World(world) = item {
+                world_registry.register(world);
+            }
+        }
+
         (registry, world_registry)
     }
 

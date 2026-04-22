@@ -470,12 +470,24 @@ pub struct TypeTable {
     default_trait_module_source: Option<ModuleSource>,
     /// Module source of the canonical `From<T>` trait, set via `#[comp_feature("from")]`.
     from_trait_module_source: Option<ModuleSource>,
+    /// Module source of the canonical `core:serde::Serialize` trait, set
+    /// via `#[comp_feature("serialize")]`.
+    pub serialize_trait_module_source: Option<ModuleSource>,
+    /// Module source of the canonical `core:serde::Deserialize` trait, set
+    /// via `#[comp_feature("deserialize")]`. The Kiln CM adapter uses this
+    /// to request `Deserialize` synthesis for the generator's `Options`
+    /// struct.
+    pub deserialize_trait_module_source: Option<ModuleSource>,
     /// Module source of the canonical `Box<T>` struct, set via `#[comp_feature("box")]`.
     pub box_module_source: Option<ModuleSource>,
     /// Module source of `RangeExclusive<T>`, set via `#[comp_feature("range_exclusive")]`.
     pub range_exclusive_module_source: Option<ModuleSource>,
     /// Module source of `RangeInclusive<T>`, set via `#[comp_feature("range_inclusive")]`.
     pub range_inclusive_module_source: Option<ModuleSource>,
+    /// Module source of the Kiln `Request<T>` wrapper, set via
+    /// `#[comp_feature("kiln_request")]`. Used by the CM adapter that
+    /// materializes `Request<Options>` from WIT `raw-request`.
+    pub kiln_request_module_source: Option<ModuleSource>,
     /// Module source that owns the tuple type family, set via `#[comp_feature("tuple")]`.
     tuple_module_source: Option<ModuleSource>,
     /// Associated type resolutions: `(concrete_type_id, assoc_name)` → `resolved_type_id`.
@@ -563,9 +575,12 @@ impl TypeTable {
             result_module_source: None,
             default_trait_module_source: None,
             from_trait_module_source: None,
+            serialize_trait_module_source: None,
+            deserialize_trait_module_source: None,
             box_module_source: None,
             range_exclusive_module_source: None,
             range_inclusive_module_source: None,
+            kiln_request_module_source: None,
             tuple_module_source: None,
             assoc_type_resolutions: IndexMap::default(),
             generic_assoc_type_defs: IndexMap::default(),
@@ -855,7 +870,13 @@ impl TypeTable {
             self.default_trait_module_source = Some(module_source.clone());
         }
         if comp_features & crate::wir::COMP_FEATURE_FROM != 0 {
-            self.from_trait_module_source = Some(module_source);
+            self.from_trait_module_source = Some(module_source.clone());
+        }
+        if comp_features & crate::wir::COMP_FEATURE_SERIALIZE != 0 {
+            self.serialize_trait_module_source = Some(module_source.clone());
+        }
+        if comp_features & crate::wir::COMP_FEATURE_DESERIALIZE != 0 {
+            self.deserialize_trait_module_source = Some(module_source);
         }
     }
 

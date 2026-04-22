@@ -36,6 +36,9 @@ pub(super) fn extract_comp_features(attrs: &[crate::ast::Attribute]) -> u32 {
                     "range_inclusive" => {
                         features |= crate::wir::COMP_FEATURE_RANGE_INCLUSIVE;
                     }
+                    "kiln_request" => features |= crate::wir::COMP_FEATURE_KILN_REQUEST,
+                    "serialize" => features |= crate::wir::COMP_FEATURE_SERIALIZE,
+                    "deserialize" => features |= crate::wir::COMP_FEATURE_DESERIALIZE,
                     _ => {}
                 }
             }
