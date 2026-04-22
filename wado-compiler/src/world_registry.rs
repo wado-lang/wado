@@ -134,8 +134,23 @@ impl WorldRegistry {
     ///
     /// The world is keyed by its fully-qualified name from the `#[cm("...")]` attribute.
     /// If no attribute is present, the `PascalCase` name is used as fallback.
+    ///
+    /// If another world is already registered under the same `fq_name`, the
+    /// first registrant is kept and this registration is skipped (with a
+    /// warning logged to stderr). Two distinct worlds sharing a fully-qualified
+    /// name is a bug in the stdlib or user input — silently overwriting would
+    /// make the earlier world invisible to the code generator.
     pub fn register(&mut self, world: &WorldDecl) {
         let fq_name = fq_name_from_attrs(&world.attrs).unwrap_or_else(|| world.name.clone());
+
+        if self.worlds.contains_key(&fq_name) {
+            eprintln!(
+                "WorldRegistry: duplicate world `{fq_name}` (also declared as `{}`). \
+                 Keeping the first registrant.",
+                world.name,
+            );
+            return;
+        }
 
         let exports = world
             .exports

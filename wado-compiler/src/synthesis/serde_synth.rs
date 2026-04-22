@@ -500,7 +500,7 @@ fn generate_struct_serialize(
     let ref_string_type = tt.make_ref(string_type);
     let ser_error_type = tt.make_struct("SerializeError".to_string(), serde_module.clone());
     let ser_error_kind_type = tt
-        .find_enum_type_by_name("SerializeErrorKind")
+        .find_enum_type("SerializeErrorKind", &serde_module)
         .unwrap_or(TypeTable::I32);
     let result_unit_err = tt.make_result(TypeTable::UNIT, ser_error_type);
     let struct_ser_type = tt.make_assoc_type_projection(
@@ -718,7 +718,7 @@ fn generate_struct_deserialize(
     let option_i32 = tt.make_option(TypeTable::I32);
     let deser_error_type = tt.make_struct("DeserializeError".to_string(), serde_module.clone());
     let deser_error_kind_type = tt
-        .find_enum_type_by_name("DeserializeErrorKind")
+        .find_enum_type("DeserializeErrorKind", &serde_module)
         .unwrap_or(TypeTable::I32);
     let result_struct_err = tt.make_result(struct_type, deser_error_type);
     let lookup_fn_type = tt.make_function(
@@ -1594,7 +1594,7 @@ fn generate_enum_deserialize(
     let ref_string_type = tt.make_ref(string_type);
     let deser_error_type = tt.make_struct("DeserializeError".to_string(), serde_module.clone());
     let deser_error_kind_type = tt
-        .find_enum_type_by_name("DeserializeErrorKind")
+        .find_enum_type("DeserializeErrorKind", &serde_module)
         .unwrap_or(TypeTable::I32);
     let result_enum_err = tt.make_result(enum_type, deser_error_type);
     let d_type_param = tt.make_type_param("D".to_string(), 0);
@@ -1971,7 +1971,7 @@ fn generate_variant_serialize(
     let ref_string_type = tt.make_ref(string_type);
     let ser_error_type = tt.make_struct("SerializeError".to_string(), serde_module.clone());
     let ser_error_kind_type = tt
-        .find_enum_type_by_name("SerializeErrorKind")
+        .find_enum_type("SerializeErrorKind", &serde_module)
         .unwrap_or(TypeTable::I32);
     let result_unit_err = tt.make_result(TypeTable::UNIT, ser_error_type);
     let variant_ser_type = tt.make_assoc_type_projection(
@@ -2248,7 +2248,7 @@ fn generate_variant_deserialize(
     let ref_string_type = tt.make_ref(string_type);
     let deser_error_type = tt.make_struct("DeserializeError".to_string(), serde_module.clone());
     let deser_error_kind_type = tt
-        .find_enum_type_by_name("DeserializeErrorKind")
+        .find_enum_type("DeserializeErrorKind", &serde_module)
         .unwrap_or(TypeTable::I32);
     let result_variant_err = tt.make_result(variant_type, deser_error_type);
     let d_type_param = tt.make_type_param("D".to_string(), 0);
@@ -2828,7 +2828,7 @@ fn generate_flags_serialize(
     let ref_string_type = tt.make_ref(string_type);
     let ser_error_type = tt.make_struct("SerializeError".to_string(), serde_module.clone());
     let ser_error_kind_type = tt
-        .find_enum_type_by_name("SerializeErrorKind")
+        .find_enum_type("SerializeErrorKind", &serde_module)
         .unwrap_or(TypeTable::I32);
     let result_unit_err = tt.make_result(TypeTable::UNIT, ser_error_type);
     let seq_ser_type = tt.make_assoc_type_projection(
@@ -3055,7 +3055,7 @@ fn generate_flags_deserialize(
     let ref_string_type = tt.make_ref(string_type);
     let deser_error_type = tt.make_struct("DeserializeError".to_string(), serde_module.clone());
     let deser_error_kind_type = tt
-        .find_enum_type_by_name("DeserializeErrorKind")
+        .find_enum_type("DeserializeErrorKind", &serde_module)
         .unwrap_or(TypeTable::I32);
     let result_flags_err = tt.make_result(flags_type, deser_error_type);
     let result_unit_err = tt.make_result(TypeTable::UNIT, deser_error_type);

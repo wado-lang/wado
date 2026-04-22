@@ -1078,51 +1078,54 @@ impl TypeTable {
         self.intern_map.get(&key).copied()
     }
 
-    /// Find a variant type by name (scanning all types).
-    /// Returns the first matching `ResolvedType::Variant` with the given name.
-    pub fn find_variant_type_by_name(&self, name: &str) -> Option<TypeId> {
-        for (&type_id, resolved) in &self.types {
-            if let ResolvedType::Variant { name: vname, .. } = resolved
-                && vname == name
-            {
-                return Some(type_id);
-            }
-        }
-        None
+    /// Find a variant type by (name, `module_source`) pair via `intern_map` (O(1)).
+    /// Collision-safe across modules when two variant types share a name.
+    pub fn find_variant_type(&self, name: &str, module_source: &ModuleSource) -> Option<TypeId> {
+        let key = ResolvedType::Variant {
+            name: name.to_string(),
+            module_source: module_source.clone(),
+        };
+        self.intern_map.get(&key).copied()
     }
 
-    /// Find a resource type by name (scanning all types).
-    /// Returns the first matching `ResolvedType::Resource` with the given name.
-    pub fn find_resource_type_by_name(&self, name: &str) -> Option<TypeId> {
-        for (&type_id, resolved) in &self.types {
-            if let ResolvedType::Resource { name: rname, .. } = resolved
-                && rname == name
-            {
-                return Some(type_id);
-            }
-        }
-        None
+    /// Find a resource type by (name, `module_source`) pair via `intern_map` (O(1)).
+    /// Collision-safe across modules when two resource types share a name.
+    pub fn find_resource_type(&self, name: &str, module_source: &ModuleSource) -> Option<TypeId> {
+        let key = ResolvedType::Resource {
+            name: name.to_string(),
+            module_source: module_source.clone(),
+        };
+        self.intern_map.get(&key).copied()
     }
 
-    /// Find an enum type by name (scanning all types).
-    /// Returns the first matching `ResolvedType::Enum` with the given name.
-    pub fn find_enum_type_by_name(&self, name: &str) -> Option<TypeId> {
-        for (&type_id, resolved) in &self.types {
-            if let ResolvedType::Enum { name: ename, .. } = resolved
-                && ename == name
-            {
-                return Some(type_id);
-            }
-        }
-        None
+    /// Find an enum type by (name, `module_source`) pair via `intern_map` (O(1)).
+    /// Collision-safe across modules when two enum types share a name.
+    pub fn find_enum_type(&self, name: &str, module_source: &ModuleSource) -> Option<TypeId> {
+        let key = ResolvedType::Enum {
+            name: name.to_string(),
+            module_source: module_source.clone(),
+        };
+        self.intern_map.get(&key).copied()
     }
 
-    /// Find a named type (resource, enum, or variant) scoped to a WASI package.
+    /// Find a flags type by (name, `module_source`) pair via `intern_map` (O(1)).
+    /// Collision-safe across modules when two flags types share a name.
+    pub fn find_flags_type(&self, name: &str, module_source: &ModuleSource) -> Option<TypeId> {
+        let key = ResolvedType::Flags {
+            name: name.to_string(),
+            module_source: module_source.clone(),
+        };
+        self.intern_map.get(&key).copied()
+    }
+
+    /// Find any decl-backed named type (resource, enum, variant, struct,
+    /// flags, or newtype) scoped to a WASI package.
     ///
-    /// Tries resource → enum → variant in order, restricting matches to types
-    /// whose `module_source` is `Wasi { interface }` where `interface` starts
-    /// with `{wasi_package}/`.  Falls back to the unscoped lookup when no
-    /// scoped match is found.
+    /// Matches types whose `module_source` is `Wasi { interface }` where
+    /// `interface` starts with `{wasi_package}/`. The key invariant: two WIT
+    /// interfaces in distinct packages that happen to share a type name
+    /// (e.g. `wasi:cli/ErrorCode` vs `wasi:http/ErrorCode`) resolve to
+    /// distinct `TypeId`s because `module_source` is part of the intern key.
     pub fn find_named_type_by_wasi_package(
         &self,
         name: &str,
@@ -1130,22 +1133,42 @@ impl TypeTable {
     ) -> Option<TypeId> {
         let prefix = format!("{wasi_package}/");
         for (&type_id, resolved) in &self.types {
-            let matches = match resolved {
+            let (n, ms) = match resolved {
                 ResolvedType::Resource {
                     name: n,
-                    module_source: ModuleSource::Wasi { interface },
-                } => n == name && interface.starts_with(&prefix),
-                ResolvedType::Enum {
+                    module_source,
+                }
+                | ResolvedType::Enum {
                     name: n,
-                    module_source: ModuleSource::Wasi { interface },
-                } => n == name && interface.starts_with(&prefix),
-                ResolvedType::Variant {
+                    module_source,
+                }
+                | ResolvedType::Variant {
                     name: n,
-                    module_source: ModuleSource::Wasi { interface },
-                } => n == name && interface.starts_with(&prefix),
-                _ => false,
+                    module_source,
+                }
+                | ResolvedType::Struct {
+                    name: n,
+                    module_source,
+                    is_monomorphized: false,
+                    ..
+                }
+                | ResolvedType::Flags {
+                    name: n,
+                    module_source,
+                }
+                | ResolvedType::Newtype {
+                    name: n,
+                    module_source,
+                    ..
+                } => (n, module_source),
+                _ => continue,
             };
-            if matches {
+            if n != name {
+                continue;
+            }
+            if let ModuleSource::Wasi { interface } = ms
+                && interface.starts_with(&prefix)
+            {
                 return Some(type_id);
             }
         }
