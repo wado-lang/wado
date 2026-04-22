@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776859318456,
+  "lastUpdate": 1776888330607,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -15413,6 +15413,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/f544fc2eb59bdea9b7f68711aa83d14ac8a7abe9"
         },
         "date": 1776859318260,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8982,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18988,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 635264,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4845e753bde385f388be5d6fc66dc2812197182b",
+          "message": "Merge pull request #902 from wado-lang/claude/fix-module-naming-conflicts-b4PVG\n\nfix(compiler): key WASI type lookups by (source_interface, name) to eliminate bare-name collisions",
+          "timestamp": "2026-04-23T05:01:04+09:00",
+          "tree_id": "2c3e2f47d3a8a7ac93a074cc6554ec0360425b1b",
+          "url": "https://github.com/wado-lang/wado/commit/4845e753bde385f388be5d6fc66dc2812197182b"
+        },
+        "date": 1776888330355,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
