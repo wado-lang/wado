@@ -395,7 +395,7 @@ pub resource Descriptor {
     /// This is similar to `posix_fadvise` in POSIX.
     #[cm("wasi:filesystem/types@0.3.0-rc-2026-03-15#[method]descriptor.advise")]
     #[cm_params("self", "offset", "length", "advice")]
-    async fn advise(self: &Descriptor, offset: Filesize, length: Filesize, advice: Advice) -> Result<(), ErrorCode>;
+    async fn advise(self: &Descriptor, offset: Filesize, length: Filesize, advice: Advice) -> Subtask<Result<(), ErrorCode>>;
     /// Synchronize the data of a file to disk.
     /// 
     /// This function succeeds with no effect if the file descriptor is not
@@ -404,7 +404,7 @@ pub resource Descriptor {
     /// Note: This is similar to `fdatasync` in POSIX.
     #[cm("wasi:filesystem/types@0.3.0-rc-2026-03-15#[method]descriptor.sync-data")]
     #[cm_params("self")]
-    async fn sync_data(self: &Descriptor) -> Result<(), ErrorCode>;
+    async fn sync_data(self: &Descriptor) -> Subtask<Result<(), ErrorCode>>;
     /// Get flags associated with a descriptor.
     /// 
     /// Note: This returns similar flags to `fcntl(fd, F_GETFL)` in POSIX.
@@ -413,7 +413,7 @@ pub resource Descriptor {
     /// from `fdstat_get` in earlier versions of WASI.
     #[cm("wasi:filesystem/types@0.3.0-rc-2026-03-15#[method]descriptor.get-flags")]
     #[cm_params("self")]
-    async fn get_flags(self: &Descriptor) -> Result<DescriptorFlags, ErrorCode>;
+    async fn get_flags(self: &Descriptor) -> Subtask<Result<DescriptorFlags, ErrorCode>>;
     /// Get the dynamic type of a descriptor.
     /// 
     /// Note: This returns the same value as the `type` field of the `fd-stat`
@@ -426,14 +426,14 @@ pub resource Descriptor {
     /// from `fdstat_get` in earlier versions of WASI.
     #[cm("wasi:filesystem/types@0.3.0-rc-2026-03-15#[method]descriptor.get-type")]
     #[cm_params("self")]
-    async fn get_type(self: &Descriptor) -> Result<DescriptorType, ErrorCode>;
+    async fn get_type(self: &Descriptor) -> Subtask<Result<DescriptorType, ErrorCode>>;
     /// Adjust the size of an open file. If this increases the file's size, the
     /// extra bytes are filled with zeros.
     /// 
     /// Note: This was called `fd_filestat_set_size` in earlier versions of WASI.
     #[cm("wasi:filesystem/types@0.3.0-rc-2026-03-15#[method]descriptor.set-size")]
     #[cm_params("self", "size")]
-    async fn set_size(self: &Descriptor, size: Filesize) -> Result<(), ErrorCode>;
+    async fn set_size(self: &Descriptor, size: Filesize) -> Subtask<Result<(), ErrorCode>>;
     /// Adjust the timestamps of an open file or directory.
     /// 
     /// Note: This is similar to `futimens` in POSIX.
@@ -441,7 +441,7 @@ pub resource Descriptor {
     /// Note: This was called `fd_filestat_set_times` in earlier versions of WASI.
     #[cm("wasi:filesystem/types@0.3.0-rc-2026-03-15#[method]descriptor.set-times")]
     #[cm_params("self", "data-access-timestamp", "data-modification-timestamp")]
-    async fn set_times(self: &Descriptor, data_access_timestamp: NewTimestamp, data_modification_timestamp: NewTimestamp) -> Result<(), ErrorCode>;
+    async fn set_times(self: &Descriptor, data_access_timestamp: NewTimestamp, data_modification_timestamp: NewTimestamp) -> Subtask<Result<(), ErrorCode>>;
     /// Read directory entries from a directory.
     /// 
     /// On filesystems where directories contain entries referring to themselves
@@ -465,13 +465,13 @@ pub resource Descriptor {
     /// Note: This is similar to `fsync` in POSIX.
     #[cm("wasi:filesystem/types@0.3.0-rc-2026-03-15#[method]descriptor.sync")]
     #[cm_params("self")]
-    async fn sync(self: &Descriptor) -> Result<(), ErrorCode>;
+    async fn sync(self: &Descriptor) -> Subtask<Result<(), ErrorCode>>;
     /// Create a directory.
     /// 
     /// Note: This is similar to `mkdirat` in POSIX.
     #[cm("wasi:filesystem/types@0.3.0-rc-2026-03-15#[method]descriptor.create-directory-at")]
     #[cm_params("self", "path")]
-    async fn create_directory_at(self: &Descriptor, path: String) -> Result<(), ErrorCode>;
+    async fn create_directory_at(self: &Descriptor, path: String) -> Subtask<Result<(), ErrorCode>>;
     /// Return the attributes of an open file or directory.
     /// 
     /// Note: This is similar to `fstat` in POSIX, except that it does not return
@@ -483,7 +483,7 @@ pub resource Descriptor {
     /// Note: This was called `fd_filestat_get` in earlier versions of WASI.
     #[cm("wasi:filesystem/types@0.3.0-rc-2026-03-15#[method]descriptor.stat")]
     #[cm_params("self")]
-    async fn stat(self: &Descriptor) -> Result<DescriptorStat, ErrorCode>;
+    async fn stat(self: &Descriptor) -> Subtask<Result<DescriptorStat, ErrorCode>>;
     /// Return the attributes of a file or directory.
     /// 
     /// Note: This is similar to `fstatat` in POSIX, except that it does not
@@ -493,7 +493,7 @@ pub resource Descriptor {
     /// Note: This was called `path_filestat_get` in earlier versions of WASI.
     #[cm("wasi:filesystem/types@0.3.0-rc-2026-03-15#[method]descriptor.stat-at")]
     #[cm_params("self", "path-flags", "path")]
-    async fn stat_at(self: &Descriptor, path_flags: PathFlags, path: String) -> Result<DescriptorStat, ErrorCode>;
+    async fn stat_at(self: &Descriptor, path_flags: PathFlags, path: String) -> Subtask<Result<DescriptorStat, ErrorCode>>;
     /// Adjust the timestamps of a file or directory.
     /// 
     /// Note: This is similar to `utimensat` in POSIX.
@@ -502,7 +502,7 @@ pub resource Descriptor {
     /// WASI.
     #[cm("wasi:filesystem/types@0.3.0-rc-2026-03-15#[method]descriptor.set-times-at")]
     #[cm_params("self", "path-flags", "path", "data-access-timestamp", "data-modification-timestamp")]
-    async fn set_times_at(self: &Descriptor, path_flags: PathFlags, path: String, data_access_timestamp: NewTimestamp, data_modification_timestamp: NewTimestamp) -> Result<(), ErrorCode>;
+    async fn set_times_at(self: &Descriptor, path_flags: PathFlags, path: String, data_access_timestamp: NewTimestamp, data_modification_timestamp: NewTimestamp) -> Subtask<Result<(), ErrorCode>>;
     /// Create a hard link.
     /// 
     /// Fails with `error-code::no-entry` if the old path does not exist,
@@ -512,7 +512,7 @@ pub resource Descriptor {
     /// Note: This is similar to `linkat` in POSIX.
     #[cm("wasi:filesystem/types@0.3.0-rc-2026-03-15#[method]descriptor.link-at")]
     #[cm_params("self", "old-path-flags", "old-path", "new-descriptor", "new-path")]
-    async fn link_at(self: &Descriptor, old_path_flags: PathFlags, old_path: String, new_descriptor: &Descriptor, new_path: String) -> Result<(), ErrorCode>;
+    async fn link_at(self: &Descriptor, old_path_flags: PathFlags, old_path: String, new_descriptor: &Descriptor, new_path: String) -> Subtask<Result<(), ErrorCode>>;
     /// Open a file or directory.
     /// 
     /// If `flags` contains `descriptor-flags::mutate-directory`, and the base
@@ -527,7 +527,7 @@ pub resource Descriptor {
     /// Note: This is similar to `openat` in POSIX.
     #[cm("wasi:filesystem/types@0.3.0-rc-2026-03-15#[method]descriptor.open-at")]
     #[cm_params("self", "path-flags", "path", "open-flags", "flags")]
-    async fn open_at(self: &Descriptor, path_flags: PathFlags, path: String, open_flags: OpenFlags, flags: DescriptorFlags) -> Result<Descriptor, ErrorCode>;
+    async fn open_at(self: &Descriptor, path_flags: PathFlags, path: String, open_flags: OpenFlags, flags: DescriptorFlags) -> Subtask<Result<Descriptor, ErrorCode>>;
     /// Read the contents of a symbolic link.
     /// 
     /// If the contents contain an absolute or rooted path in the underlying
@@ -536,7 +536,7 @@ pub resource Descriptor {
     /// Note: This is similar to `readlinkat` in POSIX.
     #[cm("wasi:filesystem/types@0.3.0-rc-2026-03-15#[method]descriptor.readlink-at")]
     #[cm_params("self", "path")]
-    async fn readlink_at(self: &Descriptor, path: String) -> Result<String, ErrorCode>;
+    async fn readlink_at(self: &Descriptor, path: String) -> Subtask<Result<String, ErrorCode>>;
     /// Remove a directory.
     /// 
     /// Return `error-code::not-empty` if the directory is not empty.
@@ -544,13 +544,13 @@ pub resource Descriptor {
     /// Note: This is similar to `unlinkat(fd, path, AT_REMOVEDIR)` in POSIX.
     #[cm("wasi:filesystem/types@0.3.0-rc-2026-03-15#[method]descriptor.remove-directory-at")]
     #[cm_params("self", "path")]
-    async fn remove_directory_at(self: &Descriptor, path: String) -> Result<(), ErrorCode>;
+    async fn remove_directory_at(self: &Descriptor, path: String) -> Subtask<Result<(), ErrorCode>>;
     /// Rename a filesystem object.
     /// 
     /// Note: This is similar to `renameat` in POSIX.
     #[cm("wasi:filesystem/types@0.3.0-rc-2026-03-15#[method]descriptor.rename-at")]
     #[cm_params("self", "old-path", "new-descriptor", "new-path")]
-    async fn rename_at(self: &Descriptor, old_path: String, new_descriptor: &Descriptor, new_path: String) -> Result<(), ErrorCode>;
+    async fn rename_at(self: &Descriptor, old_path: String, new_descriptor: &Descriptor, new_path: String) -> Subtask<Result<(), ErrorCode>>;
     /// Create a symbolic link (also known as a "symlink").
     /// 
     /// If `old-path` starts with `/`, the function fails with
@@ -559,7 +559,7 @@ pub resource Descriptor {
     /// Note: This is similar to `symlinkat` in POSIX.
     #[cm("wasi:filesystem/types@0.3.0-rc-2026-03-15#[method]descriptor.symlink-at")]
     #[cm_params("self", "old-path", "new-path")]
-    async fn symlink_at(self: &Descriptor, old_path: String, new_path: String) -> Result<(), ErrorCode>;
+    async fn symlink_at(self: &Descriptor, old_path: String, new_path: String) -> Subtask<Result<(), ErrorCode>>;
     /// Unlink a filesystem object that is not a directory.
     /// 
     /// This is similar to `unlinkat(fd, path, 0)` in POSIX.
@@ -571,7 +571,7 @@ pub resource Descriptor {
     /// POSIX-specified `error-code::not-permitted`.
     #[cm("wasi:filesystem/types@0.3.0-rc-2026-03-15#[method]descriptor.unlink-file-at")]
     #[cm_params("self", "path")]
-    async fn unlink_file_at(self: &Descriptor, path: String) -> Result<(), ErrorCode>;
+    async fn unlink_file_at(self: &Descriptor, path: String) -> Subtask<Result<(), ErrorCode>>;
     /// Test whether two descriptors refer to the same filesystem object.
     /// 
     /// In POSIX, this corresponds to testing whether the two descriptors have the
@@ -580,7 +580,7 @@ pub resource Descriptor {
     /// may be used instead.
     #[cm("wasi:filesystem/types@0.3.0-rc-2026-03-15#[method]descriptor.is-same-object")]
     #[cm_params("self", "other")]
-    async fn is_same_object(self: &Descriptor, other: &Descriptor) -> bool;
+    async fn is_same_object(self: &Descriptor, other: &Descriptor) -> Subtask<bool>;
     /// Return a hash of the metadata associated with a filesystem object referred
     /// to by a descriptor.
     /// 
@@ -602,13 +602,13 @@ pub resource Descriptor {
     /// However, none of these is required.
     #[cm("wasi:filesystem/types@0.3.0-rc-2026-03-15#[method]descriptor.metadata-hash")]
     #[cm_params("self")]
-    async fn metadata_hash(self: &Descriptor) -> Result<MetadataHashValue, ErrorCode>;
+    async fn metadata_hash(self: &Descriptor) -> Subtask<Result<MetadataHashValue, ErrorCode>>;
     /// Return a hash of the metadata associated with a filesystem object referred
     /// to by a directory descriptor and a relative path.
     /// 
     /// This performs the same hash computation as `metadata-hash`.
     #[cm("wasi:filesystem/types@0.3.0-rc-2026-03-15#[method]descriptor.metadata-hash-at")]
     #[cm_params("self", "path-flags", "path")]
-    async fn metadata_hash_at(self: &Descriptor, path_flags: PathFlags, path: String) -> Result<MetadataHashValue, ErrorCode>;
+    async fn metadata_hash_at(self: &Descriptor, path_flags: PathFlags, path: String) -> Subtask<Result<MetadataHashValue, ErrorCode>>;
 }
 

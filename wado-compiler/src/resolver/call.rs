@@ -1284,6 +1284,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     let inner_type = self.resolve_wasi_type_scoped(&generic.args[0], wasi_package);
                     self.type_table.borrow_mut().make_future(inner_type)
                 }
+                "Subtask" if generic.args.len() == 1 => {
+                    let inner_type = self.resolve_wasi_type_scoped(&generic.args[0], wasi_package);
+                    self.type_table.borrow_mut().make_subtask(inner_type)
+                }
                 "Result" if generic.args.len() == 2 => {
                     let ok_type = self.resolve_wasi_type_scoped(&generic.args[0], wasi_package);
                     let err_type = self.resolve_wasi_type_scoped(&generic.args[1], wasi_package);

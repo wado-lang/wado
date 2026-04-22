@@ -34,10 +34,10 @@ pub effect MonotonicClock {
     /// Wait until the specified mark has occurred.
     #[cm("wasi:clocks/monotonic-clock@0.3.0-rc-2026-03-15#wait-until")]
     #[cm_params("when")]
-    async fn wait_until(when: Mark);
+    async fn wait_until(when: Mark) -> Subtask<()>;
     /// Wait for the specified duration to elapse.
     #[cm("wasi:clocks/monotonic-clock@0.3.0-rc-2026-03-15#wait-for")]
     #[cm_params("how-long")]
-    async fn wait_for(how_long: Duration);
+    async fn wait_for(how_long: Duration) -> Subtask<()>;
 }
 

@@ -30,6 +30,38 @@ pub struct CmVariantCase {
 /// - Type-level: `#[cm("wasi:pkg/iface@ver#cm-name")]` → takes the fragment after `#`
 /// - Case-level: `#[cm("cm-name")]` → uses the whole arg directly
 ///
+/// Strip a `Subtask<T>` wrapper from the declared return type of an `async`
+/// effect method, recovering the CM-level result type `T`.
+///
+/// In WIT, `async func foo(...) -> T` lowers the CM-level result as `T`, but
+/// the Wado-facing effect declaration exposes `Subtask<T>` so user code can
+/// defer `wait()`-ing until after any stream parameter rendezvous
+/// completes. The CM binding synthesiser needs the raw `T` when computing
+/// outptr layout.
+///
+/// For non-async methods this is a no-op. For async methods whose return
+/// type is missing or not `Subtask<_>` we return the original type —
+/// defensive in case hand-written effect declarations predate the
+/// `Subtask<T>` convention (in which case the compiler's earlier
+/// expectations still apply).
+pub fn unwrap_subtask_if_async(is_async: bool, declared: &Option<Type>) -> Option<Type> {
+    if !is_async {
+        return declared.clone();
+    }
+    match declared {
+        Some(Type::Generic(generic))
+            if generic.name == "Subtask" && generic.args.len() == 1 =>
+        {
+            let inner = &generic.args[0];
+            if matches!(inner, Type::Named(n) if n.name == "Unit" || n.name == "unit") {
+                return None;
+            }
+            Some(inner.clone())
+        }
+        other => other.clone(),
+    }
+}
+
 /// Preserves acronym casing from the WIT source (e.g., `DNS-timeout`, `TLS-protocol-error`).
 /// Panics if no `#[cm]` attribute is present — all CM names must be metadata-driven.
 fn cm_attr_cm_name(attrs: &[crate::ast::Attribute], wado_name: &str) -> String {
@@ -545,7 +577,14 @@ impl WasiRegistry {
                             .collect();
 
                         // Keep original return type for newtype semantics
-                        // The resolver will handle Mark -> newtype mapping
+                        // The resolver will handle Mark -> newtype mapping.
+                        //
+                        // For `async fn foo(...) -> Subtask<T>` CM imports,
+                        // the stored return type is `Subtask<T>` — this is
+                        // what user calls see. The CM binding synthesiser
+                        // strips the `Subtask<T>` wrapper back to `T` when
+                        // computing the CM ABI layout (outptr size/align)
+                        // and wraps the final adapter return.
                         let return_type = method.return_type.clone();
 
                         self.register(
@@ -586,7 +625,10 @@ impl WasiRegistry {
                             })
                             .collect();
 
-                        // Keep original return type for newtype semantics
+                        // Keep original return type for newtype semantics.
+                        // Resource methods declared as `async fn -> Subtask<T>`
+                        // are handled by the CM binding synthesiser which
+                        // unwraps the `Subtask<T>` wrapper.
                         let return_type = method.return_type.clone();
 
                         self.register(
