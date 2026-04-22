@@ -22,15 +22,15 @@
 use std::cell::RefCell;
 
 use crate::ast::{self, Type};
-use crate::token::Span;
 use crate::component_model::WasiRegistry;
 use crate::name::ModuleSource;
 use crate::synthesis::cm_binding::{LiftContext, synthesize_lift_with_context};
 use crate::tir::{
-    FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirModule, TirStmt,
-    TirStmtKind, TypeId, TypeTable,
+    FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirModule, TirStmt, TirStmtKind,
+    TypeId, TypeTable,
 };
 use crate::tir_visitor::TirMutVisitor;
+use crate::token::Span;
 
 /// Expand all occurrences of `builtin::cm_lift_async_result::<T>(outptr)`
 /// in `module` into inline lift code.
@@ -68,7 +68,6 @@ pub fn expand_cm_intrinsics(module: &mut TirModule) {
         func.local_types = local_types;
     }
 }
-
 
 struct Rewriter<'a> {
     next_local: &'a mut u32,

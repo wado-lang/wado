@@ -64,7 +64,7 @@ without the connotation that something bad has happened.
 
 #### `pub effect Run`
 
-##### `async fn run() -> Result<(), ()>`
+##### `async fn run() -> Subtask<Result<(), ()>>`
 
 Run the program.
 
@@ -343,13 +343,13 @@ written or an error is encountered.
 
 Note: This is similar to `write` with `O_APPEND` in POSIX.
 
-##### `async fn advise(self: &Descriptor, offset: Filesize, length: Filesize, advice: Advice) -> Result<(), ErrorCode>`
+##### `async fn advise(self: &Descriptor, offset: Filesize, length: Filesize, advice: Advice) -> Subtask<Result<(), ErrorCode>>`
 
 Provide file advisory information on a descriptor.
 
 This is similar to `posix_fadvise` in POSIX.
 
-##### `async fn sync_data(self: &Descriptor) -> Result<(), ErrorCode>`
+##### `async fn sync_data(self: &Descriptor) -> Subtask<Result<(), ErrorCode>>`
 
 Synchronize the data of a file to disk.
 
@@ -358,7 +358,7 @@ opened for writing.
 
 Note: This is similar to `fdatasync` in POSIX.
 
-##### `async fn get_flags(self: &Descriptor) -> Result<DescriptorFlags, ErrorCode>`
+##### `async fn get_flags(self: &Descriptor) -> Subtask<Result<DescriptorFlags, ErrorCode>>`
 
 Get flags associated with a descriptor.
 
@@ -367,7 +367,7 @@ Note: This returns similar flags to `fcntl(fd, F_GETFL)` in POSIX.
 Note: This returns the value that was the `fs_flags` value returned
 from `fdstat_get` in earlier versions of WASI.
 
-##### `async fn get_type(self: &Descriptor) -> Result<DescriptorType, ErrorCode>`
+##### `async fn get_type(self: &Descriptor) -> Subtask<Result<DescriptorType, ErrorCode>>`
 
 Get the dynamic type of a descriptor.
 
@@ -380,14 +380,14 @@ by `fstat` in POSIX.
 Note: This returns the value that was the `fs_filetype` value returned
 from `fdstat_get` in earlier versions of WASI.
 
-##### `async fn set_size(self: &Descriptor, size: Filesize) -> Result<(), ErrorCode>`
+##### `async fn set_size(self: &Descriptor, size: Filesize) -> Subtask<Result<(), ErrorCode>>`
 
 Adjust the size of an open file. If this increases the file's size, the
 extra bytes are filled with zeros.
 
 Note: This was called `fd_filestat_set_size` in earlier versions of WASI.
 
-##### `async fn set_times(self: &Descriptor, data_access_timestamp: NewTimestamp, data_modification_timestamp: NewTimestamp) -> Result<(), ErrorCode>`
+##### `async fn set_times(self: &Descriptor, data_access_timestamp: NewTimestamp, data_modification_timestamp: NewTimestamp) -> Subtask<Result<(), ErrorCode>>`
 
 Adjust the timestamps of an open file or directory.
 
@@ -410,7 +410,7 @@ do not interfere with each other.
 This function returns a future, which will resolve to an error code if
 reading full contents of the directory fails.
 
-##### `async fn sync(self: &Descriptor) -> Result<(), ErrorCode>`
+##### `async fn sync(self: &Descriptor) -> Subtask<Result<(), ErrorCode>>`
 
 Synchronize the data and metadata of a file to disk.
 
@@ -419,13 +419,13 @@ opened for writing.
 
 Note: This is similar to `fsync` in POSIX.
 
-##### `async fn create_directory_at(self: &Descriptor, path: String) -> Result<(), ErrorCode>`
+##### `async fn create_directory_at(self: &Descriptor, path: String) -> Subtask<Result<(), ErrorCode>>`
 
 Create a directory.
 
 Note: This is similar to `mkdirat` in POSIX.
 
-##### `async fn stat(self: &Descriptor) -> Result<DescriptorStat, ErrorCode>`
+##### `async fn stat(self: &Descriptor) -> Subtask<Result<DescriptorStat, ErrorCode>>`
 
 Return the attributes of an open file or directory.
 
@@ -437,7 +437,7 @@ modified, use `metadata-hash`.
 
 Note: This was called `fd_filestat_get` in earlier versions of WASI.
 
-##### `async fn stat_at(self: &Descriptor, path_flags: PathFlags, path: String) -> Result<DescriptorStat, ErrorCode>`
+##### `async fn stat_at(self: &Descriptor, path_flags: PathFlags, path: String) -> Subtask<Result<DescriptorStat, ErrorCode>>`
 
 Return the attributes of a file or directory.
 
@@ -447,7 +447,7 @@ discussion of alternatives.
 
 Note: This was called `path_filestat_get` in earlier versions of WASI.
 
-##### `async fn set_times_at(self: &Descriptor, path_flags: PathFlags, path: String, data_access_timestamp: NewTimestamp, data_modification_timestamp: NewTimestamp) -> Result<(), ErrorCode>`
+##### `async fn set_times_at(self: &Descriptor, path_flags: PathFlags, path: String, data_access_timestamp: NewTimestamp, data_modification_timestamp: NewTimestamp) -> Subtask<Result<(), ErrorCode>>`
 
 Adjust the timestamps of a file or directory.
 
@@ -456,7 +456,7 @@ Note: This is similar to `utimensat` in POSIX.
 Note: This was called `path_filestat_set_times` in earlier versions of
 WASI.
 
-##### `async fn link_at(self: &Descriptor, old_path_flags: PathFlags, old_path: String, new_descriptor: &Descriptor, new_path: String) -> Result<(), ErrorCode>`
+##### `async fn link_at(self: &Descriptor, old_path_flags: PathFlags, old_path: String, new_descriptor: &Descriptor, new_path: String) -> Subtask<Result<(), ErrorCode>>`
 
 Create a hard link.
 
@@ -466,7 +466,7 @@ with `error-code::exist` if the new path already exists, and
 
 Note: This is similar to `linkat` in POSIX.
 
-##### `async fn open_at(self: &Descriptor, path_flags: PathFlags, path: String, open_flags: OpenFlags, flags: DescriptorFlags) -> Result<Descriptor, ErrorCode>`
+##### `async fn open_at(self: &Descriptor, path_flags: PathFlags, path: String, open_flags: OpenFlags, flags: DescriptorFlags) -> Subtask<Result<Descriptor, ErrorCode>>`
 
 Open a file or directory.
 
@@ -481,7 +481,7 @@ contains `truncate` or `create`, and the base descriptor doesn't have
 
 Note: This is similar to `openat` in POSIX.
 
-##### `async fn readlink_at(self: &Descriptor, path: String) -> Result<String, ErrorCode>`
+##### `async fn readlink_at(self: &Descriptor, path: String) -> Subtask<Result<String, ErrorCode>>`
 
 Read the contents of a symbolic link.
 
@@ -490,7 +490,7 @@ filesystem, this function fails with `error-code::not-permitted`.
 
 Note: This is similar to `readlinkat` in POSIX.
 
-##### `async fn remove_directory_at(self: &Descriptor, path: String) -> Result<(), ErrorCode>`
+##### `async fn remove_directory_at(self: &Descriptor, path: String) -> Subtask<Result<(), ErrorCode>>`
 
 Remove a directory.
 
@@ -498,13 +498,13 @@ Return `error-code::not-empty` if the directory is not empty.
 
 Note: This is similar to `unlinkat(fd, path, AT_REMOVEDIR)` in POSIX.
 
-##### `async fn rename_at(self: &Descriptor, old_path: String, new_descriptor: &Descriptor, new_path: String) -> Result<(), ErrorCode>`
+##### `async fn rename_at(self: &Descriptor, old_path: String, new_descriptor: &Descriptor, new_path: String) -> Subtask<Result<(), ErrorCode>>`
 
 Rename a filesystem object.
 
 Note: This is similar to `renameat` in POSIX.
 
-##### `async fn symlink_at(self: &Descriptor, old_path: String, new_path: String) -> Result<(), ErrorCode>`
+##### `async fn symlink_at(self: &Descriptor, old_path: String, new_path: String) -> Subtask<Result<(), ErrorCode>>`
 
 Create a symbolic link (also known as a "symlink").
 
@@ -513,7 +513,7 @@ If `old-path` starts with `/`, the function fails with
 
 Note: This is similar to `symlinkat` in POSIX.
 
-##### `async fn unlink_file_at(self: &Descriptor, path: String) -> Result<(), ErrorCode>`
+##### `async fn unlink_file_at(self: &Descriptor, path: String) -> Subtask<Result<(), ErrorCode>>`
 
 Unlink a filesystem object that is not a directory.
 
@@ -525,7 +525,7 @@ If the filesystem object is a directory, `error-code::access` or
 `error-code::is-directory` may be returned instead of the
 POSIX-specified `error-code::not-permitted`.
 
-##### `async fn is_same_object(self: &Descriptor, other: &Descriptor) -> bool`
+##### `async fn is_same_object(self: &Descriptor, other: &Descriptor) -> Subtask<bool>`
 
 Test whether two descriptors refer to the same filesystem object.
 
@@ -534,7 +534,7 @@ same device (`st_dev`) and inode (`st_ino` or `d_ino`) numbers.
 wasi-filesystem does not expose device and inode numbers, so this function
 may be used instead.
 
-##### `async fn metadata_hash(self: &Descriptor) -> Result<MetadataHashValue, ErrorCode>`
+##### `async fn metadata_hash(self: &Descriptor) -> Subtask<Result<MetadataHashValue, ErrorCode>>`
 
 Return a hash of the metadata associated with a filesystem object referred
 to by a descriptor.
@@ -556,7 +556,7 @@ Implementations are encouraged to provide the following properties:
 
 However, none of these is required.
 
-##### `async fn metadata_hash_at(self: &Descriptor, path_flags: PathFlags, path: String) -> Result<MetadataHashValue, ErrorCode>`
+##### `async fn metadata_hash_at(self: &Descriptor, path_flags: PathFlags, path: String) -> Subtask<Result<MetadataHashValue, ErrorCode>>`
 
 Return a hash of the metadata associated with a filesystem object referred
 to by a directory descriptor and a relative path.
@@ -871,7 +871,7 @@ incoming HTTP Request with a Response.
 In `wasi:http/middleware` this interface is both exported and imported as
 the "downstream" and "upstream" directions of the middleware chain.
 
-##### `async fn handle(request: Request) -> Result<Response, ErrorCode>`
+##### `async fn handle(request: Request) -> Subtask<Result<Response, ErrorCode>>`
 
 This function may be called with either an incoming request read from the
 network or a request synthesized or forwarded by another component.
@@ -889,7 +889,7 @@ duplication is currently necessary because some Component Model tooling
 instances of the same interface. A `client.send` import may be linked
 directly to a `handler.handle` export to bypass the network.
 
-##### `async fn send(request: Request) -> Result<Response, ErrorCode>`
+##### `async fn send(request: Request) -> Subtask<Result<Response, ErrorCode>>`
 
 This function may be used to either send an outgoing request over the
 network or to forward it to another component.
@@ -1463,11 +1463,11 @@ possibility of overflow in practice.
 Query the resolution of the clock. Returns the duration of time
 corresponding to a clock tick.
 
-##### `async fn wait_until(when: Mark)`
+##### `async fn wait_until(when: Mark) -> Subtask<()>`
 
 Wait until the specified mark has occurred.
 
-##### `async fn wait_for(how_long: Duration)`
+##### `async fn wait_for(how_long: Duration) -> Subtask<()>`
 
 Wait for the specified duration to elapse.
 
@@ -1688,7 +1688,7 @@ Similar to `AF_INET6` in POSIX.
 
 #### `pub effect IpNameLookup`
 
-##### `async fn resolve_addresses(name: String) -> Result<Array<IpAddress>, ErrorCode>`
+##### `async fn resolve_addresses(name: String) -> Subtask<Result<Array<IpAddress>, ErrorCode>>`
 
 Resolve an internet host name to a list of IP addresses.
 
@@ -1812,7 +1812,7 @@ behavior and SO_REUSEADDR performs something different.
 - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-bind>
 - <https://man.freebsd.org/cgi/man.cgi?query=bind&sektion=2&format=html>
 
-##### `async fn connect(self: &TcpSocket, remote_address: IpSocketAddress) -> Result<(), ErrorCode>`
+##### `async fn connect(self: &TcpSocket, remote_address: IpSocketAddress) -> Subtask<Result<(), ErrorCode>>`
 
 Connect to a remote endpoint.
 
@@ -2278,7 +2278,7 @@ The POSIX equivalent of this is calling `connect` with an `AF_UNSPEC` address.
 - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-connect>
 - <https://man.freebsd.org/cgi/man.cgi?connect>
 
-##### `async fn send(self: &UdpSocket, data: Array<u8>, remote_address: Option<IpSocketAddress>) -> Result<(), ErrorCode>`
+##### `async fn send(self: &UdpSocket, data: Array<u8>, remote_address: Option<IpSocketAddress>) -> Subtask<Result<(), ErrorCode>>`
 
 Send a message on the socket to a particular peer.
 
@@ -2326,7 +2326,7 @@ already done so.
 - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-wsasendmsg>
 - <https://man.freebsd.org/cgi/man.cgi?query=send&sektion=2>
 
-##### `async fn receive(self: &UdpSocket) -> Result<[Array<u8>, IpSocketAddress], ErrorCode>`
+##### `async fn receive(self: &UdpSocket) -> Subtask<Result<[Array<u8>, IpSocketAddress], ErrorCode>>`
 
 Receive a message on the socket.
 

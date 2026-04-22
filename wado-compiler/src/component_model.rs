@@ -49,9 +49,7 @@ pub fn unwrap_subtask_if_async(is_async: bool, declared: &Option<Type>) -> Optio
         return declared.clone();
     }
     match declared {
-        Some(Type::Generic(generic))
-            if generic.name == "Subtask" && generic.args.len() == 1 =>
-        {
+        Some(Type::Generic(generic)) if generic.name == "Subtask" && generic.args.len() == 1 => {
             let inner = &generic.args[0];
             if is_unit_type(inner) {
                 return None;
@@ -2180,12 +2178,7 @@ fn is_return_type_supported_with_types(
                 "Subtask" if generic.args.len() == 1 => {
                     // `Subtask<T>` is the Wado-level wrapper for async CM imports;
                     // the CM ABI return is the inner `T`. Support depends on `T`.
-                    is_return_type_supported_with_types(
-                        &generic.args[0],
-                        enums,
-                        resources,
-                        structs,
-                    )
+                    is_return_type_supported_with_types(&generic.args[0], enums, resources, structs)
                 }
                 "Result" => {
                     // Result<T, E> - both T and E must be supported

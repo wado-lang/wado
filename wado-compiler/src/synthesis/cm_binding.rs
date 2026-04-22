@@ -3012,33 +3012,33 @@ fn synthesize_adapter(
         // Allocate the async results buffer via realloc (only when there are results).
         if has_results {
             let pkg = Some(func_info.package.as_str());
-            let (async_result_size, async_result_align) =
-                if let Some(return_type) = &cm_return_type {
-                    if let crate::ast::Type::Named(named) = return_type
-                        && let Some(sa) = crate::component_model::wasi_variant_cm_size_align_scoped(
-                            &named.name,
+            let (async_result_size, async_result_align) = if let Some(return_type) = &cm_return_type
+            {
+                if let crate::ast::Type::Named(named) = return_type
+                    && let Some(sa) = crate::component_model::wasi_variant_cm_size_align_scoped(
+                        &named.name,
+                        wasi_registry,
+                        pkg,
+                    )
+                {
+                    sa
+                } else {
+                    (
+                        crate::component_model::cm_size_with_registry_scoped(
+                            return_type,
                             wasi_registry,
                             pkg,
-                        )
-                    {
-                        sa
-                    } else {
-                        (
-                            crate::component_model::cm_size_with_registry_scoped(
-                                return_type,
-                                wasi_registry,
-                                pkg,
-                            ),
-                            crate::component_model::cm_align_with_registry_scoped(
-                                return_type,
-                                wasi_registry,
-                                pkg,
-                            ),
-                        )
-                    }
-                } else {
-                    unreachable!()
-                };
+                        ),
+                        crate::component_model::cm_align_with_registry_scoped(
+                            return_type,
+                            wasi_registry,
+                            pkg,
+                        ),
+                    )
+                }
+            } else {
+                unreachable!()
+            };
             let async_outptr_local = next_local;
             body_stmts.push(let_stmt(
                 "__async_outptr",

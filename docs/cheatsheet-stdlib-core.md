@@ -100,7 +100,7 @@ pub resource WaitableSet {
 ```
 
 ```wado
-pub resource Subtask {
+pub resource RawSubtask {
     fn drop(&self);
     fn cancel(&self);
     fn join(&self, set: &WaitableSet) -> Waitable;
@@ -867,6 +867,21 @@ pub struct WaitEvent {
     code: i32,
     handle: Waitable,
     payload: u32,
+}
+```
+
+```wado
+pub struct Subtask<T> {
+    __cm_packed: i32,
+    __cm_outptr: i32,
+    __cm_size: i32,
+    __cm_align: i32,
+}
+
+impl Subtask {
+    pub fn wait(&self) -> T;
+    pub fn cancel(&self);
+    pub fn join(&self, set: &WaitableSet) -> Waitable;
 }
 ```
 
