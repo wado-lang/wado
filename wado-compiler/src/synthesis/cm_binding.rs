@@ -423,7 +423,10 @@ fn try_lift_wasi_variant_or_enum(
     };
     if let Some(cases) = cases_opt {
         let cases = cases.to_vec();
-        let variant_type = tt.find_variant_type_by_name(name)?;
+        let variant_type = ctx
+            .wasi_package
+            .and_then(|pkg| tt.find_named_type_by_wasi_package(name, pkg))
+            .or_else(|| tt.find_variant_type_by_name(name))?;
         drop(tt);
         return Some(synthesize_lift_wasi_variant(
             name,
@@ -440,7 +443,10 @@ fn try_lift_wasi_variant_or_enum(
     // Check WASI enums (e.g., ErrorCode)
     if let Some(case_names) = ctx.wasi_registry.get_enum_variants(name) {
         let case_names = case_names.to_vec();
-        let enum_type = tt.find_enum_type_by_name(name)?;
+        let enum_type = ctx
+            .wasi_package
+            .and_then(|pkg| tt.find_named_type_by_wasi_package(name, pkg))
+            .or_else(|| tt.find_enum_type_by_name(name))?;
         drop(tt);
         return Some(synthesize_lift_wasi_enum(
             name,

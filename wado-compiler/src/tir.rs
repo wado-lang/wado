@@ -1078,8 +1078,23 @@ impl TypeTable {
         self.intern_map.get(&key).copied()
     }
 
+    /// Find a variant type by (name, `module_source`) pair via `intern_map` (O(1)).
+    /// Unlike `find_variant_type_by_name`, this is collision-safe across modules.
+    pub fn find_variant_type(
+        &self,
+        name: &str,
+        module_source: &ModuleSource,
+    ) -> Option<TypeId> {
+        let key = ResolvedType::Variant {
+            name: name.to_string(),
+            module_source: module_source.clone(),
+        };
+        self.intern_map.get(&key).copied()
+    }
+
     /// Find a variant type by name (scanning all types).
     /// Returns the first matching `ResolvedType::Variant` with the given name.
+    /// Prefer `find_variant_type` when the module source is known.
     pub fn find_variant_type_by_name(&self, name: &str) -> Option<TypeId> {
         for (&type_id, resolved) in &self.types {
             if let ResolvedType::Variant { name: vname, .. } = resolved
@@ -1091,8 +1106,23 @@ impl TypeTable {
         None
     }
 
+    /// Find a resource type by (name, `module_source`) pair via `intern_map` (O(1)).
+    /// Unlike `find_resource_type_by_name`, this is collision-safe across modules.
+    pub fn find_resource_type(
+        &self,
+        name: &str,
+        module_source: &ModuleSource,
+    ) -> Option<TypeId> {
+        let key = ResolvedType::Resource {
+            name: name.to_string(),
+            module_source: module_source.clone(),
+        };
+        self.intern_map.get(&key).copied()
+    }
+
     /// Find a resource type by name (scanning all types).
     /// Returns the first matching `ResolvedType::Resource` with the given name.
+    /// Prefer `find_resource_type` when the module source is known.
     pub fn find_resource_type_by_name(&self, name: &str) -> Option<TypeId> {
         for (&type_id, resolved) in &self.types {
             if let ResolvedType::Resource { name: rname, .. } = resolved
@@ -1104,8 +1134,19 @@ impl TypeTable {
         None
     }
 
+    /// Find an enum type by (name, `module_source`) pair via `intern_map` (O(1)).
+    /// Unlike `find_enum_type_by_name`, this is collision-safe across modules.
+    pub fn find_enum_type(&self, name: &str, module_source: &ModuleSource) -> Option<TypeId> {
+        let key = ResolvedType::Enum {
+            name: name.to_string(),
+            module_source: module_source.clone(),
+        };
+        self.intern_map.get(&key).copied()
+    }
+
     /// Find an enum type by name (scanning all types).
     /// Returns the first matching `ResolvedType::Enum` with the given name.
+    /// Prefer `find_enum_type` when the module source is known.
     pub fn find_enum_type_by_name(&self, name: &str) -> Option<TypeId> {
         for (&type_id, resolved) in &self.types {
             if let ResolvedType::Enum { name: ename, .. } = resolved
@@ -1115,6 +1156,16 @@ impl TypeTable {
             }
         }
         None
+    }
+
+    /// Find a flags type by (name, `module_source`) pair via `intern_map` (O(1)).
+    /// Collision-safe across modules when two flags types share a name.
+    pub fn find_flags_type(&self, name: &str, module_source: &ModuleSource) -> Option<TypeId> {
+        let key = ResolvedType::Flags {
+            name: name.to_string(),
+            module_source: module_source.clone(),
+        };
+        self.intern_map.get(&key).copied()
     }
 
     /// Find a named type (resource, enum, or variant) scoped to a WASI package.
