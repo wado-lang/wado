@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776814160969,
+  "lastUpdate": 1776847434877,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -15325,6 +15325,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d6cd03e8bb7c9b529049942a73d7eb09b2a19e05"
         },
         "date": 1776814160655,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8982,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18988,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 635264,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "30ae9832a28ffc60f3ee2e74631e962be6784044",
+          "message": "Merge pull request #900 from wado-lang/claude/review-e2e-fixtures-SQyCO\n\nfix(resolver): cross-module aliased generic type inference + CalleeRef refactor",
+          "timestamp": "2026-04-22T17:39:43+09:00",
+          "tree_id": "07dfdf3dbe4b8477665eaf5fbf1f9d8c3a72a8bb",
+          "url": "https://github.com/wado-lang/wado/commit/30ae9832a28ffc60f3ee2e74631e962be6784044"
+        },
+        "date": 1776847434577,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
