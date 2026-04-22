@@ -53,12 +53,23 @@ pub fn unwrap_subtask_if_async(is_async: bool, declared: &Option<Type>) -> Optio
             if generic.name == "Subtask" && generic.args.len() == 1 =>
         {
             let inner = &generic.args[0];
-            if matches!(inner, Type::Named(n) if n.name == "Unit" || n.name == "unit") {
+            if is_unit_type(inner) {
                 return None;
             }
             Some(inner.clone())
         }
         other => other.clone(),
+    }
+}
+
+/// Returns true if `ty` is the Wado unit type. Recognises both surface
+/// syntaxes that the parser may emit: the empty tuple `[]` and the
+/// named form `()`.
+fn is_unit_type(ty: &Type) -> bool {
+    match ty {
+        Type::Tuple(elems) => elems.is_empty(),
+        Type::Named(named) => matches!(named.name.as_str(), "()" | "Unit" | "unit"),
+        _ => false,
     }
 }
 
@@ -580,12 +591,14 @@ impl WasiRegistry {
                         // The resolver will handle Mark -> newtype mapping.
                         //
                         // For `async fn foo(...) -> Subtask<T>` CM imports,
-                        // the stored return type is `Subtask<T>` — this is
-                        // what user calls see. The CM binding synthesiser
-                        // strips the `Subtask<T>` wrapper back to `T` when
-                        // computing the CM ABI layout (outptr size/align)
-                        // and wraps the final adapter return.
-                        let return_type = method.return_type.clone();
+                        // strip the `Subtask<T>` wrapper at registration so
+                        // the stored return type is the CM-ABI `T`. The
+                        // resolver re-wraps it as `Subtask<T>` when
+                        // answering Wado-level type queries (so user code
+                        // sees the new API), and the CM binding synthesiser
+                        // also re-wraps when constructing its adapter.
+                        let return_type =
+                            unwrap_subtask_if_async(method.is_async, &method.return_type);
 
                         self.register(
                             &effect.name,
@@ -627,9 +640,10 @@ impl WasiRegistry {
 
                         // Keep original return type for newtype semantics.
                         // Resource methods declared as `async fn -> Subtask<T>`
-                        // are handled by the CM binding synthesiser which
-                        // unwraps the `Subtask<T>` wrapper.
-                        let return_type = method.return_type.clone();
+                        // are unwrapped at registration so downstream code
+                        // works with the CM-ABI `T`. See the effect branch.
+                        let return_type =
+                            unwrap_subtask_if_async(method.is_async, &method.return_type);
 
                         self.register(
                             &resource.name,
@@ -1751,6 +1765,18 @@ impl CmInstanceTypeGen {
                     let idx = self.define_future(instance_type, inner, &key);
                     ComponentValType::Type(idx)
                 }
+                "Subtask" if generic.args.len() == 1 => {
+                    // `Subtask<T>` is a Wado-level wrapper for CM async
+                    // imports; the CM ABI-level type is the inner `T`.
+                    // Transparently unwrap here so downstream code sees the
+                    // CM signature.
+                    self.ast_type_to_cm(
+                        &generic.args[0],
+                        instance_type,
+                        wasi_registry,
+                        resource_exports,
+                    )
+                }
                 _ => panic!("unsupported generic type for CM instance: {}", generic.name),
             },
             Type::Tuple(elems) if elems.is_empty() => {
@@ -2043,6 +2069,16 @@ fn is_return_type_supported_with_types(
         Type::Generic(generic) => {
             match generic.name.as_str() {
                 "Stream" | "Future" => true,
+                "Subtask" if generic.args.len() == 1 => {
+                    // `Subtask<T>` is the Wado-level wrapper for async CM imports;
+                    // the CM ABI return is the inner `T`. Support depends on `T`.
+                    is_return_type_supported_with_types(
+                        &generic.args[0],
+                        enums,
+                        resources,
+                        structs,
+                    )
+                }
                 "Result" => {
                     // Result<T, E> - both T and E must be supported
                     generic.args.iter().all(|arg| {

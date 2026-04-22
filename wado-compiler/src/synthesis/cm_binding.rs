@@ -2437,16 +2437,12 @@ fn synthesize_adapter(
     // Also check WASI variants with payload cases (e.g., Method with Other(String)):
     // cm_flat_types treats unknown named types as i32, missing their true flat count.
     //
-    // For `async fn foo(...) -> Subtask<T>` imports, the Wado-visible return
-    // type is `Subtask<T>` but the CM ABI return is the WIT `T`. Use the
-    // unwrapped `cm_return_type` for everything that talks to the canonical
-    // ABI (outptr layout, lifting) and reserve `func_info.return_type` for
-    // the final Wado-visible adapter return type.
-    let cm_return_type: Option<crate::ast::Type> =
-        crate::component_model::unwrap_subtask_if_async(
-            func_info.is_async,
-            &func_info.return_type,
-        );
+    // For `async fn foo(...) -> Subtask<T>` imports, `func_info.return_type`
+    // already stores the CM-ABI `T` (the registry strips the `Subtask<T>`
+    // wrapper at registration time, see `WasiRegistry::register`). The
+    // wrapping is re-applied below when emitting the Wado-visible adapter
+    // return type.
+    let cm_return_type: Option<crate::ast::Type> = func_info.return_type.clone();
     let needs_outptr = cm_return_type.as_ref().is_some_and(|rt| {
         crate::cm_abi::cm_flat_types(rt).len() > MAX_FLAT_RESULTS
             || crate::component_model::wasi_named_type_return_needs_outptr(rt, wasi_registry)

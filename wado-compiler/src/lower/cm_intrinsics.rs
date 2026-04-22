@@ -206,12 +206,12 @@ fn type_id_to_ast_type_resolved(resolved: &ResolvedType, type_table: &TypeTable)
                 span: zero_span(),
             }))
         }
+        ResolvedType::Unit => Some(Type::Tuple(Vec::new())),
         ResolvedType::Ref(_)
         | ResolvedType::MutRef(_)
         | ResolvedType::Function { .. }
         | ResolvedType::TypeParam { .. }
         | ResolvedType::Reactive(_)
-        | ResolvedType::Unit
         | ResolvedType::Never
         | ResolvedType::TypePack { .. }
         | ResolvedType::AssocTypeProjection { .. }

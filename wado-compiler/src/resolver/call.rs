@@ -1118,21 +1118,33 @@ impl<H: CompilerHost> Resolver<'_, H> {
         TypeTable::UNIT
     }
 
-    /// Get the return type of a WASI effect operation from the registry
+    /// Get the return type of a WASI effect operation from the registry.
+    ///
+    /// The registry stores the CM-ABI return type (with any `Subtask<T>`
+    /// wrapper stripped at registration). For async imports the Wado
+    /// surface type is `Subtask<T>`, so re-wrap before returning.
     pub(super) fn get_wasi_effect_return_type(
         &mut self,
         effect: &str,
         operation: &str,
     ) -> Option<TypeId> {
-        // Look up the function in the WASI registry and clone the return type
-        // to avoid borrow checker issues
         let func_key = format!("{effect}::{operation}");
         let func = self.wasi_registry.get_function(&func_key)?;
-        let return_type = func.return_type.clone()?;
+        let is_async = func.is_async;
         let package = func.package.clone();
 
-        // Resolve the AST type to a TypeId, scoped to the function's WASI package
-        Some(self.resolve_wasi_type_scoped(&return_type, Some(&package)))
+        let inner = match func.return_type.clone() {
+            Some(ty) => self.resolve_wasi_type_scoped(&ty, Some(&package)),
+            None => TypeTable::UNIT,
+        };
+
+        if is_async {
+            Some(self.type_table.borrow_mut().make_subtask(inner))
+        } else if func.return_type.is_some() {
+            Some(inner)
+        } else {
+            None
+        }
     }
 
     /// Resolve a WASI AST type to a `TypeId`
