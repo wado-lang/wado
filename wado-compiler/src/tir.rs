@@ -1126,12 +1126,14 @@ impl TypeTable {
         self.intern_map.get(&key).copied()
     }
 
-    /// Find a named type (resource, enum, or variant) scoped to a WASI package.
+    /// Find any decl-backed named type (resource, enum, variant, struct,
+    /// flags, or newtype) scoped to a WASI package.
     ///
-    /// Tries resource → enum → variant in order, restricting matches to types
-    /// whose `module_source` is `Wasi { interface }` where `interface` starts
-    /// with `{wasi_package}/`.  Falls back to the unscoped lookup when no
-    /// scoped match is found.
+    /// Matches types whose `module_source` is `Wasi { interface }` where
+    /// `interface` starts with `{wasi_package}/`. The key invariant: two WIT
+    /// interfaces in distinct packages that happen to share a type name
+    /// (e.g. `wasi:cli/ErrorCode` vs `wasi:http/ErrorCode`) resolve to
+    /// distinct `TypeId`s because `module_source` is part of the intern key.
     pub fn find_named_type_by_wasi_package(
         &self,
         name: &str,
@@ -1139,22 +1141,42 @@ impl TypeTable {
     ) -> Option<TypeId> {
         let prefix = format!("{wasi_package}/");
         for (&type_id, resolved) in &self.types {
-            let matches = match resolved {
+            let (n, ms) = match resolved {
                 ResolvedType::Resource {
                     name: n,
-                    module_source: ModuleSource::Wasi { interface },
-                } => n == name && interface.starts_with(&prefix),
-                ResolvedType::Enum {
+                    module_source,
+                }
+                | ResolvedType::Enum {
                     name: n,
-                    module_source: ModuleSource::Wasi { interface },
-                } => n == name && interface.starts_with(&prefix),
-                ResolvedType::Variant {
+                    module_source,
+                }
+                | ResolvedType::Variant {
                     name: n,
-                    module_source: ModuleSource::Wasi { interface },
-                } => n == name && interface.starts_with(&prefix),
-                _ => false,
+                    module_source,
+                }
+                | ResolvedType::Struct {
+                    name: n,
+                    module_source,
+                    is_monomorphized: false,
+                    ..
+                }
+                | ResolvedType::Flags {
+                    name: n,
+                    module_source,
+                }
+                | ResolvedType::Newtype {
+                    name: n,
+                    module_source,
+                    ..
+                } => (n, module_source),
+                _ => continue,
             };
-            if matches {
+            if n != name {
+                continue;
+            }
+            if let ModuleSource::Wasi { interface } = ms
+                && interface.starts_with(&prefix)
+            {
                 return Some(type_id);
             }
         }
