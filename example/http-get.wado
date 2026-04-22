@@ -26,7 +26,7 @@ fn send_get(url: Url) -> Response with Client {
     req.set_authority(Option::Some(url.authority()));
     req.set_path_with_query(Option::Some(url.path_with_query()));
 
-    let result = Client::send(req);
+    let result = Client::send(req).wait();
     trailers_tx.write(Result::Ok(null));
 
     return match result {

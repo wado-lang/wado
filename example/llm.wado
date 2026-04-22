@@ -67,13 +67,16 @@ fn send_post(api_key: String, body: String) -> Response with Client {
     req.set_authority(Option::<String>::Some("openrouter.ai"));
     req.set_path_with_query(Option::<String>::Some("/api/v1/chat/completions"));
 
+    // Start the send as a subtask. The host begins consuming the
+    // request body stream immediately, so subsequent `body_tx.write`
+    // calls rendezvous with it and the whole body flows out without
+    // deadlock.
+    let subtask = Client::send(req);
     body_tx.write(body.as_bytes());
     body_tx.drop();
-
-    let result = Client::send(req);
     trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
 
-    return match result {
+    return match subtask.wait() {
         Ok(resp) => resp,
         Err(e) => panic(`HTTP request failed: {e:?}`),
     };

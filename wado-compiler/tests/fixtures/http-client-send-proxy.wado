@@ -19,7 +19,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode>
     out_req.set_path_with_query(Option::<String>::Some("/upstream"));
 
     // Send outgoing request via Client effect
-    let upstream_result = Client::send(out_req);
+    let upstream_result = Client::send(out_req).wait();
     trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
 
     // Unwrap the upstream response
