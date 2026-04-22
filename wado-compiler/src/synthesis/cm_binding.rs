@@ -182,12 +182,19 @@ pub fn wasi_type_to_type_id_scoped(
 }
 
 /// Extract the WASI sub-module interface path for a struct from the registry.
-/// Returns e.g. "clocks/system-clock.wado" from "wasi:clocks/system-clock@0.3.0-rc-...".
+/// Returns e.g. "clocks/system_clock.wado" from "wasi:clocks/system-clock@0.3.0-rc-...".
+/// The WIT kebab-case interface name is converted to Wado's snake_case
+/// filename convention (matching `wado-from-idl`'s output).
 fn wasi_struct_package(registry: &WasiRegistry, name: &str) -> String {
     if let Some(source) = registry.get_struct_source_interface(name) {
-        // Format: "wasi:clocks/system-clock@0.3.0-rc-..." -> "clocks/system-clock.wado"
         if let Some(after_colon) = source.strip_prefix("wasi:") {
             let without_version = after_colon.split('@').next().unwrap_or(after_colon);
+            // Split "pkg/iface" into pkg and iface; convert only the iface part
+            // from kebab-case to snake_case. WIT interface identifiers are
+            // kebab-case only, so a plain `-` -> `_` substitution is sufficient.
+            if let Some((pkg, iface)) = without_version.split_once('/') {
+                return format!("{pkg}/{}.wado", iface.replace('-', "_"));
+            }
             return format!("{without_version}.wado");
         }
     }

@@ -332,17 +332,22 @@ impl<'a> Transformer<'a> {
         }
     }
 
-    /// Get the wasi import path for an interface (with .wado extension), e.g. "wasi:clocks/system-clock.wado"
+    /// Get the import path for an interface (with `.wado` extension),
+    /// e.g. `"wasi:clocks/system_clock.wado"`. The WIT kebab-case
+    /// interface name is converted to Wado's snake_case filename
+    /// convention (matching the per-interface file emitted by
+    /// `main.rs::run_directory_mode`).
     fn get_wasi_path_for_interface(&self, iface_id: InterfaceId) -> String {
         let iface = &self.resolve.interfaces[iface_id];
         let iface_name = iface.name.as_deref().unwrap_or("unknown");
+        let file_stem = crate::naming::to_snake_case(iface_name);
         if let Some(pkg_id) = iface.package {
             let pkg = &self.resolve.packages[pkg_id];
             let namespace = &pkg.name.namespace;
             let pkg_name = &pkg.name.name;
-            format!("{namespace}:{pkg_name}/{iface_name}.wado")
+            format!("{namespace}:{pkg_name}/{file_stem}.wado")
         } else {
-            format!("{iface_name}.wado")
+            format!("{file_stem}.wado")
         }
     }
 

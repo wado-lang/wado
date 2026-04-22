@@ -18,11 +18,13 @@ pub struct InputFile {
 /// `raw-request` is an internal wire-form type and should not
 /// appear in generator source.
 /// 
-/// The `options` encoding is pending a spec decision in the WEP
-/// (originally `any-value` variant, but wit-parser rejects
-/// recursive variants through `list<...>`). The placeholder type
-/// is kept as `list<u8>` until the wire form is chosen (canonical
-/// binary bytes vs canonical JSON string).
+/// `options` is a canonical JSON string encoding of the user's
+/// `options = { ... }` block. The compiler uses the generator's
+/// typed `Options` descriptor (see `wado-compiler::kiln::options`)
+/// to encode on the caller side and decode on the generator side.
+/// Canonical JSON (sorted keys, NFC-normalized strings, fixed
+/// numeric representation) lets the cache key hash the wire bytes
+/// directly.
 #[cm("core:kiln/types@0.1.0#raw-request")]
 pub struct RawRequest {
     #[cm("primary")]
@@ -30,7 +32,7 @@ pub struct RawRequest {
     #[cm("inputs")]
     pub inputs: Array<InputFile>,
     #[cm("options")]
-    pub options: Array<u8>,
+    pub options: String,
 }
 
 /// One generated Wado file. `path` is relative to the invocation's

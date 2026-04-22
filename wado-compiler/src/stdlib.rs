@@ -46,7 +46,7 @@ pub const CORE_JSON_NSD: &str = include_str!("../lib/core/json_nsd.wado");
 pub const CORE_JSON_VALUE: &str = include_str!("../lib/core/json_value.wado");
 pub const CORE_SIMD: &str = include_str!("../lib/core/simd.wado");
 pub const CORE_KILN: &str = include_str!("../lib/core/kiln.wado");
-pub const CORE_KILN_KILN_HOST: &str = include_str!("../lib/core/kiln/kiln-host.wado");
+pub const CORE_KILN_KILN_HOST: &str = include_str!("../lib/core/kiln/kiln_host.wado");
 pub const CORE_KILN_TYPES: &str = include_str!("../lib/core/kiln/types.wado");
 pub const CORE_KILN_WORLDS: &str = include_str!("../lib/core/kiln/worlds.wado");
 pub const CORE_URL: &str = include_str!("../lib/core/url.wado");
@@ -67,17 +67,17 @@ pub const WASI_CLI_TYPES: &str = include_str!("../lib/wasi/cli/types.wado");
 pub const WASI_CLI_STDIN: &str = include_str!("../lib/wasi/cli/stdin.wado");
 pub const WASI_CLI_STDOUT: &str = include_str!("../lib/wasi/cli/stdout.wado");
 pub const WASI_CLI_STDERR: &str = include_str!("../lib/wasi/cli/stderr.wado");
-pub const WASI_CLI_TERMINAL_INPUT: &str = include_str!("../lib/wasi/cli/terminal-input.wado");
-pub const WASI_CLI_TERMINAL_OUTPUT: &str = include_str!("../lib/wasi/cli/terminal-output.wado");
-pub const WASI_CLI_TERMINAL_STDIN: &str = include_str!("../lib/wasi/cli/terminal-stdin.wado");
-pub const WASI_CLI_TERMINAL_STDOUT: &str = include_str!("../lib/wasi/cli/terminal-stdout.wado");
-pub const WASI_CLI_TERMINAL_STDERR: &str = include_str!("../lib/wasi/cli/terminal-stderr.wado");
+pub const WASI_CLI_TERMINAL_INPUT: &str = include_str!("../lib/wasi/cli/terminal_input.wado");
+pub const WASI_CLI_TERMINAL_OUTPUT: &str = include_str!("../lib/wasi/cli/terminal_output.wado");
+pub const WASI_CLI_TERMINAL_STDIN: &str = include_str!("../lib/wasi/cli/terminal_stdin.wado");
+pub const WASI_CLI_TERMINAL_STDOUT: &str = include_str!("../lib/wasi/cli/terminal_stdout.wado");
+pub const WASI_CLI_TERMINAL_STDERR: &str = include_str!("../lib/wasi/cli/terminal_stderr.wado");
 pub const WASI_CLI_WORLDS: &str = include_str!("../lib/wasi/cli/worlds.wado");
 
 pub const WASI_CLOCKS_TYPES: &str = include_str!("../lib/wasi/clocks/types.wado");
 pub const WASI_CLOCKS_MONOTONIC_CLOCK: &str =
-    include_str!("../lib/wasi/clocks/monotonic-clock.wado");
-pub const WASI_CLOCKS_SYSTEM_CLOCK: &str = include_str!("../lib/wasi/clocks/system-clock.wado");
+    include_str!("../lib/wasi/clocks/monotonic_clock.wado");
+pub const WASI_CLOCKS_SYSTEM_CLOCK: &str = include_str!("../lib/wasi/clocks/system_clock.wado");
 pub const WASI_CLOCKS_TIMEZONE: &str = include_str!("../lib/wasi/clocks/timezone.wado");
 pub const WASI_CLOCKS_WORLDS: &str = include_str!("../lib/wasi/clocks/worlds.wado");
 
@@ -90,14 +90,14 @@ pub const WASI_HTTP_HANDLER: &str = include_str!("../lib/wasi/http/handler.wado"
 pub const WASI_HTTP_CLIENT: &str = include_str!("../lib/wasi/http/client.wado");
 pub const WASI_HTTP_WORLDS: &str = include_str!("../lib/wasi/http/worlds.wado");
 
-pub const WASI_RANDOM_INSECURE_SEED: &str = include_str!("../lib/wasi/random/insecure-seed.wado");
+pub const WASI_RANDOM_INSECURE_SEED: &str = include_str!("../lib/wasi/random/insecure_seed.wado");
 pub const WASI_RANDOM_INSECURE: &str = include_str!("../lib/wasi/random/insecure.wado");
 pub const WASI_RANDOM_RANDOM: &str = include_str!("../lib/wasi/random/random.wado");
 pub const WASI_RANDOM_WORLDS: &str = include_str!("../lib/wasi/random/worlds.wado");
 
 pub const WASI_SOCKETS_TYPES: &str = include_str!("../lib/wasi/sockets/types.wado");
 pub const WASI_SOCKETS_IP_NAME_LOOKUP: &str =
-    include_str!("../lib/wasi/sockets/ip-name-lookup.wado");
+    include_str!("../lib/wasi/sockets/ip_name_lookup.wado");
 pub const WASI_SOCKETS_WORLDS: &str = include_str!("../lib/wasi/sockets/worlds.wado");
 
 /// All WASI interface statics, used for registry building.
@@ -120,18 +120,18 @@ pub const ALL_WASI_MODULES: &[(&str, &str)] = &[
     ("wasi:cli/stdin.wado", WASI_CLI_STDIN),
     ("wasi:cli/stdout.wado", WASI_CLI_STDOUT),
     ("wasi:cli/stderr.wado", WASI_CLI_STDERR),
-    ("wasi:cli/terminal-input.wado", WASI_CLI_TERMINAL_INPUT),
-    ("wasi:cli/terminal-output.wado", WASI_CLI_TERMINAL_OUTPUT),
-    ("wasi:cli/terminal-stdin.wado", WASI_CLI_TERMINAL_STDIN),
-    ("wasi:cli/terminal-stdout.wado", WASI_CLI_TERMINAL_STDOUT),
-    ("wasi:cli/terminal-stderr.wado", WASI_CLI_TERMINAL_STDERR),
+    ("wasi:cli/terminal_input.wado", WASI_CLI_TERMINAL_INPUT),
+    ("wasi:cli/terminal_output.wado", WASI_CLI_TERMINAL_OUTPUT),
+    ("wasi:cli/terminal_stdin.wado", WASI_CLI_TERMINAL_STDIN),
+    ("wasi:cli/terminal_stdout.wado", WASI_CLI_TERMINAL_STDOUT),
+    ("wasi:cli/terminal_stderr.wado", WASI_CLI_TERMINAL_STDERR),
     ("wasi:cli/worlds.wado", WASI_CLI_WORLDS),
     ("wasi:clocks/types.wado", WASI_CLOCKS_TYPES),
     (
-        "wasi:clocks/monotonic-clock.wado",
+        "wasi:clocks/monotonic_clock.wado",
         WASI_CLOCKS_MONOTONIC_CLOCK,
     ),
-    ("wasi:clocks/system-clock.wado", WASI_CLOCKS_SYSTEM_CLOCK),
+    ("wasi:clocks/system_clock.wado", WASI_CLOCKS_SYSTEM_CLOCK),
     ("wasi:clocks/timezone.wado", WASI_CLOCKS_TIMEZONE),
     ("wasi:clocks/worlds.wado", WASI_CLOCKS_WORLDS),
     ("wasi:filesystem/types.wado", WASI_FILESYSTEM_TYPES),
@@ -141,13 +141,13 @@ pub const ALL_WASI_MODULES: &[(&str, &str)] = &[
     ("wasi:http/handler.wado", WASI_HTTP_HANDLER),
     ("wasi:http/client.wado", WASI_HTTP_CLIENT),
     ("wasi:http/worlds.wado", WASI_HTTP_WORLDS),
-    ("wasi:random/insecure-seed.wado", WASI_RANDOM_INSECURE_SEED),
+    ("wasi:random/insecure_seed.wado", WASI_RANDOM_INSECURE_SEED),
     ("wasi:random/insecure.wado", WASI_RANDOM_INSECURE),
     ("wasi:random/random.wado", WASI_RANDOM_RANDOM),
     ("wasi:random/worlds.wado", WASI_RANDOM_WORLDS),
     ("wasi:sockets/types.wado", WASI_SOCKETS_TYPES),
     (
-        "wasi:sockets/ip-name-lookup.wado",
+        "wasi:sockets/ip_name_lookup.wado",
         WASI_SOCKETS_IP_NAME_LOOKUP,
     ),
     ("wasi:sockets/worlds.wado", WASI_SOCKETS_WORLDS),
@@ -189,7 +189,7 @@ pub fn get_stdlib_module(import_path: &str) -> Option<&'static str> {
         "core:simd" => Some(CORE_SIMD),
         "core:url" => Some(CORE_URL),
         "core:kiln" => Some(CORE_KILN),
-        "core:kiln/kiln-host.wado" => Some(CORE_KILN_KILN_HOST),
+        "core:kiln/kiln_host.wado" => Some(CORE_KILN_KILN_HOST),
         "core:kiln/types.wado" => Some(CORE_KILN_TYPES),
         "core:kiln/worlds.wado" => Some(CORE_KILN_WORLDS),
 
@@ -242,7 +242,7 @@ mod tests {
 
     #[test]
     fn test_get_wasi_clocks_monotonic_clock() {
-        let source = get_stdlib_module("wasi:clocks/monotonic-clock.wado");
+        let source = get_stdlib_module("wasi:clocks/monotonic_clock.wado");
         assert!(source.is_some());
         assert!(source.unwrap().contains("MonotonicClock"));
     }
@@ -287,7 +287,7 @@ mod tests {
     #[test]
     fn test_get_core_kiln_submodules() {
         assert!(
-            get_stdlib_module("core:kiln/kiln-host.wado")
+            get_stdlib_module("core:kiln/kiln_host.wado")
                 .unwrap()
                 .contains("pub effect KilnHost")
         );

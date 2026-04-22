@@ -10,7 +10,7 @@ use anyhow::{Context, Result};
 use lexopt::Arg::Long;
 use wit_parser::Resolve;
 
-use wado_from_idl::{Transformer, WadoCodeGenerator};
+use wado_from_idl::{Transformer, WadoCodeGenerator, naming::to_snake_case};
 
 // Helper functions for lexopt argument parsing
 
@@ -257,8 +257,11 @@ fn run_directory_mode(
 
             let code = generator.generate(&module);
 
-            // Write per-interface file (e.g., wasi/filesystem/types.wado)
-            let output_path = pkg_dir.join(format!("{iface_name}.wado"));
+            // Write per-interface file. WIT kebab-case interface names
+            // are converted to Wado's snake_case filename convention
+            // (e.g. `kiln-host` -> `kiln_host.wado`).
+            let file_stem = to_snake_case(iface_name);
+            let output_path = pkg_dir.join(format!("{file_stem}.wado"));
             fs::write(&output_path, code)
                 .with_context(|| format!("Failed to write {}", output_path.display()))?;
 
@@ -332,9 +335,10 @@ fn write_flat_reexport_file(
             .map(|n| n.as_str())
             .collect::<Vec<_>>()
             .join(", ");
+        let file_stem = to_snake_case(iface_name);
         writeln!(
             flat_code,
-            "pub use {{ {names_str} }} from \"{namespace}:{pkg_name}/{iface_name}.wado\";"
+            "pub use {{ {names_str} }} from \"{namespace}:{pkg_name}/{file_stem}.wado\";"
         )
         .unwrap();
         for n in new_names {
