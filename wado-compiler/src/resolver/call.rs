@@ -12,6 +12,7 @@ use crate::tir::{
 use crate::token::Span;
 
 use super::Resolver;
+use super::callee::{CalleeRef, StaticMethodRef};
 use super::infer::InferCtx;
 use super::types::{FunctionContext, TypeError};
 
@@ -225,9 +226,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
             })
             .collect();
 
-        // Get function name from callee
-        // callee_module_source is None for local calls (uses current module), Some for external calls
-        let (callee_module_source, func_name, is_known) = match &call.callee {
+        // Resolve the callee's identity. `Some(CalleeRef)` means we know
+        // both the defining module and the name-as-defined; `None` means the
+        // call target could not be resolved and we'll emit `UnknownFunction`.
+        // `display_name` is always populated for diagnostics.
+        let (callee_opt, display_name): (Option<CalleeRef>, String) = match &call.callee {
             Expr::Ident(ident) => {
                 // Check for qualified name with :: (e.g., "Stdout::write_via_stream")
                 // Parser creates a single ident for Effect::operation syntax
@@ -237,7 +240,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
                     // Builtin functions: resolve through core:builtin module
                     if prefix == "builtin" {
-                        (Some(ModuleSource::builtin()), suffix.to_string(), true)
+                        (
+                            Some(CalleeRef::new(ModuleSource::builtin(), suffix)),
+                            ident.name.clone(),
+                        )
                     }
                     // Self::method() — resolve Self to the concrete type name
                     else if prefix == "Self"
@@ -324,7 +330,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                 };
                             let method_module = self
                                 .locate_static_method_impl(prefix, suffix, arg_hint.as_deref())
-                                .map_or_else(|| self.find_struct_module_source(prefix), |(_, m)| m);
+                                .map_or_else(
+                                    || self.find_struct_module_source(prefix),
+                                    |r| r.module,
+                                );
                             if let Some(method_ast_id) =
                                 self.find_impl_method_ast_id(&method_module, prefix, suffix)
                             {
@@ -344,16 +353,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         // Only populated by `infer_static_method_type_args`; the
                         // explicit `call.type_args` only carries method-level args.
                         let mut impl_type_args_inferred: Vec<TypeId> = Vec::new();
-                        // If no explicit type args, try to infer from argument types
+                        // If no explicit type args, try to infer from argument types.
+                        // This is an exploratory probe: the `suffix` may match a
+                        // builtin-registry entry (e.g. `builtin::foo`) keyed by bare
+                        // name; otherwise the local-module lookup almost never
+                        // succeeds and `infer_static_method_type_args` below runs.
                         let mangled_name = MethodName::format_local(prefix, None, suffix);
                         if method_type_args.is_empty() {
-                            method_type_args = self.infer_fn_type_args(
-                                None,
-                                suffix,
-                                &call.args,
-                                &args,
-                                expected_type,
-                            );
+                            let probe =
+                                CalleeRef::local(&self.current_module_source, suffix.to_string());
+                            method_type_args =
+                                self.infer_fn_type_args(&probe, &call.args, &args, expected_type);
                         }
                         if method_type_args.is_empty() {
                             let (impl_args, method_args) = self.infer_static_method_type_args(
@@ -730,29 +740,30 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             } else {
                                 None
                             };
-                            let (trait_name, struct_module) = if let Some((tn, im)) = self
-                                .locate_static_method_impl(
+                            let resolved = self.locate_static_method_impl(
+                                type_name,
+                                method_name,
+                                arg_type_hint.as_deref(),
+                            );
+                            let method_ref = resolved.unwrap_or_else(|| {
+                                StaticMethodRef::new(
+                                    ns_source.clone(),
                                     type_name,
                                     method_name,
-                                    arg_type_hint.as_deref(),
-                                ) {
-                                (Some(tn), im)
-                            } else {
-                                (None, ns_source.clone())
-                            };
+                                    None,
+                                )
+                            });
+                            let trait_name = method_ref.trait_name.clone();
+                            let struct_module = method_ref.module.clone();
 
-                            let final_mangled = if let Some(ref tn) = trait_name {
+                            let final_mangled = if let Some(ref tn) = method_ref.trait_name {
                                 MethodName::format_local(type_name, Some(tn), method_name)
                             } else {
                                 mangled_name
                             };
 
-                            let mut return_type = self.lookup_static_method_return_type(
-                                type_name,
-                                &struct_module,
-                                method_name,
-                                &final_mangled,
-                            );
+                            let mut return_type =
+                                self.lookup_static_method_return_type(&method_ref, &final_mangled);
                             if !method_type_args.is_empty() {
                                 return_type =
                                     self.substitute_type_params(return_type, &method_type_args);
@@ -796,17 +807,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                 call.span,
                             );
                         }
-                        (Some(ns_source), suffix.to_string(), true)
+                        (Some(CalleeRef::new(ns_source, suffix)), ident.name.clone())
                     }
                     // Effect operations and module namespace calls - pass through to codegen.
                     // This covers Stdout::write(), etc.
                     else {
                         (
-                            Some(ModuleSource::Local {
-                                path: prefix.to_string(),
-                            }),
-                            suffix.to_string(),
-                            true,
+                            Some(CalleeRef::local_namespace(prefix, suffix)),
+                            ident.name.clone(),
                         )
                     }
                 }
@@ -816,30 +824,46 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     || matches!(ident.name.as_str(), "Ok" | "Err" | "Some" | "None")
                 {
                     self.record_item_reference_by_name(ident.id, &ident.name);
-                    (None, ident.name.clone(), true)
+                    (
+                        Some(CalleeRef::local(
+                            &self.current_module_source,
+                            ident.name.clone(),
+                        )),
+                        ident.name.clone(),
+                    )
                 }
                 // Check for prelude functions (panic, unreachable)
                 // These are defined in core:internal and re-exported by core:prelude
                 else if matches!(ident.name.as_str(), "panic" | "unreachable") {
-                    (Some(ModuleSource::internal()), ident.name.clone(), true)
+                    (
+                        Some(CalleeRef::internal_prelude(&ident.name)),
+                        ident.name.clone(),
+                    )
                 }
-                // Check if this is an imported function (per-module imports)
+                // Check if this is an imported function (per-module imports).
+                // We go through the `Symbol` directly so both the use→def edge
+                // and the `CalleeRef` come from the same resolution — this is
+                // the single place the alias→defining-name translation happens.
                 else if self.imported_functions.contains(&ident.name) {
-                    // Get module source from symbol table for codegen
                     if let Some(symbol) = self.symbols.lookup(&ident.name) {
-                        self.record_item_reference_by_name(ident.id, &ident.name);
+                        self.record_reference_to_key(ident.id, symbol.defined_at.clone());
                         (
-                            Some(symbol.module_source().clone()),
-                            symbol.name.clone(),
-                            true,
+                            Some(CalleeRef::from_imported_symbol(symbol)),
+                            ident.name.clone(),
                         )
                     } else {
                         // Imported but not in symbols - shouldn't happen but allow
-                        (None, ident.name.clone(), true)
+                        (
+                            Some(CalleeRef::local(
+                                &self.current_module_source,
+                                ident.name.clone(),
+                            )),
+                            ident.name.clone(),
+                        )
                     }
                 } else {
                     // Unknown function - will report error
-                    (None, ident.name.clone(), false)
+                    (None, ident.name.clone())
                 }
             }
             Expr::FieldAccess(field_access) => {
@@ -847,26 +871,31 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 // These are always considered known - validated elsewhere
                 if let Expr::Ident(ident) = &field_access.expr {
                     (
-                        Some(ModuleSource::Local {
-                            path: ident.name.clone(),
-                        }),
-                        field_access.field.clone(),
-                        true,
+                        Some(CalleeRef::local_namespace(
+                            ident.name.clone(),
+                            field_access.field.clone(),
+                        )),
+                        format!("{}.{}", ident.name, field_access.field),
                     )
                 } else {
-                    (None, String::from("unknown"), false)
+                    (None, String::from("unknown"))
                 }
             }
-            _ => (None, String::from("unknown"), false),
+            _ => (None, String::from("unknown")),
         };
 
-        // Report error for unknown functions
-        if !is_known {
+        // Resolve the callee down to a single `CalleeRef`. For unknown
+        // callees we emit `UnknownFunction` and fall back to a sentinel in
+        // the current module so downstream lookups return empty safely.
+        let callee = if let Some(c) = callee_opt {
+            c
+        } else {
             let _ = self.logger.error(TypeError::UnknownFunction {
-                name: func_name.clone(),
+                name: display_name.clone(),
                 span: call.span,
             });
-        }
+            CalleeRef::local(&self.current_module_source, display_name)
+        };
 
         // Resolve explicit type arguments
         let mut type_args: Vec<TypeId> = call
@@ -876,27 +905,16 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .collect();
         // If no explicit type args, try to infer from argument types
         if type_args.is_empty() {
-            type_args = self.infer_fn_type_args(
-                callee_module_source.as_ref(),
-                &func_name,
-                &call.args,
-                &args,
-                expected_type,
-            );
+            type_args = self.infer_fn_type_args(&callee, &call.args, &args, expected_type);
         }
-
-        // For local function calls (None), use the current module source
-        // to ensure DCE and codegen can find the function correctly
-        let callee_module =
-            callee_module_source.unwrap_or_else(|| self.current_module_source.clone());
 
         // Check trait bounds on function type arguments
         if !type_args.is_empty() {
-            self.check_function_type_arg_bounds(&callee_module, &func_name, &type_args, call.span);
+            self.check_function_type_arg_bounds(&callee, &type_args, call.span);
         }
 
         // Look up function return type
-        let mut return_type = self.lookup_function_return_type(&callee_module, &func_name);
+        let mut return_type = self.lookup_function_return_type(&callee);
 
         // If we have explicit type args, substitute type parameters in the return type
         if !type_args.is_empty() {
@@ -953,8 +971,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
         TirExpr::new(
             TirExprKind::Call {
                 func: FunctionRef {
-                    module_source: callee_module,
-                    name: func_name,
+                    module_source: callee.module,
+                    name: callee.name,
                     monomorph_info: None,
                     method_info: None, // Free function call,
                 },
@@ -967,11 +985,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
     }
 
     /// Look up the return type of a function
-    pub(super) fn lookup_function_return_type(
-        &mut self,
-        callee_module: &ModuleSource,
-        func_name: &str,
-    ) -> TypeId {
+    pub(super) fn lookup_function_return_type(&mut self, callee: &CalleeRef) -> TypeId {
+        let callee_module = &callee.module;
+        let func_name = callee.name.as_str();
         // Handle builtin functions
         if callee_module.is_core_builtin() {
             return self.get_builtin_return_type(func_name);
@@ -1705,12 +1721,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
     /// preserved for plain function calls).
     pub(super) fn infer_fn_type_args(
         &mut self,
-        callee_module: Option<&ModuleSource>,
-        func_name: &str,
+        callee: &CalleeRef,
         raw_args: &[Expr],
         args: &[TirExpr],
         expected_type: Option<TypeId>,
     ) -> Vec<TypeId> {
+        let func_name = callee.name.as_str();
         // Builtin functions: pull type-param / param / return info from the
         // BuiltinRegistry so that calls like `builtin::select(a, b, c)` and
         // `builtin::array_new(n)` infer their generic type parameters from
@@ -1775,8 +1791,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             v
         } else {
             // Fallback: cross-module lookup via imported functions / loaded modules.
-            let Some(info) = self.lookup_generic_func_for_inference(callee_module, func_name)
-            else {
+            let Some(info) = self.lookup_generic_func_for_inference(callee) else {
                 return vec![];
             };
             info
@@ -1822,27 +1837,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
     /// resolving param and return types.
     fn lookup_generic_func_for_inference(
         &mut self,
-        callee_module: Option<&ModuleSource>,
-        func_name: &str,
+        callee: &CalleeRef,
     ) -> Option<(Vec<(String, TypeId)>, Vec<TypeId>, Option<TypeId>)> {
-        // When the caller already knows the callee module (e.g. via an
-        // imported-alias resolution), look up the function directly. Otherwise,
-        // resolve via the symbol table — this also handles the case where the
-        // name is reachable in the current module's symbol table but the
-        // caller did not pre-resolve the defining module.
-        let (src, name) = if let Some(m) = callee_module {
-            (m.clone(), func_name.to_string())
-        } else {
-            let symbol = self.symbols.lookup(func_name)?;
-            (symbol.module_source().clone(), symbol.name.clone())
-        };
-
         let func_info: Option<(Vec<ast::GenericParam>, Vec<ast::Param>, Option<ast::Type>)> =
             Self::lookup_func_in_loaded_module(
                 self.loaded_modules,
                 &self.loaded_module_func_indices,
-                &src,
-                &name,
+                &callee.module,
+                &callee.name,
             )
             .map(|func| {
                 (

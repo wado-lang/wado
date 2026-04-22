@@ -10,6 +10,7 @@ use crate::tir::{
 use crate::token::Span;
 
 use super::Resolver;
+use super::callee::StaticMethodRef;
 use super::method_lookup::MethodInferenceInput;
 use super::types::{FunctionContext, MethodInfo, TypeError};
 
@@ -1234,13 +1235,16 @@ impl<H: CompilerHost> Resolver<'_, H> {
             &static_call.method,
         );
 
-        // Look up return type
-        let mut return_type = self.lookup_static_method_return_type(
-            &struct_name,
-            &struct_module,
-            &static_call.method,
-            &mangled_func_name,
+        let method_ref = StaticMethodRef::new(
+            struct_module.clone(),
+            struct_name.clone(),
+            static_call.method.clone(),
+            trait_name_opt.clone(),
         );
+
+        // Look up return type
+        let mut return_type =
+            self.lookup_static_method_return_type(&method_ref, &mangled_func_name);
 
         // Emit a compile error if the static method was not found anywhere
         if return_type == TypeTable::UNKNOWN {
@@ -1427,11 +1431,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
     /// Look up static method return type based on struct name and method name
     pub(super) fn lookup_static_method_return_type(
         &mut self,
-        struct_name: &str,
-        struct_module: &ModuleSource,
-        method_name: &str,
+        method_ref: &StaticMethodRef,
         mangled_func_name: &str,
     ) -> TypeId {
+        let struct_name = method_ref.type_name.as_str();
+        let struct_module = &method_ref.module;
+        let method_name = method_ref.method_name.as_str();
         // First check locally registered function_return_types
         if let Some(&return_type) = self.function_return_types.get(mangled_func_name) {
             return return_type;
@@ -2006,7 +2011,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         method_name: &str,
     ) -> Option<String> {
         self.locate_static_method_impl(struct_name, method_name, None)
-            .map(|(name, _)| name)
+            .and_then(|r| r.trait_name)
     }
 
     pub(super) fn find_static_method_trait_with_arg(
@@ -2016,19 +2021,20 @@ impl<H: CompilerHost> Resolver<'_, H> {
         arg_type_name: Option<&str>,
     ) -> Option<String> {
         self.locate_static_method_impl(struct_name, method_name, arg_type_name)
-            .map(|(name, _)| name)
+            .and_then(|r| r.trait_name)
     }
 
-    /// Locate a static trait method impl, returning the resolved trait name and the module
-    /// source where the impl block is defined. This is used so that `FunctionRef` gets the
-    /// correct `module_source` — especially when a user defines `impl From<MyType> for i32`
-    /// in the entry module (or another module), so DCE and WIR building can find it.
+    /// Locate a static trait method impl, returning the resolved identity
+    /// (`module`, `type_name`, `method_name`, `trait_name`). Used so that
+    /// `FunctionRef` gets the correct `module_source` — especially when a
+    /// user defines `impl From<MyType> for i32` in the entry module (or
+    /// another module), so DCE and WIR building can find it.
     pub(super) fn locate_static_method_impl(
         &self,
         struct_name: &str,
         method_name: &str,
         arg_type_name: Option<&str>,
-    ) -> Option<(String, ModuleSource)> {
+    ) -> Option<StaticMethodRef> {
         let resolve_trait_name = |trait_type: &ast::Type| -> String {
             let base = Self::get_type_name_static(trait_type);
             if base == "From" || base == "TryFrom" {
@@ -2073,9 +2079,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         for item in self.current_module_items {
             if let Item::Impl(impl_block) = item
-                && let Some(name) = check_impl(impl_block)
+                && let Some(trait_name) = check_impl(impl_block)
             {
-                return Some((name, self.current_module_source.clone()));
+                return Some(StaticMethodRef::new(
+                    self.current_module_source.clone(),
+                    struct_name,
+                    method_name,
+                    Some(trait_name),
+                ));
             }
         }
 
@@ -2084,9 +2095,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
             for (module_source, item_idx) in entries {
                 if let Some(module) = self.loaded_modules.get(module_source)
                     && let Item::Impl(impl_block) = &module.items[*item_idx]
-                    && let Some(name) = check_impl(impl_block)
+                    && let Some(trait_name) = check_impl(impl_block)
                 {
-                    return Some((name, module_source.clone()));
+                    return Some(StaticMethodRef::new(
+                        module_source.clone(),
+                        struct_name,
+                        method_name,
+                        Some(trait_name),
+                    ));
                 }
             }
         }
@@ -2202,28 +2218,30 @@ impl<H: CompilerHost> Resolver<'_, H> {
             } else {
                 None
             };
-        let (trait_name_opt, struct_module) = if let Some((trait_name, impl_module)) = self
-            .locate_static_method_impl(&actual_struct_name, method_name, arg_type_hint.as_deref())
-        {
-            (Some(trait_name), impl_module)
-        } else {
-            (None, self.find_struct_module_source(&actual_struct_name))
-        };
+        let resolved = self.locate_static_method_impl(
+            &actual_struct_name,
+            method_name,
+            arg_type_hint.as_deref(),
+        );
+        let method_ref = resolved.unwrap_or_else(|| {
+            StaticMethodRef::new(
+                self.find_struct_module_source(&actual_struct_name),
+                &actual_struct_name,
+                method_name,
+                None,
+            )
+        });
 
         // Use trait-qualified mangled name if this is a trait method
-        let final_mangled_name = if let Some(ref trait_name) = trait_name_opt {
+        let final_mangled_name = if let Some(ref trait_name) = method_ref.trait_name {
             MethodName::format_local(&actual_struct_name, Some(trait_name), method_name)
         } else {
             actual_mangled_name
         };
 
         // Look up return type using the actual struct name
-        let mut return_type = self.lookup_static_method_return_type(
-            &actual_struct_name,
-            &struct_module,
-            method_name,
-            &final_mangled_name,
-        );
+        let mut return_type =
+            self.lookup_static_method_return_type(&method_ref, &final_mangled_name);
 
         // Substitute impl-level + method-level type parameters in return type.
         // `lookup_static_method_return_type` registers impl params at indices
@@ -2252,7 +2270,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // Propagate #[cm("...")] from resource static methods
         let cm_name =
-            self.lookup_resource_static_cm(&actual_struct_name, &struct_module, method_name);
+            self.lookup_resource_static_cm(&actual_struct_name, &method_ref.module, method_name);
+
+        let StaticMethodRef {
+            module: struct_module,
+            trait_name: trait_name_opt,
+            ..
+        } = method_ref;
 
         TirExpr::new(
             TirExprKind::Call {

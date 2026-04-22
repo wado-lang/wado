@@ -10,6 +10,7 @@ use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
 use super::Resolver;
+use super::callee::CalleeRef;
 use super::types::{MethodInfo, ResolvedTraitMethod, TraitMethodMatch, TypeError};
 
 impl<H: CompilerHost> Resolver<'_, H> {
@@ -700,13 +701,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
     /// Looks up the function's type params and validates bounds against the provided type args.
     pub(super) fn check_function_type_arg_bounds(
         &mut self,
-        callee_module: &ModuleSource,
-        func_name: &str,
+        callee: &CalleeRef,
         type_args: &[TypeId],
         span: Span,
     ) {
         // Look up function's type params from AST
-        let type_params = self.lookup_function_type_params(callee_module, func_name);
+        let type_params = self.lookup_function_type_params(callee);
         for (i, param) in type_params.iter().enumerate() {
             if let Some(&type_arg) = type_args.get(i) {
                 for bound in &param.bounds {
