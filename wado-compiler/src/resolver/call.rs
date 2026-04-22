@@ -347,8 +347,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         // If no explicit type args, try to infer from argument types
                         let mangled_name = MethodName::format_local(prefix, None, suffix);
                         if method_type_args.is_empty() {
-                            method_type_args =
-                                self.infer_fn_type_args(suffix, &call.args, &args, expected_type);
+                            method_type_args = self.infer_fn_type_args(
+                                None,
+                                suffix,
+                                &call.args,
+                                &args,
+                                expected_type,
+                            );
                         }
                         if method_type_args.is_empty() {
                             let (impl_args, method_args) = self.infer_static_method_type_args(
@@ -871,7 +876,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .collect();
         // If no explicit type args, try to infer from argument types
         if type_args.is_empty() {
-            type_args = self.infer_fn_type_args(&func_name, &call.args, &args, expected_type);
+            type_args = self.infer_fn_type_args(
+                callee_module_source.as_ref(),
+                &func_name,
+                &call.args,
+                &args,
+                expected_type,
+            );
         }
 
         // For local function calls (None), use the current module source
@@ -1694,6 +1705,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
     /// preserved for plain function calls).
     pub(super) fn infer_fn_type_args(
         &mut self,
+        callee_module: Option<&ModuleSource>,
         func_name: &str,
         raw_args: &[Expr],
         args: &[TirExpr],
@@ -1763,7 +1775,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             v
         } else {
             // Fallback: cross-module lookup via imported functions / loaded modules.
-            let Some(info) = self.lookup_generic_func_for_inference(func_name) else {
+            let Some(info) = self.lookup_generic_func_for_inference(callee_module, func_name)
+            else {
                 return vec![];
             };
             info
@@ -1809,12 +1822,20 @@ impl<H: CompilerHost> Resolver<'_, H> {
     /// resolving param and return types.
     fn lookup_generic_func_for_inference(
         &mut self,
+        callee_module: Option<&ModuleSource>,
         func_name: &str,
     ) -> Option<(Vec<(String, TypeId)>, Vec<TypeId>, Option<TypeId>)> {
-        // Resolve the imported function via the symbol table to get its defining module.
-        let symbol = self.symbols.lookup(func_name)?;
-        let src = symbol.module_source().clone();
-        let name = symbol.name.clone();
+        // When the caller already knows the callee module (e.g. via an
+        // imported-alias resolution), look up the function directly. Otherwise,
+        // resolve via the symbol table — this also handles the case where the
+        // name is reachable in the current module's symbol table but the
+        // caller did not pre-resolve the defining module.
+        let (src, name) = if let Some(m) = callee_module {
+            (m.clone(), func_name.to_string())
+        } else {
+            let symbol = self.symbols.lookup(func_name)?;
+            (symbol.module_source().clone(), symbol.name.clone())
+        };
 
         let func_info: Option<(Vec<ast::GenericParam>, Vec<ast::Param>, Option<ast::Type>)> =
             Self::lookup_func_in_loaded_module(
