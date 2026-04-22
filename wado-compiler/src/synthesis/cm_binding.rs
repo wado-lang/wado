@@ -1048,8 +1048,10 @@ fn synthesize_lift_result_inner(
     // i32 but initialized with `ref.null none` (a reference type).
     let result_type_id = if let Some(ctx) = ctx {
         let mut tt = ctx.type_table.borrow_mut();
-        let ok_type_id = wasi_type_to_type_id_scoped(ok_ty, &mut tt, None, ctx.wasi_package);
-        let err_type_id = wasi_type_to_type_id_scoped(err_ty, &mut tt, None, ctx.wasi_package);
+        let ok_type_id =
+            wasi_type_to_type_id_scoped(ok_ty, &mut tt, Some(ctx.wasi_registry), ctx.wasi_package);
+        let err_type_id =
+            wasi_type_to_type_id_scoped(err_ty, &mut tt, Some(ctx.wasi_registry), ctx.wasi_package);
         tt.make_result(ok_type_id, err_type_id)
     } else {
         TypeTable::I32 // placeholder when no context
