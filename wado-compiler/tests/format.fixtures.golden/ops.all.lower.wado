@@ -2017,10 +2017,10 @@ pub fn write_string_to_stream(tx: StreamWritable<u8>, message: String, add_newli
     cm_raw_call stream-drop-writable(&tx as i32);
 }
 
-pub fn wait_for_subtask(packed: i32) with WaitableSet, Subtask {
+pub fn wait_for_subtask(packed: i32) with WaitableSet, RawSubtask {
     let handle: i32 = (packed >> 4);
     if (handle != 0) {
-        let subtask: Subtask = handle as Subtask;
+        let subtask: RawSubtask = handle as RawSubtask;
         let ws: WaitableSet = cm_raw_call waitable-set-new();
         core::internal::cm_waitable_join(&subtask as i32, &ws);
         loop {
