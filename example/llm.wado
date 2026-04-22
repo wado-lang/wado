@@ -1,0 +1,140 @@
+// Call OpenRouter's chat completions API with a fixed prompt.
+//
+// Requires OPENROUTER_API_KEY in the environment.
+//
+// Usage:
+//   export OPENROUTER_API_KEY=sk-or-...
+//   wado run example/llm.wado
+
+use { println, eprintln, env, Stdout, Stderr, Environment } from "core:cli";
+use {
+    Request, Response, ErrorCode, Fields, FieldName, FieldValue,
+    Method, Scheme, Trailers,
+} from "wasi:http";
+use { Client } from "wasi:http";
+use { Serialize, Deserialize } from "core:serde";
+use { to_string, from_string } from "core:json";
+
+struct ChatMessage {
+    role: String,
+    content: String,
+}
+impl Serialize for ChatMessage;
+impl Deserialize for ChatMessage;
+
+struct ChatRequest {
+    model: String,
+    messages: Array<ChatMessage>,
+}
+impl Serialize for ChatRequest;
+
+struct ChatChoice {
+    message: ChatMessage,
+}
+impl Deserialize for ChatChoice;
+
+struct ChatResponse {
+    choices: Array<ChatChoice>,
+}
+impl Deserialize for ChatResponse;
+
+fn send_post(api_key: String, body: String) -> Response with Client {
+    let [body_rx, body_tx] = Stream::<u8>::new();
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+
+    let headers = Fields::new();
+    headers.append(
+        "authorization" as FieldName,
+        `Bearer {api_key}`.as_bytes() as FieldValue,
+    );
+    headers.append(
+        "content-type" as FieldName,
+        "application/json".as_bytes() as FieldValue,
+    );
+    headers.append(
+        "user-agent" as FieldName,
+        #file.as_bytes() as FieldValue,
+    );
+
+    let [req, _req_future] = Request::new(
+        headers,
+        Option::<Stream<u8>>::Some(body_rx),
+        trailers_future,
+        null,
+    );
+    req.set_method(Method::Post);
+    req.set_scheme(Option::<Scheme>::Some(Scheme::Https));
+    req.set_authority(Option::<String>::Some("openrouter.ai"));
+    req.set_path_with_query(Option::<String>::Some("/api/v1/chat/completions"));
+
+    body_tx.write(body.as_bytes());
+    body_tx.drop();
+
+    let result = Client::send(req);
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+
+    return match result {
+        Ok(resp) => resp,
+        Err(e) => panic(`HTTP request failed: {e:?}`),
+    };
+}
+
+fn read_body(resp: Response) -> String {
+    let [res_rx, _res_tx] = Future::<Result<(), ErrorCode>>::new();
+    let [body_stream, _trailers] = Response::consume_body(resp, res_rx);
+
+    let mut buf: Array<u8> = [];
+    loop {
+        let chunk = body_stream.read(4096);
+        if chunk.len() == 0 {
+            break;
+        }
+        buf.extend(&chunk);
+    }
+    body_stream.drop();
+    return String::from_utf8_lossy(buf);
+}
+
+export fn run() with Stdout, Stderr, Environment, Client {
+    let api_key = match env("OPENROUTER_API_KEY") {
+        Some(k) => k,
+        None => {
+            eprintln("OPENROUTER_API_KEY is not set");
+            panic("missing API key");
+        },
+    };
+
+    let messages: Array<ChatMessage> = [
+        ChatMessage {
+            role: "user",
+            content: "Explain WebAssembly briefly",
+        },
+    ];
+    let request_body = to_string::<ChatRequest>(&ChatRequest {
+        model: "google/gemma-4-26b-a4b-it:free",
+        messages,
+    }).unwrap();
+
+    let resp = send_post(api_key, request_body);
+    let status = resp.get_status_code() as i32;
+    let body = read_body(resp);
+
+    if status != 200 {
+        eprintln(`HTTP {status}: {body}`);
+        panic("API request failed");
+    }
+
+    let parsed = match from_string::<ChatResponse>(body) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln(`failed to parse JSON response: {e:?}`);
+            panic("parse error");
+        },
+    };
+
+    if parsed.choices.is_empty() {
+        panic("no choices in response");
+    }
+
+    println(parsed.choices[0].message.content);
+}
