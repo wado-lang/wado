@@ -61,9 +61,8 @@ impl<H: CompilerHost + 'static> kiln_host::Host for KilnHostState<H> {
                     path: path.clone(),
                     content_hash: hash,
                 });
-                String::from_utf8(bytes).map_err(|e| {
-                    kiln_host::HostError::Io(format!("{path}: not UTF-8: {e}"))
-                })
+                String::from_utf8(bytes)
+                    .map_err(|e| kiln_host::HostError::Io(format!("{path}: not UTF-8: {e}")))
             }
             Err(wado_compiler::SourceError::NotFound { .. }) => Err(kiln_host::HostError::NotFound),
             Err(e) => Err(kiln_host::HostError::Io(e.to_string())),

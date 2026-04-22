@@ -669,13 +669,13 @@ async fn load_input<H: CompilerHost>(
     host: &H,
     path: &InvocationPath,
 ) -> Result<GeneratorInputFile, ExecuteError> {
-    let bytes = host
-        .load_source(path.as_str())
-        .await
-        .map_err(|source| ExecuteError::LoadInput {
-            path: path.as_str().to_string(),
-            source,
-        })?;
+    let bytes =
+        host.load_source(path.as_str())
+            .await
+            .map_err(|source| ExecuteError::LoadInput {
+                path: path.as_str().to_string(),
+                source,
+            })?;
     let content = String::from_utf8(bytes).map_err(|e| ExecuteError::LoadInput {
         path: path.as_str().to_string(),
         source: SourceError::IoError {
