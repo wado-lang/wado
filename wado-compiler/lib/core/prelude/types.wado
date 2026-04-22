@@ -292,6 +292,59 @@ pub struct Subtask<T> {
     pub __cm_align: i32,
 }
 
+impl Subtask<T> {
+    /// Wait for the subtask to complete and return the lifted result.
+    /// Drops the CM subtask handle and frees the result buffer before
+    /// returning. After `wait` returns, the `Subtask<T>` value must not be
+    /// used again — doing so is a use-after-free (the backing buffer has
+    /// been released).
+    pub fn wait(&self) -> T {
+        let handle = self.__cm_packed >> 4;
+        if handle != 0 {
+            let raw = handle as RawSubtask;
+            let ws = WaitableSet::new();
+            raw.join(&ws);
+            loop {
+                let event = ws.wait();
+                // `wait` delivers Starting (0) → Started (1) → Returned (2).
+                // Loop until the subtask reaches Returned.
+                if event.payload == 2 {
+                    break;
+                }
+            }
+            raw.drop();
+            ws.drop();
+        }
+        let result = builtin::cm_lift_async_result::<T>(self.__cm_outptr);
+        let _ = builtin::realloc(self.__cm_outptr, self.__cm_size, self.__cm_align, 0);
+        return result;
+    }
+
+    /// Cancel the in-flight subtask and free the result buffer. Any
+    /// partially-written result is discarded. Same single-use contract as
+    /// `wait` — the `Subtask<T>` must not be used again after `cancel`.
+    pub fn cancel(&self) {
+        let handle = self.__cm_packed >> 4;
+        if handle != 0 {
+            let raw = handle as RawSubtask;
+            raw.cancel();
+            raw.drop();
+        }
+        let _ = builtin::realloc(self.__cm_outptr, self.__cm_size, self.__cm_align, 0);
+    }
+
+    /// Join this subtask to a waitable set for manual polling (use when
+    /// the caller wants to wait on multiple subtasks and/or streams
+    /// simultaneously). Returns a `Waitable` token identifying this
+    /// subtask in wait events. The caller remains responsible for eventual
+    /// `wait`/`cancel` on this `Subtask<T>`.
+    pub fn join(&self, set: &WaitableSet) -> Waitable {
+        let handle = self.__cm_packed >> 4;
+        let raw = handle as RawSubtask;
+        return raw.join(set);
+    }
+}
+
 /// An error context carrying a debug message across component boundaries.
 pub resource ErrorContext {
     /// Create a new error context with the given message.

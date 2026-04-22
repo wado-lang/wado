@@ -450,6 +450,16 @@ fn waitable_set_drop(ws: i32);
 
 // --- Subtask / Waitable ---
 
+/// Compiler intrinsic: lift a CM async result of type `T` from the linear
+/// memory buffer at `outptr`. Expanded by the `lower` phase into an
+/// inline [`synthesize_lift_with_context`] invocation once `T` is
+/// resolved to a concrete type.
+///
+/// Used internally by `Subtask<T>::wait` to materialise the async
+/// result. Should not be called from user code; there is no protection
+/// against invoking it on an uninitialised buffer.
+fn cm_lift_async_result<T>(outptr: i32) -> T;
+
 /// Drop a completed subtask.
 #[canonical("wasi", "subtask-drop")]
 fn subtask_drop(handle: i32);
