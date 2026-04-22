@@ -370,19 +370,24 @@ pub async fn execute<H: CompilerHost>(
     host: &H,
 ) -> Result<InvocationRun, ExecuteError> {
     let primary = load_input(host, &invocation.from).await?;
-    let primary_hash = file_hash(&invocation.from, &primary.content);
+    let primary_hash = file_hash(&invocation.from, primary.content.as_bytes());
     let mut inputs = Vec::with_capacity(invocation.inputs.len());
     let mut input_hashes = Vec::with_capacity(invocation.inputs.len());
     for p in &invocation.inputs {
         let file = load_input(host, p).await?;
-        input_hashes.push(file_hash(p, &file.content));
+        input_hashes.push(file_hash(p, file.content.as_bytes()));
         inputs.push(file);
     }
 
+    // Canonical options are UTF-8 JSON bytes produced by
+    // `encode_options_canonical`. Converting to `String` at the wire
+    // boundary upholds the invariant; non-UTF-8 here is a compiler bug.
+    let options = String::from_utf8(invocation.options_canonical.clone())
+        .expect("kiln: canonical options must be UTF-8");
     let request = GeneratorRequest {
         primary,
         inputs,
-        options: invocation.options_canonical.clone(),
+        options,
     };
 
     let response = host
@@ -664,13 +669,20 @@ async fn load_input<H: CompilerHost>(
     host: &H,
     path: &InvocationPath,
 ) -> Result<GeneratorInputFile, ExecuteError> {
-    let content =
-        host.load_source(path.as_str())
-            .await
-            .map_err(|source| ExecuteError::LoadInput {
-                path: path.as_str().to_string(),
-                source,
-            })?;
+    let bytes = host
+        .load_source(path.as_str())
+        .await
+        .map_err(|source| ExecuteError::LoadInput {
+            path: path.as_str().to_string(),
+            source,
+        })?;
+    let content = String::from_utf8(bytes).map_err(|e| ExecuteError::LoadInput {
+        path: path.as_str().to_string(),
+        source: SourceError::IoError {
+            path: path.as_str().to_string(),
+            message: format!("not UTF-8: {e}"),
+        },
+    })?;
     Ok(GeneratorInputFile {
         path: path.as_str().to_string(),
         content,
@@ -1890,14 +1902,17 @@ d_string = "hi"
             };
             let host = MockHost::new(&[("schema.proto", b"x"), ("dep.proto", b"y")], Ok(response));
             let mut inv = sample_invocation();
-            inv.options_canonical = vec![0xde, 0xad, 0xbe, 0xef];
+            // Canonical options travel to the generator as a UTF-8 JSON
+            // string (see WEP §"The `kiln` world"). Use a well-formed
+            // canonical JSON fixture so the UTF-8 invariant holds.
+            inv.options_canonical = br#"{"k":"v"}"#.to_vec();
 
             runtime()
                 .block_on(async { execute(&inv, b"wasm", tmp.path(), &host).await })
                 .unwrap();
             let reqs = host.requests.lock().unwrap();
             assert_eq!(reqs.len(), 1);
-            assert_eq!(reqs[0].options, vec![0xde, 0xad, 0xbe, 0xef]);
+            assert_eq!(reqs[0].options, r#"{"k":"v"}"#);
             assert_eq!(reqs[0].primary.path, "schema.proto");
             assert_eq!(reqs[0].inputs.len(), 1);
             assert_eq!(reqs[0].inputs[0].path, "dep.proto");

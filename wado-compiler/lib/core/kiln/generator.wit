@@ -1,8 +1,19 @@
 package core:kiln@0.1.0;
 
-interface host {
-    read-file: func(path: string) -> result<list<u8>, host-error>;
+/// Host interface exposed to Kiln generators. Deliberately narrow:
+/// no clocks, no random, no network, no filesystem beyond `read-file`.
+/// See WEP 2026-04-12 (Kiln) §"The `kiln` world".
+interface kiln-host {
+    /// Read a file from the compiler's `CompilerHost`. Paths are resolved
+    /// relative to the invocation's declaration site (manifest directory
+    /// or the source file containing a `use ... with`). Every call is
+    /// recorded and contributes to the invocation cache key.
+    read-file: func(path: string) -> result<string, host-error>;
 
+    /// Report a diagnostic that will be surfaced as a normal compile
+    /// diagnostic. Multiple diagnostics may be reported; they are all
+    /// printed even if the generator eventually returns a successful
+    /// response.
     emit-diagnostic: func(diagnostic: diagnostic);
 
     variant host-error {
@@ -19,6 +30,9 @@ interface host {
 
     enum diagnostic-level { error, warning, info, hint }
 
+    /// A span into any file the generator has read, or into a file the
+    /// generator knows about by other means. The compiler renders the
+    /// snippet by consulting `CompilerHost`.
     record source-span {
         path: string,
         byte-start: u32,
@@ -26,18 +40,40 @@ interface host {
     }
 }
 
+/// Types exchanged across the generator boundary.
 interface types {
+    /// One schema file the compiler has pre-loaded for the generator.
+    /// The file is always supplied by value so that the initial input
+    /// set is fully determined by the invocation declaration.
     record input-file {
         path: string,
-        content: list<u8>,
+        content: string,
     }
 
-    record request {
+    /// The raw CM-level request record. Generator-side code sees
+    /// `Request<Options>` (a Wado-only generic defined in `core:kiln`)
+    /// whose `options: Options` field is populated from
+    /// `raw-request.options` by a compiler-synthesized decoder.
+    /// `raw-request` is an internal wire-form type and should not
+    /// appear in generator source.
+    ///
+    /// `options` is a canonical JSON string encoding of the user's
+    /// `options = { ... }` block. The compiler uses the generator's
+    /// typed `Options` descriptor (see `wado-compiler::kiln::options`)
+    /// to encode on the caller side and decode on the generator side.
+    /// Canonical JSON (sorted keys, NFC-normalized strings, fixed
+    /// numeric representation) lets the cache key hash the wire bytes
+    /// directly.
+    record raw-request {
         primary: input-file,
         inputs: list<input-file>,
-        options: list<u8>,
+        options: string,
     }
 
+    /// One generated Wado file. `path` is relative to the invocation's
+    /// output directory (defaults to `build/kiln/<invocation-name>/`).
+    /// Exactly one output file must be the entry module; supplementary
+    /// files are referenced from the entry via ordinary Wado `use`.
     record output-file {
         path: string,
         content: string,
@@ -56,8 +92,8 @@ interface types {
 }
 
 world generator {
-    import host;
-    use types.{request, response, error};
+    import kiln-host;
+    use types.{raw-request, response, error};
 
-    export generate: func(req: request) -> result<response, error>;
+    export generate: func(req: raw-request) -> result<response, error>;
 }

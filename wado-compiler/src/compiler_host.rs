@@ -351,25 +351,27 @@ pub trait CompilerHost: Send + Sync {
 
 /// Request handed to a Kiln generator by the compiler.
 ///
-/// Mirrors `core:kiln/types::request` 1:1 but does not depend on wasmtime;
-/// hosts lift/lower at their own boundary.
+/// Mirrors `core:kiln/types::raw-request` 1:1 but does not depend on
+/// wasmtime; hosts lift/lower at their own boundary.
 #[derive(Debug, Clone)]
 pub struct GeneratorRequest {
     /// The schema file named by `from` in the invocation.
     pub primary: GeneratorInputFile,
     /// Supplementary schema files.
     pub inputs: Vec<GeneratorInputFile>,
-    /// Canonical-encoded generator options, produced by the compiler.
-    ///
-    /// Empty in M2; the typed encoder lands in M4.
-    pub options: Vec<u8>,
+    /// Canonical JSON encoding of the user's `options = { ... }`.
+    /// The generator-side compiler-synthesized adapter decodes this
+    /// into the typed `Options` struct before user code runs.
+    pub options: String,
 }
 
 /// One schema file passed to a Kiln generator.
 #[derive(Debug, Clone)]
 pub struct GeneratorInputFile {
     pub path: String,
-    pub content: Vec<u8>,
+    /// UTF-8 content of the file. Kiln schemas are text (proto,
+    /// graphql, g4, wit, ...), so string is the natural wire form.
+    pub content: String,
 }
 
 /// Response returned by a Kiln generator.
@@ -579,10 +581,10 @@ mod tests {
                 let req = GeneratorRequest {
                     primary: GeneratorInputFile {
                         path: "schema.proto".to_string(),
-                        content: b"syntax = \"proto3\";".to_vec(),
+                        content: "syntax = \"proto3\";".to_string(),
                     },
                     inputs: vec![],
-                    options: vec![],
+                    options: String::new(),
                 };
                 let result = host.run_generator(b"\0asm", req).await;
                 assert!(matches!(result, Err(GeneratorRunnerError::Unsupported)));

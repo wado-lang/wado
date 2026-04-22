@@ -26,7 +26,7 @@ wasmtime::component::bindgen!({
     exports: { default: async },
 });
 
-use self::core::kiln::host as kiln_host;
+use self::core::kiln::kiln_host;
 use self::core::kiln::types as kiln_types;
 
 /// Host policy for a single generator invocation.
@@ -53,7 +53,7 @@ struct KilnHostState<H: CompilerHost> {
 }
 
 impl<H: CompilerHost + 'static> kiln_host::Host for KilnHostState<H> {
-    async fn read_file(&mut self, path: String) -> Result<Vec<u8>, kiln_host::HostError> {
+    async fn read_file(&mut self, path: String) -> Result<String, kiln_host::HostError> {
         match self.host.load_source(&path).await {
             Ok(bytes) => {
                 let hash = wado_compiler::kiln::content_hash(&bytes);
@@ -61,7 +61,9 @@ impl<H: CompilerHost + 'static> kiln_host::Host for KilnHostState<H> {
                     path: path.clone(),
                     content_hash: hash,
                 });
-                Ok(bytes)
+                String::from_utf8(bytes).map_err(|e| {
+                    kiln_host::HostError::Io(format!("{path}: not UTF-8: {e}"))
+                })
             }
             Err(wado_compiler::SourceError::NotFound { .. }) => Err(kiln_host::HostError::NotFound),
             Err(e) => Err(kiln_host::HostError::Io(e.to_string())),
@@ -153,7 +155,7 @@ pub async fn run_generator<H: CompilerHost + 'static>(
         .await
         .map_err(|e| GeneratorRunnerError::Host(format!("instantiate: {e}")))?;
 
-    let wit_request = kiln_types::Request {
+    let wit_request = kiln_types::RawRequest {
         primary: lower_input_file(&request.primary),
         inputs: request.inputs.iter().map(lower_input_file).collect(),
         options: request.options,
@@ -229,10 +231,10 @@ mod tests {
                 let request = GeneratorRequest {
                     primary: GeneratorInputFile {
                         path: "schema.proto".to_string(),
-                        content: b"syntax = \"proto3\";".to_vec(),
+                        content: "syntax = \"proto3\";".to_string(),
                     },
                     inputs: vec![],
-                    options: vec![],
+                    options: String::new(),
                 };
                 let result = run_generator(
                     &engine,
