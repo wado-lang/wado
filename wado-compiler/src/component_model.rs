@@ -365,6 +365,18 @@ impl WasiRegistry {
         Collision::Accept
     }
 
+    /// Return the canonical source interface that first registered
+    /// `(kind, name)`, e.g. `"wasi:filesystem/types@0.3.0-rc-2026-03-15"`.
+    ///
+    /// `kind` is one of `"variants"`, `"enums"`, `"resources"`, `"structs"`,
+    /// `"flags"`, or `"newtypes"`. Returns `None` when the pair was never
+    /// registered or when it was registered without a `#[cm(...)]` attribute.
+    pub fn bare_name_owner(&self, kind: &str, name: &str) -> Option<&str> {
+        self.name_owner
+            .get(&(kind.to_string(), name.to_string()))
+            .map(String::as_str)
+    }
+
     /// Extract the source interface (the part before the `#` fragment,
     /// e.g. `"wasi:cli/stdout@0.3.0-rc-2026-03-15"`) from the
     /// first `#[cm("...")]` attribute on a stdlib item. Returns an

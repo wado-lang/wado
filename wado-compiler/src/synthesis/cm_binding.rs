@@ -92,24 +92,39 @@ pub fn wasi_type_to_type_id_scoped(
             "()" => TypeTable::UNIT,
             "String" => type_table.make_struct("String".to_string(), ModuleSource::string()),
             // Resource/enum/variant types - look up the already-resolved TypeId if available.
-            // When a WASI package hint is available, try scoped lookup first to avoid
-            // name collisions (e.g. wasi:cli/ErrorCode vs wasi:http/ErrorCode).
+            // Primary lookup is scoped by `(name, wasi_package)`; only the WASI binding
+            // synthesizer may still fall back to the unscoped by-name scan, because
+            // WASI types can be interned under multiple package contexts (the resolver
+            // registers each declaring module independently). Cross-module name
+            // collisions with user-declared types are prevented because the fallback
+            // is only ever hit inside the WASI binding synthesizer.
             _ => wasi_package
                 .and_then(|pkg| {
                     type_table.find_named_type_by_wasi_package(named.name.as_str(), pkg)
                 })
+                .or_else(|| {
+                    registry
+                        .and_then(|reg| canonical_wasi_package(reg, named.name.as_str()))
+                        .and_then(|pkg| {
+                            type_table.find_named_type_by_wasi_package(named.name.as_str(), pkg)
+                        })
+                })
                 .or_else(|| type_table.find_resource_type_by_name(named.name.as_str()))
                 .or_else(|| type_table.find_variant_type_by_name(named.name.as_str()))
                 .or_else(|| {
-                    // Create variant from WASI registry when it exists in a
-                    // different module but not yet in this type_table.
-                    // Checked BEFORE find_enum_type_by_name to prevent a
-                    // same-named enum (e.g. cli ErrorCode) from shadowing
-                    // a package-scoped variant (e.g. filesystem ErrorCode).
+                    // Create variant from WASI registry when it exists but is
+                    // not yet in this type_table. Prefer the registry's
+                    // canonical owning package so we don't mint a duplicate
+                    // TypeId when the same variant was (or will be) created by
+                    // another scope. Checked BEFORE the enum fallback to
+                    // prevent a same-named enum (e.g. cli ErrorCode) from
+                    // shadowing a package-scoped variant (e.g. filesystem
+                    // ErrorCode).
                     if let Some(reg) = registry
-                        && let Some(pkg) = wasi_package
                         && reg.is_variant(&named.name)
                     {
+                        let pkg = canonical_wasi_package(reg, named.name.as_str())
+                            .or(wasi_package)?;
                         Some(type_table.make_variant(
                             named.name.clone(),
                             ModuleSource::Wasi {
@@ -179,6 +194,31 @@ pub fn wasi_type_to_type_id_scoped(
         }
         _ => TypeTable::UNIT,
     }
+}
+
+/// Extract the WASI package (e.g. `"filesystem"`) from a CM source string like
+/// `"wasi:filesystem/types@0.3.0-rc-2026-03-15"`. Returns `None` for
+/// non-`wasi:` sources or malformed strings.
+fn wasi_package_from_cm_source(source: &str) -> Option<&str> {
+    let after_colon = source.strip_prefix("wasi:")?;
+    let without_version = after_colon.split('@').next().unwrap_or(after_colon);
+    without_version.split('/').next()
+}
+
+/// Given a bare type name, ask the registry for its canonical owner and return
+/// the WASI package (e.g. `"filesystem"`). Used to disambiguate name lookups
+/// for types whose canonical owner differs from the currently-processed WASI
+/// package (e.g. `ErrorCode` is owned by `filesystem` but referenced from
+/// `http` bindings).
+fn canonical_wasi_package<'a>(registry: &'a WasiRegistry, name: &str) -> Option<&'a str> {
+    for kind in ["variants", "enums", "resources", "structs", "flags", "newtypes"] {
+        if let Some(source) = registry.bare_name_owner(kind, name)
+            && let Some(pkg) = wasi_package_from_cm_source(source)
+        {
+            return Some(pkg);
+        }
+    }
+    None
 }
 
 /// Extract the WASI sub-module interface path for a struct from the registry.
@@ -426,6 +466,10 @@ fn try_lift_wasi_variant_or_enum(
         let variant_type = ctx
             .wasi_package
             .and_then(|pkg| tt.find_named_type_by_wasi_package(name, pkg))
+            .or_else(|| {
+                canonical_wasi_package(ctx.wasi_registry, name)
+                    .and_then(|pkg| tt.find_named_type_by_wasi_package(name, pkg))
+            })
             .or_else(|| tt.find_variant_type_by_name(name))?;
         drop(tt);
         return Some(synthesize_lift_wasi_variant(
@@ -446,6 +490,10 @@ fn try_lift_wasi_variant_or_enum(
         let enum_type = ctx
             .wasi_package
             .and_then(|pkg| tt.find_named_type_by_wasi_package(name, pkg))
+            .or_else(|| {
+                canonical_wasi_package(ctx.wasi_registry, name)
+                    .and_then(|pkg| tt.find_named_type_by_wasi_package(name, pkg))
+            })
             .or_else(|| tt.find_enum_type_by_name(name))?;
         drop(tt);
         return Some(synthesize_lift_wasi_enum(
@@ -3413,25 +3461,56 @@ fn synthesize_adapter(
     binding
 }
 
-/// Build a name → module source map for every effect/resource declared in the
-/// loaded TIR modules. The CM binding synthesizer uses this to attach the
+/// Build a `(module_source, name)` set for every effect/resource declared in
+/// the loaded TIR modules. The CM binding synthesizer uses this to attach the
 /// owning effect to each generated binding using the same `module_source` the
 /// resolver assigns to user-written `with E` clauses.
+///
+/// Keying by `(module_source, name)` (rather than name alone) prevents
+/// collisions when two modules declare an effect or resource with the same
+/// name — `lookup_effect_owner` selects the canonical WASI module.
 fn effect_owner_module_sources(
     modules: &IndexMap<ModuleSource, crate::tir::TirModule>,
-) -> IndexMap<String, ModuleSource> {
-    let mut out: IndexMap<String, ModuleSource> = IndexMap::default();
+) -> IndexMap<(ModuleSource, String), ()> {
+    let mut out: IndexMap<(ModuleSource, String), ()> = IndexMap::default();
     for (module_source, module) in modules {
         for effect in &module.effects {
-            out.entry(effect.name.clone())
-                .or_insert_with(|| module_source.clone());
+            out.insert((module_source.clone(), effect.name.clone()), ());
         }
         for resource in &module.resources {
-            out.entry(resource.name.clone())
-                .or_insert_with(|| module_source.clone());
+            out.insert((module_source.clone(), resource.name.clone()), ());
         }
     }
     out
+}
+
+/// Look up the canonical owning module for an effect/resource named `name`
+/// whose binding targets WASI `package` (e.g. `"cli"`).
+///
+/// Preferred match: a `ModuleSource::Wasi { interface }` whose interface starts
+/// with `"{package}/"` (e.g. `wasi:cli/stdio.wado` for package `"cli"`).
+/// Falls back to any other owner with the same name if no WASI match exists.
+fn lookup_effect_owner(
+    owners: &IndexMap<(ModuleSource, String), ()>,
+    name: &str,
+    package: &str,
+) -> Option<ModuleSource> {
+    let wasi_prefix = format!("{package}/");
+    let mut fallback: Option<ModuleSource> = None;
+    for ((ms, n), ()) in owners {
+        if n != name {
+            continue;
+        }
+        if let ModuleSource::Wasi { interface } = ms
+            && interface.starts_with(&wasi_prefix)
+        {
+            return Some(ms.clone());
+        }
+        if fallback.is_none() {
+            fallback = Some(ms.clone());
+        }
+    }
+    fallback
 }
 
 /// Compute flat CM ABI types for an export return type, resolving variant and
@@ -5696,10 +5775,12 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                 let func_info = func_info.clone();
                 let binding_name =
                     binding_func_name(&func_info.effect_name, &func_info.method_name);
-                let owner_module = owner_sources
-                    .get(&func_info.effect_name)
-                    .cloned()
-                    .unwrap_or_else(|| ModuleSource::wasi(&func_info.package));
+                let owner_module = lookup_effect_owner(
+                    &owner_sources,
+                    &func_info.effect_name,
+                    &func_info.package,
+                )
+                .unwrap_or_else(|| ModuleSource::wasi(&func_info.package));
                 let adapter = synthesize_adapter(
                     &func_info,
                     project.wasi_registry,

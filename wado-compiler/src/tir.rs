@@ -1079,7 +1079,7 @@ impl TypeTable {
     }
 
     /// Find a variant type by (name, `module_source`) pair via `intern_map` (O(1)).
-    /// Unlike `find_variant_type_by_name`, this is collision-safe across modules.
+    /// Collision-safe across modules when two variant types share a name.
     pub fn find_variant_type(
         &self,
         name: &str,
@@ -1092,10 +1092,13 @@ impl TypeTable {
         self.intern_map.get(&key).copied()
     }
 
-    /// Find a variant type by name (scanning all types).
-    /// Returns the first matching `ResolvedType::Variant` with the given name.
-    /// Prefer `find_variant_type` when the module source is known.
-    pub fn find_variant_type_by_name(&self, name: &str) -> Option<TypeId> {
+    /// Find a variant type by name alone (scans all types).
+    ///
+    /// WARNING: collision-prone across modules — prefer `find_variant_type`
+    /// when the module source is known. Kept as an internal helper for the
+    /// WASI binding synthesizer, which resolves cross-WASI-package type
+    /// references where the primary `(name, wasi_package)` scope misses.
+    pub(crate) fn find_variant_type_by_name(&self, name: &str) -> Option<TypeId> {
         for (&type_id, resolved) in &self.types {
             if let ResolvedType::Variant { name: vname, .. } = resolved
                 && vname == name
@@ -1107,7 +1110,7 @@ impl TypeTable {
     }
 
     /// Find a resource type by (name, `module_source`) pair via `intern_map` (O(1)).
-    /// Unlike `find_resource_type_by_name`, this is collision-safe across modules.
+    /// Collision-safe across modules when two resource types share a name.
     pub fn find_resource_type(
         &self,
         name: &str,
@@ -1120,10 +1123,13 @@ impl TypeTable {
         self.intern_map.get(&key).copied()
     }
 
-    /// Find a resource type by name (scanning all types).
-    /// Returns the first matching `ResolvedType::Resource` with the given name.
-    /// Prefer `find_resource_type` when the module source is known.
-    pub fn find_resource_type_by_name(&self, name: &str) -> Option<TypeId> {
+    /// Find a resource type by name alone (scans all types).
+    ///
+    /// WARNING: collision-prone across modules — prefer `find_resource_type`
+    /// when the module source is known. Kept as an internal helper for the
+    /// WASI binding synthesizer, which resolves cross-WASI-package type
+    /// references where the primary `(name, wasi_package)` scope misses.
+    pub(crate) fn find_resource_type_by_name(&self, name: &str) -> Option<TypeId> {
         for (&type_id, resolved) in &self.types {
             if let ResolvedType::Resource { name: rname, .. } = resolved
                 && rname == name
@@ -1135,7 +1141,7 @@ impl TypeTable {
     }
 
     /// Find an enum type by (name, `module_source`) pair via `intern_map` (O(1)).
-    /// Unlike `find_enum_type_by_name`, this is collision-safe across modules.
+    /// Collision-safe across modules when two enum types share a name.
     pub fn find_enum_type(&self, name: &str, module_source: &ModuleSource) -> Option<TypeId> {
         let key = ResolvedType::Enum {
             name: name.to_string(),
@@ -1144,10 +1150,13 @@ impl TypeTable {
         self.intern_map.get(&key).copied()
     }
 
-    /// Find an enum type by name (scanning all types).
-    /// Returns the first matching `ResolvedType::Enum` with the given name.
-    /// Prefer `find_enum_type` when the module source is known.
-    pub fn find_enum_type_by_name(&self, name: &str) -> Option<TypeId> {
+    /// Find an enum type by name alone (scans all types).
+    ///
+    /// WARNING: collision-prone across modules — prefer `find_enum_type`
+    /// when the module source is known. Kept as an internal helper for the
+    /// WASI binding synthesizer, which resolves cross-WASI-package type
+    /// references where the primary `(name, wasi_package)` scope misses.
+    pub(crate) fn find_enum_type_by_name(&self, name: &str) -> Option<TypeId> {
         for (&type_id, resolved) in &self.types {
             if let ResolvedType::Enum { name: ename, .. } = resolved
                 && ename == name
