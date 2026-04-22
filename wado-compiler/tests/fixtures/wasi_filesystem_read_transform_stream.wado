@@ -44,7 +44,7 @@ export fn run() with Stdout, Stderr, Preopens {
         "hello.txt",
         OpenFlags::none(),
         DescriptorFlags::Read,
-    );
+    ).wait();
 
     if let Ok(file) = open_result {
         let [file_rx, read_future] = file.read_via_stream(0 as Filesize);

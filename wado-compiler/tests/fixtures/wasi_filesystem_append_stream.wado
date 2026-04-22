@@ -23,7 +23,7 @@ export fn run() with Stdout, Stderr, Preopens {
         "append_test.txt",
         OpenFlags::Create | OpenFlags::Truncate,
         DescriptorFlags::Read | DescriptorFlags::Write,
-    );
+    ).wait();
 
     if let Ok(file) = file_result {
         // Write "Hello" (72, 101, 108, 108, 111)
@@ -59,7 +59,7 @@ export fn run() with Stdout, Stderr, Preopens {
         read_future.drop();
 
         // Clean up
-        dir.unlink_file_at("append_test.txt");
+        dir.unlink_file_at("append_test.txt").wait();
     }
 }
 

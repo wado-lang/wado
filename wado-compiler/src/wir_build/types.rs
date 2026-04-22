@@ -393,10 +393,12 @@ fn register_variant(
     // Register case-specific struct types so the translator can reference them.
     // These are "phantom" types — the emitter will skip them and instead map their
     // WIR type indices to the correct Wasm type indices during variant rec group emission.
+    //
+    // Even no-payload cases need their own type so `ref.test (ref <case>)`
+    // can dispatch on the dynamic GC tag — constructing the variant base
+    // type for a no-payload case would fail any subsequent test against
+    // the case-specific subtype.
     for case in &cases {
-        if case.payload.is_empty() {
-            continue; // Unit cases don't need separate types
-        }
         let case_fq = format!("{fq}::{}", case.name);
         let mut fields = vec![WirField {
             name: "discriminant".to_string(),
@@ -942,11 +944,13 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
 
             ctx.variant_type_map.insert(fq.clone(), type_id.clone());
 
-            // Register case-specific struct types
+            // Register case-specific struct types — including no-payload
+            // cases. Even though a no-payload subtype is structurally
+            // identical to the base (only the discriminant), it needs its
+            // own GC subtype so `ref.test (ref <case>)` can dispatch on
+            // the dynamic type. Constructing the base type would fail any
+            // such test.
             for case in &wir_cases {
-                if case.payload.is_empty() {
-                    continue;
-                }
                 let case_fq = format!("{fq}::{}", case.name);
                 let mut fields = vec![WirField {
                     name: "discriminant".to_string(),

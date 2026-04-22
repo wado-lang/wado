@@ -25,29 +25,29 @@ export fn run() with Stdout, Stderr, Preopens {
         "hello.txt",
         OpenFlags::none(),
         DescriptorFlags::Read,
-    );
+    ).wait();
     let file2_result = dir.open_at(
         PathFlags::none(),
         "hello.txt",
         OpenFlags::none(),
         DescriptorFlags::Read,
-    );
+    ).wait();
     // Open a different file
     let file3_result = dir.open_at(
         PathFlags::none(),
         "binary.dat",
         OpenFlags::none(),
         DescriptorFlags::Read,
-    );
+    ).wait();
 
     if let Ok(file1) = file1_result {
         // Test metadata_hash on open file descriptor
-        let hash1_result = file1.metadata_hash();
+        let hash1_result = file1.metadata_hash().wait();
         if let Ok(hash1) = hash1_result {
             println("metadata_hash: got hash from file descriptor");
 
             // Test metadata_hash_at on directory
-            let hash_at_result = dir.metadata_hash_at(PathFlags::none(), "hello.txt");
+            let hash_at_result = dir.metadata_hash_at(PathFlags::none(), "hello.txt").wait();
             if let Ok(hash_at) = hash_at_result {
                 if hash1.lower == hash_at.lower && hash1.upper == hash_at.upper {
                     println("metadata_hash: descriptor and path hashes match (correct)");
@@ -63,7 +63,7 @@ export fn run() with Stdout, Stderr, Preopens {
 
         // Test is_same_object: same file
         if let Ok(file2) = file2_result {
-            let same = file1.is_same_object(&file2);
+            let same = file1.is_same_object(&file2).wait();
             if same {
                 println("is_same_object: same file returns true (correct)");
             } else {
@@ -72,7 +72,7 @@ export fn run() with Stdout, Stderr, Preopens {
 
             // Test is_same_object: different files
             if let Ok(file3) = file3_result {
-                let different = file1.is_same_object(&file3);
+                let different = file1.is_same_object(&file3).wait();
                 if !different {
                     println("is_same_object: different files returns false (correct)");
                 } else {
