@@ -330,7 +330,7 @@ pub trait CompilerHost: Send + Sync {
     /// Execute a Kiln generator component and return its response.
     ///
     /// `component_wasm` is the compiled generator component. The host is
-    /// responsible for instantiating it, linking `wado:kiln/host` so that
+    /// responsible for instantiating it, linking `core:kiln/host` so that
     /// `read-file` and `emit-diagnostic` forward back into this same host,
     /// and returning the generator's response.
     ///
@@ -351,7 +351,7 @@ pub trait CompilerHost: Send + Sync {
 
 /// Request handed to a Kiln generator by the compiler.
 ///
-/// Mirrors `wado:kiln/types::request` 1:1 but does not depend on wasmtime;
+/// Mirrors `core:kiln/types::request` 1:1 but does not depend on wasmtime;
 /// hosts lift/lower at their own boundary.
 #[derive(Debug, Clone)]
 pub struct GeneratorRequest {
@@ -402,7 +402,7 @@ pub struct GeneratorReadRecord {
     pub content_hash: [u8; 32],
 }
 
-/// Generator-side error, mirroring `wado:kiln/types::error`.
+/// Generator-side error, mirroring `core:kiln/types::error`.
 #[derive(Debug, Clone)]
 pub enum GeneratorError {
     /// The generator rejected the schema it was given.
@@ -450,7 +450,7 @@ impl std::fmt::Display for GeneratorRunnerError {
 
 impl std::error::Error for GeneratorRunnerError {}
 
-/// Severity mirrored from `wado:kiln/host::diagnostic-level`.
+/// Severity mirrored from `core:kiln/host::diagnostic-level`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GeneratorDiagnosticLevel {
     Error,
@@ -479,7 +479,7 @@ pub struct GeneratorDiagnostic {
 /// The Kiln WIT world, embedded so the compiler can treat its byte identity
 /// as part of every cache key. The single source of truth; `wado-cli` reads
 /// the same file via `wasmtime::component::bindgen!(path = "...")`.
-pub const KILN_GENERATOR_WIT: &str = include_str!("../lib/wado/kiln/generator.wit");
+pub const KILN_GENERATOR_WIT: &str = include_str!("../lib/core/kiln/generator.wit");
 
 /// A simple in-memory compiler host for testing
 ///
@@ -591,7 +591,7 @@ mod tests {
 
     #[test]
     fn kiln_generator_wit_is_embedded() {
-        assert!(KILN_GENERATOR_WIT.contains("package wado:kiln"));
+        assert!(KILN_GENERATOR_WIT.contains("package core:kiln"));
         assert!(KILN_GENERATOR_WIT.contains("world generator"));
         assert!(KILN_GENERATOR_WIT.contains("export generate"));
     }

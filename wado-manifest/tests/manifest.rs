@@ -130,12 +130,12 @@ fn build_world_kiln_generator_accepted() {
 [package]
 name = "gen"
 version = "0.1.0"
-build-world = "wado:kiln/generator"
+build-world = "core:kiln/generator"
 "#;
     let m: Manifest = toml.parse().unwrap();
     assert_eq!(
         m.package.as_ref().unwrap().build_world.as_deref(),
-        Some("wado:kiln/generator")
+        Some("core:kiln/generator")
     );
 }
 

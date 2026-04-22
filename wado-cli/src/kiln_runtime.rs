@@ -1,6 +1,6 @@
 //! Native wasmtime runtime for Kiln generators.
 //!
-//! Instantiates a compiled generator component against the `wado:kiln/generator`
+//! Instantiates a compiled generator component against the `core:kiln/generator`
 //! world, linking only the two host imports (`read-file` and `emit-diagnostic`).
 //! Everything else — WASI, clocks, random, http — is unlinked; a generator that
 //! imports any of those fails at link time, which is the determinism guarantee.
@@ -20,14 +20,14 @@ use wado_compiler::{
 };
 
 wasmtime::component::bindgen!({
-    path: "../wado-compiler/lib/wado/kiln/generator.wit",
+    path: "../wado-compiler/lib/core/kiln/generator.wit",
     world: "generator",
     imports: { default: async },
     exports: { default: async },
 });
 
-use self::wado::kiln::host as kiln_host;
-use self::wado::kiln::types as kiln_types;
+use self::core::kiln::host as kiln_host;
+use self::core::kiln::types as kiln_types;
 
 /// Host policy for a single generator invocation.
 ///
@@ -116,7 +116,7 @@ fn lift_error(e: kiln_types::Error) -> GeneratorError {
     }
 }
 
-/// Instantiate `component_wasm` against the `wado:kiln/generator` world, call
+/// Instantiate `component_wasm` against the `core:kiln/generator` world, call
 /// its exported `generate`, and return the response plus the list of every
 /// file the generator read via `host::read-file`.
 pub async fn run_generator<H: CompilerHost + 'static>(

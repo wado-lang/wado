@@ -63,8 +63,9 @@ pub struct Package {
     pub service: Option<String>,
     pub lib: Option<String>,
     /// `build-world = "..."` — opts the package into a Wado-authored host
-    /// contract. When set to `"wado:kiln/generator"`, the package is treated
-    /// as a Kiln generator (see WEP 2026-04-12).
+    /// contract. When set to `"core:kiln/generator"`, the package is treated
+    /// as a Kiln generator (see WEP 2026-04-12). In M6.2 this transitional
+    /// field is replaced by `[package].generator = "<path>"`.
     pub build_world: Option<String>,
 }
 
@@ -240,7 +241,7 @@ impl fmt::Display for ManifestError {
             ),
             ManifestError::InvalidBuildWorld { value } => write!(
                 f,
-                "package.build-world {value:?} is not supported (expected \"wado:kiln/generator\")"
+                "package.build-world {value:?} is not supported (expected \"core:kiln/generator\")"
             ),
         }
     }

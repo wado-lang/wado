@@ -8,7 +8,7 @@
 //! #4 — registry/git module sources are deferred to a follow-up.
 //!
 //! Actual component compilation (`path -> .wasm`) depends on compiler-side
-//! work that is not yet landed (the `wado:kiln/generator` world, WIT type
+//! work that is not yet landed (the `core:kiln/generator` world, WIT type
 //! surface, and stdlib additions). Until those land,
 //! [`CliGeneratorProvider::get_component`] returns
 //! [`ProviderError::Unsupported`] with an actionable message.
@@ -72,7 +72,7 @@ impl GeneratorProvider for CliGeneratorProvider {
                 Err(ProviderError::Unsupported {
                     message: format!(
                         "kiln: local generator at `{}` cannot be compiled yet — \
-                         the `wado:kiln/generator` world is scheduled for a follow-up PR. \
+                         the `core:kiln/generator` world is scheduled for a follow-up PR. \
                          Commit `build/kiln/` and `wado.lock` to use consume-only mode.",
                         path.as_str(),
                     ),
