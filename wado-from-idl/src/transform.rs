@@ -334,7 +334,7 @@ impl<'a> Transformer<'a> {
 
     /// Get the import path for an interface (with `.wado` extension),
     /// e.g. `"wasi:clocks/system_clock.wado"`. The WIT kebab-case
-    /// interface name is converted to Wado's snake_case filename
+    /// interface name is converted to Wado's `snake_case` filename
     /// convention (matching the per-interface file emitted by
     /// `main.rs::run_directory_mode`).
     fn get_wasi_path_for_interface(&self, iface_id: InterfaceId) -> String {

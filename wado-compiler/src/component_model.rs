@@ -547,11 +547,7 @@ impl WasiRegistry {
                 // Extract interface path from #[cm] attribute if present
                 // Format: #[cm("wasi:sockets/types@0.3.0-rc-2025-09-16#error-code")]
                 let source_interface = Self::cm_source_interface(&enum_def.attrs);
-                let bare_outcome = self.check_collision(
-                    "enums",
-                    &enum_def.name,
-                    &source_interface,
-                );
+                let bare_outcome = self.check_collision("enums", &enum_def.name, &source_interface);
                 // Store by Wado name only when this source wins the bare-name
                 // slot; subsequent collisions are still reachable via the
                 // disambiguated key below.
@@ -576,11 +572,8 @@ impl WasiRegistry {
                 // Use the #[cm] fragment as the CM name (preserves acronym casing)
                 let cm_name = cm_attr_cm_name(&variant_def.attrs, &variant_def.name);
                 let source_interface = Self::cm_source_interface(&variant_def.attrs);
-                let bare_outcome = self.check_collision(
-                    "variants",
-                    &variant_def.name,
-                    &source_interface,
-                );
+                let bare_outcome =
+                    self.check_collision("variants", &variant_def.name, &source_interface);
                 // Store both CM and Wado names for each case
                 let cases: Vec<CmVariantCase> = variant_def
                     .cases
