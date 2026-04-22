@@ -1,0 +1,28 @@
+//! Kiln stdlib entry point.
+//!
+//! Import the user-facing Kiln types and the `KilnHost` effect via
+//! `use { ... } from "core:kiln"`. This facade re-exports the WIT-generated
+//! submodules under `lib/core/kiln/` and adds the Wado-only `Request<T>`
+//! wrapper that generator authors write against.
+//!
+//! See WEP 2026-04-12 (Kiln) §"The `kiln` world".
+
+pub use {
+    KilnHost, HostError, Diagnostic, DiagnosticLevel, SourceSpan,
+} from "core:kiln/kiln-host.wado";
+
+pub use {
+    InputFile, OutputFile, Response, Error,
+} from "core:kiln/types.wado";
+
+/// The typed request passed to a Kiln generator's `generate` function.
+///
+/// The compiler synthesizes a Component Model adapter that decodes the
+/// wire-form `raw-request` (with `options` as a canonical JSON string)
+/// into `Request<Options>` with a typed `options` field. Generator
+/// authors never touch the JSON.
+pub struct Request<T> {
+    pub primary: InputFile,
+    pub inputs: Array<InputFile>,
+    pub options: T,
+}

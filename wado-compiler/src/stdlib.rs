@@ -45,6 +45,10 @@ pub const CORE_JSON: &str = include_str!("../lib/core/json.wado");
 pub const CORE_JSON_NSD: &str = include_str!("../lib/core/json_nsd.wado");
 pub const CORE_JSON_VALUE: &str = include_str!("../lib/core/json_value.wado");
 pub const CORE_SIMD: &str = include_str!("../lib/core/simd.wado");
+pub const CORE_KILN: &str = include_str!("../lib/core/kiln.wado");
+pub const CORE_KILN_KILN_HOST: &str = include_str!("../lib/core/kiln/kiln-host.wado");
+pub const CORE_KILN_TYPES: &str = include_str!("../lib/core/kiln/types.wado");
+pub const CORE_KILN_WORLDS: &str = include_str!("../lib/core/kiln/worlds.wado");
 pub const CORE_URL: &str = include_str!("../lib/core/url.wado");
 
 // WASI flat package files — re-export from all sub-interfaces (backward compat)
@@ -184,6 +188,10 @@ pub fn get_stdlib_module(import_path: &str) -> Option<&'static str> {
         "core:json_value" => Some(CORE_JSON_VALUE),
         "core:simd" => Some(CORE_SIMD),
         "core:url" => Some(CORE_URL),
+        "core:kiln" => Some(CORE_KILN),
+        "core:kiln/kiln-host.wado" => Some(CORE_KILN_KILN_HOST),
+        "core:kiln/types.wado" => Some(CORE_KILN_TYPES),
+        "core:kiln/worlds.wado" => Some(CORE_KILN_WORLDS),
 
         // WASI interfaces
         _ => ALL_WASI_MODULES
@@ -265,6 +273,34 @@ mod tests {
         let source = get_stdlib_module("wasi:filesystem");
         assert!(source.is_some());
         assert!(source.unwrap().contains("Descriptor"));
+    }
+
+    #[test]
+    fn test_get_core_kiln_facade() {
+        let source = get_stdlib_module("core:kiln");
+        assert!(source.is_some(), "core:kiln facade should be registered");
+        let s = source.unwrap();
+        assert!(s.contains("pub struct Request"));
+        assert!(s.contains("KilnHost"));
+    }
+
+    #[test]
+    fn test_get_core_kiln_submodules() {
+        assert!(
+            get_stdlib_module("core:kiln/kiln-host.wado")
+                .unwrap()
+                .contains("pub effect KilnHost")
+        );
+        assert!(
+            get_stdlib_module("core:kiln/types.wado")
+                .unwrap()
+                .contains("pub struct RawRequest")
+        );
+        assert!(
+            get_stdlib_module("core:kiln/worlds.wado")
+                .unwrap()
+                .contains("pub world Generator")
+        );
     }
 
     #[test]
