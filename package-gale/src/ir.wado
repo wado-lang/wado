@@ -197,6 +197,12 @@ pub fn check_references(grammar: &Grammar) -> Result<(), ParseError> {
                 // Lexer-to-lexer refs (including fragment refs) are
                 // always resolvable locally — lexer rules cannot cross
                 // the lexer/parser grammar boundary.
+                // `EOF` is a built-in that matches end-of-input inside
+                // lexer rules (e.g. `'/*' .*? ('*/' | EOF)`); it has no
+                // defining rule and is handled specially by codegen.
+                if r.referenced_name == "EOF" {
+                    continue;
+                }
                 let mut found = false;
                 for let lr of &grammar.lexer_rules {
                     if lr.name == r.referenced_name {

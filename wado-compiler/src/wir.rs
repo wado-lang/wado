@@ -953,6 +953,20 @@ pub const COMP_FEATURE_TUPLE: u32 = 1 << 7;
 pub const COMP_FEATURE_BOX: u32 = 1 << 8;
 pub const COMP_FEATURE_RANGE_EXCLUSIVE: u32 = 1 << 9;
 pub const COMP_FEATURE_RANGE_INCLUSIVE: u32 = 1 << 10;
+/// Compiler feature flag: struct is the canonical Kiln `Request<T>` wrapper.
+/// The CM adapter for `core:kiln/generator` constructs instances of this
+/// type by decoding the WIT `raw-request`'s canonical JSON `options` into a
+/// typed `Options`. See WEP 2026-04-12 §"The `kiln` world".
+pub const COMP_FEATURE_KILN_REQUEST: u32 = 1 << 11;
+/// Compiler feature flag: trait is the canonical `core:serde::Serialize`.
+/// Lets the CM adapter request `Serialize` synthesis for Wado types
+/// without hard-coding the trait's module path.
+pub const COMP_FEATURE_SERIALIZE: u32 = 1 << 12;
+/// Compiler feature flag: trait is the canonical `core:serde::Deserialize`.
+/// Lets the Kiln CM adapter request `Deserialize` synthesis for the
+/// generator's `Options` struct without hard-coding the trait's module
+/// path.
+pub const COMP_FEATURE_DESERIALIZE: u32 = 1 << 13;
 
 /// A function declaration with optional body.
 #[derive(Debug)]

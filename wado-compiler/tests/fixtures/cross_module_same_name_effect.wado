@@ -1,0 +1,28 @@
+#![TODO]
+// Two modules define `pub effect Logger` with different method sets.
+// Each module's Logger type must remain distinct — a function that
+// requires one must not be unifiable with a function that requires
+// the other.
+//
+// TODO: currently ICEs before we can even observe cross-module
+// collision, because user-defined `pub effect` is unsupported at the
+// user level (see `user_effect_smoke.wado`). Fix that first.
+// Separately, the WasiRegistry effect map keys by bare name; once
+// user effects compile, same-name cross-module effects may still
+// collide in the registry — this fixture is the regression guard.
+
+use { greet } from "./sub/cross_module_same_name_effect_a.wado";
+use { raise } from "./sub/cross_module_same_name_effect_b.wado";
+
+test "cross-module same-name effects compile" {
+    // We don't install effect handlers here — the test only verifies
+    // that the compiler accepts both declarations without name
+    // collision. Call-site resolution must pick the right Logger for
+    // each function.
+    let _g = greet;
+    let _r = raise;
+    assert true;
+}
+
+__DATA__
+{"test": {}}

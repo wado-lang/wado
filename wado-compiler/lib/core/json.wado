@@ -770,10 +770,12 @@ impl JsonDeserializer {
                 'b' => result.push(8 as u8 as char),
                 'f' => result.push(12 as u8 as char),
                 'u' => result.push(self.read_unicode_escape()?),
-                _ => return Result::Err(DeserializeError::malformed(
-                    `invalid escape '\\{esc}'`,
-                    self.pos as i64,
-                )),
+                _ => {
+                    return Result::Err(DeserializeError::malformed(
+                        `invalid escape '\\{esc}'`,
+                        self.pos as i64,
+                    ));
+                },
             }
             self.pos += 1;
         }
@@ -890,7 +892,7 @@ impl JsonDeserializer {
                     "expected integer, got float",
                     start,
                 )),
-                Ok(v) && (v < -2147483648.0 || v > 2147483647.0) => Result::Err(
+                Ok(v) && v < -2147483648.0 || v > 2147483647.0 => Result::Err(
                     DeserializeError::overflow("value out of range for i32", start),
                 ),
                 Ok(v) => Result::Ok(v as i32),
@@ -1472,10 +1474,18 @@ impl JsonDeserializer {
         }
         let b = self.input.get_byte(self.pos) as u8 as char;
         match b {
-            '"' => return self.skip_string(),
-            't' => return self.expect_true(),
-            'f' => return self.expect_false(),
-            'n' => return self.expect_null(),
+            '"' => {
+                return self.skip_string();
+            },
+            't' => {
+                return self.expect_true();
+            },
+            'f' => {
+                return self.expect_false();
+            },
+            'n' => {
+                return self.expect_null();
+            },
             '[' => {
                 self.pos += 1;
                 self.skip_whitespace();
@@ -1549,10 +1559,12 @@ impl JsonDeserializer {
                 self.skip_number();
                 return Result::Ok(());
             },
-            _ => return Result::Err(DeserializeError::malformed(
-                "unexpected character in JSON value",
-                self.pos as i64,
-            )),
+            _ => {
+                return Result::Err(DeserializeError::malformed(
+                    "unexpected character in JSON value",
+                    self.pos as i64,
+                ));
+            },
         }
     }
 }
@@ -1930,9 +1942,9 @@ impl Deserializer for JsonDeserializer {
                     Result::Err(DeserializeError::invalid_value(
                         "expected single char",
                         self.pos as i64,
-                    ))
+                    ));
                 } else {
-                    Result::Ok(c)
+                    Result::Ok(c);
                 }
             },
             None => Result::Err(DeserializeError::invalid_value(
@@ -2010,10 +2022,12 @@ impl Deserializer for JsonDeserializer {
                     is_object: true,
                 });
             },
-            _ => return Result::Err(DeserializeError::unexpected_type(
-                "expected string or object for variant",
-                self.pos as i64,
-            )),
+            _ => {
+                return Result::Err(DeserializeError::unexpected_type(
+                    "expected string or object for variant",
+                    self.pos as i64,
+                ));
+            },
         }
     }
 

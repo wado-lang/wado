@@ -1,0 +1,27 @@
+#![TODO]
+// Smoke test: a single module declares `pub resource` and uses it
+// as a type annotation. Does not attempt to construct it — we only
+// want type-level declaration acceptance.
+//
+// TODO: user-defined `pub resource` at the user level currently ICEs
+// during core-Wasm validation:
+//   "type mismatch: expected i32, found (ref (exact $type))"
+// Same class of bug as `user_effect_smoke.wado` — codegen has only
+// been exercised against stdlib resources. Remove `#![TODO]` once
+// user-level resources compile cleanly.
+
+pub resource Counter {
+    fn bump(&self);
+}
+
+pub fn tick(c: &Counter) {
+    let _ = c;
+}
+
+test "user-defined resource compiles" {
+    let _t = tick;
+    assert true;
+}
+
+__DATA__
+{"test": {}}

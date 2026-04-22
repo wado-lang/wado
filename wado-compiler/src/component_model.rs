@@ -282,6 +282,19 @@ pub struct WasiRegistry {
     /// Maps Wado struct name -> (CM record name kebab-case, source interface path, fields with CM names, fields with Wado names)
     /// Fields: Vec<(`cm_field_name`, `field_type`)>
     /// Wado fields: Vec<(`wado_field_name`, `cm_field_name`, `field_type`)>
+    /// Tracks which `(type_kind, bare_name)` was first registered from
+    /// which source interface. Used by `register_module` to panic on
+    /// silent overwrites between same-named types from different
+    /// modules. Without this, a second registration would shadow the
+    /// first (e.g. registering `core:kiln/types::Response` after
+    /// `wasi:http/types::Response` would corrupt CM codegen for HTTP
+    /// types). The proper fix — making every map source-aware and
+    /// migrating the ~128 lookup callers — is tracked separately;
+    /// this assertion converts the silent corruption into a loud
+    /// build failure at the moment of collision.
+    /// See `tests/fixtures/cross_module_same_name_*` for regression
+    /// fixtures.
+    name_owner: IndexMap<(String, String), String>,
     structs: IndexMap<
         String,
         (
@@ -293,10 +306,78 @@ pub struct WasiRegistry {
     >,
 }
 
+/// Outcome of a `WasiRegistry::check_collision` probe.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Collision {
+    /// First registration for this `(kind, name)`, or a re-registration
+    /// from the same source — caller should perform the bare-name insert.
+    Accept,
+    /// Different source already registered — caller should skip the bare-name
+    /// insert to preserve the first registrant. The duplicate is still
+    /// reachable via the dual-storage source-disambiguated key.
+    Reject,
+}
+
 impl WasiRegistry {
     /// Create a new empty registry
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Detect bare-name collisions across modules during stdlib
+    /// registration. The registry's per-kind maps are keyed by the
+    /// bare type name without the owning interface, so two modules
+    /// declaring the same name would silently overwrite each other.
+    /// `name_owner` records the first source interface to register a
+    /// given `(kind, name)` pair; a subsequent registration from a
+    /// different source returns `Reject` so the caller can skip the
+    /// insert (preserving the first registrant under the bare name)
+    /// rather than corrupting the map.
+    ///
+    /// Callers that need a specific module's type must use the
+    /// dual-storage `format!("{interface}#{name}")` key (currently
+    /// only `enums` and `variants` populate that side) or a future
+    /// source-aware accessor. The dual-storage path is the safe one
+    /// for collisions; the bare-name path serves the common case
+    /// where a type is unique across stdlib.
+    ///
+    /// See `tests/fixtures/cross_module_same_name_*` regression
+    /// fixtures and the WEP 2026-04-12 (Kiln) blocker discussion.
+    fn check_collision(&mut self, kind: &str, name: &str, source: &str) -> Collision {
+        if source.is_empty() {
+            return Collision::Accept;
+        }
+        let key = (kind.to_string(), name.to_string());
+        if let Some(prev) = self.name_owner.get(&key) {
+            if prev != source {
+                eprintln!(
+                    "WasiRegistry: bare-name collision in `{kind}` for `{name}`: \
+                     first registered from `{prev}`, ignoring duplicate from `{source}`. \
+                     The bare-name slot keeps the first registrant; callers that need \
+                     `{name}` from `{source}` must use the source-disambiguated key \
+                     (`{source}#{name}`). See WEP 2026-04-12 (Kiln).",
+                );
+                return Collision::Reject;
+            }
+            return Collision::Accept;
+        }
+        self.name_owner.insert(key, source.to_string());
+        Collision::Accept
+    }
+
+    /// Extract the source interface (the part before the `#` fragment,
+    /// e.g. `"wasi:cli/stdout@0.3.0-rc-2026-03-15"`) from the
+    /// first `#[cm("...")]` attribute on a stdlib item. Returns an
+    /// empty string if no attribute is present (user-authored items
+    /// don't carry this).
+    fn cm_source_interface(attrs: &[crate::ast::Attribute]) -> String {
+        attrs
+            .iter()
+            .find(|a| a.name == "cm")
+            .and_then(|a| a.args.first())
+            .and_then(|arg| arg.as_str().split('#').next())
+            .unwrap_or("")
+            .to_string()
     }
 
     /// Build the registry from the embedded stdlib
@@ -338,6 +419,19 @@ impl WasiRegistry {
             registry.register_module(&module, &mut world_registry);
         }
 
+        // Register the `core:kiln/generator` world. Only the world is
+        // registered — not the types (WasiRegistry's struct map is keyed
+        // by bare name and would shadow `wasi:http/types::Response` with
+        // `core:kiln::Response`). Kiln types participate as regular Wado
+        // imports via `use { ... } from "core:kiln"` and don't need the
+        // WasiRegistry bookkeeping.
+        let kiln_worlds_module = parse_module(stdlib::CORE_KILN_WORLDS);
+        for item in &kiln_worlds_module.items {
+            if let crate::ast::Item::World(world) = item {
+                world_registry.register(world);
+            }
+        }
+
         (registry, world_registry)
     }
 
@@ -352,6 +446,12 @@ impl WasiRegistry {
         // First, collect newtypes from this module
         for item in &module.items {
             if let Item::Newtype(alias) = item {
+                let source_interface = Self::cm_source_interface(&alias.attrs);
+                if self.check_collision("newtypes", &alias.name, &source_interface)
+                    == Collision::Reject
+                {
+                    continue;
+                }
                 self.newtypes.insert(alias.name.clone(), alias.ty.clone());
             }
         }
@@ -363,14 +463,12 @@ impl WasiRegistry {
                 let cm_name = cm_attr_cm_name(&resource.attrs, &resource.name);
                 // Extract source interface path from #[cm] attribute
                 // Format: #[cm("wasi:cli/terminal-input@0.3.0-rc-2026-01-06#terminal-input")]
-                let source_interface = resource
-                    .attrs
-                    .iter()
-                    .find(|a| a.name == "cm")
-                    .and_then(|a| a.args.first())
-                    .and_then(|arg| arg.as_str().split('#').next())
-                    .unwrap_or("")
-                    .to_string();
+                let source_interface = Self::cm_source_interface(&resource.attrs);
+                if self.check_collision("resources", &resource.name, &source_interface)
+                    == Collision::Reject
+                {
+                    continue;
+                }
                 self.resources
                     .insert(resource.name.clone(), (cm_name, source_interface));
             }
@@ -381,15 +479,7 @@ impl WasiRegistry {
             if let Item::Struct(struct_def) = item {
                 // Use the #[cm] fragment as the CM name (preserves acronym casing)
                 let cm_name = cm_attr_cm_name(&struct_def.attrs, &struct_def.name);
-                // Extract source interface path (part before #) from #[cm] attribute
-                let source_interface = struct_def
-                    .attrs
-                    .iter()
-                    .find(|a| a.name == "cm")
-                    .and_then(|a| a.args.first())
-                    .and_then(|arg| arg.as_str().split('#').next())
-                    .unwrap_or("")
-                    .to_string();
+                let source_interface = Self::cm_source_interface(&struct_def.attrs);
                 let fields: Vec<(String, Type)> = struct_def
                     .fields
                     .iter()
@@ -406,6 +496,11 @@ impl WasiRegistry {
                         )
                     })
                     .collect();
+                if self.check_collision("structs", &struct_def.name, &source_interface)
+                    == Collision::Reject
+                {
+                    continue;
+                }
                 self.structs.insert(
                     struct_def.name.clone(),
                     (cm_name, source_interface, fields, wado_fields),
@@ -416,11 +511,15 @@ impl WasiRegistry {
         // Collect flags types from this module
         for item in &module.items {
             if let Item::Flags(flags_def) = item {
+                let attrs = flags_def.attributes.as_deref().unwrap_or(&[]);
                 // Use the #[cm] fragment as the CM name (preserves acronym casing)
-                let cm_name = cm_attr_cm_name(
-                    flags_def.attributes.as_deref().unwrap_or(&[]),
-                    &flags_def.name,
-                );
+                let cm_name = cm_attr_cm_name(attrs, &flags_def.name);
+                let source_interface = Self::cm_source_interface(attrs);
+                if self.check_collision("flags", &flags_def.name, &source_interface)
+                    == Collision::Reject
+                {
+                    continue;
+                }
                 // Use per-member #[cm] attr for CM name
                 let member_names: Vec<String> = flags_def
                     .flags
@@ -447,24 +546,21 @@ impl WasiRegistry {
 
                 // Extract interface path from #[cm] attribute if present
                 // Format: #[cm("wasi:sockets/types@0.3.0-rc-2025-09-16#error-code")]
-                let interface_path = enum_def
-                    .attrs
-                    .iter()
-                    .find(|a| a.name == "cm")
-                    .and_then(|a| a.args.first())
-                    .and_then(|arg| arg.as_str().split('#').next())
-                    .map(str::to_string);
+                let source_interface = Self::cm_source_interface(&enum_def.attrs);
+                let bare_outcome = self.check_collision("enums", &enum_def.name, &source_interface);
+                // Store by Wado name only when this source wins the bare-name
+                // slot; subsequent collisions are still reachable via the
+                // disambiguated key below.
+                if bare_outcome == Collision::Accept {
+                    self.enums.insert(
+                        enum_def.name.clone(),
+                        (cm_name.clone(), variant_names.clone()),
+                    );
+                }
 
-                // Store by Wado name for backward compatibility
-                // but also store by interface path for interface-specific lookups
-                self.enums.insert(
-                    enum_def.name.clone(),
-                    (cm_name.clone(), variant_names.clone()),
-                );
-
-                // Also store by interface path + name for disambiguation
-                if let Some(path) = interface_path {
-                    let full_key = format!("{path}#{}", enum_def.name);
+                // Always also store by interface path + name for disambiguation
+                if !source_interface.is_empty() {
+                    let full_key = format!("{source_interface}#{}", enum_def.name);
                     self.enums.insert(full_key, (cm_name, variant_names));
                 }
             }
@@ -475,6 +571,9 @@ impl WasiRegistry {
             if let Item::Variant(variant_def) = item {
                 // Use the #[cm] fragment as the CM name (preserves acronym casing)
                 let cm_name = cm_attr_cm_name(&variant_def.attrs, &variant_def.name);
+                let source_interface = Self::cm_source_interface(&variant_def.attrs);
+                let bare_outcome =
+                    self.check_collision("variants", &variant_def.name, &source_interface);
                 // Store both CM and Wado names for each case
                 let cases: Vec<CmVariantCase> = variant_def
                     .cases
@@ -486,19 +585,17 @@ impl WasiRegistry {
                     })
                     .collect();
 
-                self.variants
-                    .insert(variant_def.name.clone(), (cm_name.clone(), cases.clone()));
+                // Store by Wado name only when this source wins the bare-name
+                // slot; subsequent collisions are still reachable via the
+                // disambiguated key below.
+                if bare_outcome == Collision::Accept {
+                    self.variants
+                        .insert(variant_def.name.clone(), (cm_name.clone(), cases.clone()));
+                }
 
-                // Also store by interface path + name for disambiguation
-                let interface_path = variant_def
-                    .attrs
-                    .iter()
-                    .find(|a| a.name == "cm")
-                    .and_then(|a| a.args.first())
-                    .and_then(|arg| arg.as_str().split('#').next())
-                    .map(str::to_string);
-                if let Some(path) = interface_path {
-                    let full_key = format!("{path}#{}", variant_def.name);
+                // Always also store by interface path + name for disambiguation
+                if !source_interface.is_empty() {
+                    let full_key = format!("{source_interface}#{}", variant_def.name);
                     self.variants.insert(full_key, (cm_name, cases));
                 }
             }

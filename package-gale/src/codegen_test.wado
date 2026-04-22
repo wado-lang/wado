@@ -22,7 +22,7 @@ use {
     Visibility,
     merge_grammars,
 } from "./ir.wado";
-use { generate, GenerateOptions } from "./generator.wado";
+use { generate, GenerateOptions } from "./codegen.wado";
 use { parse } from "./g4/parser.wado";
 
 global DEFAULT_OPTIONS: GenerateOptions = GenerateOptions { highlight: false };
@@ -109,7 +109,10 @@ test "generate single-alt struct" {
                     Alternative {
                         label: null,
                         options: [],
-                        elements: [Element::RuleRef(RuleRefElement::new("value")), Element::TokenRef(TokenRefElement::new("EOF"))],
+                        elements: [
+                            Element::RuleRef(RuleRefElement::new("value")),
+                            Element::TokenRef(TokenRefElement::new("EOF")),
+                        ],
                     },
                 ],
             },
@@ -142,7 +145,11 @@ test "generate multi-alt variant with labels" {
                     Alternative {
                         label: Option::<String>::Some("BinOp"),
                         options: [],
-                        elements: [Element::RuleRef(RuleRefElement::new("expr")), Element::TokenRef(TokenRefElement::new("PLUS")), Element::RuleRef(RuleRefElement::new("term"))],
+                        elements: [
+                            Element::RuleRef(RuleRefElement::new("expr")),
+                            Element::TokenRef(TokenRefElement::new("PLUS")),
+                            Element::RuleRef(RuleRefElement::new("term")),
+                        ],
                     },
                     Alternative {
                         label: Option::<String>::Some("Pass"),
@@ -265,7 +272,11 @@ test "generate duplicate field names" {
                     Alternative {
                         label: null,
                         options: [],
-                        elements: [Element::RuleRef(RuleRefElement::new("item")), Element::Literal(LiteralElement::new(",")), Element::RuleRef(RuleRefElement::new("item"))],
+                        elements: [
+                            Element::RuleRef(RuleRefElement::new("item")),
+                            Element::Literal(LiteralElement::new(",")),
+                            Element::RuleRef(RuleRefElement::new("item")),
+                        ],
                     },
                 ],
             },
@@ -300,8 +311,12 @@ test "generate group variant type for repeated group" {
                             Element::Repeat(RepeatElement {
                                 kind: RepeatKind::Star,
                                 element: Element::Group(GroupElement::new([
-                                    Alternative { label: null, options: [], elements: [Element::RuleRef(RuleRefElement::new("stmt"))] },
-                                    Alternative { label: null, options: [], elements: [Element::RuleRef(RuleRefElement::new("error"))] },
+                                    Alternative { label: null, options: [], elements: [
+                                        Element::RuleRef(RuleRefElement::new("stmt")),
+                                    ] },
+                                    Alternative { label: null, options: [], elements: [
+                                        Element::RuleRef(RuleRefElement::new("error")),
+                                    ] },
                                 ])),
                                 non_greedy: false,
                             }),
@@ -339,7 +354,10 @@ test "generate wildcard element" {
                     Alternative {
                         label: null,
                         options: [],
-                        elements: [Element::Wildcard(WildcardElement::new()), Element::TokenRef(TokenRefElement::new("EOF"))],
+                        elements: [
+                            Element::Wildcard(WildcardElement::new()),
+                            Element::TokenRef(TokenRefElement::new("EOF")),
+                        ],
                     },
                 ],
             },
@@ -449,8 +467,12 @@ test "generate standalone group as optional field" {
                         options: [],
                         elements: [
                             Element::Group(GroupElement::new([
-                                Alternative { label: null, options: [], elements: [Element::RuleRef(RuleRefElement::new("foo"))] },
-                                Alternative { label: null, options: [], elements: [Element::RuleRef(RuleRefElement::new("bar"))] },
+                                Alternative { label: null, options: [], elements: [
+                                    Element::RuleRef(RuleRefElement::new("foo")),
+                                ] },
+                                Alternative { label: null, options: [], elements: [
+                                    Element::RuleRef(RuleRefElement::new("bar")),
+                                ] },
                             ])),
                             Element::TokenRef(TokenRefElement::new("EOF")),
                         ],
@@ -688,8 +710,7 @@ WS : [ \\t\\r\\n]+ -> skip ;
 ";
     let grammar = parse_grammar(input, "test.g4");
     let output = generate(&grammar, &DEFAULT_OPTIONS);
-    assert str_contains(&output, "parse_expr(p, 2)"),
-        "left-assoc '**' alt should recurse with own_prec+1 (=2)";
+    assert str_contains(&output, "parse_expr(p, 2)"), "left-assoc '**' alt should recurse with own_prec+1 (=2)";
 }
 
 test "generate right-associative LR alt passes own_prec on right operand" {
@@ -702,11 +723,9 @@ WS : [ \\t\\r\\n]+ -> skip ;
 ";
     let grammar = parse_grammar(input, "test.g4");
     let output = generate(&grammar, &DEFAULT_OPTIONS);
-    assert str_contains(&output, "parse_expr(p, 1)"),
-        "right-assoc '**' alt should recurse with own_prec (=1)";
+    assert str_contains(&output, "parse_expr(p, 1)"), "right-assoc '**' alt should recurse with own_prec (=1)";
     // And the scan-side mirror must be kept in sync.
-    assert str_contains(&output, "scan_expr(tokens, pos, 1)"),
-        "scan-side must mirror the right-assoc precedence";
+    assert str_contains(&output, "scan_expr(tokens, pos, 1)"), "scan-side must mirror the right-assoc precedence";
 }
 
 fn parse_grammar(input: String, path: String) -> Grammar {
@@ -808,10 +827,8 @@ WS : [ \\t]+ -> skip ;";
     let grammar = parse_grammar(input, "test.g4");
     let output = generate(&grammar, &DEFAULT_OPTIONS);
     // A case-insensitive 'i' must use the branchless CI comparison helper.
-    assert str_contains(&output, "!chars[pos].eq_ignore_ascii_case(&'i')"),
-        `ci literal should fold 'i' → [iI]:\n{output}`;
-    assert str_contains(&output, "!chars[pos].eq_ignore_ascii_case(&'f')"),
-        `ci literal should fold 'f' → [fF]:\n{output}`;
+    assert str_contains(&output, "!chars[pos].eq_ignore_ascii_case(&'i')"), `ci literal should fold 'i' → [iI]:\n{output}`;
+    assert str_contains(&output, "!chars[pos].eq_ignore_ascii_case(&'f')"), `ci literal should fold 'f' → [fF]:\n{output}`;
 }
 
 test "caseInsensitive grammar option makes char-range match CI" {
@@ -821,8 +838,7 @@ ID : [a-z]+ ;";
     let grammar = parse_grammar(input, "test.g4");
     let output = generate(&grammar, &DEFAULT_OPTIONS);
     // A case-insensitive [a-z] must also accept [A-Z].
-    assert str_contains(&output, "'A' <= chars[pos] <= 'Z'"),
-        `ci char range should fold [a-z] → [a-zA-Z]:\n{output}`;
+    assert str_contains(&output, "'A' <= chars[pos] <= 'Z'"), `ci char range should fold [a-z] → [a-zA-Z]:\n{output}`;
 }
 
 test "lexer rule caseInsensitive=false overrides grammar-level true" {
@@ -834,14 +850,11 @@ WS : [ \\t]+ -> skip ;";
     let grammar = parse_grammar(input, "test.g4");
     let output = generate(&grammar, &DEFAULT_OPTIONS);
     // IF still CI.
-    assert str_contains(&output, "!chars[pos].eq_ignore_ascii_case(&'i')"),
-        `IF must remain CI (grammar-level):\n{output}`;
+    assert str_contains(&output, "!chars[pos].eq_ignore_ascii_case(&'i')"), `IF must remain CI (grammar-level):\n{output}`;
     // STRICT must emit plain equality for 'x' (no CI fold). The keyword
     // classifier uses `start + i` indexing.
-    assert str_contains(&output, "chars[start + 0] == 'x'"),
-        `STRICT must not fold 'x':\n{output}`;
-    assert !str_contains(&output, "chars[start + 0].eq_ignore_ascii_case(&'x')"),
-        `STRICT must not fold 'x' to [xX]:\n{output}`;
+    assert str_contains(&output, "chars[start + 0] == 'x'"), `STRICT must not fold 'x':\n{output}`;
+    assert !str_contains(&output, "chars[start + 0].eq_ignore_ascii_case(&'x')"), `STRICT must not fold 'x' to [xX]:\n{output}`;
 }
 
 test "lexer rule caseInsensitive=true enables CI when grammar-level absent" {
@@ -850,11 +863,9 @@ KW options { caseInsensitive = true; } : 'go' ;
 ID : [a-z]+ ;";
     let grammar = parse_grammar(input, "test.g4");
     let output = generate(&grammar, &DEFAULT_OPTIONS);
-    assert str_contains(&output, "!chars[pos].eq_ignore_ascii_case(&'g')"),
-        `rule-level caseInsensitive=true should fold 'g' → [gG]:\n{output}`;
+    assert str_contains(&output, "!chars[pos].eq_ignore_ascii_case(&'g')"), `rule-level caseInsensitive=true should fold 'g' → [gG]:\n{output}`;
     // ID is not CI; its range must stay [a-z] without a mirrored [A-Z].
-    assert !str_contains(&output, "'A' <= chars[pos] <= 'Z'"),
-        `ID has no CI; [a-z] must not be mirrored to [A-Z]:\n{output}`;
+    assert !str_contains(&output, "'A' <= chars[pos] <= 'Z'"), `ID has no CI; [a-z] must not be mirrored to [A-Z]:\n{output}`;
 }
 
 test "virtual tokens are marked and not match-generated" {
@@ -871,15 +882,10 @@ ID : [a-z]+ ;
 WS : [ \\t]+ -> skip ;";
     let grammar = parse_grammar(input, "test.g4");
     let output = generate(&grammar, &DEFAULT_OPTIONS);
-    assert str_contains(&output, "    VIRTUAL_TOK,  // virtual"),
-        `TokenKind member must be marked virtual:\n{output}`;
-    assert str_contains(&output, "global TK_VIRTUAL_TOK: i32 = ") &&
-        str_contains(&output, ";  // virtual"),
-        `TK_VIRTUAL_TOK constant must be marked virtual:\n{output}`;
-    assert str_contains(&output, "TK_VIRTUAL_TOK => \"VIRTUAL_TOK\",  // virtual"),
-        `token_kind_name arm must be marked virtual:\n{output}`;
-    assert !str_contains(&output, "fn try_virtual_tok("),
-        `virtual token must not get a matcher fn:\n{output}`;
+    assert str_contains(&output, "    VIRTUAL_TOK,  // virtual"), `TokenKind member must be marked virtual:\n{output}`;
+    assert str_contains(&output, "global TK_VIRTUAL_TOK: i32 = ") && str_contains(&output, ";  // virtual"), `TK_VIRTUAL_TOK constant must be marked virtual:\n{output}`;
+    assert str_contains(&output, "TK_VIRTUAL_TOK => \"VIRTUAL_TOK\",  // virtual"), `token_kind_name arm must be marked virtual:\n{output}`;
+    assert !str_contains(&output, "fn try_virtual_tok("), `virtual token must not get a matcher fn:\n{output}`;
 }
 
 test "caseInsensitive does not fold non-letters" {
@@ -915,16 +921,11 @@ test "metadata comment lists grammar-level options" {
         source_files: [],
     };
     let output = generate(&grammar, &DEFAULT_OPTIONS);
-    assert str_contains(&output, "// Grammar metadata from source .g4 prequels:"),
-        `missing metadata header:\n{output}`;
-    assert str_contains(&output, "//   option language = Python"),
-        `missing language option:\n{output}`;
-    assert str_contains(&output, "//   option superClass = my.pkg.BaseParser"),
-        `missing superClass option:\n{output}`;
-    assert str_contains(&output, "//   option tokenVocab = TestLexer"),
-        `missing tokenVocab option:\n{output}`;
-    assert str_contains(&output, "//   option caseInsensitive = true"),
-        `missing caseInsensitive option:\n{output}`;
+    assert str_contains(&output, "// Grammar metadata from source .g4 prequels:"), `missing metadata header:\n{output}`;
+    assert str_contains(&output, "//   option language = Python"), `missing language option:\n{output}`;
+    assert str_contains(&output, "//   option superClass = my.pkg.BaseParser"), `missing superClass option:\n{output}`;
+    assert str_contains(&output, "//   option tokenVocab = TestLexer"), `missing tokenVocab option:\n{output}`;
+    assert str_contains(&output, "//   option caseInsensitive = true"), `missing caseInsensitive option:\n{output}`;
 }
 
 test "metadata comment formats string and int option values" {
@@ -945,12 +946,9 @@ test "metadata comment formats string and int option values" {
         source_files: [],
     };
     let output = generate(&grammar, &DEFAULT_OPTIONS);
-    assert str_contains(&output, "//   option tokenVocab = \"foo.g4\""),
-        `missing quoted string option:\n{output}`;
-    assert str_contains(&output, "//   option k = 3"),
-        `missing int option:\n{output}`;
-    assert str_contains(&output, "//   option init = { ... }"),
-        `action body should be elided:\n{output}`;
+    assert str_contains(&output, "//   option tokenVocab = \"foo.g4\""), `missing quoted string option:\n{output}`;
+    assert str_contains(&output, "//   option k = 3"), `missing int option:\n{output}`;
+    assert str_contains(&output, "//   option init = { ... }"), `action body should be elided:\n{output}`;
 }
 
 test "metadata comment lists named actions" {
@@ -971,14 +969,10 @@ test "metadata comment lists named actions" {
         source_files: [],
     };
     let output = generate(&grammar, &DEFAULT_OPTIONS);
-    assert str_contains(&output, "// Grammar metadata from source .g4 prequels:"),
-        `missing metadata header:\n{output}`;
-    assert str_contains(&output, "//   @header"),
-        `missing @header action marker:\n{output}`;
-    assert str_contains(&output, "//   @parser::members"),
-        `missing @parser::members action marker:\n{output}`;
-    assert str_contains(&output, "//   @lexer::members"),
-        `missing @lexer::members action marker:\n{output}`;
+    assert str_contains(&output, "// Grammar metadata from source .g4 prequels:"), `missing metadata header:\n{output}`;
+    assert str_contains(&output, "//   @header"), `missing @header action marker:\n{output}`;
+    assert str_contains(&output, "//   @parser::members"), `missing @parser::members action marker:\n{output}`;
+    assert str_contains(&output, "//   @lexer::members"), `missing @lexer::members action marker:\n{output}`;
 }
 
 test "metadata block omitted when no options and no named actions" {
@@ -995,8 +989,7 @@ test "metadata block omitted when no options and no named actions" {
         source_files: [],
     };
     let output = generate(&grammar, &DEFAULT_OPTIONS);
-    assert !str_contains(&output, "// Grammar metadata from source .g4 prequels:"),
-        `metadata header should be omitted when empty:\n{output}`;
+    assert !str_contains(&output, "// Grammar metadata from source .g4 prequels:"), `metadata header should be omitted when empty:\n{output}`;
 }
 
 test "visibility comment emitted on non-default parser rule" {
@@ -1038,11 +1031,9 @@ test "visibility comment emitted on non-default parser rule" {
         source_files: [],
     };
     let output = generate(&grammar, &DEFAULT_OPTIONS);
-    assert str_contains(&output, "// rule visibility: public (ignored by codegen, matches ANTLR4)"),
-        `expected visibility comment for Public rule:\n{output}`;
+    assert str_contains(&output, "// rule visibility: public (ignored by codegen, matches ANTLR4)"), `expected visibility comment for Public rule:\n{output}`;
     // Default visibility must not add any comment.
-    assert !str_contains(&output, "// rule visibility: default"),
-        `Default visibility must not emit a comment:\n{output}`;
+    assert !str_contains(&output, "// rule visibility: default"), `Default visibility must not emit a comment:\n{output}`;
 }
 
 test "visibility comment emitted on non-default lexer rule" {
@@ -1061,8 +1052,7 @@ test "visibility comment emitted on non-default lexer rule" {
         source_files: [],
     };
     let output = generate(&grammar, &DEFAULT_OPTIONS);
-    assert str_contains(&output, "// rule visibility: protected (ignored by codegen, matches ANTLR4)"),
-        `expected visibility comment for Protected lexer rule:\n{output}`;
+    assert str_contains(&output, "// rule visibility: protected (ignored by codegen, matches ANTLR4)"), `expected visibility comment for Protected lexer rule:\n{output}`;
 }
 
 fn str_contains(haystack: &String, needle: &String) -> bool {

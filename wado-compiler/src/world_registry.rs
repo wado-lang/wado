@@ -270,4 +270,17 @@ mod tests {
         assert!(run_export.is_async, "run should be async");
         assert!(run_export.params.is_empty(), "run should have no params");
     }
+
+    #[test]
+    fn test_kiln_generator_world_registered() {
+        let (_registry, world_registry) = crate::component_model::WasiRegistry::build_from_stdlib();
+        assert!(
+            world_registry.has_world("core:kiln/generator"),
+            "core:kiln/generator world should be registered"
+        );
+        let generate = world_registry
+            .get_export("core:kiln/generator", "generate")
+            .expect("generate export not found");
+        assert_eq!(generate.params.len(), 1, "generate takes one parameter");
+    }
 }

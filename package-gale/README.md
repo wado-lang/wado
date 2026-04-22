@@ -61,8 +61,9 @@ package-gale/
     ir_test.wado
     runtime.wado         — Span, Token, ParseError (inlined into generated files)
     runtime_test.wado
-    generator.wado       — GrammarIR → .wado source (inlines runtime via #include_str)
-    generator_test.wado  — golden tests against tests/golden/
+    codegen.wado         — GrammarIR → .wado source (inlines runtime via #include_str)
+    codegen_test.wado    — golden tests against tests/golden/
+    generator.wado       — Kiln-shape entry (stub; replaced by real impl in M6.7)
     lexer_gen.wado       — lexer function code generation
     parser_gen.wado      — parser function code generation
     gen_util.wado        — shared code generation utilities

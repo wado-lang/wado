@@ -113,7 +113,7 @@ default = "https://wa.dev"
 }
 
 #[test]
-fn build_world_absent_default() {
+fn generator_field_absent_default() {
     let toml = r#"
 [package]
 name = "app"
@@ -121,37 +121,37 @@ version = "0.1.0"
 command = "main.wado"
 "#;
     let m: Manifest = toml.parse().unwrap();
-    assert!(m.package.as_ref().unwrap().build_world.is_none());
+    assert!(m.package.as_ref().unwrap().generator.is_none());
 }
 
 #[test]
-fn build_world_kiln_generator_accepted() {
+fn generator_field_accepted() {
     let toml = r#"
 [package]
 name = "gen"
 version = "0.1.0"
-build-world = "wado:kiln/generator"
+generator = "src/generator.wado"
 "#;
     let m: Manifest = toml.parse().unwrap();
     assert_eq!(
-        m.package.as_ref().unwrap().build_world.as_deref(),
-        Some("wado:kiln/generator")
+        m.package.as_ref().unwrap().generator.as_deref(),
+        Some("src/generator.wado")
     );
 }
 
 #[test]
-fn build_world_unknown_rejected() {
+fn generator_and_command_coexist() {
     let toml = r#"
 [package]
-name = "gen"
+name = "dual"
 version = "0.1.0"
-build-world = "wasi:cli/command"
+command = "src/main.wado"
+generator = "src/generator.wado"
 "#;
-    let err = toml.parse::<Manifest>().unwrap_err();
-    assert!(matches!(
-        err,
-        ManifestError::InvalidBuildWorld { value } if value == "wasi:cli/command"
-    ));
+    let m = toml.parse::<Manifest>().unwrap();
+    let pkg = m.package.as_ref().unwrap();
+    assert_eq!(pkg.command.as_deref(), Some("src/main.wado"));
+    assert_eq!(pkg.generator.as_deref(), Some("src/generator.wado"));
 }
 
 #[test]

@@ -1,0 +1,12 @@
+// Module A: declares `pub effect Logger` with one method.
+pub effect Logger {
+    fn log(msg: String);
+}
+
+// Declare a function that requires the effect, but does NOT call
+// its methods — effect handler machinery is out of scope for this
+// smoke test; we only want the declaration + type-level usage to
+// survive cross-module resolution.
+pub fn greet(name: String) with Logger {
+    let _ = name;
+}
