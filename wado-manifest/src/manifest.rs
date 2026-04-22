@@ -62,11 +62,10 @@ pub struct Package {
     pub command: Option<String>,
     pub service: Option<String>,
     pub lib: Option<String>,
-    /// `build-world = "..."` — opts the package into a Wado-authored host
-    /// contract. When set to `"core:kiln/generator"`, the package is treated
-    /// as a Kiln generator (see WEP 2026-04-12). In M6.2 this transitional
-    /// field is replaced by `[package].generator = "<path>"`.
-    pub build_world: Option<String>,
+    /// `generator = "<path>"` — entry file that exports the
+    /// `core:kiln/generator` world. Presence marks the package as a Kiln
+    /// generator; see WEP 2026-04-12.
+    pub generator: Option<String>,
 }
 
 /// The `[workspace]` section of `wado.toml`.
@@ -174,8 +173,6 @@ pub enum ManifestError {
     InvalidGeneratorFrom { invocation: String, reason: String },
     /// `module = "ns:name@ver"` does not match any `[build-dependencies]` entry.
     UnknownGeneratorModule { invocation: String, spec: String },
-    /// `package.build-world` is set to an unknown value.
-    InvalidBuildWorld { value: String },
 }
 
 impl fmt::Display for ManifestError {
@@ -239,10 +236,6 @@ impl fmt::Display for ManifestError {
                 f,
                 "[build.generators.{invocation}] module {spec:?} is not declared in [build-dependencies]"
             ),
-            ManifestError::InvalidBuildWorld { value } => write!(
-                f,
-                "package.build-world {value:?} is not supported (expected \"core:kiln/generator\")"
-            ),
         }
     }
 }
@@ -300,8 +293,7 @@ struct RawPackage {
     command: Option<String>,
     service: Option<String>,
     lib: Option<String>,
-    #[serde(rename = "build-world")]
-    build_world: Option<String>,
+    generator: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -390,7 +382,7 @@ fn convert_package(raw: RawPackage) -> Result<Package, ManifestError> {
         command: raw.command,
         service: raw.service,
         lib: raw.lib,
-        build_world: raw.build_world,
+        generator: raw.generator,
     })
 }
 
