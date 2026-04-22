@@ -1,0 +1,15 @@
+// Two modules declare `pub world Service` with different
+// `#[cm("...")]` attrs and different exports. Each world must remain
+// distinct in `WorldRegistry` — which is already keyed by the
+// fully-qualified CM name (not the bare Wado name), so this fixture
+// is expected to pass and guards against regressions.
+
+use {} from "./sub/cross_module_same_name_world_a.wado";
+use {} from "./sub/cross_module_same_name_world_b.wado";
+
+test "cross-module same-name worlds compile" {
+    assert true;
+}
+
+__DATA__
+{"test": {}}

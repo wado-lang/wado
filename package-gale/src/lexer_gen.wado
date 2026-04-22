@@ -34,7 +34,9 @@ pub struct KeywordInfo {
 /// overrides the grammar-level option. ANTLR4 spec: `doc/options.md`.
 fn lookup_ci_option(opts: &Array<GrammarOption>) -> Option<bool> {
     for let opt of opts {
-        if opt.name != "caseInsensitive" { continue; }
+        if opt.name != "caseInsensitive" {
+            continue;
+        }
         if let Ident(v) = &opt.value {
             return Option::<bool>::Some(*v == "true");
         }
@@ -199,13 +201,7 @@ fn gen_lexer_struct(w: &mut CodeWriter) {
     w.blank();
 }
 
-fn gen_lexer_match_fns(
-    w: &mut CodeWriter,
-    lexer_rules: &Array<LexerRule>,
-    keywords: &Array<KeywordInfo>,
-    lit_tokens: &Array<LitToken>,
-    grammar_opts: &Array<GrammarOption>,
-) {
+fn gen_lexer_match_fns(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, keywords: &Array<KeywordInfo>, lit_tokens: &Array<LitToken>, grammar_opts: &Array<GrammarOption>) {
     let empty_opts: Array<GrammarOption> = [];
     let grammar_ci = resolve_ci(grammar_opts, &empty_opts);
     for let rule of lexer_rules {
@@ -274,12 +270,7 @@ fn fragment_elem_refs_self(target: &String, elem: &LexerElement, all_rules: &Arr
     }
 }
 
-fn gen_lexer_match_fn(
-    w: &mut CodeWriter,
-    rule: &LexerRule,
-    all_rules: &Array<LexerRule>,
-    grammar_opts: &Array<GrammarOption>,
-) {
+fn gen_lexer_match_fn(w: &mut CodeWriter, rule: &LexerRule, all_rules: &Array<LexerRule>, grammar_opts: &Array<GrammarOption>) {
     let fn_name = `try_{to_lower(&rule.name)}`;
     let ci = resolve_ci(grammar_opts, &rule.options);
     gen_visibility_comment(w, &rule.visibility);
@@ -300,13 +291,7 @@ fn gen_lexer_match_fn(
     w.blank();
 }
 
-fn gen_lexer_alts(
-    w: &mut CodeWriter,
-    alts: &Array<LexerAlt>,
-    all_rules: &Array<LexerRule>,
-    fail_action: &String,
-    ci: bool,
-) {
+fn gen_lexer_alts(w: &mut CodeWriter, alts: &Array<LexerAlt>, all_rules: &Array<LexerRule>, fail_action: &String, ci: bool) {
     let id = w.next_id();
     w.line(`let alts_saved_{id} = pos;`);
     w.line(`let mut alts_ok_{id} = false;`);
@@ -327,13 +312,7 @@ fn gen_lexer_alts(
     w.line(`if !alts_ok_{id} \{ {fail_action}; \}`);
 }
 
-fn gen_lexer_alt_seq(
-    w: &mut CodeWriter,
-    alt: &LexerAlt,
-    all_rules: &Array<LexerRule>,
-    fail_action: &String,
-    ci: bool,
-) {
+fn gen_lexer_alt_seq(w: &mut CodeWriter, alt: &LexerAlt, all_rules: &Array<LexerRule>, fail_action: &String, ci: bool) {
     for let mut i = 0; i < alt.elements.len(); i += 1 {
         let elem = &alt.elements[i];
         if let Repeat(rep) = elem {
@@ -352,13 +331,7 @@ fn gen_lexer_alt_seq(
     }
 }
 
-fn gen_lexer_elem(
-    w: &mut CodeWriter,
-    elem: &LexerElement,
-    all_rules: &Array<LexerRule>,
-    fail_action: &String,
-    ci: bool,
-) {
+fn gen_lexer_elem(w: &mut CodeWriter, elem: &LexerElement, all_rules: &Array<LexerRule>, fail_action: &String, ci: bool) {
     match *elem {
         Literal(text) => {
             let chars: Array<char> = text.chars().collect();
@@ -462,13 +435,7 @@ fn gen_char_class(w: &mut CodeWriter, cc: &CharClass, fail_action: &String) {
     w.line("pos += 1;");
 }
 
-fn gen_lexer_repeat(
-    w: &mut CodeWriter,
-    rep: &LexerRepeatElement,
-    all_rules: &Array<LexerRule>,
-    fail_action: &String,
-    ci: bool,
-) {
+fn gen_lexer_repeat(w: &mut CodeWriter, rep: &LexerRepeatElement, all_rules: &Array<LexerRule>, fail_action: &String, ci: bool) {
     let id = w.next_id();
     let label = `rep_{id}`;
     if let Star = rep.kind {
@@ -505,14 +472,7 @@ fn gen_lexer_repeat(
     }
 }
 
-fn gen_lexer_non_greedy_repeat(
-    w: &mut CodeWriter,
-    rep: &LexerRepeatElement,
-    rest: &LexerAlt,
-    all_rules: &Array<LexerRule>,
-    fail_action: &String,
-    ci: bool,
-) {
+fn gen_lexer_non_greedy_repeat(w: &mut CodeWriter, rep: &LexerRepeatElement, rest: &LexerAlt, all_rules: &Array<LexerRule>, fail_action: &String, ci: bool) {
     let id = w.next_id();
     let label = `ng_{id}`;
     // For Plus, match at least one element first
@@ -537,13 +497,7 @@ fn gen_lexer_non_greedy_repeat(
     w.end();
 }
 
-fn gen_lexer_not(
-    w: &mut CodeWriter,
-    not_elem: &LexerNotElement,
-    all_rules: &Array<LexerRule>,
-    fail_action: &String,
-    ci: bool,
-) {
+fn gen_lexer_not(w: &mut CodeWriter, not_elem: &LexerNotElement, all_rules: &Array<LexerRule>, fail_action: &String, ci: bool) {
     if let CharClass(cc) = not_elem.element {
         let expanded = if ci { expand_char_class_ci(&cc) } else { cc };
         let flipped = CharClass {
@@ -607,11 +561,7 @@ fn try_extract_ci_char(cc: &CharClass) -> Option<char> {
 /// When `rule_ci` is true, plain literal chars are treated as case-insensitive
 /// too — ANTLR4's `caseInsensitive` option folds every grammar-level char to
 /// its opposing-case partner.
-fn try_extract_keyword_char(
-    elem: &LexerElement,
-    all_rules: &Array<LexerRule>,
-    rule_ci: bool,
-) -> Option<[char, bool]> {
+fn try_extract_keyword_char(elem: &LexerElement, all_rules: &Array<LexerRule>, rule_ci: bool) -> Option<[char, bool]> {
     if let Literal(text) = elem {
         let mut iter = text.chars();
         if let Some(c) = iter.next() {
@@ -650,11 +600,7 @@ fn try_extract_keyword_char(
 
 /// Analyzes a lexer rule to determine if it's a fixed keyword pattern.
 /// Returns KeywordInfo if it matches a sequence of case-insensitive (or literal) chars.
-fn try_extract_keyword_info(
-    rule: &LexerRule,
-    all_rules: &Array<LexerRule>,
-    grammar_opts: &Array<GrammarOption>,
-) -> Option<KeywordInfo> {
+fn try_extract_keyword_info(rule: &LexerRule, all_rules: &Array<LexerRule>, grammar_opts: &Array<GrammarOption>) -> Option<KeywordInfo> {
     if rule.is_fragment || rule.body.len() != 1 {
         return null;
     }
@@ -701,10 +647,7 @@ fn try_extract_keyword_info(
 }
 
 /// Collects all keyword rules from the grammar.
-pub fn collect_keyword_rules(
-    lexer_rules: &Array<LexerRule>,
-    grammar_opts: &Array<GrammarOption>,
-) -> Array<KeywordInfo> {
+pub fn collect_keyword_rules(lexer_rules: &Array<LexerRule>, grammar_opts: &Array<GrammarOption>) -> Array<KeywordInfo> {
     let mut result: Array<KeywordInfo> = [];
     for let rule of lexer_rules {
         if rule.is_fragment || rule.is_virtual {
@@ -749,12 +692,7 @@ fn try_extract_fixed_text(rule: &LexerRule) -> Option<String> {
 /// Parser literals inherit the grammar-level `caseInsensitive` setting, so a
 /// lexer rule with a divergent rule-level CI override must keep its own
 /// `try_*` function instead of being deduped against the shared literal.
-fn is_literal_duplicate(
-    rule: &LexerRule,
-    lit_tokens: &Array<LitToken>,
-    grammar_opts: &Array<GrammarOption>,
-    grammar_ci: bool,
-) -> bool {
+fn is_literal_duplicate(rule: &LexerRule, lit_tokens: &Array<LitToken>, grammar_opts: &Array<GrammarOption>, grammar_ci: bool) -> bool {
     let rule_ci = resolve_ci(grammar_opts, &rule.options);
     if rule_ci != grammar_ci {
         return false;
@@ -986,12 +924,7 @@ struct TryCall {
 /// current lexer shape. Used for literal-token calls that have no rule flags
 /// of their own — they still need to reset the state written by the previous
 /// best match.
-fn default_extras(
-    use_modes: bool,
-    has_set_mode_rules: bool,
-    has_more_rules: bool,
-    has_channel_rules: bool,
-) -> String {
+fn default_extras(use_modes: bool, has_set_mode_rules: bool, has_more_rules: bool, has_channel_rules: bool) -> String {
     let mut extras = String::with_capacity(64);
     if use_modes {
         extras.push_str(" best_push_mode = -1; best_pop_mode = false;");
@@ -1009,15 +942,7 @@ fn default_extras(
 }
 
 /// Compute the first-char set for a lexer rule body's first element.
-fn compute_first_chars(
-    rule: &LexerRule,
-    all_rules: &Array<LexerRule>,
-    use_modes: bool,
-    has_set_mode_rules: bool,
-    has_more_rules: bool,
-    has_channel_rules: bool,
-    grammar_opts: &Array<GrammarOption>,
-) -> TryCall {
+fn compute_first_chars(rule: &LexerRule, all_rules: &Array<LexerRule>, use_modes: bool, has_set_mode_rules: bool, has_more_rules: bool, has_channel_rules: bool, grammar_opts: &Array<GrammarOption>) -> TryCall {
     let ci = resolve_ci(grammar_opts, &rule.options);
     let fn_name = `try_{to_lower(&rule.name)}`;
     // `type(X)` rewrites the kind used when emitting the token. Use the
@@ -1085,12 +1010,7 @@ fn compute_first_chars(
 
 /// Analyze first elements of rule body alternatives to find first-char set.
 /// Returns true if it's a wildcard (any char could match).
-fn compute_elem_first_chars(
-    body: &Array<LexerAlt>,
-    all_rules: &Array<LexerRule>,
-    out: &mut Array<[char, char]>,
-    ci: bool,
-) -> bool {
+fn compute_elem_first_chars(body: &Array<LexerAlt>, all_rules: &Array<LexerRule>, out: &mut Array<[char, char]>, ci: bool) -> bool {
     for let alt of body {
         if alt.elements.is_empty() {
             return true;
@@ -1115,12 +1035,7 @@ fn add_folded_range(out: &mut Array<[char, char]>, start: char, end: char, ci: b
     }
 }
 
-fn compute_single_elem_first(
-    elem: &LexerElement,
-    all_rules: &Array<LexerRule>,
-    out: &mut Array<[char, char]>,
-    ci: bool,
-) -> bool {
+fn compute_single_elem_first(elem: &LexerElement, all_rules: &Array<LexerRule>, out: &mut Array<[char, char]>, ci: bool) -> bool {
     match *elem {
         Literal(text) => {
             let c = text.chars().next().unwrap();
@@ -1404,14 +1319,7 @@ fn arrays_equal(a: &Array<i32>, b: &Array<i32>) -> bool {
     return true;
 }
 
-fn gen_tokenize_fn(
-    w: &mut CodeWriter,
-    lexer_rules: &Array<LexerRule>,
-    lit_tokens: &Array<LitToken>,
-    mode_names: &Array<String>,
-    keywords: &Array<KeywordInfo>,
-    grammar_opts: &Array<GrammarOption>,
-) {
+fn gen_tokenize_fn(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, lit_tokens: &Array<LitToken>, mode_names: &Array<String>, keywords: &Array<KeywordInfo>, grammar_opts: &Array<GrammarOption>) {
     let use_modes = has_modes(mode_names);
     let has_set_mode_rules = has_set_mode(lexer_rules);
     let has_more_rules = has_more(lexer_rules);
@@ -1646,11 +1554,15 @@ fn gen_tokenize_fn(
             // trivia with the channel id preserved. ANTLR4 treats any
             // non-DEFAULT channel the same way at the parser boundary.
             w.else_begin("else if best_channel != 0");
-            w.line("trivia.push(Token::with_channel(best_kind, lexer.slice(tok_start, best_end), Span::new(tok_start, best_end), [], best_channel));");
+            w.line(
+                "trivia.push(Token::with_channel(best_kind, lexer.slice(tok_start, best_end), Span::new(tok_start, best_end), [], best_channel));",
+            );
             w.line("more_start = -1;");
         }
         w.else_begin("else");
-        w.line("let tok = Token::with_trivia(best_kind, lexer.slice(tok_start, best_end), Span::new(tok_start, best_end), trivia);");
+        w.line(
+            "let tok = Token::with_trivia(best_kind, lexer.slice(tok_start, best_end), Span::new(tok_start, best_end), trivia);",
+        );
         w.line("tokens.push(tok);");
         w.line("trivia = [];");
         w.line("more_start = -1;");
@@ -1663,10 +1575,14 @@ fn gen_tokenize_fn(
             // trivia with the channel id preserved. ANTLR4 treats any
             // non-DEFAULT channel the same way at the parser boundary.
             w.else_begin("else if best_channel != 0");
-            w.line("trivia.push(Token::with_channel(best_kind, lexer.slice(tok_start, best_end), Span::new(tok_start, best_end), [], best_channel));");
+            w.line(
+                "trivia.push(Token::with_channel(best_kind, lexer.slice(tok_start, best_end), Span::new(tok_start, best_end), [], best_channel));",
+            );
         }
         w.else_begin("else");
-        w.line("let tok = Token::with_trivia(best_kind, lexer.slice(tok_start, best_end), Span::new(tok_start, best_end), trivia);");
+        w.line(
+            "let tok = Token::with_trivia(best_kind, lexer.slice(tok_start, best_end), Span::new(tok_start, best_end), trivia);",
+        );
         w.line("tokens.push(tok);");
         w.line("trivia = [];");
         w.end();

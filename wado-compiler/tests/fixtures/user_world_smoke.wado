@@ -1,0 +1,16 @@
+// Smoke test: a single user module declares `pub world`. This is
+// purely a declaration — `wado compile --world` binding is not
+// exercised here. We want to confirm the parser + resolver accept
+// the declaration at user level.
+
+#[cm("example:pkg/my-world@0.1.0")]
+pub world MyWorld {
+    export fn run();
+}
+
+test "user-defined world declaration compiles" {
+    assert true;
+}
+
+__DATA__
+{"test": {}}

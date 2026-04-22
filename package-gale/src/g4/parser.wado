@@ -514,9 +514,7 @@ impl G4Parser {
             self.advance();
             if !self.is_kind(G4Token::Assign) {
                 // No `=`; best-effort recover by swallowing until `;`/`}`.
-                while !self.at_eof()
-                    && !self.is_kind(G4Token::Semicolon)
-                    && !self.is_kind(G4Token::RBrace) {
+                while !self.at_eof() && !self.is_kind(G4Token::Semicolon) && !self.is_kind(G4Token::RBrace) {
                     self.advance();
                 }
                 if self.is_kind(G4Token::Semicolon) {
@@ -562,13 +560,11 @@ impl G4Parser {
         if self.is_kind(G4Token::Identifier) {
             let head = self.peek().text.to_string();
             self.advance();
-            if !(self.is_kind(G4Token::Dot)
-                && self.peek_kind_at(1) == G4Token::Identifier as i32) {
+            if !(self.is_kind(G4Token::Dot) && self.peek_kind_at(1) == G4Token::Identifier as i32) {
                 return OptionValue::Ident(head);
             }
             let mut parts: Array<String> = [head];
-            while self.is_kind(G4Token::Dot)
-                && self.peek_kind_at(1) == G4Token::Identifier as i32 {
+            while self.is_kind(G4Token::Dot) && self.peek_kind_at(1) == G4Token::Identifier as i32 {
                 self.advance();
                 parts.push(self.peek().text.to_string());
                 self.advance();
@@ -769,9 +765,7 @@ impl G4Parser {
             let name_span = name_tok.span;
             self.advance();
             if !self.is_kind(G4Token::Assign) {
-                while !self.at_eof()
-                    && !self.is_kind(G4Token::Comma)
-                    && !self.is_kind(G4Token::RAngle) {
+                while !self.at_eof() && !self.is_kind(G4Token::Comma) && !self.is_kind(G4Token::RAngle) {
                     self.advance();
                 }
                 if self.is_kind(G4Token::Comma) {
