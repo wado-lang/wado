@@ -1080,11 +1080,7 @@ impl TypeTable {
 
     /// Find a variant type by (name, `module_source`) pair via `intern_map` (O(1)).
     /// Collision-safe across modules when two variant types share a name.
-    pub fn find_variant_type(
-        &self,
-        name: &str,
-        module_source: &ModuleSource,
-    ) -> Option<TypeId> {
+    pub fn find_variant_type(&self, name: &str, module_source: &ModuleSource) -> Option<TypeId> {
         let key = ResolvedType::Variant {
             name: name.to_string(),
             module_source: module_source.clone(),
@@ -1094,11 +1090,7 @@ impl TypeTable {
 
     /// Find a resource type by (name, `module_source`) pair via `intern_map` (O(1)).
     /// Collision-safe across modules when two resource types share a name.
-    pub fn find_resource_type(
-        &self,
-        name: &str,
-        module_source: &ModuleSource,
-    ) -> Option<TypeId> {
+    pub fn find_resource_type(&self, name: &str, module_source: &ModuleSource) -> Option<TypeId> {
         let key = ResolvedType::Resource {
             name: name.to_string(),
             module_source: module_source.clone(),
