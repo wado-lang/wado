@@ -1425,6 +1425,17 @@ ID : [a-z]+ ;";
     assert result matches { Ok(_) }, "expected grammar ending in EOF to be accepted";
 }
 
+test "parse_checked accepts EOF reference inside a lexer rule" {
+    // `EOF` is also a built-in inside lexer rules (commonly used to
+    // tolerate unterminated comments: `'/*' .*? ('*/' | EOF)`). It has
+    // no defining lexer rule and must not be flagged as undefined.
+    let input = "grammar Test;
+root : COMMENT ;
+COMMENT : '/*' .*? ('*/' | EOF) ;";
+    let result = parse_checked(input);
+    assert result matches { Ok(_) }, "expected EOF inside lexer rule to be accepted";
+}
+
 test "parse_checked accepts parser grammar with only parser-rule refs" {
     // `parser grammar` files reference tokens from a sibling lexer
     // grammar — we cannot resolve those locally, so `check_references`
