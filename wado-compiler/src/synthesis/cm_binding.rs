@@ -122,8 +122,7 @@ pub fn wasi_type_to_type_id(
                 type_table.make_future(inner)
             }
             "Subtask" if g.args.len() == 1 => {
-                let inner =
-                    wasi_type_to_type_id_scoped(&g.args[0], type_table, registry, wasi_package);
+                let inner = wasi_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
                 type_table.make_subtask(inner)
             }
             // Own/Borrow are handle types represented as i32
@@ -1056,19 +1055,9 @@ fn synthesize_lift_result_inner(
     // i32 but initialized with `ref.null none` (a reference type).
     let result_type_id = if let Some(ctx) = ctx {
         let mut tt = ctx.type_table.borrow_mut();
-<<<<<<< HEAD
-        let ok_type_id =
-            wasi_type_to_type_id_scoped(ok_ty, &mut tt, Some(ctx.wasi_registry), ctx.wasi_package);
-        let err_type_id =
-            wasi_type_to_type_id_scoped(err_ty, &mut tt, Some(ctx.wasi_registry), ctx.wasi_package);
-||||||| 30ae983
-        let ok_type_id = wasi_type_to_type_id_scoped(ok_ty, &mut tt, None, ctx.wasi_package);
-        let err_type_id = wasi_type_to_type_id_scoped(err_ty, &mut tt, None, ctx.wasi_package);
-=======
         let ok_type_id = wasi_type_to_type_id(ok_ty, &mut tt, ctx.wasi_registry, ctx.wasi_package);
         let err_type_id =
             wasi_type_to_type_id(err_ty, &mut tt, ctx.wasi_registry, ctx.wasi_package);
->>>>>>> origin/main
         tt.make_result(ok_type_id, err_type_id)
     } else {
         TypeTable::I32 // placeholder when no context
@@ -3274,36 +3263,10 @@ fn synthesize_adapter(
             raw_call_expr,
         ));
 
-<<<<<<< HEAD
         // Assemble the Subtask<T> struct fields.
         let (outptr_expr, size_expr, align_expr) =
             if let Some((outptr_local, outptr_size, outptr_align)) = async_outptr_info {
                 (
-||||||| 30ae983
-        if let Some((outptr_local, outptr_size, outptr_align)) = async_outptr_info {
-            if let Some(return_type) = &func_info.return_type {
-                // Async with result: lift from the dynamically allocated results buffer.
-                let resolved = wasi_registry.resolve_type(return_type);
-                let lift_ctx = LiftContext {
-                    wasi_registry,
-                    type_table,
-                    wasi_package: Some(&func_info.package),
-                };
-                let lifted = synthesize_lift_with_context(
-                    &resolved,
-=======
-        if let Some((outptr_local, outptr_size, outptr_align)) = async_outptr_info {
-            if let Some(return_type) = &func_info.return_type {
-                // Async with result: lift from the dynamically allocated results buffer.
-                let resolved = wasi_registry.resolve_type(return_type);
-                let lift_ctx = LiftContext {
-                    wasi_registry,
-                    type_table,
-                    wasi_package: &func_info.package,
-                };
-                let lifted = synthesize_lift_with_context(
-                    &resolved,
->>>>>>> origin/main
                     local_ref(outptr_local, "__async_outptr", TypeTable::I32),
                     i32_const(outptr_size as i32),
                     i32_const(outptr_align as i32),
@@ -3319,10 +3282,11 @@ fn synthesize_adapter(
         // void async we use `()`.
         let inner_type_id = if let Some(return_type) = &cm_return_type {
             let resolved = wasi_registry.resolve_type(return_type);
-            wasi_type_to_type_id_with_registry(
+            wasi_type_to_type_id(
                 &resolved,
                 &mut type_table.borrow_mut(),
-                Some(wasi_registry),
+                wasi_registry,
+                &func_info.package,
             )
         } else {
             TypeTable::UNIT

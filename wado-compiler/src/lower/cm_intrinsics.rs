@@ -102,7 +102,7 @@ impl TirMutVisitor for Rewriter<'_> {
             let tt = self.type_table.borrow();
             match type_id_to_ast_type(expr.type_id, &tt) {
                 Some(t) => {
-                    let pkg = infer_wasi_package(expr.type_id, &tt);
+                    let pkg = infer_wasi_package(expr.type_id, &tt).unwrap_or_default();
                     (t, pkg)
                 }
                 None => return,
@@ -118,7 +118,7 @@ impl TirMutVisitor for Rewriter<'_> {
             &LiftContext {
                 wasi_registry: self.wasi_registry,
                 type_table: self.type_table,
-                wasi_package: wasi_pkg.as_deref(),
+                wasi_package: &wasi_pkg,
             },
         );
 
