@@ -15,7 +15,7 @@ use { Preopens, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:fil
 fn read_file_bytes(path: String) -> Array<u8> with Preopens {
     let dirs = Preopens::get_directories();
     let root = dirs[0].0;
-    let file = match root.open_at(PathFlags::none(), path, OpenFlags::none(), DescriptorFlags::Read) {
+    let file = match root.open_at(PathFlags::none(), path, OpenFlags::none(), DescriptorFlags::Read).wait() {
         Ok(f) => f,
         Err(_) => panic(`failed to open {path}`),
     };

@@ -140,7 +140,7 @@ fn walk(dir: &Descriptor, depth: i32, prefix: String, opts: &Options, stats: &mu
                     entry.name,
                     OpenFlags::Directory,
                     DescriptorFlags::Read,
-                );
+                ).wait();
                 match sub {
                     Ok(d) => {
                         let mut child_prefix = String::with_capacity(prefix.len() + 4);
@@ -198,7 +198,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
             opts.path,
             OpenFlags::Directory,
             DescriptorFlags::Read,
-        );
+        ).wait();
         match opened {
             Ok(start) => {
                 println(label);

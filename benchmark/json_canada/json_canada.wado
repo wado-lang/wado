@@ -40,7 +40,7 @@ impl Deserialize for FeatureCollection;
 fn read_file(path: String) -> String with Preopens {
     let dirs = Preopens::get_directories();
     let root = dirs[0].0;
-    let open_result = root.open_at(PathFlags::none(), path, OpenFlags::none(), DescriptorFlags::Read);
+    let open_result = root.open_at(PathFlags::none(), path, OpenFlags::none(), DescriptorFlags::Read).wait();
     if let Err(_) = open_result {
         panic(`failed to open {path}`);
     }

@@ -45,7 +45,7 @@ fn cat_file(dir: &Descriptor, path: String) with Stdout, Stderr {
         path,
         OpenFlags::none(),
         DescriptorFlags::Read,
-    );
+    ).wait();
 
     if let Ok(file) = open_result {
         let [read_stream, _done] = file.read_via_stream(0 as Filesize);
