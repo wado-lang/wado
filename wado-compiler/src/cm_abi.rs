@@ -460,6 +460,7 @@ pub(crate) fn named_type(name: &str) -> Type {
         id: AstId::fresh(),
         name: name.to_string(),
         span: Span::new(0, 0, 1, 1),
+        source_interface: None,
     })
 }
 
