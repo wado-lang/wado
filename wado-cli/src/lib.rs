@@ -18,6 +18,7 @@ pub mod compiler_host;
 pub mod doc;
 pub mod dump;
 pub mod format;
+pub mod http_hooks;
 pub mod init;
 pub mod kiln_driver;
 pub mod kiln_provider;

@@ -5,10 +5,13 @@ use wasmtime_wasi::{DirPerms, FilePerms, WasiCtx, WasiCtxView, WasiView};
 use wasmtime_wasi_http::WasiHttpCtx;
 use wasmtime_wasi_http::p3::{WasiHttpCtxView, WasiHttpView};
 
+use crate::http_hooks::WadoHttpHooks;
+
 pub struct WasiState {
     ctx: WasiCtx,
     table: ResourceTable,
     http: WasiHttpCtx,
+    http_hooks: WadoHttpHooks,
 }
 
 impl WasiState {
@@ -30,7 +33,13 @@ impl WasiState {
         let ctx = builder.build();
         let table = ResourceTable::new();
         let http = WasiHttpCtx::new();
-        Ok(Self { ctx, table, http })
+        let http_hooks = WadoHttpHooks::new();
+        Ok(Self {
+            ctx,
+            table,
+            http,
+            http_hooks,
+        })
     }
 }
 
@@ -48,7 +57,7 @@ impl WasiHttpView for WasiState {
         WasiHttpCtxView {
             ctx: &mut self.http,
             table: &mut self.table,
-            hooks: Default::default(),
+            hooks: &mut self.http_hooks,
         }
     }
 }

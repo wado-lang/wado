@@ -165,6 +165,7 @@ struct HttpWasiState {
     table: ResourceTable,
     wasi: WasiCtx,
     http: WasiHttpCtx,
+    http_hooks: crate::http_hooks::WadoHttpHooks,
 }
 
 impl WasiView for HttpWasiState {
@@ -181,7 +182,7 @@ impl WasiHttpView for HttpWasiState {
         WasiHttpCtxView {
             ctx: &mut self.http,
             table: &mut self.table,
-            hooks: Default::default(),
+            hooks: &mut self.http_hooks,
         }
     }
 }
@@ -198,6 +199,7 @@ fn create_http_state() -> HttpWasiState {
         table: ResourceTable::new(),
         wasi: WasiCtxBuilder::new().inherit_stdio().build(),
         http: WasiHttpCtx::new(),
+        http_hooks: crate::http_hooks::WadoHttpHooks::new(),
     }
 }
 
