@@ -56,16 +56,16 @@ impl Default for WadoHttpHooks {
 
 fn load_extra_ca_certs(roots: &mut RootCertStore) {
     for var in ["WADO_CA_BUNDLE", "SSL_CERT_FILE"] {
-        if let Ok(path) = std::env::var(var) {
-            if !path.is_empty() {
-                load_pem_bundle(roots, Path::new(&path));
-            }
+        if let Ok(path) = std::env::var(var)
+            && !path.is_empty()
+        {
+            load_pem_bundle(roots, Path::new(&path));
         }
     }
-    if let Ok(dir) = std::env::var("SSL_CERT_DIR") {
-        if !dir.is_empty() {
-            load_pem_dir(roots, Path::new(&dir));
-        }
+    if let Ok(dir) = std::env::var("SSL_CERT_DIR")
+        && !dir.is_empty()
+    {
+        load_pem_dir(roots, Path::new(&dir));
     }
 }
 
@@ -158,15 +158,15 @@ async fn send_request(
     let connect_timeout = options
         .as_ref()
         .and_then(|o| o.connect_timeout)
-        .unwrap_or(Duration::from_secs(600));
+        .unwrap_or(Duration::from_mins(10));
     let first_byte_timeout = options
         .as_ref()
         .and_then(|o| o.first_byte_timeout)
-        .unwrap_or(Duration::from_secs(600));
+        .unwrap_or(Duration::from_mins(10));
     let between_bytes_timeout = options
         .as_ref()
         .and_then(|o| o.between_bytes_timeout)
-        .unwrap_or(Duration::from_secs(600));
+        .unwrap_or(Duration::from_mins(10));
 
     let tcp = match tokio::time::timeout(connect_timeout, TcpStream::connect(&connect_addr)).await {
         Ok(Ok(s)) => s,
@@ -271,10 +271,10 @@ fn from_hyper_response_error(err: hyper::Error) -> ErrorCode {
     if err.is_timeout() {
         return ErrorCode::HttpResponseTimeout;
     }
-    if let Some(cause) = err.source() {
-        if let Some(err) = cause.downcast_ref::<ErrorCode>() {
-            return err.clone();
-        }
+    if let Some(cause) = err.source()
+        && let Some(err) = cause.downcast_ref::<ErrorCode>()
+    {
+        return err.clone();
     }
     warn_log!("hyper response error: {err:?}");
     ErrorCode::HttpProtocolError
