@@ -4342,22 +4342,6 @@ fn cm_zero(vt: cm_abi::CmValType) -> TirExpr {
     }
 }
 
-/// Lift a single export parameter from flat CM params to a Wado-typed value.
-///
-/// Flat parameters are the Wasm function parameters corresponding to a single
-/// CM parameter. For example, a `String` parameter becomes two flat params
-/// `(ptr: i32, len: i32)` pointing to data in linear memory.
-///
-/// Returns the lifted TIR expression and the number of flat params consumed.
-///
-/// Known limitations:
-/// - Struct parameters (non-String): treated as i32 passthrough (should
-///   lift each field from consecutive flat params)
-/// - Result<T, E> parameters: not handled (falls to unit default)
-/// - Variant parameters: treated as i32 passthrough (should lift discriminant
-///   + case-specific payloads)
-/// - Array<T> for non-u8 elements: uses temp linear memory round-trip via
-///   realloc, which assumes realloc is linked
 /// Reconstruct a minimal AST `Type` surface from a TIR `TypeId`.
 ///
 /// Used by the struct/generic recursion inside
@@ -4417,6 +4401,21 @@ fn type_id_to_ast_type(type_id: TypeId, type_table: &TypeTable) -> Type {
     }
 }
 
+/// Lift a single export parameter from flat CM params to a Wado-typed value.
+///
+/// Flat parameters are the Wasm function parameters corresponding to a single
+/// CM parameter. For example, a `String` parameter becomes two flat params
+/// `(ptr: i32, len: i32)` pointing to data in linear memory.
+///
+/// Returns the lifted TIR expression and the number of flat params consumed.
+///
+/// `lift_ctx` is consulted for Array / nested-struct lifts where the
+/// WIR `struct_type_map` lookup needs the full CM resolution stack
+/// (WASI + kiln registries, type-table cell, binding package hint).
+/// When it is `None` the helper falls back to `Array<i32>` placeholders
+/// and non-primitive composites resolve via `find_struct_decl` alone —
+/// callers that exercise real structs (the three export-binding
+/// synthesizers) always pass `Some(ctx)`.
 fn synthesize_lift_from_flat_params(
     ty: &Type,
     flat_param_locals: &[u32],

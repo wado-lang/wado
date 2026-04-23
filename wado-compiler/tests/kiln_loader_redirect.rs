@@ -4,16 +4,16 @@
 
 #![allow(unused_crate_dependencies)]
 
-use std::collections::HashMap;
 use std::sync::Mutex;
 
+use indexmap::IndexMap;
 use wado_compiler::{
     CompilerHost, Diagnostic, ModuleSource, SourceError, annotate_with_invocations,
     kiln::InvocationIndex,
 };
 
 struct MapHost {
-    sources: HashMap<String, String>,
+    sources: IndexMap<String, String>,
     diagnostics: Mutex<Vec<Diagnostic>>,
 }
 
