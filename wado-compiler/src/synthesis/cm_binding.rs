@@ -4078,28 +4078,60 @@ fn lower_to_flat_inner(
         } if name == "Array" && type_args.len() == 1 => {
             // Array<T> flat ABI: (ptr: i32, len: i32).
             //
-            // v1 correctness bracket: empty arrays round-trip through
-            // the CM boundary as `(0, 0)`; non-empty arrays are a
-            // follow-up task that walks elements into linear memory
-            // via per-element size/alignment. The kiln no-op
-            // generator only returns empty arrays today, so this
-            // path keeps validation green while leaving a clear
-            // deferred gap. See the adapter-synthesis follow-up in
-            // `docs/wep-2026-04-12-kiln.md` §"Planned follow-up".
-            let _ = type_args; // Reserved for the full implementation.
+            // v1 correctness bracket: empty arrays round-trip cleanly;
+            // non-empty arrays trap at runtime via
+            // `builtin::unreachable()` so the CM boundary never silently
+            // delivers `len == 0` in place of real data. The full
+            // implementation — walk elements into linear memory per CM
+            // canonical ABI, respecting per-element size and alignment —
+            // is tracked as the lower-side adapter follow-up in
+            // `docs/wep-2026-04-12-kiln.md` §"Planned follow-up". Until
+            // it lands, a generator that returns a non-empty
+            // `Response { files: [...] }` traps loudly instead of
+            // returning a zero-pointed tombstone.
+            let _ = type_args; // Element type reserved for the full impl.
             let arr_local = alloc_local(next_local, local_types, type_id);
             stmts.push(let_stmt("__arr_val", arr_local, type_id, value));
-            let ptr_local = alloc_local(next_local, local_types, TypeTable::I32);
-            stmts.push(let_stmt(
-                "__arr_ptr",
-                ptr_local,
-                TypeTable::I32,
-                i32_const(0),
-            ));
+
+            // __len = Array::len(arr)  (generic receiver, monomorphized
+            // by the monomorphizer into `Array<T>::len`).
             let len_local = alloc_local(next_local, local_types, TypeTable::I32);
             stmts.push(let_stmt(
                 "__arr_len",
                 len_local,
+                TypeTable::I32,
+                generic_method_call(
+                    local_ref(arr_local, "__arr_val", type_id),
+                    "Array",
+                    "len",
+                    ModuleSource::prelude(),
+                    vec![],
+                    TypeTable::I32,
+                ),
+            ));
+
+            // if __arr_len != 0 { builtin::unreachable(); }
+            stmts.push(if_stmt(
+                binary_ne(
+                    local_ref(len_local, "__arr_len", TypeTable::I32),
+                    i32_const(0),
+                ),
+                block(vec![expr_stmt(builtin_call(
+                    "unreachable",
+                    vec![],
+                    TypeTable::UNIT,
+                ))]),
+                None,
+            ));
+
+            // ptr is always 0 in the empty-array fast path. Reading
+            // past ptr would be a pointer into unallocated memory, but
+            // the trap above guarantees we never reach the consumer
+            // with len > 0.
+            let ptr_local = alloc_local(next_local, local_types, TypeTable::I32);
+            stmts.push(let_stmt(
+                "__arr_ptr",
+                ptr_local,
                 TypeTable::I32,
                 i32_const(0),
             ));
