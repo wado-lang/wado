@@ -4757,38 +4757,48 @@ fn compute_export_flat_param_types(
     out
 }
 
-/// Check if a world export parameter type needs lifting (is not a simple i32 passthrough).
-fn param_needs_lifting(
-    ty: &Type,
-    tir_modules: &IndexMap<ModuleSource, crate::tir::TirModule>,
-) -> bool {
-    match ty {
-        Type::Named(named) => match named.name.as_str() {
-            "String" | "bool" | "()" => true,
-            "i8" | "u8" | "i16" | "u16" | "i32" | "u32" | "i64" | "u64" | "f32" | "f64"
-            | "char" => false,
-            _ => {
-                // Structs (and variants) flatten to multiple CM values at the
-                // boundary and therefore need a lift step. Resources / enums
-                // / flags stay as a single i32 — treat them as passthrough.
-                find_struct_decl(&named.name, tir_modules).is_some()
-                    || find_variant_decl(&named.name, tir_modules).is_some()
-            }
-        },
-        Type::Generic(generic) => matches!(generic.name.as_str(), "Array" | "Option" | "Result"),
-        Type::Tuple(elems) => !elems.is_empty(),
-        _ => false,
+/// Does a user function parameter whose TIR `TypeId` is `type_id` need CM
+/// flat-ABI lifting at the export boundary?
+///
+/// A parameter "needs lifting" when its canonical CM flat representation
+/// is not a single-slot passthrough of the same Wasm value type.
+/// Primitives (`i32`, `f64`, `bool`, `char`, ...) and handle-shaped
+/// types (resources, enums, flags) all travel as a single i32 / i64 /
+/// f32 / f64 both at the Wasm layer and at the CM layer, so no lifting
+/// step is required. Everything else — `String`, `Array<T>`,
+/// `Option<T>`, `Result<T, E>`, tuples, user structs, variants — expands
+/// to either a different value type or multiple values under the flat
+/// ABI, and therefore must be reconstructed into a Wado-side value.
+///
+/// Consults [`TypeTable`] directly; no `tir_modules` or AST traversal.
+fn param_needs_lifting(type_id: TypeId, tt: &TypeTable) -> bool {
+    use crate::tir::{PrimitiveType, ResolvedType};
+    match tt.get(type_id) {
+        ResolvedType::Primitive(prim) => matches!(prim, PrimitiveType::Bool),
+        ResolvedType::Unit => true,
+        // Single-i32 handle-shaped types flow through.
+        ResolvedType::Resource { .. }
+        | ResolvedType::Enum { .. }
+        | ResolvedType::Flags { .. }
+        | ResolvedType::GenericResource { .. } => false,
+        // `ResolvedType::Newtype` unwraps at the CM boundary, so recurse on
+        // the base type rather than treating the newtype itself as
+        // opaque.
+        ResolvedType::Newtype { base_type, .. } => param_needs_lifting(*base_type, tt),
+        // Everything else (Struct, Variant, tuples via GenericInstance,
+        // `Array<T>`, `Option<T>`, `Result<T, E>`, references, etc.)
+        // either widens or splits at the flat ABI.
+        _ => true,
     }
 }
 
-/// Check if any parameter in a world export needs lifting.
+/// Check if any parameter of the user's exported function needs lifting.
 fn export_needs_param_lifting(
-    params: &[(String, Type)],
-    tir_modules: &IndexMap<ModuleSource, crate::tir::TirModule>,
+    user_params: &[crate::tir::TirParam],
+    type_table: &std::cell::RefCell<TypeTable>,
 ) -> bool {
-    params
-        .iter()
-        .any(|(_, ty)| param_needs_lifting(ty, tir_modules))
+    let tt = type_table.borrow();
+    user_params.iter().any(|p| param_needs_lifting(p.type_id, &tt))
 }
 
 /// Synthesize a CM export binding for an async export with a Result return type.
@@ -4820,7 +4830,7 @@ fn synthesize_result_export_binding(
 
     let user_func_ref = user_func.borrow();
     let user_return_type = user_func_ref.return_type;
-    let needs_lifting = export_needs_param_lifting(world_params, tir_modules);
+    let needs_lifting = export_needs_param_lifting(&user_func_ref.params, type_table);
 
     // Build adapter params and call args
     let (adapter_params, call_args, param_count) = if needs_lifting {
@@ -5370,7 +5380,7 @@ fn synthesize_general_export_binding(
 
     let user_func_ref = user_func.borrow();
     let user_return_type = user_func_ref.return_type;
-    let needs_lifting = export_needs_param_lifting(world_params, tir_modules);
+    let needs_lifting = export_needs_param_lifting(&user_func_ref.params, type_table);
 
     // Build adapter params and call args
     let (adapter_params, call_args, param_count) = if needs_lifting {
@@ -5600,7 +5610,7 @@ fn synthesize_async_export_binding(
     let mut local_types: Vec<TypeId> = Vec::new();
 
     let user_func_ref = user_func.borrow();
-    let needs_lifting = export_needs_param_lifting(world_params, tir_modules);
+    let needs_lifting = export_needs_param_lifting(&user_func_ref.params, type_table);
 
     let (adapter_params, call_args) = if needs_lifting {
         let tt = type_table.borrow();
@@ -9416,68 +9426,125 @@ mod tests {
     }
 
     // ---- Parameter lifting tests ----
+    //
+    // These exercise the TypeTable-driven classification in
+    // `param_needs_lifting`. Each test constructs the minimum TIR shape
+    // needed to reach a specific `ResolvedType` arm.
+
+    fn mk_param(type_id: TypeId) -> crate::tir::TirParam {
+        crate::tir::TirParam {
+            name: String::new(),
+            type_id,
+            local_index: 0,
+            is_mut: false,
+            default_expr: None,
+            span: crate::token::Span::new(0, 0, 0, 0),
+        }
+    }
+
+    #[test]
+    fn param_needs_lifting_primitives_passthrough() {
+        let tt = TypeTable::new();
+        // All Wasm-native primitive shapes flow through unchanged.
+        assert!(!param_needs_lifting(TypeTable::I32, &tt));
+        assert!(!param_needs_lifting(TypeTable::I64, &tt));
+        assert!(!param_needs_lifting(TypeTable::F32, &tt));
+        assert!(!param_needs_lifting(TypeTable::F64, &tt));
+        assert!(!param_needs_lifting(TypeTable::U8, &tt));
+        assert!(!param_needs_lifting(TypeTable::U16, &tt));
+        assert!(!param_needs_lifting(TypeTable::CHAR, &tt));
+    }
+
+    #[test]
+    fn param_needs_lifting_bool_lifts() {
+        // `bool` needs a 0/!=0 widening at the CM boundary, so it
+        // counts as needing a lift step.
+        let tt = TypeTable::new();
+        assert!(param_needs_lifting(TypeTable::BOOL, &tt));
+    }
+
+    #[test]
+    fn param_needs_lifting_unit_lifts() {
+        let tt = TypeTable::new();
+        assert!(param_needs_lifting(TypeTable::UNIT, &tt));
+    }
 
     #[test]
     fn param_needs_lifting_string() {
-        let modules = IndexMap::default();
-        assert!(param_needs_lifting(&named_type("String"), &modules));
-    }
-
-    #[test]
-    fn param_needs_lifting_bool() {
-        let modules = IndexMap::default();
-        assert!(param_needs_lifting(&named_type("bool"), &modules));
-    }
-
-    #[test]
-    fn param_needs_lifting_i32() {
-        let modules = IndexMap::default();
-        assert!(!param_needs_lifting(&named_type("i32"), &modules));
+        let mut tt = TypeTable::new();
+        let s = tt.make_struct("String".to_string(), ModuleSource::string());
+        assert!(param_needs_lifting(s, &tt));
     }
 
     #[test]
     fn param_needs_lifting_resource() {
-        // With no TIR modules to register `Request` as a struct/variant,
-        // the param falls through to resource-handle semantics.
-        let modules = IndexMap::default();
-        assert!(!param_needs_lifting(&named_type("Request"), &modules));
+        // Resources are i32 handles — no lift.
+        let mut tt = TypeTable::new();
+        let r = tt.intern(crate::tir::ResolvedType::Resource {
+            name: "Request".to_string(),
+            module_source: ModuleSource::wasi("http"),
+        });
+        assert!(!param_needs_lifting(r, &tt));
+    }
+
+    #[test]
+    fn param_needs_lifting_enum() {
+        let mut tt = TypeTable::new();
+        let e = tt.intern(crate::tir::ResolvedType::Enum {
+            name: "Color".to_string(),
+            module_source: ModuleSource::EntryPoint {
+                filename: "<test>".to_string(),
+            },
+        });
+        assert!(!param_needs_lifting(e, &tt));
     }
 
     #[test]
     fn param_needs_lifting_option() {
-        let ty = cm_abi::generic_type("Option", vec![named_type("i32")]);
-        let modules = IndexMap::default();
-        assert!(param_needs_lifting(&ty, &modules));
+        // Option<T> is a GenericInstance under the hood; build it directly
+        // (avoids `make_option`'s dependency on comp-feature registration,
+        // which isn't present in a bare `TypeTable::new()`).
+        let mut tt = TypeTable::new();
+        let opt = tt.intern(crate::tir::ResolvedType::GenericInstance {
+            name: "Option".to_string(),
+            module_source: ModuleSource::core("types"),
+            type_args: vec![TypeTable::I32],
+        });
+        assert!(param_needs_lifting(opt, &tt));
     }
 
     #[test]
     fn param_needs_lifting_array() {
-        let ty = cm_abi::generic_type("Array", vec![named_type("i32")]);
-        let modules = IndexMap::default();
-        assert!(param_needs_lifting(&ty, &modules));
+        let mut tt = TypeTable::new();
+        let arr = tt.intern(crate::tir::ResolvedType::GenericInstance {
+            name: "Array".to_string(),
+            module_source: ModuleSource::prelude(),
+            type_args: vec![TypeTable::I32],
+        });
+        assert!(param_needs_lifting(arr, &tt));
     }
 
     #[test]
     fn export_needs_lifting_empty() {
-        let modules = IndexMap::default();
-        assert!(!export_needs_param_lifting(&[], &modules));
+        let tt = std::cell::RefCell::new(TypeTable::new());
+        assert!(!export_needs_param_lifting(&[], &tt));
     }
 
     #[test]
     fn export_needs_lifting_primitives_only() {
-        let params = vec![
-            ("a".to_string(), named_type("i32")),
-            ("b".to_string(), named_type("f64")),
-        ];
-        let modules = IndexMap::default();
-        assert!(!export_needs_param_lifting(&params, &modules));
+        let tt = std::cell::RefCell::new(TypeTable::new());
+        let params = vec![mk_param(TypeTable::I32), mk_param(TypeTable::F64)];
+        assert!(!export_needs_param_lifting(&params, &tt));
     }
 
     #[test]
     fn export_needs_lifting_with_string() {
-        let params = vec![("name".to_string(), named_type("String"))];
-        let modules = IndexMap::default();
-        assert!(export_needs_param_lifting(&params, &modules));
+        let tt_cell = std::cell::RefCell::new(TypeTable::new());
+        let string_id = tt_cell
+            .borrow_mut()
+            .make_struct("String".to_string(), ModuleSource::string());
+        let params = vec![mk_param(string_id)];
+        assert!(export_needs_param_lifting(&params, &tt_cell));
     }
 
     #[test]
