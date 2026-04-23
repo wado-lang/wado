@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776918517843,
+  "lastUpdate": 1776945385223,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -15501,6 +15501,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c2862eab5c11544ea7106eb36ba2a7b5274431b9"
         },
         "date": 1776918517542,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8982,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18988,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 635264,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c14dbdd2dbde2de391d888d96c12c32475134ef1",
+          "message": "Merge pull request #904 from wado-lang/claude/fix-wasm-tls-config-Iqj9W\n\nfeat(cli): load extra CA certs from SSL_CERT_FILE for guest HTTPS",
+          "timestamp": "2026-04-23T20:52:08+09:00",
+          "tree_id": "b49f66161667d19b6ec91d3dd59ad45a81d49e90",
+          "url": "https://github.com/wado-lang/wado/commit/c14dbdd2dbde2de391d888d96c12c32475134ef1"
+        },
+        "date": 1776945385153,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
