@@ -1181,10 +1181,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     let aliased = self
                         .wasi_registry
                         .find_wasi_newtype_source(&named.name)
-                        .and_then(|src| {
-                            self.wasi_registry
-                                .get_newtype_by_source(src, &named.name)
-                        })
+                        .and_then(|src| self.wasi_registry.get_newtype_by_source(src, &named.name))
                         .cloned();
                     if let Some(aliased) = aliased {
                         // Create a newtype for this WASI newtype

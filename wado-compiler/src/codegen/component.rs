@@ -658,15 +658,12 @@ fn collect_resources_in_type(
 ) {
     match ty {
         Type::Named(named)
-            if named
-                .source_interface
-                .as_deref()
-                .is_some_and(|s| {
-                    s.starts_with("wasi:")
-                        && wasi_registry
-                            .get_resource_cm_name_by_source(s, &named.name)
-                            .is_some()
-                }) =>
+            if named.source_interface.as_deref().is_some_and(|s| {
+                s.starts_with("wasi:")
+                    && wasi_registry
+                        .get_resource_cm_name_by_source(s, &named.name)
+                        .is_some()
+            }) =>
         {
             if !out.contains(&named.name) {
                 out.push(named.name.clone());
@@ -1608,8 +1605,7 @@ fn generate_cm_imports(
             // Emit flags types in the instance type (scoped to wasi:).
             let mut flags_export_indices: IndexMap<String, u32> = IndexMap::default();
             for flags_name in &needed_flags {
-                let Some(source) = project.wasi_registry.find_wasi_flags_source(flags_name)
-                else {
+                let Some(source) = project.wasi_registry.find_wasi_flags_source(flags_name) else {
                     continue;
                 };
                 let source = source.to_string();
@@ -1692,17 +1688,13 @@ fn generate_cm_imports(
                     .map(|(_, cm_name, ty)| {
                         let resolved_ty = project.wasi_registry.resolve_type(ty);
                         let val_type = if let Type::Named(named) = &resolved_ty
-                            && named
-                                .source_interface
-                                .as_deref()
-                                .is_some_and(|s| {
-                                    s.starts_with("wasi:")
-                                        && project
-                                            .wasi_registry
-                                            .get_struct_fields_by_source(s, &named.name)
-                                            .is_some()
-                                })
-                        {
+                            && named.source_interface.as_deref().is_some_and(|s| {
+                                s.starts_with("wasi:")
+                                    && project
+                                        .wasi_registry
+                                        .get_struct_fields_by_source(s, &named.name)
+                                        .is_some()
+                            }) {
                             shared_type_gen.set_next_idx(local_type_idx);
                             let resource_exports: IndexMap<&str, u32> = own_resource_type_indices
                                 .iter()
@@ -1741,16 +1733,13 @@ fn generate_cm_imports(
                 let result_type = func.return_type.as_ref().map(|ty| {
                     let resolved_ty = project.wasi_registry.resolve_type(ty);
                     if let Type::Named(named) = &resolved_ty
-                        && named
-                            .source_interface
-                            .as_deref()
-                            .is_some_and(|s| {
-                                s.starts_with("wasi:")
-                                    && project
-                                        .wasi_registry
-                                        .get_struct_fields_by_source(s, &named.name)
-                                        .is_some()
-                            })
+                        && named.source_interface.as_deref().is_some_and(|s| {
+                            s.starts_with("wasi:")
+                                && project
+                                    .wasi_registry
+                                    .get_struct_fields_by_source(s, &named.name)
+                                    .is_some()
+                        })
                     {
                         shared_type_gen.set_next_idx(local_type_idx);
                         let resource_exports: IndexMap<&str, u32> = own_resource_type_indices

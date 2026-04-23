@@ -323,12 +323,24 @@ fn synthesize_lift_inner(
                 {
                     let source = source.as_str();
                     if let Some(lifted) = try_lift_wasi_variant_or_enum(
-                        named, source, addr.clone(), next_local, stmts, local_types, ctx,
+                        named,
+                        source,
+                        addr.clone(),
+                        next_local,
+                        stmts,
+                        local_types,
+                        ctx,
                     ) {
                         return lifted;
                     }
                     if let Some(lifted) = try_lift_wasi_struct(
-                        named, source, addr.clone(), next_local, stmts, local_types, ctx,
+                        named,
+                        source,
+                        addr.clone(),
+                        next_local,
+                        stmts,
+                        local_types,
+                        ctx,
                     ) {
                         return lifted;
                     }
@@ -1493,15 +1505,12 @@ fn synthesize_lower_tuple(
 fn is_gc_passthrough_param(ty: &Type, wasi_registry: &WasiRegistry) -> bool {
     match ty {
         Type::Named(n) if n.name == "String" => true,
-        Type::Named(n) => n
-            .source_interface
-            .as_deref()
-            .is_some_and(|s| {
-                s.starts_with("wasi:")
-                    && wasi_registry
-                        .get_variant_cases_by_source(s, &n.name)
-                        .is_some()
-            }),
+        Type::Named(n) => n.source_interface.as_deref().is_some_and(|s| {
+            s.starts_with("wasi:")
+                && wasi_registry
+                    .get_variant_cases_by_source(s, &n.name)
+                    .is_some()
+        }),
         Type::Generic(g) if g.name == "Array" && g.args.len() == 1 => true,
         Type::Generic(g) if g.name == "Option" && g.args.len() == 1 => true,
         _ => false,
@@ -1575,8 +1584,8 @@ pub fn flatten_param_type(
                     return result;
                 }
                 // WASI struct (record): concatenation of all field flat types.
-                if let Some(fields) = wasi_registry
-                    .get_struct_fields_with_wado_names_by_source(source, name)
+                if let Some(fields) =
+                    wasi_registry.get_struct_fields_with_wado_names_by_source(source, name)
                 {
                     return fields
                         .iter()
@@ -1876,23 +1885,23 @@ fn synthesize_flatten_value_to_flat_args(
         }
         // Enum → variant_tag (single i32)
         Type::Named(n)
-            if n.source_interface
-                .as_deref()
-                .is_some_and(|s| s.starts_with("wasi:")
+            if n.source_interface.as_deref().is_some_and(|s| {
+                s.starts_with("wasi:")
                     && wasi_registry
                         .get_enum_variants_by_source(s, &n.name)
-                        .is_some()) =>
+                        .is_some()
+            }) =>
         {
             flat_args.push(variant_tag(value));
         }
         // Variant → disc + join of all case payload flats
         Type::Named(n)
-            if n.source_interface
-                .as_deref()
-                .is_some_and(|s| s.starts_with("wasi:")
+            if n.source_interface.as_deref().is_some_and(|s| {
+                s.starts_with("wasi:")
                     && wasi_registry
                         .get_variant_cases_by_source(s, &n.name)
-                        .is_some()) =>
+                        .is_some()
+            }) =>
         {
             let source = n
                 .source_interface
@@ -2130,9 +2139,9 @@ fn synthesize_lower_wasi_type_to_memory(
                 .source_interface
                 .as_deref()
                 .filter(|s| s.starts_with("wasi:"));
-            if let Some(fields) = source.and_then(|s| {
-                wasi_registry.get_struct_fields_with_wado_names_by_source(s, &n.name)
-            }) {
+            if let Some(fields) = source
+                .and_then(|s| wasi_registry.get_struct_fields_with_wado_names_by_source(s, &n.name))
+            {
                 let resolved_fields: Vec<(String, Type)> = fields
                     .iter()
                     .map(|(wn, _, ft)| (wn.clone(), wasi_registry.resolve_type(ft)))
@@ -2201,8 +2210,8 @@ fn cm_param_store_plan(
             .as_deref()
             .filter(|s| s.starts_with("wasi:"));
         // Check WASI flags types.
-        if let Some(members) = source
-            .and_then(|s| wasi_registry.get_flags_members_by_source(s, &named.name))
+        if let Some(members) =
+            source.and_then(|s| wasi_registry.get_flags_members_by_source(s, &named.name))
         {
             let store = match cm_flags_byte_size(members.len()) {
                 0 => return vec![],
@@ -2213,8 +2222,8 @@ fn cm_param_store_plan(
             return vec![(0, store)];
         }
         // Check WASI enum types.
-        if let Some(variants) = source
-            .and_then(|s| wasi_registry.get_enum_variants_by_source(s, &named.name))
+        if let Some(variants) =
+            source.and_then(|s| wasi_registry.get_enum_variants_by_source(s, &named.name))
         {
             let store = match cm_enum_byte_size(variants.len()) {
                 1 => "i32_store8",
@@ -2618,14 +2627,12 @@ fn synthesize_adapter(
             }
             // Struct (record) param: single GC reference, binding extracts fields
             Type::Named(n)
-                if n.source_interface
-                    .as_deref()
-                    .is_some_and(|s| {
-                        s.starts_with("wasi:")
-                            && wasi_registry
-                                .get_struct_fields_by_source(s, &n.name)
-                                .is_some()
-                    }) =>
+                if n.source_interface.as_deref().is_some_and(|s| {
+                    s.starts_with("wasi:")
+                        && wasi_registry
+                            .get_struct_fields_by_source(s, &n.name)
+                            .is_some()
+                }) =>
             {
                 let struct_type_id = {
                     let mut tt = type_table.borrow_mut();
@@ -2645,14 +2652,12 @@ fn synthesize_adapter(
             }
             // Variant param: single GC reference, binding lowers to flat args
             Type::Named(n)
-                if n.source_interface
-                    .as_deref()
-                    .is_some_and(|s| {
-                        s.starts_with("wasi:")
-                            && wasi_registry
-                                .get_variant_cases_by_source(s, &n.name)
-                                .is_some()
-                    }) =>
+                if n.source_interface.as_deref().is_some_and(|s| {
+                    s.starts_with("wasi:")
+                        && wasi_registry
+                            .get_variant_cases_by_source(s, &n.name)
+                            .is_some()
+                }) =>
             {
                 let variant_type_id = {
                     let mut tt = type_table.borrow_mut();
@@ -2994,14 +2999,12 @@ fn synthesize_adapter(
 
             // Struct (record) param: extract fields as flat args
             Type::Named(n)
-                if n.source_interface
-                    .as_deref()
-                    .is_some_and(|s| {
-                        s.starts_with("wasi:")
-                            && wasi_registry
-                                .get_struct_fields_by_source(s, &n.name)
-                                .is_some()
-                    }) =>
+                if n.source_interface.as_deref().is_some_and(|s| {
+                    s.starts_with("wasi:")
+                        && wasi_registry
+                            .get_struct_fields_by_source(s, &n.name)
+                            .is_some()
+                }) =>
             {
                 let struct_type_id = params[start_idx].type_id;
                 let source = n
@@ -3030,14 +3033,12 @@ fn synthesize_adapter(
             // Variant param: for async, pass GC ref (lowered in Step 3 indirect params);
             // for sync, flatten directly to flat i32 args.
             Type::Named(n)
-                if n.source_interface
-                    .as_deref()
-                    .is_some_and(|s| {
-                        s.starts_with("wasi:")
-                            && wasi_registry
-                                .get_variant_cases_by_source(s, &n.name)
-                                .is_some()
-                    }) =>
+                if n.source_interface.as_deref().is_some_and(|s| {
+                    s.starts_with("wasi:")
+                        && wasi_registry
+                            .get_variant_cases_by_source(s, &n.name)
+                            .is_some()
+                }) =>
             {
                 if func_info.is_async {
                     let variant_type_id = params[start_idx].type_id;
@@ -8062,8 +8063,8 @@ fn rewrite_calls_in_expr(
         // Resolve through type aliases (e.g., Headers -> Fields). Scoped to
         // `wasi:` — the method resolution path is WASI-only.
         if !adapters.contains_key(&qualified)
-            && let Some(source) = wasi_registry
-                .find_wasi_newtype_source(&method_info.base_struct_name)
+            && let Some(source) =
+                wasi_registry.find_wasi_newtype_source(&method_info.base_struct_name)
             && let Some(Type::Named(resolved)) =
                 wasi_registry.get_newtype_by_source(source, &method_info.base_struct_name)
         {
@@ -8645,10 +8646,10 @@ fn collect_effect_calls_in_expr(
                 );
                 if wasi_registry.get_function(&qualified).is_some() {
                     effects.insert(qualified);
-                } else if let Some(source) = wasi_registry
-                    .find_wasi_newtype_source(&method_info.base_struct_name)
-                    && let Some(Type::Named(resolved)) = wasi_registry
-                        .get_newtype_by_source(source, &method_info.base_struct_name)
+                } else if let Some(source) =
+                    wasi_registry.find_wasi_newtype_source(&method_info.base_struct_name)
+                    && let Some(Type::Named(resolved)) =
+                        wasi_registry.get_newtype_by_source(source, &method_info.base_struct_name)
                 {
                     // Resolve through type aliases (e.g., Headers -> Fields)
                     let aliased = format!("{}::{}", resolved.name, method_info.method_name);

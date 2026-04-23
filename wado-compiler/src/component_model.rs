@@ -200,7 +200,10 @@ impl WasiFunctionInfo {
                 }
                 // WASI struct (record) types always need memory since they have
                 // multiple fields and exceed MAX_FLAT_RESULTS (1) in canon lower.
-                if registry.get_struct_fields_by_source(src, &named.name).is_some() {
+                if registry
+                    .get_struct_fields_by_source(src, &named.name)
+                    .is_some()
+                {
                     return true;
                 }
             }
@@ -1160,11 +1163,7 @@ impl WasiRegistry {
     }
 
     /// Enum registered at `(interface, name)`; returns CM-kebab variant names.
-    pub fn get_enum_variants_by_source(
-        &self,
-        interface: &str,
-        name: &str,
-    ) -> Option<&[String]> {
+    pub fn get_enum_variants_by_source(&self, interface: &str, name: &str) -> Option<&[String]> {
         self.enums
             .get(&(interface.to_string(), name.to_string()))
             .map(|(_, variants)| variants.as_slice())
@@ -1178,11 +1177,7 @@ impl WasiRegistry {
     }
 
     /// Flags registered at `(interface, name)`; returns the member list.
-    pub fn get_flags_members_by_source(
-        &self,
-        interface: &str,
-        name: &str,
-    ) -> Option<&[String]> {
+    pub fn get_flags_members_by_source(&self, interface: &str, name: &str) -> Option<&[String]> {
         self.flags
             .get(&(interface.to_string(), name.to_string()))
             .map(|(_, members)| members.as_slice())
@@ -1267,14 +1262,16 @@ impl WasiRegistry {
         wasi_package_hint: Option<&str>,
     ) -> Option<&'a str> {
         if let Some(s) = named.source_interface.as_deref() {
-            return if s.starts_with("wasi:") { Some(s) } else { None };
+            return if s.starts_with("wasi:") {
+                Some(s)
+            } else {
+                None
+            };
         }
         if let Some(pkg) = wasi_package_hint {
             let prefix = format!("wasi:{pkg}/");
             if let Some(s) = find_unique_source_with_prefix(&self.newtypes, &prefix, &named.name)
-                .or_else(|| {
-                    find_unique_source_with_prefix(&self.resources, &prefix, &named.name)
-                })
+                .or_else(|| find_unique_source_with_prefix(&self.resources, &prefix, &named.name))
                 .or_else(|| find_unique_source_with_prefix(&self.structs, &prefix, &named.name))
                 .or_else(|| find_unique_source_with_prefix(&self.variants, &prefix, &named.name))
                 .or_else(|| find_unique_source_with_prefix(&self.enums, &prefix, &named.name))
@@ -2195,18 +2192,10 @@ impl CmInstanceTypeGen {
                             let hit = wasi_registry
                                 .get_resource_cm_name_by_source(h, name)
                                 .is_some()
-                                || wasi_registry
-                                    .get_variant_cases_by_source(h, name)
-                                    .is_some()
-                                || wasi_registry
-                                    .get_struct_fields_by_source(h, name)
-                                    .is_some()
-                                || wasi_registry
-                                    .get_enum_variants_by_source(h, name)
-                                    .is_some()
-                                || wasi_registry
-                                    .get_flags_members_by_source(h, name)
-                                    .is_some();
+                                || wasi_registry.get_variant_cases_by_source(h, name).is_some()
+                                || wasi_registry.get_struct_fields_by_source(h, name).is_some()
+                                || wasi_registry.get_enum_variants_by_source(h, name).is_some()
+                                || wasi_registry.get_flags_members_by_source(h, name).is_some();
                             hit.then(|| h.to_string())
                         });
                     let source_owned: String = named
@@ -3142,8 +3131,7 @@ pub fn cm_size_with_registry_scoped(
                 }
                 return crate::cm_abi::align_to(offset, max_align);
             }
-            if let Some(sa) = wasi_variant_cm_size_align_scoped(named, registry, wasi_package)
-            {
+            if let Some(sa) = wasi_variant_cm_size_align_scoped(named, registry, wasi_package) {
                 return sa.0;
             }
             if let Some(variants) = registry.get_enum_variants_by_source(source, &named.name) {
@@ -3207,8 +3195,7 @@ pub fn cm_align_with_registry_scoped(
                 }
                 return max_align;
             }
-            if let Some(sa) = wasi_variant_cm_size_align_scoped(named, registry, wasi_package)
-            {
+            if let Some(sa) = wasi_variant_cm_size_align_scoped(named, registry, wasi_package) {
                 return sa.1;
             }
             if let Some(variants) = registry.get_enum_variants_by_source(source, &named.name) {

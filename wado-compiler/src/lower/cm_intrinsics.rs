@@ -171,22 +171,34 @@ fn type_id_to_ast_type_resolved(
     match resolved {
         ResolvedType::Primitive(prim) => Some(named(prim.as_str())),
         ResolvedType::Struct {
-            name, module_source, ..
+            name,
+            module_source,
+            ..
         }
         | ResolvedType::Variant {
-            name, module_source, ..
+            name,
+            module_source,
+            ..
         }
         | ResolvedType::Enum {
-            name, module_source, ..
+            name,
+            module_source,
+            ..
         }
         | ResolvedType::Flags {
-            name, module_source, ..
+            name,
+            module_source,
+            ..
         }
         | ResolvedType::Newtype {
-            name, module_source, ..
+            name,
+            module_source,
+            ..
         }
         | ResolvedType::Resource {
-            name, module_source, ..
+            name,
+            module_source,
+            ..
         } => Some(named_from_module_source(name, module_source, wasi_registry)),
         ResolvedType::GenericInstance {
             name, type_args, ..
