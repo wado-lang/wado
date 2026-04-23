@@ -250,6 +250,16 @@ impl FunctionTranslator<'_, '_> {
             .ctx
             .type_id_to_wir_type(self.type_table, scrutinee.type_id);
 
+        // Detect whether the arms exhaustively cover the variant/enum cases of
+        // the scrutinee type. When so, the LAST arm in source order is
+        // guaranteed to match given every previous arm failed — its pattern
+        // test and the fallback `unreachable` are both dead code. We suppress
+        // them by treating that arm as irrefutable during lowering.
+        let exhaustive_last_arm_is_dead = self.match_last_arm_test_is_redundant(
+            scrutinee.type_id,
+            arms,
+        );
+
         // Build the if-else chain from inside out (last arm first)
         let mut result = WirInstr::Unreachable; // fallback: non-exhaustive
 
@@ -261,7 +271,8 @@ impl FunctionTranslator<'_, '_> {
         let mut if_depths = Vec::with_capacity(arms.len());
         {
             let mut depth = 0u32;
-            for arm in arms {
+            for (idx, arm) in arms.iter().enumerate() {
+                let is_last_arm = idx + 1 == arms.len();
                 let is_irrefutable = matches!(
                     arm.pattern,
                     TirPattern::Wildcard
@@ -276,7 +287,14 @@ impl FunctionTranslator<'_, '_> {
                     arm.pattern,
                     TirPattern::Wildcard | TirPattern::Binding { .. }
                 );
-                if !is_irrefutable {
+                // The final arm of an exhaustive match will be emitted as
+                // irrefutable (body only, no If), matching the override in the
+                // lowering loop below. Depth must not count the elided If, or
+                // `break` inside the final arm's body would compute a wrong
+                // br depth.
+                let emitted_as_irrefutable = is_irrefutable
+                    || (exhaustive_last_arm_is_dead && is_last_arm && arm.guard.is_none());
+                if !emitted_as_irrefutable {
                     depth += 1;
                     if arm.guard.is_some() && !pattern_trivially_true {
                         depth += 1; // guarded arms with non-trivial pattern create an extra inner If
@@ -342,13 +360,20 @@ impl FunctionTranslator<'_, '_> {
             );
 
             // For irrefutable patterns (wildcard, binding, struct), just use the body
-            let is_irrefutable = matches!(
+            let mut is_irrefutable = matches!(
                 arm.pattern,
                 TirPattern::Wildcard
                     | TirPattern::Binding { .. }
                     | TirPattern::Struct { .. }
                     | TirPattern::Tuple(_, _)
             );
+
+            // The final arm of an exhaustive variant/enum match is reached
+            // only when every earlier arm has failed, which leaves exactly
+            // this case — so the pattern test is statically true.
+            if exhaustive_last_arm_is_dead && reverse_idx == 0 && arm.guard.is_none() {
+                is_irrefutable = true;
+            }
 
             if is_irrefutable && arm.guard.is_none() {
                 // This arm always matches — it becomes the fallback
@@ -445,6 +470,91 @@ impl FunctionTranslator<'_, '_> {
             },
             result,
         ])
+    }
+
+    /// Returns true when the arms of a variant/enum `match` exhaustively
+    /// cover every case using distinct, unguarded patterns. In that case
+    /// the final arm is guaranteed to match by exclusion, so its pattern
+    /// test and the trailing `unreachable` fallback are dead.
+    ///
+    /// Conservative: requires every arm to be a plain `Variant` or `Enum`
+    /// pattern (no wildcards, no guards, no `Or`/`Literal`/`Range`) with
+    /// distinct case indices, and the count to equal the total case count
+    /// of the scrutinee type. Anything more adventurous falls back to the
+    /// standard `unreachable`-tailed cascade.
+    fn match_last_arm_test_is_redundant(
+        &self,
+        scrut_type: TypeId,
+        arms: &[TirMatchArm],
+    ) -> bool {
+        if arms.is_empty() {
+            return false;
+        }
+        if arms.iter().any(|a| a.guard.is_some()) {
+            return false;
+        }
+
+        // Resolve the scrutinee's variant declaration so we can count cases.
+        // Plain enums aren't handled here: the WIR type registry does not
+        // expose their case count at this point, so we fall back to the
+        // regular cascade for them.
+        let (var_name, var_module) = match self.type_table.get(scrut_type) {
+            ResolvedType::Variant {
+                name,
+                module_source,
+                ..
+            } => (name.clone(), module_source.clone()),
+            ResolvedType::GenericInstance {
+                name,
+                module_source,
+                type_args,
+                ..
+            } => {
+                let type_arg_names: Vec<String> = type_args
+                    .iter()
+                    .map(|t| self.type_table.mangle_type_name(*t))
+                    .collect();
+                (
+                    crate::name::mangle_generic_name(name, &type_arg_names),
+                    module_source.clone(),
+                )
+            }
+            _ => return false,
+        };
+
+        let fq = format!("{var_module}//{var_name}");
+        let Some(variant_type_id) = self.ctx.type_map.get(&fq) else {
+            return false;
+        };
+        let crate::wir::WirTypeDef::Variant(vt) =
+            &self.ctx.types[variant_type_id.index() as usize]
+        else {
+            return false;
+        };
+
+        let case_names: Vec<&String> = vt.cases.iter().map(|c| &c.name).collect();
+        let total_cases = case_names.len();
+        if arms.len() != total_cases {
+            return false;
+        }
+
+        let mut seen = vec![false; total_cases];
+        for arm in arms {
+            let case_index = match &arm.pattern {
+                TirPattern::Variant { variant_name, .. } => {
+                    match case_names.iter().position(|n| *n == variant_name) {
+                        Some(i) => i,
+                        None => return false,
+                    }
+                }
+                _ => return false,
+            };
+            if seen[case_index] {
+                return false;
+            }
+            seen[case_index] = true;
+        }
+        seen.iter().all(|v| *v)
     }
 
     /// Generate a condition expression for a pattern.
