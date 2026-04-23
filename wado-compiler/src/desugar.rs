@@ -137,6 +137,7 @@ fn desugar_type(ty: &Type, ctx: &DesugarContext) -> Type {
                     id: n.id,
                     name: stripped.to_string(),
                     span: n.span,
+                    source_interface: None,
                 })
             }
         }

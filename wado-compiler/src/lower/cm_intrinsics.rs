@@ -99,7 +99,7 @@ impl TirMutVisitor for Rewriter<'_> {
         };
         let (ast_type, wasi_pkg) = {
             let tt = self.type_table.borrow();
-            match type_id_to_ast_type(expr.type_id, &tt) {
+            match type_id_to_ast_type(expr.type_id, &tt, self.wasi_registry) {
                 Some(t) => {
                     let pkg = infer_wasi_package(expr.type_id, &tt).unwrap_or_default();
                     (t, pkg)
@@ -154,26 +154,58 @@ fn is_cm_lift_call(func: &FunctionRef) -> bool {
 /// `Type` without losing information (e.g. references). The caller
 /// falls back to leaving the lift intrinsic in place, which surfaces as
 /// a Wasm validation error and is a signal to extend this converter.
-pub fn type_id_to_ast_type(type_id: TypeId, type_table: &TypeTable) -> Option<Type> {
+pub fn type_id_to_ast_type(
+    type_id: TypeId,
+    type_table: &TypeTable,
+    wasi_registry: &crate::component_model::WasiRegistry,
+) -> Option<Type> {
     let resolved = type_table.get(type_id).clone();
-    type_id_to_ast_type_resolved(&resolved, type_table)
+    type_id_to_ast_type_resolved(&resolved, type_table, wasi_registry)
 }
 
-fn type_id_to_ast_type_resolved(resolved: &ResolvedType, type_table: &TypeTable) -> Option<Type> {
+fn type_id_to_ast_type_resolved(
+    resolved: &ResolvedType,
+    type_table: &TypeTable,
+    wasi_registry: &crate::component_model::WasiRegistry,
+) -> Option<Type> {
     match resolved {
         ResolvedType::Primitive(prim) => Some(named(prim.as_str())),
-        ResolvedType::Struct { name, .. } => Some(named(name)),
-        ResolvedType::Variant { name, .. } => Some(named(name)),
-        ResolvedType::Enum { name, .. } => Some(named(name)),
-        ResolvedType::Flags { name, .. } => Some(named(name)),
-        ResolvedType::Newtype { name, .. } => Some(named(name)),
-        ResolvedType::Resource { name, .. } => Some(named(name)),
+        ResolvedType::Struct {
+            name,
+            module_source,
+            ..
+        }
+        | ResolvedType::Variant {
+            name,
+            module_source,
+            ..
+        }
+        | ResolvedType::Enum {
+            name,
+            module_source,
+            ..
+        }
+        | ResolvedType::Flags {
+            name,
+            module_source,
+            ..
+        }
+        | ResolvedType::Newtype {
+            name,
+            module_source,
+            ..
+        }
+        | ResolvedType::Resource {
+            name,
+            module_source,
+            ..
+        } => Some(named_from_module_source(name, module_source, wasi_registry)),
         ResolvedType::GenericInstance {
             name, type_args, ..
         } => {
             let args: Option<Vec<Type>> = type_args
                 .iter()
-                .map(|&arg| type_id_to_ast_type(arg, type_table))
+                .map(|&arg| type_id_to_ast_type(arg, type_table, wasi_registry))
                 .collect();
             Some(Type::Generic(ast::GenericType {
                 id: ast::AstId::fresh(),
@@ -187,7 +219,7 @@ fn type_id_to_ast_type_resolved(resolved: &ResolvedType, type_table: &TypeTable)
         } => {
             let args: Option<Vec<Type>> = type_args
                 .iter()
-                .map(|&arg| type_id_to_ast_type(arg, type_table))
+                .map(|&arg| type_id_to_ast_type(arg, type_table, wasi_registry))
                 .collect();
             Some(Type::Generic(ast::GenericType {
                 id: ast::AstId::fresh(),
@@ -197,7 +229,7 @@ fn type_id_to_ast_type_resolved(resolved: &ResolvedType, type_table: &TypeTable)
             }))
         }
         ResolvedType::BuiltinArray(elem) => {
-            let elem_ty = type_id_to_ast_type(*elem, type_table)?;
+            let elem_ty = type_id_to_ast_type(*elem, type_table, wasi_registry)?;
             Some(Type::Generic(ast::GenericType {
                 id: ast::AstId::fresh(),
                 name: "Array".to_string(),
@@ -274,6 +306,40 @@ fn named(name: &str) -> Type {
         id: ast::AstId::fresh(),
         name: name.to_string(),
         span: zero_span(),
+        source_interface: None,
+    })
+}
+
+/// Construct a `Type::Named` whose `source_interface` is derived from the
+/// TIR `ModuleSource` of the resolved type. For a `ModuleSource::Wasi`,
+/// this produces the full `"wasi:{pkg}/{iface}@{version}"` form by matching
+/// the TIR-side `snake_case` interface ("filesystem/types.wado") against the
+/// stdlib-registered kebab-case interface ("wasi:filesystem/types@..."),
+/// disambiguating by the type's Wado name. For non-wasi `module_sources` we
+/// leave `source_interface` unresolved.
+fn named_from_module_source(
+    name: &str,
+    module_source: &crate::name::ModuleSource,
+    wasi_registry: &crate::component_model::WasiRegistry,
+) -> Type {
+    let source_interface = match module_source {
+        crate::name::ModuleSource::Wasi { interface } => {
+            let stripped = interface
+                .strip_suffix(".wado")
+                .unwrap_or(interface.as_str());
+            let kebab = stripped.replace('_', "-");
+            let prefix = format!("wasi:{kebab}@");
+            wasi_registry
+                .find_wasi_source_under_prefix(&prefix, name)
+                .map(str::to_string)
+        }
+        _ => None,
+    };
+    Type::Named(ast::NamedType {
+        id: ast::AstId::fresh(),
+        name: name.to_string(),
+        span: zero_span(),
+        source_interface,
     })
 }
 

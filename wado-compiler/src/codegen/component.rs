@@ -657,7 +657,14 @@ fn collect_resources_in_type(
     out: &mut Vec<String>,
 ) {
     match ty {
-        Type::Named(named) if wasi_registry.is_resource(&named.name) => {
+        Type::Named(named)
+            if named.source_interface.as_deref().is_some_and(|s| {
+                s.starts_with("wasi:")
+                    && wasi_registry
+                        .get_resource_cm_name_by_source(s, &named.name)
+                        .is_some()
+            }) =>
+        {
             if !out.contains(&named.name) {
                 out.push(named.name.clone());
             }
@@ -1383,7 +1390,13 @@ fn generate_cm_imports(
             let mut own_resource_type_indices: IndexMap<String, u32> = IndexMap::default();
             let mut borrow_resource_type_indices: IndexMap<String, u32> = IndexMap::default();
             for resource_name in &needed_resources {
-                if let Some(cm_name) = project.wasi_registry.get_resource_cm_name(resource_name) {
+                if let Some(source) = project
+                    .wasi_registry
+                    .find_wasi_resource_source(resource_name)
+                    && let Some(cm_name) = project
+                        .wasi_registry
+                        .get_resource_cm_name_by_source(source, resource_name)
+                {
                     instance_type.export(
                         cm_name,
                         wasm_encoder::ComponentTypeRef::Type(TypeBounds::SubResource),
@@ -1446,11 +1459,19 @@ fn generate_cm_imports(
                 }
             }
 
-            // Partition into enums, variants, and flags
+            // Partition into enums, variants, and flags by querying this
+            // interface directly. Only types declared in
+            // `interface_info.path` are emitted here; types that live in
+            // other interfaces get their declarations from those interfaces'
+            // own emit loop and are referenced via outer aliases.
+            let iface = interface_info.path.as_str();
             let needed_variants: Vec<String> = referenced_types
                 .iter()
                 .filter(|name| {
-                    project.wasi_registry.is_variant(name)
+                    project
+                        .wasi_registry
+                        .get_variant_cases_by_source(iface, name)
+                        .is_some()
                         && (name.as_str() != "ErrorCode" || has_local_error_code)
                 })
                 .cloned()
@@ -1460,7 +1481,10 @@ fn generate_cm_imports(
             let needed_enums: Vec<String> = referenced_types
                 .iter()
                 .filter(|name| {
-                    project.wasi_registry.is_enum(name)
+                    project
+                        .wasi_registry
+                        .get_enum_variants_by_source(iface, name)
+                        .is_some()
                         && !needed_variants.contains(name)
                         && (name.as_str() != "ErrorCode" || has_local_error_code)
                 })
@@ -1469,7 +1493,12 @@ fn generate_cm_imports(
 
             let needed_flags: Vec<String> = referenced_types
                 .iter()
-                .filter(|name| project.wasi_registry.is_flags(name))
+                .filter(|name| {
+                    project
+                        .wasi_registry
+                        .get_flags_members_by_source(iface, name)
+                        .is_some()
+                })
                 .cloned()
                 .collect();
 
@@ -1516,8 +1545,12 @@ fn generate_cm_imports(
                 .collect();
             // Shared CmInstanceTypeGen for complex types across variant payloads and functions.
             // Created early so variant payload types (e.g. Instant in NewTimestamp) are cached
-            // and reused when the same types appear in function signatures.
-            let mut shared_type_gen = CmInstanceTypeGen::new(local_type_idx);
+            // and reused when the same types appear in function signatures. The
+            // `interface_hint` lets `ast_type_to_cm` resolve ambiguous names
+            // (e.g. `ErrorCode`, declared independently in multiple WASI
+            // packages) against this emitter's owning interface.
+            let mut shared_type_gen =
+                CmInstanceTypeGen::with_interface_hint(local_type_idx, &interface_info.path);
             for (name, &idx) in &enum_export_indices {
                 shared_type_gen.register_existing(&format!("enum:{name}"), idx);
             }
@@ -1569,10 +1602,17 @@ fn generate_cm_imports(
                 enum_export_indices.insert(name.clone(), *idx);
             }
 
-            // Emit flags types in the instance type
+            // Emit flags types in the instance type (scoped to wasi:).
             let mut flags_export_indices: IndexMap<String, u32> = IndexMap::default();
             for flags_name in &needed_flags {
-                if let Some(members) = project.wasi_registry.get_flags_members(flags_name) {
+                let Some(source) = project.wasi_registry.find_wasi_flags_source(flags_name) else {
+                    continue;
+                };
+                let source = source.to_string();
+                if let Some(members) = project
+                    .wasi_registry
+                    .get_flags_members_by_source(&source, flags_name)
+                {
                     instance_type
                         .ty()
                         .defined_type()
@@ -1580,7 +1620,10 @@ fn generate_cm_imports(
                     let type_idx = local_type_idx;
                     local_type_idx += 1;
 
-                    if let Some(cm_name) = project.wasi_registry.get_flags_cm_name(flags_name) {
+                    if let Some(cm_name) = project
+                        .wasi_registry
+                        .get_flags_cm_name_by_source(&source, flags_name)
+                    {
                         instance_type.export(
                             cm_name,
                             wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(type_idx)),
@@ -1645,8 +1688,13 @@ fn generate_cm_imports(
                     .map(|(_, cm_name, ty)| {
                         let resolved_ty = project.wasi_registry.resolve_type(ty);
                         let val_type = if let Type::Named(named) = &resolved_ty
-                            && project.wasi_registry.is_struct(&named.name)
-                        {
+                            && named.source_interface.as_deref().is_some_and(|s| {
+                                s.starts_with("wasi:")
+                                    && project
+                                        .wasi_registry
+                                        .get_struct_fields_by_source(s, &named.name)
+                                        .is_some()
+                            }) {
                             shared_type_gen.set_next_idx(local_type_idx);
                             let resource_exports: IndexMap<&str, u32> = own_resource_type_indices
                                 .iter()
@@ -1685,7 +1733,13 @@ fn generate_cm_imports(
                 let result_type = func.return_type.as_ref().map(|ty| {
                     let resolved_ty = project.wasi_registry.resolve_type(ty);
                     if let Type::Named(named) = &resolved_ty
-                        && project.wasi_registry.is_struct(&named.name)
+                        && named.source_interface.as_deref().is_some_and(|s| {
+                            s.starts_with("wasi:")
+                                && project
+                                    .wasi_registry
+                                    .get_struct_fields_by_source(s, &named.name)
+                                    .is_some()
+                        })
                     {
                         shared_type_gen.set_next_idx(local_type_idx);
                         let resource_exports: IndexMap<&str, u32> = own_resource_type_indices
@@ -1749,7 +1803,13 @@ fn generate_cm_imports(
         // This allows other interfaces (e.g., wasi:filesystem/preopens which uses
         // wasi:filesystem/types::descriptor) to alias them via `alias outer`.
         for resource_name in &needed_resources {
-            if let Some(cm_name) = project.wasi_registry.get_resource_cm_name(resource_name) {
+            if let Some(source) = project
+                .wasi_registry
+                .find_wasi_resource_source(resource_name)
+                && let Some(cm_name) = project
+                    .wasi_registry
+                    .get_resource_cm_name_by_source(source, resource_name)
+            {
                 let resource_type_name = format!("resource:{cm_name}");
                 if !ctx.has_type(&resource_type_name) {
                     ctx.register_type(&resource_type_name);
@@ -2569,7 +2629,13 @@ fn import_resource_using_interfaces(
         // We use package-qualified names (e.g., "filesystem-types") to avoid collisions
         // with other interfaces that share the same short interface name (e.g., "cli/types").
         for resource_name in &needed_resources {
-            if let Some(cm_name) = project.wasi_registry.get_resource_cm_name(resource_name) {
+            if let Some(source) = project
+                .wasi_registry
+                .find_wasi_resource_source(resource_name)
+                && let Some(cm_name) = project
+                    .wasi_registry
+                    .get_resource_cm_name_by_source(source, resource_name)
+            {
                 let outer_resource_type_name = format!("resource:{cm_name}");
                 if ctx.has_type(&outer_resource_type_name) {
                     continue; // already imported
@@ -2630,7 +2696,13 @@ fn import_resource_using_interfaces(
             let mut borrow_resource_type_indices: IndexMap<String, u32> = IndexMap::default();
 
             for resource_name in &needed_resources {
-                if let Some(cm_name) = project.wasi_registry.get_resource_cm_name(resource_name) {
+                if let Some(source) = project
+                    .wasi_registry
+                    .find_wasi_resource_source(resource_name)
+                    && let Some(cm_name) = project
+                        .wasi_registry
+                        .get_resource_cm_name_by_source(source, resource_name)
+                {
                     let outer_resource_type_name = format!("resource:{cm_name}");
                     if ctx.has_type(&outer_resource_type_name) {
                         let outer_idx = ctx.type_idx(&outer_resource_type_name);

@@ -173,24 +173,24 @@ fn canonical_wasi_package<'a>(registry: &'a WasiRegistry, name: &str) -> Option<
     None
 }
 
-/// Extract the WASI sub-module interface path for a struct from the registry.
-/// Returns e.g. "`clocks/system_clock.wado`" from "wasi:clocks/system-clock@0.3.0-rc-...".
-/// The WIT kebab-case interface name is converted to Wado's `snake_case`
-/// filename convention (matching `wado-from-idl`'s output).
-fn wasi_struct_package(registry: &WasiRegistry, name: &str) -> String {
-    if let Some(source) = registry.get_struct_source_interface(name)
-        && let Some(after_colon) = source.strip_prefix("wasi:")
-    {
-        let without_version = after_colon.split('@').next().unwrap_or(after_colon);
-        // Split "pkg/iface" into pkg and iface; convert only the iface part
-        // from kebab-case to snake_case. WIT interface identifiers are
-        // kebab-case only, so a plain `-` -> `_` substitution is sufficient.
-        if let Some((pkg, iface)) = without_version.split_once('/') {
-            return format!("{pkg}/{}.wado", iface.replace('-', "_"));
-        }
-        return format!("{without_version}.wado");
+/// Derive the Wado-side `ModuleSource` interface suffix from a fully
+/// qualified `#[cm]` source interface like `"wasi:clocks/system-clock@0.3.0-rc-..."`.
+///
+/// Returns e.g. `"clocks/system_clock.wado"`. The WIT kebab-case interface
+/// name is converted to Wado's `snake_case` filename convention (matching
+/// `wado-from-idl`'s output). Returns an empty string if the source is not a
+/// `wasi:` interface (such inputs never occur in WASI-side synthesis because
+/// every caller supplies a `NamedType.source_interface` populated by stdlib
+/// bootstrap from a WASI module, but we're defensive).
+fn wasi_interface_suffix(source_interface: &str) -> String {
+    let Some(after_colon) = source_interface.strip_prefix("wasi:") else {
+        return String::new();
+    };
+    let without_version = after_colon.split('@').next().unwrap_or(after_colon);
+    if let Some((pkg, iface)) = without_version.split_once('/') {
+        return format!("{pkg}/{}.wado", iface.replace('-', "_"));
     }
-    String::new()
+    format!("{without_version}.wado")
 }
 
 /// Create an i32 addition expression.
@@ -309,35 +309,45 @@ fn synthesize_lift_inner(
                 internal_call("memory_to_gc_string", vec![ptr, len], string_type_id)
             }
             _ => {
-                // Check if this is a WASI variant/enum that needs GC struct construction
+                // WASI named types arrive with `source_interface` populated
+                // either by stdlib bootstrap or by `resolve_wasi_source_for`
+                // (fallback to the unique `wasi:*` registrant, biased by the
+                // current binding's WASI package so that cross-package
+                // collisions like `ErrorCode` pick the right interface).
+                // Non-WASI references fall through to the i32-handle default.
                 if let Some(ctx) = ctx
-                    && let Some(lifted) = try_lift_wasi_variant_or_enum(
-                        &named.name,
+                    && let Some(source) = ctx
+                        .wasi_registry
+                        .resolve_wasi_source_for(named, Some(ctx.wasi_package))
+                        .map(str::to_string)
+                {
+                    let source = source.as_str();
+                    if let Some(lifted) = try_lift_wasi_variant_or_enum(
+                        named,
+                        source,
                         addr.clone(),
                         next_local,
                         stmts,
                         local_types,
                         ctx,
-                    )
-                {
-                    return lifted;
-                }
-                // Check if this is a WASI struct (record) that needs GC struct construction
-                if let Some(ctx) = ctx
-                    && let Some(lifted) = try_lift_wasi_struct(
-                        &named.name,
+                    ) {
+                        return lifted;
+                    }
+                    if let Some(lifted) = try_lift_wasi_struct(
+                        named,
+                        source,
                         addr.clone(),
                         next_local,
                         stmts,
                         local_types,
                         ctx,
-                    )
-                {
-                    return lifted;
-                }
-                // Check if this is a WASI flags/enum type that needs a smaller load
-                if let Some(ctx) = ctx {
-                    if let Some(members) = ctx.wasi_registry.get_flags_members(&named.name) {
+                    ) {
+                        return lifted;
+                    }
+                    if let Some(members) = ctx
+                        .wasi_registry
+                        .get_flags_members_by_source(source, &named.name)
+                    {
                         let load_name = match cm_flags_byte_size(members.len()) {
                             0 => return i32_const(0),
                             1 => "i32_load8_u",
@@ -346,7 +356,10 @@ fn synthesize_lift_inner(
                         };
                         return builtin_call(load_name, vec![addr], TypeTable::I32);
                     }
-                    if let Some(variants) = ctx.wasi_registry.get_enum_variants(&named.name) {
+                    if let Some(variants) = ctx
+                        .wasi_registry
+                        .get_enum_variants_by_source(source, &named.name)
+                    {
                         let load_name = if variants.len() <= 256 {
                             "i32_load8_u"
                         } else if variants.len() <= 65536 {
@@ -393,10 +406,12 @@ fn synthesize_lift_inner(
     }
 }
 
-/// Try to lift a WASI variant or enum type from linear memory into a GC struct.
-/// Returns `None` if the type is not a known WASI variant/enum.
+/// Try to lift a WASI variant or enum type from linear memory into a GC
+/// struct. Returns `None` if `(source, named.name)` is not a variant or
+/// enum in the registry.
 fn try_lift_wasi_variant_or_enum(
-    name: &str,
+    named: &crate::ast::NamedType,
+    source: &str,
     addr: TirExpr,
     next_local: &mut u32,
     stmts: &mut Vec<TirStmt>,
@@ -404,24 +419,20 @@ fn try_lift_wasi_variant_or_enum(
     ctx: &LiftContext<'_>,
 ) -> Option<TirExpr> {
     let tt = ctx.type_table.borrow();
-
-    // Check WASI variants (e.g., HeaderError with cases InvalidSyntax, Forbidden, Immutable)
-    // Use package-scoped lookup to avoid name collisions
-    // (e.g., wasi:http/ErrorCode vs wasi:sockets/ErrorCode).
-    let cases_opt = ctx
+    if let Some(cases) = ctx
         .wasi_registry
-        .get_variant_cases_by_package(ctx.wasi_package, name);
-    if let Some(cases) = cases_opt {
+        .get_variant_cases_by_source(source, &named.name)
+    {
         let cases = cases.to_vec();
         let variant_type = tt
-            .find_named_type_by_wasi_package(name, ctx.wasi_package)
+            .find_named_type_by_wasi_package(&named.name, ctx.wasi_package)
             .or_else(|| {
-                canonical_wasi_package(ctx.wasi_registry, name)
-                    .and_then(|pkg| tt.find_named_type_by_wasi_package(name, pkg))
+                canonical_wasi_package(ctx.wasi_registry, &named.name)
+                    .and_then(|pkg| tt.find_named_type_by_wasi_package(&named.name, pkg))
             })?;
         drop(tt);
         return Some(synthesize_lift_wasi_variant(
-            name,
+            &named.name,
             variant_type,
             &cases,
             addr,
@@ -431,19 +442,20 @@ fn try_lift_wasi_variant_or_enum(
             Some(ctx),
         ));
     }
-
-    // Check WASI enums (e.g., ErrorCode)
-    if let Some(case_names) = ctx.wasi_registry.get_enum_variants(name) {
+    if let Some(case_names) = ctx
+        .wasi_registry
+        .get_enum_variants_by_source(source, &named.name)
+    {
         let case_names = case_names.to_vec();
         let enum_type = tt
-            .find_named_type_by_wasi_package(name, ctx.wasi_package)
+            .find_named_type_by_wasi_package(&named.name, ctx.wasi_package)
             .or_else(|| {
-                canonical_wasi_package(ctx.wasi_registry, name)
-                    .and_then(|pkg| tt.find_named_type_by_wasi_package(name, pkg))
+                canonical_wasi_package(ctx.wasi_registry, &named.name)
+                    .and_then(|pkg| tt.find_named_type_by_wasi_package(&named.name, pkg))
             })?;
         drop(tt);
         return Some(synthesize_lift_wasi_enum(
-            name,
+            &named.name,
             enum_type,
             &case_names,
             addr,
@@ -452,21 +464,24 @@ fn try_lift_wasi_variant_or_enum(
             local_types,
         ));
     }
-
     None
 }
 
-/// Try to lift a WASI struct (record) type from linear memory into a GC struct.
-/// Returns `None` if the type is not a known WASI struct.
+/// Try to lift a WASI struct (record) type from linear memory into a GC
+/// struct. Returns `None` if `(source, named.name)` is not a registered
+/// struct.
 fn try_lift_wasi_struct(
-    name: &str,
+    named: &crate::ast::NamedType,
+    source: &str,
     addr: TirExpr,
     next_local: &mut u32,
     stmts: &mut Vec<TirStmt>,
     local_types: &mut Vec<TypeId>,
     ctx: &LiftContext<'_>,
 ) -> Option<TirExpr> {
-    let fields = ctx.wasi_registry.get_struct_fields(name)?;
+    let fields = ctx
+        .wasi_registry
+        .get_struct_fields_by_source(source, &named.name)?;
     let fields = fields.to_vec();
 
     // Resolve field types through newtypes and compute the record layout
@@ -489,33 +504,29 @@ fn try_lift_wasi_struct(
         max_align = max_align.max(fa);
     }
 
-    // Create the struct type in the type table using registry-aware resolution
+    // Create the struct type in the type table using the exact source
+    // interface — no scan across packages.
     let struct_type_id = {
         let mut tt = ctx.type_table.borrow_mut();
-        let package = wasi_struct_package(ctx.wasi_registry, name);
-        tt.make_struct(name.to_string(), ModuleSource::Wasi { interface: package })
+        let iface_suffix = wasi_interface_suffix(source);
+        tt.make_struct(
+            named.name.clone(),
+            ModuleSource::Wasi {
+                interface: iface_suffix,
+            },
+        )
     };
 
-    // Lift each field
+    // Lift each field — Wado field names come directly from this interface's
+    // registration, which must exist since we just proved the struct does.
+    let wado_fields: Vec<String> = ctx
+        .wasi_registry
+        .get_struct_fields_with_wado_names_by_source(source, &named.name)
+        .expect("struct fields_with_wado_names present when fields are")
+        .iter()
+        .map(|(wn, _, _)| wn.clone())
+        .collect();
     let mut tir_fields = Vec::with_capacity(resolved_fields.len());
-    // Get the original Wado field names from the struct definition
-    // The fields in the registry use CM kebab-case names. We need the Wado field names.
-    let wado_fields: Vec<String> = {
-        // Get the original struct definition's fields (Wado names)
-        // by looking at the AST struct fields, which preserve the Wado names
-        // The registry stores (cm_name, field_type) but we need the Wado names
-        // We can get them from the full struct info
-        ctx.wasi_registry
-            .get_struct_fields_with_wado_names(name)
-            .map(|f| f.iter().map(|(wn, _, _)| wn.clone()).collect())
-            .unwrap_or_else(|| {
-                // Fallback: convert CM kebab-case names to Wado snake_case
-                resolved_fields
-                    .iter()
-                    .map(|(cm_name, _)| cm_name.replace('-', "_"))
-                    .collect()
-            })
-    };
     for (i, (_, field_ty)) in resolved_fields.iter().enumerate() {
         let field_addr = if offsets[i] == 0 {
             addr.clone()
@@ -543,7 +554,7 @@ fn try_lift_wasi_struct(
     let struct_expr = TirExpr::new(
         TirExprKind::StructLiteral {
             struct_type: struct_type_id,
-            struct_name: name.to_string(),
+            struct_name: named.name.clone(),
             fields: tir_fields,
         },
         struct_type_id,
@@ -1488,11 +1499,18 @@ fn synthesize_lower_tuple(
 
 /// Check if a type is a "GC passthrough" parameter — one that the binding
 /// accepts as a GC reference and lowers internally, rather than requiring
-/// the call site to flatten into CM ABI i32 args.
+/// the call site to flatten into CM ABI i32 args. Variant lookup is scoped to
+/// the `wasi:` namespace; same-named variants in other namespaces (e.g.
+/// `core:kiln/types::Error`) do not affect WASI binding synthesis.
 fn is_gc_passthrough_param(ty: &Type, wasi_registry: &WasiRegistry) -> bool {
     match ty {
         Type::Named(n) if n.name == "String" => true,
-        Type::Named(n) if wasi_registry.is_variant(&n.name) => true,
+        Type::Named(n) => n.source_interface.as_deref().is_some_and(|s| {
+            s.starts_with("wasi:")
+                && wasi_registry
+                    .get_variant_cases_by_source(s, &n.name)
+                    .is_some()
+        }),
         Type::Generic(g) if g.name == "Array" && g.args.len() == 1 => true,
         Type::Generic(g) if g.name == "Option" && g.args.len() == 1 => true,
         _ => false,
@@ -1531,8 +1549,17 @@ pub fn flatten_param_type(
             "f64" => vec![TypeTable::F64],
             "String" => vec![TypeTable::I32, TypeTable::I32],
             name => {
-                // WASI variant: discriminant + join of all case payload flat types
-                if let Some(cases) = wasi_registry.get_variant_cases(name) {
+                // Without a resolved WASI source the reference is not a WASI
+                // variant/struct — flatten to a single i32 handle.
+                let Some(source) = named
+                    .source_interface
+                    .as_deref()
+                    .filter(|s| s.starts_with("wasi:"))
+                else {
+                    return vec![TypeTable::I32];
+                };
+                // WASI variant: discriminant + join of all case payload flat types.
+                if let Some(cases) = wasi_registry.get_variant_cases_by_source(source, name) {
                     let mut result = vec![TypeTable::I32]; // discriminant
                     let case_flats: Vec<Vec<TypeId>> = cases
                         .iter()
@@ -1556,8 +1583,10 @@ pub fn flatten_param_type(
                     }
                     return result;
                 }
-                // WASI struct (record): concatenation of all field flat types
-                if let Some(fields) = wasi_registry.get_struct_fields_with_wado_names(name) {
+                // WASI struct (record): concatenation of all field flat types.
+                if let Some(fields) =
+                    wasi_registry.get_struct_fields_with_wado_names_by_source(source, name)
+                {
                     return fields
                         .iter()
                         .flat_map(|(_, _, ft)| flatten_param_type(ft, wasi_registry))
@@ -1633,7 +1662,8 @@ fn cm_param_align(ty: &Type, wasi_registry: &crate::component_model::WasiRegistr
 /// For each variant case with a payload, generates:
 ///   if `variant_test(value`, `case_i`) { `store_payload(payload_addr`, `variant_payload(value`, i)) }
 fn synthesize_lower_wasi_variant_to_memory(
-    name: &str,
+    named: &crate::ast::NamedType,
+    source: &str,
     value: TirExpr,
     addr: TirExpr,
     next_local: &mut u32,
@@ -1643,7 +1673,8 @@ fn synthesize_lower_wasi_variant_to_memory(
     wasi_package: &str,
     type_table: &RefCell<TypeTable>,
 ) {
-    let cases = if let Some(c) = wasi_registry.get_variant_cases(name) {
+    let name = named.name.as_str();
+    let cases = if let Some(c) = wasi_registry.get_variant_cases_by_source(source, name) {
         c.to_vec()
     } else {
         // Fallback: store as i32
@@ -1853,11 +1884,29 @@ fn synthesize_flatten_value_to_flat_args(
             ));
         }
         // Enum → variant_tag (single i32)
-        Type::Named(n) if wasi_registry.is_enum(&n.name) => {
+        Type::Named(n)
+            if n.source_interface.as_deref().is_some_and(|s| {
+                s.starts_with("wasi:")
+                    && wasi_registry
+                        .get_enum_variants_by_source(s, &n.name)
+                        .is_some()
+            }) =>
+        {
             flat_args.push(variant_tag(value));
         }
         // Variant → disc + join of all case payload flats
-        Type::Named(n) if wasi_registry.is_variant(&n.name) => {
+        Type::Named(n)
+            if n.source_interface.as_deref().is_some_and(|s| {
+                s.starts_with("wasi:")
+                    && wasi_registry
+                        .get_variant_cases_by_source(s, &n.name)
+                        .is_some()
+            }) =>
+        {
+            let source = n
+                .source_interface
+                .as_deref()
+                .expect("wasi variant source_interface present");
             let vt = value.type_id;
             let val_local = alloc_local(next_local, local_types, vt);
             stmts.push(let_stmt(&format!("{prefix}_val"), val_local, vt, value));
@@ -1870,7 +1919,9 @@ fn synthesize_flatten_value_to_flat_args(
             )));
 
             // Compute max flat payload count across all cases (the "join")
-            let cases = wasi_registry.get_variant_cases(&n.name).unwrap_or(&[]);
+            let cases = wasi_registry
+                .get_variant_cases_by_source(source, &n.name)
+                .unwrap_or(&[]);
             let max_flat_count: usize = cases
                 .iter()
                 .map(|c| {
@@ -2082,8 +2133,15 @@ fn synthesize_lower_wasi_type_to_memory(
     let resolved = wasi_registry.resolve_type(ty);
     match &resolved {
         Type::Named(n) => {
-            // WASI struct: store each field at its offset
-            if let Some(fields) = wasi_registry.get_struct_fields_with_wado_names(&n.name) {
+            // WASI struct: store each field at its offset, keyed on the exact
+            // source interface the Named reference was resolved to.
+            let source = n
+                .source_interface
+                .as_deref()
+                .filter(|s| s.starts_with("wasi:"));
+            if let Some(fields) = source
+                .and_then(|s| wasi_registry.get_struct_fields_with_wado_names_by_source(s, &n.name))
+            {
                 let resolved_fields: Vec<(String, Type)> = fields
                     .iter()
                     .map(|(wn, _, ft)| (wn.clone(), wasi_registry.resolve_type(ft)))
@@ -2147,8 +2205,14 @@ fn cm_param_store_plan(
     wasi_registry: &crate::component_model::WasiRegistry,
 ) -> Vec<(u32, &'static str)> {
     if let Type::Named(named) = ty {
-        // Check WASI flags types
-        if let Some(members) = wasi_registry.get_flags_members(&named.name) {
+        let source = named
+            .source_interface
+            .as_deref()
+            .filter(|s| s.starts_with("wasi:"));
+        // Check WASI flags types.
+        if let Some(members) =
+            source.and_then(|s| wasi_registry.get_flags_members_by_source(s, &named.name))
+        {
             let store = match cm_flags_byte_size(members.len()) {
                 0 => return vec![],
                 1 => "i32_store8",
@@ -2157,8 +2221,10 @@ fn cm_param_store_plan(
             };
             return vec![(0, store)];
         }
-        // Check WASI enum types
-        if let Some(variants) = wasi_registry.get_enum_variants(&named.name) {
+        // Check WASI enum types.
+        if let Some(variants) =
+            source.and_then(|s| wasi_registry.get_enum_variants_by_source(s, &named.name))
+        {
             let store = match cm_enum_byte_size(variants.len()) {
                 1 => "i32_store8",
                 2 => "i32_store16",
@@ -2283,23 +2349,26 @@ fn synthesize_lift_flat_result(
                 synth_span(),
             )
         } else {
-            // Err with a flat payload — the remaining flat values encode the error
-            // For enums/variants, the error value is the disc shifted appropriately
-            // For now, try to lift the error type using the WASI variant/enum path
-            let err_name = match err_ty {
-                Type::Named(n) => n.name.as_str(),
-                _ => "",
+            // Err with a flat payload — the remaining flat values encode the error.
+            // Only lift when the error type is a named WASI variant/enum carrying
+            // a resolved source_interface; otherwise fall back to a bare Err.
+            let lifted_variant = if let Type::Named(n) = err_ty
+                && let Some(source) = n.source_interface.as_deref()
+                && source.starts_with("wasi:")
+            {
+                try_lift_wasi_variant_or_enum(
+                    n,
+                    source,
+                    disc_expr.clone(),
+                    next_local,
+                    stmts,
+                    local_types,
+                    ctx,
+                )
+            } else {
+                None
             };
-            if let Some(lifted) = try_lift_wasi_variant_or_enum(
-                err_name,
-                // The error discriminant is in the remaining flat values after the Result disc
-                // For flat result, the second flat value is the error payload
-                disc_expr.clone(), // placeholder — we'll fix below
-                next_local,
-                stmts,
-                local_types,
-                ctx,
-            ) {
+            if let Some(lifted) = lifted_variant {
                 TirExpr::new(
                     TirExprKind::VariantConstruct {
                         variant_type: TypeTable::I32,
@@ -2469,7 +2538,7 @@ fn synthesize_adapter(
             // WASI variants need their registry-computed size/align, not the generic cm_size
             if let crate::ast::Type::Named(named) = rt
                 && let Some(sa) = crate::component_model::wasi_variant_cm_size_align_scoped(
-                    &named.name,
+                    named,
                     wasi_registry,
                     pkg,
                 )
@@ -2557,7 +2626,14 @@ fn synthesize_adapter(
                 param_mapping.push((start, 1));
             }
             // Struct (record) param: single GC reference, binding extracts fields
-            Type::Named(n) if wasi_registry.is_struct(&n.name) => {
+            Type::Named(n)
+                if n.source_interface.as_deref().is_some_and(|s| {
+                    s.starts_with("wasi:")
+                        && wasi_registry
+                            .get_struct_fields_by_source(s, &n.name)
+                            .is_some()
+                }) =>
+            {
                 let struct_type_id = {
                     let mut tt = type_table.borrow_mut();
                     wasi_type_to_type_id(param_type, &mut tt, wasi_registry, &func_info.package)
@@ -2575,7 +2651,14 @@ fn synthesize_adapter(
                 param_mapping.push((start, 1));
             }
             // Variant param: single GC reference, binding lowers to flat args
-            Type::Named(n) if wasi_registry.is_variant(&n.name) => {
+            Type::Named(n)
+                if n.source_interface.as_deref().is_some_and(|s| {
+                    s.starts_with("wasi:")
+                        && wasi_registry
+                            .get_variant_cases_by_source(s, &n.name)
+                            .is_some()
+                }) =>
+            {
                 let variant_type_id = {
                     let mut tt = type_table.borrow_mut();
                     wasi_type_to_type_id(param_type, &mut tt, wasi_registry, &func_info.package)
@@ -2915,11 +2998,22 @@ fn synthesize_adapter(
             }
 
             // Struct (record) param: extract fields as flat args
-            Type::Named(n) if wasi_registry.is_struct(&n.name) => {
+            Type::Named(n)
+                if n.source_interface.as_deref().is_some_and(|s| {
+                    s.starts_with("wasi:")
+                        && wasi_registry
+                            .get_struct_fields_by_source(s, &n.name)
+                            .is_some()
+                }) =>
+            {
                 let struct_type_id = params[start_idx].type_id;
+                let source = n
+                    .source_interface
+                    .as_deref()
+                    .expect("wasi struct source_interface present");
                 let wado_fields = wasi_registry
-                    .get_struct_fields_with_wado_names(&n.name)
-                    .unwrap();
+                    .get_struct_fields_with_wado_names_by_source(source, &n.name)
+                    .expect("struct fields_with_wado_names present when fields are");
                 for (field_idx, (wado_name, _, field_ty)) in wado_fields.iter().enumerate() {
                     let field_type_id = {
                         let mut tt = type_table.borrow_mut();
@@ -2938,7 +3032,14 @@ fn synthesize_adapter(
             }
             // Variant param: for async, pass GC ref (lowered in Step 3 indirect params);
             // for sync, flatten directly to flat i32 args.
-            Type::Named(n) if wasi_registry.is_variant(&n.name) => {
+            Type::Named(n)
+                if n.source_interface.as_deref().is_some_and(|s| {
+                    s.starts_with("wasi:")
+                        && wasi_registry
+                            .get_variant_cases_by_source(s, &n.name)
+                            .is_some()
+                }) =>
+            {
                 if func_info.is_async {
                     let variant_type_id = params[start_idx].type_id;
                     flat_args.push(local_ref(param_local, param_name, variant_type_id));
@@ -3016,7 +3117,7 @@ fn synthesize_adapter(
             {
                 if let crate::ast::Type::Named(named) = return_type
                     && let Some(sa) = crate::component_model::wasi_variant_cm_size_align_scoped(
-                        &named.name,
+                        named,
                         wasi_registry,
                         pkg,
                     )
@@ -3063,7 +3164,13 @@ fn synthesize_adapter(
         // Force indirect path when variant or Option params are present
         // (they need memory lowering, not direct flat passing).
         let has_variant_params = func_info.params.iter().any(|(_, _, ty)| {
-            matches!(ty, Type::Named(n) if wasi_registry.is_variant(&n.name))
+            matches!(ty, Type::Named(n) if n
+                .source_interface
+                .as_deref()
+                .is_some_and(|s| s.starts_with("wasi:")
+                    && wasi_registry
+                        .get_variant_cases_by_source(s, &n.name)
+                        .is_some()))
                 || matches!(ty, Type::Generic(g) if g.name == "Option" && g.args.len() == 1)
         });
 
@@ -3113,7 +3220,11 @@ fn synthesize_adapter(
                 let base_offset = param_offsets[param_idx];
                 // WASI variants: lower directly to the buffer using registry-aware layout
                 if let Type::Named(n) = ty
-                    && wasi_registry.is_variant(&n.name)
+                    && let Some(source) = n.source_interface.as_deref()
+                    && source.starts_with("wasi:")
+                    && wasi_registry
+                        .get_variant_cases_by_source(source, &n.name)
+                        .is_some()
                 {
                     let buf_addr = if base_offset == 0 {
                         local_ref(params_buf_local, "__params_buf", TypeTable::I32)
@@ -3127,7 +3238,8 @@ fn synthesize_adapter(
                     let variant_value = flat_args[flat_idx].clone();
                     flat_idx += 1;
                     synthesize_lower_wasi_variant_to_memory(
-                        &n.name,
+                        n,
+                        source,
                         variant_value,
                         buf_addr,
                         &mut next_local,
@@ -6117,14 +6229,21 @@ fn synthesize_record_stream_reads(project: &mut Package) {
     let mut new_functions: Vec<Rc<RefCell<TirFunction>>> = Vec::new();
 
     for (elem_name, (elem_type_id, array_type_id)) in &needed_element_types {
-        // Look up the WASI struct fields and compute CM ABI size/align
-        let Some(fields) = wasi_registry.get_struct_fields(elem_name) else {
+        // Stream-record element types come from `find_record_stream_reads`,
+        // which only produces WASI record names. Resolve the name to its
+        // defining `wasi:*` interface and then fetch fields strictly.
+        let Some(source) = wasi_registry.find_wasi_struct_source(elem_name) else {
+            continue;
+        };
+        let source = source.to_string();
+        let Some(fields) = wasi_registry.get_struct_fields_by_source(&source, elem_name) else {
             continue;
         };
         let ast_type = crate::ast::Type::Named(crate::ast::NamedType {
             id: crate::ast::AstId::fresh(),
             name: elem_name.clone(),
             span: synth_span(),
+            source_interface: Some(source.clone()),
         });
         let elem_size =
             crate::component_model::cm_size_with_registry(&ast_type, wasi_registry) as i32;
@@ -6473,6 +6592,7 @@ fn synthesize_stream_read_func(
         id: crate::ast::AstId::fresh(),
         name: elem_name.to_string(),
         span: synth_span(),
+        source_interface: None,
     });
     let lifted_elem = synthesize_lift_with_context(
         &ast_type,
@@ -7940,10 +8060,13 @@ fn rewrite_calls_in_expr(
             "{}::{}",
             method_info.base_struct_name, method_info.method_name
         );
-        // Resolve through type aliases (e.g., Headers -> Fields)
+        // Resolve through type aliases (e.g., Headers -> Fields). Scoped to
+        // `wasi:` — the method resolution path is WASI-only.
         if !adapters.contains_key(&qualified)
+            && let Some(source) =
+                wasi_registry.find_wasi_newtype_source(&method_info.base_struct_name)
             && let Some(Type::Named(resolved)) =
-                wasi_registry.get_newtype(&method_info.base_struct_name)
+                wasi_registry.get_newtype_by_source(source, &method_info.base_struct_name)
         {
             let aliased = format!("{}::{}", resolved.name, method_info.method_name);
             if adapters.contains_key(&aliased) {
@@ -8523,8 +8646,10 @@ fn collect_effect_calls_in_expr(
                 );
                 if wasi_registry.get_function(&qualified).is_some() {
                     effects.insert(qualified);
-                } else if let Some(Type::Named(resolved)) =
-                    wasi_registry.get_newtype(&method_info.base_struct_name)
+                } else if let Some(source) =
+                    wasi_registry.find_wasi_newtype_source(&method_info.base_struct_name)
+                    && let Some(Type::Named(resolved)) =
+                        wasi_registry.get_newtype_by_source(source, &method_info.base_struct_name)
                 {
                     // Resolve through type aliases (e.g., Headers -> Fields)
                     let aliased = format!("{}::{}", resolved.name, method_info.method_name);
@@ -8642,6 +8767,7 @@ mod tests {
             id: crate::ast::AstId::fresh(),
             name: name.to_string(),
             span: synth_span(),
+            source_interface: None,
         })
     }
 
