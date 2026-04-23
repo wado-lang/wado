@@ -1,0 +1,27 @@
+// Test: a struct whose fields all have defaults auto-derives `Default`.
+// See docs/wep-2026-04-11-default-arguments.md (Interaction with Default Trait).
+
+struct Config {
+    host: String = "localhost",
+    port: i32 = 8080,
+    debug: bool = false,
+}
+
+fn make_default<T: Default>() -> T {
+    return T::default();
+}
+
+export fn run() {
+    let c = Config::default();
+    assert c.host == "localhost";
+    assert c.port == 8080;
+    assert c.debug == false;
+
+    let c2 = make_default::<Config>();
+    assert c2.host == "localhost";
+    assert c2.port == 8080;
+    assert c2.debug == false;
+}
+
+__DATA__
+{"stdout": ""}
