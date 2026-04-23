@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776945385223,
+  "lastUpdate": 1776948171740,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -15545,6 +15545,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c14dbdd2dbde2de391d888d96c12c32475134ef1"
         },
         "date": 1776945385153,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8982,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18988,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 635264,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a44371080dbf25e6c92ed58325c60bd6273b34d6",
+          "message": "Merge pull request #905 from wado-lang/gfx/tweak_llm_wado\n\nchore: tweak llm.wado",
+          "timestamp": "2026-04-23T21:38:30+09:00",
+          "tree_id": "388a07ab8e289371ef4c895b8b5ad8aec8c75e7d",
+          "url": "https://github.com/wado-lang/wado/commit/a44371080dbf25e6c92ed58325c60bd6273b34d6"
+        },
+        "date": 1776948171422,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
