@@ -1639,6 +1639,7 @@ stream parameters (e.g. a request body) made after the adapter call and
 before `wait` / `cancel` are rendezvoused with the host subtask.
 
 Example (HTTP POST body):
+
 ```wado
 let [body_rx, body_tx] = Stream::<u8>::new();
 let [req, _tx_future] = Request::new(headers, Option::Some(body_rx), ...);
