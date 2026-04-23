@@ -12,16 +12,21 @@ use crate::template::Template;
 
 const COMPILER_STACK_SIZE: usize = 16 * 1024 * 1024;
 
-/// Default worker count: one third of the logical CPUs (min 1). Each worker
-/// owns a 16 MB stack and runs the full compiler plus wasmtime, so saturating
-/// every core is wasteful and, on constrained sandboxes, has empirically led
-/// to SIGSEGV from resource exhaustion during golden-dump. Halving the CPU
-/// count still segfaulted in practice, so we go to one third.
+/// Default worker count: one per logical CPU. Each worker owns a 16 MB stack
+/// and runs the full compiler plus wasmtime. On constrained sandboxes this has
+/// empirically caused SIGSEGV from resource exhaustion; set `WADO_GOLDEN_WORKERS`
+/// to cap the parallelism in that case.
 fn default_num_workers() -> usize {
-    let logical = std::thread::available_parallelism()
+    if let Some(n) = std::env::var("WADO_GOLDEN_WORKERS")
+        .ok()
+        .and_then(|s| s.parse::<usize>().ok())
+        .filter(|&n| n > 0)
+    {
+        return n;
+    }
+    std::thread::available_parallelism()
         .map(std::num::NonZero::get)
-        .unwrap_or(4);
-    (logical / 3).max(1)
+        .unwrap_or(4)
 }
 
 /// Per-worker slot tracking which file is currently being compiled.
