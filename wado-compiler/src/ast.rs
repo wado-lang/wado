@@ -183,6 +183,24 @@ impl Module {
         self.ast_id_count
     }
 
+    /// Allocate a fresh dense [`AstId`] at the end of this module's
+    /// per-module range.  Use this when post-parse synthesis injects a
+    /// new AST node into [`Self::items`] and the node needs a
+    /// [`SymbolKey`](crate::symbol::SymbolKey)-compatible id (for
+    /// example an `Item::Impl` that the resolver walks).  The returned
+    /// id is guaranteed not to collide with any parser-allocated id.
+    ///
+    /// Prefer this over [`AstId::fresh`] for nodes that enter a module
+    /// tree — `AstId::fresh` is globally unique but lives outside the
+    /// `(ModuleSource, AstId)` dense range, so symbol-lookup machinery
+    /// keyed on that range cannot find them.
+    #[must_use]
+    pub fn alloc_ast_id(&mut self) -> AstId {
+        let id = AstId(self.ast_id_count);
+        self.ast_id_count += 1;
+        id
+    }
+
     /// Return the [`Span`] of the AST node bearing the given [`AstId`].
     /// Returns `None` if no id-bearing node in this module has that id.
     pub fn span_of_ast_id(&self, target: AstId) -> Option<Span> {

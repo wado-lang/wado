@@ -16,7 +16,7 @@
 //! machinery as any other import error.
 //!
 //! See WEP 2026-04-12 §"M6.5 stage 2".
-use crate::ast::{AstId, ImplBlock, Item, Module, NamedType, Type};
+use crate::ast::{ImplBlock, Item, Module, NamedType, Type};
 use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
 use crate::hashmap::IndexMap;
 use crate::logger::Logger;
@@ -54,10 +54,10 @@ pub fn check_loaded<H: CompilerHost>(
 /// user already wrote the impl.
 ///
 /// Runs post-load, pre-annotate so the resolver sees the synthesized
-/// `Item::Impl` during its ordinary walk. Uses `AstId::fresh()` for the
-/// injected nodes: `ImplBlock` items have no name to resolve, so they
-/// never become `SymbolKey` lookup targets, and the dense per-module
-/// parser range is therefore safe to sit alongside.
+/// `Item::Impl` during its ordinary walk. The injected AST ids come
+/// from [`Module::alloc_ast_id`], which extends the parser's dense
+/// per-module range — any symbol-lookup machinery keyed on
+/// `(ModuleSource, AstId)` still finds the node.
 pub fn inject_deserialize_impl(
     target_world: Option<&str>,
     entry_module: &ModuleSource,
@@ -94,15 +94,15 @@ pub fn inject_deserialize_impl(
     }
 
     let span = synthesized_span();
-    let trait_type = Type::Named(NamedType::new(
-        AstId::fresh(),
-        "Deserialize".to_string(),
-        span,
-    ));
-    let target_ty = Type::Named(NamedType::new(AstId::fresh(), "Options".to_string(), span));
+    let trait_id = module.alloc_ast_id();
+    let target_id = module.alloc_ast_id();
+    let impl_id = module.alloc_ast_id();
+
+    let trait_type = Type::Named(NamedType::new(trait_id, "Deserialize".to_string(), span));
+    let target_ty = Type::Named(NamedType::new(target_id, "Options".to_string(), span));
 
     let block = ImplBlock {
-        id: AstId::fresh(),
+        id: impl_id,
         type_params: Vec::new(),
         trait_type: Some(trait_type),
         ty: target_ty,
