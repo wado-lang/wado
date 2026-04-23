@@ -330,9 +330,17 @@ fn compile_after_load<H: CompilerHost>(
     // chosen mode, set its export_name to "realloc", and clear export_name from all others.
     {
         let allocator_tag = options.allocator.unwrap_or_else(|| {
+            // HTTP service worlds default to `freelist` (long-running process,
+            // benefits from reclamation). Detection routes through
+            // `WorldInfo::has_http_handler_export` so the "is this the HTTP
+            // service world?" rule stays in one place.
+            let is_http_service = package
+                .world_registry
+                .get(&package.target_world)
+                .is_some_and(crate::world_registry::WorldInfo::has_http_handler_export);
             if package.is_test_world() {
                 "debug".to_string()
-            } else if package.target_world == "wasi:http/service" {
+            } else if is_http_service {
                 "freelist".to_string()
             } else {
                 "bump".to_string()
