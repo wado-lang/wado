@@ -177,9 +177,12 @@ impl WasiFunctionInfo {
     }
 
     /// Check if a named type is a WASI variant/struct whose payload requires memory.
+    /// Scoped to `wasi:` — this path is called only for WASI return-type analysis.
     fn named_type_payload_requires_memory(ty: &Type, registry: &WasiRegistry) -> bool {
         if let Type::Named(named) = ty {
-            if let Some(cases) = registry.get_variant_cases(&named.name) {
+            if let Some(cases) = registry
+                .get_variant_cases_by_interface_prefix("wasi:", &named.name)
+            {
                 return cases.iter().any(|case| {
                     case.payload
                         .as_ref()
@@ -188,7 +191,7 @@ impl WasiFunctionInfo {
             }
             // WASI struct (record) types always need memory since they have multiple
             // fields and exceed MAX_FLAT_RESULTS (1) in canon lower.
-            if registry.is_struct(&named.name) {
+            if registry.has_struct_with_prefix("wasi:", &named.name) {
                 return true;
             }
         }
@@ -378,6 +381,58 @@ fn has_any_in<V>(map: &IndexMap<(String, String), V>, name: &str) -> bool {
     map.keys().any(|(_, n)| n == name)
 }
 
+/// Return the value for `name` in a `(source_interface, name)`-keyed map when
+/// exactly one interface whose source starts with `prefix` defines it. Returns
+/// `None` for zero or multiple matches under the prefix. No fallback to the
+/// bare-name scan: a caller that passes a prefix is explicitly requesting
+/// prefix-scoped resolution and must not be silently redirected to a type
+/// defined in a different namespace.
+fn find_unique_with_prefix<'a, V>(
+    map: &'a IndexMap<(String, String), V>,
+    prefix: &str,
+    name: &str,
+) -> Option<&'a V> {
+    let mut found: Option<&V> = None;
+    for ((src, n), v) in map {
+        if n != name || !src.starts_with(prefix) {
+            continue;
+        }
+        if found.is_some() {
+            return None;
+        }
+        found = Some(v);
+    }
+    found
+}
+
+/// Return true if any interface whose source starts with `prefix` registers
+/// `name`.
+fn has_with_prefix<V>(map: &IndexMap<(String, String), V>, prefix: &str, name: &str) -> bool {
+    map
+        .keys()
+        .any(|(src, n)| n == name && src.starts_with(prefix))
+}
+
+/// Return the `source_interface` when `name` has exactly one registrant under
+/// `prefix`.
+fn find_unique_source_with_prefix<'a, V>(
+    map: &'a IndexMap<(String, String), V>,
+    prefix: &str,
+    name: &str,
+) -> Option<&'a str> {
+    let mut found: Option<&str> = None;
+    for ((src, n), _) in map {
+        if n != name || !src.starts_with(prefix) {
+            continue;
+        }
+        if found.is_some() {
+            return None;
+        }
+        found = Some(src.as_str());
+    }
+    found
+}
+
 /// Return the `source_interface` when `name` has exactly one registrant,
 /// ignoring empty source strings.
 fn find_unique_source_in<'a, V>(
@@ -511,17 +566,29 @@ impl WasiRegistry {
             registry.register_module(&module, &mut world_registry);
         }
 
-        // Register the `core:kiln/generator` world. Only the world is
-        // registered — not the types (WasiRegistry's struct map is keyed
-        // by bare name and would shadow `wasi:http/types::Response` with
-        // `core:kiln::Response`). Kiln types participate as regular Wado
-        // imports via `use { ... } from "core:kiln"` and don't need the
-        // WasiRegistry bookkeeping.
-        let kiln_worlds_module = parse_module(stdlib::CORE_KILN_WORLDS);
-        for item in &kiln_worlds_module.items {
-            if let crate::ast::Item::World(world) = item {
-                world_registry.register(world);
-            }
+        // Register the `core:kiln` stdlib modules (`kiln-host`, `types`,
+        // `worlds`). Each Kiln type carries a `#[cm("core:kiln/<iface>...")]`
+        // attribute, so `register_unique`'s `(source_interface, name)` key
+        // places them in their own slot. Cross-namespace collisions (such as
+        // `core:kiln/types::Response` vs. `wasi:http/types::Response`) are
+        // prevented because every WASI-side registry lookup is scoped via
+        // `has_*_with_prefix("wasi:", ...)` or `*_by_interface_prefix("wasi:",
+        // ...)` — registering Kiln types alongside them is safe.
+        // Register the `core:kiln` stdlib modules (`kiln-host`, `types`,
+        // `worlds`). Each Kiln type carries a `#[cm("core:kiln/<iface>...")]`
+        // attribute, so `register_unique`'s `(source_interface, name)` key
+        // places them in their own slot. Cross-namespace collisions (such as
+        // `core:kiln/types::Response` vs. `wasi:http/types::Response`) are
+        // prevented because every WASI-side registry lookup is scoped via
+        // `has_*_with_prefix("wasi:", ...)` or `*_by_wasi_package(...)` —
+        // registering Kiln types alongside WASI ones is therefore safe.
+        for source in [
+            stdlib::CORE_KILN_KILN_HOST,
+            stdlib::CORE_KILN_TYPES,
+            stdlib::CORE_KILN_WORLDS,
+        ] {
+            let module = parse_module(source);
+            registry.register_module(&module, &mut world_registry);
         }
 
         (registry, world_registry)
@@ -800,6 +867,22 @@ impl WasiRegistry {
         find_unique_in(&self.newtypes, name)
     }
 
+    /// Check whether a newtype with `name` is registered by an interface whose
+    /// source starts with `prefix`.
+    pub fn has_newtype_with_prefix(&self, prefix: &str, name: &str) -> bool {
+        has_with_prefix(&self.newtypes, prefix, name)
+    }
+
+    /// Get a newtype registered under `prefix`, when exactly one interface with
+    /// that prefix defines the name.
+    pub fn get_newtype_by_interface_prefix(
+        &self,
+        prefix: &str,
+        name: &str,
+    ) -> Option<&Type> {
+        find_unique_with_prefix(&self.newtypes, prefix, name)
+    }
+
     /// Iterate all newtypes as `((source_interface, name), type)`.
     pub fn newtypes(&self) -> &IndexMap<(String, String), Type> {
         &self.newtypes
@@ -821,9 +904,48 @@ impl WasiRegistry {
         find_unique_source_in(&self.resources, name)
     }
 
+    /// Check whether a resource with `name` is registered by an interface whose
+    /// source starts with `prefix`.
+    pub fn has_resource_with_prefix(&self, prefix: &str, name: &str) -> bool {
+        has_with_prefix(&self.resources, prefix, name)
+    }
+
+    /// Get the CM kebab-case name for a resource registered under `prefix`,
+    /// when exactly one interface with that prefix defines it.
+    pub fn get_resource_cm_name_by_interface_prefix(
+        &self,
+        prefix: &str,
+        name: &str,
+    ) -> Option<&str> {
+        find_unique_with_prefix(&self.resources, prefix, name).map(String::as_str)
+    }
+
+    /// Get the source interface for a resource registered under `prefix`, when
+    /// exactly one interface with that prefix defines it.
+    pub fn get_resource_source_interface_by_prefix(
+        &self,
+        prefix: &str,
+        name: &str,
+    ) -> Option<&str> {
+        find_unique_source_with_prefix(&self.resources, prefix, name)
+    }
+
     /// Check if a type name is a registered enum (in any interface).
     pub fn is_enum(&self, name: &str) -> bool {
         has_any_in(&self.enums, name)
+    }
+
+    /// Check whether a resource, struct, variant, enum, flags, or newtype with
+    /// `name` is registered by an interface whose source starts with `prefix`.
+    /// Used as the canonical "does this package own a type with this name"
+    /// guard during CM binding synthesis.
+    pub fn has_named_type_with_prefix(&self, prefix: &str, name: &str) -> bool {
+        self.has_struct_with_prefix(prefix, name)
+            || self.has_resource_with_prefix(prefix, name)
+            || self.has_variant_with_prefix(prefix, name)
+            || self.has_enum_with_prefix(prefix, name)
+            || self.has_flags_with_prefix(prefix, name)
+            || self.has_newtype_with_prefix(prefix, name)
     }
 
     /// Get the CM kebab-case name for an enum, when unambiguous.
@@ -838,8 +960,9 @@ impl WasiRegistry {
 
     /// Get the CM enum variant names scoped to a specific source interface
     /// (e.g. `"wasi:cli/types@0.3.0-rc-2026-03-15"`). Disambiguates enums
-    /// sharing a Wado name across interfaces. Falls back to the unscoped
-    /// lookup when only one interface defines the name.
+    /// sharing a Wado name across interfaces. Falls back to the unique WASI
+    /// cross-package registrant when the scoped interface does not define the
+    /// name. The fallback is limited to the `wasi:` namespace.
     pub fn get_enum_variants_by_interface(
         &self,
         interface_path: &str,
@@ -847,22 +970,49 @@ impl WasiRegistry {
     ) -> Option<&[String]> {
         self.enums
             .get(&(interface_path.to_string(), name.to_string()))
+            .or_else(|| find_unique_with_prefix(&self.enums, "wasi:", name))
             .map(|(_, variants)| variants.as_slice())
-            .or_else(|| self.get_enum_variants(name))
     }
 
     /// Get the CM enum name scoped to a specific source interface.
     pub fn get_enum_cm_name_by_interface(&self, interface_path: &str, name: &str) -> Option<&str> {
         self.enums
             .get(&(interface_path.to_string(), name.to_string()))
+            .or_else(|| find_unique_with_prefix(&self.enums, "wasi:", name))
             .map(|(cm_name, _)| cm_name.as_str())
-            .or_else(|| self.get_enum_cm_name(name))
     }
 
     /// Check if a specific interface defines its own enum type (exact match, no fallback).
     pub fn has_enum_in_interface(&self, interface_path: &str, name: &str) -> bool {
         self.enums
             .contains_key(&(interface_path.to_string(), name.to_string()))
+    }
+
+    /// Check whether an enum with `name` is registered by an interface whose
+    /// source starts with `prefix`.
+    pub fn has_enum_with_prefix(&self, prefix: &str, name: &str) -> bool {
+        has_with_prefix(&self.enums, prefix, name)
+    }
+
+    /// Get the CM enum variant names for an enum registered under `prefix`,
+    /// when exactly one interface with that prefix defines it.
+    pub fn get_enum_variants_by_interface_prefix(
+        &self,
+        prefix: &str,
+        name: &str,
+    ) -> Option<&[String]> {
+        find_unique_with_prefix(&self.enums, prefix, name)
+            .map(|(_, variants)| variants.as_slice())
+    }
+
+    /// Get the CM enum name registered under `prefix`, when exactly one
+    /// interface with that prefix defines it.
+    pub fn get_enum_cm_name_by_interface_prefix(
+        &self,
+        prefix: &str,
+        name: &str,
+    ) -> Option<&str> {
+        find_unique_with_prefix(&self.enums, prefix, name).map(|(cm_name, _)| cm_name.as_str())
     }
 
     /// Check if a type name is a registered flags type (in any interface).
@@ -880,9 +1030,40 @@ impl WasiRegistry {
         find_unique_in(&self.flags, name).map(|(_, members)| members.as_slice())
     }
 
+    /// Check whether a flags type with `name` is registered by an interface
+    /// whose source starts with `prefix`.
+    pub fn has_flags_with_prefix(&self, prefix: &str, name: &str) -> bool {
+        has_with_prefix(&self.flags, prefix, name)
+    }
+
+    /// Get the CM kebab-case name for a flags type registered under `prefix`.
+    pub fn get_flags_cm_name_by_interface_prefix(
+        &self,
+        prefix: &str,
+        name: &str,
+    ) -> Option<&str> {
+        find_unique_with_prefix(&self.flags, prefix, name).map(|(cm_name, _)| cm_name.as_str())
+    }
+
+    /// Get the CM member names for a flags type registered under `prefix`.
+    pub fn get_flags_members_by_interface_prefix(
+        &self,
+        prefix: &str,
+        name: &str,
+    ) -> Option<&[String]> {
+        find_unique_with_prefix(&self.flags, prefix, name)
+            .map(|(_, members)| members.as_slice())
+    }
+
     /// Check if a type name is a registered variant (in any interface).
     pub fn is_variant(&self, name: &str) -> bool {
         has_any_in(&self.variants, name)
+    }
+
+    /// Check whether a variant with `name` is registered by an interface whose
+    /// source starts with `prefix`.
+    pub fn has_variant_with_prefix(&self, prefix: &str, name: &str) -> bool {
+        has_with_prefix(&self.variants, prefix, name)
     }
 
     /// Get the CM kebab-case name for a variant, when unambiguous.
@@ -896,7 +1077,15 @@ impl WasiRegistry {
     }
 
     /// Get the variant cases scoped to a WASI package (e.g., `"http"`).
-    /// Prefers an interface whose source starts with `"wasi:{package}/"`.
+    /// Prefers an interface whose source starts with `"wasi:{package}/"` and
+    /// falls back to the unique WASI cross-package registrant (e.g. `ErrorCode`
+    /// defined in `wasi:filesystem/types` when referenced from a `wasi:http`
+    /// binding). If multiple interfaces under the same package define the
+    /// name (e.g. `wasi:sockets/types::ErrorCode` vs.
+    /// `wasi:sockets/ip-name-lookup::ErrorCode`), returns the first registered
+    /// to preserve existing WASI binding behavior. The fallback is scoped to
+    /// the `wasi:` namespace so that a same-named type in `core:*` (e.g.
+    /// `core:kiln/types::Error`) cannot leak into WASI binding synthesis.
     pub fn get_variant_cases_by_package(
         &self,
         package: &str,
@@ -907,10 +1096,15 @@ impl WasiRegistry {
             .iter()
             .find(|((src, n), _)| n == name && src.starts_with(&prefix))
             .map(|(_, (_, cases))| cases.as_slice())
-            .or_else(|| self.get_variant_cases(name))
+            .or_else(|| {
+                find_unique_with_prefix(&self.variants, "wasi:", name)
+                    .map(|(_, cases)| cases.as_slice())
+            })
     }
 
-    /// Get the variant cases scoped to a specific source interface.
+    /// Get the variant cases scoped to a specific source interface. Falls back
+    /// to the unique WASI cross-package registrant (scoped to `wasi:`) when
+    /// the given interface does not define the name.
     pub fn get_variant_cases_by_interface(
         &self,
         interface_path: &str,
@@ -918,11 +1112,12 @@ impl WasiRegistry {
     ) -> Option<&[CmVariantCase]> {
         self.variants
             .get(&(interface_path.to_string(), name.to_string()))
+            .or_else(|| find_unique_with_prefix(&self.variants, "wasi:", name))
             .map(|(_, cases)| cases.as_slice())
-            .or_else(|| self.get_variant_cases(name))
     }
 
-    /// Get the CM variant name scoped to a specific source interface.
+    /// Get the CM variant name scoped to a specific source interface. Falls
+    /// back to the unique WASI cross-package registrant (scoped to `wasi:`).
     pub fn get_variant_cm_name_by_interface(
         &self,
         interface_path: &str,
@@ -930,8 +1125,29 @@ impl WasiRegistry {
     ) -> Option<&str> {
         self.variants
             .get(&(interface_path.to_string(), name.to_string()))
+            .or_else(|| find_unique_with_prefix(&self.variants, "wasi:", name))
             .map(|(cm_name, _)| cm_name.as_str())
-            .or_else(|| self.get_variant_cm_name(name))
+    }
+
+    /// Get variant cases registered under `prefix`, when exactly one interface
+    /// with that prefix defines the name.
+    pub fn get_variant_cases_by_interface_prefix(
+        &self,
+        prefix: &str,
+        name: &str,
+    ) -> Option<&[CmVariantCase]> {
+        find_unique_with_prefix(&self.variants, prefix, name)
+            .map(|(_, cases)| cases.as_slice())
+    }
+
+    /// Get the CM variant name registered under `prefix`.
+    pub fn get_variant_cm_name_by_interface_prefix(
+        &self,
+        prefix: &str,
+        name: &str,
+    ) -> Option<&str> {
+        find_unique_with_prefix(&self.variants, prefix, name)
+            .map(|(cm_name, _)| cm_name.as_str())
     }
 
     /// Check if a type name is a registered struct (WIT record, in any interface).
@@ -973,6 +1189,111 @@ impl WasiRegistry {
         name: &str,
     ) -> Option<&[(String, String, Type)]> {
         find_unique_in(&self.structs, name).map(|(_, _, wado_fields)| wado_fields.as_slice())
+    }
+
+    /// Get struct fields scoped to a WASI package (e.g., `"filesystem"`).
+    /// Prefers a `wasi:{package}/` interface and falls back to the unique WASI
+    /// cross-package registrant (for cross-package field types such as
+    /// `wasi:clocks/types::Instant` inside a `wasi:filesystem` struct). The
+    /// fallback is scoped to the `wasi:` namespace so types in `core:*` cannot
+    /// leak into WASI binding synthesis.
+    pub fn get_struct_fields_by_wasi_package(
+        &self,
+        package: &str,
+        name: &str,
+    ) -> Option<&[(String, Type)]> {
+        let prefix = format!("wasi:{package}/");
+        self.structs
+            .iter()
+            .find(|((src, n), _)| n == name && src.starts_with(&prefix))
+            .map(|(_, (_, fields, _))| fields.as_slice())
+            .or_else(|| {
+                find_unique_with_prefix(&self.structs, "wasi:", name)
+                    .map(|(_, fields, _)| fields.as_slice())
+            })
+    }
+
+    /// Get struct fields with Wado names scoped to a WASI package, with the
+    /// same fallback semantics as `get_struct_fields_by_wasi_package`.
+    pub fn get_struct_fields_with_wado_names_by_wasi_package(
+        &self,
+        package: &str,
+        name: &str,
+    ) -> Option<&[(String, String, Type)]> {
+        let prefix = format!("wasi:{package}/");
+        self.structs
+            .iter()
+            .find(|((src, n), _)| n == name && src.starts_with(&prefix))
+            .map(|(_, (_, _, wado_fields))| wado_fields.as_slice())
+            .or_else(|| {
+                find_unique_with_prefix(&self.structs, "wasi:", name)
+                    .map(|(_, _, wado_fields)| wado_fields.as_slice())
+            })
+    }
+
+    /// Get the source interface for a struct scoped to a WASI package, with
+    /// the same fallback semantics as `get_struct_fields_by_wasi_package`.
+    pub fn get_struct_source_interface_by_wasi_package(
+        &self,
+        package: &str,
+        name: &str,
+    ) -> Option<&str> {
+        let prefix = format!("wasi:{package}/");
+        self.structs
+            .iter()
+            .find(|((src, n), _)| n == name && src.starts_with(&prefix))
+            .map(|((src, _), _)| src.as_str())
+            .or_else(|| find_unique_source_with_prefix(&self.structs, "wasi:", name))
+    }
+
+    /// Check whether a struct with `name` is registered by an interface whose
+    /// source starts with `prefix` (e.g. `"wasi:http/"` or `"core:kiln/"`).
+    pub fn has_struct_with_prefix(&self, prefix: &str, name: &str) -> bool {
+        has_with_prefix(&self.structs, prefix, name)
+    }
+
+    /// Get the CM kebab-case name for a struct registered under `prefix`,
+    /// when exactly one interface with that prefix defines it.
+    pub fn get_struct_cm_name_by_interface_prefix(
+        &self,
+        prefix: &str,
+        name: &str,
+    ) -> Option<&str> {
+        find_unique_with_prefix(&self.structs, prefix, name)
+            .map(|(cm_name, _, _)| cm_name.as_str())
+    }
+
+    /// Get the fields of a struct registered under `prefix`, when exactly one
+    /// interface with that prefix defines it. Does not fall back to a bare-name
+    /// scan — same-named structs in other namespaces are deliberately invisible.
+    pub fn get_struct_fields_by_interface_prefix(
+        &self,
+        prefix: &str,
+        name: &str,
+    ) -> Option<&[(String, Type)]> {
+        find_unique_with_prefix(&self.structs, prefix, name)
+            .map(|(_, fields, _)| fields.as_slice())
+    }
+
+    /// Get the fields (with Wado names) of a struct registered under `prefix`,
+    /// when exactly one interface with that prefix defines it.
+    pub fn get_struct_fields_with_wado_names_by_interface_prefix(
+        &self,
+        prefix: &str,
+        name: &str,
+    ) -> Option<&[(String, String, Type)]> {
+        find_unique_with_prefix(&self.structs, prefix, name)
+            .map(|(_, _, wado_fields)| wado_fields.as_slice())
+    }
+
+    /// Get the source interface path for a struct registered under `prefix`,
+    /// when exactly one interface with that prefix defines it.
+    pub fn get_struct_source_interface_by_prefix(
+        &self,
+        prefix: &str,
+        name: &str,
+    ) -> Option<&str> {
+        find_unique_source_with_prefix(&self.structs, prefix, name)
     }
 
     /// Iterate over all structs from a specific interface (matched by prefix).
@@ -1684,9 +2005,15 @@ impl CmInstanceTypeGen {
                 "f64" => ComponentValType::Primitive(PrimitiveValType::F64),
                 "char" => ComponentValType::Primitive(PrimitiveValType::Char),
                 name => {
-                    if wasi_registry.is_resource(name) {
+                    // Every branch here is emitting a WASI interface declaration.
+                    // Scope registry lookups to `wasi:` so same-named types in
+                    // other namespaces (e.g. `core:kiln/types::Response`) cannot
+                    // shadow the type being emitted.
+                    if wasi_registry.has_resource_with_prefix("wasi:", name) {
                         // own<resource>
-                        let cm_name = wasi_registry.get_resource_cm_name(name).unwrap();
+                        let cm_name = wasi_registry
+                            .get_resource_cm_name_by_interface_prefix("wasi:", name)
+                            .unwrap();
                         let cache_key = format!("own:{cm_name}");
                         if let Some(&idx) = self.cache.get(&cache_key) {
                             return ComponentValType::Type(idx);
@@ -1696,7 +2023,7 @@ impl CmInstanceTypeGen {
                         let idx = self.alloc_idx();
                         self.cache.insert(cache_key, idx);
                         ComponentValType::Type(idx)
-                    } else if wasi_registry.is_variant(name) {
+                    } else if wasi_registry.has_variant_with_prefix("wasi:", name) {
                         let (cm_name, cases) = if let Some(hint) = &self.interface_hint {
                             let cm = wasi_registry
                                 .get_variant_cm_name_by_interface(hint, name)
@@ -1708,8 +2035,14 @@ impl CmInstanceTypeGen {
                                 .to_vec();
                             (cm, cs)
                         } else {
-                            let cm = wasi_registry.get_variant_cm_name(name).unwrap().to_string();
-                            let cs = wasi_registry.get_variant_cases(name).unwrap().to_vec();
+                            let cm = wasi_registry
+                                .get_variant_cm_name_by_interface_prefix("wasi:", name)
+                                .unwrap()
+                                .to_string();
+                            let cs = wasi_registry
+                                .get_variant_cases_by_interface_prefix("wasi:", name)
+                                .unwrap()
+                                .to_vec();
                             (cm, cs)
                         };
                         let idx = self.define_variant(
@@ -1720,9 +2053,15 @@ impl CmInstanceTypeGen {
                             resource_exports,
                         );
                         ComponentValType::Type(idx)
-                    } else if wasi_registry.is_struct(name) {
-                        let cm_name = wasi_registry.get_struct_cm_name(name).unwrap().to_string();
-                        let fields = wasi_registry.get_struct_fields(name).unwrap().to_vec();
+                    } else if wasi_registry.has_struct_with_prefix("wasi:", name) {
+                        let cm_name = wasi_registry
+                            .get_struct_cm_name_by_interface_prefix("wasi:", name)
+                            .unwrap()
+                            .to_string();
+                        let fields = wasi_registry
+                            .get_struct_fields_by_interface_prefix("wasi:", name)
+                            .unwrap()
+                            .to_vec();
                         let idx = self.define_record(
                             instance_type,
                             &cm_name,
@@ -1731,12 +2070,15 @@ impl CmInstanceTypeGen {
                             resource_exports,
                         );
                         ComponentValType::Type(idx)
-                    } else if wasi_registry.is_enum(name) {
+                    } else if wasi_registry.has_enum_with_prefix("wasi:", name) {
                         let cache_key = format!("enum:{name}");
                         if let Some(&idx) = self.cache.get(&cache_key) {
                             return ComponentValType::Type(idx);
                         }
-                        let variants = wasi_registry.get_enum_variants(name).unwrap().to_vec();
+                        let variants = wasi_registry
+                            .get_enum_variants_by_interface_prefix("wasi:", name)
+                            .unwrap()
+                            .to_vec();
                         instance_type
                             .ty()
                             .defined_type()
@@ -1745,7 +2087,9 @@ impl CmInstanceTypeGen {
                         self.cache.insert(cache_key.clone(), idx);
 
                         // Export the enum type
-                        if let Some(cm_name) = wasi_registry.get_enum_cm_name(name) {
+                        if let Some(cm_name) = wasi_registry
+                            .get_enum_cm_name_by_interface_prefix("wasi:", name)
+                        {
                             instance_type.export(
                                 cm_name,
                                 wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(idx)),
@@ -1756,12 +2100,15 @@ impl CmInstanceTypeGen {
                         }
 
                         ComponentValType::Type(idx)
-                    } else if wasi_registry.is_flags(name) {
+                    } else if wasi_registry.has_flags_with_prefix("wasi:", name) {
                         let cache_key = format!("flags:{name}");
                         if let Some(&idx) = self.cache.get(&cache_key) {
                             return ComponentValType::Type(idx);
                         }
-                        let members = wasi_registry.get_flags_members(name).unwrap().to_vec();
+                        let members = wasi_registry
+                            .get_flags_members_by_interface_prefix("wasi:", name)
+                            .unwrap()
+                            .to_vec();
                         instance_type
                             .ty()
                             .defined_type()
@@ -1776,9 +2123,11 @@ impl CmInstanceTypeGen {
             },
             Type::Reference(inner) | Type::MutReference(inner) => {
                 if let Type::Named(n) = inner.as_ref()
-                    && wasi_registry.is_resource(&n.name)
+                    && wasi_registry.has_resource_with_prefix("wasi:", &n.name)
                 {
-                    let cm_name = wasi_registry.get_resource_cm_name(&n.name).unwrap();
+                    let cm_name = wasi_registry
+                        .get_resource_cm_name_by_interface_prefix("wasi:", &n.name)
+                        .unwrap();
                     let export_idx = resource_exports[cm_name];
                     let idx = self.define_borrow(instance_type, export_idx, cm_name);
                     return ComponentValType::Type(idx);
@@ -1984,16 +2333,21 @@ pub fn flatten_wasi_param_type(ty: &Type, out: &mut Vec<ValType>, registry: &Was
             // Unit type — no core values
             "()" => {}
             // Struct (record) types flatten to concatenation of field flat types
-            name if registry.is_struct(name) => {
-                let fields = registry.get_struct_fields(name).unwrap();
+            // (scoped to wasi: — non-WASI records don't participate in WASI flat ABI).
+            name if registry.has_struct_with_prefix("wasi:", name) => {
+                let fields = registry
+                    .get_struct_fields_by_interface_prefix("wasi:", name)
+                    .unwrap();
                 for (_, field_ty) in fields {
                     flatten_wasi_param_type(field_ty, out, registry);
                 }
             }
             // Variant types flatten to: discriminant i32 + union(max payload)
-            name if registry.is_variant(name) => {
+            name if registry.has_variant_with_prefix("wasi:", name) => {
                 out.push(ValType::I32); // discriminant
-                if let Some(cases) = registry.get_variant_cases(name) {
+                if let Some(cases) = registry
+                    .get_variant_cases_by_interface_prefix("wasi:", name)
+                {
                     let mut max_flat: Vec<ValType> = Vec::new();
                     for case in cases {
                         if let Some(payload_ty) = &case.payload {
@@ -2341,11 +2695,16 @@ pub fn return_type_requires_outptr(ty: &Type) -> bool {
 /// registry-aware check fills that gap.
 pub fn wasi_named_type_return_needs_outptr(ty: &Type, registry: &WasiRegistry) -> bool {
     if let Type::Named(named) = ty {
-        if let Some(cases) = registry.get_variant_cases(&named.name) {
+        if let Some(cases) = registry
+            .get_variant_cases_by_interface_prefix("wasi:", &named.name)
+        {
             return cases.iter().any(|case| case.payload.is_some());
         }
         // WASI structs (records) always need outptr — they have multiple fields
-        if registry.get_struct_fields(&named.name).is_some() {
+        if registry
+            .get_struct_fields_by_interface_prefix("wasi:", &named.name)
+            .is_some()
+        {
             return true;
         }
     }
@@ -2359,12 +2718,16 @@ pub fn wasi_named_type_return_needs_outptr(ty: &Type, registry: &WasiRegistry) -
 pub fn cm_size_with_registry(ty: &Type, registry: &WasiRegistry) -> u32 {
     match ty {
         Type::Named(named) => {
-            // Check newtypes first
-            if let Some(resolved) = registry.get_newtype(&named.name) {
+            // Every registry lookup is scoped to `wasi:` — these ABI
+            // computations are called for WASI canonical ABI layout only.
+            if let Some(resolved) = registry
+                .get_newtype_by_interface_prefix("wasi:", &named.name)
+            {
                 return cm_size_with_registry(resolved, registry);
             }
-            // Check structs (records)
-            if let Some(fields) = registry.get_struct_fields(&named.name) {
+            if let Some(fields) = registry
+                .get_struct_fields_by_interface_prefix("wasi:", &named.name)
+            {
                 let resolved_fields: Vec<Type> = fields
                     .iter()
                     .map(|(_, ty)| registry.resolve_type(ty))
@@ -2386,12 +2749,14 @@ pub fn cm_size_with_registry(ty: &Type, registry: &WasiRegistry) -> u32 {
             if let Some(sa) = wasi_variant_cm_size_align(&named.name, registry) {
                 return sa.0;
             }
-            // Check enums
-            if let Some(variants) = registry.get_enum_variants(&named.name) {
+            if let Some(variants) = registry
+                .get_enum_variants_by_interface_prefix("wasi:", &named.name)
+            {
                 return crate::synthesis::cm_binding::cm_enum_byte_size(variants.len());
             }
-            // Check flags
-            if let Some(members) = registry.get_flags_members(&named.name) {
+            if let Some(members) = registry
+                .get_flags_members_by_interface_prefix("wasi:", &named.name)
+            {
                 return crate::synthesis::cm_binding::cm_flags_byte_size(members.len());
             }
             crate::cm_abi::cm_size(ty)
@@ -2425,10 +2790,14 @@ pub fn cm_size_with_registry(ty: &Type, registry: &WasiRegistry) -> u32 {
 pub fn cm_align_with_registry(ty: &Type, registry: &WasiRegistry) -> u32 {
     match ty {
         Type::Named(named) => {
-            if let Some(resolved) = registry.get_newtype(&named.name) {
+            if let Some(resolved) = registry
+                .get_newtype_by_interface_prefix("wasi:", &named.name)
+            {
                 return cm_align_with_registry(resolved, registry);
             }
-            if let Some(fields) = registry.get_struct_fields(&named.name) {
+            if let Some(fields) = registry
+                .get_struct_fields_by_interface_prefix("wasi:", &named.name)
+            {
                 let mut max_align = 1u32;
                 for (_, field_ty) in fields {
                     let resolved = registry.resolve_type(field_ty);
@@ -2440,10 +2809,14 @@ pub fn cm_align_with_registry(ty: &Type, registry: &WasiRegistry) -> u32 {
             if let Some(sa) = wasi_variant_cm_size_align(&named.name, registry) {
                 return sa.1;
             }
-            if let Some(variants) = registry.get_enum_variants(&named.name) {
+            if let Some(variants) = registry
+                .get_enum_variants_by_interface_prefix("wasi:", &named.name)
+            {
                 return crate::synthesis::cm_binding::cm_enum_byte_size(variants.len());
             }
-            if let Some(members) = registry.get_flags_members(&named.name) {
+            if let Some(members) = registry
+                .get_flags_members_by_interface_prefix("wasi:", &named.name)
+            {
                 return crate::synthesis::cm_binding::cm_flags_byte_align(members.len());
             }
             crate::cm_abi::cm_align(ty)
@@ -2482,11 +2855,10 @@ pub fn wasi_variant_cm_size_align_scoped(
     wasi_package: Option<&str>,
 ) -> Option<(u32, u32)> {
     let cases = if let Some(pkg) = wasi_package {
-        registry
-            .get_variant_cases_by_package(pkg, name)
-            .or_else(|| registry.get_variant_cases(name))
+        registry.get_variant_cases_by_package(pkg, name)
     } else {
-        registry.get_variant_cases(name)
+        find_unique_with_prefix(&registry.variants, "wasi:", name)
+            .map(|(_, cases)| cases.as_slice())
     }?;
     if !cases.iter().any(|case| case.payload.is_some()) {
         return None; // no payload cases — not outptr
@@ -2519,10 +2891,14 @@ pub fn cm_size_with_registry_scoped(
 ) -> u32 {
     match ty {
         Type::Named(named) => {
-            if let Some(resolved) = registry.get_newtype(&named.name) {
+            if let Some(resolved) = registry
+                .get_newtype_by_interface_prefix("wasi:", &named.name)
+            {
                 return cm_size_with_registry_scoped(resolved, registry, wasi_package);
             }
-            if let Some(fields) = registry.get_struct_fields(&named.name) {
+            if let Some(fields) = registry
+                .get_struct_fields_by_interface_prefix("wasi:", &named.name)
+            {
                 let resolved_fields: Vec<Type> = fields
                     .iter()
                     .map(|(_, ty)| registry.resolve_type(ty))
@@ -2542,10 +2918,14 @@ pub fn cm_size_with_registry_scoped(
             {
                 return sa.0;
             }
-            if let Some(variants) = registry.get_enum_variants(&named.name) {
+            if let Some(variants) = registry
+                .get_enum_variants_by_interface_prefix("wasi:", &named.name)
+            {
                 return crate::synthesis::cm_binding::cm_enum_byte_size(variants.len());
             }
-            if let Some(members) = registry.get_flags_members(&named.name) {
+            if let Some(members) = registry
+                .get_flags_members_by_interface_prefix("wasi:", &named.name)
+            {
                 return crate::synthesis::cm_binding::cm_flags_byte_size(members.len());
             }
             crate::cm_abi::cm_size(ty)
@@ -2585,10 +2965,14 @@ pub fn cm_align_with_registry_scoped(
 ) -> u32 {
     match ty {
         Type::Named(named) => {
-            if let Some(resolved) = registry.get_newtype(&named.name) {
+            if let Some(resolved) = registry
+                .get_newtype_by_interface_prefix("wasi:", &named.name)
+            {
                 return cm_align_with_registry_scoped(resolved, registry, wasi_package);
             }
-            if let Some(fields) = registry.get_struct_fields(&named.name) {
+            if let Some(fields) = registry
+                .get_struct_fields_by_interface_prefix("wasi:", &named.name)
+            {
                 let mut max_align = 1u32;
                 for (_, field_ty) in fields {
                     let resolved = registry.resolve_type(field_ty);
@@ -2604,10 +2988,14 @@ pub fn cm_align_with_registry_scoped(
             {
                 return sa.1;
             }
-            if let Some(variants) = registry.get_enum_variants(&named.name) {
+            if let Some(variants) = registry
+                .get_enum_variants_by_interface_prefix("wasi:", &named.name)
+            {
                 return crate::synthesis::cm_binding::cm_enum_byte_size(variants.len());
             }
-            if let Some(members) = registry.get_flags_members(&named.name) {
+            if let Some(members) = registry
+                .get_flags_members_by_interface_prefix("wasi:", &named.name)
+            {
                 return crate::synthesis::cm_binding::cm_flags_byte_align(members.len());
             }
             crate::cm_abi::cm_align(ty)

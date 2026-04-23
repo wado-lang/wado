@@ -1176,8 +1176,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     if let Some(&newtype_id) = self.newtypes.get(&named.name) {
                         return newtype_id;
                     }
-                    // Otherwise, try to resolve via WASI registry's newtypes
-                    let aliased = self.wasi_registry.get_newtype(&named.name).cloned();
+                    // Otherwise, try to resolve via WASI registry's newtypes.
+                    // Scoped to `wasi:` to keep this resolver path WASI-only.
+                    let aliased = self
+                        .wasi_registry
+                        .get_newtype_by_interface_prefix("wasi:", &named.name)
+                        .cloned();
                     if let Some(aliased) = aliased {
                         // Create a newtype for this WASI newtype
                         let base_type = self.resolve_wasi_type_scoped(&aliased, wasi_package);
@@ -1189,7 +1193,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         // Cache the newtype for future lookups
                         self.newtypes.insert(named.name.clone(), newtype_id);
                         newtype_id
-                    } else if self.wasi_registry.is_resource(&named.name) {
+                    } else if self.wasi_registry.has_resource_with_prefix("wasi:", &named.name) {
                         // WASI resource type - create a proper Resource TypeId so that
                         // method calls on the returned handle resolve correctly.
                         // Look up the actual module source from all_resource_types.
@@ -1214,8 +1218,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             tid
                         } else {
                             drop(tt);
-                            // Fallback: enum → struct → i32
-                            if self.wasi_registry.is_enum(&named.name) {
+                            // Fallback: enum → struct → i32 (scoped to wasi: so
+                            // same-named core:* types cannot leak in).
+                            if self.wasi_registry.has_enum_with_prefix("wasi:", &named.name) {
                                 let module_source = self
                                     .all_enum_cases
                                     .iter()
@@ -1226,7 +1231,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                 self.type_table
                                     .borrow_mut()
                                     .make_enum(named.name.clone(), module_source)
-                            } else if self.wasi_registry.is_struct(&named.name) {
+                            } else if self
+                                .wasi_registry
+                                .has_struct_with_prefix("wasi:", &named.name)
+                            {
                                 let module_source = self
                                     .all_struct_fields
                                     .iter()
@@ -1241,7 +1249,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                 TypeTable::I32
                             }
                         }
-                    } else if self.wasi_registry.is_enum(&named.name) {
+                    } else if self.wasi_registry.has_enum_with_prefix("wasi:", &named.name) {
                         // WASI enum type - look up the module source from all_enum_cases
                         let module_source = self
                             .all_enum_cases
@@ -1257,7 +1265,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         self.type_table
                             .borrow_mut()
                             .make_enum(named.name.clone(), module_source)
-                    } else if self.wasi_registry.is_struct(&named.name) {
+                    } else if self
+                        .wasi_registry
+                        .has_struct_with_prefix("wasi:", &named.name)
+                    {
                         // WASI struct (record) type - look up module source from all_struct_fields
                         let module_source = self
                             .all_struct_fields
