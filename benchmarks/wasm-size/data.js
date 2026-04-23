@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776888330607,
+  "lastUpdate": 1776918517843,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -15457,6 +15457,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/4845e753bde385f388be5d6fc66dc2812197182b"
         },
         "date": 1776888330355,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8982,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18988,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 635264,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c2862eab5c11544ea7106eb36ba2a7b5274431b9",
+          "message": "Merge pull request #903 from wado-lang/claude/add-openrouter-example-QaIlr\n\nfeat(prelude): AsyncCall&lt;T&gt; wrapper for CM async imports + OpenRouter example",
+          "timestamp": "2026-04-23T13:24:14+09:00",
+          "tree_id": "a1252e5bcb82daa6e3d584d2ccf135c2633bc1e8",
+          "url": "https://github.com/wado-lang/wado/commit/c2862eab5c11544ea7106eb36ba2a7b5274431b9"
+        },
+        "date": 1776918517542,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
