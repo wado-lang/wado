@@ -1,7 +1,7 @@
 //! Expand CM async intrinsics (`builtin::cm_lift_async_result`) into inline
 //! TIR that lifts the async result from the caller-provided outptr buffer.
 //!
-//! The `Subtask<T>::wait` method in `core:prelude/types.wado` materialises
+//! The `AsyncCall<T>::wait` method in `core:prelude/types.wado` materialises
 //! its result value by calling `builtin::cm_lift_async_result::<T>(outptr)`.
 //! Monomorphisation substitutes `T` with the concrete async-import result
 //! type, but the call itself remains a generic builtin — it cannot be

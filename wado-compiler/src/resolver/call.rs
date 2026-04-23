@@ -1120,9 +1120,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
     /// Get the return type of a WASI effect operation from the registry.
     ///
-    /// The registry stores the CM-ABI return type (with any `Subtask<T>`
+    /// The registry stores the CM-ABI return type (with any `AsyncCall<T>`
     /// wrapper stripped at registration). For async imports the Wado
-    /// surface type is `Subtask<T>`, so re-wrap before returning.
+    /// surface type is `AsyncCall<T>`, so re-wrap before returning.
     pub(super) fn get_wasi_effect_return_type(
         &mut self,
         effect: &str,
@@ -1139,7 +1139,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         };
 
         if is_async {
-            Some(self.type_table.borrow_mut().make_subtask(inner))
+            Some(self.type_table.borrow_mut().make_async_call(inner))
         } else if func.return_type.is_some() {
             Some(inner)
         } else {
@@ -1296,9 +1296,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     let inner_type = self.resolve_wasi_type_scoped(&generic.args[0], wasi_package);
                     self.type_table.borrow_mut().make_future(inner_type)
                 }
-                "Subtask" if generic.args.len() == 1 => {
+                "AsyncCall" if generic.args.len() == 1 => {
                     let inner_type = self.resolve_wasi_type_scoped(&generic.args[0], wasi_package);
-                    self.type_table.borrow_mut().make_subtask(inner_type)
+                    self.type_table.borrow_mut().make_async_call(inner_type)
                 }
                 "Result" if generic.args.len() == 2 => {
                     let ok_type = self.resolve_wasi_type_scoped(&generic.args[0], wasi_package);

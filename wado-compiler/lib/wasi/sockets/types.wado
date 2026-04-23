@@ -278,7 +278,7 @@ pub resource TcpSocket {
     /// - <https://man.freebsd.org/cgi/man.cgi?connect>
     #[cm("wasi:sockets/types@0.3.0-rc-2026-03-15#[method]tcp-socket.connect")]
     #[cm_params("self", "remote-address")]
-    async fn connect(self: &TcpSocket, remote_address: IpSocketAddress) -> Subtask<Result<(), ErrorCode>>;
+    async fn connect(self: &TcpSocket, remote_address: IpSocketAddress) -> AsyncCall<Result<(), ErrorCode>>;
     /// Start listening and return a stream of new inbound connections.
     /// 
     /// Transitions the socket into the `listening` state. This can be called
@@ -728,7 +728,7 @@ pub resource UdpSocket {
     /// - <https://man.freebsd.org/cgi/man.cgi?query=send&sektion=2>
     #[cm("wasi:sockets/types@0.3.0-rc-2026-03-15#[method]udp-socket.send")]
     #[cm_params("self", "data", "remote-address")]
-    async fn send(self: &UdpSocket, data: Array<u8>, remote_address: Option<IpSocketAddress>) -> Subtask<Result<(), ErrorCode>>;
+    async fn send(self: &UdpSocket, data: Array<u8>, remote_address: Option<IpSocketAddress>) -> AsyncCall<Result<(), ErrorCode>>;
     /// Receive a message on the socket.
     /// 
     /// On success, the return value contains a tuple of the received data
@@ -754,7 +754,7 @@ pub resource UdpSocket {
     /// - <https://man.freebsd.org/cgi/man.cgi?query=recv&sektion=2>
     #[cm("wasi:sockets/types@0.3.0-rc-2026-03-15#[method]udp-socket.receive")]
     #[cm_params("self")]
-    async fn receive(self: &UdpSocket) -> Subtask<Result<[Array<u8>, IpSocketAddress], ErrorCode>>;
+    async fn receive(self: &UdpSocket) -> AsyncCall<Result<[Array<u8>, IpSocketAddress], ErrorCode>>;
     /// Get the current bound address.
     /// 
     /// POSIX mentions:

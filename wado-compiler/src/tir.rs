@@ -954,22 +954,22 @@ impl TypeTable {
         })
     }
 
-    /// Create a `Subtask<T>` generic struct instance type.
+    /// Create a `AsyncCall<T>` generic struct instance type.
     ///
     /// Unlike `Future<T>` and `Stream<T>` (which are CM handle resources),
-    /// `Subtask<T>` is a Wado-level struct carrying both the raw subtask
+    /// `AsyncCall<T>` is a Wado-level struct carrying both the raw subtask
     /// handle and the result buffer, so it is represented as a
     /// `GenericInstance`, not a `GenericResource`.
-    pub fn make_subtask(&mut self, inner: TypeId) -> TypeId {
-        self.make_generic_instance("Subtask".to_string(), ModuleSource::types(), vec![inner])
+    pub fn make_async_call(&mut self, inner: TypeId) -> TypeId {
+        self.make_generic_instance("AsyncCall".to_string(), ModuleSource::types(), vec![inner])
     }
 
-    /// If `type_id` is a `Subtask<T>` `GenericInstance`, return `T`.
-    pub fn as_subtask(&self, type_id: TypeId) -> Option<TypeId> {
+    /// If `type_id` is a `AsyncCall<T>` `GenericInstance`, return `T`.
+    pub fn as_async_call(&self, type_id: TypeId) -> Option<TypeId> {
         if let ResolvedType::GenericInstance {
             name, type_args, ..
         } = self.get(type_id)
-            && name == "Subtask"
+            && name == "AsyncCall"
             && type_args.len() == 1
         {
             return Some(type_args[0]);

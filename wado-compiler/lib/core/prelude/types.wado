@@ -228,7 +228,7 @@ pub resource WaitableSet {
     fn drop(&self);
 }
 
-/// A raw CM subtask handle. Internal — most users should hold `Subtask<T>`
+/// A raw CM subtask handle. Internal — most users should hold `AsyncCall<T>`
 /// (see below) which pairs the handle with its result buffer.
 ///
 /// `RawSubtask` extends `Waitable` in the CM spec. When dropped, it
@@ -262,7 +262,7 @@ pub resource RawSubtask {
 /// result type `T`. Returned by the synthesised adapter for a WIT
 /// `async func` import.
 ///
-/// `Subtask<T>` pairs the raw CM subtask handle with the linear-memory
+/// `AsyncCall<T>` pairs the raw CM subtask handle with the linear-memory
 /// buffer into which the host writes the async result. Use `wait(self)` to
 /// block until the call returns and take the lifted result; use
 /// `cancel(self)` to abort the in-flight call.
@@ -275,12 +275,12 @@ pub resource RawSubtask {
 /// ```wado
 /// let [body_rx, body_tx] = Stream::<u8>::new();
 /// let [req, _tx_future] = Request::new(headers, Option::Some(body_rx), ...);
-/// let subtask = Client::send(req);   // host subtask starts
+/// let task = Client::send(req);       // host subtask starts
 /// body_tx.write(body_bytes);          // rendezvous with host read
 /// body_tx.drop();
-/// let resp = subtask.wait();          // block for response
+/// let resp = task.wait();             // block for response
 /// ```
-pub struct Subtask<T> {
+pub struct AsyncCall<T> {
     /// Raw CM subtask handle packed as `(subtask_handle << 4) | status`,
     /// as returned by `canon lower async`.
     pub __cm_packed: i32,
@@ -292,10 +292,10 @@ pub struct Subtask<T> {
     pub __cm_align: i32,
 }
 
-impl Subtask<T> {
+impl AsyncCall<T> {
     /// Wait for the subtask to complete and return the lifted result.
     /// Drops the CM subtask handle and frees the result buffer before
-    /// returning. After `wait` returns, the `Subtask<T>` value must not be
+    /// returning. After `wait` returns, the `AsyncCall<T>` value must not be
     /// used again — doing so is a use-after-free (the backing buffer has
     /// been released).
     pub fn wait(&self) -> T {
@@ -322,7 +322,7 @@ impl Subtask<T> {
 
     /// Cancel the in-flight subtask and free the result buffer. Any
     /// partially-written result is discarded. Same single-use contract as
-    /// `wait` — the `Subtask<T>` must not be used again after `cancel`.
+    /// `wait` — the `AsyncCall<T>` must not be used again after `cancel`.
     pub fn cancel(&self) {
         let handle = self.__cm_packed >> 4;
         if handle != 0 {
@@ -337,7 +337,7 @@ impl Subtask<T> {
     /// the caller wants to wait on multiple subtasks and/or streams
     /// simultaneously). Returns a `Waitable` token identifying this
     /// subtask in wait events. The caller remains responsible for eventual
-    /// `wait`/`cancel` on this `Subtask<T>`.
+    /// `wait`/`cancel` on this `AsyncCall<T>`.
     pub fn join(&self, set: &WaitableSet) -> Waitable {
         let handle = self.__cm_packed >> 4;
         let raw = handle as RawSubtask;

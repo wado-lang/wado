@@ -239,16 +239,16 @@ impl WadoCodeGenerator {
         let params = Self::format_params(&func.params);
 
         // For CM `async func` imports, the Wado-level signature returns
-        // `Subtask<T>` instead of `T` (or `Subtask<()>` for WIT-void async
-        // imports). Users then call `.wait()` on the subtask to block on
-        // the result, or compose multiple subtasks with `WaitableSet`. The
+        // `AsyncCall<T>` instead of `T` (or `AsyncCall<()>` for WIT-void async
+        // imports). Users then call `.wait()` on the task to block on
+        // the result, or compose multiple tasks with `WaitableSet`. The
         // CM canonical ABI is unchanged — the wrapping lives purely at
         // the Wado-level adapter synthesised by `cm_binding.rs`.
         //
         // The `async` keyword is retained in the effect declaration as
         // the signal to the binding synthesiser that this import should
         // be lowered with `canon lower async`. The synthesiser strips the
-        // `Subtask<T>` wrapper to recover `T` when computing the CM ABI
+        // `AsyncCall<T>` wrapper to recover `T` when computing the CM ABI
         // layout for the outptr buffer.
         let return_type = if func.is_async {
             let inner = match (&func.return_type, func.never_returns) {
@@ -256,7 +256,7 @@ impl WadoCodeGenerator {
                 (Some(ty), false) => Self::format_type(ty),
                 (None, false) => "()".to_string(),
             };
-            format!(" -> Subtask<{inner}>")
+            format!(" -> AsyncCall<{inner}>")
         } else {
             match (&func.return_type, func.never_returns) {
                 (_, true) => " -> !".to_string(),

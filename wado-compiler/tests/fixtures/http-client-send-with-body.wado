@@ -1,12 +1,12 @@
 // Test: Client::send with a request body stream (POST).
 //
-// Exercises the Subtask<T>::wait pattern:
+// Exercises the AsyncCall<T>::wait pattern:
 //   1. Build an outgoing Request whose `contents` is the readable end of
 //      a stream.
-//   2. Call `Client::send(req)` — returns `Subtask<Result<Response,
-//      ErrorCode>>` with the host subtask already reading the body.
+//   2. Call `Client::send(req)` — returns `AsyncCall<Result<Response,
+//      ErrorCode>>` with the host task already reading the body.
 //   3. Write the body bytes and close the writable end.
-//   4. `subtask.wait()` to block on the response.
+//   4. `task.wait()` to block on the response.
 //
 // This is the client-side mirror of the `task return` + stream-write
 // pattern used by HTTP server handlers (`example/http-bin.wado`).

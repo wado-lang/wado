@@ -121,9 +121,9 @@ pub fn wasi_type_to_type_id(
                 let inner = wasi_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
                 type_table.make_future(inner)
             }
-            "Subtask" if g.args.len() == 1 => {
+            "AsyncCall" if g.args.len() == 1 => {
                 let inner = wasi_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
-                type_table.make_subtask(inner)
+                type_table.make_async_call(inner)
             }
             // Own/Borrow are handle types represented as i32
             "Own" | "Borrow" => TypeTable::I32,
@@ -2453,8 +2453,8 @@ fn synthesize_adapter(
     // Also check WASI variants with payload cases (e.g., Method with Other(String)):
     // cm_flat_types treats unknown named types as i32, missing their true flat count.
     //
-    // For `async fn foo(...) -> Subtask<T>` imports, `func_info.return_type`
-    // already stores the CM-ABI `T` (the registry strips the `Subtask<T>`
+    // For `async fn foo(...) -> AsyncCall<T>` imports, `func_info.return_type`
+    // already stores the CM-ABI `T` (the registry strips the `AsyncCall<T>`
     // wrapper at registration time, see `WasiRegistry::register`). The
     // wrapping is re-applied below when emitting the Wado-visible adapter
     // return type.
@@ -3005,8 +3005,8 @@ fn synthesize_adapter(
         const MAX_FLAT_ASYNC_PARAMS: usize = 4;
 
         // The CM-level result type (for layout) is the inner `T` of
-        // `Subtask<T>` for async imports; the `func_info.return_type`
-        // itself is the Wado-visible `Subtask<T>` wrapper.
+        // `AsyncCall<T>` for async imports; the `func_info.return_type`
+        // itself is the Wado-visible `AsyncCall<T>` wrapper.
         let has_results = cm_return_type.is_some();
 
         // Allocate the async results buffer via realloc (only when there are results).
@@ -3246,13 +3246,13 @@ fn synthesize_adapter(
         // result (if any) is written to the async outptr buffer when the
         // subtask eventually reaches `Status::Returned`.
         //
-        // For Wado-level `async fn foo(...) -> Subtask<T>` imports, the
+        // For Wado-level `async fn foo(...) -> AsyncCall<T>` imports, the
         // adapter does NOT wait for the subtask or lift the result here.
         // Instead it packages `(packed_handle, outptr, size, align)` into a
-        // `Subtask<T>` struct and returns it immediately, letting the
+        // `AsyncCall<T>` struct and returns it immediately, letting the
         // caller interleave stream-parameter writes with the host subtask
         // before explicitly `.wait()`-ing. The wait + lift + free logic
-        // lives in the synthesised `Subtask<T>::wait` method.
+        // lives in the synthesised `AsyncCall<T>::wait` method.
         let subtask_local = next_local;
         local_types.push(TypeTable::I32);
         next_local += 1;
@@ -3263,7 +3263,7 @@ fn synthesize_adapter(
             raw_call_expr,
         ));
 
-        // Assemble the Subtask<T> struct fields.
+        // Assemble the AsyncCall<T> struct fields.
         let (outptr_expr, size_expr, align_expr) =
             if let Some((outptr_local, outptr_size, outptr_align)) = async_outptr_info {
                 (
@@ -3273,11 +3273,11 @@ fn synthesize_adapter(
                 )
             } else {
                 // Void async import: no outptr. Carry zeroes so the struct
-                // layout is uniform; `Subtask<()>::wait` is a no-op.
+                // layout is uniform; `AsyncCall<()>::wait` is a no-op.
                 (i32_const(0), i32_const(0), i32_const(0))
             };
 
-        // Determine the type argument T for Subtask<T>. The CM-level
+        // Determine the type argument T for AsyncCall<T>. The CM-level
         // result type (inner T) was computed in `cm_return_type`; for
         // void async we use `()`.
         let inner_type_id = if let Some(return_type) = &cm_return_type {
@@ -3291,12 +3291,12 @@ fn synthesize_adapter(
         } else {
             TypeTable::UNIT
         };
-        let subtask_type = type_table.borrow_mut().make_subtask(inner_type_id);
+        let subtask_type = type_table.borrow_mut().make_async_call(inner_type_id);
 
         let subtask_struct = TirExpr::new(
             TirExprKind::StructLiteral {
                 struct_type: subtask_type,
-                struct_name: "Subtask".to_string(),
+                struct_name: "AsyncCall".to_string(),
                 fields: vec![
                     crate::tir::TirStructField {
                         name: "__cm_packed".to_string(),
