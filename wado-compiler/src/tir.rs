@@ -1142,19 +1142,28 @@ impl TypeTable {
     }
 
     /// Find any decl-backed named type (resource, enum, variant, struct,
-    /// flags, or newtype) scoped to a WASI package.
+    /// flags, or newtype) scoped to a CM package.
     ///
-    /// Matches types whose `module_source` is `Wasi { interface }` where
-    /// `interface` starts with `{wasi_package}/`. The key invariant: two WIT
-    /// interfaces in distinct packages that happen to share a type name
-    /// (e.g. `wasi:cli/ErrorCode` vs `wasi:http/ErrorCode`) resolve to
-    /// distinct `TypeId`s because `module_source` is part of the intern key.
-    pub fn find_named_type_by_wasi_package(
+    /// Matches types whose `module_source` prefix resolves to
+    /// `{cm_package}/` — both `Wasi { interface: "{pkg}/…" }` (e.g.
+    /// `wasi:http/types.wado`) and `Core { name: "{pkg}/…" }` (e.g.
+    /// `core:kiln/types.wado`) are considered. The key invariant: two
+    /// CM interfaces in distinct packages that happen to share a type
+    /// name (`wasi:cli/ErrorCode` vs `wasi:http/ErrorCode`, or
+    /// `wasi:http/types::Response` vs `core:kiln/types::Response`)
+    /// resolve to distinct `TypeId`s because `module_source` is part of
+    /// the intern key.
+    ///
+    /// `cm_package` is the bare package segment — `"http"`, `"kiln"`,
+    /// `"cli"`, etc. — not a fully-qualified source string. Callers
+    /// synthesizing CM bindings normally retrieve it from
+    /// [`crate::world_registry::WorldInfo::package`].
+    pub fn find_named_type_by_cm_package(
         &self,
         name: &str,
-        wasi_package: &str,
+        cm_package: &str,
     ) -> Option<TypeId> {
-        let prefix = format!("{wasi_package}/");
+        let prefix = format!("{cm_package}/");
         for (&type_id, resolved) in &self.types {
             let (n, ms) = match resolved {
                 ResolvedType::Resource {

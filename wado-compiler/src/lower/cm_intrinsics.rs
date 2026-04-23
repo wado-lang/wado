@@ -117,7 +117,7 @@ impl TirMutVisitor for Rewriter<'_> {
             &LiftContext {
                 wasi_registry: self.wasi_registry,
                 type_table: self.type_table,
-                wasi_package: &wasi_pkg,
+                cm_package: &wasi_pkg,
             },
         );
 

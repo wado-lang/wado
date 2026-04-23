@@ -46,13 +46,14 @@ use super::common::{
 pub struct LiftContext<'a> {
     pub wasi_registry: &'a WasiRegistry,
     pub type_table: &'a RefCell<TypeTable>,
-    /// WASI package owning the binding being synthesized (e.g., `"http"`
+    /// CM package owning the binding being synthesized (e.g., `"http"`
     /// for `wasi:http/*` bindings, `"kiln"` for `core:kiln/*` bindings).
     /// Required: every CM binding is emitted inside a known package,
     /// and named-type lookups are always scoped by `(name, package)` to
     /// prevent collisions such as `wasi:cli/ErrorCode` vs.
-    /// `wasi:http/ErrorCode`.
-    pub wasi_package: &'a str,
+    /// `wasi:http/ErrorCode` — or, across schemes,
+    /// `wasi:http/types::Response` vs. `core:kiln/types::Response`.
+    pub cm_package: &'a str,
 }
 
 /// Convert a WASI AST `Type` to a `TypeId` in the type table.
@@ -99,10 +100,10 @@ pub fn wasi_type_to_type_id(
             // conflate same-named types from distinct interfaces (e.g.
             // `wasi:filesystem/ErrorCode` vs. `wasi:http/ErrorCode`).
             _ => type_table
-                .find_named_type_by_wasi_package(named.name.as_str(), wasi_package)
+                .find_named_type_by_cm_package(named.name.as_str(), wasi_package)
                 .or_else(|| {
                     canonical_wasi_package(registry, named.name.as_str()).and_then(|pkg| {
-                        type_table.find_named_type_by_wasi_package(named.name.as_str(), pkg)
+                        type_table.find_named_type_by_cm_package(named.name.as_str(), pkg)
                     })
                 })
                 .unwrap_or(TypeTable::I32),
@@ -351,7 +352,7 @@ fn synthesize_lift_inner(
                 if let Some(ctx) = ctx
                     && let Some(source) = ctx
                         .wasi_registry
-                        .resolve_cm_source_for(named, Some(ctx.wasi_package))
+                        .resolve_cm_source_for(named, Some(ctx.cm_package))
                         .map(str::to_string)
                 {
                     let source = source.as_str();
@@ -458,10 +459,10 @@ fn try_lift_wasi_variant_or_enum(
     {
         let cases = cases.to_vec();
         let variant_type = tt
-            .find_named_type_by_wasi_package(&named.name, ctx.wasi_package)
+            .find_named_type_by_cm_package(&named.name, ctx.cm_package)
             .or_else(|| {
                 canonical_wasi_package(ctx.wasi_registry, &named.name)
-                    .and_then(|pkg| tt.find_named_type_by_wasi_package(&named.name, pkg))
+                    .and_then(|pkg| tt.find_named_type_by_cm_package(&named.name, pkg))
             })?;
         drop(tt);
         return Some(synthesize_lift_wasi_variant(
@@ -481,10 +482,10 @@ fn try_lift_wasi_variant_or_enum(
     {
         let case_names = case_names.to_vec();
         let enum_type = tt
-            .find_named_type_by_wasi_package(&named.name, ctx.wasi_package)
+            .find_named_type_by_cm_package(&named.name, ctx.cm_package)
             .or_else(|| {
                 canonical_wasi_package(ctx.wasi_registry, &named.name)
-                    .and_then(|pkg| tt.find_named_type_by_wasi_package(&named.name, pkg))
+                    .and_then(|pkg| tt.find_named_type_by_cm_package(&named.name, pkg))
             })?;
         drop(tt);
         return Some(synthesize_lift_wasi_enum(
@@ -640,7 +641,7 @@ fn synthesize_lift_wasi_variant(
     ));
 
     // Compute max payload alignment for payload offset calculation
-    let wasi_package = ctx.map(|c| c.wasi_package);
+    let wasi_package = ctx.map(|c| c.cm_package);
     let max_payload_align = cases
         .iter()
         .filter_map(|case| case.payload.as_ref())
@@ -838,7 +839,7 @@ fn synthesize_lift_list(
     // These are needed by the monomorphizer to instantiate Array::with_capacity and .push().
     let (elem_type_id, array_type_id) = if let Some(ctx) = ctx {
         let mut tt = ctx.type_table.borrow_mut();
-        let elem_tid = wasi_type_to_type_id(elem_ty, &mut tt, ctx.wasi_registry, ctx.wasi_package);
+        let elem_tid = wasi_type_to_type_id(elem_ty, &mut tt, ctx.wasi_registry, ctx.cm_package);
         let array_tid = tt.make_array(elem_tid);
         (elem_tid, array_tid)
     } else {
@@ -993,7 +994,7 @@ fn synthesize_lift_option_inner(
     ctx: Option<&LiftContext<'_>>,
 ) -> TirExpr {
     let layout = if let Some(c) = ctx {
-        cm_abi::layout_option_with_registry_scoped(inner_ty, c.wasi_registry, Some(c.wasi_package))
+        cm_abi::layout_option_with_registry_scoped(inner_ty, c.wasi_registry, Some(c.cm_package))
     } else {
         cm_abi::layout_option(inner_ty)
     };
@@ -1004,7 +1005,7 @@ fn synthesize_lift_option_inner(
     let option_type_id = if let Some(c) = ctx {
         let mut tt = c.type_table.borrow_mut();
         let inner_type_id =
-            wasi_type_to_type_id(inner_ty, &mut tt, c.wasi_registry, c.wasi_package);
+            wasi_type_to_type_id(inner_ty, &mut tt, c.wasi_registry, c.cm_package);
         tt.make_option(inner_type_id)
     } else {
         TypeTable::I32 // placeholder when no context
@@ -1074,7 +1075,7 @@ fn synthesize_lift_result_inner(
             ok_ty,
             err_ty,
             c.wasi_registry,
-            Some(c.wasi_package),
+            Some(c.cm_package),
         )
     } else {
         cm_abi::layout_result(ok_ty, err_ty)
@@ -1096,9 +1097,9 @@ fn synthesize_lift_result_inner(
     // i32 but initialized with `ref.null none` (a reference type).
     let result_type_id = if let Some(ctx) = ctx {
         let mut tt = ctx.type_table.borrow_mut();
-        let ok_type_id = wasi_type_to_type_id(ok_ty, &mut tt, ctx.wasi_registry, ctx.wasi_package);
+        let ok_type_id = wasi_type_to_type_id(ok_ty, &mut tt, ctx.wasi_registry, ctx.cm_package);
         let err_type_id =
-            wasi_type_to_type_id(err_ty, &mut tt, ctx.wasi_registry, ctx.wasi_package);
+            wasi_type_to_type_id(err_ty, &mut tt, ctx.wasi_registry, ctx.cm_package);
         tt.make_result(ok_type_id, err_type_id)
     } else {
         TypeTable::I32 // placeholder when no context
@@ -1212,7 +1213,7 @@ fn synthesize_lift_tuple(
         let mut tt = ctx.type_table.borrow_mut();
         let elem_type_ids: Vec<TypeId> = elems
             .iter()
-            .map(|t| wasi_type_to_type_id(t, &mut tt, ctx.wasi_registry, ctx.wasi_package))
+            .map(|t| wasi_type_to_type_id(t, &mut tt, ctx.wasi_registry, ctx.cm_package))
             .collect();
         tt.make_tuple(elem_type_ids)
     } else {
@@ -3479,7 +3480,7 @@ fn synthesize_adapter(
         let lift_ctx = LiftContext {
             wasi_registry,
             type_table,
-            wasi_package: &func_info.package,
+            cm_package: &func_info.package,
         };
         let lifted = synthesize_lift_with_context(
             &resolved,
@@ -3536,7 +3537,7 @@ fn synthesize_adapter(
             let lift_ctx = LiftContext {
                 wasi_registry,
                 type_table,
-                wasi_package: &func_info.package,
+                cm_package: &func_info.package,
             };
             let lifted = synthesize_lift_flat_result(
                 &resolved,
@@ -4811,7 +4812,7 @@ fn synthesize_result_export_binding(
     type_table: &Rc<RefCell<TypeTable>>,
     world_params: &[(String, Type)],
     wasi_registry: &WasiRegistry,
-    wasi_package: &str,
+    cm_package: &str,
 ) -> Rc<RefCell<TirFunction>> {
     let binding_name = export_binding_func_name(export_name);
     let mut body_stmts: Vec<TirStmt> = Vec::new();
@@ -4856,7 +4857,7 @@ fn synthesize_result_export_binding(
         let lift_ctx = LiftContext {
             wasi_registry,
             type_table,
-            wasi_package,
+            cm_package,
         };
         for (i, (_name, param_ty)) in world_params.iter().enumerate() {
             let user_type_id = user_func_ref
@@ -5361,7 +5362,7 @@ fn synthesize_general_export_binding(
     type_table: &Rc<RefCell<TypeTable>>,
     world_params: &[(String, Type)],
     wasi_registry: &WasiRegistry,
-    wasi_package: &str,
+    cm_package: &str,
 ) -> Rc<RefCell<TirFunction>> {
     let binding_name = export_binding_func_name(export_name);
     let mut body_stmts: Vec<TirStmt> = Vec::new();
@@ -5403,7 +5404,7 @@ fn synthesize_general_export_binding(
         let lift_ctx = LiftContext {
             wasi_registry,
             type_table,
-            wasi_package,
+            cm_package,
         };
         for (i, (_name, param_ty)) in world_params.iter().enumerate() {
             let user_type_id = user_func_ref
@@ -5592,7 +5593,7 @@ fn synthesize_async_export_binding(
     type_table: &Rc<RefCell<TypeTable>>,
     world_params: &[(String, Type)],
     wasi_registry: &WasiRegistry,
-    wasi_package: &str,
+    cm_package: &str,
 ) -> Rc<RefCell<TirFunction>> {
     let binding_name = export_binding_func_name(export_name);
     let mut body_stmts: Vec<TirStmt> = Vec::new();
@@ -5632,7 +5633,7 @@ fn synthesize_async_export_binding(
         let lift_ctx = LiftContext {
             wasi_registry,
             type_table,
-            wasi_package,
+            cm_package,
         };
         for (i, (_name, param_ty)) in world_params.iter().enumerate() {
             let user_type_id = user_func_ref
@@ -6257,7 +6258,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
             // `resolve_cm_source_for` as a fallback anchor. Derived from
             // the world's `fq_name` — the attribute-sourced identity is
             // the single source of truth.
-            let binding_wasi_package = world_info.package().to_string();
+            let binding_cm_package = world_info.package().to_string();
 
             for export in &world_info.exports {
                 // Find the user's export function and check for missing `export` keyword
@@ -6331,7 +6332,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                             &entry_type_table,
                             &export.params,
                             project.wasi_registry,
-                            &binding_wasi_package,
+                            &binding_cm_package,
                         )
                     } else {
                         // Check the user function's actual return type (signature-driven)
@@ -6364,7 +6365,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                                 &entry_type_table,
                                 &export.params,
                                 project.wasi_registry,
-                                &binding_wasi_package,
+                                &binding_cm_package,
                             )
                         } else {
                             // Non-Result return: check if we can use the simple void adapter
@@ -6396,7 +6397,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                                     &entry_type_table,
                                     &export.params,
                                     project.wasi_registry,
-                                    &binding_wasi_package,
+                                    &binding_cm_package,
                                 )
                             }
                         }
@@ -6901,7 +6902,7 @@ fn synthesize_stream_read_func(
     let lift_ctx = LiftContext {
         wasi_registry,
         type_table,
-        wasi_package: "filesystem",
+        cm_package: "filesystem",
     };
     let ast_type = crate::ast::Type::Named(crate::ast::NamedType {
         id: crate::ast::AstId::fresh(),
