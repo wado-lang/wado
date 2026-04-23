@@ -26,7 +26,7 @@ export fn run() with Stdout, Stderr, Preopens {
         "hello.txt",
         OpenFlags::none(),
         DescriptorFlags::Read,
-    );
+    ).wait();
 
     if let Ok(file) = open_result {
         // read_via_stream returns [Stream<u8>, Future<Result<(), ErrorCode>>]

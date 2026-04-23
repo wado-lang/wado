@@ -213,11 +213,13 @@ Drop the waitable set. Traps if waitables are still joined to this set.
 
 #### `pub resource Subtask`
 
-An async subtask handle returned by CM async operations.
+A raw CM subtask handle. Internal — most users should hold `AsyncCall<T>`
+(see below) which pairs the handle with its result buffer.
 
-Subtask extends Waitable in the CM spec. When dropped, it automatically
-removes itself from any joined WaitableSet (the CM runtime calls
-`Waitable.join(None)` internally), so `WaitableSet::drop()` can succeed.
+`Subtask` extends `Waitable` in the CM spec. When dropped, it
+automatically removes itself from any joined `WaitableSet` (the CM
+runtime calls `Waitable.join(None)` internally), so `WaitableSet::drop`
+can succeed.
 
 Correct lifecycle:
 let subtask = handle as Subtask;
@@ -255,6 +257,20 @@ Get the debug message from this error context.
 ##### `fn drop(&self)`
 
 Drop the error context.
+
+#### `pub resource Task`
+
+The current async task handle.
+
+Provides operations that apply to the currently executing async task.
+
+##### `fn cancel()`
+
+Acknowledge cancellation of the current task.
+
+Call this in response to a cancellation signal (e.g. after receiving
+`WaitEvent { code: 6 }` from `WaitableSet::wait`). Signals to the CM
+runtime that the task accepts being cancelled and will clean up.
 
 ### Traits
 
@@ -1606,6 +1622,71 @@ Which waitable handle triggered the event.
 ##### `payload: u32`
 
 Event-specific data (e.g. count|status for streams).
+
+#### `pub struct AsyncCall<T>`
+
+A handle to an in-flight CM async import call, parameterised by the
+result type `T`. Returned by the synthesised adapter for a WIT
+`async func` import.
+
+`AsyncCall<T>` pairs the raw CM subtask handle with the linear-memory
+buffer into which the host writes the async result. Use `wait(self)` to
+block until the call returns and take the lifted result; use
+`cancel(self)` to abort the in-flight call.
+
+The subtask begins running the moment the adapter returns, so writes to
+stream parameters (e.g. a request body) made after the adapter call and
+before `wait` / `cancel` are rendezvoused with the host subtask.
+
+Example (HTTP POST body):
+
+```wado
+let [body_rx, body_tx] = Stream::<u8>::new();
+let [req, _tx_future] = Request::new(headers, Option::Some(body_rx), ...);
+let task = Client::send(req); // host subtask starts
+body_tx.write(body_bytes); // rendezvous with host read
+body_tx.drop();
+let resp = task.wait(); // block for response
+```
+
+##### `__cm_packed: i32`
+
+Raw CM subtask handle packed as `(subtask_handle << 4) | status`,
+as returned by `canon lower async`.
+
+##### `__cm_outptr: i32`
+
+Pointer to the linear-memory buffer holding the async result.
+
+##### `__cm_size: i32`
+
+Size of the result buffer (for realloc-based free).
+
+##### `__cm_align: i32`
+
+Alignment of the result buffer (for realloc-based free).
+
+##### `pub fn wait(&self) -> T`
+
+Wait for the subtask to complete and return the lifted result.
+Drops the CM subtask handle and frees the result buffer before
+returning. After `wait` returns, the `AsyncCall<T>` value must not be
+used again — doing so is a use-after-free (the backing buffer has
+been released).
+
+##### `pub fn cancel(&self)`
+
+Cancel the in-flight subtask and free the result buffer. Any
+partially-written result is discarded. Same single-use contract as
+`wait` — the `AsyncCall<T>` must not be used again after `cancel`.
+
+##### `pub fn join(&self, set: &WaitableSet) -> Waitable`
+
+Join this subtask to a waitable set for manual polling (use when
+the caller wants to wait on multiple subtasks and/or streams
+simultaneously). Returns a `Waitable` token identifying this
+subtask in wait events. The caller remains responsible for eventual
+`wait`/`cancel` on this `AsyncCall<T>`.
 
 #### `pub struct ParseIntError`
 

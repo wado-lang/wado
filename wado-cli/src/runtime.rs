@@ -22,6 +22,7 @@ impl WasiState {
     pub fn new(preopened_dirs: &[(String, String)], args: &[String]) -> Result<Self> {
         let mut builder = WasiCtx::builder();
         builder.inherit_stdio();
+        builder.inherit_env();
         builder.args(args);
         for (host_path, guest_path) in preopened_dirs {
             builder.preopened_dir(host_path, guest_path, DirPerms::all(), FilePerms::all())?;

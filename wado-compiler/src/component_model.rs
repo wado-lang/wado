@@ -30,6 +30,47 @@ pub struct CmVariantCase {
 /// - Type-level: `#[cm("wasi:pkg/iface@ver#cm-name")]` → takes the fragment after `#`
 /// - Case-level: `#[cm("cm-name")]` → uses the whole arg directly
 ///
+/// Strip a `AsyncCall<T>` wrapper from the declared return type of an `async`
+/// effect method, recovering the CM-level result type `T`.
+///
+/// In WIT, `async func foo(...) -> T` lowers the CM-level result as `T`, but
+/// the Wado-facing effect declaration exposes `AsyncCall<T>` so user code can
+/// defer `wait()`-ing until after any stream parameter rendezvous
+/// completes. The CM binding synthesiser needs the raw `T` when computing
+/// outptr layout.
+///
+/// For non-async methods this is a no-op. For async methods whose return
+/// type is missing or not `AsyncCall<_>` we return the original type —
+/// defensive in case hand-written effect declarations predate the
+/// `AsyncCall<T>` convention (in which case the compiler's earlier
+/// expectations still apply).
+pub fn unwrap_async_call_if_async(is_async: bool, declared: &Option<Type>) -> Option<Type> {
+    if !is_async {
+        return declared.clone();
+    }
+    match declared {
+        Some(Type::Generic(generic)) if generic.name == "AsyncCall" && generic.args.len() == 1 => {
+            let inner = &generic.args[0];
+            if is_unit_type(inner) {
+                return None;
+            }
+            Some(inner.clone())
+        }
+        other => other.clone(),
+    }
+}
+
+/// Returns true if `ty` is the Wado unit type. Recognises both surface
+/// syntaxes that the parser may emit: the empty tuple `[]` and the
+/// named form `()`.
+fn is_unit_type(ty: &Type) -> bool {
+    match ty {
+        Type::Tuple(elems) => elems.is_empty(),
+        Type::Named(named) => matches!(named.name.as_str(), "()" | "Unit" | "unit"),
+        _ => false,
+    }
+}
+
 /// Preserves acronym casing from the WIT source (e.g., `DNS-timeout`, `TLS-protocol-error`).
 /// Panics if no `#[cm]` attribute is present — all CM names must be metadata-driven.
 fn cm_attr_cm_name(attrs: &[crate::ast::Attribute], wado_name: &str) -> String {
@@ -676,8 +717,17 @@ impl WasiRegistry {
                             .collect();
 
                         // Keep original return type for newtype semantics
-                        // The resolver will handle Mark -> newtype mapping
-                        let return_type = method.return_type.clone();
+                        // The resolver will handle Mark -> newtype mapping.
+                        //
+                        // For `async fn foo(...) -> AsyncCall<T>` CM imports,
+                        // strip the `AsyncCall<T>` wrapper at registration so
+                        // the stored return type is the CM-ABI `T`. The
+                        // resolver re-wraps it as `AsyncCall<T>` when
+                        // answering Wado-level type queries (so user code
+                        // sees the new API), and the CM binding synthesiser
+                        // also re-wraps when constructing its adapter.
+                        let return_type =
+                            unwrap_async_call_if_async(method.is_async, &method.return_type);
 
                         self.register(
                             &effect.name,
@@ -717,8 +767,12 @@ impl WasiRegistry {
                             })
                             .collect();
 
-                        // Keep original return type for newtype semantics
-                        let return_type = method.return_type.clone();
+                        // Keep original return type for newtype semantics.
+                        // Resource methods declared as `async fn -> AsyncCall<T>`
+                        // are unwrapped at registration so downstream code
+                        // works with the CM-ABI `T`. See the effect branch.
+                        let return_type =
+                            unwrap_async_call_if_async(method.is_async, &method.return_type);
 
                         self.register(
                             &resource.name,
@@ -1817,6 +1871,18 @@ impl CmInstanceTypeGen {
                     let idx = self.define_future(instance_type, inner, &key);
                     ComponentValType::Type(idx)
                 }
+                "AsyncCall" if generic.args.len() == 1 => {
+                    // `AsyncCall<T>` is a Wado-level wrapper for CM async
+                    // imports; the CM ABI-level type is the inner `T`.
+                    // Transparently unwrap here so downstream code sees the
+                    // CM signature.
+                    self.ast_type_to_cm(
+                        &generic.args[0],
+                        instance_type,
+                        wasi_registry,
+                        resource_exports,
+                    )
+                }
                 _ => panic!("unsupported generic type for CM instance: {}", generic.name),
             },
             Type::Tuple(elems) if elems.is_empty() => {
@@ -2109,6 +2175,11 @@ fn is_return_type_supported_with_types(
         Type::Generic(generic) => {
             match generic.name.as_str() {
                 "Stream" | "Future" => true,
+                "AsyncCall" if generic.args.len() == 1 => {
+                    // `AsyncCall<T>` is the Wado-level wrapper for async CM imports;
+                    // the CM ABI return is the inner `T`. Support depends on `T`.
+                    is_return_type_supported_with_types(&generic.args[0], enums, resources, structs)
+                }
                 "Result" => {
                     // Result<T, E> - both T and E must be supported
                     generic.args.iter().all(|arg| {

@@ -115,6 +115,12 @@ pub resource ErrorContext {
 }
 ```
 
+```wado
+pub resource Task {
+    fn cancel();
+}
+```
+
 ### Traits
 
 ```wado
@@ -867,6 +873,21 @@ pub struct WaitEvent {
     code: i32,
     handle: Waitable,
     payload: u32,
+}
+```
+
+```wado
+pub struct AsyncCall<T> {
+    __cm_packed: i32,
+    __cm_outptr: i32,
+    __cm_size: i32,
+    __cm_align: i32,
+}
+
+impl AsyncCall {
+    pub fn wait(&self) -> T;
+    pub fn cancel(&self);
+    pub fn join(&self, set: &WaitableSet) -> Waitable;
 }
 ```
 

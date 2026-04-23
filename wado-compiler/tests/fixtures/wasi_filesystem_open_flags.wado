@@ -20,7 +20,7 @@ export fn run() with Stdout, Stderr, Preopens {
     let dir = dirs[0].0;
 
     // Clean up any leftover from previous runs
-    dir.unlink_file_at("exclusive_test.txt");
+    dir.unlink_file_at("exclusive_test.txt").wait();
 
     // Test Create|Exclusive on a new file
     let excl_result = dir.open_at(
@@ -28,7 +28,7 @@ export fn run() with Stdout, Stderr, Preopens {
         "exclusive_test.txt",
         OpenFlags::Create | OpenFlags::Exclusive,
         DescriptorFlags::Write,
-    );
+    ).wait();
 
     if let Ok(_file) = excl_result {
         println("exclusive: new file created successfully");
@@ -43,7 +43,7 @@ export fn run() with Stdout, Stderr, Preopens {
         "exclusive_test.txt",
         OpenFlags::Create | OpenFlags::Exclusive,
         DescriptorFlags::Write,
-    );
+    ).wait();
 
     if let Err(_err) = excl_dup_result {
         println("exclusive: existing file returns Exist error (correct)");
@@ -57,7 +57,7 @@ export fn run() with Stdout, Stderr, Preopens {
         "subdir",
         OpenFlags::Directory,
         DescriptorFlags::Read,
-    );
+    ).wait();
 
     if let Ok(_d) = dir_result {
         println("directory: opened directory successfully");
@@ -71,7 +71,7 @@ export fn run() with Stdout, Stderr, Preopens {
         "hello.txt",
         OpenFlags::Directory,
         DescriptorFlags::Read,
-    );
+    ).wait();
 
     if let Err(_err) = dir_on_file {
         println("directory: file returns error (correct)");
@@ -80,7 +80,7 @@ export fn run() with Stdout, Stderr, Preopens {
     }
 
     // Clean up: unlink the exclusive test file
-    let unlink_result = dir.unlink_file_at("exclusive_test.txt");
+    let unlink_result = dir.unlink_file_at("exclusive_test.txt").wait();
     if let Ok(_) = unlink_result {
         println("unlink: cleaned up exclusive_test.txt");
     } else {

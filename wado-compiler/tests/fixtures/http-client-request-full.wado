@@ -82,7 +82,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode>
     }
 
     // Send
-    let result = Client::send(out_req);
+    let result = Client::send(out_req).wait();
     trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
 
     let upstream = match result {

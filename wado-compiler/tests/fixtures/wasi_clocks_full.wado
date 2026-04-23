@@ -13,7 +13,7 @@ test "monotonic: resolution is positive" {
 
 test "monotonic: wait_for advances clock" {
     let before = MonotonicClock::now();
-    MonotonicClock::wait_for(1_000_000);
+    MonotonicClock::wait_for(1_000_000).wait();
     let after = MonotonicClock::now();
     assert after >= before;
 }
@@ -21,20 +21,20 @@ test "monotonic: wait_for advances clock" {
 test "monotonic: wait_until reaches target" {
     let now = MonotonicClock::now();
     let target: Mark = now + 1_000_000;
-    MonotonicClock::wait_until(target);
+    MonotonicClock::wait_until(target).wait();
     let after = MonotonicClock::now();
     assert after >= target;
 }
 
 test "monotonic: wait_for zero returns immediately" {
     let before = MonotonicClock::now();
-    MonotonicClock::wait_for(0);
+    MonotonicClock::wait_for(0).wait();
     let after = MonotonicClock::now();
     assert after >= before;
 }
 
 test "monotonic: wait_until past returns immediately" {
-    MonotonicClock::wait_until(0);
+    MonotonicClock::wait_until(0).wait();
     let after = MonotonicClock::now();
     assert after > 0;
 }

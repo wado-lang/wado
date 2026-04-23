@@ -19,7 +19,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode>
     out_req.set_authority(Option::<String>::Some("localhost"));
     out_req.set_path_with_query(Option::<String>::Some("/no-mock-exists"));
 
-    let result = Client::send(out_req);
+    let result = Client::send(out_req).wait();
     trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
 
     // TODO: When mock returns ErrorCode instead of trap, test Err variant:

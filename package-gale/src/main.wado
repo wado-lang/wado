@@ -64,7 +64,7 @@ fn cmd_gen(paths: Array<String>, options: &GenerateOptions) with Stdout, Stderr,
             path,
             OpenFlags::none(),
             DescriptorFlags::Read,
-        );
+        ).wait();
 
         if let Err(_) = open_result {
             eprintln(`gale: {path}: cannot open file`);
@@ -120,7 +120,7 @@ fn cmd_dump(paths: Array<String>, rule_filter: &Option<String>) with Stdout, Std
             path,
             OpenFlags::none(),
             DescriptorFlags::Read,
-        );
+        ).wait();
         if let Err(_) = open_result {
             eprintln(`gale: {path}: cannot open file`);
             return;

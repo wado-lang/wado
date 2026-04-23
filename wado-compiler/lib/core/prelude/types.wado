@@ -228,11 +228,13 @@ pub resource WaitableSet {
     fn drop(&self);
 }
 
-/// An async subtask handle returned by CM async operations.
+/// A raw CM subtask handle. Internal — most users should hold `AsyncCall<T>`
+/// (see below) which pairs the handle with its result buffer.
 ///
-/// Subtask extends Waitable in the CM spec. When dropped, it automatically
-/// removes itself from any joined WaitableSet (the CM runtime calls
-/// `Waitable.join(None)` internally), so `WaitableSet::drop()` can succeed.
+/// `Subtask` extends `Waitable` in the CM spec. When dropped, it
+/// automatically removes itself from any joined `WaitableSet` (the CM
+/// runtime calls `Waitable.join(None)` internally), so `WaitableSet::drop`
+/// can succeed.
 ///
 /// Correct lifecycle:
 ///   let subtask = handle as Subtask;
@@ -254,6 +256,93 @@ pub resource Subtask {
     /// Returns a Waitable token identifying this subtask in wait results.
     #[cm("waitable-join")]
     fn join(&self, set: &WaitableSet) -> Waitable;
+}
+
+/// A handle to an in-flight CM async import call, parameterised by the
+/// result type `T`. Returned by the synthesised adapter for a WIT
+/// `async func` import.
+///
+/// `AsyncCall<T>` pairs the raw CM subtask handle with the linear-memory
+/// buffer into which the host writes the async result. Use `wait(self)` to
+/// block until the call returns and take the lifted result; use
+/// `cancel(self)` to abort the in-flight call.
+///
+/// The subtask begins running the moment the adapter returns, so writes to
+/// stream parameters (e.g. a request body) made after the adapter call and
+/// before `wait` / `cancel` are rendezvoused with the host subtask.
+///
+/// Example (HTTP POST body):
+/// ```wado
+/// let [body_rx, body_tx] = Stream::<u8>::new();
+/// let [req, _tx_future] = Request::new(headers, Option::Some(body_rx), ...);
+/// let task = Client::send(req);       // host subtask starts
+/// body_tx.write(body_bytes);          // rendezvous with host read
+/// body_tx.drop();
+/// let resp = task.wait();             // block for response
+/// ```
+pub struct AsyncCall<T> {
+    /// Raw CM subtask handle packed as `(subtask_handle << 4) | status`,
+    /// as returned by `canon lower async`.
+    pub __cm_packed: i32,
+    /// Pointer to the linear-memory buffer holding the async result.
+    pub __cm_outptr: i32,
+    /// Size of the result buffer (for realloc-based free).
+    pub __cm_size: i32,
+    /// Alignment of the result buffer (for realloc-based free).
+    pub __cm_align: i32,
+}
+
+impl AsyncCall<T> {
+    /// Wait for the subtask to complete and return the lifted result.
+    /// Drops the CM subtask handle and frees the result buffer before
+    /// returning. After `wait` returns, the `AsyncCall<T>` value must not be
+    /// used again — doing so is a use-after-free (the backing buffer has
+    /// been released).
+    pub fn wait(&self) -> T {
+        let handle = self.__cm_packed >> 4;
+        if handle != 0 {
+            let raw = handle as Subtask;
+            let ws = WaitableSet::new();
+            raw.join(&ws);
+            loop {
+                let event = ws.wait();
+                // `wait` delivers Starting (0) → Started (1) → Returned (2).
+                // Loop until the subtask reaches Returned.
+                if event.payload == 2 {
+                    break;
+                }
+            }
+            raw.drop();
+            ws.drop();
+        }
+        let result = builtin::cm_lift_async_result::<T>(self.__cm_outptr);
+        let _ = builtin::realloc(self.__cm_outptr, self.__cm_size, self.__cm_align, 0);
+        return result;
+    }
+
+    /// Cancel the in-flight subtask and free the result buffer. Any
+    /// partially-written result is discarded. Same single-use contract as
+    /// `wait` — the `AsyncCall<T>` must not be used again after `cancel`.
+    pub fn cancel(&self) {
+        let handle = self.__cm_packed >> 4;
+        if handle != 0 {
+            let raw = handle as Subtask;
+            raw.cancel();
+            raw.drop();
+        }
+        let _ = builtin::realloc(self.__cm_outptr, self.__cm_size, self.__cm_align, 0);
+    }
+
+    /// Join this subtask to a waitable set for manual polling (use when
+    /// the caller wants to wait on multiple subtasks and/or streams
+    /// simultaneously). Returns a `Waitable` token identifying this
+    /// subtask in wait events. The caller remains responsible for eventual
+    /// `wait`/`cancel` on this `AsyncCall<T>`.
+    pub fn join(&self, set: &WaitableSet) -> Waitable {
+        let handle = self.__cm_packed >> 4;
+        let raw = handle as Subtask;
+        return raw.join(set);
+    }
 }
 
 /// An error context carrying a debug message across component boundaries.

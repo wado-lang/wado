@@ -51,7 +51,7 @@ export fn run() with Stdout, Stderr, Preopens, Descriptor {
         "set_size_test.txt",
         OpenFlags::Create | OpenFlags::Truncate,
         DescriptorFlags::Read | DescriptorFlags::Write,
-    );
+    ).wait();
 
     if let Ok(file) = file_result {
         // Write "ABCDEFGHIJ" (65-74)
@@ -59,7 +59,7 @@ export fn run() with Stdout, Stderr, Preopens, Descriptor {
         write_bytes(&file, data);
 
         // Verify initial size
-        let stat1 = file.stat();
+        let stat1 = file.stat().wait();
         if let Ok(s) = stat1 {
             if s.size == 10 as Filesize {
                 println("set_size: initial size is 10 (correct)");
@@ -70,7 +70,7 @@ export fn run() with Stdout, Stderr, Preopens, Descriptor {
         }
 
         // Truncate to 5 bytes
-        let trunc_result = file.set_size(5 as Filesize);
+        let trunc_result = file.set_size(5 as Filesize).wait();
         if let Ok(_) = trunc_result {
             println("set_size: truncate to 5 succeeded");
         } else {
@@ -79,7 +79,7 @@ export fn run() with Stdout, Stderr, Preopens, Descriptor {
         }
 
         // Verify truncated size
-        let stat2 = file.stat();
+        let stat2 = file.stat().wait();
         if let Ok(s) = stat2 {
             if s.size == 5 as Filesize {
                 println("set_size: truncated size is 5 (correct)");
@@ -104,7 +104,7 @@ export fn run() with Stdout, Stderr, Preopens, Descriptor {
         }
 
         // Extend to 8 bytes (zero-filled)
-        let extend_result = file.set_size(8 as Filesize);
+        let extend_result = file.set_size(8 as Filesize).wait();
         if let Ok(_) = extend_result {
             println("set_size: extend to 8 succeeded");
         } else {
@@ -112,7 +112,7 @@ export fn run() with Stdout, Stderr, Preopens, Descriptor {
         }
 
         // Verify extended size
-        let stat3 = file.stat();
+        let stat3 = file.stat().wait();
         if let Ok(s) = stat3 {
             if s.size == 8 as Filesize {
                 println("set_size: extended size is 8 (correct)");
@@ -123,7 +123,7 @@ export fn run() with Stdout, Stderr, Preopens, Descriptor {
         }
 
         // Clean up
-        dir.unlink_file_at("set_size_test.txt");
+        dir.unlink_file_at("set_size_test.txt").wait();
     } else {
         eprintln("failed to create set_size_test.txt");
     }

@@ -17,7 +17,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode>
     out_req.set_authority(Option::<String>::Some("localhost"));
     out_req.set_path_with_query(Option::<String>::Some("/"));
 
-    let upstream = Client::send(out_req);
+    let upstream = Client::send(out_req).wait();
     task return upstream;
 
     // Write trailers after task return

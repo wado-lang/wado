@@ -18,7 +18,7 @@ export fn run() with Stdout, Stderr, Preopens {
     let dir = dirs[0].0;
 
     // Test get_type on directory descriptor
-    let dir_type_result = dir.get_type();
+    let dir_type_result = dir.get_type().wait();
     if let Ok(dt) = dir_type_result {
         if dt matches { Directory } {
             println("get_type: directory descriptor is Directory (correct)");
@@ -35,10 +35,10 @@ export fn run() with Stdout, Stderr, Preopens {
         "hello.txt",
         OpenFlags::none(),
         DescriptorFlags::Read,
-    );
+    ).wait();
 
     if let Ok(file) = open_result {
-        let file_type_result = file.get_type();
+        let file_type_result = file.get_type().wait();
         if let Ok(ft) = file_type_result {
             if ft matches { RegularFile } {
                 println("get_type: file descriptor is RegularFile (correct)");
@@ -50,7 +50,7 @@ export fn run() with Stdout, Stderr, Preopens {
         }
 
         // Test get_flags on file opened with Read
-        let flags_result = file.get_flags();
+        let flags_result = file.get_flags().wait();
         if let Ok(flags) = flags_result {
             if flags & DescriptorFlags::Read == DescriptorFlags::Read {
                 println("get_flags: Read flag is set (correct)");
@@ -71,10 +71,10 @@ export fn run() with Stdout, Stderr, Preopens {
         "hello.txt",
         OpenFlags::none(),
         DescriptorFlags::Read | DescriptorFlags::Write,
-    );
+    ).wait();
 
     if let Ok(rw_file) = rw_result {
-        let rw_flags_result = rw_file.get_flags();
+        let rw_flags_result = rw_file.get_flags().wait();
         if let Ok(rw_flags) = rw_flags_result {
             if rw_flags & DescriptorFlags::Read == DescriptorFlags::Read
                 && rw_flags & DescriptorFlags::Write == DescriptorFlags::Write

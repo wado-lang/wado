@@ -50,7 +50,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode>
     let _ = out_req.set_authority(Option::<String>::Some("localhost"));
     let _ = out_req.set_method(Method::Get);
 
-    let result = Client::send(out_req);
+    let result = Client::send(out_req).wait();
     trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
 
     task return result;

@@ -20,11 +20,11 @@ export fn run() with Stdout, Stderr, Preopens, Descriptor {
     let dir = dirs[0].0;
 
     // Clean up any leftover from previous runs
-    dir.unlink_file_at("test_symlink");
-    dir.unlink_file_at("test_hardlink");
+    dir.unlink_file_at("test_symlink").wait();
+    dir.unlink_file_at("test_hardlink").wait();
 
     // Test symlink_at: create a symlink to hello.txt
-    let sym_result = dir.symlink_at("hello.txt", "test_symlink");
+    let sym_result = dir.symlink_at("hello.txt", "test_symlink").wait();
     if let Ok(_) = sym_result {
         println("symlink_at: created symlink");
     } else if let Err(err) = sym_result {
@@ -40,7 +40,7 @@ export fn run() with Stdout, Stderr, Preopens, Descriptor {
     }
 
     // Test readlink_at: read the symlink target
-    let readlink_result = dir.readlink_at("test_symlink");
+    let readlink_result = dir.readlink_at("test_symlink").wait();
     if let Ok(target) = readlink_result {
         if target == "hello.txt" {
             println("readlink_at: target is hello.txt (correct)");
@@ -57,10 +57,10 @@ export fn run() with Stdout, Stderr, Preopens, Descriptor {
         "test_symlink",
         OpenFlags::none(),
         DescriptorFlags::Read,
-    );
+    ).wait();
 
     if let Ok(linked_file) = open_via_link {
-        let stat_result = linked_file.stat();
+        let stat_result = linked_file.stat().wait();
         if let Ok(stat) = stat_result {
             if stat.type matches { RegularFile } && stat.size == 14 as Filesize {
                 println("symlink follow: opened file has correct type and size (correct)");
@@ -89,7 +89,7 @@ export fn run() with Stdout, Stderr, Preopens, Descriptor {
     }
 
     // Clean up symlink
-    let unlink_sym = dir.unlink_file_at("test_symlink");
+    let unlink_sym = dir.unlink_file_at("test_symlink").wait();
     if let Ok(_) = unlink_sym {
         println("symlink cleanup: removed test_symlink");
     } else {
@@ -108,12 +108,12 @@ fn test_link_at(dir: &Descriptor) with Stdout, Stderr, Descriptor {
         "hello.txt",
         dir,
         "test_hardlink",
-    );
+    ).wait();
     if let Ok(_) = link_result {
         println("link_at: created hard link");
 
         // Verify hard link has same content
-        let link_stat = dir.stat_at(PathFlags::none(), "test_hardlink");
+        let link_stat = dir.stat_at(PathFlags::none(), "test_hardlink").wait();
         if let Ok(stat) = link_stat {
             if stat.size == 14 as Filesize {
                 println("link_at: hard link has correct size (correct)");
@@ -121,7 +121,7 @@ fn test_link_at(dir: &Descriptor) with Stdout, Stderr, Descriptor {
         }
 
         // Clean up
-        dir.unlink_file_at("test_hardlink");
+        dir.unlink_file_at("test_hardlink").wait();
     } else if let Err(err) = link_result {
         if err matches { Unsupported } {
             println("link_at: not supported (skipping)");

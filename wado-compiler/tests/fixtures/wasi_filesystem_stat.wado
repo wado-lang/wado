@@ -24,7 +24,7 @@ export fn run() with Stdout, Stderr, Preopens {
     let dir = dirs[0].0;
 
     // Test stat_at: get metadata for hello.txt via the directory descriptor
-    let stat_result = dir.stat_at(PathFlags::none(), "hello.txt");
+    let stat_result = dir.stat_at(PathFlags::none(), "hello.txt").wait();
 
     if let Ok(stat) = stat_result {
         // hello.txt should be a regular file
@@ -54,10 +54,10 @@ export fn run() with Stdout, Stderr, Preopens {
         "hello.txt",
         OpenFlags::none(),
         DescriptorFlags::Read,
-    );
+    ).wait();
 
     if let Ok(file) = open_result {
-        let fstat_result = file.stat();
+        let fstat_result = file.stat().wait();
 
         if let Ok(fstat) = fstat_result {
             if fstat.type matches { RegularFile } {

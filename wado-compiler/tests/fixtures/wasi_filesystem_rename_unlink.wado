@@ -26,7 +26,7 @@ export fn run() with Stdout, Stderr, Preopens {
         "rename_src.txt",
         OpenFlags::Create | OpenFlags::Truncate,
         DescriptorFlags::Write,
-    );
+    ).wait();
 
     if let Ok(src_file) = src_result {
         let [write_rx, write_tx] = Stream::<u8>::new();
@@ -43,7 +43,7 @@ export fn run() with Stdout, Stderr, Preopens {
     }
 
     // Rename src -> dst
-    let rename_result = dir.rename_at("rename_src.txt", &dir, "rename_dst.txt");
+    let rename_result = dir.rename_at("rename_src.txt", &dir, "rename_dst.txt").wait();
     if let Ok(_) = rename_result {
         println("rename: rename_at succeeded");
     } else {
@@ -57,7 +57,7 @@ export fn run() with Stdout, Stderr, Preopens {
         "rename_src.txt",
         OpenFlags::none(),
         DescriptorFlags::Read,
-    );
+    ).wait();
     if let Err(err) = old_result {
         if err matches { NoEntry } {
             println("rename: old path returns NoEntry (correct)");
@@ -74,9 +74,9 @@ export fn run() with Stdout, Stderr, Preopens {
         "rename_dst.txt",
         OpenFlags::none(),
         DescriptorFlags::Read,
-    );
+    ).wait();
     if let Ok(dst_file) = dst_result {
-        let stat_result = dst_file.stat();
+        let stat_result = dst_file.stat().wait();
         if let Ok(stat) = stat_result {
             if stat.size == 6 as Filesize {
                 println("rename: destination has correct size (correct)");
@@ -90,7 +90,7 @@ export fn run() with Stdout, Stderr, Preopens {
     }
 
     // Test unlink_file_at
-    let unlink_result = dir.unlink_file_at("rename_dst.txt");
+    let unlink_result = dir.unlink_file_at("rename_dst.txt").wait();
     if let Ok(_) = unlink_result {
         println("unlink: removed rename_dst.txt");
     } else {
@@ -103,7 +103,7 @@ export fn run() with Stdout, Stderr, Preopens {
         "rename_dst.txt",
         OpenFlags::none(),
         DescriptorFlags::Read,
-    );
+    ).wait();
     if let Err(err) = gone_result {
         if err matches { NoEntry } {
             println("unlink: file is gone (correct)");
@@ -115,7 +115,7 @@ export fn run() with Stdout, Stderr, Preopens {
     }
 
     // Test unlink nonexistent file
-    let unlink_missing = dir.unlink_file_at("nonexistent_file.txt");
+    let unlink_missing = dir.unlink_file_at("nonexistent_file.txt").wait();
     if let Err(_) = unlink_missing {
         println("unlink: nonexistent file returns error (correct)");
     } else {

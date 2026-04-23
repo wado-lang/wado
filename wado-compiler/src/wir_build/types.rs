@@ -942,10 +942,10 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
 
             ctx.variant_type_map.insert(fq.clone(), type_id.clone());
 
-            // Register case-specific struct types
+            // Register case-specific struct types so the translator can reference them.
             for case in &wir_cases {
                 if case.payload.is_empty() {
-                    continue;
+                    continue; // Unit cases don't need separate types
                 }
                 let case_fq = format!("{fq}::{}", case.name);
                 let mut fields = vec![WirField {

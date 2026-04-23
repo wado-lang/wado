@@ -37,7 +37,7 @@ export fn run() with Stdout, Stderr, Preopens {
         "test_output.txt",
         OpenFlags::Create | OpenFlags::Truncate,
         DescriptorFlags::Write | DescriptorFlags::Read,
-    );
+    ).wait();
 
     if let Ok(file) = write_result {
         // Write "Hello, Stream!\n" via stream (consumer-first ordering)
@@ -65,7 +65,7 @@ export fn run() with Stdout, Stderr, Preopens {
         read_done.drop();
 
         // Clean up
-        dir.unlink_file_at("test_output.txt");
+        dir.unlink_file_at("test_output.txt").wait();
     }
 }
 

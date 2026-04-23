@@ -24,7 +24,7 @@ export fn run() with Stdout, Stderr, Preopens {
         "times_test.txt",
         OpenFlags::Create | OpenFlags::Truncate,
         DescriptorFlags::Read | DescriptorFlags::Write,
-    );
+    ).wait();
 
     if let Ok(file) = file_result {
         // Write some data so the file is not empty
@@ -36,7 +36,7 @@ export fn run() with Stdout, Stderr, Preopens {
         sub.drop();
 
         // Test set_times on the open file descriptor
-        let times_result = file.set_times(NewTimestamp::Now, NewTimestamp::Now);
+        let times_result = file.set_times(NewTimestamp::Now, NewTimestamp::Now).wait();
         if let Ok(_) = times_result {
             println("set_times: Now/Now succeeded");
         } else {
@@ -44,7 +44,7 @@ export fn run() with Stdout, Stderr, Preopens {
         }
 
         // Verify timestamps are set
-        let stat_result = file.stat();
+        let stat_result = file.stat().wait();
         if let Ok(stat) = stat_result {
             if let Some(_ts) = stat.data_access_timestamp {
                 println("set_times: access timestamp is set");
@@ -61,7 +61,7 @@ export fn run() with Stdout, Stderr, Preopens {
         }
 
         // Test set_times with NoChange
-        let no_change_result = file.set_times(NewTimestamp::NoChange, NewTimestamp::NoChange);
+        let no_change_result = file.set_times(NewTimestamp::NoChange, NewTimestamp::NoChange).wait();
         if let Ok(_) = no_change_result {
             println("set_times: NoChange/NoChange succeeded");
         } else {
@@ -78,7 +78,7 @@ export fn run() with Stdout, Stderr, Preopens {
         "times_test.txt",
         NewTimestamp::NoChange,
         NewTimestamp::Now,
-    );
+    ).wait();
     if let Ok(_) = times_at_result {
         println("set_times_at: NoChange/Now succeeded");
     } else {
@@ -86,7 +86,7 @@ export fn run() with Stdout, Stderr, Preopens {
     }
 
     // Clean up
-    dir.unlink_file_at("times_test.txt");
+    dir.unlink_file_at("times_test.txt").wait();
 
     println("all set_times tests passed");
 }

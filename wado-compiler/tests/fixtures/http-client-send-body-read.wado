@@ -15,7 +15,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode>
     out_req.set_authority(Option::<String>::Some("localhost"));
     out_req.set_path_with_query(Option::<String>::Some("/upstream"));
 
-    let upstream_result = Client::send(out_req);
+    let upstream_result = Client::send(out_req).wait();
     trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
 
     let upstream = match upstream_result {

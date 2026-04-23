@@ -30,7 +30,7 @@ export fn run() with Stdout, Stderr, Preopens {
         "hello.txt",
         OpenFlags::none(),
         DescriptorFlags::Read,
-    );
+    ).wait();
 
     if let Ok(_file) = open_result {
         println("open_at: file opened successfully");
@@ -45,7 +45,7 @@ export fn run() with Stdout, Stderr, Preopens {
         "does_not_exist.txt",
         OpenFlags::none(),
         DescriptorFlags::Read,
-    );
+    ).wait();
 
     if let Err(_err) = missing_result {
         println("open_at: nonexistent file returns error (correct)");

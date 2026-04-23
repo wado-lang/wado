@@ -121,6 +121,10 @@ pub fn wasi_type_to_type_id(
                 let inner = wasi_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
                 type_table.make_future(inner)
             }
+            "AsyncCall" if g.args.len() == 1 => {
+                let inner = wasi_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
+                type_table.make_async_call(inner)
+            }
             // Own/Borrow are handle types represented as i32
             "Own" | "Borrow" => TypeTable::I32,
             _ => TypeTable::UNIT,
@@ -2448,13 +2452,20 @@ fn synthesize_adapter(
     // Derive outptr needs from return type using Canonical ABI layout.
     // Also check WASI variants with payload cases (e.g., Method with Other(String)):
     // cm_flat_types treats unknown named types as i32, missing their true flat count.
-    let needs_outptr = func_info.return_type.as_ref().is_some_and(|rt| {
+    //
+    // For `async fn foo(...) -> AsyncCall<T>` imports, `func_info.return_type`
+    // already stores the CM-ABI `T` (the registry strips the `AsyncCall<T>`
+    // wrapper at registration time, see `WasiRegistry::register`). The
+    // wrapping is re-applied below when emitting the Wado-visible adapter
+    // return type.
+    let cm_return_type: Option<crate::ast::Type> = func_info.return_type.clone();
+    let needs_outptr = cm_return_type.as_ref().is_some_and(|rt| {
         crate::cm_abi::cm_flat_types(rt).len() > MAX_FLAT_RESULTS
             || crate::component_model::wasi_named_type_return_needs_outptr(rt, wasi_registry)
     });
     let pkg = Some(func_info.package.as_str());
     let outptr_alloc = if needs_outptr {
-        func_info.return_type.as_ref().map(|rt| {
+        cm_return_type.as_ref().map(|rt| {
             // WASI variants need their registry-computed size/align, not the generic cm_size
             if let crate::ast::Type::Named(named) = rt
                 && let Some(sa) = crate::component_model::wasi_variant_cm_size_align_scoped(
@@ -2993,38 +3004,41 @@ fn synthesize_adapter(
         // - Async void functions have no results_ptr.
         const MAX_FLAT_ASYNC_PARAMS: usize = 4;
 
-        let has_results = func_info.return_type.is_some();
+        // The CM-level result type (for layout) is the inner `T` of
+        // `AsyncCall<T>` for async imports; the `func_info.return_type`
+        // itself is the Wado-visible `AsyncCall<T>` wrapper.
+        let has_results = cm_return_type.is_some();
 
         // Allocate the async results buffer via realloc (only when there are results).
         if has_results {
             let pkg = Some(func_info.package.as_str());
-            let (async_result_size, async_result_align) =
-                if let Some(return_type) = &func_info.return_type {
-                    if let crate::ast::Type::Named(named) = return_type
-                        && let Some(sa) = crate::component_model::wasi_variant_cm_size_align_scoped(
-                            &named.name,
+            let (async_result_size, async_result_align) = if let Some(return_type) = &cm_return_type
+            {
+                if let crate::ast::Type::Named(named) = return_type
+                    && let Some(sa) = crate::component_model::wasi_variant_cm_size_align_scoped(
+                        &named.name,
+                        wasi_registry,
+                        pkg,
+                    )
+                {
+                    sa
+                } else {
+                    (
+                        crate::component_model::cm_size_with_registry_scoped(
+                            return_type,
                             wasi_registry,
                             pkg,
-                        )
-                    {
-                        sa
-                    } else {
-                        (
-                            crate::component_model::cm_size_with_registry_scoped(
-                                return_type,
-                                wasi_registry,
-                                pkg,
-                            ),
-                            crate::component_model::cm_align_with_registry_scoped(
-                                return_type,
-                                wasi_registry,
-                                pkg,
-                            ),
-                        )
-                    }
-                } else {
-                    unreachable!()
-                };
+                        ),
+                        crate::component_model::cm_align_with_registry_scoped(
+                            return_type,
+                            wasi_registry,
+                            pkg,
+                        ),
+                    )
+                }
+            } else {
+                unreachable!()
+            };
             let async_outptr_local = next_local;
             body_stmts.push(let_stmt(
                 "__async_outptr",
@@ -3227,82 +3241,90 @@ fn synthesize_adapter(
     // status), so wait_for_subtask is a no-op. The result is always written to the
     // outptr and lifted via synthesize_lift based on the return type metadata.
     if needs_async_lower {
-        // WASI P3 async calling convention: the lowered function returns a subtask
-        // handle (i32). 0 = completed synchronously; non-zero = async task in-flight.
-        // In both cases, the result is written to the async results buffer in linear memory.
-        // Save the subtask handle and wait for completion before reading the result.
+        // WASI P3 async calling convention: the lowered function returns a
+        // packed subtask handle/status `(subtask_handle << 4) | status`. The
+        // result (if any) is written to the async outptr buffer when the
+        // subtask eventually reaches `Status::Returned`.
+        //
+        // For Wado-level `async fn foo(...) -> AsyncCall<T>` imports, the
+        // adapter does NOT wait for the subtask or lift the result here.
+        // Instead it packages `(packed_handle, outptr, size, align)` into a
+        // `AsyncCall<T>` struct and returns it immediately, letting the
+        // caller interleave stream-parameter writes with the host subtask
+        // before explicitly `.wait()`-ing. The wait + lift + free logic
+        // lives in the synthesised `AsyncCall<T>::wait` method.
         let subtask_local = next_local;
         local_types.push(TypeTable::I32);
         next_local += 1;
         body_stmts.push(let_stmt(
-            "__subtask",
+            "__subtask_packed",
             subtask_local,
             TypeTable::I32,
             raw_call_expr,
         ));
-        body_stmts.push(expr_stmt(internal_call(
-            "wait_for_subtask",
-            vec![local_ref(subtask_local, "__subtask", TypeTable::I32)],
-            TypeTable::UNIT,
-        )));
 
-        if let Some((outptr_local, outptr_size, outptr_align)) = async_outptr_info {
-            if let Some(return_type) = &func_info.return_type {
-                // Async with result: lift from the dynamically allocated results buffer.
-                let resolved = wasi_registry.resolve_type(return_type);
-                let lift_ctx = LiftContext {
-                    wasi_registry,
-                    type_table,
-                    wasi_package: &func_info.package,
-                };
-                let lifted = synthesize_lift_with_context(
-                    &resolved,
+        // Assemble the AsyncCall<T> struct fields.
+        let (outptr_expr, size_expr, align_expr) =
+            if let Some((outptr_local, outptr_size, outptr_align)) = async_outptr_info {
+                (
                     local_ref(outptr_local, "__async_outptr", TypeTable::I32),
-                    &mut next_local,
-                    &mut body_stmts,
-                    &mut local_types,
-                    &lift_ctx,
-                );
-                // Materialize the lifted value into a local before freeing if it
-                // contains a bare memory load (e.g., i32.load from the outptr buffer).
-                // Complex types are already materialized into locals by synthesize_lift.
-                let lifted = materialize_if_needed(
-                    lifted,
-                    &mut next_local,
-                    &mut body_stmts,
-                    &mut local_types,
-                );
-                // Free the async results buffer after materializing the lifted value.
-                body_stmts.push(expr_stmt(builtin_call(
-                    "realloc",
-                    vec![
-                        local_ref(outptr_local, "__async_outptr", TypeTable::I32),
-                        i32_const(outptr_size as i32),
-                        i32_const(outptr_align as i32),
-                        i32_const(0),
-                    ],
-                    TypeTable::I32,
-                )));
-                body_stmts.push(return_stmt(Some(lifted.clone())));
-                adapter_return_type = lifted.type_id;
+                    i32_const(outptr_size as i32),
+                    i32_const(outptr_align as i32),
+                )
             } else {
-                // Has outptr but no return type: free the async results buffer.
-                body_stmts.push(expr_stmt(builtin_call(
-                    "realloc",
-                    vec![
-                        local_ref(outptr_local, "__async_outptr", TypeTable::I32),
-                        i32_const(outptr_size as i32),
-                        i32_const(outptr_align as i32),
-                        i32_const(0),
-                    ],
-                    TypeTable::I32,
-                )));
-                adapter_return_type = TypeTable::UNIT;
-            }
+                // Void async import: no outptr. Carry zeroes so the struct
+                // layout is uniform; `AsyncCall<()>::wait` is a no-op.
+                (i32_const(0), i32_const(0), i32_const(0))
+            };
+
+        // Determine the type argument T for AsyncCall<T>. The CM-level
+        // result type (inner T) was computed in `cm_return_type`; for
+        // void async we use `()`.
+        let inner_type_id = if let Some(return_type) = &cm_return_type {
+            let resolved = wasi_registry.resolve_type(return_type);
+            wasi_type_to_type_id(
+                &resolved,
+                &mut type_table.borrow_mut(),
+                wasi_registry,
+                &func_info.package,
+            )
         } else {
-            // Async void: no outptr, no results to lift.
-            adapter_return_type = TypeTable::UNIT;
-        }
+            TypeTable::UNIT
+        };
+        let subtask_type = type_table.borrow_mut().make_async_call(inner_type_id);
+
+        let subtask_struct = TirExpr::new(
+            TirExprKind::StructLiteral {
+                struct_type: subtask_type,
+                struct_name: "AsyncCall".to_string(),
+                fields: vec![
+                    crate::tir::TirStructField {
+                        name: "__cm_packed".to_string(),
+                        value: local_ref(subtask_local, "__subtask_packed", TypeTable::I32),
+                        field_index: 0,
+                    },
+                    crate::tir::TirStructField {
+                        name: "__cm_outptr".to_string(),
+                        value: outptr_expr,
+                        field_index: 1,
+                    },
+                    crate::tir::TirStructField {
+                        name: "__cm_size".to_string(),
+                        value: size_expr,
+                        field_index: 2,
+                    },
+                    crate::tir::TirStructField {
+                        name: "__cm_align".to_string(),
+                        value: align_expr,
+                        field_index: 3,
+                    },
+                ],
+            },
+            subtask_type,
+            synth_span(),
+        );
+        body_stmts.push(return_stmt(Some(subtask_struct)));
+        adapter_return_type = subtask_type;
     } else if let Some((alloc_size, alloc_align)) = outptr_alloc {
         body_stmts.push(expr_stmt(raw_call_expr));
         let outptr_local = next_local - 1;

@@ -1,28 +1,34 @@
-// Test: Client::send with request body stream (contents=Some(Stream<u8>)).
+// Test: Client::send with a request body stream (POST).
 //
-// TODO: This test times out at O0 and O2. The body stream + Client::send
-// combination causes the async runtime to hang. Commenting out the body stream
-// parts until the underlying issue is resolved.
+// Exercises the AsyncCall<T>::wait pattern:
+//   1. Build an outgoing Request whose `contents` is the readable end of
+//      a stream.
+//   2. Call `Client::send(req)` — returns `AsyncCall<Result<Response,
+//      ErrorCode>>` with the host task already reading the body.
+//   3. Write the body bytes and close the writable end.
+//   4. `task.wait()` to block on the response.
 //
-// Tests (when uncommented):
-// - Request.new with contents=Some(Stream<u8>)
-// - Writing body to outgoing request stream before sending
+// This is the client-side mirror of the `task return` + stream-write
+// pattern used by HTTP server handlers (`example/http-bin.wado`).
 
-use { Request, Response, ErrorCode, Fields, Scheme, Trailers } from "wasi:http";
+use { Request, Response, ErrorCode, Fields, Scheme, Trailers, FieldName, FieldValue } from "wasi:http";
 use { Client } from "wasi:http/client.wado";
 
 export async fn handle(request: Request) -> Result<Response, ErrorCode>
     with Client
 {
-    // TODO: uncomment body stream when timeout issue is fixed
-    // let [body_rx, body_tx] = Stream::<u8>::new();
+    let [body_rx, body_tx] = Stream::<u8>::new();
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
 
     let headers = Fields::new();
-    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let _ = headers.append(
+        "content-type" as FieldName,
+        "text/plain".as_bytes() as FieldValue,
+    );
+
     let [out_req, _req_future] = Request::new(
         headers,
-        // TODO: use Option::<Stream<u8>>::Some(body_rx) when timeout issue is fixed
-        null,
+        Option::<Stream<u8>>::Some(body_rx),
         trailers_future,
         null,
     );
@@ -31,12 +37,19 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode>
     out_req.set_authority(Option::<String>::Some("localhost"));
     out_req.set_path_with_query(Option::<String>::Some("/upstream"));
 
-    // TODO: uncomment body write when timeout issue is fixed
-    // body_tx.write("request body".as_bytes());
-    // body_tx.drop();
+    // Start the send as a subtask. The host begins consuming the body
+    // stream immediately; the guest is free to continue executing.
+    let subtask = Client::send(out_req);
 
-    let result = Client::send(out_req);
+    // Write the body concurrently with the host subtask's read. These
+    // writes rendezvous with the host reader without deadlock because
+    // the subtask is already in flight by the time we reach here.
+    body_tx.write("request body".as_bytes());
+    body_tx.drop();
     trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+
+    // Block until the host has a full response.
+    let result = subtask.wait();
 
     task return result;
 }
@@ -45,12 +58,12 @@ __DATA__
 {
     "wasi:http/service": {
         "status": 200,
-        "body": "ok"
+        "body": "upstream received body"
     },
     "outgoing_mocks": {
         "/upstream": {
             "status": 200,
-            "body": "ok"
+            "body": "upstream received body"
         }
     }
 }
