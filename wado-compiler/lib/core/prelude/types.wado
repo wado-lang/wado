@@ -183,7 +183,7 @@ pub resource StreamWritable<T> {
 }
 
 /// Opaque token identifying a waitable handle within a WaitableSet.
-/// Obtained from `RawSubtask::join`. Compared by handle identity (==).
+/// Obtained from `Subtask::join`. Compared by handle identity (==).
 pub resource Waitable;
 
 impl Eq for Waitable {
@@ -207,7 +207,7 @@ pub struct WaitEvent {
 ///
 /// Lifecycle: create with `new()`, join waitables into the set, wait/poll for
 /// events, then drop. A WaitableSet can only be dropped when it has no joined
-/// children — `RawSubtask::drop()` automatically removes the subtask from its
+/// children — `Subtask::drop()` automatically removes the subtask from its
 /// joined set (via the CM spec's `Waitable.join(None)` semantics), so always
 /// drop subtasks before dropping the set.
 pub resource WaitableSet {
@@ -231,18 +231,18 @@ pub resource WaitableSet {
 /// A raw CM subtask handle. Internal — most users should hold `AsyncCall<T>`
 /// (see below) which pairs the handle with its result buffer.
 ///
-/// `RawSubtask` extends `Waitable` in the CM spec. When dropped, it
+/// `Subtask` extends `Waitable` in the CM spec. When dropped, it
 /// automatically removes itself from any joined `WaitableSet` (the CM
 /// runtime calls `Waitable.join(None)` internally), so `WaitableSet::drop`
 /// can succeed.
 ///
 /// Correct lifecycle:
-///   let subtask = handle as RawSubtask;
+///   let subtask = handle as Subtask;
 ///   subtask.join(&ws);
 ///   ws.wait();
 ///   subtask.drop();  // removes from ws
 ///   ws.drop();       // safe — no children
-pub resource RawSubtask {
+pub resource Subtask {
     /// Drop a completed subtask. Automatically unjoins from its WaitableSet.
     /// Traps if the subtask has not yet resolved.
     #[cm("subtask-drop")]
@@ -301,7 +301,7 @@ impl AsyncCall<T> {
     pub fn wait(&self) -> T {
         let handle = self.__cm_packed >> 4;
         if handle != 0 {
-            let raw = handle as RawSubtask;
+            let raw = handle as Subtask;
             let ws = WaitableSet::new();
             raw.join(&ws);
             loop {
@@ -326,7 +326,7 @@ impl AsyncCall<T> {
     pub fn cancel(&self) {
         let handle = self.__cm_packed >> 4;
         if handle != 0 {
-            let raw = handle as RawSubtask;
+            let raw = handle as Subtask;
             raw.cancel();
             raw.drop();
         }
@@ -340,7 +340,7 @@ impl AsyncCall<T> {
     /// `wait`/`cancel` on this `AsyncCall<T>`.
     pub fn join(&self, set: &WaitableSet) -> Waitable {
         let handle = self.__cm_packed >> 4;
-        let raw = handle as RawSubtask;
+        let raw = handle as Subtask;
         return raw.join(set);
     }
 }
