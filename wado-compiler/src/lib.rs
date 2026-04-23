@@ -268,6 +268,31 @@ fn compile_after_load<H: CompilerHost>(
     let module_name = filename.unwrap_or_else(|| "module".to_string());
     let implicit_modules = load_result.implicit_modules.clone();
     let entry_ast = load_result.entry_ast.clone();
+    let mut load_result = load_result;
+
+    // === Phase 1a: Kiln generator import-refusal ===
+    // Runs before analysis so `wasi:*` imports in a generator package
+    // surface as a clean `KilnGeneratorForbiddenImport` rather than getting
+    // lost inside effect/type errors further downstream.
+    let rejected = kiln::import_check::check_loaded(
+        options.target_world.as_deref(),
+        &load_result.entry_module_source,
+        &load_result.modules,
+        logger,
+    );
+    if rejected > 0 {
+        return Err(Bail);
+    }
+
+    // === Phase 1b: Kiln `impl Deserialize for Options;` auto-injection ===
+    // Ensures the resolver sees an impl record for `Options: Deserialize`
+    // so `bind_request::<Options>(raw)` typechecks without the user having
+    // to write `impl Deserialize for Options;` by hand. Idempotent.
+    kiln::import_check::inject_deserialize_impl(
+        options.target_world.as_deref(),
+        &load_result.entry_module_source,
+        &mut load_result.modules,
+    );
 
     // === Phases 2 + 6a + 6b: Analyze + Annotate + Lower TIR ===
     // `annotate` performs analyze, type resolution, and body-level TIR

@@ -3,26 +3,60 @@
 //! Import the user-facing Kiln types and the `KilnHost` effect via
 //! `use { ... } from "core:kiln"`. This facade re-exports the WIT-generated
 //! submodules under `lib/core/kiln/` and adds the Wado-only `Request<T>`
-//! wrapper that generator authors write against.
+//! wrapper plus the `bind_request` helper that generator authors write
+//! against.
 //!
-//! See WEP 2026-04-12 (Kiln) §"The `kiln` world".
+//! See WEP 2026-04-12 (Kiln) §"The `kiln` world" and §"M6.5 stage 2".
+
+use { from_string } from "core:json";
+use { Deserialize } from "core:serde";
 
 pub use { KilnHost, HostError, Diagnostic, DiagnosticLevel, SourceSpan } from "core:kiln/kiln_host.wado";
 
-pub use { InputFile, OutputFile, Response, Error } from "core:kiln/types.wado";
+pub use { InputFile, OutputFile, RawRequest, Response, Error } from "core:kiln/types.wado";
 
-/// The typed request passed to a Kiln generator's `generate` function.
+/// The typed request a Kiln generator receives after `bind_request` decodes
+/// the canonical-JSON `options` payload into its typed `Options` struct.
 ///
-/// The compiler synthesizes a Component Model adapter that decodes the
-/// wire-form `raw-request` (with `options` as a canonical JSON string)
-/// into `Request<Options>` with a typed `options` field. Generator
-/// authors never touch the JSON.
-///
-/// `#[comp_feature("kiln_request")]` marks this as the canonical wrapper
-/// so the adapter can construct instances via the comp-feature lookup.
+/// The long-term plan is for the compiler to synthesize the decode step
+/// so authors write `fn generate(req: Request<Options>)` directly; the
+/// `#[comp_feature("kiln_request")]` attribute is the lookup anchor for
+/// that future adapter. See the M6.5-stage-2 notes in the WEP.
 #[comp_feature("kiln_request")]
 pub struct Request<T> {
     pub primary: InputFile,
     pub inputs: Array<InputFile>,
     pub options: T,
+}
+
+/// Decode a wire-form `RawRequest` into a typed `Request<T>`.
+///
+/// Generator authors call this at the top of their `generate` entry:
+///
+/// ```wado
+/// export fn generate(raw: RawRequest) -> Result<Response, Error> {
+///     let req = bind_request::<Options>(raw)?;
+///     // ... read req.primary.content, honor req.options, emit files ...
+/// }
+/// ```
+///
+/// `T` must be the generator's `pub struct Options`. The compiler
+/// auto-synthesizes `Options::deserialize` for every package targeting
+/// the `core:kiln/generator` world, so authors never write
+/// `impl Deserialize for Options;` explicitly.
+///
+/// A `Result::Err` return signals a corrupt `options` payload; the
+/// compiler's caller-side encoder guarantees well-formed JSON, so this
+/// branch should only fire if the wire bytes were tampered with
+/// out-of-band.
+pub fn bind_request<T: Deserialize>(raw: RawRequest) -> Result<Request<T>, Error> {
+    let opts = match from_string::<T>(raw.options) {
+        Ok(v) => v,
+        Err(_) => return Result::Err(Error::Other("kiln: failed to decode options JSON")),
+    };
+    return Result::Ok(Request {
+        primary: raw.primary,
+        inputs: raw.inputs,
+        options: opts,
+    });
 }

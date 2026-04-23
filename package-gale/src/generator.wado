@@ -1,16 +1,114 @@
-//! Kiln generator entry for gale (stub).
+//! Kiln generator entry for Gale.
 //!
 //! Declared by `[package].generator = "src/generator.wado"` in `wado.toml`.
-//! M6.7 (WEP 2026-04-12) replaces this stub with the real implementation
-//! that delegates to `./codegen.wado`.
+//! Reads a `.g4` grammar from `raw.primary.content`, parses it with the
+//! existing g4 parser, and emits a single entry `.wado` module built from
+//! the `./codegen.wado` pipeline.
 //!
-//! Until then this file only reserves the entry symbols so the package
-//! manifest resolves; actual generation still goes through the
-//! `gale gen` CLI in `./main.wado`.
+//! The long-running `gale gen` CLI in `./main.wado` stays around in M6 for
+//! parity with the existing golden-regeneration flow (`mise run
+//! update-gale-golden`); retiring the CLI is a follow-up once Kiln-driven
+//! consumers have proven out on one release cycle.
+//!
+//! v1 ergonomics (WEP 2026-04-12 §"M6.5 stage 2"): the author writes
+//! `fn generate(raw: RawRequest)` and calls `bind_request::<Options>(raw)?`
+//! at the top of the body. A follow-up adapter synthesis may hide that
+//! call.
 
+use { RawRequest, Response, Error, OutputFile, bind_request } from "core:kiln";
+use { parse } from "./g4/parser.wado";
+use { Grammar, merge_grammars, check_references } from "./ir.wado";
+use { generate as codegen_generate, GenerateOptions } from "./codegen.wado";
+
+/// Generator-side options. Surfaced under `options = { ... }` on the
+/// consuming project's `[build.generators.<name>]` table or at an inline
+/// `use ... with { generator: { options: { ... } } }` site.
+///
+/// The shape mirrors the legacy `gale gen` CLI flags; extend here as new
+/// flags land (WEP 2026-04-12 M6.7 checklist).
 pub struct Options {
+    /// Emit the optional `highlight` table in the generated parser.
+    pub highlight: bool,
 }
 
-export fn generate() {
-    panic("gale Kiln generator is not yet implemented; use `gale gen` CLI");
+impl Deserialize for Options;
+
+/// Kiln entry point. Called by the compiler via
+/// `core:kiln/generator.generate` when `[build.generators.*]` references
+/// this package as its `module`.
+export fn generate(raw: RawRequest) -> Result<Response, Error> {
+    let req = match bind_request::<Options>(raw) {
+        Ok(r) => r,
+        Err(e) => return Result::Err(e),
+    };
+
+    // Parse the primary grammar plus any supplementary grammars listed in
+    // `inputs` (e.g. a sibling lexer grammar for a split parser grammar).
+    // `merge_grammars` handles the single-grammar case by returning the
+    // input unchanged, so the fast path stays fast.
+    let mut grammars: Array<Grammar> = [];
+    match parse(req.primary.content) {
+        Ok(g) => grammars.push(g),
+        Err(e) => {
+            return Result::Err(Error::InvalidSchema(
+                `gale: failed to parse primary grammar '{req.primary.path}': {e.message}`
+            ));
+        },
+    };
+    for let supp of &req.inputs {
+        match parse(supp.content) {
+            Ok(g) => grammars.push(g),
+            Err(e) => {
+                return Result::Err(Error::InvalidSchema(
+                    `gale: failed to parse supplementary grammar '{supp.path}': {e.message}`
+                ));
+            },
+        };
+    }
+
+    let grammar = merge_grammars(grammars);
+
+    match check_references(&grammar) {
+        Ok(_) => {},
+        Err(e) => {
+            return Result::Err(Error::InvalidSchema(
+                `gale: unresolved rule references in '{req.primary.path}': {e.message}`
+            ));
+        },
+    };
+
+    let gen_opts = GenerateOptions { highlight: req.options.highlight };
+    let wado_source = codegen_generate(&grammar, &gen_opts);
+
+    // Kiln entry module name mirrors Gale's CLI convention: snake-case
+    // the grammar name. Consumers import the generated module via the
+    // `use { X } from "./path/to/grammar.g4"` redirect that the Kiln
+    // pipeline installs.
+    let entry_name = to_snake_case(&grammar.name);
+    let files: Array<OutputFile> = [
+        OutputFile {
+            path: `{entry_name}.wado`,
+            content: wado_source,
+            is_entry: true,
+        },
+    ];
+    return Result::Ok(Response { files });
+}
+
+fn to_snake_case(name: &String) -> String {
+    let mut out = String::with_capacity(name.len());
+    let mut prev_lower_or_digit = false;
+    for let c of name.chars() {
+        if c.is_ascii_uppercase() {
+            if prev_lower_or_digit {
+                out.push('_');
+            }
+            out.push(c.to_ascii_lowercase());
+            prev_lower_or_digit = false;
+        } else {
+            out.push(c);
+            prev_lower_or_digit = c.is_ascii_lowercase() || (c >= '0' && c <= '9');
+        }
+    }
+    return out;
 }

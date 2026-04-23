@@ -136,6 +136,8 @@ pub enum Code {
     GeneratorOptionsInvalid,
     /// Generator cache is stale and host cannot re-run generators (consume-only mode).
     KilnStaleCache,
+    /// A Kiln generator package imports an interface the sandbox forbids.
+    KilnGeneratorForbiddenImport,
 }
 
 impl std::fmt::Display for Code {
@@ -168,6 +170,7 @@ impl std::fmt::Display for Code {
             Code::GeneratorOptionsUnsupported => "GENERATOR_OPTIONS_UNSUPPORTED",
             Code::GeneratorOptionsInvalid => "GENERATOR_OPTIONS_INVALID",
             Code::KilnStaleCache => "KILN_STALE_CACHE",
+            Code::KilnGeneratorForbiddenImport => "KILN_GENERATOR_FORBIDDEN_IMPORT",
         };
         write!(f, "{name}")
     }

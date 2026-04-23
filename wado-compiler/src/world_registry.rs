@@ -50,8 +50,7 @@ impl WorldExportInfo {
 
     /// Check if this export returns an HTTP response.
     ///
-    /// Returns true if the return type is `Result<Response, ErrorCode>`,
-    /// which indicates this is an HTTP handler export.
+    /// Returns true if the return type is `Result<Response, ErrorCode>`.
     pub fn returns_http_response(&self) -> bool {
         let Some(return_type) = &self.return_type else {
             return false;
@@ -85,11 +84,17 @@ impl WorldInfo {
 
     /// Check if this world has an HTTP handler export.
     ///
-    /// Returns true if any export returns `Result<Response, ErrorCode>`.
+    /// Keyed on the world's fully-qualified name rather than the return-type
+    /// shape so same-named types in other namespaces — notably
+    /// `core:kiln/types::Response` under the `core:kiln/generator` world —
+    /// cannot be mistaken for `wasi:http/types::Response` and route the
+    /// generator through the HTTP codegen branch.
     pub fn has_http_handler_export(&self) -> bool {
-        self.exports
-            .iter()
-            .any(WorldExportInfo::returns_http_response)
+        self.fq_name.starts_with("wasi:http/")
+            && self
+                .exports
+                .iter()
+                .any(WorldExportInfo::returns_http_response)
     }
 }
 

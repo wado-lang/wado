@@ -131,10 +131,16 @@ fn build_world_export_plans(
             }]
         });
 
+    let is_http_world = target_world.starts_with("wasi:http/");
     exports
         .into_iter()
         .map(|export| {
-            let is_http_handler = export.returns_http_response();
+            // Only mark as HTTP handler when the world itself is under
+            // `wasi:http/…`. Without this guard, any world whose export
+            // returns `Result<Response, _>` (for example
+            // `core:kiln/generator`'s `Response`) would be misrouted
+            // through the HTTP codegen branch.
+            let is_http_handler = is_http_world && export.returns_http_response();
             // Use export adapter if one was synthesized by synthesis::cm_binding
             let core_func_name = export_binding_names
                 .get(&export.name)
