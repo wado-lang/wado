@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776948171740,
+  "lastUpdate": 1776954669350,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -15589,6 +15589,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/a44371080dbf25e6c92ed58325c60bd6273b34d6"
         },
         "date": 1776948171422,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8982,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18988,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 635264,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0901ec348dbd9b428d4d9eae2b788235472d6e17",
+          "message": "Merge pull request #906 from wado-lang/claude/upgrade-wasmtime-v44-DMHRH\n\nchore(deps): upgrade wasmtime to v44",
+          "timestamp": "2026-04-23T23:23:45+09:00",
+          "tree_id": "1b1a1b5120886f03377934384ea31c41119dcb4d",
+          "url": "https://github.com/wado-lang/wado/commit/0901ec348dbd9b428d4d9eae2b788235472d6e17"
+        },
+        "date": 1776954669050,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
