@@ -21,6 +21,8 @@
 
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use sha2::{Digest, Sha256};
 
@@ -43,10 +45,15 @@ pub const METADATA_DIR: &str = "build/kiln/metadata";
 /// CLI-side generator provider.
 ///
 /// Holds the project-root directory so it can resolve `LocalPath` modules
-/// relative to the manifest.
+/// relative to the manifest. The `compile_count` counter records how many
+/// times the provider has fallen through to an actual generator-package
+/// compile (vs. a cache hit); tests use it to assert that the on-disk
+/// `build/kiln/generators/<stable-id>.wasm` cache is honored without
+/// relying on filesystem-level mtime observation.
 #[derive(Debug, Clone)]
 pub struct CliGeneratorProvider {
     manifest_root: PathBuf,
+    compile_count: Arc<AtomicUsize>,
 }
 
 impl CliGeneratorProvider {
@@ -54,7 +61,20 @@ impl CliGeneratorProvider {
     /// directory containing `wado.toml`.
     #[must_use]
     pub fn new(manifest_root: PathBuf) -> Self {
-        Self { manifest_root }
+        Self {
+            manifest_root,
+            compile_count: Arc::new(AtomicUsize::new(0)),
+        }
+    }
+
+    /// Number of times this provider has run the inner wado-compiler
+    /// pipeline. Cache hits do not contribute. The counter is shared
+    /// across `Clone`s of the provider (backed by `Arc<AtomicUsize>`)
+    /// so callers that keep multiple handles still observe the same
+    /// total.
+    #[must_use]
+    pub fn compile_count(&self) -> usize {
+        self.compile_count.load(Ordering::SeqCst)
     }
 
     fn resolve_path(&self, rel: &str) -> PathBuf {
@@ -170,6 +190,11 @@ impl GeneratorProvider for CliGeneratorProvider {
                 {
                     return Ok(bytes);
                 }
+
+                // Cache miss: fall through to the real compile. Record it on
+                // the shared counter so tests can assert cache behaviour
+                // without fiddling with mtime resolutions on tmpfs/NFS.
+                self.compile_count.fetch_add(1, Ordering::SeqCst);
 
                 let base_path = abs.parent().map(Path::to_path_buf).unwrap_or_default();
                 let abs_str = abs.to_string_lossy().to_string();
@@ -375,6 +400,8 @@ export fn generate(raw: RawRequest) -> Result<Response, Error> {\n\
         let provider = CliGeneratorProvider::new(tmp.clone());
         let module = GeneratorModule::LocalPath(InvocationPath::normalize("./generator.wado"));
 
+        assert_eq!(provider.compile_count(), 0);
+
         let wasm = runtime()
             .block_on(async { provider.get_component(&module).await })
             .unwrap_or_else(|e| panic!("compile failed: {e:?}"));
@@ -383,9 +410,14 @@ export fn generate(raw: RawRequest) -> Result<Response, Error> {\n\
             wasm.starts_with(b"\0asm"),
             "component must start with wasm magic"
         );
+        assert_eq!(
+            provider.compile_count(),
+            1,
+            "first call runs the inner compiler exactly once"
+        );
 
-        // Second call should hit the on-disk cache.  We confirm by ensuring a
-        // file was written under `build/kiln/generators/`.
+        // Second call should hit the on-disk cache — observed directly via
+        // `compile_count` rather than filesystem state.
         let cache_dir = tmp.join(CACHE_DIR);
         let entries: Vec<_> = std::fs::read_dir(&cache_dir)
             .map(|it| it.filter_map(Result::ok).collect())
@@ -396,6 +428,11 @@ export fn generate(raw: RawRequest) -> Result<Response, Error> {\n\
             .block_on(async { provider.get_component(&module).await })
             .unwrap();
         assert_eq!(wasm, wasm2, "cached second call must match first");
+        assert_eq!(
+            provider.compile_count(),
+            1,
+            "cache hit must not re-invoke the inner compiler"
+        );
 
         let _ = std::fs::remove_dir_all(&tmp);
     }
