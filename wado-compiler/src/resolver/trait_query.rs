@@ -149,11 +149,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // Structs auto-implement Default when every field has a declared
         // default expression (`= expr`) — the synthesis pass emits the body.
+        // Share the eligibility predicate with the method-lookup helper so
+        // the bound check and `S::default()` resolution agree.
         if let ResolvedType::Struct { name, .. } = &resolved
             && trait_name == "Default"
-            && let Some(info) = self.struct_fields.get(name)
-            && !info.fields.is_empty()
-            && info.field_defaults.iter().all(Option::is_some)
+            && self.auto_derive_default_struct_type(name).is_some()
         {
             return true;
         }

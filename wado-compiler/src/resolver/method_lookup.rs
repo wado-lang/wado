@@ -272,22 +272,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
     /// eligible for auto-derived `Default::default()` synthesis.
     ///
     /// Returns `None` when:
-    /// - the name is unknown,
+    /// - the name is unknown (only visible structs are considered, matching
+    ///   Eq/Ord auto-derive eligibility),
     /// - any field is required (no `= expr`),
+    /// - the struct has no fields (empty structs opt out),
     /// - the struct is generic (left for a follow-up).
     ///
     /// Does not check whether the user wrote their own `impl Default`;
     /// callers should consult this only as a fallback after the regular
     /// impl-lookup paths.
     pub(super) fn auto_derive_default_struct_type(&self, struct_name: &str) -> Option<TypeId> {
-        let info = self
-            .struct_fields
-            .get(struct_name)
-            .or_else(|| {
-                self.all_struct_fields
-                    .values()
-                    .find_map(|m| m.get(struct_name))
-            })?;
+        let info = self.struct_fields.get(struct_name)?;
         if info.fields.is_empty() || !info.field_defaults.iter().all(Option::is_some) {
             return None;
         }

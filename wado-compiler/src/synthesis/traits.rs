@@ -33,11 +33,10 @@ use super::common::{
 /// implementations for types that don't already have user-provided implementations.
 pub fn synthesize_traits(project: Package) -> Package {
     let mut project = project;
-    let effectful_funcs = collect_effectful_functions(&project);
     for module in project.tir_modules.values_mut() {
         generate_enum_trait_impls(module);
         generate_struct_eq_ord_impls(module);
-        generate_struct_default_impls(module, &effectful_funcs);
+        generate_struct_default_impls(module);
         generate_variant_eq_impls(module);
         generate_inspect_impls(module);
         generate_inspect_alt_impls(module);
@@ -45,98 +44,6 @@ pub fn synthesize_traits(project: Package) -> Package {
         generate_display_alt_fallback_impls(module);
     }
     project
-}
-
-/// Set of functions that declare one or more effects, keyed by
-/// `(module_source, mangled_name)`. Used by Default synthesis to skip structs
-/// whose default expressions call effectful functions — the purity check
-/// will report the user-facing error on the field declaration itself.
-fn collect_effectful_functions(project: &Package) -> IndexSet<(ModuleSource, String)> {
-    let mut set = IndexSet::default();
-    for module in project.tir_modules.values() {
-        for func_rc in &module.functions {
-            let func = func_rc.borrow();
-            if !func.effects.is_empty() {
-                set.insert((module.module_source.clone(), func.name.clone()));
-            }
-        }
-    }
-    set
-}
-
-/// Walk `expr` and return true if any `Call` / method-call resolves to a
-/// function in `effectful` — i.e. the expression cannot safely appear in a
-/// synthesized pure `Default::default()` body.
-fn expr_has_effectful_call(
-    expr: &TirExpr,
-    effectful: &IndexSet<(ModuleSource, String)>,
-) -> bool {
-    let check_func_ref = |func_ref: &FunctionRef| -> bool {
-        effectful.contains(&(func_ref.module_source.clone(), func_ref.name.clone()))
-    };
-    match &expr.kind {
-        TirExprKind::Call { func, args, .. } => {
-            if check_func_ref(func) {
-                return true;
-            }
-            args.iter().any(|a| expr_has_effectful_call(&a.expr, effectful))
-        }
-        TirExprKind::MethodCall {
-            receiver,
-            func,
-            args,
-            ..
-        } => {
-            if check_func_ref(func) {
-                return true;
-            }
-            expr_has_effectful_call(receiver, effectful)
-                || args.iter().any(|a| expr_has_effectful_call(&a.expr, effectful))
-        }
-        TirExprKind::Binary { left, right, .. } => {
-            expr_has_effectful_call(left, effectful) || expr_has_effectful_call(right, effectful)
-        }
-        TirExprKind::Unary { expr, .. } => expr_has_effectful_call(expr, effectful),
-        TirExprKind::Cast { expr, .. } => expr_has_effectful_call(expr, effectful),
-        TirExprKind::FieldAccess { expr, .. } => expr_has_effectful_call(expr, effectful),
-        TirExprKind::StructLiteral { fields, .. } => fields
-            .iter()
-            .any(|f| expr_has_effectful_call(&f.value, effectful)),
-        TirExprKind::TupleLiteral { elements } => elements
-            .iter()
-            .any(|e| expr_has_effectful_call(e, effectful)),
-        TirExprKind::VariantConstruct {
-            payload: Some(p), ..
-        } => expr_has_effectful_call(p, effectful),
-        TirExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            expr_has_effectful_call(condition, effectful)
-                || then_branch
-                    .stmts
-                    .iter()
-                    .any(|s| stmt_has_effectful_call(s, effectful))
-                || else_branch
-                    .as_ref()
-                    .is_some_and(|b| b.stmts.iter().any(|s| stmt_has_effectful_call(s, effectful)))
-        }
-        _ => false,
-    }
-}
-
-fn stmt_has_effectful_call(
-    stmt: &crate::tir::TirStmt,
-    effectful: &IndexSet<(ModuleSource, String)>,
-) -> bool {
-    use crate::tir::TirStmtKind;
-    match &stmt.kind {
-        TirStmtKind::Let { value, .. } => expr_has_effectful_call(value, effectful),
-        TirStmtKind::Expr(e) => expr_has_effectful_call(e, effectful),
-        TirStmtKind::Return { value: Some(e) } => expr_has_effectful_call(e, effectful),
-        _ => false,
-    }
 }
 
 /// Check if a trait method implementation already exists for a type.
@@ -462,10 +369,11 @@ fn generate_struct_eq_ord_impls(module: &mut TirModule) {
 /// - generic structs (generic field defaults may depend on bounds; left for
 ///   a follow-up — monomorphized instances never hit this pass because
 ///   `monomorph_info.is_some()`).
-fn generate_struct_default_impls(
-    module: &mut TirModule,
-    effectful_funcs: &IndexSet<(ModuleSource, String)>,
-) {
+///
+/// Effect purity of the default expressions is already enforced by
+/// `check_default_purity` before synthesis runs; if it had failed the pipeline
+/// would have bailed, so every `default_expr` reaching here is pure.
+fn generate_struct_default_impls(module: &mut TirModule) {
     if module.structs.is_empty() {
         return;
     }
@@ -490,18 +398,7 @@ fn generate_struct_default_impls(
                         .map(|e| (f.name.clone(), f.type_id, f.index, (**e).clone()))
                 })
                 .collect();
-            let fields = fields?;
-            // Skip if any default expression transitively calls an effectful
-            // function. `check_default_purity` will report the error on the
-            // offending field; there is no reason to also emit a synthetic
-            // `default()` body that would trip the effect checker first.
-            if fields
-                .iter()
-                .any(|(_, _, _, e)| expr_has_effectful_call(e, effectful_funcs))
-            {
-                return None;
-            }
-            Some((s.name.clone(), fields, s.span))
+            fields.map(|fields| (s.name.clone(), fields, s.span))
         })
         .collect();
 
