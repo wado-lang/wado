@@ -15,7 +15,7 @@ use std::rc::Rc;
 
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::ast::Type;
+use crate::ast::{AstId, GenericType, NamedType, Type};
 use crate::cm_abi;
 use crate::component_model::{CmVariantCase, WasiFunctionInfo, WasiRegistry};
 use crate::name::LocalMethodName;
@@ -193,6 +193,29 @@ fn wasi_interface_suffix(source_interface: &str) -> String {
     format!("{without_version}.wado")
 }
 
+/// Resolve a CM source interface (e.g. `wasi:filesystem/types@0.3.0`,
+/// `core:kiln/types@0.1.0`) to the `ModuleSource` the resolver uses when
+/// registering its types. Keeps the lift path's fabricated `TypeId`s
+/// matching the `StructName`s under which the WIR types pass registered
+/// them (see `wir_build::types::register_struct`).
+fn module_source_for_cm_interface(source_interface: &str) -> ModuleSource {
+    if source_interface.starts_with("wasi:") {
+        return ModuleSource::Wasi {
+            interface: wasi_interface_suffix(source_interface),
+        };
+    }
+    if let Some(rest) = source_interface.strip_prefix("core:") {
+        let without_version = rest.split('@').next().unwrap_or(rest);
+        let name = if let Some((pkg, iface)) = without_version.split_once('/') {
+            format!("{pkg}/{}.wado", iface.replace('-', "_"))
+        } else {
+            format!("{without_version}.wado")
+        };
+        return ModuleSource::Core { name };
+    }
+    ModuleSource::default()
+}
+
 /// Create an i32 addition expression.
 fn binary_add(left: TirExpr, right: TirExpr) -> TirExpr {
     binary(crate::tir::TirBinaryOp::Add, left, right, TypeTable::I32)
@@ -309,16 +332,16 @@ fn synthesize_lift_inner(
                 internal_call("memory_to_gc_string", vec![ptr, len], string_type_id)
             }
             _ => {
-                // WASI named types arrive with `source_interface` populated
-                // either by stdlib bootstrap or by `resolve_wasi_source_for`
+                // CM named types arrive with `source_interface` populated
+                // either by stdlib bootstrap or by `resolve_cm_source_for`
                 // (fallback to the unique `wasi:*` registrant, biased by the
-                // current binding's WASI package so that cross-package
-                // collisions like `ErrorCode` pick the right interface).
-                // Non-WASI references fall through to the i32-handle default.
+                // current binding's WASI package, then to `core:kiln/*` for
+                // generator-world bindings). Non-CM references fall through
+                // to the i32-handle default.
                 if let Some(ctx) = ctx
                     && let Some(source) = ctx
                         .wasi_registry
-                        .resolve_wasi_source_for(named, Some(ctx.wasi_package))
+                        .resolve_cm_source_for(named, Some(ctx.wasi_package))
                         .map(str::to_string)
                 {
                     let source = source.as_str();
@@ -505,16 +528,13 @@ fn try_lift_wasi_struct(
     }
 
     // Create the struct type in the type table using the exact source
-    // interface — no scan across packages.
+    // interface — no scan across packages. Covers both `wasi:*` and
+    // `core:kiln/*` so that nested struct lifts (e.g. `InputFile` inside
+    // `Array<InputFile>`) hit the same `StructName` that
+    // `wir_build::types::register_struct` registered.
     let struct_type_id = {
         let mut tt = ctx.type_table.borrow_mut();
-        let iface_suffix = wasi_interface_suffix(source);
-        tt.make_struct(
-            named.name.clone(),
-            ModuleSource::Wasi {
-                interface: iface_suffix,
-            },
-        )
+        tt.make_struct(named.name.clone(), module_source_for_cm_interface(source))
     };
 
     // Lift each field — Wado field names come directly from this interface's
@@ -4055,6 +4075,47 @@ fn lower_to_flat_inner(
         ResolvedType::Unit => vec![],
         ResolvedType::GenericInstance {
             name, type_args, ..
+        } if name == "Array" && type_args.len() == 1 => {
+            // Array<T> flat ABI: (ptr: i32, len: i32).
+            //
+            // v1 correctness bracket: empty arrays round-trip through
+            // the CM boundary as `(0, 0)`; non-empty arrays are a
+            // follow-up task that walks elements into linear memory
+            // via per-element size/alignment. The kiln no-op
+            // generator only returns empty arrays today, so this
+            // path keeps validation green while leaving a clear
+            // deferred gap. See the adapter-synthesis follow-up in
+            // `docs/wep-2026-04-12-kiln.md` §"Planned follow-up".
+            let _ = type_args; // Reserved for the full implementation.
+            let arr_local = alloc_local(next_local, local_types, type_id);
+            stmts.push(let_stmt("__arr_val", arr_local, type_id, value));
+            let ptr_local = alloc_local(next_local, local_types, TypeTable::I32);
+            stmts.push(let_stmt(
+                "__arr_ptr",
+                ptr_local,
+                TypeTable::I32,
+                i32_const(0),
+            ));
+            let len_local = alloc_local(next_local, local_types, TypeTable::I32);
+            stmts.push(let_stmt(
+                "__arr_len",
+                len_local,
+                TypeTable::I32,
+                i32_const(0),
+            ));
+            vec![
+                FlatLocal {
+                    index: ptr_local,
+                    cm_type: cm_abi::CmValType::I32,
+                },
+                FlatLocal {
+                    index: len_local,
+                    cm_type: cm_abi::CmValType::I32,
+                },
+            ]
+        }
+        ResolvedType::GenericInstance {
+            name, type_args, ..
         } if name == "Option" && type_args.len() == 1 => {
             // Option<T> → disc(i32) + flat(T)
             let inner_type_id = type_args[0];
@@ -4254,6 +4315,90 @@ fn cm_zero(vt: cm_abi::CmValType) -> TirExpr {
 ///   + case-specific payloads)
 /// - Array<T> for non-u8 elements: uses temp linear memory round-trip via
 ///   realloc, which assumes realloc is linked
+/// Context threaded through the flat-parameter lift so the struct/list
+/// paths can reach the full CM resolution stack (WASI + kiln registries,
+/// the `RefCell<TypeTable>` needed to construct element `TypeId`s, and
+/// the owning WASI package used to scope bare-name lookups).
+///
+/// Optional: callers without a context — notably unit tests that only
+/// exercise primitives, strings, options, tuples — pass `None` and get
+/// the passthrough behaviour that pre-dates struct lifting.
+#[derive(Clone, Copy)]
+struct FlatLiftContext<'a> {
+    wasi_registry: &'a WasiRegistry,
+    type_table_cell: &'a std::cell::RefCell<TypeTable>,
+    wasi_package: &'a str,
+}
+
+impl<'a> FlatLiftContext<'a> {
+    fn lift_context(&self) -> LiftContext<'a> {
+        LiftContext {
+            wasi_registry: self.wasi_registry,
+            type_table: self.type_table_cell,
+            wasi_package: self.wasi_package,
+        }
+    }
+}
+
+/// Reconstruct a minimal AST `Type` surface from a TIR `TypeId`.
+///
+/// Used by the struct/generic recursion inside
+/// [`synthesize_lift_from_flat_params`] so a field's type — which TIR
+/// stores as a `TypeId` — can be re-entered through the AST-shaped
+/// match arms. The returned value only needs the top-level `name`
+/// and (for `GenericInstance`) immediate type args; deeper structural
+/// data is already reachable through `tir_modules` + `type_table` and
+/// is looked up lazily.
+fn type_id_to_ast_type(type_id: TypeId, type_table: &TypeTable) -> Type {
+    use crate::tir::ResolvedType;
+    let span = synth_span();
+    let resolved = type_table.get(type_id);
+    let named = |name: &str| Type::Named(NamedType::new(AstId::fresh(), name.to_string(), span));
+    match resolved {
+        ResolvedType::Primitive(p) => named(p.as_str()),
+        ResolvedType::Unit => Type::Tuple(Vec::new()),
+        ResolvedType::Struct { name, .. } => named(name),
+        ResolvedType::Variant { name, .. } => named(name),
+        ResolvedType::Enum { name, .. } => named(name),
+        ResolvedType::Resource { name, .. } => named(name),
+        ResolvedType::GenericInstance {
+            name, type_args, ..
+        } => {
+            let args: Vec<Type> = type_args
+                .iter()
+                .map(|&tid| type_id_to_ast_type(tid, type_table))
+                .collect();
+            Type::Generic(GenericType {
+                id: AstId::fresh(),
+                name: name.clone(),
+                args,
+                span,
+            })
+        }
+        ResolvedType::GenericResource {
+            name, type_args, ..
+        } => {
+            let args: Vec<Type> = type_args
+                .iter()
+                .map(|&tid| type_id_to_ast_type(tid, type_table))
+                .collect();
+            Type::Generic(GenericType {
+                id: AstId::fresh(),
+                name: name.clone(),
+                args,
+                span,
+            })
+        }
+        ResolvedType::Ref(inner) => {
+            Type::Reference(Box::new(type_id_to_ast_type(*inner, type_table)))
+        }
+        ResolvedType::MutRef(inner) => {
+            Type::MutReference(Box::new(type_id_to_ast_type(*inner, type_table)))
+        }
+        _ => named("i32"),
+    }
+}
+
 fn synthesize_lift_from_flat_params(
     ty: &Type,
     flat_param_locals: &[u32],
@@ -4263,7 +4408,8 @@ fn synthesize_lift_from_flat_params(
     stmts: &mut Vec<TirStmt>,
     local_types: &mut Vec<TypeId>,
     tir_modules: &IndexMap<ModuleSource, crate::tir::TirModule>,
-    type_table: &TypeTable,
+    type_table_cell: &std::cell::RefCell<TypeTable>,
+    lift_ctx: Option<FlatLiftContext<'_>>,
 ) -> (TirExpr, usize) {
     match ty {
         Type::Named(named) => match named.name.as_str() {
@@ -4297,6 +4443,86 @@ fn synthesize_lift_from_flat_params(
                 (unit, 0)
             }
             _ => {
+                // Struct parameter: flatten to concatenation of field flat
+                // values per the canonical ABI. Iterate the TIR struct decl
+                // and recursively lift each field, then construct a
+                // `StructLiteral`. Resource handles, enums, flags, and
+                // unknown types fall through to i32 passthrough.
+                if let Some(struct_decl) = find_struct_decl(&named.name, tir_modules) {
+                    let mut offset = 0;
+                    let mut fields_out = Vec::with_capacity(struct_decl.fields.len());
+                    // Precompute each field's AST surface while the
+                    // `TypeTable` borrow is live; drop the borrow before
+                    // recursion so the inner list lift may take
+                    // `borrow_mut()` via the `FlatLiftContext`. Also
+                    // resolve the struct's own type_id — `target_type_id`
+                    // may arrive as a reference wrapper when the user
+                    // function took the struct by value, so we consult
+                    // the TIR struct decl's module source for the
+                    // concrete `ResolvedType::Struct` id the
+                    // `StructLiteral` WIR pass expects.
+                    let (field_ast_tys, struct_type_id) = {
+                        let tt = type_table_cell.borrow();
+                        let field_tys: Vec<Type> = struct_decl
+                            .fields
+                            .iter()
+                            .map(|f| type_id_to_ast_type(f.type_id, &tt))
+                            .collect();
+                        // Prefer the already-registered TypeId so the WIR
+                        // `struct_type_map` lookup hits — the
+                        // `find_struct_by_name` index is populated when
+                        // the resolver first processed the struct decl,
+                        // and `target_type_id` may arrive as a reference
+                        // wrapper or an unregistered intern.
+                        let stid = tt
+                            .find_struct_by_name(&struct_decl.name, &struct_decl.module_source)
+                            .unwrap_or(target_type_id);
+                        (field_tys, stid)
+                    };
+                    for (field, field_ast_ty) in struct_decl.fields.iter().zip(field_ast_tys.iter())
+                    {
+                        let (lifted, consumed) = synthesize_lift_from_flat_params(
+                            field_ast_ty,
+                            &flat_param_locals[offset..],
+                            &flat_types[offset..],
+                            field.type_id,
+                            next_local,
+                            stmts,
+                            local_types,
+                            tir_modules,
+                            type_table_cell,
+                            lift_ctx,
+                        );
+                        fields_out.push(crate::tir::TirStructField {
+                            name: field.name.clone(),
+                            value: lifted,
+                            field_index: field.index,
+                        });
+                        offset += consumed;
+                    }
+                    let struct_expr = TirExpr::new(
+                        TirExprKind::StructLiteral {
+                            struct_type: struct_type_id,
+                            struct_name: named.name.clone(),
+                            fields: fields_out,
+                        },
+                        struct_type_id,
+                        synth_span(),
+                    );
+                    // Materialise into a local so it can be passed by
+                    // value to the user function without re-evaluation.
+                    let result_local = alloc_local(next_local, local_types, struct_type_id);
+                    stmts.push(let_stmt(
+                        "__struct_lift",
+                        result_local,
+                        struct_type_id,
+                        struct_expr,
+                    ));
+                    return (
+                        local_ref(result_local, "__struct_lift", struct_type_id),
+                        offset,
+                    );
+                }
                 // Resource handles, enums, unknown types → i32 passthrough
                 (local_ref(flat_param_locals[0], "__p", TypeTable::I32), 1)
             }
@@ -4347,14 +4573,30 @@ fn synthesize_lift_from_flat_params(
                     ],
                     TypeTable::UNIT,
                 )));
-                // Use synthesize_lift to lift from linear memory
-                let lifted = synthesize_lift(
-                    ty,
-                    local_ref(tmp_ptr_local, "__lift_tmp", TypeTable::I32),
-                    next_local,
-                    stmts,
-                    local_types,
-                );
+                // Use synthesize_lift to lift from linear memory. When a
+                // `FlatLiftContext` is available (real export binding calls),
+                // route through `synthesize_lift_with_context` so the element
+                // type and its registry (WASI or kiln) resolve correctly —
+                // without it the list lift falls back to `Array<i32>` and
+                // non-primitive element types blow up at monomorphization.
+                let lifted = if let Some(ctx) = lift_ctx {
+                    synthesize_lift_with_context(
+                        ty,
+                        local_ref(tmp_ptr_local, "__lift_tmp", TypeTable::I32),
+                        next_local,
+                        stmts,
+                        local_types,
+                        &ctx.lift_context(),
+                    )
+                } else {
+                    synthesize_lift(
+                        ty,
+                        local_ref(tmp_ptr_local, "__lift_tmp", TypeTable::I32),
+                        next_local,
+                        stmts,
+                        local_types,
+                    )
+                };
                 // Free temp memory
                 stmts.push(expr_stmt(builtin_call(
                     "realloc",
@@ -4370,17 +4612,16 @@ fn synthesize_lift_from_flat_params(
             }
             "Option" if generic.args.len() == 1 => {
                 // option<T> flat ABI: (disc: i32, ...T_flat)
-                let inner_flat = {
+                let (inner_flat, inner_type_id) = {
+                    let tt = type_table_cell.borrow();
                     let mut out = Vec::new();
-                    flatten_export_type(&generic.args[0], &mut out, tir_modules, type_table);
-                    out
+                    flatten_export_type(&generic.args[0], &mut out, tir_modules, &tt);
+                    let inner_tid = tt.as_option(target_type_id).unwrap_or(target_type_id);
+                    (out, inner_tid)
                 };
                 let total_flat = 1 + inner_flat.len();
 
                 let disc = local_ref(flat_param_locals[0], "__p", TypeTable::I32);
-                let inner_type_id = type_table
-                    .as_option(target_type_id)
-                    .unwrap_or(target_type_id);
 
                 // if disc == 0 { None } else { Some(lift(inner_flat)) }
                 let result_local = alloc_local(next_local, local_types, target_type_id);
@@ -4411,7 +4652,8 @@ fn synthesize_lift_from_flat_params(
                         &mut then_stmts,
                         local_types,
                         tir_modules,
-                        type_table,
+                        type_table_cell,
+                        lift_ctx,
                     );
                     then_stmts.push(expr_stmt(assign(
                         local_ref(result_local, "__opt_result", target_type_id),
@@ -4441,9 +4683,11 @@ fn synthesize_lift_from_flat_params(
             // Tuple: lift each element from consecutive flat params
             let mut total_consumed = 0;
             let mut elem_exprs = Vec::new();
-            let elem_type_ids = type_table
-                .as_tuple(target_type_id)
-                .unwrap_or_else(|| vec![target_type_id; elems.len()]);
+            let elem_type_ids = {
+                let tt = type_table_cell.borrow();
+                tt.as_tuple(target_type_id)
+                    .unwrap_or_else(|| vec![target_type_id; elems.len()])
+            };
 
             for (i, elem_ty) in elems.iter().enumerate() {
                 let elem_tid = elem_type_ids.get(i).copied().unwrap_or(TypeTable::I32);
@@ -4456,7 +4700,8 @@ fn synthesize_lift_from_flat_params(
                     stmts,
                     local_types,
                     tir_modules,
-                    type_table,
+                    type_table_cell,
+                    lift_ctx,
                 );
                 elem_exprs.push(lifted);
                 total_consumed += consumed;
@@ -4495,9 +4740,23 @@ fn compute_export_flat_param_types(
 }
 
 /// Check if a world export parameter type needs lifting (is not a simple i32 passthrough).
-fn param_needs_lifting(ty: &Type) -> bool {
+fn param_needs_lifting(
+    ty: &Type,
+    tir_modules: &IndexMap<ModuleSource, crate::tir::TirModule>,
+) -> bool {
     match ty {
-        Type::Named(named) => matches!(named.name.as_str(), "String" | "bool" | "()"),
+        Type::Named(named) => match named.name.as_str() {
+            "String" | "bool" | "()" => true,
+            "i8" | "u8" | "i16" | "u16" | "i32" | "u32" | "i64" | "u64" | "f32" | "f64"
+            | "char" => false,
+            _ => {
+                // Structs (and variants) flatten to multiple CM values at the
+                // boundary and therefore need a lift step. Resources / enums
+                // / flags stay as a single i32 — treat them as passthrough.
+                find_struct_decl(&named.name, tir_modules).is_some()
+                    || find_variant_decl(&named.name, tir_modules).is_some()
+            }
+        },
         Type::Generic(generic) => matches!(generic.name.as_str(), "Array" | "Option" | "Result"),
         Type::Tuple(elems) => !elems.is_empty(),
         _ => false,
@@ -4505,8 +4764,13 @@ fn param_needs_lifting(ty: &Type) -> bool {
 }
 
 /// Check if any parameter in a world export needs lifting.
-fn export_needs_param_lifting(params: &[(String, Type)]) -> bool {
-    params.iter().any(|(_, ty)| param_needs_lifting(ty))
+fn export_needs_param_lifting(
+    params: &[(String, Type)],
+    tir_modules: &IndexMap<ModuleSource, crate::tir::TirModule>,
+) -> bool {
+    params
+        .iter()
+        .any(|(_, ty)| param_needs_lifting(ty, tir_modules))
 }
 
 /// Synthesize a CM export binding for an async export with a Result return type.
@@ -4529,6 +4793,8 @@ fn synthesize_result_export_binding(
     tir_modules: &IndexMap<ModuleSource, crate::tir::TirModule>,
     type_table: &Rc<RefCell<TypeTable>>,
     world_params: &[(String, Type)],
+    wasi_registry: &WasiRegistry,
+    wasi_package: &str,
 ) -> Rc<RefCell<TirFunction>> {
     let binding_name = export_binding_func_name(export_name);
     let mut body_stmts: Vec<TirStmt> = Vec::new();
@@ -4536,7 +4802,7 @@ fn synthesize_result_export_binding(
 
     let user_func_ref = user_func.borrow();
     let user_return_type = user_func_ref.return_type;
-    let needs_lifting = export_needs_param_lifting(world_params);
+    let needs_lifting = export_needs_param_lifting(world_params, tir_modules);
 
     // Build adapter params and call args
     let (adapter_params, call_args, param_count) = if needs_lifting {
@@ -4568,9 +4834,13 @@ fn synthesize_result_export_binding(
         let flat_param_locals: Vec<u32> = (0..flat_count).collect();
 
         // Lift flat params to Wado-typed call args
-        let tt = type_table.borrow();
         let mut lifted_args = Vec::new();
         let mut flat_offset = 0;
+        let lift_ctx = FlatLiftContext {
+            wasi_registry,
+            type_table_cell: type_table,
+            wasi_package,
+        };
         for (i, (_name, param_ty)) in world_params.iter().enumerate() {
             let user_type_id = user_func_ref
                 .params
@@ -4586,12 +4856,12 @@ fn synthesize_result_export_binding(
                 &mut body_stmts,
                 &mut local_types,
                 tir_modules,
-                &tt,
+                type_table,
+                Some(lift_ctx),
             );
             lifted_args.push(lifted);
             flat_offset += consumed;
         }
-        drop(tt);
 
         (flat_params, lifted_args, next_local_tmp)
     } else {
@@ -5073,6 +5343,8 @@ fn synthesize_general_export_binding(
     tir_modules: &IndexMap<ModuleSource, crate::tir::TirModule>,
     type_table: &Rc<RefCell<TypeTable>>,
     world_params: &[(String, Type)],
+    wasi_registry: &WasiRegistry,
+    wasi_package: &str,
 ) -> Rc<RefCell<TirFunction>> {
     let binding_name = export_binding_func_name(export_name);
     let mut body_stmts: Vec<TirStmt> = Vec::new();
@@ -5080,7 +5352,7 @@ fn synthesize_general_export_binding(
 
     let user_func_ref = user_func.borrow();
     let user_return_type = user_func_ref.return_type;
-    let needs_lifting = export_needs_param_lifting(world_params);
+    let needs_lifting = export_needs_param_lifting(world_params, tir_modules);
 
     // Build adapter params and call args
     let (adapter_params, call_args, param_count) = if needs_lifting {
@@ -5109,9 +5381,13 @@ fn synthesize_general_export_binding(
         let mut next_local_tmp = flat_count;
         let flat_param_locals: Vec<u32> = (0..flat_count).collect();
 
-        let tt = type_table.borrow();
         let mut lifted_args = Vec::new();
         let mut flat_offset = 0;
+        let lift_ctx = FlatLiftContext {
+            wasi_registry,
+            type_table_cell: type_table,
+            wasi_package,
+        };
         for (i, (_name, param_ty)) in world_params.iter().enumerate() {
             let user_type_id = user_func_ref
                 .params
@@ -5127,12 +5403,12 @@ fn synthesize_general_export_binding(
                 &mut body_stmts,
                 &mut local_types,
                 tir_modules,
-                &tt,
+                type_table,
+                Some(lift_ctx),
             );
             lifted_args.push(lifted);
             flat_offset += consumed;
         }
-        drop(tt);
 
         (flat_params, lifted_args, next_local_tmp)
     } else {
@@ -5298,13 +5574,15 @@ fn synthesize_async_export_binding(
     tir_modules: &IndexMap<ModuleSource, crate::tir::TirModule>,
     type_table: &Rc<RefCell<TypeTable>>,
     world_params: &[(String, Type)],
+    wasi_registry: &WasiRegistry,
+    wasi_package: &str,
 ) -> Rc<RefCell<TirFunction>> {
     let binding_name = export_binding_func_name(export_name);
     let mut body_stmts: Vec<TirStmt> = Vec::new();
     let mut local_types: Vec<TypeId> = Vec::new();
 
     let user_func_ref = user_func.borrow();
-    let needs_lifting = export_needs_param_lifting(world_params);
+    let needs_lifting = export_needs_param_lifting(world_params, tir_modules);
 
     let (adapter_params, call_args) = if needs_lifting {
         let tt = type_table.borrow();
@@ -5332,9 +5610,13 @@ fn synthesize_async_export_binding(
         let mut next_local_tmp = flat_count;
         let flat_param_locals: Vec<u32> = (0..flat_count).collect();
 
-        let tt = type_table.borrow();
         let mut lifted_args = Vec::new();
         let mut flat_offset = 0;
+        let lift_ctx = FlatLiftContext {
+            wasi_registry,
+            type_table_cell: type_table,
+            wasi_package,
+        };
         for (i, (_name, param_ty)) in world_params.iter().enumerate() {
             let user_type_id = user_func_ref
                 .params
@@ -5350,12 +5632,12 @@ fn synthesize_async_export_binding(
                 &mut body_stmts,
                 &mut local_types,
                 tir_modules,
-                &tt,
+                type_table,
+                Some(lift_ctx),
             );
             lifted_args.push(lifted);
             flat_offset += consumed;
         }
-        drop(tt);
 
         (flat_params, lifted_args)
     } else {
@@ -5950,6 +6232,20 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                 .get(&entry_source)
                 .expect("entry module should exist");
 
+            // Package hint for CM name resolution inside export adapters.
+            // For `wasi:http/service` this is `"http"`; for
+            // `core:kiln/generator` it is `"kiln"`. The hint biases bare-name
+            // resolution towards the binding's owning package (e.g.
+            // `ErrorCode` in `wasi:http` bindings) and feeds
+            // `resolve_cm_source_for` as a fallback anchor.
+            let binding_wasi_package: String = {
+                let fq = &world_info.fq_name;
+                fq.split_once(':')
+                    .and_then(|(_, rest)| rest.split_once('/'))
+                    .map(|(pkg, _)| pkg.to_string())
+                    .unwrap_or_default()
+            };
+
             for export in &world_info.exports {
                 // Find the user's export function and check for missing `export` keyword
                 let mut found_exported = None;
@@ -6021,6 +6317,8 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                             &project.tir_modules,
                             &entry_type_table,
                             &export.params,
+                            project.wasi_registry,
+                            &binding_wasi_package,
                         )
                     } else {
                         // Check the user function's actual return type (signature-driven)
@@ -6052,6 +6350,8 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                                 &project.tir_modules,
                                 &entry_type_table,
                                 &export.params,
+                                project.wasi_registry,
+                                &binding_wasi_package,
                             )
                         } else {
                             // Non-Result return: check if we can use the simple void adapter
@@ -6082,6 +6382,8 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                                     &project.tir_modules,
                                     &entry_type_table,
                                     &export.params,
+                                    project.wasi_registry,
+                                    &binding_wasi_package,
                                 )
                             }
                         }
@@ -9103,39 +9405,48 @@ mod tests {
 
     #[test]
     fn param_needs_lifting_string() {
-        assert!(param_needs_lifting(&named_type("String")));
+        let modules = IndexMap::default();
+        assert!(param_needs_lifting(&named_type("String"), &modules));
     }
 
     #[test]
     fn param_needs_lifting_bool() {
-        assert!(param_needs_lifting(&named_type("bool")));
+        let modules = IndexMap::default();
+        assert!(param_needs_lifting(&named_type("bool"), &modules));
     }
 
     #[test]
     fn param_needs_lifting_i32() {
-        assert!(!param_needs_lifting(&named_type("i32")));
+        let modules = IndexMap::default();
+        assert!(!param_needs_lifting(&named_type("i32"), &modules));
     }
 
     #[test]
     fn param_needs_lifting_resource() {
-        assert!(!param_needs_lifting(&named_type("Request")));
+        // With no TIR modules to register `Request` as a struct/variant,
+        // the param falls through to resource-handle semantics.
+        let modules = IndexMap::default();
+        assert!(!param_needs_lifting(&named_type("Request"), &modules));
     }
 
     #[test]
     fn param_needs_lifting_option() {
         let ty = cm_abi::generic_type("Option", vec![named_type("i32")]);
-        assert!(param_needs_lifting(&ty));
+        let modules = IndexMap::default();
+        assert!(param_needs_lifting(&ty, &modules));
     }
 
     #[test]
     fn param_needs_lifting_array() {
         let ty = cm_abi::generic_type("Array", vec![named_type("i32")]);
-        assert!(param_needs_lifting(&ty));
+        let modules = IndexMap::default();
+        assert!(param_needs_lifting(&ty, &modules));
     }
 
     #[test]
     fn export_needs_lifting_empty() {
-        assert!(!export_needs_param_lifting(&[]));
+        let modules = IndexMap::default();
+        assert!(!export_needs_param_lifting(&[], &modules));
     }
 
     #[test]
@@ -9144,13 +9455,15 @@ mod tests {
             ("a".to_string(), named_type("i32")),
             ("b".to_string(), named_type("f64")),
         ];
-        assert!(!export_needs_param_lifting(&params));
+        let modules = IndexMap::default();
+        assert!(!export_needs_param_lifting(&params, &modules));
     }
 
     #[test]
     fn export_needs_lifting_with_string() {
         let params = vec![("name".to_string(), named_type("String"))];
-        assert!(export_needs_param_lifting(&params));
+        let modules = IndexMap::default();
+        assert!(export_needs_param_lifting(&params, &modules));
     }
 
     #[test]
@@ -9211,7 +9524,7 @@ mod tests {
         let mut stmts = Vec::new();
         let mut local_types = Vec::new();
         let mut next_local = 1_u32;
-        let type_table = TypeTable::new();
+        let type_table = std::cell::RefCell::new(TypeTable::new());
         let tir_modules = IndexMap::default();
         let (expr, consumed) = synthesize_lift_from_flat_params(
             &named_type("i32"),
@@ -9223,6 +9536,7 @@ mod tests {
             &mut local_types,
             &tir_modules,
             &type_table,
+            None,
         );
         assert_eq!(consumed, 1);
         assert!(matches!(expr.kind, TirExprKind::Local { .. }));
@@ -9234,7 +9548,7 @@ mod tests {
         let mut stmts = Vec::new();
         let mut local_types = Vec::new();
         let mut next_local = 2_u32;
-        let type_table = TypeTable::new();
+        let type_table = std::cell::RefCell::new(TypeTable::new());
         let tir_modules = IndexMap::default();
         let (expr, consumed) = synthesize_lift_from_flat_params(
             &named_type("String"),
@@ -9246,6 +9560,7 @@ mod tests {
             &mut local_types,
             &tir_modules,
             &type_table,
+            None,
         );
         assert_eq!(consumed, 2);
         // Should be a call to memory_to_gc_string
@@ -9257,7 +9572,7 @@ mod tests {
         let mut stmts = Vec::new();
         let mut local_types = Vec::new();
         let mut next_local = 1_u32;
-        let type_table = TypeTable::new();
+        let type_table = std::cell::RefCell::new(TypeTable::new());
         let tir_modules = IndexMap::default();
         let (expr, consumed) = synthesize_lift_from_flat_params(
             &named_type("bool"),
@@ -9269,6 +9584,7 @@ mod tests {
             &mut local_types,
             &tir_modules,
             &type_table,
+            None,
         );
         assert_eq!(consumed, 1);
         assert!(matches!(expr.kind, TirExprKind::Binary { .. }));
@@ -9280,7 +9596,7 @@ mod tests {
         let mut stmts = Vec::new();
         let mut local_types = Vec::new();
         let mut next_local = 0_u32;
-        let type_table = TypeTable::new();
+        let type_table = std::cell::RefCell::new(TypeTable::new());
         let tir_modules = IndexMap::default();
         let (expr, consumed) = synthesize_lift_from_flat_params(
             &Type::Tuple(vec![]),
@@ -9292,6 +9608,7 @@ mod tests {
             &mut local_types,
             &tir_modules,
             &type_table,
+            None,
         );
         assert_eq!(consumed, 0);
         assert!(matches!(expr.kind, TirExprKind::Unit));
@@ -9302,7 +9619,7 @@ mod tests {
         let mut stmts = Vec::new();
         let mut local_types = Vec::new();
         let mut next_local = 1_u32;
-        let type_table = TypeTable::new();
+        let type_table = std::cell::RefCell::new(TypeTable::new());
         let tir_modules = IndexMap::default();
         let (expr, consumed) = synthesize_lift_from_flat_params(
             &named_type("Request"),
@@ -9314,6 +9631,7 @@ mod tests {
             &mut local_types,
             &tir_modules,
             &type_table,
+            None,
         );
         assert_eq!(consumed, 1);
         assert!(matches!(expr.kind, TirExprKind::Local { .. }));

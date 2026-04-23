@@ -1189,10 +1189,18 @@ impl TypeTable {
             if n != name {
                 continue;
             }
-            if let ModuleSource::Wasi { interface } = ms
-                && interface.starts_with(&prefix)
-            {
-                return Some(type_id);
+            match ms {
+                ModuleSource::Wasi { interface } if interface.starts_with(&prefix) => {
+                    return Some(type_id);
+                }
+                // Core-packaged CM types (e.g. `core:kiln/types.wado`) are
+                // registered under `ModuleSource::Core`; match them by the
+                // same package-prefix contract so generator bindings reach
+                // their stdlib types through this lookup.
+                ModuleSource::Core { name: cm_name } if cm_name.starts_with(&prefix) => {
+                    return Some(type_id);
+                }
+                _ => {}
             }
         }
         None
