@@ -680,8 +680,8 @@ impl WasiRegistry {
     /// Returns `Some` only when exactly one WASI interface declares the bare
     /// name. Same-named types from multiple interfaces (e.g. `ErrorCode` in
     /// `wasi:filesystem/types` vs `wasi:http/types`) return `None` — callers
-    /// must then disambiguate with the package-scoped accessor (e.g.
-    /// `get_variant_cases_by_package`).
+    /// must then disambiguate with a source-interface-scoped accessor
+    /// (e.g. `get_variant_cases_by_source`).
     pub fn bare_name_owner(&self, kind: &str, name: &str) -> Option<&str> {
         let candidates: Vec<&str> = match kind {
             "variants" => self
@@ -1392,32 +1392,6 @@ impl WasiRegistry {
     /// Get the variant cases, when unambiguous.
     pub fn get_variant_cases(&self, name: &str) -> Option<&[CmVariantCase]> {
         find_unique_in(&self.variants, name).map(|(_, cases)| cases.as_slice())
-    }
-
-    /// Get the variant cases scoped to a WASI package (e.g., `"http"`).
-    /// Prefers an interface whose source starts with `"wasi:{package}/"` and
-    /// falls back to the unique WASI cross-package registrant (e.g. `ErrorCode`
-    /// defined in `wasi:filesystem/types` when referenced from a `wasi:http`
-    /// binding). If multiple interfaces under the same package define the
-    /// name (e.g. `wasi:sockets/types::ErrorCode` vs.
-    /// `wasi:sockets/ip-name-lookup::ErrorCode`), returns the first registered
-    /// to preserve existing WASI binding behavior. The fallback is scoped to
-    /// the `wasi:` namespace so that a same-named type in `core:*` (e.g.
-    /// `core:kiln/types::Error`) cannot leak into WASI binding synthesis.
-    pub fn get_variant_cases_by_package(
-        &self,
-        package: &str,
-        name: &str,
-    ) -> Option<&[CmVariantCase]> {
-        let prefix = format!("wasi:{package}/");
-        self.variants
-            .iter()
-            .find(|((src, n), _)| n == name && src.starts_with(&prefix))
-            .map(|(_, (_, cases))| cases.as_slice())
-            .or_else(|| {
-                find_unique_with_prefix(&self.variants, "wasi:", name)
-                    .map(|(_, cases)| cases.as_slice())
-            })
     }
 
     /// Get the variant cases scoped to a specific source interface. Falls back
