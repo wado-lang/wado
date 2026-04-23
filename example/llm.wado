@@ -6,7 +6,7 @@
 //   export OPENROUTER_API_KEY=sk-or-...
 //   wado run example/llm.wado
 
-use { println, eprintln, env, Stdout, Stderr, Environment } from "core:cli";
+use { println, env, Stdout, Stderr, Environment } from "core:cli";
 use {
     Request, Response, ErrorCode, Fields, FieldName, FieldValue,
     Method, Scheme, Trailers,
@@ -38,9 +38,11 @@ struct ChatResponse {
 }
 impl Deserialize for ChatResponse;
 
+global MODEL_NAME: String = "google/gemma-4-26b-a4b-it:free";
+
 fn send_post(api_key: String, body: String) -> Response with Client {
     let [body_rx, body_tx] = Stream::<u8>::new();
-    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [trailers_rx, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
 
     let headers = Fields::new();
     headers.append(
@@ -59,7 +61,7 @@ fn send_post(api_key: String, body: String) -> Response with Client {
     let [req, _req_future] = Request::new(
         headers,
         Option::<Stream<u8>>::Some(body_rx),
-        trailers_future,
+        trailers_rx,
         null,
     );
     req.set_method(Method::Post);
@@ -84,17 +86,17 @@ fn send_post(api_key: String, body: String) -> Response with Client {
 
 fn read_body(resp: Response) -> String {
     let [res_rx, _res_tx] = Future::<Result<(), ErrorCode>>::new();
-    let [body_stream, _trailers] = Response::consume_body(resp, res_rx);
+    let [body_stream_rx, _trailers] = Response::consume_body(resp, res_rx);
 
     let mut buf: Array<u8> = [];
     loop {
-        let chunk = body_stream.read(4096);
+        let chunk = body_stream_rx.read(4096);
         if chunk.len() == 0 {
             break;
         }
         buf.extend(&chunk);
     }
-    body_stream.drop();
+    body_stream_rx.drop();
     return String::from_utf8_lossy(buf);
 }
 
@@ -102,8 +104,7 @@ export fn run() with Stdout, Stderr, Environment, Client {
     let api_key = match env("OPENROUTER_API_KEY") {
         Some(k) => k,
         None => {
-            eprintln("OPENROUTER_API_KEY is not set");
-            panic("missing API key");
+            panic("OPENROUTER_API_KEY is not set");
         },
     };
 
@@ -113,25 +114,23 @@ export fn run() with Stdout, Stderr, Environment, Client {
             content: "Explain WebAssembly briefly",
         },
     ];
-    let request_body = to_string::<ChatRequest>(&ChatRequest {
-        model: "google/gemma-4-26b-a4b-it:free",
+    let request_body = to_string(&ChatRequest {
+        model: MODEL_NAME,
         messages,
     }).unwrap();
 
     let resp = send_post(api_key, request_body);
-    let status = resp.get_status_code() as i32;
+    let status = resp.get_status_code();
     let body = read_body(resp);
 
     if status != 200 {
-        eprintln(`HTTP {status}: {body}`);
-        panic("API request failed");
+        panic(`HTTP {status as i32}: {body}`);
     }
 
     let parsed = match from_string::<ChatResponse>(body) {
         Ok(r) => r,
         Err(e) => {
-            eprintln(`failed to parse JSON response: {e:?}`);
-            panic("parse error");
+            panic(`failed to parse JSON response: {e:?}`);
         },
     };
 
