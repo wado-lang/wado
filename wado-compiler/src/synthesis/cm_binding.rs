@@ -35,13 +35,23 @@ use super::common::{
 
 /// Context for lifting CM values to GC types, providing access to
 /// the WASI registry (for variant/enum case info) and type table (for `TypeIds`).
+///
+/// Shared between the memory-based lift (`synthesize_lift_inner`) and
+/// the flat-parameter lift (`synthesize_lift_from_flat_params`). The
+/// latter grabs a `RefCell<TypeTable>` borrow transitively through
+/// `synthesize_lift_list`, so this struct is `Copy` to make it cheap
+/// to pass by value across the recursion sites without propagating a
+/// borrow.
+#[derive(Clone, Copy)]
 pub struct LiftContext<'a> {
     pub wasi_registry: &'a WasiRegistry,
     pub type_table: &'a RefCell<TypeTable>,
-    /// WASI package owning the binding being synthesized (e.g., `"http"`).
-    /// Required: every WASI binding is emitted inside a known package, and
-    /// named-type lookups are always scoped by `(name, wasi_package)` to
-    /// prevent collisions such as `wasi:cli/ErrorCode` vs. `wasi:http/ErrorCode`.
+    /// WASI package owning the binding being synthesized (e.g., `"http"`
+    /// for `wasi:http/*` bindings, `"kiln"` for `core:kiln/*` bindings).
+    /// Required: every CM binding is emitted inside a known package,
+    /// and named-type lookups are always scoped by `(name, package)` to
+    /// prevent collisions such as `wasi:cli/ErrorCode` vs.
+    /// `wasi:http/ErrorCode`.
     pub wasi_package: &'a str,
 }
 
@@ -4347,31 +4357,6 @@ fn cm_zero(vt: cm_abi::CmValType) -> TirExpr {
 ///   + case-specific payloads)
 /// - Array<T> for non-u8 elements: uses temp linear memory round-trip via
 ///   realloc, which assumes realloc is linked
-/// Context threaded through the flat-parameter lift so the struct/list
-/// paths can reach the full CM resolution stack (WASI + kiln registries,
-/// the `RefCell<TypeTable>` needed to construct element `TypeId`s, and
-/// the owning WASI package used to scope bare-name lookups).
-///
-/// Optional: callers without a context — notably unit tests that only
-/// exercise primitives, strings, options, tuples — pass `None` and get
-/// the passthrough behaviour that pre-dates struct lifting.
-#[derive(Clone, Copy)]
-struct FlatLiftContext<'a> {
-    wasi_registry: &'a WasiRegistry,
-    type_table_cell: &'a std::cell::RefCell<TypeTable>,
-    wasi_package: &'a str,
-}
-
-impl<'a> FlatLiftContext<'a> {
-    fn lift_context(&self) -> LiftContext<'a> {
-        LiftContext {
-            wasi_registry: self.wasi_registry,
-            type_table: self.type_table_cell,
-            wasi_package: self.wasi_package,
-        }
-    }
-}
-
 /// Reconstruct a minimal AST `Type` surface from a TIR `TypeId`.
 ///
 /// Used by the struct/generic recursion inside
@@ -4441,7 +4426,7 @@ fn synthesize_lift_from_flat_params(
     local_types: &mut Vec<TypeId>,
     tir_modules: &IndexMap<ModuleSource, crate::tir::TirModule>,
     type_table_cell: &std::cell::RefCell<TypeTable>,
-    lift_ctx: Option<FlatLiftContext<'_>>,
+    lift_ctx: Option<LiftContext<'_>>,
 ) -> (TirExpr, usize) {
     match ty {
         Type::Named(named) => match named.name.as_str() {
@@ -4486,7 +4471,7 @@ fn synthesize_lift_from_flat_params(
                     // Precompute each field's AST surface while the
                     // `TypeTable` borrow is live; drop the borrow before
                     // recursion so the inner list lift may take
-                    // `borrow_mut()` via the `FlatLiftContext`. Also
+                    // `borrow_mut()` via the `LiftContext`. Also
                     // resolve the struct's own type_id — `target_type_id`
                     // may arrive as a reference wrapper when the user
                     // function took the struct by value, so we consult
@@ -4606,19 +4591,19 @@ fn synthesize_lift_from_flat_params(
                     TypeTable::UNIT,
                 )));
                 // Use synthesize_lift to lift from linear memory. When a
-                // `FlatLiftContext` is available (real export binding calls),
+                // `LiftContext` is available (real export binding calls),
                 // route through `synthesize_lift_with_context` so the element
                 // type and its registry (WASI or kiln) resolve correctly —
                 // without it the list lift falls back to `Array<i32>` and
                 // non-primitive element types blow up at monomorphization.
-                let lifted = if let Some(ctx) = lift_ctx {
+                let lifted = if let Some(ref ctx) = lift_ctx {
                     synthesize_lift_with_context(
                         ty,
                         local_ref(tmp_ptr_local, "__lift_tmp", TypeTable::I32),
                         next_local,
                         stmts,
                         local_types,
-                        &ctx.lift_context(),
+                        ctx,
                     )
                 } else {
                     synthesize_lift(
@@ -4868,9 +4853,9 @@ fn synthesize_result_export_binding(
         // Lift flat params to Wado-typed call args
         let mut lifted_args = Vec::new();
         let mut flat_offset = 0;
-        let lift_ctx = FlatLiftContext {
+        let lift_ctx = LiftContext {
             wasi_registry,
-            type_table_cell: type_table,
+            type_table,
             wasi_package,
         };
         for (i, (_name, param_ty)) in world_params.iter().enumerate() {
@@ -5415,9 +5400,9 @@ fn synthesize_general_export_binding(
 
         let mut lifted_args = Vec::new();
         let mut flat_offset = 0;
-        let lift_ctx = FlatLiftContext {
+        let lift_ctx = LiftContext {
             wasi_registry,
-            type_table_cell: type_table,
+            type_table,
             wasi_package,
         };
         for (i, (_name, param_ty)) in world_params.iter().enumerate() {
@@ -5644,9 +5629,9 @@ fn synthesize_async_export_binding(
 
         let mut lifted_args = Vec::new();
         let mut flat_offset = 0;
-        let lift_ctx = FlatLiftContext {
+        let lift_ctx = LiftContext {
             wasi_registry,
-            type_table_cell: type_table,
+            type_table,
             wasi_package,
         };
         for (i, (_name, param_ty)) in world_params.iter().enumerate() {
