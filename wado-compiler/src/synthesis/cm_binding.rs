@@ -6254,14 +6254,10 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
             // `core:kiln/generator` it is `"kiln"`. The hint biases bare-name
             // resolution towards the binding's owning package (e.g.
             // `ErrorCode` in `wasi:http` bindings) and feeds
-            // `resolve_cm_source_for` as a fallback anchor.
-            let binding_wasi_package: String = {
-                let fq = &world_info.fq_name;
-                fq.split_once(':')
-                    .and_then(|(_, rest)| rest.split_once('/'))
-                    .map(|(pkg, _)| pkg.to_string())
-                    .unwrap_or_default()
-            };
+            // `resolve_cm_source_for` as a fallback anchor. Derived from
+            // the world's `fq_name` — the attribute-sourced identity is
+            // the single source of truth.
+            let binding_wasi_package = world_info.package().to_string();
 
             for export in &world_info.exports {
                 // Find the user's export function and check for missing `export` keyword

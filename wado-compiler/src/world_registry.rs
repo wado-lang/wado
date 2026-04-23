@@ -90,12 +90,55 @@ impl WorldInfo {
     /// cannot be mistaken for `wasi:http/types::Response` and route the
     /// generator through the HTTP codegen branch.
     pub fn has_http_handler_export(&self) -> bool {
-        self.fq_name.starts_with("wasi:http/")
+        self.namespace_prefix() == "wasi:http/"
             && self
                 .exports
                 .iter()
                 .any(WorldExportInfo::returns_http_response)
     }
+
+    /// The CM package segment of this world's fully-qualified name.
+    ///
+    /// `wasi:http/service` → `"http"`, `core:kiln/generator` → `"kiln"`.
+    /// Returns an empty slice when `fq_name` has no scheme/package
+    /// structure (e.g. the built-in synthetic `test` world).
+    ///
+    /// This is a computed accessor, not a stored field — `fq_name` is the
+    /// single source of truth. Use [`Self::namespace_prefix`] when the
+    /// caller needs a `starts_with`-friendly form that also pins the
+    /// scheme.
+    pub fn package(&self) -> &str {
+        fq_name_package(&self.fq_name)
+    }
+
+    /// Namespace prefix usable with `ModuleSource::starts_with` / type
+    /// registry lookups that scope by `(name, namespace)`.
+    ///
+    /// `wasi:http/service` → `"wasi:http/"`, `core:kiln/generator` →
+    /// `"core:kiln/"`. Returns an empty slice for bare-name worlds.
+    pub fn namespace_prefix(&self) -> &str {
+        fq_name_namespace_prefix(&self.fq_name)
+    }
+}
+
+/// Extract the package segment of a world `fq_name` (`"wasi:http/service"`
+/// → `"http"`; `"core:kiln/generator"` → `"kiln"`). Returns `""` when
+/// the name has no `scheme:package/interface` shape.
+fn fq_name_package(fq_name: &str) -> &str {
+    let Some((_, rest)) = fq_name.split_once(':') else {
+        return "";
+    };
+    rest.split_once('/').map_or("", |(pkg, _)| pkg)
+}
+
+/// Extract the namespace prefix (`scheme:package/`) of a world
+/// `fq_name`. Returns `""` when the name has no structure.
+fn fq_name_namespace_prefix(fq_name: &str) -> &str {
+    let after_slash = fq_name.find('/').map(|i| i + 1).unwrap_or(0);
+    if after_slash == 0 || !fq_name[..after_slash].contains(':') {
+        return "";
+    }
+    &fq_name[..after_slash]
 }
 
 /// Registry of world definitions for code generation
@@ -302,5 +345,53 @@ mod tests {
             .get_export("core:kiln/generator", "generate")
             .expect("generate export not found");
         assert_eq!(generate.params.len(), 1, "generate takes one parameter");
+    }
+
+    fn world_info(fq: &str) -> WorldInfo {
+        WorldInfo {
+            fq_name: fq.to_string(),
+            exports: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn test_fq_name_accessors_wasi() {
+        let w = world_info("wasi:http/service");
+        assert_eq!(w.package(), "http");
+        assert_eq!(w.namespace_prefix(), "wasi:http/");
+    }
+
+    #[test]
+    fn test_fq_name_accessors_kiln() {
+        let w = world_info("core:kiln/generator");
+        assert_eq!(w.package(), "kiln");
+        assert_eq!(w.namespace_prefix(), "core:kiln/");
+    }
+
+    #[test]
+    fn test_fq_name_accessors_cli() {
+        let w = world_info("wasi:cli/command");
+        assert_eq!(w.package(), "cli");
+        assert_eq!(w.namespace_prefix(), "wasi:cli/");
+    }
+
+    #[test]
+    fn test_fq_name_accessors_bare_name() {
+        // Synthesized worlds without a `scheme:pkg/iface` shape (e.g. the
+        // fallback when no `#[cm(...)]` is present) surface empty slices,
+        // not partial parses.
+        let w = world_info("test");
+        assert_eq!(w.package(), "");
+        assert_eq!(w.namespace_prefix(), "");
+    }
+
+    #[test]
+    fn test_fq_name_accessors_no_scheme() {
+        // `name/with-slash-but-no-scheme` has no scheme prefix, so
+        // `namespace_prefix` returns `""` rather than a misleading
+        // `"name/"`.
+        let w = world_info("orphan/x");
+        assert_eq!(w.package(), "");
+        assert_eq!(w.namespace_prefix(), "");
     }
 }
