@@ -177,7 +177,7 @@ fn canonical_wasi_package<'a>(registry: &'a WasiRegistry, name: &str) -> Option<
 /// qualified `#[cm]` source interface like `"wasi:clocks/system-clock@0.3.0-rc-..."`.
 ///
 /// Returns e.g. `"clocks/system_clock.wado"`. The WIT kebab-case interface
-/// name is converted to Wado's snake_case filename convention (matching
+/// name is converted to Wado's `snake_case` filename convention (matching
 /// `wado-from-idl`'s output). Returns an empty string if the source is not a
 /// `wasi:` interface (such inputs never occur in WASI-side synthesis because
 /// every caller supplies a `NamedType.source_interface` populated by stdlib

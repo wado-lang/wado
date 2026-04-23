@@ -301,9 +301,9 @@ fn named(name: &str) -> Type {
 /// Construct a `Type::Named` whose `source_interface` is derived from the
 /// TIR `ModuleSource` of the resolved type. For a `ModuleSource::Wasi`,
 /// this produces the full `"wasi:{pkg}/{iface}@{version}"` form by matching
-/// the TIR-side snake_case interface ("filesystem/types.wado") against the
+/// the TIR-side `snake_case` interface ("filesystem/types.wado") against the
 /// stdlib-registered kebab-case interface ("wasi:filesystem/types@..."),
-/// disambiguating by the type's Wado name. For non-wasi module_sources we
+/// disambiguating by the type's Wado name. For non-wasi `module_sources` we
 /// leave `source_interface` unresolved.
 fn named_from_module_source(
     name: &str,

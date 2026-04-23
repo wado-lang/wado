@@ -1237,7 +1237,7 @@ impl WasiRegistry {
     /// Given a source-interface prefix (e.g. `"wasi:filesystem/types@"`) and
     /// a Wado type name, return the full registered source interface that
     /// matches in any type kind. Used by TIR → AST conversion to recover the
-    /// exact versioned source_interface from a coarser `ModuleSource`.
+    /// exact versioned `source_interface` from a coarser `ModuleSource`.
     pub fn find_wasi_source_under_prefix(&self, prefix: &str, name: &str) -> Option<&str> {
         find_unique_source_with_prefix(&self.structs, prefix, name)
             .or_else(|| find_unique_source_with_prefix(&self.variants, prefix, name))
