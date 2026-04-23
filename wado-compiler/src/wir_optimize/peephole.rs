@@ -124,6 +124,7 @@ pub(super) fn run_peephole(instrs: &mut Vec<WirInstr>, types: &[WirTypeDef]) {
     }
     fold_eqz_patterns(instrs);
     fold_branchless_increment(instrs);
+    simplify_redundant_byte_masks(instrs);
     elide_copy_used_only_for_field_reads(instrs);
     elide_multi_value_structs(instrs, types);
     relax_gc_operand_nullability(instrs);
@@ -513,6 +514,103 @@ fn fold_branchless_increment_in(instr: &mut WirInstr) {
         name: name.clone(),
         value: Box::new(WirInstr::I32Add(get, cond)),
     };
+}
+
+/// Returns the upper bound (exclusive) of values this instruction can produce,
+/// when that bound is a power of two. Used to drop redundant bitmasks that do
+/// not change the value.
+///
+/// - `I32Load8U` / `I32Load16U` zero-extend from memory and are always in the
+///   8-bit / 16-bit unsigned range.
+/// - `ArrayGetU` on a packed `u8` / `u16` array field returns a zero-extended
+///   byte / short.
+/// - `I32And` with a constant mask bounds the result to `mask + 1`.
+fn unsigned_bit_width(instr: &WirInstr) -> Option<u32> {
+    match instr {
+        WirInstr::I32Load8U { .. } => Some(8),
+        WirInstr::I32Load16U { .. } => Some(16),
+        WirInstr::ArrayGetU {
+            result_ty: WirType::U8 | WirType::Bool,
+            ..
+        } => Some(8),
+        WirInstr::ArrayGetU {
+            result_ty: WirType::U16,
+            ..
+        } => Some(16),
+        WirInstr::I32Const(v) => {
+            if *v >= 0 {
+                Some(32 - (*v as u32).leading_zeros())
+            } else {
+                None
+            }
+        }
+        WirInstr::I32And(l, r) => {
+            // Result is bounded by the narrower of the two operands' masks.
+            let lw = unsigned_bit_width(l);
+            let rw = unsigned_bit_width(r);
+            match (lw, rw) {
+                (Some(a), Some(b)) => Some(a.min(b)),
+                (Some(a), None) | (None, Some(a)) => Some(a),
+                (None, None) => None,
+            }
+        }
+        _ => None,
+    }
+}
+
+/// Remove redundant `x & ((1 << n) - 1)` masks when `x` is already known to
+/// fit in `n` bits (e.g., the result of a zero-extending load or packed array
+/// read). The Wasm backend re-introduces truncation on stores into packed
+/// storage, so the mask is pure overhead.
+fn simplify_redundant_byte_masks(instrs: &mut [WirInstr]) {
+    struct Simplify;
+    impl WirMutVisitor for Simplify {
+        fn visit_instr(&mut self, instr: &mut WirInstr) {
+            self.walk_instr(instr);
+            try_drop_mask(instr);
+        }
+    }
+    for instr in instrs.iter_mut() {
+        Simplify.visit_instr(instr);
+    }
+}
+
+fn try_drop_mask(instr: &mut WirInstr) {
+    // Match `I32And(expr, I32Const(mask))` or the symmetric form, where `mask`
+    // is `2^n - 1` and `expr` already fits in `n` bits.
+    let WirInstr::I32And(l, r) = instr else {
+        return;
+    };
+    let (value_box, mask) = match (l.as_ref(), r.as_ref()) {
+        (_, WirInstr::I32Const(v)) => (l, *v),
+        (WirInstr::I32Const(v), _) => (r, *v),
+        _ => return,
+    };
+    let Some(mask_bits) = power_of_two_minus_one_width(mask) else {
+        return;
+    };
+    let Some(value_bits) = unsigned_bit_width(value_box.as_ref()) else {
+        return;
+    };
+    if value_bits > mask_bits {
+        return;
+    }
+    let value = std::mem::replace(value_box.as_mut(), WirInstr::Nop);
+    *instr = value;
+}
+
+/// If `v` has the form `2^n - 1` with `1 <= n <= 31`, return `n`.
+fn power_of_two_minus_one_width(v: i32) -> Option<u32> {
+    if v <= 0 {
+        return None;
+    }
+    let u = v as u32;
+    let bits = u.count_ones();
+    if bits == u32::BITS - u.leading_zeros() {
+        Some(bits)
+    } else {
+        None
+    }
 }
 
 /// Returns true if the instruction is guaranteed to produce 0 or 1.
