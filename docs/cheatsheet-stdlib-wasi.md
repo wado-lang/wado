@@ -34,7 +34,7 @@ pub effect Exit {
 
 ```wado
 pub effect Run {
-    async fn run() -> Subtask<Result<(), ()>>;
+    async fn run() -> AsyncCall<Result<(), ()>>;
 }
 ```
 
@@ -149,28 +149,28 @@ pub resource Descriptor {
     fn read_via_stream(self: &Descriptor, offset: Filesize) -> [Stream<u8>, Future<Result<(), ErrorCode>>];
     fn write_via_stream(self: &Descriptor, data: Stream<u8>, offset: Filesize) -> Future<Result<(), ErrorCode>>;
     fn append_via_stream(self: &Descriptor, data: Stream<u8>) -> Future<Result<(), ErrorCode>>;
-    async fn advise(self: &Descriptor, offset: Filesize, length: Filesize, advice: Advice) -> Subtask<Result<(), ErrorCode>>;
-    async fn sync_data(self: &Descriptor) -> Subtask<Result<(), ErrorCode>>;
-    async fn get_flags(self: &Descriptor) -> Subtask<Result<DescriptorFlags, ErrorCode>>;
-    async fn get_type(self: &Descriptor) -> Subtask<Result<DescriptorType, ErrorCode>>;
-    async fn set_size(self: &Descriptor, size: Filesize) -> Subtask<Result<(), ErrorCode>>;
-    async fn set_times(self: &Descriptor, data_access_timestamp: NewTimestamp, data_modification_timestamp: NewTimestamp) -> Subtask<Result<(), ErrorCode>>;
+    async fn advise(self: &Descriptor, offset: Filesize, length: Filesize, advice: Advice) -> AsyncCall<Result<(), ErrorCode>>;
+    async fn sync_data(self: &Descriptor) -> AsyncCall<Result<(), ErrorCode>>;
+    async fn get_flags(self: &Descriptor) -> AsyncCall<Result<DescriptorFlags, ErrorCode>>;
+    async fn get_type(self: &Descriptor) -> AsyncCall<Result<DescriptorType, ErrorCode>>;
+    async fn set_size(self: &Descriptor, size: Filesize) -> AsyncCall<Result<(), ErrorCode>>;
+    async fn set_times(self: &Descriptor, data_access_timestamp: NewTimestamp, data_modification_timestamp: NewTimestamp) -> AsyncCall<Result<(), ErrorCode>>;
     fn read_directory(self: &Descriptor) -> [Stream<DirectoryEntry>, Future<Result<(), ErrorCode>>];
-    async fn sync(self: &Descriptor) -> Subtask<Result<(), ErrorCode>>;
-    async fn create_directory_at(self: &Descriptor, path: String) -> Subtask<Result<(), ErrorCode>>;
-    async fn stat(self: &Descriptor) -> Subtask<Result<DescriptorStat, ErrorCode>>;
-    async fn stat_at(self: &Descriptor, path_flags: PathFlags, path: String) -> Subtask<Result<DescriptorStat, ErrorCode>>;
-    async fn set_times_at(self: &Descriptor, path_flags: PathFlags, path: String, data_access_timestamp: NewTimestamp, data_modification_timestamp: NewTimestamp) -> Subtask<Result<(), ErrorCode>>;
-    async fn link_at(self: &Descriptor, old_path_flags: PathFlags, old_path: String, new_descriptor: &Descriptor, new_path: String) -> Subtask<Result<(), ErrorCode>>;
-    async fn open_at(self: &Descriptor, path_flags: PathFlags, path: String, open_flags: OpenFlags, flags: DescriptorFlags) -> Subtask<Result<Descriptor, ErrorCode>>;
-    async fn readlink_at(self: &Descriptor, path: String) -> Subtask<Result<String, ErrorCode>>;
-    async fn remove_directory_at(self: &Descriptor, path: String) -> Subtask<Result<(), ErrorCode>>;
-    async fn rename_at(self: &Descriptor, old_path: String, new_descriptor: &Descriptor, new_path: String) -> Subtask<Result<(), ErrorCode>>;
-    async fn symlink_at(self: &Descriptor, old_path: String, new_path: String) -> Subtask<Result<(), ErrorCode>>;
-    async fn unlink_file_at(self: &Descriptor, path: String) -> Subtask<Result<(), ErrorCode>>;
-    async fn is_same_object(self: &Descriptor, other: &Descriptor) -> Subtask<bool>;
-    async fn metadata_hash(self: &Descriptor) -> Subtask<Result<MetadataHashValue, ErrorCode>>;
-    async fn metadata_hash_at(self: &Descriptor, path_flags: PathFlags, path: String) -> Subtask<Result<MetadataHashValue, ErrorCode>>;
+    async fn sync(self: &Descriptor) -> AsyncCall<Result<(), ErrorCode>>;
+    async fn create_directory_at(self: &Descriptor, path: String) -> AsyncCall<Result<(), ErrorCode>>;
+    async fn stat(self: &Descriptor) -> AsyncCall<Result<DescriptorStat, ErrorCode>>;
+    async fn stat_at(self: &Descriptor, path_flags: PathFlags, path: String) -> AsyncCall<Result<DescriptorStat, ErrorCode>>;
+    async fn set_times_at(self: &Descriptor, path_flags: PathFlags, path: String, data_access_timestamp: NewTimestamp, data_modification_timestamp: NewTimestamp) -> AsyncCall<Result<(), ErrorCode>>;
+    async fn link_at(self: &Descriptor, old_path_flags: PathFlags, old_path: String, new_descriptor: &Descriptor, new_path: String) -> AsyncCall<Result<(), ErrorCode>>;
+    async fn open_at(self: &Descriptor, path_flags: PathFlags, path: String, open_flags: OpenFlags, flags: DescriptorFlags) -> AsyncCall<Result<Descriptor, ErrorCode>>;
+    async fn readlink_at(self: &Descriptor, path: String) -> AsyncCall<Result<String, ErrorCode>>;
+    async fn remove_directory_at(self: &Descriptor, path: String) -> AsyncCall<Result<(), ErrorCode>>;
+    async fn rename_at(self: &Descriptor, old_path: String, new_descriptor: &Descriptor, new_path: String) -> AsyncCall<Result<(), ErrorCode>>;
+    async fn symlink_at(self: &Descriptor, old_path: String, new_path: String) -> AsyncCall<Result<(), ErrorCode>>;
+    async fn unlink_file_at(self: &Descriptor, path: String) -> AsyncCall<Result<(), ErrorCode>>;
+    async fn is_same_object(self: &Descriptor, other: &Descriptor) -> AsyncCall<bool>;
+    async fn metadata_hash(self: &Descriptor) -> AsyncCall<Result<MetadataHashValue, ErrorCode>>;
+    async fn metadata_hash_at(self: &Descriptor, path_flags: PathFlags, path: String) -> AsyncCall<Result<MetadataHashValue, ErrorCode>>;
 }
 ```
 
@@ -282,13 +282,13 @@ pub type StatusCode = u16;
 
 ```wado
 pub effect Handler {
-    async fn handle(request: Request) -> Subtask<Result<Response, ErrorCode>>;
+    async fn handle(request: Request) -> AsyncCall<Result<Response, ErrorCode>>;
 }
 ```
 
 ```wado
 pub effect Client {
-    async fn send(request: Request) -> Subtask<Result<Response, ErrorCode>>;
+    async fn send(request: Request) -> AsyncCall<Result<Response, ErrorCode>>;
 }
 ```
 
@@ -474,8 +474,8 @@ pub type Mark = u64;
 pub effect MonotonicClock {
     fn now() -> Mark;
     fn get_resolution() -> Duration;
-    async fn wait_until(when: Mark) -> Subtask<()>;
-    async fn wait_for(how_long: Duration) -> Subtask<()>;
+    async fn wait_until(when: Mark) -> AsyncCall<()>;
+    async fn wait_for(how_long: Duration) -> AsyncCall<()>;
 }
 ```
 
@@ -549,7 +549,7 @@ pub enum IpAddressFamily {
 
 ```wado
 pub effect IpNameLookup {
-    async fn resolve_addresses(name: String) -> Subtask<Result<Array<IpAddress>, ErrorCode>>;
+    async fn resolve_addresses(name: String) -> AsyncCall<Result<Array<IpAddress>, ErrorCode>>;
 }
 ```
 
@@ -559,7 +559,7 @@ pub effect IpNameLookup {
 pub resource TcpSocket {
     fn create(address_family: IpAddressFamily) -> Result<TcpSocket, ErrorCode>;
     fn bind(self: &TcpSocket, local_address: IpSocketAddress) -> Result<(), ErrorCode>;
-    async fn connect(self: &TcpSocket, remote_address: IpSocketAddress) -> Subtask<Result<(), ErrorCode>>;
+    async fn connect(self: &TcpSocket, remote_address: IpSocketAddress) -> AsyncCall<Result<(), ErrorCode>>;
     fn listen(self: &TcpSocket) -> Result<Stream<TcpSocket>, ErrorCode>;
     fn send(self: &TcpSocket, data: Stream<u8>) -> Future<Result<(), ErrorCode>>;
     fn receive(self: &TcpSocket) -> [Stream<u8>, Future<Result<(), ErrorCode>>];
@@ -591,8 +591,8 @@ pub resource UdpSocket {
     fn bind(self: &UdpSocket, local_address: IpSocketAddress) -> Result<(), ErrorCode>;
     fn connect(self: &UdpSocket, remote_address: IpSocketAddress) -> Result<(), ErrorCode>;
     fn disconnect(self: &UdpSocket) -> Result<(), ErrorCode>;
-    async fn send(self: &UdpSocket, data: Array<u8>, remote_address: Option<IpSocketAddress>) -> Subtask<Result<(), ErrorCode>>;
-    async fn receive(self: &UdpSocket) -> Subtask<Result<[Array<u8>, IpSocketAddress], ErrorCode>>;
+    async fn send(self: &UdpSocket, data: Array<u8>, remote_address: Option<IpSocketAddress>) -> AsyncCall<Result<(), ErrorCode>>;
+    async fn receive(self: &UdpSocket) -> AsyncCall<Result<[Array<u8>, IpSocketAddress], ErrorCode>>;
     fn get_local_address(self: &UdpSocket) -> Result<IpSocketAddress, ErrorCode>;
     fn get_remote_address(self: &UdpSocket) -> Result<IpSocketAddress, ErrorCode>;
     fn get_address_family(self: &UdpSocket) -> IpAddressFamily;

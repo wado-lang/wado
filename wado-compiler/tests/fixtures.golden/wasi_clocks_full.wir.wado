@@ -25,7 +25,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(3)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct core:prelude/types.wado//Subtask<unit> {  // TypeId(4)
+struct core:prelude/types.wado//AsyncCall<unit> {  // TypeId(4)
     mut __cm_packed: i32,
     mut __cm_outptr: i32,
     mut __cm_size: i32,
@@ -84,9 +84,9 @@ type "functype//wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_binding_
 
 type "functype//wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_binding__MonotonicClock_get_resolution" = fn() -> u64;  // TypeId(30)
 
-type "functype//wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_binding__MonotonicClock_wait_for" = fn(i64) -> ref "core:prelude/types.wado//Subtask<unit>";  // TypeId(31)
+type "functype//wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_binding__MonotonicClock_wait_for" = fn(i64) -> ref "core:prelude/types.wado//AsyncCall<unit>";  // TypeId(31)
 
-type "functype//wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_binding__MonotonicClock_wait_until" = fn(i64) -> ref "core:prelude/types.wado//Subtask<unit>";  // TypeId(32)
+type "functype//wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_binding__MonotonicClock_wait_until" = fn(i64) -> ref "core:prelude/types.wado//AsyncCall<unit>";  // TypeId(32)
 
 type "functype//wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_binding__SystemClock_now" = fn() -> ref "wasi:clocks/system_clock.wado//Instant";  // TypeId(33)
 
@@ -140,7 +140,7 @@ type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(58)
 
-type "functype//core:prelude/types.wado/Subtask<unit>::wait" = fn(ref "core:prelude/types.wado//Subtask<unit>");  // TypeId(59)
+type "functype//core:prelude/types.wado/AsyncCall<unit>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<unit>");  // TypeId(59)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(60)
 
@@ -295,7 +295,7 @@ fn "wado-compiler/tests/fixtures/wasi_clocks_full.wado/__test_2_monotonic__wait_
     let __local_24: ref "core:prelude/format.wado//Formatter";
     let __local_30: ref "core:prelude/string.wado//String";
     before = "wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_binding__MonotonicClock_now"();
-    "core:prelude/types.wado/Subtask<unit>::wait"("wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_binding__MonotonicClock_wait_for"(1000000_i64));
+    "core:prelude/types.wado/AsyncCall<unit>::wait"("wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_binding__MonotonicClock_wait_for"(1000000_i64));
     after = "wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_binding__MonotonicClock_now"();
     __cond = after >=u before;
     if __cond == 0 {
@@ -363,7 +363,7 @@ fn "wado-compiler/tests/fixtures/wasi_clocks_full.wado/__test_3_monotonic__wait_
     let __local_31: ref "core:prelude/string.wado//String";
     now = "wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_binding__MonotonicClock_now"();
     target = now + 1000000_i64;
-    "core:prelude/types.wado/Subtask<unit>::wait"("wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_binding__MonotonicClock_wait_until"(target));
+    "core:prelude/types.wado/AsyncCall<unit>::wait"("wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_binding__MonotonicClock_wait_until"(target));
     after = "wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_binding__MonotonicClock_now"();
     __cond = after >=u target;
     if __cond == 0 {
@@ -429,7 +429,7 @@ fn "wado-compiler/tests/fixtures/wasi_clocks_full.wado/__test_4_monotonic__wait_
     let __local_24: ref "core:prelude/format.wado//Formatter";
     let __local_30: ref "core:prelude/string.wado//String";
     before = "wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_binding__MonotonicClock_now"();
-    "core:prelude/types.wado/Subtask<unit>::wait"("wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_binding__MonotonicClock_wait_for"(0_i64));
+    "core:prelude/types.wado/AsyncCall<unit>::wait"("wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_binding__MonotonicClock_wait_for"(0_i64));
     after = "wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_binding__MonotonicClock_now"();
     __cond = after >=u before;
     if __cond == 0 {
@@ -491,7 +491,7 @@ fn "wado-compiler/tests/fixtures/wasi_clocks_full.wado/__test_5_monotonic__wait_
     let __local_8: ref "core:prelude/format.wado//Formatter";
     let __local_13: ref "core:prelude/format.wado//Formatter";
     let __local_19: ref "core:prelude/string.wado//String";
-    "core:prelude/types.wado/Subtask<unit>::wait"("wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_binding__MonotonicClock_wait_until"(0_i64));
+    "core:prelude/types.wado/AsyncCall<unit>::wait"("wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_binding__MonotonicClock_wait_until"(0_i64));
     after = "wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_binding__MonotonicClock_now"();
     __cond = after >u 0_i64;
     if __cond == 0 {
@@ -715,13 +715,13 @@ fn "wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_binding__MonotonicCl
 fn "wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_binding__MonotonicClock_wait_for"(how_long) with MonotonicClock {
     let __subtask_packed: i32;
     __subtask_packed = "wasi/wasi:clocks/MonotonicClock::wait_for"(how_long);
-    return struct.new "core:prelude/types.wado//Subtask<unit>" { __cm_packed: __subtask_packed, __cm_outptr: 0, __cm_size: 0, __cm_align: 0 };
+    return struct.new "core:prelude/types.wado//AsyncCall<unit>" { __cm_packed: __subtask_packed, __cm_outptr: 0, __cm_size: 0, __cm_align: 0 };
 }
 
 fn "wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_binding__MonotonicClock_wait_until"(when) with MonotonicClock {
     let __subtask_packed: i32;
     __subtask_packed = "wasi/wasi:clocks/MonotonicClock::wait_until"(when);
-    return struct.new "core:prelude/types.wado//Subtask<unit>" { __cm_packed: __subtask_packed, __cm_outptr: 0, __cm_size: 0, __cm_align: 0 };
+    return struct.new "core:prelude/types.wado//AsyncCall<unit>" { __cm_packed: __subtask_packed, __cm_outptr: 0, __cm_size: 0, __cm_align: 0 };
 }
 
 fn "wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_binding__SystemClock_now"() with SystemClock {
@@ -1290,7 +1290,7 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/types.wado/Subtask<unit>::wait"(self) {
+fn "core:prelude/types.wado/AsyncCall<unit>::wait"(self) {
     let handle: i32;
     let raw: i32;
     let ws: i32;

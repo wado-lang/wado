@@ -152,7 +152,7 @@ struct wasi:http/types.wado//ErrorCode::InternalError {  // TypeId(22)
     payload_0: ref null "core:prelude/string.wado//String",
 }
 
-struct core:prelude/types.wado//Subtask<Result<Response,ErrorCode>> {  // TypeId(23)
+struct core:prelude/types.wado//AsyncCall<Result<Response,ErrorCode>> {  // TypeId(23)
     mut __cm_packed: i32,
     mut __cm_outptr: i32,
     mut __cm_size: i32,
@@ -267,7 +267,7 @@ type "functype//wado-compiler/tests/fixtures/http-client-send-simple.wado/__cm_b
 
 type "functype//wado-compiler/tests/fixtures/http-client-send-simple.wado/__cm_binding__Request_set_path_with_query" = fn(i32, ref null "core:prelude/string.wado//String") -> ref "core:prelude/types.wado//Result<unit,unit>";  // TypeId(53)
 
-type "functype//wado-compiler/tests/fixtures/http-client-send-simple.wado/__cm_binding__Client_send" = fn(i32) -> ref "core:prelude/types.wado//Subtask<Result<Response,ErrorCode>>";  // TypeId(54)
+type "functype//wado-compiler/tests/fixtures/http-client-send-simple.wado/__cm_binding__Client_send" = fn(i32) -> ref "core:prelude/types.wado//AsyncCall<Result<Response,ErrorCode>>";  // TypeId(54)
 
 type "functype//wado-compiler/tests/fixtures/http-client-send-simple.wado/__cm_export__handle" = fn(i32);  // TypeId(55)
 
@@ -277,7 +277,7 @@ type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i
 
 type "functype//core:internal/cm_lower_string" = fn(ref "core:prelude/string.wado//String") -> i64;  // TypeId(58)
 
-type "functype//core:prelude/types.wado/Subtask<Result<Response,ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//Subtask<Result<Response,ErrorCode>>") -> ref "core:prelude/types.wado//Result<Response,ErrorCode>";  // TypeId(59)
+type "functype//core:prelude/types.wado/AsyncCall<Result<Response,ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<Result<Response,ErrorCode>>") -> ref "core:prelude/types.wado//Result<Response,ErrorCode>";  // TypeId(59)
 
 type "functype//wasi/future-new" = fn() -> i64;  // TypeId(60)
 
@@ -463,7 +463,7 @@ fn "wado-compiler/tests/fixtures/http-client-send-simple.wado/handle"() with Cli
     drop("wado-compiler/tests/fixtures/http-client-send-simple.wado/__cm_binding__Request_set_scheme"(out_req, struct.new "wasi:http/types.wado//Scheme" { 0 }));
     drop("wado-compiler/tests/fixtures/http-client-send-simple.wado/__cm_binding__Request_set_authority"(out_req, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("localhost"), used: 9 }));
     drop("wado-compiler/tests/fixtures/http-client-send-simple.wado/__cm_binding__Request_set_path_with_query"(out_req, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("/"), used: 1 }));
-    upstream = "core:prelude/types.wado/Subtask<Result<Response,ErrorCode>>::wait"("wado-compiler/tests/fixtures/http-client-send-simple.wado/__cm_binding__Client_send"(out_req));
+    upstream = "core:prelude/types.wado/AsyncCall<Result<Response,ErrorCode>>::wait"("wado-compiler/tests/fixtures/http-client-send-simple.wado/__cm_binding__Client_send"(out_req));
     __tv_1 = 0;
     __tv_2 = 0;
     __tv_3 = 0_i64;
@@ -910,7 +910,7 @@ fn "wado-compiler/tests/fixtures/http-client-send-simple.wado/__cm_binding__Clie
     let __subtask_packed: i32;
     __async_outptr = "mem/realloc"(0, 0, 8, 40);
     __subtask_packed = "wasi/wasi:http/Client::send"(request, __async_outptr);
-    return struct.new "core:prelude/types.wado//Subtask<Result<Response,ErrorCode>>" { __cm_packed: __subtask_packed, __cm_outptr: __async_outptr, __cm_size: 40, __cm_align: 8 };
+    return struct.new "core:prelude/types.wado//AsyncCall<Result<Response,ErrorCode>>" { __cm_packed: __subtask_packed, __cm_outptr: __async_outptr, __cm_size: 40, __cm_align: 8 };
 }
 
 fn "wado-compiler/tests/fixtures/http-client-send-simple.wado/__cm_export__handle"(request) {
@@ -978,7 +978,7 @@ fn "core:internal/cm_waitable_set_wait"(ws) {
     return code, evt_handle, payload;
 }
 
-fn "core:prelude/types.wado/Subtask<Result<Response,ErrorCode>>::wait"(self) {
+fn "core:prelude/types.wado/AsyncCall<Result<Response,ErrorCode>>::wait"(self) {
     let handle: i32;
     let raw: i32;
     let ws: i32;

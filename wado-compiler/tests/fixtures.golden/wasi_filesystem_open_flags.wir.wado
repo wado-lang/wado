@@ -61,14 +61,14 @@ struct tuple//[Descriptor, String] {  // TypeId(4)
 
 array builtin::array<Tuple<Descriptor,String>> (mut ref "tuple//[Descriptor, String]");  // TypeId(5)
 
-struct core:prelude/types.wado//Subtask<Result<Descriptor,ErrorCode>> {  // TypeId(6)
+struct core:prelude/types.wado//AsyncCall<Result<Descriptor,ErrorCode>> {  // TypeId(6)
     mut __cm_packed: i32,
     mut __cm_outptr: i32,
     mut __cm_size: i32,
     mut __cm_align: i32,
 }
 
-struct core:prelude/types.wado//Subtask<Result<unit,ErrorCode>> {  // TypeId(7)
+struct core:prelude/types.wado//AsyncCall<Result<unit,ErrorCode>> {  // TypeId(7)
     mut __cm_packed: i32,
     mut __cm_outptr: i32,
     mut __cm_size: i32,
@@ -137,9 +137,9 @@ type "functype//wado-compiler/tests/fixtures/wasi_filesystem_open_flags.wado/__c
 
 type "functype//wado-compiler/tests/fixtures/wasi_filesystem_open_flags.wado/__cm_binding__Preopens_get_directories" = fn() -> ref "core:prelude//Array<Tuple<Descriptor,String>>";  // TypeId(29)
 
-type "functype//wado-compiler/tests/fixtures/wasi_filesystem_open_flags.wado/__cm_binding__Descriptor_unlink_file_at" = fn(i32, ref "core:prelude/string.wado//String") -> ref "core:prelude/types.wado//Subtask<Result<unit,ErrorCode>>";  // TypeId(30)
+type "functype//wado-compiler/tests/fixtures/wasi_filesystem_open_flags.wado/__cm_binding__Descriptor_unlink_file_at" = fn(i32, ref "core:prelude/string.wado//String") -> ref "core:prelude/types.wado//AsyncCall<Result<unit,ErrorCode>>";  // TypeId(30)
 
-type "functype//wado-compiler/tests/fixtures/wasi_filesystem_open_flags.wado/__cm_binding__Descriptor_open_at" = fn(i32, i32, ref "core:prelude/string.wado//String", i32, i32) -> ref "core:prelude/types.wado//Subtask<Result<Descriptor,ErrorCode>>";  // TypeId(31)
+type "functype//wado-compiler/tests/fixtures/wasi_filesystem_open_flags.wado/__cm_binding__Descriptor_open_at" = fn(i32, i32, ref "core:prelude/string.wado//String", i32, i32) -> ref "core:prelude/types.wado//AsyncCall<Result<Descriptor,ErrorCode>>";  // TypeId(31)
 
 type "functype//wado-compiler/tests/fixtures/wasi_filesystem_open_flags.wado/__cm_export__run" = fn();  // TypeId(32)
 
@@ -171,9 +171,9 @@ type "functype//core:prelude/Array<Tuple<Descriptor,String>>::push" = fn(ref "co
 
 type "functype//core:prelude/array.wado/Array<Tuple<Descriptor,String>>::grow" = fn(ref "core:prelude//Array<Tuple<Descriptor,String>>");  // TypeId(46)
 
-type "functype//core:prelude/types.wado/Subtask<Result<Descriptor,ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//Subtask<Result<Descriptor,ErrorCode>>") -> ref "core:prelude/types.wado//Result<Descriptor,ErrorCode>";  // TypeId(47)
+type "functype//core:prelude/types.wado/AsyncCall<Result<Descriptor,ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<Result<Descriptor,ErrorCode>>") -> ref "core:prelude/types.wado//Result<Descriptor,ErrorCode>";  // TypeId(47)
 
-type "functype//core:prelude/types.wado/Subtask<Result<unit,ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//Subtask<Result<unit,ErrorCode>>") -> ref "core:prelude/types.wado//Result<unit,ErrorCode>";  // TypeId(48)
+type "functype//core:prelude/types.wado/AsyncCall<Result<unit,ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<Result<unit,ErrorCode>>") -> ref "core:prelude/types.wado//Result<unit,ErrorCode>";  // TypeId(48)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(49)
 
@@ -224,33 +224,33 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_open_flags.wado/run"() with Std
         break __inline_Array_Tuple_Descriptor_String___IndexValue_i32___index_value_3: builtin::array_get<ref "tuple//[Descriptor, String]">(dirs.repr, 0);
         unreachable;
     }.0;
-    drop("core:prelude/types.wado/Subtask<Result<unit,ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_open_flags.wado/__cm_binding__Descriptor_unlink_file_at"(dir, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("exclusive_test.txt"), used: 18 })));
-    excl_result = "core:prelude/types.wado/Subtask<Result<Descriptor,ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_open_flags.wado/__cm_binding__Descriptor_open_at"(dir, 0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("exclusive_test.txt"), used: 18 }, 5, 2));
+    drop("core:prelude/types.wado/AsyncCall<Result<unit,ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_open_flags.wado/__cm_binding__Descriptor_unlink_file_at"(dir, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("exclusive_test.txt"), used: 18 })));
+    excl_result = "core:prelude/types.wado/AsyncCall<Result<Descriptor,ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_open_flags.wado/__cm_binding__Descriptor_open_at"(dir, 0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("exclusive_test.txt"), used: 18 }, 5, 2));
     if ref.test "core:prelude/types.wado//Result<Descriptor,ErrorCode>::Ok"(excl_result) {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("exclusive: new file created successfully"), used: 40 });
     } else {
         "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("exclusive: failed to create new file"), used: 36 });
         return;
     }
-    excl_dup_result = "core:prelude/types.wado/Subtask<Result<Descriptor,ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_open_flags.wado/__cm_binding__Descriptor_open_at"(dir, 0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("exclusive_test.txt"), used: 18 }, 5, 2));
+    excl_dup_result = "core:prelude/types.wado/AsyncCall<Result<Descriptor,ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_open_flags.wado/__cm_binding__Descriptor_open_at"(dir, 0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("exclusive_test.txt"), used: 18 }, 5, 2));
     if ref.test "core:prelude/types.wado//Result<Descriptor,ErrorCode>::Err"(excl_dup_result) {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("exclusive: existing file returns Exist error (correct)"), used: 54 });
     } else {
         "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("exclusive: existing file should have returned error"), used: 51 });
     }
-    dir_result = "core:prelude/types.wado/Subtask<Result<Descriptor,ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_open_flags.wado/__cm_binding__Descriptor_open_at"(dir, 0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("subdir"), used: 6 }, 2, 1));
+    dir_result = "core:prelude/types.wado/AsyncCall<Result<Descriptor,ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_open_flags.wado/__cm_binding__Descriptor_open_at"(dir, 0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("subdir"), used: 6 }, 2, 1));
     if ref.test "core:prelude/types.wado//Result<Descriptor,ErrorCode>::Ok"(dir_result) {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("directory: opened directory successfully"), used: 40 });
     } else {
         "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("directory: failed to open directory"), used: 35 });
     }
-    dir_on_file = "core:prelude/types.wado/Subtask<Result<Descriptor,ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_open_flags.wado/__cm_binding__Descriptor_open_at"(dir, 0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello.txt"), used: 9 }, 2, 1));
+    dir_on_file = "core:prelude/types.wado/AsyncCall<Result<Descriptor,ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_open_flags.wado/__cm_binding__Descriptor_open_at"(dir, 0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello.txt"), used: 9 }, 2, 1));
     if ref.test "core:prelude/types.wado//Result<Descriptor,ErrorCode>::Err"(dir_on_file) {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("directory: file returns error (correct)"), used: 39 });
     } else {
         "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("directory: file should have returned error"), used: 42 });
     }
-    unlink_result = "core:prelude/types.wado/Subtask<Result<unit,ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_open_flags.wado/__cm_binding__Descriptor_unlink_file_at"(dir, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("exclusive_test.txt"), used: 18 }));
+    unlink_result = "core:prelude/types.wado/AsyncCall<Result<unit,ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_open_flags.wado/__cm_binding__Descriptor_unlink_file_at"(dir, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("exclusive_test.txt"), used: 18 }));
     if unlink_result.discriminant == 0 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unlink: cleaned up exclusive_test.txt"), used: 37 });
     } else {
@@ -319,7 +319,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_open_flags.wado/__cm_binding__D
     __path_packed = "core:internal/cm_lower_string"(path);
     __async_outptr = "mem/realloc"(0, 0, 4, 20);
     __subtask_packed = "wasi/wasi:filesystem/Descriptor::unlink_file_at"(self, builtin::i32_wrap_i64(__path_packed), builtin::i32_wrap_i64(__path_packed >> 32_i64), __async_outptr);
-    return struct.new "core:prelude/types.wado//Subtask<Result<unit,ErrorCode>>" { __cm_packed: __subtask_packed, __cm_outptr: __async_outptr, __cm_size: 20, __cm_align: 4 };
+    return struct.new "core:prelude/types.wado//AsyncCall<Result<unit,ErrorCode>>" { __cm_packed: __subtask_packed, __cm_outptr: __async_outptr, __cm_size: 20, __cm_align: 4 };
 }
 
 fn "wado-compiler/tests/fixtures/wasi_filesystem_open_flags.wado/__cm_binding__Descriptor_open_at"(self, path_flags, path, open_flags, flags) with Descriptor {
@@ -337,7 +337,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_open_flags.wado/__cm_binding__D
     builtin::store_u8(__params_buf + 16, open_flags);
     builtin::store_u8(__params_buf + 17, flags);
     __subtask_packed = "wasi/wasi:filesystem/Descriptor::open_at"(__params_buf, __async_outptr);
-    return struct.new "core:prelude/types.wado//Subtask<Result<Descriptor,ErrorCode>>" { __cm_packed: __subtask_packed, __cm_outptr: __async_outptr, __cm_size: 20, __cm_align: 4 };
+    return struct.new "core:prelude/types.wado//AsyncCall<Result<Descriptor,ErrorCode>>" { __cm_packed: __subtask_packed, __cm_outptr: __async_outptr, __cm_size: 20, __cm_align: 4 };
 }
 
 fn "wado-compiler/tests/fixtures/wasi_filesystem_open_flags.wado/__cm_export__run"() {
@@ -565,7 +565,7 @@ fn "core:prelude/array.wado/Array<Tuple<Descriptor,String>>::grow"(self) {
     self.repr = new_repr;
 }
 
-fn "core:prelude/types.wado/Subtask<Result<Descriptor,ErrorCode>>::wait"(self) {
+fn "core:prelude/types.wado/AsyncCall<Result<Descriptor,ErrorCode>>::wait"(self) {
     let handle: i32;
     let raw: i32;
     let ws: i32;
@@ -703,7 +703,7 @@ fn "core:prelude/types.wado/Subtask<Result<Descriptor,ErrorCode>>::wait"(self) {
     return result;
 }
 
-fn "core:prelude/types.wado/Subtask<Result<unit,ErrorCode>>::wait"(self) {
+fn "core:prelude/types.wado/AsyncCall<Result<unit,ErrorCode>>::wait"(self) {
     let handle: i32;
     let raw: i32;
     let ws: i32;

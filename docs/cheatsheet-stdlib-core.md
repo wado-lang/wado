@@ -100,7 +100,7 @@ pub resource WaitableSet {
 ```
 
 ```wado
-pub resource RawSubtask {
+pub resource Subtask {
     fn drop(&self);
     fn cancel(&self);
     fn join(&self, set: &WaitableSet) -> Waitable;
@@ -112,6 +112,12 @@ pub resource ErrorContext {
     fn new(message: String) -> ErrorContext;
     fn debug_message(&self) -> String;
     fn drop(&self);
+}
+```
+
+```wado
+pub resource Task {
+    fn cancel();
 }
 ```
 
@@ -871,14 +877,14 @@ pub struct WaitEvent {
 ```
 
 ```wado
-pub struct Subtask<T> {
+pub struct AsyncCall<T> {
     __cm_packed: i32,
     __cm_outptr: i32,
     __cm_size: i32,
     __cm_align: i32,
 }
 
-impl Subtask {
+impl AsyncCall {
     pub fn wait(&self) -> T;
     pub fn cancel(&self);
     pub fn join(&self, set: &WaitableSet) -> Waitable;

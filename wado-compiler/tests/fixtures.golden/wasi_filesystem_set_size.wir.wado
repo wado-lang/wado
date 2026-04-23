@@ -106,21 +106,21 @@ struct tuple//[Descriptor, String] {  // TypeId(10)
 
 array builtin::array<Tuple<Descriptor,String>> (mut ref "tuple//[Descriptor, String]");  // TypeId(11)
 
-struct core:prelude/types.wado//Subtask<Result<unit,ErrorCode>> {  // TypeId(12)
+struct core:prelude/types.wado//AsyncCall<Result<unit,ErrorCode>> {  // TypeId(12)
     mut __cm_packed: i32,
     mut __cm_outptr: i32,
     mut __cm_size: i32,
     mut __cm_align: i32,
 }
 
-struct core:prelude/types.wado//Subtask<Result<DescriptorStat,ErrorCode>> {  // TypeId(13)
+struct core:prelude/types.wado//AsyncCall<Result<DescriptorStat,ErrorCode>> {  // TypeId(13)
     mut __cm_packed: i32,
     mut __cm_outptr: i32,
     mut __cm_size: i32,
     mut __cm_align: i32,
 }
 
-struct core:prelude/types.wado//Subtask<Result<Descriptor,ErrorCode>> {  // TypeId(14)
+struct core:prelude/types.wado//AsyncCall<Result<Descriptor,ErrorCode>> {  // TypeId(14)
     mut __cm_packed: i32,
     mut __cm_outptr: i32,
     mut __cm_size: i32,
@@ -233,13 +233,13 @@ type "functype//wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_
 
 type "functype//wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Preopens_get_directories" = fn() -> ref "core:prelude//Array<Tuple<Descriptor,String>>";  // TypeId(50)
 
-type "functype//wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Descriptor_open_at" = fn(i32, i32, ref "core:prelude/string.wado//String", i32, i32) -> ref "core:prelude/types.wado//Subtask<Result<Descriptor,ErrorCode>>";  // TypeId(51)
+type "functype//wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Descriptor_open_at" = fn(i32, i32, ref "core:prelude/string.wado//String", i32, i32) -> ref "core:prelude/types.wado//AsyncCall<Result<Descriptor,ErrorCode>>";  // TypeId(51)
 
-type "functype//wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Descriptor_stat" = fn(i32) -> ref "core:prelude/types.wado//Subtask<Result<DescriptorStat,ErrorCode>>";  // TypeId(52)
+type "functype//wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Descriptor_stat" = fn(i32) -> ref "core:prelude/types.wado//AsyncCall<Result<DescriptorStat,ErrorCode>>";  // TypeId(52)
 
-type "functype//wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Descriptor_set_size" = fn(i32, i64) -> ref "core:prelude/types.wado//Subtask<Result<unit,ErrorCode>>";  // TypeId(53)
+type "functype//wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Descriptor_set_size" = fn(i32, i64) -> ref "core:prelude/types.wado//AsyncCall<Result<unit,ErrorCode>>";  // TypeId(53)
 
-type "functype//wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Descriptor_unlink_file_at" = fn(i32, ref "core:prelude/string.wado//String") -> ref "core:prelude/types.wado//Subtask<Result<unit,ErrorCode>>";  // TypeId(54)
+type "functype//wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Descriptor_unlink_file_at" = fn(i32, ref "core:prelude/string.wado//String") -> ref "core:prelude/types.wado//AsyncCall<Result<unit,ErrorCode>>";  // TypeId(54)
 
 type "functype//wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_export__run" = fn();  // TypeId(55)
 
@@ -289,11 +289,11 @@ type "functype//core:prelude/Array<Tuple<Descriptor,String>>::push" = fn(ref "co
 
 type "functype//core:prelude/array.wado/Array<Tuple<Descriptor,String>>::grow" = fn(ref "core:prelude//Array<Tuple<Descriptor,String>>");  // TypeId(78)
 
-type "functype//core:prelude/types.wado/Subtask<Result<unit,ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//Subtask<Result<unit,ErrorCode>>") -> ref "core:prelude/types.wado//Result<unit,ErrorCode>";  // TypeId(79)
+type "functype//core:prelude/types.wado/AsyncCall<Result<unit,ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<Result<unit,ErrorCode>>") -> ref "core:prelude/types.wado//Result<unit,ErrorCode>";  // TypeId(79)
 
-type "functype//core:prelude/types.wado/Subtask<Result<DescriptorStat,ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//Subtask<Result<DescriptorStat,ErrorCode>>") -> ref "core:prelude/types.wado//Result<DescriptorStat,ErrorCode>";  // TypeId(80)
+type "functype//core:prelude/types.wado/AsyncCall<Result<DescriptorStat,ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<Result<DescriptorStat,ErrorCode>>") -> ref "core:prelude/types.wado//Result<DescriptorStat,ErrorCode>";  // TypeId(80)
 
-type "functype//core:prelude/types.wado/Subtask<Result<Descriptor,ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//Subtask<Result<Descriptor,ErrorCode>>") -> ref "core:prelude/types.wado//Result<Descriptor,ErrorCode>";  // TypeId(81)
+type "functype//core:prelude/types.wado/AsyncCall<Result<Descriptor,ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<Result<Descriptor,ErrorCode>>") -> ref "core:prelude/types.wado//Result<Descriptor,ErrorCode>";  // TypeId(81)
 
 type "functype//core:prelude/array.wado/Array<u8>::push" = fn(ref "core:prelude//Array<u8>", u8);  // TypeId(82)
 
@@ -453,7 +453,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/run"() with Stdou
         break __inline_Array_Tuple_Descriptor_String___IndexValue_i32___index_value_3: builtin::array_get<ref "tuple//[Descriptor, String]">(dirs.repr, 0);
         unreachable;
     }.0;
-    file_result = "core:prelude/types.wado/Subtask<Result<Descriptor,ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Descriptor_open_at"(dir, 0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("set_size_test.txt"), used: 17 }, 9, 3));
+    file_result = "core:prelude/types.wado/AsyncCall<Result<Descriptor,ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Descriptor_open_at"(dir, 0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("set_size_test.txt"), used: 17 }, 9, 3));
     if ref.test "core:prelude/types.wado//Result<Descriptor,ErrorCode>::Ok"(file_result) {
         file = ref.cast "core:prelude/types.wado//Result<Descriptor,ErrorCode>::Ok"(file_result).payload_0;
         data = __seq_lit: block -> ref "core:prelude//Array<u8>" {
@@ -462,7 +462,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/run"() with Stdou
             unreachable;
         };
         "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/write_bytes"(file, data);
-        stat1 = "core:prelude/types.wado/Subtask<Result<DescriptorStat,ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Descriptor_stat"(file));
+        stat1 = "core:prelude/types.wado/AsyncCall<Result<DescriptorStat,ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Descriptor_stat"(file));
         if ref.test "core:prelude/types.wado//Result<DescriptorStat,ErrorCode>::Ok"(stat1) {
             s_7 = ref.cast "core:prelude/types.wado//Result<DescriptorStat,ErrorCode>::Ok"(stat1).payload_0;
             if s_7.size == 10_i64 {
@@ -480,14 +480,14 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/run"() with Stdou
                 });
             }
         }
-        trunc_result = "core:prelude/types.wado/Subtask<Result<unit,ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Descriptor_set_size"(file, 5_i64));
+        trunc_result = "core:prelude/types.wado/AsyncCall<Result<unit,ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Descriptor_set_size"(file, 5_i64));
         if trunc_result.discriminant == 0 {
             "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("set_size: truncate to 5 succeeded"), used: 33 });
         } else {
             "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("set_size: truncate failed"), used: 25 });
             return;
         }
-        stat2 = "core:prelude/types.wado/Subtask<Result<DescriptorStat,ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Descriptor_stat"(file));
+        stat2 = "core:prelude/types.wado/AsyncCall<Result<DescriptorStat,ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Descriptor_stat"(file));
         if ref.test "core:prelude/types.wado//Result<DescriptorStat,ErrorCode>::Ok"(stat2) {
             s_11 = ref.cast "core:prelude/types.wado//Result<DescriptorStat,ErrorCode>::Ok"(stat2).payload_0;
             if s_11.size == 5_i64 {
@@ -574,13 +574,13 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/run"() with Stdou
                 unreachable;
             });
         }
-        extend_result = "core:prelude/types.wado/Subtask<Result<unit,ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Descriptor_set_size"(file, 8_i64));
+        extend_result = "core:prelude/types.wado/AsyncCall<Result<unit,ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Descriptor_set_size"(file, 8_i64));
         if extend_result.discriminant == 0 {
             "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("set_size: extend to 8 succeeded"), used: 31 });
         } else {
             "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("set_size: extend failed"), used: 23 });
         }
-        stat3 = "core:prelude/types.wado/Subtask<Result<DescriptorStat,ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Descriptor_stat"(file));
+        stat3 = "core:prelude/types.wado/AsyncCall<Result<DescriptorStat,ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Descriptor_stat"(file));
         if ref.test "core:prelude/types.wado//Result<DescriptorStat,ErrorCode>::Ok"(stat3) {
             s_16 = ref.cast "core:prelude/types.wado//Result<DescriptorStat,ErrorCode>::Ok"(stat3).payload_0;
             if s_16.size == 8_i64 {
@@ -598,7 +598,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/run"() with Stdou
                 });
             }
         }
-        drop("core:prelude/types.wado/Subtask<Result<unit,ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Descriptor_unlink_file_at"(dir, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("set_size_test.txt"), used: 17 })));
+        drop("core:prelude/types.wado/AsyncCall<Result<unit,ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Descriptor_unlink_file_at"(dir, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("set_size_test.txt"), used: 17 })));
     } else {
         "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("failed to create set_size_test.txt"), used: 34 });
     }
@@ -689,7 +689,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Des
     builtin::store_u8(__params_buf + 16, open_flags);
     builtin::store_u8(__params_buf + 17, flags);
     __subtask_packed = "wasi/wasi:filesystem/Descriptor::open_at"(__params_buf, __async_outptr);
-    return struct.new "core:prelude/types.wado//Subtask<Result<Descriptor,ErrorCode>>" { __cm_packed: __subtask_packed, __cm_outptr: __async_outptr, __cm_size: 20, __cm_align: 4 };
+    return struct.new "core:prelude/types.wado//AsyncCall<Result<Descriptor,ErrorCode>>" { __cm_packed: __subtask_packed, __cm_outptr: __async_outptr, __cm_size: 20, __cm_align: 4 };
 }
 
 fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Descriptor_stat"(self) with Descriptor {
@@ -697,7 +697,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Des
     let __subtask_packed: i32;
     __async_outptr = "mem/realloc"(0, 0, 8, 112);
     __subtask_packed = "wasi/wasi:filesystem/Descriptor::stat"(self, __async_outptr);
-    return struct.new "core:prelude/types.wado//Subtask<Result<DescriptorStat,ErrorCode>>" { __cm_packed: __subtask_packed, __cm_outptr: __async_outptr, __cm_size: 112, __cm_align: 8 };
+    return struct.new "core:prelude/types.wado//AsyncCall<Result<DescriptorStat,ErrorCode>>" { __cm_packed: __subtask_packed, __cm_outptr: __async_outptr, __cm_size: 112, __cm_align: 8 };
 }
 
 fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Descriptor_set_size"(self, size) with Descriptor {
@@ -705,7 +705,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Des
     let __subtask_packed: i32;
     __async_outptr = "mem/realloc"(0, 0, 4, 20);
     __subtask_packed = "wasi/wasi:filesystem/Descriptor::set_size"(self, size, __async_outptr);
-    return struct.new "core:prelude/types.wado//Subtask<Result<unit,ErrorCode>>" { __cm_packed: __subtask_packed, __cm_outptr: __async_outptr, __cm_size: 20, __cm_align: 4 };
+    return struct.new "core:prelude/types.wado//AsyncCall<Result<unit,ErrorCode>>" { __cm_packed: __subtask_packed, __cm_outptr: __async_outptr, __cm_size: 20, __cm_align: 4 };
 }
 
 fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Descriptor_unlink_file_at"(self, path) with Descriptor {
@@ -715,7 +715,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Des
     __path_packed = "core:internal/cm_lower_string"(path);
     __async_outptr = "mem/realloc"(0, 0, 4, 20);
     __subtask_packed = "wasi/wasi:filesystem/Descriptor::unlink_file_at"(self, builtin::i32_wrap_i64(__path_packed), builtin::i32_wrap_i64(__path_packed >> 32_i64), __async_outptr);
-    return struct.new "core:prelude/types.wado//Subtask<Result<unit,ErrorCode>>" { __cm_packed: __subtask_packed, __cm_outptr: __async_outptr, __cm_size: 20, __cm_align: 4 };
+    return struct.new "core:prelude/types.wado//AsyncCall<Result<unit,ErrorCode>>" { __cm_packed: __subtask_packed, __cm_outptr: __async_outptr, __cm_size: 20, __cm_align: 4 };
 }
 
 fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_export__run"() {
@@ -1319,7 +1319,7 @@ fn "core:prelude/array.wado/Array<Tuple<Descriptor,String>>::grow"(self) {
     self.repr = new_repr;
 }
 
-fn "core:prelude/types.wado/Subtask<Result<unit,ErrorCode>>::wait"(self) {
+fn "core:prelude/types.wado/AsyncCall<Result<unit,ErrorCode>>::wait"(self) {
     let handle: i32;
     let raw: i32;
     let ws: i32;
@@ -1457,7 +1457,7 @@ fn "core:prelude/types.wado/Subtask<Result<unit,ErrorCode>>::wait"(self) {
     return result;
 }
 
-fn "core:prelude/types.wado/Subtask<Result<DescriptorStat,ErrorCode>>::wait"(self) {
+fn "core:prelude/types.wado/AsyncCall<Result<DescriptorStat,ErrorCode>>::wait"(self) {
     let handle: i32;
     let raw: i32;
     let ws: i32;
@@ -1678,7 +1678,7 @@ fn "core:prelude/types.wado/Subtask<Result<DescriptorStat,ErrorCode>>::wait"(sel
     return result;
 }
 
-fn "core:prelude/types.wado/Subtask<Result<Descriptor,ErrorCode>>::wait"(self) {
+fn "core:prelude/types.wado/AsyncCall<Result<Descriptor,ErrorCode>>::wait"(self) {
     let handle: i32;
     let raw: i32;
     let ws: i32;

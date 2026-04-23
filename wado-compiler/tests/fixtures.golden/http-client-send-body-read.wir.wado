@@ -164,7 +164,7 @@ struct core:prelude/array.wado//ArrayIter<u8> {  // TypeId(24)
     mut index: i32,
 }
 
-struct core:prelude/types.wado//Subtask<Result<Response,ErrorCode>> {  // TypeId(25)
+struct core:prelude/types.wado//AsyncCall<Result<Response,ErrorCode>> {  // TypeId(25)
     mut __cm_packed: i32,
     mut __cm_outptr: i32,
     mut __cm_size: i32,
@@ -313,7 +313,7 @@ type "functype//wado-compiler/tests/fixtures/http-client-send-body-read.wado/__c
 
 type "functype//wado-compiler/tests/fixtures/http-client-send-body-read.wado/__cm_binding__Request_set_path_with_query" = fn(i32, ref null "core:prelude/string.wado//String") -> ref "core:prelude/types.wado//Result<unit,unit>";  // TypeId(66)
 
-type "functype//wado-compiler/tests/fixtures/http-client-send-body-read.wado/__cm_binding__Client_send" = fn(i32) -> ref "core:prelude/types.wado//Subtask<Result<Response,ErrorCode>>";  // TypeId(67)
+type "functype//wado-compiler/tests/fixtures/http-client-send-body-read.wado/__cm_binding__Client_send" = fn(i32) -> ref "core:prelude/types.wado//AsyncCall<Result<Response,ErrorCode>>";  // TypeId(67)
 
 type "functype//wado-compiler/tests/fixtures/http-client-send-body-read.wado/__cm_export__handle" = fn(i32);  // TypeId(68)
 
@@ -349,7 +349,7 @@ type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/st
 
 type "functype//core:prelude/string.wado/String::from_utf8<Array<u8>>" = fn(ref "core:prelude//Array<u8>") -> ref "core:prelude/types.wado//Result<String,String>";  // TypeId(84)
 
-type "functype//core:prelude/types.wado/Subtask<Result<Response,ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//Subtask<Result<Response,ErrorCode>>") -> ref "core:prelude/types.wado//Result<Response,ErrorCode>";  // TypeId(85)
+type "functype//core:prelude/types.wado/AsyncCall<Result<Response,ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<Result<Response,ErrorCode>>") -> ref "core:prelude/types.wado//Result<Response,ErrorCode>";  // TypeId(85)
 
 type "functype//core:prelude/array.wado/Array<u8>::push" = fn(ref "core:prelude//Array<u8>", u8);  // TypeId(86)
 
@@ -577,7 +577,7 @@ fn "wado-compiler/tests/fixtures/http-client-send-body-read.wado/handle"() with 
     drop("wado-compiler/tests/fixtures/http-client-send-body-read.wado/__cm_binding__Request_set_scheme"(out_req, struct.new "wasi:http/types.wado//Scheme" { 0 }));
     drop("wado-compiler/tests/fixtures/http-client-send-body-read.wado/__cm_binding__Request_set_authority"(out_req, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("localhost"), used: 9 }));
     drop("wado-compiler/tests/fixtures/http-client-send-body-read.wado/__cm_binding__Request_set_path_with_query"(out_req, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("/upstream"), used: 9 }));
-    upstream_result = "core:prelude/types.wado/Subtask<Result<Response,ErrorCode>>::wait"("wado-compiler/tests/fixtures/http-client-send-body-read.wado/__cm_binding__Client_send"(out_req));
+    upstream_result = "core:prelude/types.wado/AsyncCall<Result<Response,ErrorCode>>::wait"("wado-compiler/tests/fixtures/http-client-send-body-read.wado/__cm_binding__Client_send"(out_req));
     let __fw_write_ptr_2: i32;
     let __fw_handle_2: i32;
     let __fw_result_2: i32;
@@ -1111,7 +1111,7 @@ fn "wado-compiler/tests/fixtures/http-client-send-body-read.wado/__cm_binding__C
     let __subtask_packed: i32;
     __async_outptr = "mem/realloc"(0, 0, 8, 40);
     __subtask_packed = "wasi/wasi:http/Client::send"(request, __async_outptr);
-    return struct.new "core:prelude/types.wado//Subtask<Result<Response,ErrorCode>>" { __cm_packed: __subtask_packed, __cm_outptr: __async_outptr, __cm_size: 40, __cm_align: 8 };
+    return struct.new "core:prelude/types.wado//AsyncCall<Result<Response,ErrorCode>>" { __cm_packed: __subtask_packed, __cm_outptr: __async_outptr, __cm_size: 40, __cm_align: 8 };
 }
 
 fn "wado-compiler/tests/fixtures/http-client-send-body-read.wado/__cm_binding__Response_consume_body"(this, res) with Response {
@@ -1591,7 +1591,7 @@ fn "core:prelude/array.wado/ArrayIter<u8>^Iterator::next"(self) {
     return 0, item;
 }
 
-fn "core:prelude/types.wado/Subtask<Result<Response,ErrorCode>>::wait"(self) {
+fn "core:prelude/types.wado/AsyncCall<Result<Response,ErrorCode>>::wait"(self) {
     let handle: i32;
     let raw: i32;
     let ws: i32;

@@ -171,7 +171,7 @@ struct wasi:http/types.wado//ErrorCode::InternalError {  // TypeId(25)
     payload_0: ref null "core:prelude/string.wado//String",
 }
 
-struct core:prelude/types.wado//Subtask<Result<Response,ErrorCode>> {  // TypeId(26)
+struct core:prelude/types.wado//AsyncCall<Result<Response,ErrorCode>> {  // TypeId(26)
     mut __cm_packed: i32,
     mut __cm_outptr: i32,
     mut __cm_size: i32,
@@ -301,7 +301,7 @@ type "functype//wado-compiler/tests/fixtures/http-client-send-with-body.wado/__c
 
 type "functype//wado-compiler/tests/fixtures/http-client-send-with-body.wado/__cm_binding__Request_set_path_with_query" = fn(i32, ref null "core:prelude/string.wado//String") -> ref "core:prelude/types.wado//Result<unit,unit>";  // TypeId(62)
 
-type "functype//wado-compiler/tests/fixtures/http-client-send-with-body.wado/__cm_binding__Client_send" = fn(i32) -> ref "core:prelude/types.wado//Subtask<Result<Response,ErrorCode>>";  // TypeId(63)
+type "functype//wado-compiler/tests/fixtures/http-client-send-with-body.wado/__cm_binding__Client_send" = fn(i32) -> ref "core:prelude/types.wado//AsyncCall<Result<Response,ErrorCode>>";  // TypeId(63)
 
 type "functype//wado-compiler/tests/fixtures/http-client-send-with-body.wado/__cm_export__handle" = fn(i32);  // TypeId(64)
 
@@ -319,7 +319,7 @@ type "functype//core:internal/cm_stream_write_u8" = fn(i32, ref "core:prelude//A
 
 type "functype//core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect" = fn(ref "core:prelude/string.wado//StrUtf8ByteIter") -> ref "core:prelude//Array<u8>";  // TypeId(71)
 
-type "functype//core:prelude/types.wado/Subtask<Result<Response,ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//Subtask<Result<Response,ErrorCode>>") -> ref "core:prelude/types.wado//Result<Response,ErrorCode>";  // TypeId(72)
+type "functype//core:prelude/types.wado/AsyncCall<Result<Response,ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<Result<Response,ErrorCode>>") -> ref "core:prelude/types.wado//Result<Response,ErrorCode>";  // TypeId(72)
 
 type "functype//core:prelude/array.wado/Array<u8>::push" = fn(ref "core:prelude//Array<u8>", u8);  // TypeId(73)
 
@@ -369,7 +369,7 @@ fn "wado-compiler/tests/fixtures/http-client-send-with-body.wado/handle"() with 
     let trailers_tx: i32;
     let headers: i32;
     let out_req: i32;
-    let subtask: ref "core:prelude/types.wado//Subtask<Result<Response,ErrorCode>>";
+    let subtask: ref "core:prelude/types.wado//AsyncCall<Result<Response,ErrorCode>>";
     let result: ref "core:prelude/types.wado//Result<Response,ErrorCode>";
     let __tv_1: i32;
     let __tv_2: i32;
@@ -554,7 +554,7 @@ fn "wado-compiler/tests/fixtures/http-client-send-with-body.wado/handle"() with 
         drop("mem/realloc"(__fw_evt_3, 8, 4, 0));
     }
     drop("mem/realloc"(__fw_write_ptr_3, 40, 8, 0));
-    result = "core:prelude/types.wado/Subtask<Result<Response,ErrorCode>>::wait"(subtask);
+    result = "core:prelude/types.wado/AsyncCall<Result<Response,ErrorCode>>::wait"(subtask);
     __tv_1 = 0;
     __tv_2 = 0;
     __tv_3 = 0_i64;
@@ -1041,7 +1041,7 @@ fn "wado-compiler/tests/fixtures/http-client-send-with-body.wado/__cm_binding__C
     let __subtask_packed: i32;
     __async_outptr = "mem/realloc"(0, 0, 8, 40);
     __subtask_packed = "wasi/wasi:http/Client::send"(request, __async_outptr);
-    return struct.new "core:prelude/types.wado//Subtask<Result<Response,ErrorCode>>" { __cm_packed: __subtask_packed, __cm_outptr: __async_outptr, __cm_size: 40, __cm_align: 8 };
+    return struct.new "core:prelude/types.wado//AsyncCall<Result<Response,ErrorCode>>" { __cm_packed: __subtask_packed, __cm_outptr: __async_outptr, __cm_size: 40, __cm_align: 8 };
 }
 
 fn "wado-compiler/tests/fixtures/http-client-send-with-body.wado/__cm_export__handle"(request) {
@@ -1185,7 +1185,7 @@ fn "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(self) {
     return result;
 }
 
-fn "core:prelude/types.wado/Subtask<Result<Response,ErrorCode>>::wait"(self) {
+fn "core:prelude/types.wado/AsyncCall<Result<Response,ErrorCode>>::wait"(self) {
     let handle: i32;
     let raw: i32;
     let ws: i32;
