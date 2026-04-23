@@ -471,7 +471,7 @@ let resp = Fetch::fetch(url, init).read();
 - [ ] TIR: add `default_expr: Option<TirExpr>` to `TirParam` and `TirField`
 - [ ] Trait resolution: propagate trait method defaults to call sites
 - [ ] Trait resolution: reject defaults in `impl` blocks for trait methods
-- [ ] Auto-derive `Default` for all-defaulted structs
+- [x] Auto-derive `Default` for all-defaulted structs (non-generic; generic structs are a follow-up)
 - [ ] Update `wado-from-idl` WebIDL mapping to emit defaults instead of `Option<T>`
 - [ ] Update `wado-from-idl` dictionary mapping to emit struct field defaults
 

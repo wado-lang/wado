@@ -147,6 +147,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
         }
 
+        // Structs auto-implement Default when every field has a declared
+        // default expression (`= expr`) — the synthesis pass emits the body.
+        if let ResolvedType::Struct { name, .. } = &resolved
+            && trait_name == "Default"
+            && let Some(info) = self.struct_fields.get(name)
+            && !info.fields.is_empty()
+            && info.field_defaults.iter().all(Option::is_some)
+        {
+            return true;
+        }
+
         // Generic structs auto-implement Eq/Ord when all fields implement the trait
         // (with type params substituted by concrete type args)
         if let ResolvedType::GenericInstance {

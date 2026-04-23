@@ -1,0 +1,22 @@
+// Test: when the user writes `impl Default for S`, it takes precedence
+// over the auto-derived impl even if every field has a declared default.
+
+struct Config {
+    host: String = "localhost",
+    port: i32 = 8080,
+}
+
+impl Default for Config {
+    fn default() -> Config {
+        return Config { host: "override", port: 1 };
+    }
+}
+
+export fn run() {
+    let c = Config::default();
+    assert c.host == "override";
+    assert c.port == 1;
+}
+
+__DATA__
+{"stdout": ""}
