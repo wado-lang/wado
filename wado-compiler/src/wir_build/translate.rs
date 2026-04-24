@@ -700,10 +700,12 @@ impl FunctionTranslator<'_, '_> {
                 local_index,
                 value,
                 is_mut,
-                skip_value_copy,
                 ..
             } => {
-                // Track immutable locals for value-copy elision on subsequent bindings.
+                // `immutable_locals` used to feed the WIR-level `is_source_immutable`
+                // shortcut; keep the tracking for the residual reader
+                // (`wir_build::value_copy::build_value_copy` no longer needs it but
+                // removing the field is follow-up cleanup).
                 if !is_mut {
                     self.immutable_locals.insert(*local_index);
                 }
@@ -1186,7 +1188,7 @@ impl FunctionTranslator<'_, '_> {
             TirExprKind::Assign { target, value } => {
                 let val = self.translate_expr(value);
                 match &target.kind {
-                    TirExprKind::Local { index, name } => {
+                    TirExprKind::Local { index, .. } => {
                         // Unit-type locals have no Wasm representation
                         if target.type_id == TypeTable::UNIT {
                             return val;
