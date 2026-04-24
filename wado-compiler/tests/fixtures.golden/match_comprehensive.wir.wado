@@ -491,9 +491,7 @@ fn "wado-compiler/tests/fixtures/match_comprehensive.wado/match_in_loop"() with 
                     __cast_1 = ref.cast "core:prelude/types.wado//Option<i32>::Some"(item);
                     __local_5 = __cast_1.payload_0;
                     sum = sum + __local_5;
-                } else if item.discriminant == 1 {
                 } else {
-                    unreachable;
                 }
             } else {
                 break b19;
@@ -673,8 +671,8 @@ fn "wado-compiler/tests/fixtures/match_comprehensive.wado/if_let_with_else"() wi
         unreachable;
     };
     __iter_2 = struct.new "core:prelude/array.wado//ArrayIter<Option<i32>>" { repr: values.repr, used: 3, index: 0 };
-    b36: block {
-        l37: loop {
+    b35: block {
+        l36: loop {
             __pattern_temp_0 = "core:prelude/array.wado/ArrayIter<Option<i32>>^Iterator::next"(__iter_2);
             if ref.is_null(__pattern_temp_0) == 0 {
                 v = ref.as_non_null(__pattern_temp_0);
@@ -695,9 +693,9 @@ fn "wado-compiler/tests/fixtures/match_comprehensive.wado/if_let_with_else"() wi
                     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("nothing"), used: 7 });
                 }
             } else {
-                break b36;
+                break b35;
             }
-            continue l37;
+            continue l36;
         };
     };
 }
@@ -751,13 +749,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     __for_1: block {
         i = 0;
         block {
-            l42: loop {
+            l41: loop {
                 if i >= len {
                     break __for_1;
                 }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l42;
+                continue l41;
             };
         };
     };
@@ -809,13 +807,13 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
     __for_1: block {
         t = val;
         block {
-            l47: loop {
+            l46: loop {
                 if t <= 0_i64 {
                     break __for_1;
                 }
                 n = n + 1;
                 t = t / 10_i64;
-                continue l47;
+                continue l46;
             };
         };
     };
@@ -832,14 +830,14 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         __for_2: block {
             temp = abs_val;
             block {
-                l51: loop {
+                l50: loop {
                     if temp <= 0_i64 {
                         break __for_2;
                     }
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l51;
+                    continue l50;
                 };
             };
         };
@@ -952,13 +950,13 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l63: loop {
+            l62: loop {
                 if i >= n {
                     break __for_0;
                 }
                 "core:prelude/string.wado/String::push"(_licm_buf_4, c);
                 i = i + 1;
-                continue l63;
+                continue l62;
             };
         };
     };
@@ -1120,13 +1118,13 @@ fn "core:prelude/array.wado/Array<Option<i32>>::grow"(self) {
     __for_0: block {
         i = 0;
         block {
-            l89: loop {
+            l88: loop {
                 if i >= used {
                     break __for_0;
                 }
                 builtin::array_set<ref "core:prelude/types.wado//Option<i32>">(new_repr, i, builtin::array_get<ref "core:prelude/types.wado//Option<i32>">(old_repr, i));
                 i = i + 1;
-                continue l89;
+                continue l88;
             };
         };
     };
@@ -1173,13 +1171,13 @@ fn "core:prelude/array.wado/Array<Tree>::grow"(self) {
     __for_0: block {
         i = 0;
         block {
-            l94: loop {
+            l93: loop {
                 if i >= used {
                     break __for_0;
                 }
                 builtin::array_set<ref "wado-compiler/tests/fixtures/match_comprehensive.wado//Tree">(new_repr, i, builtin::array_get<ref "wado-compiler/tests/fixtures/match_comprehensive.wado//Tree">(old_repr, i));
                 i = i + 1;
-                continue l94;
+                continue l93;
             };
         };
     };

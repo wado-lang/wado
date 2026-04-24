@@ -229,7 +229,7 @@ fn "./sub/cross_module_treemap_variant_helper.wado/stringify"(v) {
             break __tmpl: __local_8;
             unreachable;
         };
-    } else if ref.test "./sub/cross_module_treemap_variant_helper.wado//Value::Obj"(__match_scrut_0) -> ref "core:prelude/string.wado//String" {
+    } else {
         let __cast_1: ref "./sub/cross_module_treemap_variant_helper.wado//Value::Obj";
         __cast_1 = ref.cast "./sub/cross_module_treemap_variant_helper.wado//Value::Obj"(__match_scrut_0);
         __local_2 = __cast_1.payload_0;
@@ -238,7 +238,7 @@ fn "./sub/cross_module_treemap_variant_helper.wado/stringify"(v) {
         __for_0: block {
             __local_5 = 0;
             block {
-                l3: loop {
+                l2: loop {
                     if __local_5 >= __local_4.used {
                         break __for_0;
                     }
@@ -272,7 +272,7 @@ fn "./sub/cross_module_treemap_variant_helper.wado/stringify"(v) {
                         unreachable;
                     };
                     __local_5 = __local_5 + 1;
-                    continue l3;
+                    continue l2;
                 };
             };
         };
@@ -283,8 +283,6 @@ fn "./sub/cross_module_treemap_variant_helper.wado/stringify"(v) {
             break __tmpl: __local_11;
             unreachable;
         };
-    } else {
-        unreachable;
     });
 }
 
@@ -323,13 +321,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     __for_1: block {
         i = 0;
         block {
-            l9: loop {
+            l8: loop {
                 if i >= len {
                     break __for_1;
                 }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l9;
+                continue l8;
             };
         };
     };
@@ -461,7 +459,7 @@ fn "core:prelude/string.wado/String^Eq::eq_bytes"(a, b, len) {
     __for_1: block {
         i = 0;
         block {
-            l18: loop {
+            l17: loop {
                 if i >= len {
                     break __for_1;
                 }
@@ -469,7 +467,7 @@ fn "core:prelude/string.wado/String^Eq::eq_bytes"(a, b, len) {
                     return 0;
                 }
                 i = i + 1;
-                continue l18;
+                continue l17;
             };
         };
     };
@@ -493,7 +491,7 @@ fn "core:prelude/string.wado/String^Ord::cmp"(self, other) {
     __for_2: block {
         i = 0;
         block {
-            l22: loop {
+            l21: loop {
                 if i >= min_len {
                     break __for_2;
                 }
@@ -506,7 +504,7 @@ fn "core:prelude/string.wado/String^Ord::cmp"(self, other) {
                     return 2;
                 }
                 i = i + 1;
-                continue l22;
+                continue l21;
             };
         };
     };
@@ -648,13 +646,13 @@ fn "core:prelude/array.wado/Array<TreeMapEntry<String,Value>>::grow"(self) {
     __for_0: block {
         i = 0;
         block {
-            l42: loop {
+            l41: loop {
                 if i >= used {
                     break __for_0;
                 }
                 builtin::array_set<ref "core:collections//TreeMapEntry<String,Value>">(new_repr, i, builtin::array_get<ref "core:collections//TreeMapEntry<String,Value>">(old_repr, i));
                 i = i + 1;
-                continue l42;
+                continue l41;
             };
         };
     };
@@ -674,8 +672,8 @@ fn "core:collections/TreeMap<String,Value>::find_index"(self, key) {
     _licm_entries_8 = self.entries;
     _licm_used_9 = _licm_entries_8.used;
     _licm_repr_10 = _licm_entries_8.repr;
-    b44: block {
-        l45: loop {
+    b43: block {
+        l44: loop {
             __pattern_temp_0 = value_copy "core:prelude/types.wado//Option<TreeMapNode<String>>"(current);
             if ref.is_null(__pattern_temp_0) == 0 {
                 n = ref.as_non_null(__pattern_temp_0);
@@ -700,9 +698,9 @@ fn "core:collections/TreeMap<String,Value>::find_index"(self, key) {
                     current = n.right;
                 }
             } else {
-                break b44;
+                break b43;
             }
-            continue l45;
+            continue l44;
         };
     };
     return -1;
@@ -735,8 +733,8 @@ fn "core:collections/TreeMap<String,Value>::entries"(self) {
         break __inline_Array_TreeMapEntry_String_Value___IntoIterator__into_iter_3: struct.new "core:prelude/array.wado//ArrayIter<TreeMapEntry<String,Value>>" { repr: __local_9.repr, used: __local_9.used, index: 0 };
         unreachable;
     };
-    b52: block {
-        l53: loop {
+    b51: block {
+        l52: loop {
             __pattern_temp_0 = "core:prelude/array.wado/ArrayIter<TreeMapEntry<String,Value>>^Iterator::next"(__iter_3);
             if ref.is_null(__pattern_temp_0) == 0 {
                 entry = value_copy "core:collections//TreeMapEntry<String,Value>"(ref.as_non_null(__pattern_temp_0));
@@ -744,9 +742,9 @@ fn "core:collections/TreeMap<String,Value>::entries"(self) {
                     "core:prelude/array.wado/Array<Tuple<String,Value>>::push"(result, struct.new "tuple//[String, Value]" { 0: entry.key, 1: entry.value });
                 }
             } else {
-                break b52;
+                break b51;
             }
-            continue l53;
+            continue l52;
         };
     };
     return result;
@@ -782,13 +780,13 @@ fn "core:prelude/array.wado/Array<Tuple<String,Value>>::grow"(self) {
     __for_0: block {
         i = 0;
         block {
-            l58: loop {
+            l57: loop {
                 if i >= used {
                     break __for_0;
                 }
                 builtin::array_set<ref "tuple//[String, Value]">(new_repr, i, builtin::array_get<ref "tuple//[String, Value]">(old_repr, i));
                 i = i + 1;
-                continue l58;
+                continue l57;
             };
         };
     };

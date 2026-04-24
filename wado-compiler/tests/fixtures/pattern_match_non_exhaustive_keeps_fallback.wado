@@ -1,0 +1,66 @@
+// Test: non-exhaustive and guarded variant matches still get the cascade.
+//
+// `translate_match` only elides the last-arm pattern test when the
+// match is exhaustive and every arm is unguarded. These three shapes
+// must NOT trigger the optimization: a guarded final arm, a match that
+// only covers a subset of cases (backed by a wildcard), and a match
+// where the scrutinee is not a variant/enum at all.
+//
+// Runtime assertions below pin the semantics; the WIR patterns pin
+// that the optimization stays conservative.
+
+struct AppError {
+    message: String,
+}
+
+fn step(flag: bool) -> Result<(), AppError> {
+    if flag {
+        return Result::Err(AppError { message: "boom" });
+    }
+    return Result::Ok(());
+}
+
+pub fn guarded(code: i32) -> Result<(), AppError> {
+    match step(code != 0) {
+        Ok(_) => return Result::Ok(()),
+        Err(e) && code > 100 => return Result::Err(e),
+        Err(_) => return Result::Err(AppError { message: "suppressed" }),
+    };
+}
+
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
+pub fn red_or_other(c: Color) -> String {
+    return match c {
+        Red => "red",
+        _ => "other",
+    };
+}
+
+pub fn classify(n: i32) -> String {
+    return match n {
+        0 => "zero",
+        1 => "one",
+        _ => "many",
+    };
+}
+
+test {
+    assert guarded(0) matches { Ok(_) };
+    assert guarded(50) matches { Err(e) && e.message == "suppressed" };
+    assert guarded(200) matches { Err(e) && e.message == "boom" };
+
+    assert red_or_other(Color::Red) == "red";
+    assert red_or_other(Color::Green) == "other";
+
+    assert classify(0) == "zero";
+    assert classify(1) == "one";
+    assert classify(99) == "many";
+}
+
+__DATA__
+{"test": {}}

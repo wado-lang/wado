@@ -13,6 +13,23 @@ use crate::wir::{WirInstr, WirType};
 
 use super::translate::{FunctionTranslator, LabelEntry};
 
+/// Case enumeration for a variant or enum scrutinee, used to check whether a
+/// set of match arms exhaustively covers every case.
+struct CaseIndexer {
+    /// Case names in declaration order — present for variants so `Variant`
+    /// patterns can be mapped to indices by name. `None` for enums, which
+    /// carry their case index directly on the pattern.
+    names: Option<Vec<String>>,
+    /// Total number of cases in the scrutinee type.
+    total: usize,
+}
+
+impl CaseIndexer {
+    fn by_name(&self, case_name: &str) -> Option<usize> {
+        self.names.as_ref()?.iter().position(|n| n == case_name)
+    }
+}
+
 impl FunctionTranslator<'_, '_> {
     /// Translate switch expression using `br_table`.
     pub(super) fn translate_switch(
@@ -250,6 +267,12 @@ impl FunctionTranslator<'_, '_> {
             .ctx
             .type_id_to_wir_type(self.type_table, scrutinee.type_id);
 
+        // Precompute, per source-order arm, whether it will be lowered as
+        // irrefutable (body only, no surrounding `If`). Both the `if_depths`
+        // depth counter below and the emission loop that follows consume this
+        // slice, so the two views cannot disagree.
+        let emitted_as_irrefutable = self.compute_emitted_as_irrefutable(scrutinee.type_id, arms);
+
         // Build the if-else chain from inside out (last arm first)
         let mut result = WirInstr::Unreachable; // fallback: non-exhaustive
 
@@ -261,14 +284,7 @@ impl FunctionTranslator<'_, '_> {
         let mut if_depths = Vec::with_capacity(arms.len());
         {
             let mut depth = 0u32;
-            for arm in arms {
-                let is_irrefutable = matches!(
-                    arm.pattern,
-                    TirPattern::Wildcard
-                        | TirPattern::Binding { .. }
-                        | TirPattern::Struct { .. }
-                        | TirPattern::Tuple(_, _)
-                ) && arm.guard.is_none();
+            for (idx, arm) in arms.iter().enumerate() {
                 // When the pattern is trivially true (Binding/Wildcard) and a guard
                 // is present, we fold into a single If instead of nested 2-level If,
                 // so only count 1 depth instead of 2.
@@ -276,7 +292,7 @@ impl FunctionTranslator<'_, '_> {
                     arm.pattern,
                     TirPattern::Wildcard | TirPattern::Binding { .. }
                 );
-                if !is_irrefutable {
+                if !emitted_as_irrefutable[idx] {
                     depth += 1;
                     if arm.guard.is_some() && !pattern_trivially_true {
                         depth += 1; // guarded arms with non-trivial pattern create an extra inner If
@@ -341,14 +357,11 @@ impl FunctionTranslator<'_, '_> {
                 scrutinee.type_id,
             );
 
-            // For irrefutable patterns (wildcard, binding, struct), just use the body
-            let is_irrefutable = matches!(
-                arm.pattern,
-                TirPattern::Wildcard
-                    | TirPattern::Binding { .. }
-                    | TirPattern::Struct { .. }
-                    | TirPattern::Tuple(_, _)
-            );
+            // `emitted_as_irrefutable[source_idx]` already folds in both the
+            // base irrefutable patterns (wildcard/binding/struct/tuple) and the
+            // last-arm-of-exhaustive-match case, so the depth counter above
+            // and this check stay in lockstep.
+            let is_irrefutable = emitted_as_irrefutable[source_idx];
 
             if is_irrefutable && arm.guard.is_none() {
                 // This arm always matches — it becomes the fallback
@@ -445,6 +458,173 @@ impl FunctionTranslator<'_, '_> {
             },
             result,
         ])
+    }
+
+    /// Returns, per source-order arm, whether that arm will be lowered as
+    /// irrefutable — i.e. emitted as just its body (with pattern bindings)
+    /// and no surrounding `If` test.
+    ///
+    /// Two sources:
+    /// * The pattern itself is always true (wildcard / binding / struct /
+    ///   tuple) and the arm has no guard.
+    /// * The arm is the LAST arm of an exhaustive variant-or-enum match,
+    ///   every earlier arm has failed by the time control reaches it, and
+    ///   the arm has no guard. The pattern test and the trailing
+    ///   `unreachable` fallback are both dead in that case.
+    ///
+    /// The caller uses the resulting `Vec<bool>` both for depth accounting
+    /// and for emission, so the two stages cannot drift.
+    fn compute_emitted_as_irrefutable(
+        &self,
+        scrut_type: TypeId,
+        arms: &[TirMatchArm],
+    ) -> Vec<bool> {
+        let mut out: Vec<bool> = arms
+            .iter()
+            .map(|arm| {
+                matches!(
+                    arm.pattern,
+                    TirPattern::Wildcard
+                        | TirPattern::Binding { .. }
+                        | TirPattern::Struct { .. }
+                        | TirPattern::Tuple(_, _)
+                ) && arm.guard.is_none()
+            })
+            .collect();
+        if let Some(last_idx) = arms.len().checked_sub(1)
+            && !out[last_idx]
+            && arms[last_idx].guard.is_none()
+            && self.match_is_exhaustive(scrut_type, arms)
+        {
+            out[last_idx] = true;
+        }
+        out
+    }
+
+    /// Returns true when `arms` exhaustively cover every case of the
+    /// scrutinee's variant or enum type using distinct, unguarded patterns.
+    ///
+    /// Accepts `TirPattern::Variant`, `TirPattern::Enum`, and one level of
+    /// `TirPattern::Or` whose alternatives are themselves `Variant`/`Enum`
+    /// patterns. Anything else (wildcards, literals, ranges, guards, nested
+    /// Ors with non-Variant/Enum alternatives) bails out.
+    fn match_is_exhaustive(&self, scrut_type: TypeId, arms: &[TirMatchArm]) -> bool {
+        if arms.is_empty() {
+            return false;
+        }
+        if arms.iter().any(|a| a.guard.is_some()) {
+            return false;
+        }
+
+        let Some(index_of) = self.case_indexer(scrut_type) else {
+            return false;
+        };
+        let total_cases = index_of.total;
+
+        let mut seen = vec![false; total_cases];
+        let mut covered = 0usize;
+        for arm in arms {
+            if !self.arm_pattern_covers_cases(&arm.pattern, &index_of, &mut seen, &mut covered) {
+                return false;
+            }
+        }
+        covered == total_cases
+    }
+
+    /// Walk a single arm's pattern (possibly an `Or`) and mark every case it
+    /// covers in `seen`. Returns `false` if the arm touches any case already
+    /// covered by a previous arm/alternative, or if it contains a pattern
+    /// shape outside the supported set.
+    fn arm_pattern_covers_cases(
+        &self,
+        pattern: &TirPattern,
+        index_of: &CaseIndexer,
+        seen: &mut [bool],
+        covered: &mut usize,
+    ) -> bool {
+        match pattern {
+            TirPattern::Variant { variant_name, .. } => {
+                let Some(i) = index_of.by_name(variant_name) else {
+                    return false;
+                };
+                self.record_case(i, seen, covered)
+            }
+            TirPattern::Enum { case_index, .. } => {
+                self.record_case(*case_index as usize, seen, covered)
+            }
+            TirPattern::Or(alts) => alts
+                .iter()
+                .all(|alt| self.arm_pattern_covers_cases(alt, index_of, seen, covered)),
+            _ => false,
+        }
+    }
+
+    fn record_case(&self, i: usize, seen: &mut [bool], covered: &mut usize) -> bool {
+        if i >= seen.len() || seen[i] {
+            return false;
+        }
+        seen[i] = true;
+        *covered += 1;
+        true
+    }
+
+    /// Resolve the scrutinee type to a list of case names (variant) or a bare
+    /// count (enum). Returns `None` for any type that isn't a concrete variant
+    /// or enum the compiler can enumerate here.
+    fn case_indexer(&self, scrut_type: TypeId) -> Option<CaseIndexer> {
+        match self.type_table.get(scrut_type) {
+            ResolvedType::Variant {
+                name,
+                module_source,
+                ..
+            } => self.variant_case_indexer(name, module_source),
+            ResolvedType::GenericInstance {
+                name,
+                module_source,
+                type_args,
+                ..
+            } => {
+                let type_arg_names: Vec<String> = type_args
+                    .iter()
+                    .map(|t| self.type_table.mangle_type_name(*t))
+                    .collect();
+                let mangled = crate::name::mangle_generic_name(name, &type_arg_names);
+                self.variant_case_indexer(&mangled, module_source)
+            }
+            ResolvedType::Enum {
+                name,
+                module_source,
+            } => self
+                .ctx
+                .package
+                .enums
+                .iter()
+                .find(|e| e.name == *name && e.module_source == *module_source)
+                .map(|e| CaseIndexer {
+                    names: None,
+                    total: e.cases.len(),
+                }),
+            _ => None,
+        }
+    }
+
+    fn variant_case_indexer(
+        &self,
+        variant_name: &str,
+        module_source: &crate::name::ModuleSource,
+    ) -> Option<CaseIndexer> {
+        let fq = format!("{module_source}//{variant_name}");
+        let variant_type_id = self.ctx.type_map.get(&fq)?;
+        let crate::wir::WirTypeDef::Variant(vt) = &self.ctx.types[variant_type_id.index() as usize]
+        else {
+            return None;
+        };
+        let names: Vec<String> = vt.cases.iter().map(|c| c.name.clone()).collect();
+        let total = names.len();
+        Some(CaseIndexer {
+            names: Some(names),
+            total,
+        })
     }
 
     /// Generate a condition expression for a pattern.

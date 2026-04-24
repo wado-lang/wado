@@ -1,0 +1,80 @@
+// Test: exhaustive variant / enum / Or match skips the last-arm test.
+//
+// For a `match` whose unguarded arms exhaustively cover every case of
+// the scrutinee's variant or enum type, the last arm in source order
+// is guaranteed to match by exclusion — its pattern test and the
+// trailing `unreachable` fallback are dead. `translate_match` in
+// `wir_build/pattern_match.rs` recognises that via
+// `compute_emitted_as_irrefutable` and treats the final arm as
+// irrefutable (bindings + body only, no `If`). This removes one
+// pattern test and one branch per `?` on the hot path of every
+// deserializer.
+//
+// Each helper below exercises one supported pattern shape — plain
+// variant, plain enum, and a single-level `Or` pattern — and the test
+// block below pins the runtime semantics. The WIR assertion is scoped
+// to `propagate`, which after the `NullableRef` pass produces a
+// `ref.is_null` shape; checking the `!is_null` re-check is the
+// narrowest pin of the elision working end to end.
+
+struct AppError {
+    message: String,
+}
+
+fn step(flag: bool) -> Result<(), AppError> {
+    if flag {
+        return Result::Err(AppError { message: "boom" });
+    }
+    return Result::Ok(());
+}
+
+pub fn propagate(flag: bool) -> Result<(), AppError> {
+    step(flag)?;
+    return Result::Ok(());
+}
+
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
+pub fn color_name(c: Color) -> String {
+    return match c {
+        Red => "red",
+        Green => "green",
+        Blue => "blue",
+    };
+}
+
+variant Triple {
+    One,
+    Two,
+    Three,
+}
+
+pub fn is_odd_variant(t: Triple) -> bool {
+    return match t {
+        One | Three => true,
+        Two => false,
+    };
+}
+
+test {
+    assert propagate(false) matches { Ok(_) };
+    assert propagate(true) matches { Err(_) };
+
+    assert color_name(Color::Red) == "red";
+    assert color_name(Color::Green) == "green";
+    assert color_name(Color::Blue) == "blue";
+
+    assert is_odd_variant(Triple::One);
+    assert !is_odd_variant(Triple::Two);
+    assert is_odd_variant(Triple::Three);
+}
+
+__DATA__
+{
+    "test": {},
+    "wir_not_expect:O2": ["ref.is_null(__match_scrut_0) == 0"]
+}

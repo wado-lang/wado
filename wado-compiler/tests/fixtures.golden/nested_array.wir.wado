@@ -674,10 +674,8 @@ fn "wado-compiler/tests/fixtures/nested_array.wado/nested_array_option_access_te
                         break __tmpl: __local_12;
                         unreachable;
                     };
-                } else if __match_scrut_0.discriminant == 1 -> ref "core:prelude/string.wado//String" {
-                    struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("None"), used: 4 };
                 } else {
-                    unreachable;
+                    struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("None"), used: 4 };
                 });
                 "core:cli/println"(s);
             } else {
@@ -737,13 +735,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     __for_1: block {
         i = 0;
         block {
-            l38: loop {
+            l37: loop {
                 if i >= len {
                     break __for_1;
                 }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l38;
+                continue l37;
             };
         };
     };
@@ -832,13 +830,13 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
     __for_1: block {
         t = val;
         block {
-            l44: loop {
+            l43: loop {
                 if t <= 0_i64 {
                     break __for_1;
                 }
                 n = n + 1;
                 t = t / 10_i64;
-                continue l44;
+                continue l43;
             };
         };
     };
@@ -855,14 +853,14 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         __for_2: block {
             temp = abs_val;
             block {
-                l48: loop {
+                l47: loop {
                     if temp <= 0_i64 {
                         break __for_2;
                     }
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l48;
+                    continue l47;
                 };
             };
         };
@@ -989,13 +987,13 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l60: loop {
+            l59: loop {
                 if i >= n {
                     break __for_0;
                 }
                 "core:prelude/string.wado/String::push"(_licm_buf_4, c);
                 i = i + 1;
-                continue l60;
+                continue l59;
             };
         };
     };
@@ -1123,13 +1121,13 @@ fn "core:prelude/array.wado/Array<Option<i32>>::grow"(self) {
     __for_0: block {
         i = 0;
         block {
-            l82: loop {
+            l81: loop {
                 if i >= used {
                     break __for_0;
                 }
                 builtin::array_set<ref "core:prelude/types.wado//Option<i32>">(new_repr, i, builtin::array_get<ref "core:prelude/types.wado//Option<i32>">(old_repr, i));
                 i = i + 1;
-                continue l82;
+                continue l81;
             };
         };
     };
@@ -1147,7 +1145,7 @@ fn "core:prelude/primitive.wado/Array<Array<i32>>^Inspect::inspect"(self, f) {
         _licm_used_12 = self.used;
         _licm_repr_13 = self.repr;
         block {
-            l85: loop {
+            l84: loop {
                 if i >= _licm_used_12 {
                     break __for_5;
                 }
@@ -1157,7 +1155,7 @@ fn "core:prelude/primitive.wado/Array<Array<i32>>^Inspect::inspect"(self, f) {
                 }
                 "core:prelude/array.wado/Array<i32>^Inspect::inspect"(builtin::array_get<ref "core:prelude//Array<i32>">(_licm_repr_13, i), f);
                 i = i + 1;
-                continue l85;
+                continue l84;
             };
         };
     };
@@ -1176,7 +1174,7 @@ fn "core:prelude/array.wado/Array<i32>^Inspect::inspect"(self, f) {
         _licm_used_16 = self.used;
         _licm_repr_17 = self.repr;
         block {
-            l89: loop {
+            l88: loop {
                 if i >= _licm_used_16 {
                     break __for_5;
                 }
@@ -1187,7 +1185,7 @@ fn "core:prelude/array.wado/Array<i32>^Inspect::inspect"(self, f) {
                 self_8 = struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get<i32>(_licm_repr_17, i) };
                 "core:prelude/primitive.wado/i32::fmt_decimal"(self_8.value, f);
                 i = i + 1;
-                continue l89;
+                continue l88;
             };
         };
     };
@@ -1206,7 +1204,7 @@ fn "core:prelude/primitive.wado/Array<i32>^Inspect::inspect"(self, f) {
         _licm_used_16 = self.used;
         _licm_repr_17 = self.repr;
         block {
-            l93: loop {
+            l92: loop {
                 if i >= _licm_used_16 {
                     break __for_5;
                 }
@@ -1217,7 +1215,7 @@ fn "core:prelude/primitive.wado/Array<i32>^Inspect::inspect"(self, f) {
                 self_8 = struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get<i32>(_licm_repr_17, i) };
                 "core:prelude/primitive.wado/i32::fmt_decimal"(self_8.value, f);
                 i = i + 1;
-                continue l93;
+                continue l92;
             };
         };
     };
@@ -1254,13 +1252,13 @@ fn "core:prelude/array.wado/Array<i32>::grow"(self) {
     __for_0: block {
         i = 0;
         block {
-            l98: loop {
+            l97: loop {
                 if i >= used {
                     break __for_0;
                 }
                 builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
                 i = i + 1;
-                continue l98;
+                continue l97;
             };
         };
     };
@@ -1327,13 +1325,13 @@ fn "core:prelude/array.wado/Array<Array<i32>>::grow"(self) {
     __for_0: block {
         i = 0;
         block {
-            l105: loop {
+            l104: loop {
                 if i >= used {
                     break __for_0;
                 }
                 builtin::array_set<ref "core:prelude//Array<i32>">(new_repr, i, builtin::array_get<ref "core:prelude//Array<i32>">(old_repr, i));
                 i = i + 1;
-                continue l105;
+                continue l104;
             };
         };
     };
@@ -1370,13 +1368,13 @@ fn "core:prelude/array.wado/Array<Array<Array<i32>>>::grow"(self) {
     __for_0: block {
         i = 0;
         block {
-            l109: loop {
+            l108: loop {
                 if i >= used {
                     break __for_0;
                 }
                 builtin::array_set<ref "core:prelude//Array<Array<i32>>">(new_repr, i, builtin::array_get<ref "core:prelude//Array<Array<i32>>">(old_repr, i));
                 i = i + 1;
-                continue l109;
+                continue l108;
             };
         };
     };
