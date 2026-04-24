@@ -1214,9 +1214,7 @@ fn emit_canonical_intrinsics(
                 // import signature (computed via
                 // `compute_export_flat_return_types`) or component
                 // validation fails at instantiation.
-                let task_return_type = if is_kiln_generator
-                    && ctx.has_type("kiln-handler-result")
-                {
+                let task_return_type = if is_kiln_generator && ctx.has_type("kiln-handler-result") {
                     ctx.type_idx("kiln-handler-result")
                 } else if has_http_handler_export && ctx.has_type("http-handler-result") {
                     ctx.type_idx("http-handler-result")
@@ -1354,9 +1352,7 @@ fn emit_world_exports(
         // linear memory for the core function. `realloc` satisfies the
         // validator; `result_unit_type` exports take no params so stay
         // realloc-free.
-        if export.is_http_handler
-            || (is_kiln_generator && ctx.has_type("kiln-raw-request"))
-        {
+        if export.is_http_handler || (is_kiln_generator && ctx.has_type("kiln-raw-request")) {
             lift_opts.push(CanonicalOption::Realloc(ctx.core_func_idx("realloc")));
         }
         builder.lift_func(

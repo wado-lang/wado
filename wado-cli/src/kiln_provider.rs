@@ -177,13 +177,8 @@ impl CliGeneratorProvider {
                         ),
                     })?;
                 let result = rt.block_on(async {
-                    wado_compiler::compile_with_options(
-                        &source_str,
-                        &host,
-                        Some(&abs_str),
-                        options,
-                    )
-                    .await
+                    wado_compiler::compile_with_options(&source_str, &host, Some(&abs_str), options)
+                        .await
                 });
                 match result {
                     Ok(r) => Ok(CompileArtifacts {
@@ -199,9 +194,7 @@ impl CliGeneratorProvider {
             })
             .await
             .map_err(|e| ProviderError::Internal {
-                message: format!(
-                    "kiln: generator compile task panicked or was cancelled: {e}"
-                ),
+                message: format!("kiln: generator compile task panicked or was cancelled: {e}"),
             })?;
 
         let artifacts = artifacts?;
@@ -538,7 +531,11 @@ export fn generate(raw: RawRequest) -> Result<Response, Error> {\n\
         let desc_entries: Vec<_> = std::fs::read_dir(&metadata_dir)
             .map(|it| it.filter_map(Result::ok).collect())
             .unwrap_or_default();
-        assert_eq!(desc_entries.len(), 1, "exactly one cached descriptor expected");
+        assert_eq!(
+            desc_entries.len(),
+            1,
+            "exactly one cached descriptor expected"
+        );
 
         // Second call: disk cache hits, no recompile. Spans are not
         // persisted (intentionally — they would drift across edits), so

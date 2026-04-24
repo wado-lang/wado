@@ -183,8 +183,7 @@ pub fn inject_kiln_request_adapter(
     let let_id = module.alloc_ast_id();
     let pattern_id = module.alloc_ast_id();
 
-    let raw_request_type =
-        Type::Named(NamedType::new(raw_ty_id, "RawRequest".to_string(), span));
+    let raw_request_type = Type::Named(NamedType::new(raw_ty_id, "RawRequest".to_string(), span));
 
     let bind_callee = Expr::Ident(IdentExpr {
         id: bind_ident_id,
@@ -246,13 +245,16 @@ pub fn inject_kiln_request_adapter(
 /// otherwise inserts a fresh one at the top of `module.items`.
 fn ensure_kiln_imports(module: &mut Module, span: Span, needed: &[&str]) {
     let mut missing: Vec<&&str> = needed.iter().collect();
-    for item in module.items.iter() {
+    for item in &module.items {
         let Item::Use(decl) = item else { continue };
         if decl.source != "core:kiln" {
             continue;
         }
         missing.retain(|name| {
-            !decl.items.iter().any(|u| matches!(u, UseItem::Simple { name: n, .. } if n == **name))
+            !decl
+                .items
+                .iter()
+                .any(|u| matches!(u, UseItem::Simple { name: n, .. } if n == **name))
         });
     }
     if missing.is_empty() {
@@ -260,7 +262,7 @@ fn ensure_kiln_imports(module: &mut Module, span: Span, needed: &[&str]) {
     }
 
     // Try to extend an existing `use ... from "core:kiln"` first.
-    for item in module.items.iter_mut() {
+    for item in &mut module.items {
         let Item::Use(decl) = item else { continue };
         if decl.source != "core:kiln" {
             continue;

@@ -182,8 +182,7 @@ fn adapter_generator_compiles_like_raw_request_generator() {
     std::fs::write(&gen_path, ADAPTER_GENERATOR).unwrap();
 
     let provider = CliGeneratorProvider::new(tmp.clone());
-    let module =
-        GeneratorModule::LocalPath(InvocationPath::normalize("./adapter_generator.wado"));
+    let module = GeneratorModule::LocalPath(InvocationPath::normalize("./adapter_generator.wado"));
 
     let wasm = runtime()
         .block_on(async { provider.get_component(&module).await })

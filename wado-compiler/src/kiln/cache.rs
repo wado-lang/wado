@@ -491,10 +491,7 @@ mod tests {
 
     #[test]
     fn canonical_json_integer_float_drops_point_zero() {
-        let bytes = encode_options_canonical(&opts(vec![(
-            "ratio",
-            CanonicalValue::F64(5.0),
-        )]));
+        let bytes = encode_options_canonical(&opts(vec![("ratio", CanonicalValue::F64(5.0))]));
         assert_eq!(std::str::from_utf8(&bytes).unwrap(), r#"{"ratio":5}"#);
     }
 
@@ -566,10 +563,7 @@ mod tests {
 
     #[test]
     fn canonical_json_float_negative_zero_renders_as_zero() {
-        let bytes = encode_options_canonical(&opts(vec![(
-            "z",
-            CanonicalValue::F64(-0.0),
-        )]));
+        let bytes = encode_options_canonical(&opts(vec![("z", CanonicalValue::F64(-0.0))]));
         assert_eq!(std::str::from_utf8(&bytes).unwrap(), r#"{"z":0}"#);
     }
 

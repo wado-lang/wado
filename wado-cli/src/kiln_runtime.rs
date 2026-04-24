@@ -165,9 +165,7 @@ pub async fn run_generator<H: CompilerHost + 'static>(
     // outer Result combines wasmtime's runtime errors and the
     // generator's own typed `error` variant.
     let result = store
-        .run_concurrent(async |accessor| {
-            generator.call_generate(accessor, wit_request).await
-        })
+        .run_concurrent(async |accessor| generator.call_generate(accessor, wit_request).await)
         .await
         .map_err(|e| GeneratorRunnerError::Host(format!("generate call: {e}")))?
         .map_err(|e| GeneratorRunnerError::Host(format!("generate call: {e}")))?;

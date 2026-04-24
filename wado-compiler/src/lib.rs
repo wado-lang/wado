@@ -334,8 +334,7 @@ fn compile_after_load<H: CompilerHost>(
     // through the host without bailing: a malformed descriptor does not
     // fail the whole compile, so the driver's provisional fallback still
     // produces a valid cache key.
-    let kiln_options_descriptor = if options.target_world.as_deref()
-        == Some("core:kiln/generator")
+    let kiln_options_descriptor = if options.target_world.as_deref() == Some("core:kiln/generator")
     {
         match kiln::extract_options_descriptor(&annotated, &annotated.entry_module_source) {
             Ok(d) => Some(d),
