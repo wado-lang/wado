@@ -1,0 +1,16 @@
+// Test: a struct with any required field must NOT auto-derive `Default`.
+// See docs/wep-2026-04-11-default-arguments.md: "A struct with any required
+// field (no default) does not auto-derive Default."
+
+struct Partial {
+    host: String,            // required — no default
+    port: i32 = 8080,
+    debug: bool = false,
+}
+
+export fn run() {
+    let _ = Partial::default();
+}
+
+__DATA__
+{"compile_error": "Partial::default"}

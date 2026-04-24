@@ -36,6 +36,7 @@ pub fn synthesize_traits(project: Package) -> Package {
     for module in project.tir_modules.values_mut() {
         generate_enum_trait_impls(module);
         generate_struct_eq_ord_impls(module);
+        generate_struct_default_impls(module);
         generate_variant_eq_impls(module);
         generate_inspect_impls(module);
         generate_inspect_alt_impls(module);
@@ -354,6 +355,118 @@ fn generate_struct_eq_ord_impls(module: &mut TirModule) {
 
     drop(tt);
     module.functions.extend(generated);
+}
+
+/// Generate auto-derived `Default` trait implementations for structs whose
+/// fields all carry a declared default expression.
+///
+/// For a non-generic struct `S { f0: T0 = e0, f1: T1 = e1, ... }`, synthesize:
+/// - `S^Default::default() -> S` — returns `S { f0: e0, f1: e1, ... }`.
+///
+/// Skips:
+/// - structs where any field has no default expression,
+/// - structs that already have a user-provided `impl Default for S`,
+/// - generic structs (generic field defaults may depend on bounds; left for
+///   a follow-up — monomorphized instances never hit this pass because
+///   `monomorph_info.is_some()`).
+///
+/// Effect purity of the default expressions is already enforced by
+/// `check_default_purity` before synthesis runs; if it had failed the pipeline
+/// would have bailed, so every `default_expr` reaching here is pure.
+fn generate_struct_default_impls(module: &mut TirModule) {
+    if module.structs.is_empty() {
+        return;
+    }
+
+    let module_source = module.module_source.clone();
+    let existing = collect_existing_trait_methods(module);
+    let mut generated = Vec::new();
+
+    let mut tt = module.type_table.borrow_mut();
+
+    let infos: Vec<(String, Vec<(String, TypeId, u32, TirExpr)>, Span)> = module
+        .structs
+        .iter()
+        .filter(|s| s.type_params.is_empty() && s.monomorph_info.is_none())
+        .filter_map(|s| {
+            let fields: Option<Vec<_>> = s
+                .fields
+                .iter()
+                .map(|f| {
+                    f.default_expr
+                        .as_ref()
+                        .map(|e| (f.name.clone(), f.type_id, f.index, (**e).clone()))
+                })
+                .collect();
+            fields.map(|fields| (s.name.clone(), fields, s.span))
+        })
+        .collect();
+
+    for (name, fields, span) in &infos {
+        if has_existing_impl(&existing, name, "Default", "default") {
+            continue;
+        }
+        let struct_type = tt.make_struct(name.clone(), module_source.clone());
+        let func = generate_struct_default_fn(name, fields, struct_type, *span);
+        generated.push(Rc::new(RefCell::new(func)));
+    }
+
+    drop(tt);
+    module.functions.extend(generated);
+}
+
+/// Generate `StructName^Default::default() -> StructName` for a non-generic
+/// struct whose fields all have default expressions.
+fn generate_struct_default_fn(
+    struct_name: &str,
+    fields: &[(String, TypeId, u32, TirExpr)],
+    struct_type: TypeId,
+    span: Span,
+) -> TirFunction {
+    let method_info = LocalMethodName::new(
+        struct_name.to_string(),
+        Some("Default".to_string()),
+        "default".to_string(),
+    );
+    let qualified_name = method_info.to_mangled_name();
+
+    let struct_fields = fields
+        .iter()
+        .map(|(name, _type, index, value)| crate::tir::TirStructField {
+            name: name.clone(),
+            value: value.clone(),
+            field_index: *index,
+        })
+        .collect();
+
+    let literal = TirExpr::new(
+        TirExprKind::StructLiteral {
+            struct_type,
+            struct_name: struct_name.to_string(),
+            fields: struct_fields,
+        },
+        struct_type,
+        span,
+    );
+
+    let body = TirBlock::new(
+        vec![TirStmt::new(
+            TirStmtKind::Return {
+                value: Some(literal),
+            },
+            span,
+        )],
+        span,
+    );
+
+    make_synthetic_method(
+        qualified_name,
+        method_info,
+        vec![],
+        struct_type,
+        body,
+        vec![],
+    )
 }
 
 /// Generate auto-derived Eq trait implementations for variant types in a module.

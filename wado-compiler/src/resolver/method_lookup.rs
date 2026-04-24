@@ -267,7 +267,36 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
     }
 
-    /// Find the module source for a struct by name
+    /// Return `Some(struct_type)` when `struct_name` is a non-generic struct
+    /// whose fields all carry a declared default expression, making it
+    /// eligible for auto-derived `Default::default()` synthesis.
+    ///
+    /// Returns `None` when:
+    /// - the name is unknown (only visible structs are considered, matching
+    ///   Eq/Ord auto-derive eligibility),
+    /// - any field is required (no `= expr`),
+    /// - the struct has no fields (empty structs opt out),
+    /// - the struct is generic (left for a follow-up).
+    ///
+    /// Does not check whether the user wrote their own `impl Default`;
+    /// callers should consult this only as a fallback after the regular
+    /// impl-lookup paths.
+    pub(super) fn auto_derive_default_struct_type(&self, struct_name: &str) -> Option<TypeId> {
+        let info = self.struct_fields.get(struct_name)?;
+        if info.fields.is_empty() || !info.field_defaults.iter().all(Option::is_some) {
+            return None;
+        }
+        if !info.type_param_type_ids.is_empty() {
+            return None;
+        }
+        Some(
+            self.type_table
+                .borrow_mut()
+                .make_struct(info.name.clone(), info.module_source.clone()),
+        )
+    }
+
+    /// Find the module source for a struct by name.
     pub(super) fn find_struct_module_source(&self, struct_name: &str) -> ModuleSource {
         // Check if it's a primitive type - impl blocks live in core:prelude/primitive.wado
         // Note: i128/u128 are structs (in prelude/int128.wado), not primitives

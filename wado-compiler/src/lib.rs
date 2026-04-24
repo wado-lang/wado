@@ -380,6 +380,17 @@ fn compile_after_load<H: CompilerHost>(
         return Err(Bail);
     }
 
+    // === Phase 7b: Default-Value Purity Check ===
+    // Every `param: T = expr` and `field: T = expr` must be pure. Runs before
+    // synthesis so that auto-derived `Default::default()` bodies (which clone
+    // the field default expressions) are only emitted for structs whose
+    // defaults have already cleared the purity gate — otherwise the effect
+    // checker would fire on the synthetic body with a misleading location.
+    {
+        let _span = logger.span("default-purity-check");
+        check_default_purity(&package.tir_modules, logger)?;
+    }
+
     // === Phase 8: Synthesis (Package -> Package) ===
     let package = {
         let _span = logger.span("synthesis");
@@ -401,14 +412,6 @@ fn compile_after_load<H: CompilerHost>(
     {
         let _span = logger.span("effect-check");
         check_effects(&package.tir_modules, logger)?;
-    }
-
-    // === Phase 8a2: Default-Value Purity Check ===
-    // Every `param: T = expr` and `field: T = expr` must be pure. Runs after
-    // effect checking so the effect map is consistent.
-    {
-        let _span = logger.span("default-purity-check");
-        check_default_purity(&package.tir_modules, logger)?;
     }
 
     // === Phase 8b: Stores Check ===

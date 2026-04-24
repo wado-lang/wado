@@ -460,20 +460,9 @@ let resp = Fetch::fetch(url, init).read();
 
 ## Implementation Roadmap
 
-- [ ] AST: add `default: Option<Expr>` to `Param`
-- [ ] AST: add `default: Option<Expr>` to struct `Field`
-- [ ] Parser: parse `= expr` after parameter type and after struct field type
-- [ ] Parser: validate default parameters are trailing
-- [ ] Resolver: validate default expressions are pure (no effects)
-- [ ] Resolver: adjust argument count checking to allow fewer arguments
-- [ ] Resolver: insert default expressions at call sites during resolution
-- [ ] Resolver: insert default field values at struct construction sites
-- [ ] TIR: add `default_expr: Option<TirExpr>` to `TirParam` and `TirField`
-- [ ] Trait resolution: propagate trait method defaults to call sites
-- [ ] Trait resolution: reject defaults in `impl` blocks for trait methods
-- [ ] Auto-derive `Default` for all-defaulted structs
-- [ ] Update `wado-from-idl` WebIDL mapping to emit defaults instead of `Option<T>`
-- [ ] Update `wado-from-idl` dictionary mapping to emit struct field defaults
+- [x] Parameter and struct-field defaults end-to-end (AST / parser / resolver / TIR / trait propagation / purity check). Covered by the `default_arg_*` and `default_field_*` fixtures in `wado-compiler/tests/fixtures/`.
+- [x] Auto-derive `Default` for all-defaulted non-generic structs. Generic structs are a follow-up.
+- [ ] `wado-from-idl`: emit `= default` instead of `Option<T>` for WebIDL parameters with IDL defaults, and map WebIDL dictionaries to structs with field defaults. Blocked on WebIDL support in `wado-from-idl` itself (currently WIT-only).
 
 ## See Also
 

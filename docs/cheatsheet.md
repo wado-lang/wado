@@ -869,6 +869,8 @@ Variants auto-derive `Eq` and `Ord` as well. `Option<T: Eq>`, `Result<T: Eq, E: 
 
 `Inspect` and `InspectAlt` are auto-derived, and `Display` and `DisplayAlt` default to `Inspect` and `InspectAlt` respectively.
 
+`Default` is auto-derived for a non-generic struct when every field has a declared default expression (`f: T = expr`). A user-written `impl Default for S` overrides the auto-derived one.
+
 ## Associated Constants
 
 ```wado
