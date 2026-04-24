@@ -89,7 +89,7 @@ if rustup target list --installed 2>/dev/null | grep -q wasm32-wasip1; then
         CC_wasm32_wasip1="$SDK_DIR/bin/clang" \
         CFLAGS_wasm32_wasip1="--sysroot=$SDK_DIR/share/wasi-sysroot" \
         AR_wasm32_wasip1="$SDK_DIR/bin/llvm-ar" \
-            (cd sqlite_highlight && cargo build --release --target wasm32-wasip1)
+            cargo build --release --target wasm32-wasip1 --manifest-path sqlite_highlight/Cargo.toml
         cp sqlite_highlight/target/wasm32-wasip1/release/sqlite_highlight.wasm "$OUT_DIR/sqlite_highlight_rust.wasm"
     else
         echo "SKIP: sqlite_highlight Rust (needs wasi-sdk for tree-sitter C parser)"
