@@ -1199,6 +1199,29 @@ impl WasiRegistry {
         find_unique_source_with_prefix(&self.structs, "wasi:", name)
     }
 
+    /// Find the source interface of a struct declared in `core:kiln/*` by its
+    /// Wado name, when exactly one kiln interface registers the name. Used by
+    /// the CM lift/lower paths so records from `core:kiln/types` (e.g.
+    /// `RawRequest`) can be resolved without leaking into the bare-name WASI
+    /// lookups — those stay strictly scoped to `wasi:*` to preserve the
+    /// `wasi:http/types::Response` vs. `core:kiln/types::Response`
+    /// disambiguation.
+    pub fn find_kiln_struct_source(&self, name: &str) -> Option<&str> {
+        find_unique_source_with_prefix(&self.structs, "core:kiln/", name)
+    }
+
+    /// Find the source interface of a variant declared in `core:kiln/*` by its
+    /// Wado name, when exactly one kiln interface registers the name. Sibling
+    /// to [`Self::find_kiln_struct_source`].
+    pub fn find_kiln_variant_source(&self, name: &str) -> Option<&str> {
+        find_unique_source_with_prefix(&self.variants, "core:kiln/", name)
+    }
+
+    /// Find the source interface of an enum declared in `core:kiln/*`.
+    pub fn find_kiln_enum_source(&self, name: &str) -> Option<&str> {
+        find_unique_source_with_prefix(&self.enums, "core:kiln/", name)
+    }
+
     /// Find the source interface of a newtype declared in `wasi:*` by its
     /// Wado name, when exactly one wasi interface registers the name.
     pub fn find_wasi_newtype_source(&self, name: &str) -> Option<&str> {
@@ -1286,6 +1309,30 @@ impl WasiRegistry {
             .or_else(|| self.find_wasi_variant_source(&named.name))
             .or_else(|| self.find_wasi_enum_source(&named.name))
             .or_else(|| self.find_wasi_flags_source(&named.name))
+    }
+
+    /// Resolve a named type to its source interface across all CM namespaces
+    /// (`wasi:*` and `core:kiln/*`). The Kiln-specific lookup is only
+    /// consulted when the WASI lookup misses, preserving the strict
+    /// cross-namespace scoping the rest of the binding pipeline relies on.
+    ///
+    /// Used by the flat-param lift path when the binding is for a
+    /// `core:kiln/generator` world export and the parameter happens to be a
+    /// `core:kiln/types` record such as `RawRequest`.
+    pub fn resolve_cm_source_for<'a>(
+        &'a self,
+        named: &'a crate::ast::NamedType,
+        wasi_package_hint: Option<&str>,
+    ) -> Option<&'a str> {
+        if let Some(s) = named.source_interface.as_deref() {
+            return Some(s);
+        }
+        if let Some(s) = self.resolve_wasi_source_for(named, wasi_package_hint) {
+            return Some(s);
+        }
+        self.find_kiln_struct_source(&named.name)
+            .or_else(|| self.find_kiln_variant_source(&named.name))
+            .or_else(|| self.find_kiln_enum_source(&named.name))
     }
 
     // -- Legacy unscoped lookups -------------------------------------------

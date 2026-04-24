@@ -6,7 +6,7 @@
 use crate::ast::Type;
 use crate::hashmap::IndexMap;
 use crate::tir::TirTest;
-use crate::world_registry::{WorldExportInfo, WorldRegistry};
+use crate::world_registry::{WorldExportInfo, WorldInfo, WorldRegistry};
 
 /// Plan for the Component Model structure.
 ///
@@ -118,23 +118,31 @@ fn build_world_export_plans(
     export_binding_names: &IndexMap<String, String>,
     world_registry: &WorldRegistry,
 ) -> Vec<WorldExportPlan> {
-    let exports: Vec<WorldExportInfo> = world_registry
-        .get(target_world)
-        .map(|w| w.exports.clone())
-        .unwrap_or_else(|| {
-            // Fallback to a default run export for unknown worlds
-            vec![WorldExportInfo {
-                name: "run".to_string(),
-                is_async: true,
-                params: vec![],
-                return_type: None,
-            }]
-        });
+    let world = world_registry.get(target_world);
+    let exports: Vec<WorldExportInfo> = world.map(|w| w.exports.clone()).unwrap_or_else(|| {
+        // Fallback to a default run export for unknown worlds
+        vec![WorldExportInfo {
+            name: "run".to_string(),
+            is_async: true,
+            params: vec![],
+            return_type: None,
+        }]
+    });
 
+    // Route through `WorldInfo::has_http_handler_export` so the "is this
+    // the HTTP service world?" check stays in one place — no ad-hoc
+    // `starts_with("wasi:http/")` string parsing scattered across the
+    // codegen pipeline.
+    let is_http_world = world.is_some_and(WorldInfo::has_http_handler_export);
     exports
         .into_iter()
         .map(|export| {
-            let is_http_handler = export.returns_http_response();
+            // Only mark as HTTP handler when the world itself is under
+            // `wasi:http/…`. Without this guard, any world whose export
+            // returns `Result<Response, _>` (for example
+            // `core:kiln/generator`'s `Response`) would be misrouted
+            // through the HTTP codegen branch.
+            let is_http_handler = is_http_world && export.returns_http_response();
             // Use export adapter if one was synthesized by synthesis::cm_binding
             let core_func_name = export_binding_names
                 .get(&export.name)

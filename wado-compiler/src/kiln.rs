@@ -13,6 +13,7 @@
 
 pub mod cache;
 pub mod header;
+pub mod import_check;
 pub mod inline;
 pub mod invocation;
 pub mod options;

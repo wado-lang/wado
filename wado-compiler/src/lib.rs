@@ -268,6 +268,31 @@ fn compile_after_load<H: CompilerHost>(
     let module_name = filename.unwrap_or_else(|| "module".to_string());
     let implicit_modules = load_result.implicit_modules.clone();
     let entry_ast = load_result.entry_ast.clone();
+    let mut load_result = load_result;
+
+    // === Phase 1a: Kiln generator import-refusal ===
+    // Runs before analysis so `wasi:*` imports in a generator package
+    // surface as a clean `KilnGeneratorForbiddenImport` rather than getting
+    // lost inside effect/type errors further downstream.
+    let rejected = kiln::import_check::check_loaded(
+        options.target_world.as_deref(),
+        &load_result.entry_module_source,
+        &load_result.modules,
+        logger,
+    );
+    if rejected > 0 {
+        return Err(Bail);
+    }
+
+    // === Phase 1b: Kiln `impl Deserialize for Options;` auto-injection ===
+    // Ensures the resolver sees an impl record for `Options: Deserialize`
+    // so `bind_request::<Options>(raw)` typechecks without the user having
+    // to write `impl Deserialize for Options;` by hand. Idempotent.
+    kiln::import_check::inject_deserialize_impl(
+        options.target_world.as_deref(),
+        &load_result.entry_module_source,
+        &mut load_result.modules,
+    );
 
     // === Phases 2 + 6a + 6b: Analyze + Annotate + Lower TIR ===
     // `annotate` performs analyze, type resolution, and body-level TIR
@@ -305,9 +330,17 @@ fn compile_after_load<H: CompilerHost>(
     // chosen mode, set its export_name to "realloc", and clear export_name from all others.
     {
         let allocator_tag = options.allocator.unwrap_or_else(|| {
+            // HTTP service worlds default to `freelist` (long-running process,
+            // benefits from reclamation). Detection routes through
+            // `WorldInfo::has_http_handler_export` so the "is this the HTTP
+            // service world?" rule stays in one place.
+            let is_http_service = package
+                .world_registry
+                .get(&package.target_world)
+                .is_some_and(crate::world_registry::WorldInfo::has_http_handler_export);
             if package.is_test_world() {
                 "debug".to_string()
-            } else if package.target_world == "wasi:http/service" {
+            } else if is_http_service {
                 "freelist".to_string()
             } else {
                 "bump".to_string()

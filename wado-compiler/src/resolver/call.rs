@@ -1219,7 +1219,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     } else if let Some(pkg) = wasi_package {
                         // Scoped lookup: use type table's package-aware search
                         let tt = self.type_table.borrow();
-                        if let Some(tid) = tt.find_named_type_by_wasi_package(&named.name, pkg) {
+                        if let Some(tid) = tt.find_named_type_by_cm_package(&named.name, pkg) {
                             tid
                         } else {
                             drop(tt);
