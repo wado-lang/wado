@@ -1500,6 +1500,14 @@ pub enum WirInstr {
         value: Box<WirInstr>,
         len: Box<WirInstr>,
     },
+    /// Deep-copy a `builtin::array<T>`: allocates a new array the same
+    /// length as `src` and copies every element. Emitted by codegen as the
+    /// same JIT-compiled loop that previously lived inside `emit_value_copy`
+    /// for raw array struct fields.
+    ArrayClone {
+        type_id: WirTypeId,
+        src: Box<WirInstr>,
+    },
 
     // === GC: Reference ===
     RefNull {
@@ -2260,6 +2268,9 @@ impl WirInstr {
                 f(src_offset);
                 f(len);
             }
+            Self::ArrayClone { src, .. } => {
+                f(src);
+            }
             Self::Select {
                 condition,
                 if_true,
@@ -2835,6 +2846,9 @@ impl WirInstr {
                 f(src);
                 f(src_offset);
                 f(len);
+            }
+            Self::ArrayClone { src, .. } => {
+                f(src);
             }
             Self::Select {
                 condition,

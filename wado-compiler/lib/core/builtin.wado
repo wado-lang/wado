@@ -59,6 +59,11 @@ fn array_set<T>(arr: builtin::array<T>, idx: i32, value: T);
 /// Copies `len` elements from src[src_offset..] to dst[dst_offset..].
 fn array_copy<T>(dst: builtin::array<T>, dst_offset: i32, src: builtin::array<T>, src_offset: i32, len: i32);
 
+/// Allocates a new builtin::array<T> and copies every element of `src` into
+/// it. Used by the synthesized `$value_copy$` functions to deep-copy raw
+/// array fields of value-semantic structs.
+fn array_clone<T>(src: builtin::array<T>) -> builtin::array<T>;
+
 /// Fills a builtin::array<T> with a value.
 /// Fills `len` elements starting at `offset` with `value`.
 fn array_fill<T>(arr: builtin::array<T>, offset: i32, value: T, len: i32);

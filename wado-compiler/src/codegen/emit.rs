@@ -904,6 +904,9 @@ impl<'a> WirEmitter<'a> {
                 self.collect_declared_locals_instr(src_offset, locals);
                 self.collect_declared_locals_instr(len, locals);
             }
+            WirInstr::ArrayClone { src, .. } => {
+                self.collect_declared_locals_instr(src, locals);
+            }
             WirInstr::GlobalSet { value, .. } => {
                 self.collect_declared_locals_instr(value, locals);
             }
@@ -2123,6 +2126,63 @@ impl<'a> WirEmitter<'a> {
                 self.emit_instr(f, len);
                 let wasm_idx = self.resolve_type_index(type_id.index());
                 f.instruction(&Instruction::ArrayFill(wasm_idx));
+            }
+            WirInstr::ArrayClone { type_id, src } => {
+                // Allocate a fresh array the same length as `src` and copy
+                // every element with a JIT-compiled loop. This was the
+                // per-array-field code path inside the former
+                // `emit_value_copy` for raw `builtin::array<T>` fields and is
+                // now reachable only via the synthesized `$value_copy$`
+                // helpers' explicit `builtin::array_clone::<T>(...)` calls.
+                let arr_wasm_idx = self.resolve_type_index(type_id.index());
+                let src_name = format!("__copy_arr_src_{}", type_id.index());
+                let dst_name = format!("__copy_arr_dst_{}", type_id.index());
+                let len_name = format!("__copy_arr_len_{}", type_id.index());
+                let loop_idx_name = format!("__copy_arr_i_{}", type_id.index());
+                let src_local = self.resolve_local(&src_name);
+                let dst_local = self.resolve_local(&dst_name);
+                let len_local = self.resolve_local(&len_name);
+                let loop_idx_local = self.resolve_local(&loop_idx_name);
+                self.emit_instr(f, src);
+                f.instruction(&Instruction::LocalSet(src_local));
+                f.instruction(&Instruction::LocalGet(src_local));
+                f.instruction(&Instruction::ArrayLen);
+                f.instruction(&Instruction::LocalSet(len_local));
+                f.instruction(&Instruction::LocalGet(len_local));
+                f.instruction(&Instruction::ArrayNewDefault(arr_wasm_idx));
+                f.instruction(&Instruction::LocalSet(dst_local));
+                f.instruction(&Instruction::I32Const(0));
+                f.instruction(&Instruction::LocalSet(loop_idx_local));
+                f.instruction(&Instruction::Block(BlockType::Empty));
+                f.instruction(&Instruction::Loop(BlockType::Empty));
+                f.instruction(&Instruction::LocalGet(loop_idx_local));
+                f.instruction(&Instruction::LocalGet(len_local));
+                f.instruction(&Instruction::I32GeS);
+                f.instruction(&Instruction::BrIf(1));
+                f.instruction(&Instruction::LocalGet(dst_local));
+                f.instruction(&Instruction::LocalGet(loop_idx_local));
+                f.instruction(&Instruction::LocalGet(src_local));
+                f.instruction(&Instruction::LocalGet(loop_idx_local));
+                match self.is_array_packed(type_id.index()) {
+                    Some(true) => {
+                        f.instruction(&Instruction::ArrayGetS(arr_wasm_idx));
+                    }
+                    Some(false) => {
+                        f.instruction(&Instruction::ArrayGetU(arr_wasm_idx));
+                    }
+                    None => {
+                        f.instruction(&Instruction::ArrayGet(arr_wasm_idx));
+                    }
+                }
+                f.instruction(&Instruction::ArraySet(arr_wasm_idx));
+                f.instruction(&Instruction::LocalGet(loop_idx_local));
+                f.instruction(&Instruction::I32Const(1));
+                f.instruction(&Instruction::I32Add);
+                f.instruction(&Instruction::LocalSet(loop_idx_local));
+                f.instruction(&Instruction::Br(0));
+                f.instruction(&Instruction::End);
+                f.instruction(&Instruction::End);
+                f.instruction(&Instruction::LocalGet(dst_local));
             }
 
             // GC: Reference (casts, i31, extern)

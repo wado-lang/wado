@@ -1491,6 +1491,12 @@ impl<'a> WirUnparser<'a> {
                 self.unparse_instr_inline(len);
                 self.write(")");
             }
+            WirInstr::ArrayClone { type_id, src } => {
+                let elem = self.array_elem_type_str(type_id);
+                self.write(&format!("builtin::array_clone<{elem}>("));
+                self.unparse_instr_inline(src);
+                self.write(")");
+            }
 
             // GC: Reference
             WirInstr::RefNull { heap_type } => {
