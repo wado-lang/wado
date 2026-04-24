@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776960509701,
+  "lastUpdate": 1776989614501,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -15677,6 +15677,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/7c5c1cae9209f341982af5c5ec893876819cdc39"
         },
         "date": 1776960509397,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8982,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18988,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 635264,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9900b640af8119e4d1d2258030fb27b0df185da4",
+          "message": "Merge pull request #908 from wado-lang/claude/optimize-golden-fixtures-Jvfq7\n\nperf(dev-tools): speed up update-golden-fixtures ~5.5x",
+          "timestamp": "2026-04-24T09:09:06+09:00",
+          "tree_id": "81c486f564c0d84428834dee8467c3a7517df75e",
+          "url": "https://github.com/wado-lang/wado/commit/9900b640af8119e4d1d2258030fb27b0df185da4"
+        },
+        "date": 1776989614280,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
