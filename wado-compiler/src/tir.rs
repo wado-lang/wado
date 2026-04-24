@@ -1158,11 +1158,7 @@ impl TypeTable {
     /// `"cli"`, etc. — not a fully-qualified source string. Callers
     /// synthesizing CM bindings normally retrieve it from
     /// [`crate::world_registry::WorldInfo::package`].
-    pub fn find_named_type_by_cm_package(
-        &self,
-        name: &str,
-        cm_package: &str,
-    ) -> Option<TypeId> {
+    pub fn find_named_type_by_cm_package(&self, name: &str, cm_package: &str) -> Option<TypeId> {
         let prefix = format!("{cm_package}/");
         for (&type_id, resolved) in &self.types {
             let (n, ms) = match resolved {

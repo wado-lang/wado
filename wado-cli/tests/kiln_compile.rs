@@ -130,9 +130,7 @@ fn source_edit_invalidates_cache() {
     // Rewrite the source. The stable-id is `sha256(path || content)`,
     // so a content change picks a different cache key and must force
     // a fresh compile.
-    let edited = format!(
-        "{MINIMAL_GENERATOR}\nfn __touched() -> bool {{ return true; }}\n"
-    );
+    let edited = format!("{MINIMAL_GENERATOR}\nfn __touched() -> bool {{ return true; }}\n");
     std::fs::write(&gen_path, edited).unwrap();
 
     let second = runtime()

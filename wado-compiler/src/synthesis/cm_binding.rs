@@ -1004,8 +1004,7 @@ fn synthesize_lift_option_inner(
     // use the correct GC reference type rather than an i32 placeholder.
     let option_type_id = if let Some(c) = ctx {
         let mut tt = c.type_table.borrow_mut();
-        let inner_type_id =
-            wasi_type_to_type_id(inner_ty, &mut tt, c.wasi_registry, c.cm_package);
+        let inner_type_id = wasi_type_to_type_id(inner_ty, &mut tt, c.wasi_registry, c.cm_package);
         tt.make_option(inner_type_id)
     } else {
         TypeTable::I32 // placeholder when no context
@@ -1098,8 +1097,7 @@ fn synthesize_lift_result_inner(
     let result_type_id = if let Some(ctx) = ctx {
         let mut tt = ctx.type_table.borrow_mut();
         let ok_type_id = wasi_type_to_type_id(ok_ty, &mut tt, ctx.wasi_registry, ctx.cm_package);
-        let err_type_id =
-            wasi_type_to_type_id(err_ty, &mut tt, ctx.wasi_registry, ctx.cm_package);
+        let err_type_id = wasi_type_to_type_id(err_ty, &mut tt, ctx.wasi_registry, ctx.cm_package);
         tt.make_result(ok_type_id, err_type_id)
     } else {
         TypeTable::I32 // placeholder when no context
@@ -4797,7 +4795,9 @@ fn export_needs_param_lifting(
     type_table: &std::cell::RefCell<TypeTable>,
 ) -> bool {
     let tt = type_table.borrow();
-    user_params.iter().any(|p| param_needs_lifting(p.type_id, &tt))
+    user_params
+        .iter()
+        .any(|p| param_needs_lifting(p.type_id, &tt))
 }
 
 /// Synthesize a CM export binding for an async export with a Result return type.

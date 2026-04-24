@@ -119,17 +119,15 @@ fn build_world_export_plans(
     world_registry: &WorldRegistry,
 ) -> Vec<WorldExportPlan> {
     let world = world_registry.get(target_world);
-    let exports: Vec<WorldExportInfo> = world
-        .map(|w| w.exports.clone())
-        .unwrap_or_else(|| {
-            // Fallback to a default run export for unknown worlds
-            vec![WorldExportInfo {
-                name: "run".to_string(),
-                is_async: true,
-                params: vec![],
-                return_type: None,
-            }]
-        });
+    let exports: Vec<WorldExportInfo> = world.map(|w| w.exports.clone()).unwrap_or_else(|| {
+        // Fallback to a default run export for unknown worlds
+        vec![WorldExportInfo {
+            name: "run".to_string(),
+            is_async: true,
+            params: vec![],
+            return_type: None,
+        }]
+    });
 
     // Route through `WorldInfo::has_http_handler_export` so the "is this
     // the HTTP service world?" check stays in one place — no ad-hoc
