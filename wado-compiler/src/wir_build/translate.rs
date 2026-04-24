@@ -384,6 +384,39 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
+    /// Wrap each call argument with `RefAsNonNull` where the callee's
+    /// declared parameter type is a non-nullable reference. Wado-level types
+    /// always agree at the source, but TIR locals introduced by SROA may be
+    /// declared nullable at WIR build time (Wasm GC defaultability), and
+    /// passing them straight to a non-null parameter would fail Wasm
+    /// validation. The cast is a no-op when the value is already non-null.
+    pub(super) fn cast_call_args_to_param_types(
+        &self,
+        func_id: &crate::wir::WirFuncId,
+        args: Vec<WirInstr>,
+    ) -> Vec<WirInstr> {
+        let Some(func_type_id) = self.ctx.func_type_id(func_id) else {
+            return args;
+        };
+        let idx = func_type_id.index() as usize;
+        if idx >= self.ctx.types.len() {
+            return args;
+        }
+        let WirTypeDef::Func(ft) = &self.ctx.types[idx] else {
+            return args;
+        };
+        args.into_iter()
+            .enumerate()
+            .map(|(i, instr)| {
+                if ft.params.get(i).is_some_and(WirType::is_nonnull_ref) {
+                    WirInstr::RefAsNonNull(Box::new(instr))
+                } else {
+                    instr
+                }
+            })
+            .collect()
+    }
+
     /// Check if a named field of a struct type is a non-nullable reference.
     fn is_field_nonnull_ref(&self, type_id: &WirTypeId, field_name: &str) -> bool {
         let idx = type_id.index() as usize;
@@ -1077,6 +1110,8 @@ impl FunctionTranslator<'_, '_> {
                     .collect();
 
                 if let Some(func_id) = self.resolve_function_ref(func) {
+                    let translated_args =
+                        self.cast_call_args_to_param_types(&func_id, translated_args);
                     WirInstr::Call {
                         func_id,
                         args: translated_args,

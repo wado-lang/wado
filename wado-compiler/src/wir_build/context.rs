@@ -237,6 +237,22 @@ impl<'a> WirContext<'a> {
     }
 
     /// Register a defined function (with body) and return its `WirFuncId`.
+    /// Return the `WirTypeId` of the func type backing the given function
+    /// reference. Resolves both imported functions (indices below
+    /// `DEFINED_FUNC_BASE`) and defined ones.
+    pub fn func_type_id(&self, func_id: &WirFuncId) -> Option<WirTypeId> {
+        let idx = func_id.index();
+        if idx < DEFINED_FUNC_BASE {
+            self.imports.get(idx as usize).and_then(|imp| match &imp.desc {
+                WirImportDesc::Func { type_id, .. } => Some(type_id.clone()),
+                _ => None,
+            })
+        } else {
+            let defined_idx = (idx - DEFINED_FUNC_BASE) as usize;
+            self.func_type_ids.get(defined_idx).cloned()
+        }
+    }
+
     pub fn register_function(&mut self, func: WirFunction) -> WirFuncId {
         let func_idx =
             DEFINED_FUNC_BASE + u32::try_from(self.functions.len()).expect("too many funcs");
