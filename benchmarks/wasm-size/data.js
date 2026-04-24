@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776989614501,
+  "lastUpdate": 1776991467906,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -15721,6 +15721,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/9900b640af8119e4d1d2258030fb27b0df185da4"
         },
         "date": 1776989614280,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8982,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18988,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 635264,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "fd623887707f231fa02def31fedf40e875fac900",
+          "message": "Merge pull request #909 from wado-lang/claude/complete-m6-kiln-fix-TQVxu\n\nfeat(kiln): complete M6 — bind_request path, real provider, CM lift adapter, Gale generator",
+          "timestamp": "2026-04-24T09:39:48+09:00",
+          "tree_id": "c60d41ec4b057f6612612c2fac58699d0e756070",
+          "url": "https://github.com/wado-lang/wado/commit/fd623887707f231fa02def31fedf40e875fac900"
+        },
+        "date": 1776991467588,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
