@@ -1696,19 +1696,6 @@ pub enum WirInstr {
         value: Box<WirInstr>,
     },
 
-    // === High-level compound instructions (lowered to sequences during emission) ===
-    /// Deep copy of a value type (struct, array, variant, option, tuple).
-    /// **Dead** — no production path emits `ValueCopy` after the move to
-    /// the TIR-level `\$value_copy\$T<id>` synthesis pass. The variant is
-    /// kept only so the optimizer's pattern-matching arms still compile;
-    /// follow-up commit removes the variant and the residual arms together.
-    ValueCopy {
-        type_id: WirTypeId,
-        source_type: WirCopyType,
-        expr: Box<WirInstr>,
-        nullable: bool,
-    },
-
     /// Multi-value instruction with direct local binding (tuple elision).
     /// The instruction pushes N values on the stack; they are bound directly
     /// to locals without intermediate struct allocation.
@@ -1826,8 +1813,7 @@ impl WirInstr {
             | Self::GlobalSet { value, .. } => f(value),
             Self::StructGet { expr, .. }
             | Self::RefCast { expr, .. }
-            | Self::RefTest { expr, .. }
-            | Self::ValueCopy { expr, .. } => f(expr),
+            | Self::RefTest { expr, .. } => f(expr),
             Self::BrIf { condition, .. }
             | Self::BranchHint {
                 expr: condition, ..
@@ -2405,8 +2391,7 @@ impl WirInstr {
             | Self::GlobalSet { value, .. } => f(value),
             Self::StructGet { expr, .. }
             | Self::RefCast { expr, .. }
-            | Self::RefTest { expr, .. }
-            | Self::ValueCopy { expr, .. } => f(expr),
+            | Self::RefTest { expr, .. } => f(expr),
             Self::BrIf { condition, .. }
             | Self::BranchHint {
                 expr: condition, ..
@@ -2952,42 +2937,6 @@ impl WirInstr {
             }
         }
     }
-}
-
-/// What kind of value copy to perform.
-#[derive(Debug, Clone)]
-pub enum WirCopyType {
-    Struct {
-        fields: Vec<WirCopyField>,
-    },
-    Array {
-        element_copy: Option<Box<WirCopyType>>,
-    },
-    Variant {
-        cases: Vec<WirCopyCase>,
-    },
-    Option {
-        inner_copy: Box<WirCopyType>,
-    },
-    Tuple {
-        field_copies: Vec<Option<WirCopyType>>,
-    },
-}
-
-/// A field in a struct copy.
-#[derive(Debug, Clone)]
-pub struct WirCopyField {
-    pub index: u32,
-    pub needs_copy: bool,
-    pub copy_type: Option<WirCopyType>,
-}
-
-/// A case in a variant copy.
-#[derive(Debug, Clone)]
-pub struct WirCopyCase {
-    pub index: u32,
-    pub name: String,
-    pub payload_copy: Option<WirCopyType>,
 }
 
 /// An import entry.

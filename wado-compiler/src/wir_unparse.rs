@@ -1856,9 +1856,6 @@ impl<'a> WirUnparser<'a> {
                 self.write(")");
             }
 
-            WirInstr::ValueCopy { .. } => {
-                panic!("WirInstr::ValueCopy is deprecated and should not appear in WIR")
-            }
             WirInstr::MultiValueStructNew { type_id, instr } => {
                 let tid = type_id.to_string();
                 self.write("multivalue_struct_new ");

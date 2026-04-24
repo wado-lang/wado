@@ -2394,7 +2394,7 @@ fn take_call_from_local_set(instr: &mut WirInstr) -> (Vec<WirInstr>, Box<WirInst
     (prefix, Box::new(call))
 }
 
-/// Recursively unwrap `ValueCopy` and `Block` wrappers to extract the `Call` instruction.
+/// Recursively unwrap `Block` wrappers to extract the `Call` instruction.
 /// Collects any non-result instructions from blocks into `prefix` so they can be
 /// emitted before the call.
 fn unwrap_and_take_call(instr: WirInstr, prefix: &mut Vec<WirInstr>) -> WirInstr {
@@ -2402,9 +2402,6 @@ fn unwrap_and_take_call(instr: WirInstr, prefix: &mut Vec<WirInstr>) -> WirInstr
     loop {
         match current {
             WirInstr::Call { .. } => return current,
-            WirInstr::ValueCopy { expr, .. } => {
-                current = *expr;
-            }
             WirInstr::Block { ref mut body, .. } => {
                 // Extract the call from the block's result position,
                 // and collect all preceding statements as prefix.
