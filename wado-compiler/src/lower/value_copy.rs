@@ -12,31 +12,74 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::flat_package::FlatPackage;
+use crate::hashmap::IndexSet;
 use crate::name::ModuleSource;
 use crate::tir::{
-    CallArg, FunctionRef, MonomorphInfo, ResolvedType, TirExpr, TirExprKind, TirStmt, TirStmtKind,
-    TypeId, TypeTable,
+    CallArg, FunctionRef, MonomorphInfo, ResolvedType, TirBlock, TirExpr, TirExprKind, TirStmt,
+    TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::tir_visitor::{TirOptVisitor, opt_walk_expr, opt_walk_stmt};
 
 /// Run the value-copy insertion pass on every user-defined function body.
 pub fn insert_value_copy_calls(project: &mut FlatPackage) {
-    let mut visitor = ValueCopyInserter {
-        type_table: project.type_table.clone(),
-    };
+    let type_table = project.type_table.clone();
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
         if func.is_cm_binding {
             continue;
         }
+        let immutable_locals = collect_immutable_locals(func.body.as_ref());
+        let mut visitor = ValueCopyInserter {
+            type_table: type_table.clone(),
+            immutable_locals,
+        };
         if let Some(ref mut body) = func.body {
             visitor.visit_block(body);
         }
     }
 }
 
+fn collect_immutable_locals(body: Option<&TirBlock>) -> IndexSet<u32> {
+    let mut out = IndexSet::default();
+    if let Some(body) = body {
+        collect_immutable_in_block(body, &mut out);
+    }
+    out
+}
+
+fn collect_immutable_in_block(block: &TirBlock, out: &mut IndexSet<u32>) {
+    for stmt in &block.stmts {
+        collect_immutable_in_stmt(stmt, out);
+    }
+}
+
+fn collect_immutable_in_stmt(stmt: &TirStmt, out: &mut IndexSet<u32>) {
+    match &stmt.kind {
+        TirStmtKind::Let {
+            local_index,
+            is_mut,
+            ..
+        } if !*is_mut => {
+            out.insert(*local_index);
+        }
+        TirStmtKind::If {
+            then_block,
+            else_block,
+            ..
+        } => {
+            collect_immutable_in_block(then_block, out);
+            if let Some(eb) = else_block {
+                collect_immutable_in_block(eb, out);
+            }
+        }
+        TirStmtKind::Loop { body } => collect_immutable_in_block(body, out),
+        _ => {}
+    }
+}
+
 struct ValueCopyInserter {
     type_table: Rc<RefCell<TypeTable>>,
+    immutable_locals: IndexSet<u32>,
 }
 
 impl ValueCopyInserter {
@@ -110,6 +153,175 @@ impl ValueCopyInserter {
         let owned = std::mem::replace(slot, placeholder);
         *slot = self.wrap_if_needed(owned);
     }
+
+    /// Mirror `wir_build::value_copy::is_fresh_value` at the TIR level: a
+    /// fresh expression does not alias existing data and therefore does not
+    /// need a defensive copy. The TIR optimizer may later relax this in
+    /// favour of a more thorough freshness pass.
+    fn is_fresh_value(expr: &TirExpr) -> bool {
+        Self::is_fresh_in_context(expr, &IndexSet::default())
+    }
+
+    fn is_fresh_in_context(expr: &TirExpr, fresh_locals: &IndexSet<u32>) -> bool {
+        match &expr.kind {
+            TirExprKind::StringLiteral(_)
+            | TirExprKind::StructLiteral { .. }
+            | TirExprKind::TupleLiteral { .. }
+            | TirExprKind::TupleSpread { .. }
+            | TirExprKind::TupleZip { .. }
+            | TirExprKind::TypePackExpansion { .. }
+            | TirExprKind::Null => true,
+            TirExprKind::Call { .. }
+            | TirExprKind::MethodCall { .. }
+            | TirExprKind::CmRawCall { .. }
+            | TirExprKind::IndirectCall { .. } => true,
+            TirExprKind::ClosureToCanonical { .. } => true,
+            TirExprKind::VariantConstruct { .. } | TirExprKind::EnumConstruct { .. } => true,
+            TirExprKind::Local { index, .. } => fresh_locals.contains(index),
+            TirExprKind::Unary {
+                op: TirUnaryOp::Deref,
+                expr: inner,
+            } => Self::is_fresh_in_context(inner, fresh_locals),
+            TirExprKind::LabeledBlock { label, block, .. } => {
+                Self::block_breaks_are_fresh(label, block, fresh_locals)
+            }
+            TirExprKind::FieldAccess { expr: inner, .. }
+            | TirExprKind::VariantPayload { expr: inner, .. } => {
+                Self::is_fresh_in_context(inner, fresh_locals)
+            }
+            _ => false,
+        }
+    }
+
+    fn block_breaks_are_fresh(
+        label: &str,
+        block: &TirBlock,
+        parent_fresh: &IndexSet<u32>,
+    ) -> bool {
+        let mut found = false;
+        let mut fresh_locals = parent_fresh.clone();
+        if Self::scan_block_for_breaks(label, block, &mut found, &mut fresh_locals) {
+            found
+        } else {
+            false
+        }
+    }
+
+    fn scan_block_for_breaks(
+        label: &str,
+        block: &TirBlock,
+        found: &mut bool,
+        fresh_locals: &mut IndexSet<u32>,
+    ) -> bool {
+        for stmt in &block.stmts {
+            if !Self::scan_stmt_for_breaks(label, stmt, found, fresh_locals) {
+                return false;
+            }
+        }
+        true
+    }
+
+    fn scan_stmt_for_breaks(
+        label: &str,
+        stmt: &TirStmt,
+        found: &mut bool,
+        fresh_locals: &mut IndexSet<u32>,
+    ) -> bool {
+        match &stmt.kind {
+            TirStmtKind::Let {
+                local_index, value, ..
+            } => {
+                if Self::is_fresh_in_context(value, fresh_locals) {
+                    fresh_locals.insert(*local_index);
+                }
+                true
+            }
+            TirStmtKind::Break {
+                label: Some(l),
+                value: Some(v),
+            } if l == label => {
+                *found = true;
+                Self::is_fresh_in_context(v, fresh_locals)
+            }
+            TirStmtKind::If {
+                then_block,
+                else_block,
+                ..
+            } => {
+                if !Self::scan_block_for_breaks(label, then_block, found, fresh_locals) {
+                    return false;
+                }
+                if let Some(eb) = else_block
+                    && !Self::scan_block_for_breaks(label, eb, found, fresh_locals)
+                {
+                    return false;
+                }
+                true
+            }
+            TirStmtKind::Loop { body } => {
+                Self::scan_block_for_breaks(label, body, found, fresh_locals)
+            }
+            TirStmtKind::Expr(expr) => Self::scan_expr_for_breaks(label, expr, found, fresh_locals),
+            _ => true,
+        }
+    }
+
+    fn scan_expr_for_breaks(
+        label: &str,
+        expr: &TirExpr,
+        found: &mut bool,
+        fresh_locals: &mut IndexSet<u32>,
+    ) -> bool {
+        match &expr.kind {
+            TirExprKind::LabeledBlock { block, .. } | TirExprKind::Block(block) => {
+                Self::scan_block_for_breaks(label, block, found, fresh_locals)
+            }
+            TirExprKind::If {
+                then_branch,
+                else_branch,
+                ..
+            } => {
+                if !Self::scan_block_for_breaks(label, then_branch, found, fresh_locals) {
+                    return false;
+                }
+                if let Some(eb) = else_branch
+                    && !Self::scan_block_for_breaks(label, eb, found, fresh_locals)
+                {
+                    return false;
+                }
+                true
+            }
+            _ => true,
+        }
+    }
+
+    /// Mirror `wir_build::value_copy::is_source_immutable`: when the source
+    /// expression is rooted at a local known to be immutable, the destination
+    /// binding can safely alias it without a copy.
+    fn is_source_immutable(&self, expr: &TirExpr) -> bool {
+        match &expr.kind {
+            TirExprKind::Local { index, .. } => self.immutable_locals.contains(index),
+            TirExprKind::FieldAccess { expr: inner, .. }
+            | TirExprKind::TupleSpread { expr: inner }
+            | TirExprKind::TupleZip { expr: inner }
+            | TirExprKind::TypePackExpansion {
+                call_expr: inner, ..
+            } => self.is_source_immutable(inner),
+            _ => false,
+        }
+    }
+
+    /// Wrap `slot` only if the expression semantically requires a copy — i.e.
+    /// it is a value-semantic type and is not provably safe to share.
+    fn wrap_slot_if_needed(&self, slot: &mut TirExpr) {
+        if !self.needs_value_copy(slot.type_id)
+            || Self::is_copy_value_call(slot)
+            || Self::is_fresh_value(slot)
+        {
+            return;
+        }
+        self.wrap_slot(slot);
+    }
 }
 
 impl TirOptVisitor for ValueCopyInserter {
@@ -121,14 +333,21 @@ impl TirOptVisitor for ValueCopyInserter {
         match &mut stmt.kind {
             TirStmtKind::Let {
                 value,
+                is_mut,
                 skip_value_copy,
                 ..
-            } if !*skip_value_copy => {
-                self.wrap_slot(value);
+            } => {
+                // `skip_value_copy` is set by LICM/SROA/template hoisting to
+                // indicate the binding is safe to alias. An immutable binding
+                // from an immutable source is also safe.
+                if *skip_value_copy || (!*is_mut && self.is_source_immutable(value)) {
+                    return false;
+                }
+                self.wrap_slot_if_needed(value);
                 true
             }
             TirStmtKind::LetDestructure { value, .. } => {
-                self.wrap_slot(value);
+                self.wrap_slot_if_needed(value);
                 true
             }
             _ => false,
@@ -142,20 +361,19 @@ impl TirOptVisitor for ValueCopyInserter {
             TirExprKind::Call { args, .. } | TirExprKind::MethodCall { args, .. } => {
                 for arg in args.iter_mut() {
                     if arg.is_mut {
-                        self.wrap_slot(&mut arg.expr);
+                        self.wrap_slot_if_needed(&mut arg.expr);
                     }
                 }
             }
             TirExprKind::IndirectCall { args, .. } => {
-                // Indirect call args used to receive an unconditional value
-                // copy at WIR build; preserve that semantics here since the
-                // dispatched function may observe the argument as `mut`.
+                // Indirect call args receive an unconditional copy because
+                // the callee signature is not known at this point.
                 for arg in args.iter_mut() {
-                    self.wrap_slot(arg);
+                    self.wrap_slot_if_needed(arg);
                 }
             }
             TirExprKind::Assign { value, .. } => {
-                self.wrap_slot(value);
+                self.wrap_slot_if_needed(value);
             }
             _ => {}
         }
