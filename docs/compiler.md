@@ -91,7 +91,7 @@ Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve �
 | CondImplication | `optimize/condition_implication.rs`  | Condition implication from dominating guards                                                             |
 | TmplHoist       | `optimize/tmpl_hoist.rs`             | Template buffer hoisting out of loops                                                                    |
 | ComponentPlan   | `wir_build/component_plan.rs`        | `ComponentPlan` types and `build_component_plan`                                                         |
-| WIR Translate   | `wir_build/translate.rs` + siblings  | Function-body TIR→WIR: driver + helpers (value_copy, primitive_ops, calls, canonical_abi, pattern_match) |
+| WIR Translate   | `wir_build/translate.rs` + siblings  | Function-body TIR→WIR: driver + helpers (primitive_ops, calls, canonical_abi, pattern_match)             |
 | Stdlib          | `stdlib.rs`                          | Embedded core library sources                                                                            |
 | CompilerHost    | `compiler_host.rs`                   | I/O abstraction for the compiler                                                                         |
 | Logger          | `logger.rs`                          | Diagnostic logging with timestamps                                                                       |
@@ -218,7 +218,6 @@ The `wir_build/` directory translates a linked `FlatPackage` into a `WirPackage`
 | `wir_build/functions.rs`      | Collect and register function signatures                                                                               |
 | `wir_build/component_plan.rs` | `ComponentPlan` types and `build_component_plan`                                                                       |
 | `wir_build/translate.rs`      | Driver: `FunctionTranslator` struct, main dispatch (`translate_expr`/`translate_stmt`/`translate_block`), core helpers |
-| `wir_build/value_copy.rs`     | Value-copy semantics: when to emit defensive deep-copies, freshness / aliasing analysis                                |
 | `wir_build/primitive_ops.rs`  | Primitive-level operations: literals, binary / unary operators, casts, array indexing                                  |
 | `wir_build/calls.rs`          | Call sites: function-ref resolution, builtin intrinsics, indirect calls, closure-to-canonical                          |
 | `wir_build/canonical_abi.rs`  | Component Model canonical ABI: future / stream creation, read / write lowering, result lifting                         |
