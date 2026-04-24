@@ -156,10 +156,8 @@ fn "wado-compiler/tests/fixtures/serde_ndjson_wrapper.wado/response_body"(ok) {
                 __local_6 = (if __sroa___match_scrut_0_discriminant == 0 -> ref "core:prelude/string.wado//String" {
                     __local_5 = __sroa___match_scrut_0_case0_payload_0;
                     __local_5;
-                } else if __sroa___match_scrut_0_discriminant == 1 -> ref "core:prelude/string.wado//String" {
-                    struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("null"), used: 4 };
                 } else {
-                    unreachable;
+                    struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("null"), used: 4 };
                 });
                 __local_7 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 "), used: 1 };
@@ -180,10 +178,8 @@ fn "wado-compiler/tests/fixtures/serde_ndjson_wrapper.wado/response_body"(ok) {
                 __local_10 = (if __sroa___match_scrut_1_discriminant == 0 -> ref "core:prelude/string.wado//String" {
                     __local_9 = __sroa___match_scrut_1_case0_payload_0;
                     __local_9;
-                } else if __sroa___match_scrut_1_discriminant == 1 -> ref "core:prelude/string.wado//String" {
-                    struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("null"), used: 4 };
                 } else {
-                    unreachable;
+                    struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("null"), used: 4 };
                 });
                 __local_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 "), used: 1 };
@@ -241,13 +237,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     __for_1: block {
         i = 0;
         block {
-            l7: loop {
+            l5: loop {
                 if i >= len {
                     break __for_1;
                 }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l7;
+                continue l5;
             };
         };
     };
@@ -303,7 +299,7 @@ fn "core:prelude/primitive.wado/write_base_digits"(arr, offset, abs_val, digit_c
         __for_3: block {
             temp = abs_val;
             block {
-                l12: loop {
+                l10: loop {
                     if temp <= 0_i64 {
                         break __for_3;
                     }
@@ -318,7 +314,7 @@ fn "core:prelude/primitive.wado/write_base_digits"(arr, offset, abs_val, digit_c
                     });
                     builtin::array_set_u8(arr, pos, ch & 255);
                     temp = temp / base64;
-                    continue l12;
+                    continue l10;
                 };
             };
         };
@@ -337,13 +333,13 @@ fn "core:prelude/primitive.wado/count_digits_base"(val, base) {
     __for_4: block {
         t = val;
         block {
-            l18: loop {
+            l16: loop {
                 if t <= 0_i64 {
                     break __for_4;
                 }
                 n = n + 1;
                 t = t / base64;
-                continue l18;
+                continue l16;
             };
         };
     };
@@ -358,8 +354,8 @@ fn "core:json/write_escaped_string"(buf, s) {
     let __local_6: ref "core:prelude/format.wado//Formatter";
     "core:prelude/string.wado/String::push"(buf, 34);
     __iter_2 = struct.new "core:prelude/string.wado//StrCharIter" { repr: s.repr, used: s.used, byte_index: 0 };
-    b20: block {
-        l21: loop {
+    b18: block {
+        l19: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: char;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = "core:prelude/string.wado/StrCharIter^Iterator::next"(__iter_2);
@@ -397,9 +393,9 @@ fn "core:json/write_escaped_string"(buf, s) {
                     }
                 }
             } else {
-                break b20;
+                break b18;
             }
-            continue l21;
+            continue l19;
         };
     };
     "core:prelude/string.wado/String::push"(buf, 34);
@@ -412,14 +408,12 @@ fn "core:json/core/json/to_string<ErrorMessage>"(value) {
     let __match_scrut_0: ref null "core:serde//SerializeError";
     __match_scrut_0 = "wado-compiler/tests/fixtures/serde_ndjson_wrapper.wado/ErrorMessage^Serialize::serialize<JsonSerializer>"(value, buf);
     if ref.is_null(__match_scrut_0) {
-    } else if ref.is_null(__match_scrut_0) == 0 {
+    } else {
         let __cast_1: ref null "core:serde//SerializeError";
         __cast_1 = ref.as_non_null(__match_scrut_0);
         __local_4 = ref.as_non_null(__cast_1);
         return 1, ref.null none, __local_4;
         unreachable;
-        unreachable;
-    } else {
         unreachable;
     }
     return 0, buf, ref.null none;
@@ -432,14 +426,12 @@ fn "core:json/core/json/to_string<Message>"(value) {
     let __match_scrut_0: ref null "core:serde//SerializeError";
     __match_scrut_0 = "wado-compiler/tests/fixtures/serde_ndjson_wrapper.wado/Message^Serialize::serialize<JsonSerializer>"(value, buf);
     if ref.is_null(__match_scrut_0) {
-    } else if ref.is_null(__match_scrut_0) == 0 {
+    } else {
         let __cast_1: ref null "core:serde//SerializeError";
         __cast_1 = ref.as_non_null(__match_scrut_0);
         __local_4 = ref.as_non_null(__cast_1);
         return 1, ref.null none, __local_4;
         unreachable;
-        unreachable;
-    } else {
         unreachable;
     }
     return 0, buf, ref.null none;
@@ -618,13 +610,13 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l47: loop {
+            l43: loop {
                 if i >= n {
                     break __for_0;
                 }
                 "core:prelude/string.wado/String::push"(_licm_buf_4, c);
                 i = i + 1;
-                continue l47;
+                continue l43;
             };
         };
     };

@@ -688,10 +688,8 @@ fn "core:prelude/string.wado/String::from_utf8_lossy<MyBytes>"(bytes) {
                 __local_4 = __cast_1.payload_0;
                 pending = struct.new "core:prelude/types.wado//Option<u8>" { 1 };
                 struct.new "core:prelude/types.wado//Option<u8>::Some" { discriminant: 0, payload_0: __local_4 };
-            } else if __match_scrut_0.discriminant == 1 -> ref "core:prelude/types.wado//Option<u8>" {
-                "core:prelude/array.wado/ArrayIter<u8>^Iterator::next"(iter);
             } else {
-                unreachable;
+                "core:prelude/array.wado/ArrayIter<u8>^Iterator::next"(iter);
             });
             if ref.test "core:prelude/types.wado//Option<u8>::Some"(b0_opt) {
                 b0 = ref.cast "core:prelude/types.wado//Option<u8>::Some"(b0_opt).payload_0;
@@ -878,13 +876,13 @@ fn "core:prelude/array.wado/Array<u8>::grow"(self) {
     __for_0: block {
         i = 0;
         block {
-            l99: loop {
+            l98: loop {
                 if i >= used {
                     break __for_0;
                 }
                 builtin::array_set_u8(new_repr, i, builtin::array_get<u8>(old_repr, i));
                 i = i + 1;
-                continue l99;
+                continue l98;
             };
         };
     };

@@ -108,7 +108,7 @@ fn "wado-compiler/tests/fixtures/enum-display-template.wado/describe"(f) {
             break __tmpl: __local_3;
             unreachable;
         };
-    } else if __match_scrut_0 == 2 -> ref "core:prelude/string.wado//String" {
+    } else {
         __tmpl: block -> ref "core:prelude/string.wado//String" {
             __local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(25), used: 0 };
             __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
@@ -117,8 +117,6 @@ fn "wado-compiler/tests/fixtures/enum-display-template.wado/describe"(f) {
             break __tmpl: __local_5;
             unreachable;
         };
-    } else {
-        unreachable;
     });
 }
 
@@ -184,13 +182,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     __for_1: block {
         i = 0;
         block {
-            l5: loop {
+            l4: loop {
                 if i >= len {
                     break __for_1;
                 }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l5;
+                continue l4;
             };
         };
     };

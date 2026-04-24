@@ -113,10 +113,8 @@ fn "./variant_struct_concat_module.wado/format_str"(s, opts) {
         "core:prelude/string.wado/String::concat"(s, pad);
     } else if __match_scrut_0.discriminant == 1 -> ref "core:prelude/string.wado//String" {
         "core:prelude/string.wado/String::concat"(pad, s);
-    } else if __match_scrut_0.discriminant == 2 -> ref "core:prelude/string.wado//String" {
-        "core:prelude/string.wado/String::concat"("core:prelude/string.wado/String::concat"(pad, s), pad);
     } else {
-        unreachable;
+        "core:prelude/string.wado/String::concat"("core:prelude/string.wado/String::concat"(pad, s), pad);
     });
 }
 
@@ -155,13 +153,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     __for_1: block {
         i = 0;
         block {
-            l5: loop {
+            l4: loop {
                 if i >= len {
                     break __for_1;
                 }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l5;
+                continue l4;
             };
         };
     };

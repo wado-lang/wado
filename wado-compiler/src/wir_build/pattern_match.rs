@@ -577,7 +577,7 @@ impl FunctionTranslator<'_, '_> {
                 name,
                 module_source,
                 ..
-            } => self.variant_case_indexer(&name, &module_source),
+            } => self.variant_case_indexer(name, module_source),
             ResolvedType::GenericInstance {
                 name,
                 module_source,
@@ -589,7 +589,7 @@ impl FunctionTranslator<'_, '_> {
                     .map(|t| self.type_table.mangle_type_name(*t))
                     .collect();
                 let mangled = crate::name::mangle_generic_name(name, &type_arg_names);
-                self.variant_case_indexer(&mangled, &module_source)
+                self.variant_case_indexer(&mangled, module_source)
             }
             ResolvedType::Enum {
                 name,

@@ -345,10 +345,8 @@ fn "wado-compiler/tests/fixtures/match_ergonomics.wado/match_ergonomics_match"()
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("red"), used: 3 };
     } else if __match_scrut_0 == 1 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("green"), used: 5 };
-    } else if __match_scrut_0 == 2 -> ref "core:prelude/string.wado//String" {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("blue"), used: 4 };
     } else {
-        unreachable;
+        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("blue"), used: 4 };
     });
     __v0_3 = name;
     __cond_4 = "core:prelude/string.wado/String^Eq::eq"(__v0_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("red"), used: 3 });
@@ -391,10 +389,8 @@ condition: name == \"red\"
         __cast_1 = ref.cast "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_1);
         __local_7 = struct.new "core:prelude/types.wado//Box<i32>" { value: __cast_1.payload_0 };
         __local_7.value;
-    } else if __match_scrut_1.discriminant == 1 -> i32 {
-        0;
     } else {
-        unreachable;
+        0;
     });
     __cond_10 = val == 42;
     if __cond_10 == 0 {
@@ -515,13 +511,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     __for_1: block {
         i = 0;
         block {
-            l21: loop {
+            l19: loop {
                 if i >= len {
                     break __for_1;
                 }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l21;
+                continue l19;
             };
         };
     };
@@ -610,13 +606,13 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
     __for_1: block {
         t = val;
         block {
-            l27: loop {
+            l25: loop {
                 if t <= 0_i64 {
                     break __for_1;
                 }
                 n = n + 1;
                 t = t / 10_i64;
-                continue l27;
+                continue l25;
             };
         };
     };
@@ -633,14 +629,14 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         __for_2: block {
             temp = abs_val;
             block {
-                l31: loop {
+                l29: loop {
                     if temp <= 0_i64 {
                         break __for_2;
                     }
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l31;
+                    continue l29;
                 };
             };
         };
@@ -733,7 +729,7 @@ fn "core:prelude/string.wado/String^Eq::eq_bytes"(a, b, len) {
     __for_1: block {
         i = 0;
         block {
-            l40: loop {
+            l38: loop {
                 if i >= len {
                     break __for_1;
                 }
@@ -741,7 +737,7 @@ fn "core:prelude/string.wado/String^Eq::eq_bytes"(a, b, len) {
                     return 0;
                 }
                 i = i + 1;
-                continue l40;
+                continue l38;
             };
         };
     };
@@ -827,13 +823,13 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l52: loop {
+            l50: loop {
                 if i >= n {
                     break __for_0;
                 }
                 "core:prelude/string.wado/String::push"(_licm_buf_4, c);
                 i = i + 1;
-                continue l52;
+                continue l50;
             };
         };
     };
@@ -972,8 +968,8 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
         unreachable;
     };
     _licm_buf_33 = f.buf;
-    b75: block {
-        l76: loop {
+    b73: block {
+        l74: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: char;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = "core:prelude/string.wado/StrCharIter^Iterator::next"(__iter_2);
@@ -998,9 +994,9 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
                     "core:prelude/string.wado/String::push"(_licm_buf_33, c);
                 }
             } else {
-                break b75;
+                break b73;
             }
-            continue l76;
+            continue l74;
         };
     };
     "core:prelude/string.wado/String::push"(f.buf, 34);

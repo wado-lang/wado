@@ -74,10 +74,8 @@ fn "wado-compiler/tests/fixtures/variant_in_struct_match.wado/__cm_export__run"(
     __sroa_opts_align = struct.new "./variant_in_struct_match_module.wado//Align" { 1 };
     "core:cli/println"(let __match_scrut_0: ref "./variant_in_struct_match_module.wado//Align"; __match_scrut_0 = __sroa_opts_align; (if __match_scrut_0.discriminant == 0 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("left"), used: 4 };
-    } else if __match_scrut_0.discriminant == 1 -> ref "core:prelude/string.wado//String" {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("right"), used: 5 };
     } else {
-        unreachable;
+        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("right"), used: 5 };
     }));
     "wasi/task-return"(0);
 }
@@ -117,13 +115,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     __for_1: block {
         i = 0;
         block {
-            l4: loop {
+            l3: loop {
                 if i >= len {
                     break __for_1;
                 }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l4;
+                continue l3;
             };
         };
     };

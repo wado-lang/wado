@@ -88,10 +88,8 @@ fn "wado-compiler/tests/fixtures/enum-impl-basic.wado/run"() with Stdout {
         2;
     } else if __match_scrut_1 == 2 -> "wado-compiler/tests/fixtures/enum-impl-basic.wado//enum:Season" {
         3;
-    } else if __match_scrut_1 == 3 -> "wado-compiler/tests/fixtures/enum-impl-basic.wado//enum:Season" {
-        0;
     } else {
-        unreachable;
+        0;
     });
     if n == 1 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("next is summer"), used: 14 });
@@ -156,13 +154,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     __for_1: block {
         i = 0;
         block {
-            l13: loop {
+            l12: loop {
                 if i >= len {
                     break __for_1;
                 }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l13;
+                continue l12;
             };
         };
     };

@@ -127,7 +127,7 @@ fn "./variant_import_struct_module.wado/format_with_opts"(s, opts) {
         "core:prelude/string.wado/String::concat"(s, pad);
     } else if __match_scrut_0.discriminant == 1 -> ref "core:prelude/string.wado//String" {
         "core:prelude/string.wado/String::concat"(pad, s);
-    } else if __match_scrut_0.discriminant == 2 -> ref "core:prelude/string.wado//String" {
+    } else {
         __local_5 = pad_len / 2;
         __local_6 = pad_len - __local_5;
         __local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(__local_5), used: 0 };
@@ -135,32 +135,30 @@ fn "./variant_import_struct_module.wado/format_with_opts"(s, opts) {
         __for_0: block {
             __local_9 = 0;
             block {
-                l9: loop {
+                l8: loop {
                     if __local_9 >= __local_5 {
                         break __for_0;
                     }
                     "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" "), used: 1 });
                     __local_9 = __local_9 + 1;
-                    continue l9;
+                    continue l8;
                 };
             };
         };
         __for_1: block {
             __local_10 = 0;
             block {
-                l12: loop {
+                l11: loop {
                     if __local_10 >= __local_6 {
                         break __for_1;
                     }
                     "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" "), used: 1 });
                     __local_10 = __local_10 + 1;
-                    continue l12;
+                    continue l11;
                 };
             };
         };
         "core:prelude/string.wado/String::concat"("core:prelude/string.wado/String::concat"(__local_7, s), __local_8);
-    } else {
-        unreachable;
     });
 }
 
@@ -199,13 +197,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     __for_1: block {
         i = 0;
         block {
-            l16: loop {
+            l15: loop {
                 if i >= len {
                     break __for_1;
                 }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l16;
+                continue l15;
             };
         };
     };
