@@ -369,7 +369,7 @@ async fn collect_test_jobs(
     let mut jobs = Vec::new();
     let mut todo_compile_errors = Vec::new();
 
-    for (module_idx, path) in paths.iter().enumerate() {
+    for path in paths {
         // Compile with --world test so test functions become component exports
         // and non-test code is subject to DCE.
         let compile_start = Instant::now();
@@ -430,6 +430,7 @@ async fn collect_test_jobs(
             }
         }
 
+        let module_idx = modules.len();
         for test_name in &test_names {
             let expect_trap = test_name.starts_with("test-trap-");
             let is_todo = test_name.starts_with("test-todo-");
