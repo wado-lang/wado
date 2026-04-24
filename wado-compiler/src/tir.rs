@@ -2130,7 +2130,7 @@ impl FunctionRef {
 
         match generic_name {
             "array_get" | "array_set" | "array_new" | "array_len" | "array_copy" | "array_fill"
-            | "select" => Some(format!("builtin::{generic_name}")),
+            | "select" | "copy_value" => Some(format!("builtin::{generic_name}")),
             _ => None,
         }
     }

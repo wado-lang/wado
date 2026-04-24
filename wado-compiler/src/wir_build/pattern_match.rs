@@ -183,7 +183,6 @@ impl FunctionTranslator<'_, '_> {
         value: &TirExpr,
     ) -> Option<WirInstr> {
         let value_instr = self.translate_expr(value);
-        let value_instr = self.maybe_value_copy(value, value_instr);
 
         match pattern {
             TirPattern::Tuple(patterns, _) => {
