@@ -1552,12 +1552,25 @@ impl FunctionTranslator<'_, '_> {
                         expr: Box::new(val),
                     };
                     let payload_result_ty = self.struct_field_wir_type(case_type_id, "payload_0");
-                    return WirInstr::StructGet {
+                    let get = WirInstr::StructGet {
                         type_id: case_type_id.clone(),
                         field_name: "payload_0".to_string(),
                         expr: Box::new(cast),
-                        result_ty: payload_result_ty,
+                        result_ty: payload_result_ty.clone(),
                     };
+                    // The variant case's `payload_0` field is declared
+                    // nullable for the Option<&T> = &T | null boxing
+                    // optimisation, but every `Some(_)` construction site
+                    // wraps its value with `RefAsNonNull`, so the extracted
+                    // value is invariantly non-null at runtime. Narrow the
+                    // WIR type so downstream call-sites and struct writes
+                    // see it as non-null (matches what the former
+                    // `WirInstr::ValueCopy { nullable }` handling guaranteed
+                    // implicitly).
+                    if matches!(payload_result_ty, WirType::Ref { nullable: true, .. }) {
+                        return WirInstr::RefAsNonNull(Box::new(get));
+                    }
+                    return get;
                 }
             }
         }
