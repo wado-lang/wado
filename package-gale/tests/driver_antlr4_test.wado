@@ -4,8 +4,15 @@
 /// from RULE_REF, so full parsing of real ANTLR4 input is not supported.
 /// These tests verify tokenization, basic parsing, and that the generated
 /// parser compiles.
-use antlr4 from "./golden/antlr4.wado";
-use { TK_LINE_COMMENT, TK_BLOCK_COMMENT, TK_INT } from "./golden/antlr4.wado";
+use antlr4 from "./grammars/ANTLRv4Lexer.g4"
+    with {
+        generator: {
+            module: { path: "src/generator.wado" },
+            inputs: ["./grammars/ANTLRv4Parser.g4"],
+            options: { highlight: false },
+        },
+    };
+use { TK_LINE_COMMENT, TK_BLOCK_COMMENT, TK_INT } from "./grammars/ANTLRv4Lexer.g4";
 
 test "tokenize grammar declaration" {
     let tokens = antlr4::tokenize(&"grammar Foo;");

@@ -1,5 +1,11 @@
-use ra from "./golden/right_assoc_gaps.wado";
-use { normalize_tree } from "./golden/right_assoc_gaps.wado";
+use ra from "./grammars/right_assoc_gaps.g4"
+    with {
+        generator: {
+            module: { path: "src/generator.wado" },
+            options: { highlight: false },
+        },
+    };
+use { normalize_tree } from "./grammars/right_assoc_gaps.g4";
 
 fn assert_tree(input: &String, expected: &String) {
     let root = ra::parse(input).unwrap();

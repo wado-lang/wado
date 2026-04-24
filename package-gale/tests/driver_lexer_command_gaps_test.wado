@@ -1,5 +1,11 @@
-use lex from "./golden/lexer_command_gaps.wado";
-use { normalize_tree } from "./golden/lexer_command_gaps.wado";
+use lex from "./grammars/lexer_command_gaps.g4"
+    with {
+        generator: {
+            module: { path: "src/generator.wado" },
+            options: { highlight: false },
+        },
+    };
+use { normalize_tree } from "./grammars/lexer_command_gaps.g4";
 
 fn assert_parses(input: &String) {
     let result = lex::parse(input);

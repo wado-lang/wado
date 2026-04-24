@@ -1,10 +1,16 @@
-use sexpression from "./golden/sexpression.wado";
+use sexpression from "./grammars/sexpression.g4"
+    with {
+        generator: {
+            module: { path: "src/generator.wado" },
+            options: { highlight: false },
+        },
+    };
 use {
     LexerSlice, Span, Token, SexprNode, ItemNode, ItemAlt0, ItemAlt1, ItemAlt2,
     ListNode, AtomNode, AtomAlt0, AtomAlt1, AtomAlt2, AtomAlt3,
     TK_STRING, TK_WHITESPACE, TK_NUMBER, TK_SYMBOL,
     TK_LPAREN, TK_RPAREN, TK_DOT, TK_EOF,
-} from "./golden/sexpression.wado";
+} from "./grammars/sexpression.g4";
 
 fn tok(kind: i32, text: String, start: i32, end: i32) -> Token {
     return Token {

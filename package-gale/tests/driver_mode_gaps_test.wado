@@ -1,5 +1,11 @@
-use mg from "./golden/mode_gaps.wado";
-use { normalize_tree } from "./golden/mode_gaps.wado";
+use mg from "./grammars/mode_gaps.g4"
+    with {
+        generator: {
+            module: { path: "src/generator.wado" },
+            options: { highlight: false },
+        },
+    };
+use { normalize_tree } from "./grammars/mode_gaps.g4";
 
 fn assert_tree(input: &String, expected: &String) {
     let root = mg::parse(input).unwrap();

@@ -1,5 +1,11 @@
-use ng from "./golden/non_greedy_gaps.wado";
-use { normalize_tree } from "./golden/non_greedy_gaps.wado";
+use ng from "./grammars/non_greedy_gaps.g4"
+    with {
+        generator: {
+            module: { path: "src/generator.wado" },
+            options: { highlight: false },
+        },
+    };
+use { normalize_tree } from "./grammars/non_greedy_gaps.g4";
 
 fn assert_parses(input: &String) {
     let result = ng::parse(input);

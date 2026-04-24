@@ -1,5 +1,11 @@
-use up from "./golden/unicode_props.wado";
-use { normalize_tree } from "./golden/unicode_props.wado";
+use up from "./grammars/unicode_props.g4"
+    with {
+        generator: {
+            module: { path: "src/generator.wado" },
+            options: { highlight: false },
+        },
+    };
+use { normalize_tree } from "./grammars/unicode_props.g4";
 
 fn assert_tree(input: &String, expected: &String) {
     let root = up::parse(input).unwrap();

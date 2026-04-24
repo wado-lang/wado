@@ -3,12 +3,19 @@
 /// The TypeScript grammar uses semantic predicates extensively, so full
 /// parsing is not supported without predicate evaluation. These tests
 /// verify tokenization of various TypeScript constructs.
-use ts from "./golden/typescript.wado";
-use { normalize_tree } from "./golden/typescript.wado";
+use ts from "./grammars/TypeScriptLexer.g4"
+    with {
+        generator: {
+            module: { path: "src/generator.wado" },
+            inputs: ["./grammars/TypeScriptParser.g4"],
+            options: { highlight: false },
+        },
+    };
+use { normalize_tree } from "./grammars/TypeScriptLexer.g4";
 use {
     TK_BackTick, TK_BackTickInside, TK_TemplateStringAtom,
     TK_WhiteSpaces, TK_Let,
-} from "./golden/typescript.wado";
+} from "./grammars/TypeScriptLexer.g4";
 
 fn assert_tree(input: &String, expected: &String) {
     let root = ts::parse(input).unwrap();

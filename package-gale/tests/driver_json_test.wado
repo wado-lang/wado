@@ -1,5 +1,11 @@
-use json from "./golden/json.wado";
-use { CstNode, CstChild, normalize_tree } from "./golden/json.wado";
+use json from "./grammars/JSON.g4"
+    with {
+        generator: {
+            module: { path: "src/generator.wado" },
+            options: { highlight: false },
+        },
+    };
+use { CstNode, CstChild, normalize_tree } from "./grammars/JSON.g4";
 
 fn assert_tree(input: &String, expected: &String) {
     let root = json::parse(input).unwrap();
