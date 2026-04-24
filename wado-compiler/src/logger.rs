@@ -105,6 +105,13 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
         }
     }
 
+    /// Access the underlying `CompilerHost` for callers that need to
+    /// relay pre-built diagnostics without contributing to the error count
+    /// (e.g. soft-warn paths like the kiln `Options` descriptor extractor).
+    pub fn host(&self) -> &'a H {
+        self.host
+    }
+
     // === File context ===
 
     /// Set the current file context for diagnostics

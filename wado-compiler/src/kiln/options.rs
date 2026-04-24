@@ -15,6 +15,8 @@
 //! out into auxiliary structs that are themselves made of the primitives
 //! listed here.
 
+use serde::{Deserialize, Serialize};
+
 use crate::annotate::Annotated;
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::hashmap::IndexSet;
@@ -25,12 +27,12 @@ use crate::tir::{
 use crate::token::Span;
 
 /// Structural description of a generator's `pub struct Options`.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct OptionsDescriptor {
     pub fields: Vec<OptionsField>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct OptionsField {
     pub name: String,
     pub ty: OptionsType,
@@ -38,11 +40,17 @@ pub struct OptionsField {
     /// provides a literal default for this field. Fields without a default
     /// are required in the user's options table.
     pub default: Option<CanonicalValue>,
+    /// Source position in the generator source. Not persisted across the
+    /// descriptor-cache boundary — diagnostics emitted against a cached
+    /// descriptor degrade to a zero span, which is acceptable because the
+    /// cache is keyed by source hash and the user still sees the field
+    /// name.
+    #[serde(skip, default)]
     pub span: Span,
 }
 
 /// The set of shapes supported inside a generator's `Options` struct.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum OptionsType {
     Bool,
     I32,
@@ -88,7 +96,7 @@ impl OptionsType {
 ///
 /// Shape mirrors [`OptionsType`] so [`crate::kiln::cache::encode_options_canonical`]
 /// can walk the two in lock-step.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum CanonicalValue {
     Bool(bool),
     I64(i64),

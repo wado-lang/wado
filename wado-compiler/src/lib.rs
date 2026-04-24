@@ -84,6 +84,12 @@ pub struct CompileResult {
     pub wir_package: Option<wir::WirPackage>,
     /// Whether the entry module has `#![TODO]`
     pub is_todo_module: bool,
+    /// Structural description of the generator's `pub struct Options`,
+    /// populated only when `target_world == "core:kiln/generator"` and
+    /// the Options struct extracts cleanly. Consumed by the CLI's kiln
+    /// provider to skip a second compile when the driver asks for the
+    /// descriptor.
+    pub kiln_options_descriptor: Option<kiln::OptionsDescriptor>,
 }
 
 /// Compilation failure with metadata from the successfully-parsed AST.
@@ -248,11 +254,12 @@ pub async fn compile_with_options<H: CompilerHost>(
     // Wrap all subsequent Bail errors with is_todo_module
     let result = compile_after_load(load_result, options, &logger, filename);
     match result {
-        Ok((wasm, module, wir_package)) => Ok(CompileResult {
+        Ok((wasm, module, wir_package, kiln_options_descriptor)) => Ok(CompileResult {
             wasm,
             module,
             wir_package,
             is_todo_module,
+            kiln_options_descriptor,
         }),
         Err(Bail) => Err(CompileFailure { is_todo_module }),
     }
@@ -264,7 +271,15 @@ fn compile_after_load<H: CompilerHost>(
     options: CompilerOptions,
     logger: &Logger<'_, H>,
     filename: Option<String>,
-) -> Result<(Vec<u8>, ast::Module, Option<wir::WirPackage>), Bail> {
+) -> Result<
+    (
+        Vec<u8>,
+        ast::Module,
+        Option<wir::WirPackage>,
+        Option<kiln::OptionsDescriptor>,
+    ),
+    Bail,
+> {
     let module_name = filename.unwrap_or_else(|| "module".to_string());
     let implicit_modules = load_result.implicit_modules.clone();
     let entry_ast = load_result.entry_ast.clone();
@@ -299,6 +314,29 @@ fn compile_after_load<H: CompilerHost>(
     // lowering. The resulting `Annotated` carries the `TirModule`s the batch
     // compiler needs plus the use→def reference map LSP queries need.
     let annotated = annotate::annotate_loaded(load_result, logger)?;
+
+    // === Phase 6c: Kiln `Options` descriptor extraction ===
+    // For the `core:kiln/generator` target world, walk the entry module's
+    // `pub struct Options` and produce a structural descriptor that the CLI
+    // provider caches on disk. Diagnostics from the extractor surface
+    // through the host without bailing: a malformed descriptor does not
+    // fail the whole compile, so the driver's provisional fallback still
+    // produces a valid cache key.
+    let kiln_options_descriptor = if options.target_world.as_deref()
+        == Some("core:kiln/generator")
+    {
+        match kiln::extract_options_descriptor(&annotated, &annotated.entry_module_source) {
+            Ok(d) => Some(d),
+            Err(diags) => {
+                for d in diags {
+                    logger.host().emit_diagnostic(d);
+                }
+                None
+            }
+        }
+    } else {
+        None
+    };
 
     let annotate::Annotated {
         entry_module_source,
@@ -486,6 +524,7 @@ fn compile_after_load<H: CompilerHost>(
         } else {
             None
         },
+        kiln_options_descriptor,
     ))
 }
 
