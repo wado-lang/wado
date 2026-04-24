@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777027550150,
+  "lastUpdate": 1777035594943,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -15897,6 +15897,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d26ad5968a615885fd60f18f51de26eb1a4f0ed5"
         },
         "date": 1777027549904,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8982,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18935,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 622193,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3f484e7c9ff53316d33f4f6cc57f945998272df7",
+          "message": "Merge pull request #913 from wado-lang/claude/wasi-p3-tls-support-DPrFD\n\nwasi: add wasi:tls@0.3.0-draft stdlib (wasmtime v44)",
+          "timestamp": "2026-04-24T21:55:17+09:00",
+          "tree_id": "87f0c95d4fd74541bf0f6240eadd5733055c99d4",
+          "url": "https://github.com/wado-lang/wado/commit/3f484e7c9ff53316d33f4f6cc57f945998272df7"
+        },
+        "date": 1777035594636,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
