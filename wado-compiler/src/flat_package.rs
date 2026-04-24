@@ -99,6 +99,15 @@ impl FlatPackage {
         self.target_world == world_registry::TEST_WORLD
     }
 
+    /// Check if the project targets the Kiln generator well-known world
+    /// (`core:kiln/generator`). The codegen path uses this to emit the
+    /// kiln-specific CM record/variant types and to point the
+    /// `task-return` canon at the `result<response, error>` shape
+    /// required by the generator's export signature.
+    pub fn is_kiln_generator_world(&self) -> bool {
+        self.target_world == "core:kiln/generator"
+    }
+
     /// Look up a variant by `(module_source, name)`.
     pub fn find_variant(&self, ms: &ModuleSource, name: &str) -> Option<&TirVariantDecl> {
         self.variant_index

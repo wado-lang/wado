@@ -160,9 +160,16 @@ pub async fn run_generator<H: CompilerHost + 'static>(
         options: request.options,
     };
 
-    let result = generator
-        .call_generate(&mut store, &wit_request)
+    // Async exports in wasmtime bindgen take an `Accessor` rather than
+    // `&mut Store`, so we drive the call through `run_concurrent`. The
+    // outer Result combines wasmtime's runtime errors and the
+    // generator's own typed `error` variant.
+    let result = store
+        .run_concurrent(async |accessor| {
+            generator.call_generate(accessor, wit_request).await
+        })
         .await
+        .map_err(|e| GeneratorRunnerError::Host(format!("generate call: {e}")))?
         .map_err(|e| GeneratorRunnerError::Host(format!("generate call: {e}")))?;
 
     for diag in diagnostics.lock().unwrap().drain(..) {
