@@ -10,12 +10,14 @@
 //! update-gale-golden`); retiring the CLI is a follow-up once Kiln-driven
 //! consumers have proven out on one release cycle.
 //!
-//! v1 ergonomics (WEP 2026-04-12 §"M6.5 stage 2"): the author writes
-//! `fn generate(raw: RawRequest)` and calls `bind_request::<Options>(raw)?`
-//! at the top of the body. A follow-up adapter synthesis may hide that
-//! call.
+//! v2 ergonomics (WEP 2026-04-12 §"M6.5 stage 2"): the author writes
+//! `fn generate(req: Request<Options>)` and the compiler's
+//! `inject_kiln_request_adapter` phase rewrites the signature to
+//! `fn generate(req: RawRequest)` with
+//! `let req = bind_request::<Options>(req)?;` prepended. The v1
+//! explicit form still compiles for packages that prefer it.
 
-use { RawRequest, Response, Error, OutputFile, bind_request } from "core:kiln";
+use { Request, Response, Error, OutputFile } from "core:kiln";
 use { parse } from "./g4/parser.wado";
 use { Grammar, merge_grammars, check_references } from "./ir.wado";
 use { generate as codegen_generate, GenerateOptions } from "./codegen.wado";
@@ -36,13 +38,12 @@ impl Deserialize for Options;
 
 /// Kiln entry point. Called by the compiler via
 /// `core:kiln/generator.generate` when `[build.generators.*]` references
-/// this package as its `module`.
-export fn generate(raw: RawRequest) -> Result<Response, Error> {
-    let req = match bind_request::<Options>(raw) {
-        Ok(r) => r,
-        Err(e) => return Result::Err(e),
-    };
-
+/// this package as its `module`. The compiler rewrites the
+/// `Request<Options>` form to the internal `RawRequest` +
+/// `bind_request` shape during
+/// `kiln::import_check::inject_kiln_request_adapter` (runs before
+/// analyze).
+export fn generate(req: Request<Options>) -> Result<Response, Error> {
     // Parse the primary grammar plus any supplementary grammars listed in
     // `inputs` (e.g. a sibling lexer grammar for a split parser grammar).
     // `merge_grammars` handles the single-grammar case by returning the
