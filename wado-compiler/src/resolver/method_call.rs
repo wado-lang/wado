@@ -2116,9 +2116,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // Auto-derived `Default::default()` — no user impl block exists, but
         // the synthesis pass emits one in the struct's own module.
-        if method_name == "default"
-            && self.auto_derive_default_struct_type(struct_name).is_some()
-        {
+        if method_name == "default" && self.auto_derive_default_struct_type(struct_name).is_some() {
             return Some(StaticMethodRef::new(
                 self.find_struct_module_source(struct_name),
                 struct_name,
@@ -2190,9 +2188,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Auto-derived `Default::default()` for structs whose fields all have
         // default expressions. No user impl exists (previous checks would have
         // caught it), but `synthesis::traits` will emit the body.
-        if method_name == "default"
-            && self.auto_derive_default_struct_type(struct_name).is_some()
-        {
+        if method_name == "default" && self.auto_derive_default_struct_type(struct_name).is_some() {
             return true;
         }
 
