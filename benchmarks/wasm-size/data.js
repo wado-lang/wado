@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777002778293,
+  "lastUpdate": 1777011117016,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -15829,6 +15829,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 635264,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9dee8ac91ce45872dfeb9657391ee36da3be09e1",
+          "message": "Merge pull request #911 from wado-lang/claude/optimize-benchmark-json-catslog-2pUeO\n\nperf(lowering): skip last-arm test for exhaustive variant/enum match",
+          "timestamp": "2026-04-24T15:07:43+09:00",
+          "tree_id": "89ed657b71ea648d89096ba13ddd7fc379e42539",
+          "url": "https://github.com/wado-lang/wado/commit/9dee8ac91ce45872dfeb9657391ee36da3be09e1"
+        },
+        "date": 1777011116761,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8982,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18935,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 622193,
             "unit": "bytes"
           }
         ]
