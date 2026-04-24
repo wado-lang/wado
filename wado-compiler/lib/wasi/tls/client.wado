@@ -1,0 +1,29 @@
+#![generated(by = "wado-from-idl", sources = ["vendor/wasmtime/crates/wasi-tls/src/p3/wit/deps/tls/client.wit"])]
+
+use { Error } from "wasi:tls/types.wado";
+
+
+#[cm("wasi:tls/client@0.3.0-draft#connector")]
+pub resource Connector {
+    #[cm("wasi:tls/client@0.3.0-draft#[constructor]connector")]
+    fn new() -> Connector;
+    /// Set up the encryption stream transform.
+    /// This takes an unprotected `cleartext` application data stream and
+    /// returns an encrypted data stream, ready to be sent out over the network.
+    /// Closing the `cleartext` stream will cause a `close_notify` packet to be emitted on the returned output stream.
+    #[cm("wasi:tls/client@0.3.0-draft#[method]connector.send")]
+    #[cm_params("self", "cleartext")]
+    fn send(self: &Connector, cleartext: Stream<u8>) -> [Stream<u8>, Future<Result<(), Error>>];
+    /// Set up the decryption stream transform.
+    /// This takes an encrypted data stream, as received via e.g. the network,
+    /// and returns a decrypted application data stream.
+    #[cm("wasi:tls/client@0.3.0-draft#[method]connector.receive")]
+    #[cm_params("self", "ciphertext")]
+    fn receive(self: &Connector, ciphertext: Stream<u8>) -> [Stream<u8>, Future<Result<(), Error>>];
+    /// Perform the handshake.
+    /// The `send` & `receive` streams must be set up before calling this method.
+    #[cm("wasi:tls/client@0.3.0-draft#[static]connector.connect")]
+    #[cm_params("this", "server-name")]
+    async fn connect(this: Connector, server_name: String) -> AsyncCall<Result<(), Error>>;
+}
+
