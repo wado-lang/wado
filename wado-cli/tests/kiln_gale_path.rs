@@ -79,9 +79,9 @@ fn consumer_manifest_lowers_kiln_invocation_to_local_gale() {
 fn consumer_provider_compiles_gale_and_hits_cache_on_rerun() {
     let root = consumer_root();
     let provider = CliGeneratorProvider::new(root.clone());
-    let module = GeneratorModule::LocalPath(
-        wado_compiler::kiln::InvocationPath::normalize("../../src/generator.wado"),
-    );
+    let module = GeneratorModule::LocalPath(wado_compiler::kiln::InvocationPath::normalize(
+        "../../src/generator.wado",
+    ));
 
     assert_eq!(provider.compile_count(), 0);
 
