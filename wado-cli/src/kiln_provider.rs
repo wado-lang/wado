@@ -160,7 +160,13 @@ impl CliGeneratorProvider {
                     inner: FilesystemCompilerHost::with_log_level(base_path, LogLevel::Warn),
                 };
                 let options = CompilerOptions {
-                    opt_level: wado_compiler::OptLevel::O0,
+                    // `O2` matches what `mise run update-gale-golden` uses
+                    // for the CLI path, so Kiln-invoked generators see the
+                    // same optimization level their authors tested against.
+                    // O0 also uncovers O0-visible bugs in generators (e.g.
+                    // `package-gale`'s `parser_gen` SQLite path) that are
+                    // orthogonal to the Kiln wiring.
+                    opt_level: wado_compiler::OptLevel::O2,
                     target_world: Some("core:kiln/generator".to_string()),
                     skip_validation: false,
                     log_level: Some(LogLevel::Warn),
