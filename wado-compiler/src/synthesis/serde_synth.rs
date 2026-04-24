@@ -11,6 +11,7 @@ use crate::hashmap::IndexSet;
 use crate::name::{LocalMethodName, MethodName, ModuleSource, mangle_local_trait_method};
 use crate::package::Package;
 use crate::tir::{
+    FunctionKind,
     CallArg, FunctionRef, InlineHint, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction,
     TirMatchArm, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind, TirStructField,
     TirTemplatePart, TirTypeParam, TypeId, TypeTable,
@@ -698,6 +699,7 @@ fn generate_struct_serialize(
         comp_features: 0,
         export_name: None,
         allocator_tag: None,
+        kind: FunctionKind::Regular,
     })
 }
 
@@ -1236,6 +1238,7 @@ fn generate_struct_deserialize(
         comp_features: 0,
         export_name: None,
         allocator_tag: None,
+        kind: FunctionKind::Regular,
     };
 
     Some((lookup_func, deser_func))
@@ -1424,6 +1427,7 @@ fn generate_lookup_function(
         comp_features: 0,
         export_name: None,
         allocator_tag: None,
+        kind: FunctionKind::Regular,
     }
 }
 
@@ -1576,6 +1580,7 @@ fn generate_enum_serialize(
         comp_features: 0,
         export_name: None,
         allocator_tag: None,
+        kind: FunctionKind::Regular,
     })
 }
 
@@ -1950,6 +1955,7 @@ fn generate_enum_deserialize(
         comp_features: 0,
         export_name: None,
         allocator_tag: None,
+        kind: FunctionKind::Regular,
     })
 }
 
@@ -2230,6 +2236,7 @@ fn generate_variant_serialize(
         comp_features: 0,
         export_name: None,
         allocator_tag: None,
+        kind: FunctionKind::Regular,
     })
 }
 
@@ -2764,6 +2771,7 @@ fn generate_variant_deserialize(
         comp_features: 0,
         export_name: None,
         allocator_tag: None,
+        kind: FunctionKind::Regular,
     })
 }
 
@@ -3034,6 +3042,7 @@ fn generate_flags_serialize(
         comp_features: 0,
         export_name: None,
         allocator_tag: None,
+        kind: FunctionKind::Regular,
     })
 }
 
@@ -3379,6 +3388,7 @@ fn generate_flags_deserialize(
         comp_features: 0,
         export_name: None,
         allocator_tag: None,
+        kind: FunctionKind::Regular,
     })
 }
 

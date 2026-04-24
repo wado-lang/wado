@@ -2890,6 +2890,26 @@ pub struct TirFunction {
 
     /// Allocator tag from `#[allocator("...")]` attribute (e.g., `"bump"`, `"debug"`).
     pub allocator_tag: Option<String>,
+
+    /// Categorizes the function for kind-specific optimizations. Most functions
+    /// are `Regular`; synthesis passes set specialized kinds so the TIR
+    /// optimizer can apply targeted transformations (e.g. freshness-based
+    /// elision for `ValueCopy`).
+    pub kind: FunctionKind,
+}
+
+/// Semantic category of a `TirFunction`. Carries the type operand so the
+/// optimizer can reason about the call without re-deriving it from the
+/// signature.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum FunctionKind {
+    /// Ordinary user-defined or synthesized function.
+    #[default]
+    Regular,
+    /// Synthesized `copy_value` function that deep-copies a value of
+    /// `type_id`. Calls to such functions may be elided when the argument is
+    /// provably fresh.
+    ValueCopy { type_id: TypeId },
 }
 
 /// Inline hint for a function, extracted from `#[inline(...)]` attributes.

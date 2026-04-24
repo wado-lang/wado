@@ -5,6 +5,7 @@ use crate::compiler_host::CompilerHost;
 use crate::hashmap::IndexSet;
 use crate::name::{LocalMethodName, MethodName, ModuleSource};
 use crate::tir::{
+    FunctionKind,
     TirEffect, TirEffectOp, TirFunction, TirGlobal, TirParam, TirResource, TirStruct, TirTest,
     TirVariantCase, TirVariantDecl, TypeId, TypeTable,
 };
@@ -606,6 +607,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             comp_features: extract_comp_features(&func.attrs),
             export_name: Self::extract_export_name(&func.attrs),
             allocator_tag: Self::extract_allocator_tag(&func.attrs),
+            kind: FunctionKind::Regular,
         })
     }
 
@@ -688,6 +690,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             comp_features: 0,
             export_name: None,
             allocator_tag: None,
+            kind: FunctionKind::Regular,
         };
 
         let tir_test = TirTest {
@@ -1073,6 +1076,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             comp_features: extract_comp_features(&func.attrs),
             export_name: None,
             allocator_tag: None,
+            kind: FunctionKind::Regular,
         })
     }
 }

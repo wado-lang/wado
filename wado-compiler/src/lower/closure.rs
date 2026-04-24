@@ -6,6 +6,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::name::{LocalMethodName, MethodName, ModuleSource};
 use crate::tir::{
+    FunctionKind,
     CallArg, ClosureFunctor, FunctionRef, InlineHint, ResolvedType, TirBlock, TirCapture, TirExpr,
     TirExprKind, TirField, TirFunction, TirImpl, TirMatchArm, TirModule, TirParam, TirPattern,
     TirStmt, TirStmtKind, TirStruct, TirStructField, TirStructPatternField, TirUnaryOp, TypeId,
@@ -1260,6 +1261,7 @@ impl ClosureLowerer {
                 comp_features: 0,
                 export_name: None,
                 allocator_tag: None,
+                kind: FunctionKind::Regular,
             };
 
             let call_method_rc = Rc::new(RefCell::new(call_method));
@@ -2944,6 +2946,7 @@ impl ClosureLowerer {
             comp_features: callee.comp_features,
             export_name: callee.export_name.clone(),
             allocator_tag: callee.allocator_tag.clone(),
+            kind: FunctionKind::Regular,
         };
 
         self.generated_functions
