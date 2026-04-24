@@ -1698,8 +1698,10 @@ pub enum WirInstr {
 
     // === High-level compound instructions (lowered to sequences during emission) ===
     /// Deep copy of a value type (struct, array, variant, option, tuple).
-    /// Lowered to field-by-field copy, array loop, etc. during emission.
-    /// When `nullable` is true, codegen emits a null guard (`ref.is_null` + if/else).
+    /// **Dead** — no production path emits `ValueCopy` after the move to
+    /// the TIR-level `\$value_copy\$T<id>` synthesis pass. The variant is
+    /// kept only so the optimizer's pattern-matching arms still compile;
+    /// follow-up commit removes the variant and the residual arms together.
     ValueCopy {
         type_id: WirTypeId,
         source_type: WirCopyType,
