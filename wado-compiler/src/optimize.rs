@@ -36,6 +36,7 @@ mod sroa;
 mod store_load_forward;
 mod tmpl_hoist;
 mod value_copy;
+mod value_copy_elide;
 mod value_copy_synth;
 
 use condition_implication::eliminate_implied_conditions;
@@ -198,6 +199,18 @@ pub fn optimize(
     profiler.span_start("tir/value_copy_synthesis");
     value_copy_synth::synthesize_value_copy_funcs(&mut project);
     profiler.span_end("tir/value_copy_synthesis");
+
+    // Elide single-use, immutable `$value_copy$T<id>` calls — recovers the
+    // freshness optimization that the former WIR-level `value_copy`
+    // instruction performed inline. The remaining helpers are visible in
+    // `wado dump` exactly when their cost is actually paid.
+    profiler.span_start("tir/value_copy_elide");
+    value_copy_elide::elide_synthesized_value_copies(&mut project);
+    profiler.span_end("tir/value_copy_elide");
+
+    // Final DCE — drop synthesized `$value_copy$T<id>` helpers whose only
+    // call sites were elided.
+    run_dce(&mut project, profiler);
 
     project
 }
