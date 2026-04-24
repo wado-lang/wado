@@ -177,17 +177,20 @@ fn lower(name: &str, gi: &GeneratorInvocation) -> Result<Invocation, DriverError
     })
 }
 
-/// Provisional canonical TOML encoder — used by M3 until M4 replaces it with
-/// the Component-Model lifted form.
+/// Provisional canonical encoder over the raw TOML tree — used only when
+/// the provider cannot hand back a typed `OptionsDescriptor` (spec-form
+/// generators, `Unsupported`, etc.). It emits canonical JSON matching
+/// the wire `options: string` layout so cache keys stay byte-identical
+/// with the typed path on the common subset.
 ///
-/// Format (length-prefixed, depth-first, keys sorted alphabetically):
-/// - `0` bool, 1 byte (0 / 1)
-/// - `1` integer, 8 BE bytes
-/// - `2` float, 8 BE bytes (IEEE-754 bits)
-/// - `3` string, u64 BE length-prefix + UTF-8 bytes
-/// - `4` array, u64 BE count + each element
-/// - `5` table, u64 BE count + each (key string + value)
-/// - `6` datetime, u64 BE length-prefix + RFC3339 string
+/// Rules mirror [`wado_compiler::kiln::encode_options_canonical`]:
+/// - Object keys sorted lexicographically (UTF-8 byte order).
+/// - Strings NFC-normalized, minimal JSON escapes.
+/// - Integers: shortest base-10, no leading sign on zero.
+/// - Floats: shortest-roundtrip decimal. Integer-valued floats drop
+///   their trailing `.0`. `NaN` / `±Inf` panic.
+/// - Arrays: JSON arrays in source order.
+/// - Datetimes: string-encoded via `Display`, wrapped as JSON strings.
 #[must_use]
 pub fn encode_options_canonical_provisional(value: &toml::Value) -> Vec<u8> {
     let mut out = Vec::new();
@@ -197,53 +200,90 @@ pub fn encode_options_canonical_provisional(value: &toml::Value) -> Vec<u8> {
 
 fn write_toml(out: &mut Vec<u8>, v: &toml::Value) {
     match v {
-        toml::Value::Boolean(b) => {
-            out.push(0);
-            out.push(u8::from(*b));
-        }
+        toml::Value::Boolean(true) => out.extend_from_slice(b"true"),
+        toml::Value::Boolean(false) => out.extend_from_slice(b"false"),
         toml::Value::Integer(i) => {
-            out.push(1);
-            out.extend_from_slice(&i.to_be_bytes());
+            use std::io::Write;
+            let _ = write!(out, "{i}");
         }
         toml::Value::Float(f) => {
-            out.push(2);
-            out.extend_from_slice(&f.to_bits().to_be_bytes());
+            assert!(
+                f.is_finite(),
+                "kiln: canonical JSON cannot encode non-finite float {f}"
+            );
+            write_json_float(out, *f);
         }
         toml::Value::String(s) => {
-            out.push(3);
-            write_str(out, s);
+            write_json_string(out, s);
         }
         toml::Value::Array(a) => {
-            out.push(4);
-            write_len(out, a.len());
-            for item in a {
+            out.push(b'[');
+            for (i, item) in a.iter().enumerate() {
+                if i > 0 {
+                    out.push(b',');
+                }
                 write_toml(out, item);
             }
+            out.push(b']');
         }
         toml::Value::Table(t) => {
-            out.push(5);
+            out.push(b'{');
             let mut entries: Vec<(&String, &toml::Value)> = t.iter().collect();
             entries.sort_by(|a, b| a.0.cmp(b.0));
-            write_len(out, entries.len());
+            let mut first = true;
             for (k, val) in entries {
-                write_str(out, k);
+                if !first {
+                    out.push(b',');
+                }
+                first = false;
+                write_json_string(out, k);
+                out.push(b':');
                 write_toml(out, val);
             }
+            out.push(b'}');
         }
         toml::Value::Datetime(dt) => {
-            out.push(6);
-            write_str(out, &dt.to_string());
+            write_json_string(out, &dt.to_string());
         }
     }
 }
 
-fn write_str(out: &mut Vec<u8>, s: &str) {
-    write_len(out, s.len());
-    out.extend_from_slice(s.as_bytes());
+fn write_json_string(out: &mut Vec<u8>, s: &str) {
+    use unicode_normalization::UnicodeNormalization;
+    out.push(b'"');
+    for ch in s.nfc() {
+        match ch {
+            '"' => out.extend_from_slice(b"\\\""),
+            '\\' => out.extend_from_slice(b"\\\\"),
+            '\u{0008}' => out.extend_from_slice(b"\\b"),
+            '\u{000C}' => out.extend_from_slice(b"\\f"),
+            '\n' => out.extend_from_slice(b"\\n"),
+            '\r' => out.extend_from_slice(b"\\r"),
+            '\t' => out.extend_from_slice(b"\\t"),
+            c if (c as u32) < 0x20 => {
+                use std::io::Write;
+                let _ = write!(out, "\\u{:04x}", c as u32);
+            }
+            c => {
+                let mut buf = [0u8; 4];
+                out.extend_from_slice(c.encode_utf8(&mut buf).as_bytes());
+            }
+        }
+    }
+    out.push(b'"');
 }
 
-fn write_len(out: &mut Vec<u8>, n: usize) {
-    out.extend_from_slice(&(n as u64).to_be_bytes());
+fn write_json_float(out: &mut Vec<u8>, f: f64) {
+    use std::io::Write;
+    if f == 0.0 {
+        out.push(b'0');
+        return;
+    }
+    if f.fract() == 0.0 && f.abs() < 9_007_199_254_740_992.0 {
+        let _ = write!(out, "{}", f as i64);
+        return;
+    }
+    let _ = write!(out, "{f}");
 }
 
 /// Convert a `toml::Value` to the compiler-side generic [`AttrValue`] tree so

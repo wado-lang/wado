@@ -9,14 +9,18 @@
 //! The options encoding is intentionally opaque here (`&[u8]`). The caller
 //! supplies already-canonical bytes:
 //!
-//! - M3 driver: provisional TOML encoding produced outside the compiler.
-//! - M4 driver: Component-Model lifted encoding produced by
-//!   `kiln::options::encode_canonical`.
+//! - M3 driver: provisional TOML-tree encoding produced outside the
+//!   compiler; since M6.4 it also emits canonical JSON so the two paths
+//!   stay byte-equivalent on the common subset.
+//! - M6.4 driver: canonical JSON encoding produced by
+//!   [`encode_options_canonical`]. The same bytes feed the cache key and
+//!   the wire-form `options: string` on `core:kiln/types::raw-request`.
 //!
 //! Swapping the encoder in one place keeps cache keys stable unless the
 //! user-facing options actually change.
 
 use sha2::{Digest, Sha256};
+use unicode_normalization::UnicodeNormalization;
 
 use super::invocation::{GeneratorModule, Invocation, InvocationPath};
 use super::options::CanonicalValue;
@@ -38,9 +42,10 @@ fn hex(bytes: &[u8; 32]) -> String {
     out
 }
 
-/// Magic + version prefix. Bump when the canonical layout changes in a way
-/// that must invalidate every existing lockfile entry.
-const MAGIC: &[u8] = b"kiln-cache-key-v1\0";
+/// Magic + version prefix. Bump when the canonical layout changes in a
+/// way that must invalidate every existing lockfile entry. `v2` marks
+/// the M6.4 switch from the binary options encoder to canonical JSON.
+const MAGIC: &[u8] = b"kiln-cache-key-v2\0";
 
 /// The core:kiln world version the generator was built against. Part of the
 /// cache key so a future world-version bump invalidates every cached entry.
@@ -105,23 +110,21 @@ pub fn hex_digest(digest: &[u8; 32]) -> String {
     hex(digest)
 }
 
-/// Encode a [`CanonicalOptions`] to the canonical cache-key byte string.
+/// Encode a [`CanonicalOptions`] to the canonical cache-key / wire byte
+/// string (canonical JSON, RFC 8785–style).
 ///
-/// Format is a direct superset of the provisional TOML encoder's layout so
-/// cache keys for inputs expressible in both encoders stay byte-identical:
-///
-/// - `0` bool, 1 byte (0 / 1)
-/// - `1` integer, 8 BE bytes (signed)
-/// - `2` float, 8 BE bytes (IEEE-754 bits)
-/// - `3` string, u64 BE length-prefix + UTF-8 bytes
-/// - `5` table, u64 BE count + each (key string + value), keys sorted
-///
-/// `Option<T>` is encoded transparently: `Some(x)` emits exactly what `x`
-/// alone would emit; `None` is omitted from the enclosing table (and the
-/// table's entry count is reduced accordingly). This matches the provisional
-/// encoder's behavior where a missing field in TOML simply does not appear.
-/// Enums map to strings (tag 3). Unsigned integers are cast to signed before
-/// the big-endian write, matching TOML's single integer tag.
+/// - Object keys are lexicographically sorted (UTF-8 byte order).
+/// - String values are NFC-normalized and escaped minimally: `"`, `\`,
+///   and the ASCII control set use `\"`, `\\`, `\b`, `\f`, `\n`, `\r`,
+///   `\t`, or `\uXXXX`. Non-ASCII characters survive as raw UTF-8 bytes.
+/// - Integers render as shortest base-10 with no leading sign on zero.
+/// - Floats render shortest-roundtrip. Integer-valued floats drop their
+///   trailing `.0`. `-0.0` canonicalizes to `0`. `NaN` / `±Inf` panic
+///   because JSON cannot represent them — no Wado options schema yields
+///   them.
+/// - `Option::None` fields are omitted from the enclosing object.
+///   `Some(x)` is transparent: the JSON value is exactly `x`'s encoding.
+/// - Enum variants render as JSON strings using their Wado name.
 #[must_use]
 pub fn encode_options_canonical(options: &CanonicalOptions) -> Vec<u8> {
     let mut out = Vec::new();
@@ -130,44 +133,48 @@ pub fn encode_options_canonical(options: &CanonicalOptions) -> Vec<u8> {
 }
 
 fn encode_options_table(out: &mut Vec<u8>, entries: &[(String, CanonicalValue)]) {
-    out.push(5);
+    out.push(b'{');
     let mut indices: Vec<usize> = (0..entries.len())
         .filter(|i| !matches!(entries[*i].1, CanonicalValue::None))
         .collect();
     indices.sort_by(|a, b| entries[*a].0.cmp(&entries[*b].0));
-    write_u64(out, indices.len() as u64);
+    let mut first = true;
     for i in indices {
+        if !first {
+            out.push(b',');
+        }
+        first = false;
         let (k, v) = &entries[i];
-        write_vec_str(out, k);
+        write_json_string(out, k);
+        out.push(b':');
         encode_canonical_value(out, v);
     }
+    out.push(b'}');
 }
 
 fn encode_canonical_value(out: &mut Vec<u8>, v: &CanonicalValue) {
     match v {
-        CanonicalValue::Bool(b) => {
-            out.push(0);
-            out.push(u8::from(*b));
-        }
+        CanonicalValue::Bool(true) => out.extend_from_slice(b"true"),
+        CanonicalValue::Bool(false) => out.extend_from_slice(b"false"),
         CanonicalValue::I64(n) => {
-            out.push(1);
-            out.extend_from_slice(&n.to_be_bytes());
+            use std::io::Write;
+            let _ = write!(out, "{n}");
         }
         CanonicalValue::U64(n) => {
-            out.push(1);
-            out.extend_from_slice(&(*n as i64).to_be_bytes());
+            use std::io::Write;
+            let _ = write!(out, "{n}");
         }
         CanonicalValue::F64(f) => {
-            out.push(2);
-            out.extend_from_slice(&f.to_bits().to_be_bytes());
+            assert!(
+                f.is_finite(),
+                "kiln: canonical JSON cannot encode non-finite float {f}"
+            );
+            write_json_float(out, *f);
         }
         CanonicalValue::String(s) | CanonicalValue::Enum(s) => {
-            out.push(3);
-            write_vec_str(out, s);
+            write_json_string(out, s);
         }
         CanonicalValue::None => {
-            // Caller must suppress the enclosing entry; reaching here
-            // indicates a bug in the options walker.
             panic!("kiln: encode_options_canonical reached bare None value");
         }
         CanonicalValue::Some(inner) => {
@@ -179,13 +186,43 @@ fn encode_canonical_value(out: &mut Vec<u8>, v: &CanonicalValue) {
     }
 }
 
-fn write_u64(out: &mut Vec<u8>, n: u64) {
-    out.extend_from_slice(&n.to_be_bytes());
+/// Write a JSON string literal: surrounding quotes, NFC-normalized
+/// payload, minimal escapes.
+fn write_json_string(out: &mut Vec<u8>, s: &str) {
+    out.push(b'"');
+    for ch in s.nfc() {
+        match ch {
+            '"' => out.extend_from_slice(b"\\\""),
+            '\\' => out.extend_from_slice(b"\\\\"),
+            '\u{0008}' => out.extend_from_slice(b"\\b"),
+            '\u{000C}' => out.extend_from_slice(b"\\f"),
+            '\n' => out.extend_from_slice(b"\\n"),
+            '\r' => out.extend_from_slice(b"\\r"),
+            '\t' => out.extend_from_slice(b"\\t"),
+            c if (c as u32) < 0x20 => {
+                use std::io::Write;
+                let _ = write!(out, "\\u{:04x}", c as u32);
+            }
+            c => {
+                let mut buf = [0u8; 4];
+                out.extend_from_slice(c.encode_utf8(&mut buf).as_bytes());
+            }
+        }
+    }
+    out.push(b'"');
 }
 
-fn write_vec_str(out: &mut Vec<u8>, s: &str) {
-    write_u64(out, s.len() as u64);
-    out.extend_from_slice(s.as_bytes());
+fn write_json_float(out: &mut Vec<u8>, f: f64) {
+    use std::io::Write;
+    if f == 0.0 {
+        out.push(b'0');
+        return;
+    }
+    if f.fract() == 0.0 && f.abs() < 9_007_199_254_740_992.0 {
+        let _ = write!(out, "{}", f as i64);
+        return;
+    }
+    let _ = write!(out, "{f}");
 }
 
 /// Hex SHA-256 of the canonical options encoding.
@@ -421,5 +458,133 @@ mod tests {
         let result: Result<(FileHash, Vec<FileHash>), &'static str> =
             gather_file_hashes(&inv, |_| Err("oops"), |_| Ok(vec![]));
         assert_eq!(result, Err("oops"));
+    }
+
+    use crate::kiln::options::OptionsDescriptor;
+    use crate::kiln::options_check::CanonicalOptions;
+
+    fn opts(pairs: Vec<(&str, CanonicalValue)>) -> CanonicalOptions {
+        CanonicalOptions {
+            descriptor: OptionsDescriptor { fields: vec![] },
+            values: pairs.into_iter().map(|(k, v)| (k.to_string(), v)).collect(),
+        }
+    }
+
+    #[test]
+    fn canonical_json_empty_table_is_braces() {
+        let bytes = encode_options_canonical(&opts(vec![]));
+        assert_eq!(bytes, b"{}");
+    }
+
+    #[test]
+    fn canonical_json_bool_int_u64_render_plainly() {
+        let bytes = encode_options_canonical(&opts(vec![
+            ("flag", CanonicalValue::Bool(true)),
+            ("n", CanonicalValue::I64(-7)),
+            ("u", CanonicalValue::U64(42)),
+        ]));
+        assert_eq!(
+            std::str::from_utf8(&bytes).unwrap(),
+            r#"{"flag":true,"n":-7,"u":42}"#
+        );
+    }
+
+    #[test]
+    fn canonical_json_integer_float_drops_point_zero() {
+        let bytes = encode_options_canonical(&opts(vec![(
+            "ratio",
+            CanonicalValue::F64(5.0),
+        )]));
+        assert_eq!(std::str::from_utf8(&bytes).unwrap(), r#"{"ratio":5}"#);
+    }
+
+    #[test]
+    fn canonical_json_string_escapes_quote_and_controls() {
+        let bytes = encode_options_canonical(&opts(vec![(
+            "msg",
+            CanonicalValue::String("a\"b\nc\td".to_string()),
+        )]));
+        assert_eq!(
+            std::str::from_utf8(&bytes).unwrap(),
+            r#"{"msg":"a\"b\nc\td"}"#
+        );
+    }
+
+    #[test]
+    fn canonical_json_string_nfc_normalizes_compound_char() {
+        let decomposed = "e\u{0301}";
+        let composed = "\u{00e9}";
+        let bytes_d = encode_options_canonical(&opts(vec![(
+            "accent",
+            CanonicalValue::String(decomposed.to_string()),
+        )]));
+        let bytes_c = encode_options_canonical(&opts(vec![(
+            "accent",
+            CanonicalValue::String(composed.to_string()),
+        )]));
+        assert_eq!(
+            bytes_d, bytes_c,
+            "decomposed and composed forms must canonicalize to the same bytes"
+        );
+        assert!(std::str::from_utf8(&bytes_c).unwrap().contains(composed));
+    }
+
+    #[test]
+    fn canonical_json_sorts_keys_regardless_of_input_order() {
+        let unsorted = encode_options_canonical(&opts(vec![
+            ("zeta", CanonicalValue::I64(1)),
+            ("alpha", CanonicalValue::I64(2)),
+            ("mu", CanonicalValue::I64(3)),
+        ]));
+        let sorted = encode_options_canonical(&opts(vec![
+            ("alpha", CanonicalValue::I64(2)),
+            ("mu", CanonicalValue::I64(3)),
+            ("zeta", CanonicalValue::I64(1)),
+        ]));
+        assert_eq!(unsorted, sorted);
+        assert_eq!(
+            std::str::from_utf8(&unsorted).unwrap(),
+            r#"{"alpha":2,"mu":3,"zeta":1}"#
+        );
+    }
+
+    #[test]
+    fn canonical_json_option_none_is_omitted_and_some_is_transparent() {
+        let bytes = encode_options_canonical(&opts(vec![
+            ("kept", CanonicalValue::Bool(true)),
+            ("dropped", CanonicalValue::None),
+            (
+                "wrapped",
+                CanonicalValue::Some(Box::new(CanonicalValue::String("x".to_string()))),
+            ),
+        ]));
+        assert_eq!(
+            std::str::from_utf8(&bytes).unwrap(),
+            r#"{"kept":true,"wrapped":"x"}"#
+        );
+    }
+
+    #[test]
+    fn canonical_json_float_negative_zero_renders_as_zero() {
+        let bytes = encode_options_canonical(&opts(vec![(
+            "z",
+            CanonicalValue::F64(-0.0),
+        )]));
+        assert_eq!(std::str::from_utf8(&bytes).unwrap(), r#"{"z":0}"#);
+    }
+
+    #[test]
+    fn canonical_json_struct_nests_cleanly() {
+        let bytes = encode_options_canonical(&opts(vec![(
+            "nested",
+            CanonicalValue::Struct(vec![
+                ("y".to_string(), CanonicalValue::I64(2)),
+                ("x".to_string(), CanonicalValue::I64(1)),
+            ]),
+        )]));
+        assert_eq!(
+            std::str::from_utf8(&bytes).unwrap(),
+            r#"{"nested":{"x":1,"y":2}}"#
+        );
     }
 }
