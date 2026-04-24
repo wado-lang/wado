@@ -43,7 +43,7 @@ pub const DEFAULT_INLINE_OUTPUT_DIR_PREFIX: &str = "build/kiln";
 /// iff the manifest + inline merge keeps them under a single invocation.
 /// Scope at which an [`InvocationIndex`] entry takes effect.
 ///
-/// Drop-in replacement for the former "empty-string decl_file means
+/// Drop-in replacement for the former "empty-string `decl_file` means
 /// any importer" sentinel: manifest-declared invocations use
 /// [`DeclScope::Any`] (redirect any importer that imports the
 /// matching `from`), while inline-declared invocations use
