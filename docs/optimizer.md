@@ -181,6 +181,18 @@ E2E: [select_basic.wado](../wado-compiler/tests/fixtures/select_basic.wado), [se
 
 `tir_visitor.rs` and `wir_visitor.rs` provide shared `*MutVisitor` / `*RefVisitor` / `TirOptVisitor` traits used by every pass. Centralizing Block/Loop/If/Seq traversal here keeps individual passes free of duplicated walk logic. `TirOptVisitor` exposes change-tracking (`-> bool`) for fixed-point convergence.
 
+## Lowering Optimizations
+
+TIR→WIR lowering (`wir_build/`) also avoids emitting redundant shapes in a few targeted spots. These are not fixed-point passes; they fire once while the cascade is being built and are effective at all optimization levels including `-O0`.
+
+### Exhaustive Match Last-Arm Elision (`wir_build/pattern_match.rs`)
+
+For `match` expressions whose unguarded arms exhaustively cover every case of the scrutinee's variant or enum type, the final arm in source order is guaranteed to match by exclusion — its pattern test and the trailing `unreachable` fallback are both dead. `translate_match` recognises this via `compute_emitted_as_irrefutable` and treats the last arm as irrefutable (bindings + body only, no surrounding `If`). Removes one pattern test and one branch per `?` on the hot path of every `Result`/`Option`-heavy function, which is a significant fraction of deserializers.
+
+Conservative — only fires when every arm is `Variant`, `Enum`, or a one-level `Or` of those (with no guards, distinct case indices, and a count equal to the total cases of the scrutinee type). Anything else (wildcards, literals, ranges, guards, nested `Or`s) falls back to the standard `unreachable`-tailed cascade.
+
+E2E: [pattern_match_exhaustive_variant_last_arm.wado](../wado-compiler/tests/fixtures/pattern_match_exhaustive_variant_last_arm.wado), [pattern_match_non_exhaustive_keeps_fallback.wado](../wado-compiler/tests/fixtures/pattern_match_non_exhaustive_keeps_fallback.wado).
+
 ## WIR Optimizations
 
 `wir_optimize.rs` runs after WIR build and before Wasm emission, mutating the `WirPackage` in place. Phases run in order; passes within a phase may iterate.
