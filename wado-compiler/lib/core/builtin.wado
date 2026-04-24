@@ -29,6 +29,14 @@ fn i32_eqz(a: i32) -> i32;
 /// Returns if_true when cond is true, if_false when cond is false.
 /// Both operands are evaluated eagerly.
 fn select<T>(cond: bool, if_true: T, if_false: T) -> T;
+
+/// Deep-copies a value to preserve value semantics on assignment and
+/// parameter passing. Inserted at TIR build for value-semantic composite
+/// types (structs, variants, tuples). The synthesis phase replaces each
+/// monomorphized instance with a concrete per-type copy function tagged
+/// `FunctionKind::ValueCopy`, and the TIR optimizer elides calls whose
+/// argument is provably fresh.
+fn copy_value<T>(value: T) -> T;
 /// Returns the length of a GC array.
 fn array_len(arr: builtin::array<u8>) -> i32;
 

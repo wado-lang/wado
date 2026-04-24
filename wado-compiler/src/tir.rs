@@ -2947,6 +2947,21 @@ impl TirFunction {
     pub fn has_real_type_params(&self) -> bool {
         self.type_params.iter().any(|p| !p.is_effect)
     }
+
+    /// Returns the copied type if this is a synthesized value-copy function.
+    #[inline]
+    pub fn value_copy_type(&self) -> Option<TypeId> {
+        match self.kind {
+            FunctionKind::ValueCopy { type_id } => Some(type_id),
+            FunctionKind::Regular => None,
+        }
+    }
+
+    /// Returns true if this function was synthesized as a value-copy helper.
+    #[inline]
+    pub fn is_value_copy(&self) -> bool {
+        matches!(self.kind, FunctionKind::ValueCopy { .. })
+    }
 }
 
 #[derive(Debug, Clone)]
