@@ -127,17 +127,6 @@ impl FunctionTranslator<'_, '_> {
         result_type_id: TypeId,
     ) -> Option<WirInstr> {
         match builtin_name {
-            // Value-copy intrinsic: materialized by the `lower/value_copy`
-            // pass and lowered here to the same struct/variant deep-copy
-            // sequence that the former `wir_build::maybe_value_copy` path
-            // produced. Synthesis phase will eventually replace this path
-            // with per-type copy functions, after which the WirInstr::ValueCopy
-            // shape disappears entirely.
-            "builtin::copy_value" => {
-                let arg_expr = &args[0].expr;
-                let translated = self.translate_expr(arg_expr);
-                Some(self.build_value_copy(arg_expr.type_id, translated))
-            }
             "builtin::i32_load" => {
                 let addr = self.translate_expr(&args[0].expr);
                 Some(WirInstr::I32Load {
