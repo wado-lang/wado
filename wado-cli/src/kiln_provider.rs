@@ -159,12 +159,10 @@ impl CliGeneratorProvider {
                 let host = SilentHost {
                     inner: FilesystemCompilerHost::with_log_level(base_path, LogLevel::Warn),
                 };
-                // `skip_validation: true` tracks the CM-type-instance-
-                // wrapping follow-up on the M6.5 stage-2 surface.
                 let options = CompilerOptions {
                     opt_level: wado_compiler::OptLevel::O0,
                     target_world: Some("core:kiln/generator".to_string()),
-                    skip_validation: true,
+                    skip_validation: false,
                     log_level: Some(LogLevel::Warn),
                     ..CompilerOptions::default()
                 };

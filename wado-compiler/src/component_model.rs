@@ -2998,7 +2998,7 @@ pub fn wasi_named_type_return_needs_outptr(ty: &Type, registry: &WasiRegistry) -
 pub fn cm_size_with_registry(ty: &Type, registry: &WasiRegistry) -> u32 {
     match ty {
         Type::Named(named) => {
-            let Some(source) = registry.resolve_wasi_source_for(named, None) else {
+            let Some(source) = registry.resolve_cm_source_for(named, None) else {
                 return crate::cm_abi::cm_size(ty);
             };
             if let Some(resolved) = registry.get_newtype_by_source(source, &named.name) {
@@ -3060,7 +3060,7 @@ pub fn cm_size_with_registry(ty: &Type, registry: &WasiRegistry) -> u32 {
 pub fn cm_align_with_registry(ty: &Type, registry: &WasiRegistry) -> u32 {
     match ty {
         Type::Named(named) => {
-            let Some(source) = registry.resolve_wasi_source_for(named, None) else {
+            let Some(source) = registry.resolve_cm_source_for(named, None) else {
                 return crate::cm_abi::cm_align(ty);
             };
             if let Some(resolved) = registry.get_newtype_by_source(source, &named.name) {
@@ -3156,7 +3156,7 @@ pub fn cm_size_with_registry_scoped(
 ) -> u32 {
     match ty {
         Type::Named(named) => {
-            let Some(source) = registry.resolve_wasi_source_for(named, None) else {
+            let Some(source) = registry.resolve_cm_source_for(named, None) else {
                 return crate::cm_abi::cm_size(ty);
             };
             if let Some(resolved) = registry.get_newtype_by_source(source, &named.name) {
@@ -3224,7 +3224,7 @@ pub fn cm_align_with_registry_scoped(
 ) -> u32 {
     match ty {
         Type::Named(named) => {
-            let Some(source) = registry.resolve_wasi_source_for(named, None) else {
+            let Some(source) = registry.resolve_cm_source_for(named, None) else {
                 return crate::cm_abi::cm_align(ty);
             };
             if let Some(resolved) = registry.get_newtype_by_source(source, &named.name) {

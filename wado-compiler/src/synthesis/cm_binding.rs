@@ -2162,12 +2162,25 @@ fn synthesize_lower_wasi_type_to_memory(
     let resolved = wasi_registry.resolve_type(ty);
     match &resolved {
         Type::Named(n) => {
-            // WASI struct: store each field at its offset, keyed on the exact
-            // source interface the Named reference was resolved to.
-            let source = n
+            // CM record lowering: store each field at its offset, keyed on
+            // the exact source interface the Named reference was resolved
+            // to. Accepts both `wasi:*` and `core:kiln/*` sources so the
+            // kiln generator's record surface (input-file, output-file,
+            // response, raw-request) lowers through the same path as WASI
+            // records. When `source_interface` isn't on the AST node (e.g.
+            // when the NamedType was reconstructed from a TIR `TypeId` for
+            // `Array<T>` element lowering), fall back to `resolve_cm_source_for`
+            // using `wasi_package` as the hint — this mirrors the lift path.
+            let resolved_source = n
                 .source_interface
                 .as_deref()
-                .filter(|s| s.starts_with("wasi:"));
+                .map(str::to_string)
+                .or_else(|| {
+                    wasi_registry
+                        .resolve_cm_source_for(n, Some(wasi_package))
+                        .map(str::to_string)
+                });
+            let source = resolved_source.as_deref();
             if let Some(fields) = source
                 .and_then(|s| wasi_registry.get_struct_fields_with_wado_names_by_source(s, &n.name))
             {
@@ -3969,18 +3982,18 @@ fn synthesize_lower_to_flat(
     stmts: &mut Vec<TirStmt>,
     local_types: &mut Vec<TypeId>,
     tir_modules: &IndexMap<ModuleSource, crate::tir::TirModule>,
-    type_table: &TypeTable,
+    ctx: LiftContext<'_>,
 ) -> Vec<FlatLocal> {
-    let resolved = type_table.get(type_id);
+    let resolved = ctx.type_table.borrow().get(type_id).clone();
     lower_to_flat_inner(
         value,
         type_id,
-        resolved,
+        &resolved,
         next_local,
         stmts,
         local_types,
         tir_modules,
-        type_table,
+        ctx,
     )
 }
 
@@ -3999,7 +4012,7 @@ fn lower_to_flat_inner(
     stmts: &mut Vec<TirStmt>,
     local_types: &mut Vec<TypeId>,
     tir_modules: &IndexMap<ModuleSource, crate::tir::TirModule>,
-    type_table: &TypeTable,
+    ctx: LiftContext<'_>,
 ) -> Vec<FlatLocal> {
     use crate::tir::{PrimitiveType, ResolvedType};
 
@@ -4085,25 +4098,24 @@ fn lower_to_flat_inner(
         ResolvedType::GenericInstance {
             name, type_args, ..
         } if name == "Array" && type_args.len() == 1 => {
-            // Array<T> flat ABI: (ptr: i32, len: i32).
-            //
-            // v1 correctness bracket: empty arrays round-trip cleanly;
-            // non-empty arrays trap at runtime via
-            // `builtin::unreachable()` so the CM boundary never silently
-            // delivers `len == 0` in place of real data. The full
-            // implementation — walk elements into linear memory per CM
-            // canonical ABI, respecting per-element size and alignment —
-            // is tracked as the lower-side adapter follow-up in
-            // `docs/wep-2026-04-12-kiln.md` §"Planned follow-up". Until
-            // it lands, a generator that returns a non-empty
-            // `Response { files: [...] }` traps loudly instead of
-            // returning a zero-pointed tombstone.
-            let _ = type_args; // Element type reserved for the full impl.
+            // Array<T> flat ABI: (ptr: i32, len: i32) pointing at
+            // `len * cm_size(T)` bytes of linear memory with `cm_align(T)`
+            // alignment, laid out per the Canonical ABI.
+            let elem_type_id = type_args[0];
+            let elem_ast_type = {
+                let tt = ctx.type_table.borrow();
+                type_id_to_ast_type(elem_type_id, &tt)
+            };
+            let elem_size =
+                crate::component_model::cm_size_with_registry(&elem_ast_type, ctx.wasi_registry);
+            let elem_align =
+                crate::component_model::cm_align_with_registry(&elem_ast_type, ctx.wasi_registry);
+
+            // __arr = value
             let arr_local = alloc_local(next_local, local_types, type_id);
             stmts.push(let_stmt("__arr_val", arr_local, type_id, value));
 
-            // __len = Array::len(arr)  (generic receiver, monomorphized
-            // by the monomorphizer into `Array<T>::len`).
+            // __len = Array::len(__arr)
             let len_local = alloc_local(next_local, local_types, TypeTable::I32);
             stmts.push(let_stmt(
                 "__arr_len",
@@ -4119,31 +4131,135 @@ fn lower_to_flat_inner(
                 ),
             ));
 
-            // if __arr_len != 0 { builtin::unreachable(); }
-            stmts.push(if_stmt(
-                binary_ne(
+            // __bytes = __len * elem_size
+            let bytes_local = alloc_local(next_local, local_types, TypeTable::I32);
+            stmts.push(let_stmt(
+                "__arr_bytes",
+                bytes_local,
+                TypeTable::I32,
+                binary(
+                    crate::tir::TirBinaryOp::Mul,
                     local_ref(len_local, "__arr_len", TypeTable::I32),
-                    i32_const(0),
+                    i32_const(elem_size as i32),
+                    TypeTable::I32,
                 ),
-                block(vec![expr_stmt(builtin_call(
-                    "unreachable",
-                    vec![],
-                    TypeTable::UNIT,
-                ))]),
-                None,
             ));
 
-            // ptr is always 0 in the empty-array fast path. Reading
-            // past ptr would be a pointer into unallocated memory, but
-            // the trap above guarantees we never reach the consumer
-            // with len > 0.
+            // __ptr = builtin::realloc(0, 0, elem_align, __bytes)  — i.e.
+            // allocate `bytes` fresh bytes with `elem_align` alignment.
             let ptr_local = alloc_local(next_local, local_types, TypeTable::I32);
             stmts.push(let_stmt(
                 "__arr_ptr",
                 ptr_local,
                 TypeTable::I32,
+                builtin_call(
+                    "realloc",
+                    vec![
+                        i32_const(0),
+                        i32_const(0),
+                        i32_const(elem_align as i32),
+                        local_ref(bytes_local, "__arr_bytes", TypeTable::I32),
+                    ],
+                    TypeTable::I32,
+                ),
+            ));
+
+            // for let mut __i = 0; __i < __len; __i += 1 {
+            //   let __elem = __arr[__i];
+            //   synthesize_lower_wasi_type_to_memory(
+            //     elem_ast_type, __elem,
+            //     __ptr + __i * elem_size,
+            //   );
+            // }
+            let i_local = alloc_local(next_local, local_types, TypeTable::I32);
+            stmts.push(let_mut_stmt(
+                "__arr_i",
+                i_local,
+                TypeTable::I32,
                 i32_const(0),
             ));
+
+            let mut loop_stmts: Vec<TirStmt> = Vec::new();
+            loop_stmts.push(if_stmt(
+                binary(
+                    crate::tir::TirBinaryOp::GtEq,
+                    local_ref(i_local, "__arr_i", TypeTable::I32),
+                    local_ref(len_local, "__arr_len", TypeTable::I32),
+                    TypeTable::BOOL,
+                ),
+                block(vec![break_stmt()]),
+                None,
+            ));
+
+            // __elem = (__arr[__i]) via the IndexValue<i32> trait method.
+            let elem_local = alloc_local(next_local, local_types, elem_type_id);
+            let iv_info = crate::name::LocalMethodName::new(
+                "Array".to_string(),
+                Some("IndexValue<i32>".to_string()),
+                "index_value".to_string(),
+            );
+            let iv_mangled = iv_info.to_mangled_name();
+            loop_stmts.push(let_stmt(
+                "__arr_elem",
+                elem_local,
+                elem_type_id,
+                TirExpr::new(
+                    TirExprKind::method_call(
+                        Box::new(local_ref(arr_local, "__arr_val", type_id)),
+                        FunctionRef {
+                            module_source: ModuleSource::array(),
+                            name: iv_mangled,
+                            monomorph_info: None,
+                            method_info: Some(iv_info),
+                        },
+                        vec![],
+                        vec![CallArg::new(
+                            local_ref(i_local, "__arr_i", TypeTable::I32),
+                            false,
+                        )],
+                    ),
+                    elem_type_id,
+                    synth_span(),
+                ),
+            ));
+
+            // __elem_addr = __ptr + __i * elem_size
+            let elem_addr_local = alloc_local(next_local, local_types, TypeTable::I32);
+            loop_stmts.push(let_stmt(
+                "__arr_elem_addr",
+                elem_addr_local,
+                TypeTable::I32,
+                binary_add(
+                    local_ref(ptr_local, "__arr_ptr", TypeTable::I32),
+                    binary(
+                        crate::tir::TirBinaryOp::Mul,
+                        local_ref(i_local, "__arr_i", TypeTable::I32),
+                        i32_const(elem_size as i32),
+                        TypeTable::I32,
+                    ),
+                ),
+            ));
+
+            // Lower the element into the allocated slot.
+            loop_stmts.extend(synthesize_lower_wasi_type_to_memory(
+                &elem_ast_type,
+                local_ref(elem_local, "__arr_elem", elem_type_id),
+                local_ref(elem_addr_local, "__arr_elem_addr", TypeTable::I32),
+                next_local,
+                local_types,
+                ctx.wasi_registry,
+                ctx.cm_package,
+                ctx.type_table,
+            ));
+
+            // __i += 1
+            loop_stmts.push(expr_stmt(assign(
+                local_ref(i_local, "__arr_i", TypeTable::I32),
+                binary_add(local_ref(i_local, "__arr_i", TypeTable::I32), i32_const(1)),
+            )));
+
+            stmts.push(loop_stmt(block(loop_stmts)));
+
             vec![
                 FlatLocal {
                     index: ptr_local,
@@ -4192,7 +4308,10 @@ fn lower_to_flat_inner(
             });
 
             // If Some, lower the inner value
-            let inner_flat_types = flat_types_from_type_id(inner_type_id, tir_modules, type_table);
+            let inner_flat_types = {
+                let tt = ctx.type_table.borrow();
+                flat_types_from_type_id(inner_type_id, tir_modules, &tt)
+            };
             if !inner_flat_types.is_empty() {
                 // Allocate locals for inner flat values (initialized to zero)
                 let inner_locals: Vec<(u32, cm_abi::CmValType, String)> = inner_flat_types
@@ -4218,7 +4337,7 @@ fn lower_to_flat_inner(
                     &mut then_stmts,
                     local_types,
                     tir_modules,
-                    type_table,
+                    ctx,
                 );
                 for (i, flat_val) in inner_lowered.iter().enumerate() {
                     if i < inner_locals.len() {
@@ -4280,7 +4399,7 @@ fn lower_to_flat_inner(
                         stmts,
                         local_types,
                         tir_modules,
-                        type_table,
+                        ctx,
                     );
                     result.extend(field_lowered);
                 }
@@ -4830,6 +4949,11 @@ fn synthesize_result_export_binding(
     let user_func_ref = user_func.borrow();
     let user_return_type = user_func_ref.return_type;
     let needs_lifting = export_needs_param_lifting(&user_func_ref.params, type_table);
+    let lift_ctx = LiftContext {
+        wasi_registry,
+        type_table,
+        cm_package,
+    };
 
     // Build adapter params and call args
     let (adapter_params, call_args, param_count) = if needs_lifting {
@@ -4863,11 +4987,6 @@ fn synthesize_result_export_binding(
         // Lift flat params to Wado-typed call args
         let mut lifted_args = Vec::new();
         let mut flat_offset = 0;
-        let lift_ctx = LiftContext {
-            wasi_registry,
-            type_table,
-            cm_package,
-        };
         for (i, (_name, param_ty)) in world_params.iter().enumerate() {
             let user_type_id = user_func_ref
                 .params
@@ -5012,7 +5131,6 @@ fn synthesize_result_export_binding(
         let ok_local = alloc_local(&mut next_local, &mut local_types, ok_type_id);
         ok_stmts.push(let_stmt("__ok_val", ok_local, ok_type_id, ok_value));
 
-        let tt = type_table.borrow();
         let ok_lowered = synthesize_lower_to_flat(
             local_ref(ok_local, "__ok_val", ok_type_id),
             ok_type_id,
@@ -5020,9 +5138,8 @@ fn synthesize_result_export_binding(
             &mut ok_stmts,
             &mut local_types,
             tir_modules,
-            &tt,
+            lift_ctx,
         );
-        drop(tt);
 
         // Assign lowered values to flat locals [1..1+ok_flat_count]
         for (i, flat_val) in ok_lowered.iter().enumerate() {
@@ -5079,8 +5196,7 @@ fn synthesize_result_export_binding(
 
     // Lower Err payload to flat values
     // For variant Err types (like ErrorCode), we need the discriminant and per-case payload
-    let tt = type_table.borrow();
-    let err_resolved = tt.get(err_type_id);
+    let err_resolved = type_table.borrow().get(err_type_id).clone();
 
     // Check if Err type is a variant with payloads
     if let crate::tir::ResolvedType::Variant { name, .. } = &err_resolved {
@@ -5096,7 +5212,7 @@ fn synthesize_result_export_binding(
                 &mut err_stmts,
                 &mut local_types,
                 tir_modules,
-                &tt,
+                lift_ctx,
             );
         } else {
             // Unknown variant — lower as i32
@@ -5120,7 +5236,7 @@ fn synthesize_result_export_binding(
             &mut err_stmts,
             &mut local_types,
             tir_modules,
-            &tt,
+            lift_ctx,
         );
         for (i, flat_val) in err_lowered.iter().enumerate() {
             if 1 + i < flat_locals.len() {
@@ -5137,8 +5253,6 @@ fn synthesize_result_export_binding(
             }
         }
     }
-
-    drop(tt);
 
     // Call task-return with flat values
     let task_return_args: Vec<TirExpr> = flat_locals
@@ -5211,7 +5325,7 @@ fn synthesize_variant_lower_to_flat(
     stmts: &mut Vec<TirStmt>,
     local_types: &mut Vec<TypeId>,
     tir_modules: &IndexMap<ModuleSource, crate::tir::TirModule>,
-    type_table: &TypeTable,
+    ctx: LiftContext<'_>,
 ) {
     // Set flat[0] = discriminant
     if !flat_locals.is_empty() {
@@ -5227,7 +5341,10 @@ fn synthesize_variant_lower_to_flat(
 
     // For each non-unit case, generate: if variant_test { extract payload, lower to flat }
     for case in &variant_decl.cases {
-        let case_flat = flat_types_from_type_id(case.payload, tir_modules, type_table);
+        let case_flat = {
+            let tt = ctx.type_table.borrow();
+            flat_types_from_type_id(case.payload, tir_modules, &tt)
+        };
         if case_flat.is_empty() {
             continue; // Unit case — no payload to lower
         }
@@ -5256,7 +5373,7 @@ fn synthesize_variant_lower_to_flat(
             &mut case_stmts,
             local_types,
             tir_modules,
-            type_table,
+            ctx,
         );
 
         // Assign lowered values to flat locals [1..]
@@ -5380,6 +5497,11 @@ fn synthesize_general_export_binding(
     let user_func_ref = user_func.borrow();
     let user_return_type = user_func_ref.return_type;
     let needs_lifting = export_needs_param_lifting(&user_func_ref.params, type_table);
+    let lift_ctx = LiftContext {
+        wasi_registry,
+        type_table,
+        cm_package,
+    };
 
     // Build adapter params and call args
     let (adapter_params, call_args, param_count) = if needs_lifting {
@@ -5410,11 +5532,6 @@ fn synthesize_general_export_binding(
 
         let mut lifted_args = Vec::new();
         let mut flat_offset = 0;
-        let lift_ctx = LiftContext {
-            wasi_registry,
-            type_table,
-            cm_package,
-        };
         for (i, (_name, param_ty)) in world_params.iter().enumerate() {
             let user_type_id = user_func_ref
                 .params
@@ -5513,7 +5630,6 @@ fn synthesize_general_export_binding(
             call_user,
         ));
 
-        let tt = type_table.borrow();
         let lowered = synthesize_lower_to_flat(
             local_ref(result_local, "__result", user_return_type),
             user_return_type,
@@ -5521,9 +5637,8 @@ fn synthesize_general_export_binding(
             &mut body_stmts,
             &mut local_types,
             tir_modules,
-            &tt,
+            lift_ctx,
         );
-        drop(tt);
 
         // Build task-return args: [0 (Ok disc), ...flat_return_values]
         let mut task_return_args = vec![i32_const(0)];
@@ -5746,6 +5861,8 @@ fn expand_task_returns_in_func(
     flat_return_types: &[cm_abi::CmValType],
     tir_modules: &IndexMap<ModuleSource, crate::tir::TirModule>,
     type_table: &Rc<RefCell<TypeTable>>,
+    wasi_registry: &WasiRegistry,
+    cm_package: &str,
 ) {
     let mut func = user_func.borrow_mut();
     let mut next_local = func.local_count;
@@ -5761,6 +5878,8 @@ fn expand_task_returns_in_func(
         &mut extra_local_types,
         tir_modules,
         type_table,
+        wasi_registry,
+        cm_package,
     );
     func.body = Some(body);
     func.local_count = next_local;
@@ -5821,6 +5940,8 @@ fn expand_task_return_in_block(
     local_types: &mut Vec<TypeId>,
     tir_modules: &IndexMap<ModuleSource, crate::tir::TirModule>,
     type_table: &Rc<RefCell<TypeTable>>,
+    wasi_registry: &WasiRegistry,
+    cm_package: &str,
 ) {
     let stmts = std::mem::take(&mut blk.stmts);
     let mut new_stmts: Vec<TirStmt> = Vec::with_capacity(stmts.len());
@@ -5836,6 +5957,8 @@ fn expand_task_return_in_block(
                     local_types,
                     tir_modules,
                     type_table,
+                    wasi_registry,
+                    cm_package,
                 );
                 new_stmts.extend(expanded);
             }
@@ -5847,6 +5970,8 @@ fn expand_task_return_in_block(
                 local_types,
                 tir_modules,
                 type_table,
+                wasi_registry,
+                cm_package,
             );
             new_stmts.push(stmt);
         }
@@ -5861,6 +5986,8 @@ fn expand_task_return_in_stmt(
     local_types: &mut Vec<TypeId>,
     tir_modules: &IndexMap<ModuleSource, crate::tir::TirModule>,
     type_table: &Rc<RefCell<TypeTable>>,
+    wasi_registry: &WasiRegistry,
+    cm_package: &str,
 ) {
     match &mut stmt.kind {
         TirStmtKind::If {
@@ -5875,6 +6002,8 @@ fn expand_task_return_in_stmt(
                 local_types,
                 tir_modules,
                 type_table,
+                wasi_registry,
+                cm_package,
             );
             if let Some(blk) = else_block {
                 expand_task_return_in_block(
@@ -5884,6 +6013,8 @@ fn expand_task_return_in_stmt(
                     local_types,
                     tir_modules,
                     type_table,
+                    wasi_registry,
+                    cm_package,
                 );
             }
         }
@@ -5895,6 +6026,8 @@ fn expand_task_return_in_stmt(
                 local_types,
                 tir_modules,
                 type_table,
+                wasi_registry,
+                cm_package,
             );
         }
         TirStmtKind::IfLet {
@@ -5909,6 +6042,8 @@ fn expand_task_return_in_stmt(
                 local_types,
                 tir_modules,
                 type_table,
+                wasi_registry,
+                cm_package,
             );
             if let Some(blk) = else_block {
                 expand_task_return_in_block(
@@ -5918,6 +6053,8 @@ fn expand_task_return_in_stmt(
                     local_types,
                     tir_modules,
                     type_table,
+                    wasi_registry,
+                    cm_package,
                 );
             }
         }
@@ -5939,7 +6076,14 @@ fn generate_inline_task_return(
     local_types: &mut Vec<TypeId>,
     tir_modules: &IndexMap<ModuleSource, crate::tir::TirModule>,
     type_table: &Rc<RefCell<TypeTable>>,
+    wasi_registry: &WasiRegistry,
+    cm_package: &str,
 ) -> Vec<TirStmt> {
+    let lift_ctx = LiftContext {
+        wasi_registry,
+        type_table,
+        cm_package,
+    };
     let mut stmts: Vec<TirStmt> = Vec::new();
     let value_type_id = value.type_id;
 
@@ -6002,7 +6146,6 @@ fn generate_inline_task_return(
         if !ok_flat_types.is_empty() {
             let ok_local = alloc_local(next_local, local_types, ok_type_id);
             ok_stmts.push(let_stmt("__ok_val", ok_local, ok_type_id, ok_value));
-            let tt = type_table.borrow();
             let ok_lowered = synthesize_lower_to_flat(
                 local_ref(ok_local, "__ok_val", ok_type_id),
                 ok_type_id,
@@ -6010,9 +6153,8 @@ fn generate_inline_task_return(
                 &mut ok_stmts,
                 local_types,
                 tir_modules,
-                &tt,
+                lift_ctx,
             );
-            drop(tt);
             for (i, flat_val) in ok_lowered.iter().enumerate() {
                 if 1 + i < flat_locals.len() {
                     let target_type = cm_val_type_to_type_id(flat_return_types[1 + i]);
@@ -6053,8 +6195,7 @@ fn generate_inline_task_return(
         );
         let err_local = alloc_local(next_local, local_types, err_type_id);
         err_stmts.push(let_stmt("__err_val", err_local, err_type_id, err_value));
-        let tt = type_table.borrow();
-        let err_resolved = tt.get(err_type_id);
+        let err_resolved = type_table.borrow().get(err_type_id).clone();
         if let crate::tir::ResolvedType::Variant { name, .. } = &err_resolved {
             if let Some(variant_decl) = find_variant_decl(name, tir_modules) {
                 synthesize_variant_lower_to_flat(
@@ -6067,7 +6208,7 @@ fn generate_inline_task_return(
                     &mut err_stmts,
                     local_types,
                     tir_modules,
-                    &tt,
+                    lift_ctx,
                 );
             } else if flat_locals.len() > 1 {
                 err_stmts.push(expr_stmt(assign(
@@ -6087,7 +6228,7 @@ fn generate_inline_task_return(
                 &mut err_stmts,
                 local_types,
                 tir_modules,
-                &tt,
+                lift_ctx,
             );
             for (i, flat_val) in err_lowered.iter().enumerate() {
                 if 1 + i < flat_locals.len() {
@@ -6104,7 +6245,6 @@ fn generate_inline_task_return(
                 }
             }
         }
-        drop(tt);
         err_stmts.push(expr_stmt(cm_raw_call(
             "task-return",
             task_return_args,
@@ -6331,6 +6471,8 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                                 &flat_types,
                                 &project.tir_modules,
                                 &entry_type_table,
+                                project.wasi_registry,
+                                &binding_cm_package,
                             );
                         }
                         synthesize_async_export_binding(

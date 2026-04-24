@@ -139,6 +139,11 @@ pub async fn run_generator<H: CompilerHost + 'static>(
         diagnostics: diagnostics.clone(),
     };
 
+    // The kiln determinism guarantee (WEP 2026-04-12 §"Design
+    // principles" #1) says the linker exposes only `core:kiln/kiln-
+    // host`. The compiler handles the panic-path stderr elision
+    // at codegen time so the generator component never imports WASI
+    // in the first place.
     let mut linker: Linker<KilnHostState<H>> = Linker::new(engine);
     kiln_host::add_to_linker::<_, HasSelf<_>>(&mut linker, |s| s)
         .map_err(|e| GeneratorRunnerError::Host(format!("linker setup: {e}")))?;

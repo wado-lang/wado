@@ -1659,6 +1659,30 @@ impl FunctionTranslator<'_, '_> {
 
             "builtin::call_indirect_stdout_write_via_stream"
             | "builtin::call_indirect_stderr_write_via_stream" => {
+                // The kiln generator world forbids every WASI interface
+                // (WEP 2026-04-12 §"Design principles" #1 — determinism
+                // by construction). The Wado stdlib's `panic` implementation
+                // writes its message to stderr before trapping; in the kiln
+                // world we short-circuit the stderr path to `unreachable` so
+                // the generator component never imports `wasi:cli/stderr`.
+                // The effect is equivalent: panic still traps, and the
+                // generator surfaces as a `GeneratorRunnerError::Host` at
+                // the kiln runtime boundary. Stdout goes the same way — a
+                // generator that calls `println` shouldn't compile past the
+                // import-refusal check anyway, but belt-and-suspenders is
+                // cheap at the builtin boundary.
+                if self.ctx.package.is_kiln_generator_world() {
+                    // `unreachable` is stack-polymorphic — it satisfies
+                    // the declared i32 return of the stderr/stdout
+                    // write-via-stream builtin without further work.
+                    // The call-site arguments are intentionally dropped
+                    // unevaluated: `log_stderr` only passes a freshly-
+                    // constructed stream handle whose sole downstream
+                    // use was to pipe data to stderr, which the kiln
+                    // world forbids.
+                    return Some(WirInstr::Unreachable);
+                }
+
                 // Wado uses stackful async: canon lower without async flag,
                 // so sync lower returns the result directly.
                 let is_stderr = builtin_name.contains("stderr");

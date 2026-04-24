@@ -868,86 +868,165 @@ fn build_transmission_future_type_for(
     ctx.type_idx(&future_key)
 }
 
-/// Emit the `core:kiln/types` record/variant surface at the component
-/// type level. Called once per `core:kiln/generator` component.
+/// Emit the `core:kiln/types` record/variant surface via an imported
+/// instance. Called once per `core:kiln/generator` component.
 ///
-/// Registers (in declaration order so later types can reference earlier
-/// type indices):
-/// - `kiln-input-file`  = record { path: string, content: string }
-/// - `kiln-list-input-file` = list<input-file>
-/// - `kiln-output-file` = record { path: string, content: string, is-entry: bool }
-/// - `kiln-list-output-file` = list<output-file>
-/// - `kiln-response`    = record { files: list<output-file> }
-/// - `kiln-error`       = variant { invalid-schema(string), unsupported(string), other(string) }
-/// - `kiln-raw-request` = record { primary: input-file, inputs: list<input-file>, options: string }
-/// - `kiln-handler-result` = result<response, error>  (the `task-return` shape)
+/// Structure:
+/// - Build an `InstanceType` whose interior defines `input-file`,
+///   `output-file`, `response`, `error`, `raw-request` as records/variants
+///   and exports each one by its WIT name. The CM validator's
+///   `all_valtypes_named_in_defined` check requires records/variants
+///   referenced by a component-level export to have their original type
+///   ids in `exported_types`; the instance-wrap satisfies that because
+///   inserting exported types into the set happens as the instance's
+///   exports are processed in declaration order.
+/// - Import that instance at the component level as
+///   `core:kiln/types@0.1.0`. No runtime code is required — wasmtime
+///   satisfies the import trivially because the instance has no function
+///   members.
+/// - Alias each exported type from the instance into the component's
+///   local type index space so `emit_world_exports` and the canon
+///   `task-return` routing can reference them by `ctx.type_idx(...)`.
+/// - Also register a component-local `kiln-handler-result` =
+///   `result<response, error>` (anonymous `result` doesn't need naming).
 fn emit_kiln_world_types(builder: &mut ComponentBuilder, ctx: &mut ComponentModelContext) {
     let string_vt = ComponentValType::Primitive(PrimitiveValType::String);
     let bool_vt = ComponentValType::Primitive(PrimitiveValType::Bool);
 
-    ctx.register_type("kiln-input-file");
+    // Build the instance type. Indices below are instance-local; each
+    // `ty()` call advances the instance's type counter, and each
+    // `export(..Eq(idx)..)` creates an alias at the next counter slot.
+    let mut instance_type = InstanceType::new();
+    let mut local_idx: u32 = 0;
+
+    // input-file
+    instance_type
+        .ty()
+        .defined_type()
+        .record([("path", string_vt), ("content", string_vt)]);
+    let input_file_local = local_idx;
+    local_idx += 1;
+    instance_type.export(
+        "input-file",
+        wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(input_file_local)),
+    );
+    let input_file_export = local_idx;
+    local_idx += 1;
+
+    // output-file
+    instance_type.ty().defined_type().record([
+        ("path", string_vt),
+        ("content", string_vt),
+        ("is-entry", bool_vt),
+    ]);
+    let output_file_local = local_idx;
+    local_idx += 1;
+    instance_type.export(
+        "output-file",
+        wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(output_file_local)),
+    );
+    let output_file_export = local_idx;
+    local_idx += 1;
+
+    // list<output-file> — anonymous list referencing the exported alias.
+    instance_type
+        .ty()
+        .defined_type()
+        .list(ComponentValType::Type(output_file_export));
+    let list_output_local = local_idx;
+    local_idx += 1;
+
+    // response = record { files: list<output-file> }
+    instance_type
+        .ty()
+        .defined_type()
+        .record([("files", ComponentValType::Type(list_output_local))]);
+    let response_local = local_idx;
+    local_idx += 1;
+    instance_type.export(
+        "response",
+        wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(response_local)),
+    );
+    #[allow(unused_assignments)]
     {
-        let (_, enc) = builder.ty(Some("kiln-input-file"));
-        enc.defined_type()
-            .record([("path", string_vt), ("content", string_vt)]);
+        local_idx += 1;
     }
 
-    ctx.register_type("kiln-list-input-file");
+    // error variant
+    instance_type.ty().defined_type().variant([
+        ("invalid-schema", Some(string_vt)),
+        ("unsupported", Some(string_vt)),
+        ("other", Some(string_vt)),
+    ]);
+    let error_local = local_idx;
+    local_idx += 1;
+    instance_type.export(
+        "error",
+        wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(error_local)),
+    );
+    #[allow(unused_assignments)]
     {
-        let input_file_idx = ctx.type_idx("kiln-input-file");
-        let (_, enc) = builder.ty(Some("kiln-list-input-file"));
-        enc.defined_type()
-            .list(ComponentValType::Type(input_file_idx));
+        local_idx += 1;
     }
 
-    ctx.register_type("kiln-output-file");
+    // list<input-file>
+    instance_type
+        .ty()
+        .defined_type()
+        .list(ComponentValType::Type(input_file_export));
+    let list_input_local = local_idx;
+    local_idx += 1;
+
+    // raw-request = record { primary: input-file, inputs: list<input-file>, options: string }
+    instance_type.ty().defined_type().record([
+        ("primary", ComponentValType::Type(input_file_export)),
+        ("inputs", ComponentValType::Type(list_input_local)),
+        ("options", string_vt),
+    ]);
+    let raw_request_local = local_idx;
+    // No further local_idx uses after this point inside the instance
+    // type; the export alias below advances the encoder's internal
+    // counter but we don't reference it by index from here.
+    instance_type.export(
+        "raw-request",
+        wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(raw_request_local)),
+    );
+
+    // Register the instance type at the component level.
+    let instance_type_idx = ctx.register_type("kiln-types-instance-type");
     {
-        let (_, enc) = builder.ty(Some("kiln-output-file"));
-        enc.defined_type().record([
-            ("path", string_vt),
-            ("content", string_vt),
-            ("is-entry", bool_vt),
-        ]);
+        let (_, enc) = builder.ty(Some("kiln-types-instance-type"));
+        enc.instance(&instance_type);
     }
 
-    ctx.register_type("kiln-list-output-file");
-    {
-        let output_file_idx = ctx.type_idx("kiln-output-file");
-        let (_, enc) = builder.ty(Some("kiln-list-output-file"));
-        enc.defined_type()
-            .list(ComponentValType::Type(output_file_idx));
+    // Import the instance as `core:kiln/types@0.1.0`.
+    ctx.register_instance("kiln-types");
+    builder.import(
+        "core:kiln/types@0.1.0",
+        wasm_encoder::ComponentTypeRef::Instance(instance_type_idx),
+    );
+
+    // Alias each exported type into the component's local type space.
+    // `ctx.register_type(name)` bumps the component's type counter in
+    // lockstep with the encoder's so downstream registrations stay in
+    // sync.
+    for (export_name, local_name) in [
+        ("input-file", "kiln-input-file"),
+        ("output-file", "kiln-output-file"),
+        ("response", "kiln-response"),
+        ("error", "kiln-error"),
+        ("raw-request", "kiln-raw-request"),
+    ] {
+        builder.alias_export(
+            ctx.instance_idx("kiln-types"),
+            export_name,
+            ComponentExportKind::Type,
+        );
+        ctx.register_type(local_name);
     }
 
-    ctx.register_type("kiln-response");
-    {
-        let list_output_idx = ctx.type_idx("kiln-list-output-file");
-        let (_, enc) = builder.ty(Some("kiln-response"));
-        enc.defined_type()
-            .record([("files", ComponentValType::Type(list_output_idx))]);
-    }
-
-    ctx.register_type("kiln-error");
-    {
-        let (_, enc) = builder.ty(Some("kiln-error"));
-        enc.defined_type().variant([
-            ("invalid-schema", Some(string_vt)),
-            ("unsupported", Some(string_vt)),
-            ("other", Some(string_vt)),
-        ]);
-    }
-
-    ctx.register_type("kiln-raw-request");
-    {
-        let input_file_idx = ctx.type_idx("kiln-input-file");
-        let list_input_idx = ctx.type_idx("kiln-list-input-file");
-        let (_, enc) = builder.ty(Some("kiln-raw-request"));
-        enc.defined_type().record([
-            ("primary", ComponentValType::Type(input_file_idx)),
-            ("inputs", ComponentValType::Type(list_input_idx)),
-            ("options", string_vt),
-        ]);
-    }
-
+    // `result<response, error>` — anonymous, component-local. Used by
+    // the canon `task-return` and by `emit_world_exports`.
     ctx.register_type("kiln-handler-result");
     {
         let response_idx = ctx.type_idx("kiln-response");
