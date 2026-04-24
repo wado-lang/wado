@@ -982,8 +982,6 @@ fn unwrap_to_candidate_call(instr: &WirInstr, candidate_ids: &IndexSet<u32>) -> 
         WirInstr::Call { func_id, .. } if candidate_ids.contains(&func_id.index()) => {
             Some(func_id.index())
         }
-        // ValueCopy wraps a struct reference — look through it
-        WirInstr::ValueCopy { expr, .. } => unwrap_to_candidate_call(expr, candidate_ids),
         // Trivial block from inlining: the block's result value is either:
         // 1. The last instruction in body (implicit value)
         // 2. A Seq([..., value, Br]) pattern (break-with-value)
@@ -1119,8 +1117,8 @@ fn check_invalid_call_uses(
     }
 }
 
-/// Scan prefix instructions in Block/ValueCopy wrappers for nested candidate calls.
-/// When a `LocalSet { value: ValueCopy { Block { body } } }` wraps a candidate call
+/// Scan prefix instructions in Block wrappers for nested candidate calls.
+/// When a `LocalSet { value: Block { body } }` wraps a candidate call
 /// as its result, the prefix instructions in the block body may also contain calls
 /// to candidates that the rewrite pass cannot reach.
 fn find_candidate_calls_in_block_prefix(
@@ -1129,9 +1127,6 @@ fn find_candidate_calls_in_block_prefix(
     invalid: &mut IndexSet<u32>,
 ) {
     match instr {
-        WirInstr::ValueCopy { expr, .. } => {
-            find_candidate_calls_in_block_prefix(expr, candidate_ids, invalid);
-        }
         WirInstr::Block { body, .. } => {
             // All instructions except the last (which is the result value) are prefix.
             // Skip trailing Unreachable — translate_stmts_as_value may append one after
@@ -1151,11 +1146,10 @@ fn find_candidate_calls_in_block_prefix(
     }
 }
 
-/// Unwrap through ValueCopy/Block to find the inner Call instruction (for arg checking).
+/// Unwrap through Block to find the inner Call instruction (for arg checking).
 fn unwrap_to_inner_call(instr: &WirInstr) -> Option<&WirInstr> {
     match instr {
         WirInstr::Call { .. } => Some(instr),
-        WirInstr::ValueCopy { expr, .. } => unwrap_to_inner_call(expr),
         WirInstr::Block { body, .. } => {
             let last = body.last()?;
             match last {
@@ -2134,40 +2128,10 @@ fn recurse_rewrite_call_sites(
 
 /// Replace `StructGet { field_name, expr: LocalGet(temp) }` with `LocalGet(fresh_local)`
 /// for all known replacements. Uses `WirInstr::for_each_boxed_child_mut` for generic traversal.
-///
-/// Also handles `ValueCopy { expr: StructGet { field_name, expr: LocalGet(temp) } }` →
-/// `LocalGet(fresh_local)`, eliminating the unnecessary copy. After SROA, the fresh local
-/// already holds a reference to the value that was in the struct field; the `ValueCopy` was
-/// emitted to preserve value semantics when extracting from a shared struct, but since SROA
-/// has eliminated the struct, the copy is redundant.
 fn replace_struct_gets(
     instr: &mut WirInstr,
     replacements: &crate::hashmap::IndexMap<String, crate::hashmap::IndexMap<String, String>>,
 ) {
-    // Handle ValueCopy(StructGet(LocalGet(temp))) → LocalGet(sroa_fresh).
-    // This eliminates the unnecessary shallow copy that was emitted to preserve value
-    // semantics when extracting a field from a shared struct. After SROA the struct no
-    // longer exists, so the copy serves no purpose.
-    if let WirInstr::ValueCopy { expr, .. } = instr
-        && let WirInstr::StructGet {
-            field_name,
-            expr: inner_expr,
-            result_ty,
-            ..
-        } = expr.as_ref()
-        && let WirInstr::LocalGet {
-            name: temp_name, ..
-        } = inner_expr.as_ref()
-        && let Some(field_map) = replacements.get(temp_name.as_str())
-        && let Some(fresh_local) = field_map.get(field_name.as_str())
-    {
-        *instr = WirInstr::LocalGet {
-            name: fresh_local.clone(),
-            result_ty: result_ty.clone(),
-        };
-        return;
-    }
-
     // Check if THIS instruction is a StructGet that should be replaced
     if let WirInstr::StructGet {
         field_name,
@@ -2284,46 +2248,17 @@ fn collect_refcast_aliases(
 /// Handles five patterns:
 /// 1. `RefTest { type_id, expr: LocalGet(temp) }` → `I32Eq(LocalGet(disc), I32Const(case_disc))`
 /// 2. `StructGet { field, expr: RefCast { type_id, expr: LocalGet(temp) } }` → `LocalGet(sroa_local)`
-/// 3. `ValueCopy { StructGet { field, expr: RefCast { type_id, expr: LocalGet(temp) } } }` → same
+/// 3. `RefAsNonNull(StructGet { field, expr: RefCast { type_id, expr: LocalGet(temp) } })` → same
 /// 4. `StructGet { field, expr: LocalGet(cast_alias) }` where `cast_alias` was a `RefCast` alias → same
-/// 5. `ValueCopy { StructGet { field, expr: LocalGet(cast_alias) } }` → same
 fn replace_variant_accesses(
     instr: &mut WirInstr,
     variant_replacements: &crate::hashmap::IndexMap<String, VariantReplacement>,
     refcast_aliases: &crate::hashmap::IndexMap<String, (String, u32)>,
 ) {
-    // Pattern 3: ValueCopy wrapping StructGet(RefCast(LocalGet(temp)))
-    if let WirInstr::ValueCopy { expr, .. } = instr
-        && let WirInstr::StructGet {
-            field_name,
-            expr: sg_expr,
-            result_ty,
-            ..
-        } = expr.as_ref()
-        && let WirInstr::RefCast {
-            type_id: cast_type_id,
-            expr: rc_expr,
-            ..
-        } = sg_expr.as_ref()
-        && let WirInstr::LocalGet {
-            name: temp_name, ..
-        } = rc_expr.as_ref()
-        && let Some(vr) = variant_replacements.get(temp_name.as_str())
-    {
-        let key = (cast_type_id.index(), field_name.clone());
-        if let Some(local_name) = vr.field_to_local.get(&key) {
-            *instr = sroa_local_get(local_name, &vr.ref_locals, result_ty.clone());
-            return;
-        }
-    }
-
-    // Pattern 4: `RefAsNonNull(StructGet(RefCast(LocalGet(temp))))` — the
-    // variant-payload extraction form emitted by `wir_build::pattern_match`
-    // since the `WirInstr::ValueCopy` wrap was removed. Matches the same
-    // outer structure as pattern 3, but `RefAsNonNull` in place of
-    // `ValueCopy`. Replaces with `sroa_local_get`, which applies a
-    // non-null narrowing when the original variant payload field was
-    // non-nullable.
+    // Pattern 3: `RefAsNonNull(StructGet(RefCast(LocalGet(temp))))` — the
+    // variant-payload extraction form emitted by `wir_build::pattern_match`.
+    // Replaces with `sroa_local_get`, which applies a non-null narrowing when
+    // the original variant payload field was non-nullable.
     if let WirInstr::RefAsNonNull(inner) = instr
         && let WirInstr::StructGet {
             field_name,
@@ -2384,27 +2319,6 @@ fn replace_variant_accesses(
         && let Some(vr) = variant_replacements.get(temp_name.as_str())
     {
         let key = (cast_type_id.index(), field_name.clone());
-        if let Some(local_name) = vr.field_to_local.get(&key) {
-            *instr = sroa_local_get(local_name, &vr.ref_locals, result_ty.clone());
-            return;
-        }
-    }
-
-    // Pattern 5: ValueCopy { StructGet { field, LocalGet(cast_alias) } } via alias
-    if let WirInstr::ValueCopy { expr, .. } = instr
-        && let WirInstr::StructGet {
-            field_name,
-            expr: sg_expr,
-            result_ty,
-            ..
-        } = expr.as_ref()
-        && let WirInstr::LocalGet {
-            name: alias_name, ..
-        } = sg_expr.as_ref()
-        && let Some((temp_name, cast_type_idx)) = refcast_aliases.get(alias_name.as_str())
-        && let Some(vr) = variant_replacements.get(temp_name.as_str())
-    {
-        let key = (*cast_type_idx, field_name.clone());
         if let Some(local_name) = vr.field_to_local.get(&key) {
             *instr = sroa_local_get(local_name, &vr.ref_locals, result_ty.clone());
             return;
