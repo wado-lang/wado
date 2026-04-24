@@ -185,16 +185,10 @@ impl ValueCopyInserter {
             TirExprKind::LabeledBlock { label, block, .. } => {
                 Self::block_breaks_are_fresh(label, block, fresh_locals)
             }
-            TirExprKind::FieldAccess { expr: inner, .. } => {
+            TirExprKind::FieldAccess { expr: inner, .. }
+            | TirExprKind::VariantPayload { expr: inner, .. } => {
                 Self::is_fresh_in_context(inner, fresh_locals)
             }
-            // Variant payload extraction is always treated as fresh: at WIR
-            // build the payload field is `ref null T`, which the value-copy
-            // helper would have to thread through as a nullable signature.
-            // The OLD WIR-level peephole elided the wrap in every observed
-            // case anyway; mirror that here so the synthesized helper isn't
-            // called with a nullable arg it can't accept.
-            TirExprKind::VariantPayload { .. } => true,
             _ => false,
         }
     }
