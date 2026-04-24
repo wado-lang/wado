@@ -136,10 +136,18 @@ pub fn plan(manifest: &Manifest, manifest_root: &Path) -> Result<PlanOutcome, Dr
 fn lower(name: &str, gi: &GeneratorInvocation) -> Result<Invocation, DriverError> {
     let module = match &gi.module {
         GeneratorModuleRef::Spec(spec) => GeneratorModule::Spec(spec.clone()),
-        GeneratorModuleRef::Inline(_) => {
-            return Err(DriverError::UnsupportedInlineModule {
-                invocation: name.to_string(),
-            });
+        GeneratorModuleRef::Inline(dep) => {
+            use wado_manifest::DependencySource;
+            match &dep.source {
+                DependencySource::Path { path, .. } => {
+                    GeneratorModule::LocalPath(InvocationPath::normalize(path))
+                }
+                _ => {
+                    return Err(DriverError::UnsupportedInlineModule {
+                        invocation: name.to_string(),
+                    });
+                }
+            }
         }
     };
 
@@ -1334,7 +1342,7 @@ from = "./a.g4"
     }
 
     #[test]
-    fn inline_module_record_is_rejected() {
+    fn inline_path_module_lowers_to_local_path() {
         let (m, root) = parse(
             r#"
 [package]
@@ -1346,12 +1354,13 @@ module = { path = "../tools/proto" }
 from = "./schema.proto"
 "#,
         );
-        let err = plan(&m, &root).unwrap_err();
-        match err {
-            DriverError::UnsupportedInlineModule { invocation } => {
-                assert_eq!(invocation, "proto");
+        let outcome = plan(&m, &root).expect("inline path module must lower");
+        assert_eq!(outcome.plan.order.len(), 1);
+        match &outcome.plan.order[0].module {
+            GeneratorModule::LocalPath(p) => {
+                assert_eq!(p.as_str(), "../tools/proto");
             }
-            other => panic!("expected UnsupportedInlineModule, got {other:?}"),
+            other => panic!("expected LocalPath, got {other:?}"),
         }
     }
 

@@ -1,0 +1,14 @@
+//! Trivial consumer of the Kiln-generated calculator parser.
+//!
+//! The Gale generator places its output under `src/generated/<grammar>.wado`
+//! where `<grammar>` is the snake-cased grammar name (`calculator` here).
+//! Importing it by the original `grammar.g4` path routes through the
+//! compiler's invocation-index redirect (see WEP 2026-04-12 §"Loader
+//! redirect") so the consumer never has to hand-spell the generated
+//! filename.
+
+use calculator from "./grammar.g4";
+
+export fn run() {
+    let _ = calculator::parse("1+2=3");
+}
