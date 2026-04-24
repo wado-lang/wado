@@ -388,6 +388,11 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
 
     /// Check a single module
     fn check_module(&mut self, module: &TirModule) -> Result<(), Bail> {
+        // Scope diagnostics to this module so EffectError spans carry the
+        // correct filename instead of whatever an earlier phase last set.
+        self.logger
+            .set_file(module.module_source.diagnostic_filename());
+
         // Check all functions
         for func_rc in &module.functions {
             let func = func_rc.borrow();

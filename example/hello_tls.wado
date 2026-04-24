@@ -1,0 +1,109 @@
+// Raw TLS example: fetch https://httpbin.org/get directly over TCP + wasi:tls.
+//
+// Port of wasmtime's p3_tls_sample_application.rs. Unlike example/http-get.wado
+// (which uses the high-level wasi:http Client), this example wires a wasi:tls
+// Connector between a wasi:sockets TcpSocket and the application's own byte
+// streams, then speaks HTTP/1.1 by hand.
+//
+// Status: the bindings in wado-compiler/lib/wasi/tls/ exist but are not yet
+// reachable from user code. To actually compile and run this example you still
+// need to:
+//   1. Register "wasi:tls", "wasi:tls/client.wado", "wasi:tls/types.wado" and
+//      "wasi:tls/worlds.wado" in wado-compiler/src/stdlib.rs (next to the
+//      existing wasi:sockets entries).
+//   2. Link wasmtime-wasi-tls into wado-cli/src/runtime.rs so the host can
+//      satisfy the wasi:tls imports at runtime.
+//   3. Ensure the target CLI world imports wasi:sockets and wasi:tls.
+//
+// Usage (once the above is wired up):
+//   cargo run --bin wado -- run example/hello_tls.wado
+#![TODO]
+use { println, Stdout } from "core:cli";
+use {
+    TcpSocket,
+    IpAddress,
+    IpAddressFamily,
+    IpSocketAddress,
+    Ipv4SocketAddress,
+    Ipv6SocketAddress,
+    IpNameLookup,
+} from "wasi:sockets";
+use { Connector } from "wasi:tls";
+
+fn family_of(ip: &IpAddress) -> IpAddressFamily {
+    return match ip {
+        Ipv4(_) => IpAddressFamily::Ipv4,
+        Ipv6(_) => IpAddressFamily::Ipv6,
+    };
+}
+
+fn socket_address(ip: IpAddress, port: u16) -> IpSocketAddress {
+    return match ip {
+        Ipv4(address) => IpSocketAddress::Ipv4(Ipv4SocketAddress { port, address }),
+        Ipv6(address) => IpSocketAddress::Ipv6(Ipv6SocketAddress {
+            port,
+            flow_info: 0,
+            address,
+            scope_id: 0,
+        }),
+    };
+}
+
+export fn run() with Stdout, IpNameLookup {
+    let domain = "httpbin.org";
+    let port: u16 = 443;
+
+    // Resolve the hostname. resolve_addresses is async at the CM layer, so
+    // .wait() blocks the current subtask until the result arrives.
+    let addrs = match IpNameLookup::resolve_addresses(domain).wait() {
+        Ok(a) => a,
+        Err(_) => panic(`DNS lookup failed for {domain}`),
+    };
+    let ip = addrs[0];
+
+    // Open a TCP connection to httpbin.org:443.
+    let sock = match TcpSocket::create(family_of(&ip)) {
+        Ok(s) => s,
+        Err(_) => panic("TcpSocket::create failed"),
+    };
+    match sock.connect(socket_address(ip, port)).wait() {
+        Ok(_) => {},
+        Err(_) => panic(`TCP connect to {domain}:{port as i32} failed`),
+    }
+
+    let conn = Connector::new();
+
+    // Receive path: socket ciphertext -> TLS -> application cleartext.
+    let [sock_rx, _sock_rx_fut] = sock.receive();
+    let [tls_rx, _tls_rx_fut] = conn.receive(sock_rx);
+
+    // Send path: application cleartext -> TLS -> socket ciphertext.
+    let [data_rx, data_tx] = Stream::<u8>::new();
+    let [tls_tx, _tls_tx_fut] = conn.send(data_rx);
+    let _sock_tx_fut = sock.send(tls_tx);
+
+    // Both streams must be wired up before the handshake.
+    match Connector::connect(conn, domain).wait() {
+        Ok(_) => {},
+        Err(e) => panic(`TLS handshake failed: {e.to_debug_string()}`),
+    }
+
+    // Send a minimal HTTP/1.1 GET request. Connection: close tells the server
+    // to terminate the stream after the body so tls_rx drains cleanly.
+    let request = `GET /get HTTP/1.1\r\nHost: {domain}\r\nUser-Agent: wado-hello-tls\r\nConnection: close\r\n\r\n`;
+    data_tx.write(request.bytes().collect());
+    data_tx.drop();
+
+    // Read until the peer closes.
+    let mut response: Array<u8> = [];
+    loop {
+        let chunk = tls_rx.read(4096);
+        if chunk.len() == 0 {
+            break;
+        }
+        response.extend(&chunk);
+    }
+    tls_rx.drop();
+
+    println(String::from_utf8_lossy(response));
+}
