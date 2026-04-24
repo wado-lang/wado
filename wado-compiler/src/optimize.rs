@@ -36,6 +36,7 @@ mod sroa;
 mod store_load_forward;
 mod tmpl_hoist;
 mod value_copy;
+mod value_copy_synth;
 
 use condition_implication::eliminate_implied_conditions;
 use const_branch_prune::prune_constant_branches;
@@ -189,6 +190,14 @@ pub fn optimize(
     profiler.span_start("tir/value_copy_insertion");
     value_copy::insert_value_copy_calls(&mut project);
     profiler.span_end("tir/value_copy_insertion");
+
+    // Replace each `builtin::copy_value::<T>(x)` placeholder with a call to
+    // a synthesized concrete `$value_copy$` helper, so WIR build no longer
+    // needs a special case for the builtin and the per-type cost is visible
+    // in `wado dump`.
+    profiler.span_start("tir/value_copy_synthesis");
+    value_copy_synth::synthesize_value_copy_funcs(&mut project);
+    profiler.span_end("tir/value_copy_synthesis");
 
     project
 }

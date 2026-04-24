@@ -904,8 +904,22 @@ impl<'a> WirEmitter<'a> {
                 self.collect_declared_locals_instr(src_offset, locals);
                 self.collect_declared_locals_instr(len, locals);
             }
-            WirInstr::ArrayClone { src, .. } => {
+            WirInstr::ArrayClone { type_id, src } => {
                 self.collect_declared_locals_instr(src, locals);
+                // Pre-declare the four temps the JIT-compiled clone loop uses.
+                let arr_wasm_idx = self.resolve_type_index(type_id.index());
+                let arr_ref = RefType {
+                    nullable: false,
+                    heap_type: HeapType::Concrete(arr_wasm_idx),
+                };
+                let src_name = format!("__copy_arr_src_{}", type_id.index());
+                let dst_name = format!("__copy_arr_dst_{}", type_id.index());
+                let len_name = format!("__copy_arr_len_{}", type_id.index());
+                let loop_idx_name = format!("__copy_arr_i_{}", type_id.index());
+                locals.push((src_name, ValType::Ref(arr_ref)));
+                locals.push((dst_name, ValType::Ref(arr_ref)));
+                locals.push((len_name, ValType::I32));
+                locals.push((loop_idx_name, ValType::I32));
             }
             WirInstr::GlobalSet { value, .. } => {
                 self.collect_declared_locals_instr(value, locals);
