@@ -135,7 +135,11 @@ type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeI
 
 type "functype//wado-compiler/tests/fixtures/variant_construct.wado/return_result_array" = fn() -> [i32, ref null "core:prelude//Array<i32>", ref null "core:prelude/string.wado//String"];  // TypeId(49)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(50)
+type "functype//wado-compiler/tests/fixtures/variant_construct.wado/$value_copy$T106" = fn(ref "core:prelude//Array<u8>") -> [ref builtin::array<u8>, i32];  // TypeId(50)
+
+type "functype//wado-compiler/tests/fixtures/variant_construct.wado/$value_copy$T398" = fn(ref "core:prelude//Array<i32>") -> [ref builtin::array<i32>, i32];  // TypeId(51)
+
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(52)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -170,20 +174,16 @@ fn "wado-compiler/tests/fixtures/variant_construct.wado/return_result_array"() {
 }
 
 fn "wado-compiler/tests/fixtures/variant_construct.wado/variant_construct_literal_coercion"() with Stdout {
-    let arr_0: ref "core:prelude//Array<u8>";
     let __v0_1: i32;
     let __cond_2: bool;
-    let arr_3: ref "core:prelude//Array<u8>";
     let __v0_4: i32;
     let __cond_5: bool;
     let __v0_6: u8;
     let __cond_7: bool;
-    let arr_8: ref "core:prelude//Array<i32>";
     let __v0_9: i32;
     let __cond_10: bool;
     let __v0_11: i32;
     let __cond_12: bool;
-    let arr_13: ref "core:prelude//Array<i32>";
     let __v0_14: i32;
     let __cond_15: bool;
     let opt_i32: ref "core:prelude/types.wado//Option<i32>";
@@ -232,8 +232,10 @@ fn "wado-compiler/tests/fixtures/variant_construct.wado/variant_construct_litera
         unreachable;
     });
     if ref.is_null(__pattern_temp_0) == 0 {
-        arr_0 = ref.as_non_null(__pattern_temp_0);
-        __v0_1 = arr_0.used;
+        let __sroa_arr_0_repr: ref builtin::array<u8>;
+        let __sroa_arr_0_used: i32;
+        multivalue_bind [__sroa_arr_0_repr, __sroa_arr_0_used] = "wado-compiler/tests/fixtures/variant_construct.wado/$value_copy$T106"(ref.as_non_null(__pattern_temp_0));
+        __v0_1 = __sroa_arr_0_used;
         __cond_2 = __v0_1 == 0;
         if __cond_2 == 0 {
             "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -268,8 +270,10 @@ condition: arr.len() == 0
     }
     __pattern_temp_1 = "wado-compiler/tests/fixtures/variant_construct.wado/return_non_empty"();
     if ref.is_null(__pattern_temp_1) == 0 {
-        arr_3 = ref.as_non_null(__pattern_temp_1);
-        __v0_4 = arr_3.used;
+        let __sroa_arr_3_repr: ref builtin::array<u8>;
+        let __sroa_arr_3_used: i32;
+        multivalue_bind [__sroa_arr_3_repr, __sroa_arr_3_used] = "wado-compiler/tests/fixtures/variant_construct.wado/$value_copy$T106"(ref.as_non_null(__pattern_temp_1));
+        __v0_4 = __sroa_arr_3_used;
         __cond_5 = __v0_4 == 3;
         if __cond_5 == 0 {
             "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -299,11 +303,11 @@ condition: arr.len() == 3
             unreachable;
         }
         __v0_6 = __inline_Array_u8__IndexValue_i32___index_value_20: block -> u8 {
-            if 0 >= arr_3.used {
+            if 0 >= __sroa_arr_3_used {
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
-            break __inline_Array_u8__IndexValue_i32___index_value_20: builtin::array_get<u8>(arr_3.repr, 0);
+            break __inline_Array_u8__IndexValue_i32___index_value_20: builtin::array_get<u8>(__sroa_arr_3_repr, 0);
             unreachable;
         };
         __cond_7 = __v0_6 == 1;
@@ -350,8 +354,10 @@ condition: arr[0] == 1 as u8
     let __sroa___pattern_temp_2_case1_payload_0: ref null "core:prelude/string.wado//String";
     multivalue_bind [__sroa___pattern_temp_2_discriminant, __sroa___pattern_temp_2_case0_payload_0, __sroa___pattern_temp_2_case1_payload_0] = "wado-compiler/tests/fixtures/variant_construct.wado/return_result_array"();
     if __sroa___pattern_temp_2_discriminant == 0 {
-        arr_8 = __sroa___pattern_temp_2_case0_payload_0;
-        __v0_9 = arr_8.used;
+        let __sroa_arr_8_repr: ref builtin::array<i32>;
+        let __sroa_arr_8_used: i32;
+        multivalue_bind [__sroa_arr_8_repr, __sroa_arr_8_used] = "wado-compiler/tests/fixtures/variant_construct.wado/$value_copy$T398"(ref.as_non_null(__sroa___pattern_temp_2_case0_payload_0));
+        __v0_9 = __sroa_arr_8_used;
         __cond_10 = __v0_9 == 3;
         if __cond_10 == 0 {
             "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -381,11 +387,11 @@ condition: arr.len() == 3
             unreachable;
         }
         __v0_11 = __inline_Array_i32__IndexValue_i32___index_value_36: block -> i32 {
-            if 0 >= arr_8.used {
+            if 0 >= __sroa_arr_8_used {
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
-            break __inline_Array_i32__IndexValue_i32___index_value_36: builtin::array_get<i32>(arr_8.repr, 0);
+            break __inline_Array_i32__IndexValue_i32___index_value_36: builtin::array_get<i32>(__sroa_arr_8_repr, 0);
             unreachable;
         };
         __cond_12 = __v0_11 == 10;
@@ -433,8 +439,10 @@ condition: arr[0] == 10
         unreachable;
     }) };
     if ref.test "core:prelude/types.wado//Result<Array<i32>,String>::Ok"(__pattern_temp_3) {
-        arr_13 = ref.cast "core:prelude/types.wado//Result<Array<i32>,String>::Ok"(__pattern_temp_3).payload_0;
-        __v0_14 = arr_13.used;
+        let __sroa_arr_13_repr: ref builtin::array<i32>;
+        let __sroa_arr_13_used: i32;
+        multivalue_bind [__sroa_arr_13_repr, __sroa_arr_13_used] = "wado-compiler/tests/fixtures/variant_construct.wado/$value_copy$T398"(ref.cast "core:prelude/types.wado//Result<Array<i32>,String>::Ok"(__pattern_temp_3).payload_0);
+        __v0_14 = __sroa_arr_13_used;
         __cond_15 = __v0_14 == 0;
         if __cond_15 == 0 {
             "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -546,6 +554,14 @@ fn "wado-compiler/tests/fixtures/variant_construct.wado/__cm_export__run"() {
     "wado-compiler/tests/fixtures/variant_construct.wado/variant_construct_literal_coercion"();
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("variant construction works"), used: 26 });
     "wasi/task-return"(0);
+}
+
+fn "wado-compiler/tests/fixtures/variant_construct.wado/$value_copy$T106"(v) {
+    return ref.as_non_null(builtin::array_clone<u8>(v.repr)), v.used;
+}
+
+fn "wado-compiler/tests/fixtures/variant_construct.wado/$value_copy$T398"(v) {
+    return ref.as_non_null(builtin::array_clone<i32>(v.repr)), v.used;
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {

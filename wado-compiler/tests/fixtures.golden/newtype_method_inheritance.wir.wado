@@ -83,7 +83,9 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(31)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(32)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(33)
+type "functype//wado-compiler/tests/fixtures/newtype_method_inheritance.wado/$value_copy$T20" = fn(ref "wado-compiler/tests/fixtures/newtype_method_inheritance.wado//Point") -> [i32, i32];  // TypeId(33)
+
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(34)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -99,7 +101,6 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 fn "wado-compiler/tests/fixtures/newtype_method_inheritance.wado/run"() with Stdout {
-    let loc1: ref "wado-compiler/tests/fixtures/newtype_method_inheritance.wado//Point";
     let s: i32;
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
@@ -109,8 +110,13 @@ fn "wado-compiler/tests/fixtures/newtype_method_inheritance.wado/run"() with Std
     let __local_26: ref "core:prelude/format.wado//Formatter";
     let __sroa_loc3_x: i32;
     let __sroa_loc3_y: i32;
-    loc1 = struct.new "wado-compiler/tests/fixtures/newtype_method_inheritance.wado//Point" { x: 10, y: 20 };
-    s = loc1.x + loc1.y;
+    let __sroa_loc1_x: i32;
+    let __sroa_loc1_y: i32;
+    multivalue_bind [__sroa_loc1_x, __sroa_loc1_y] = "wado-compiler/tests/fixtures/newtype_method_inheritance.wado/$value_copy$T20"(struct.new "wado-compiler/tests/fixtures/newtype_method_inheritance.wado//Point" { x: 10, y: 20 });
+    let __sroa_loc2_x: i32;
+    let __sroa_loc2_y: i32;
+    multivalue_bind [__sroa_loc2_x, __sroa_loc2_y] = "wado-compiler/tests/fixtures/newtype_method_inheritance.wado/$value_copy$T20"(struct.new "wado-compiler/tests/fixtures/newtype_method_inheritance.wado//Point" { x: 5, y: 5 });
+    s = __sroa_loc1_x + __sroa_loc1_y;
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
         "core:prelude/string.wado/String::push"(__local_4, 115);
@@ -123,8 +129,8 @@ fn "wado-compiler/tests/fixtures/newtype_method_inheritance.wado/run"() with Std
         break __tmpl: __local_4;
         unreachable;
     });
-    __sroa_loc3_x = loc1.x + 5;
-    __sroa_loc3_y = loc1.y + 5;
+    __sroa_loc3_x = __sroa_loc1_x + __sroa_loc2_x;
+    __sroa_loc3_y = __sroa_loc1_y + __sroa_loc2_y;
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(43), used: 0 };
         "core:prelude/string.wado/String::push"(__local_6, 97);
@@ -156,6 +162,10 @@ fn "wado-compiler/tests/fixtures/newtype_method_inheritance.wado/__cm_binding__S
 fn "wado-compiler/tests/fixtures/newtype_method_inheritance.wado/__cm_export__run"() {
     "wado-compiler/tests/fixtures/newtype_method_inheritance.wado/run"();
     "wasi/task-return"(0);
+}
+
+fn "wado-compiler/tests/fixtures/newtype_method_inheritance.wado/$value_copy$T20"(v) {
+    return v.x, v.y;
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {

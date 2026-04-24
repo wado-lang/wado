@@ -154,7 +154,7 @@ fn "wado-compiler/tests/fixtures/serde_ndjson_wrapper.wado/response_body"(ok) {
                 let __sroa___match_scrut_0_case1_payload_0: ref null "core:serde//SerializeError";
                 multivalue_bind [__sroa___match_scrut_0_discriminant, __sroa___match_scrut_0_case0_payload_0, __sroa___match_scrut_0_case1_payload_0] = "core:json/core/json/to_string<Message>"(1);
                 __local_6 = (if __sroa___match_scrut_0_discriminant == 0 -> ref "core:prelude/string.wado//String" {
-                    __local_5 = __sroa___match_scrut_0_case0_payload_0;
+                    __local_5 = ref.as_non_null(__sroa___match_scrut_0_case0_payload_0);
                     __local_5;
                 } else {
                     struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("null"), used: 4 };
@@ -176,7 +176,7 @@ fn "wado-compiler/tests/fixtures/serde_ndjson_wrapper.wado/response_body"(ok) {
                 let __sroa___match_scrut_1_case1_payload_0: ref null "core:serde//SerializeError";
                 multivalue_bind [__sroa___match_scrut_1_discriminant, __sroa___match_scrut_1_case0_payload_0, __sroa___match_scrut_1_case1_payload_0] = "core:json/core/json/to_string<ErrorMessage>"(__local_3.error);
                 __local_10 = (if __sroa___match_scrut_1_discriminant == 0 -> ref "core:prelude/string.wado//String" {
-                    __local_9 = __sroa___match_scrut_1_case0_payload_0;
+                    __local_9 = ref.as_non_null(__sroa___match_scrut_1_case0_payload_0);
                     __local_9;
                 } else {
                     struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("null"), used: 4 };

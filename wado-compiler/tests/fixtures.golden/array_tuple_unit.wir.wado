@@ -105,7 +105,9 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(38)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(39)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(40)
+type "functype//wado-compiler/tests/fixtures/array_tuple_unit.wado/$value_copy$T396" = fn(i32) -> ref "tuple//[i32, unit]";  // TypeId(40)
+
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(41)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -139,7 +141,7 @@ fn "wado-compiler/tests/fixtures/array_tuple_unit.wado/run"() with Stdout {
         l1: loop {
             __pattern_temp_0 = "core:prelude/array.wado/ArrayIter<Tuple<i32,unit>>^Iterator::next"(__iter_2);
             if ref.is_null(__pattern_temp_0) == 0 {
-                item = value_copy "tuple//[i32, unit]"(ref.as_non_null(__pattern_temp_0));
+                item = "wado-compiler/tests/fixtures/array_tuple_unit.wado/$value_copy$T396"(ref.as_non_null(__pattern_temp_0).0);
                 "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
                     __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
                     __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
@@ -163,6 +165,10 @@ fn "wado-compiler/tests/fixtures/array_tuple_unit.wado/__cm_binding__Stdout_writ
 fn "wado-compiler/tests/fixtures/array_tuple_unit.wado/__cm_export__run"() {
     "wado-compiler/tests/fixtures/array_tuple_unit.wado/run"();
     "wasi/task-return"(0);
+}
+
+fn "wado-compiler/tests/fixtures/array_tuple_unit.wado/$value_copy$T396"(v) {
+    return struct.new "tuple//[i32, unit]" { 0: v };
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {
