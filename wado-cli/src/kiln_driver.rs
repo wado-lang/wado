@@ -165,6 +165,10 @@ fn lower(name: &str, gi: &GeneratorInvocation) -> Result<Invocation, DriverError
             .as_str(),
     );
     let options_canonical = encode_options_canonical_provisional(&gi.options);
+    let raw_options = match toml_to_attr_value(&gi.options) {
+        AttrValue::Object(obj) if obj.is_empty() => None,
+        other => Some(other),
+    };
     Ok(Invocation {
         decl_site: DeclSite::Manifest {
             name: name.to_string(),
@@ -174,6 +178,7 @@ fn lower(name: &str, gi: &GeneratorInvocation) -> Result<Invocation, DriverError
         inputs,
         output_dir,
         options_canonical,
+        raw_options,
     })
 }
 
@@ -550,6 +555,42 @@ fn to_manifest_file_hash(f: &FileHash) -> ManifestFileHash {
     ManifestFileHash {
         path: f.path.clone(),
         hash: hex_digest(&f.hash),
+    }
+}
+
+/// Compose a `file:` URI from an absolute filesystem path.
+///
+/// Used to populate the [`wado_compiler::kiln::InvocationIndex`] entries
+/// the loader consults at module-resolve time.
+///
+/// Uses the `kiln:` scheme without authority (`kiln:/abs/path`) rather
+/// than `file://` because the compiler's qualified-name format
+/// (`{module_source}//{name}`) treats `//` as the separator between
+/// module source and symbol name. A `file:///abs/path` URI contains its
+/// own `//` and confuses every parser that splits on `//` — see
+/// `wir_build::types::sort_types_topologically` and the equivalent
+/// keying in `register_struct`. The `kiln:/path` form has no internal
+/// `//`, so the qualified-name boundary stays unambiguous.
+///
+/// The URI is RFC 3986–valid (single-segment scheme followed by an
+/// absolute-path reference), so `fluent_uri::UriRef::parse` accepts it
+/// and the loader's `strip_kiln_scheme` recovers the absolute path.
+/// Relative paths are not supported; the caller must canonicalize
+/// first.
+fn path_to_kiln_uri(path: &Path) -> String {
+    // `Path::display` is sufficient on Unix where every absolute path is
+    // a `/`-separated UTF-8 string. The CLI is host-only, so any
+    // platform-specific path quirk is the kiln_driver's problem to
+    // solve, not the wasm32-compatible compiler crate's.
+    let s = path.display().to_string().replace('\\', "/");
+    if s.starts_with('/') {
+        format!("kiln:{s}")
+    } else {
+        // Relative-path fallback. The leading `/` keeps the URI
+        // RFC 3986–valid even though the loader will fail to find the
+        // file at runtime — a useful diagnostic shape for callers that
+        // forgot to canonicalize.
+        format!("kiln:/{s}")
     }
 }
 
@@ -1055,24 +1096,27 @@ where
                 }
             }
             if let Some(entry_path) = entry.outputs.iter().find(|o| o.entry).map(|o| &o.path) {
-                let decl_file = match &invocation.decl_site {
-                    wado_compiler::kiln::DeclSite::Manifest { .. } => String::new(),
-                    wado_compiler::kiln::DeclSite::Inline { module, .. } => module.clone(),
+                let scope = match &invocation.decl_site {
+                    wado_compiler::kiln::DeclSite::Manifest { .. } => {
+                        wado_compiler::kiln::DeclScope::Any
+                    }
+                    wado_compiler::kiln::DeclSite::Inline { module, .. } => {
+                        wado_compiler::kiln::DeclScope::LocalTo(module.clone())
+                    }
                 };
-                // Store an absolute path in the invocation index so the
-                // compiler's module loader can resolve the entry without
-                // knowing the manifest root or the importer's directory.
-                // Canonicalize so a relative `manifest_root` (e.g. when the
-                // user runs `wado test package-gale/...` from the workspace
-                // root) still lands as a true absolute path.
+                // Compose a `file:` URI from the canonicalized absolute
+                // path. Canonicalizing here means the loader does not
+                // need to know the manifest root or the importer's
+                // working directory at resolve time. Falling back to the
+                // un-canonicalized join (rare: only when the file does
+                // not yet exist on disk, e.g. a stale-cache path) keeps
+                // the URI well-formed enough for diagnostics.
                 let joined = manifest_root.join(entry_path);
-                let absolute = std::fs::canonicalize(&joined)
-                    .unwrap_or(joined)
-                    .to_string_lossy()
-                    .to_string();
+                let abs = std::fs::canonicalize(&joined).unwrap_or(joined);
+                let uri = path_to_kiln_uri(&abs);
                 outcome
                     .invocations
-                    .insert(&decl_file, invocation.from.as_str(), &absolute);
+                    .insert(scope, invocation.from.as_str(), &uri);
             }
             new_cache.push(entry);
         }
@@ -1157,31 +1201,11 @@ async fn typed_encode_options<H, P>(
 
     let build = manifest.build.as_ref();
 
+    let _ = build;
     for inv in invocations.iter_mut() {
-        let (display_name, supplied_attr): (String, Option<AttrValue>) = match &inv.decl_site {
-            DeclSite::Manifest { name } => {
-                let Some(gi) = build.and_then(|b| b.generators.get(name)) else {
-                    continue;
-                };
-                (name.clone(), Some(toml_to_attr_value(&gi.options)))
-            }
-            DeclSite::Inline {
-                module,
-                synthetic_id,
-            } => {
-                // Re-parse the source file that carried the `use ... with {
-                // generator: {...} }` clause to recover the raw `options`
-                // `AttrValue`. `collect_inline_invocations_for_entry` ran
-                // before any descriptor was known, so the `options_canonical`
-                // bytes stashed on the invocation are empty — this second
-                // pass fills them in now that the provider can describe the
-                // generator's `Options` type.
-                let Some(attr) = reparse_inline_options(module, &inv.from, &inv.module, host)
-                else {
-                    continue;
-                };
-                (synthetic_id.clone(), Some(attr))
-            }
+        let display_name = match &inv.decl_site {
+            DeclSite::Manifest { name } => name.clone(),
+            DeclSite::Inline { synthetic_id, .. } => synthetic_id.clone(),
         };
 
         let descriptor = match provider.descriptor(&inv.module).await {
@@ -1201,7 +1225,7 @@ async fn typed_encode_options<H, P>(
             }
         };
 
-        let supplied: Option<&AttrValue> = match supplied_attr.as_ref() {
+        let supplied: Option<&AttrValue> = match inv.raw_options.as_ref() {
             Some(AttrValue::Object(obj)) if obj.is_empty() => None,
             other => other,
         };
@@ -1216,53 +1240,6 @@ async fn typed_encode_options<H, P>(
             }
         }
     }
-}
-
-/// Re-parse the decl file that owns an inline invocation to recover the raw
-/// `generator.options` `AttrValue`. Returns `None` if the file cannot be read
-/// or parsed, or if no matching `use ... with { generator: {...} }` clause is
-/// found — in those cases `typed_encode_options` simply leaves the
-/// invocation's `options_canonical` alone.
-fn reparse_inline_options<H: CompilerHost>(
-    decl_path: &str,
-    from: &InvocationPath,
-    module: &GeneratorModule,
-    _host: &H,
-) -> Option<AttrValue> {
-    use wado_compiler::ast::Item;
-
-    let source = std::fs::read_to_string(decl_path).ok()?;
-    let parsed = wado_compiler::parse(&source).ok()?;
-    for item in &parsed.ast.items {
-        let Item::Use(use_decl) = item else { continue };
-        if InvocationPath::normalize(&use_decl.source).as_str() != from.as_str() {
-            continue;
-        }
-        let attrs = use_decl.attributes.as_ref()?;
-        let cfg = attrs.generator()?;
-        // Match by module, so two clauses with the same `from` but different
-        // generators don't cross-contaminate.
-        let cfg_module = cfg.get("module")?;
-        let clause_module = match cfg_module {
-            AttrValue::String(s) => GeneratorModule::Spec(s.clone()),
-            AttrValue::Object(obj) => match obj.get("path") {
-                Some(AttrValue::String(p)) => {
-                    GeneratorModule::LocalPath(InvocationPath::normalize(p))
-                }
-                _ => return None,
-            },
-            _ => return None,
-        };
-        if &clause_module != module {
-            continue;
-        }
-        return Some(
-            cfg.get("options")
-                .cloned()
-                .unwrap_or(AttrValue::Object(CompilerIndexMap::default())),
-        );
-    }
-    None
 }
 
 async fn run_and_build_entry<H, P>(
@@ -1903,6 +1880,7 @@ d_string = "hi"
                 inputs: vec![InvocationPath::normalize("dep.proto")],
                 output_dir: InvocationPath::normalize("build/kiln/proto"),
                 options_canonical: vec![],
+                raw_options: None,
             }
         }
 
@@ -2112,6 +2090,7 @@ d_string = "hi"
                 inputs: vec![InvocationPath::normalize("dep.proto")],
                 output_dir: InvocationPath::normalize("build/kiln/proto"),
                 options_canonical: vec![],
+                raw_options: None,
             }
         }
 

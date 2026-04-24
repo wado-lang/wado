@@ -454,6 +454,7 @@ mod tests {
             inputs: vec![InvocationPath::normalize("dep.proto")],
             output_dir: InvocationPath::normalize("build/kiln/proto"),
             options_canonical: vec![],
+            raw_options: None,
         };
         let result: Result<(FileHash, Vec<FileHash>), &'static str> =
             gather_file_hashes(&inv, |_| Err("oops"), |_| Ok(vec![]));

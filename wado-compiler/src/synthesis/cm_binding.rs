@@ -2167,20 +2167,10 @@ fn synthesize_lower_wasi_type_to_memory(
             // to. Accepts both `wasi:*` and `core:kiln/*` sources so the
             // kiln generator's record surface (input-file, output-file,
             // response, raw-request) lowers through the same path as WASI
-            // records. When `source_interface` isn't on the AST node (e.g.
-            // when the NamedType was reconstructed from a TIR `TypeId` for
-            // `Array<T>` element lowering), fall back to `resolve_cm_source_for`
-            // using `wasi_package` as the hint — this mirrors the lift path.
-            let resolved_source = n
-                .source_interface
-                .as_deref()
-                .map(str::to_string)
-                .or_else(|| {
-                    wasi_registry
-                        .resolve_cm_source_for(n, Some(wasi_package))
-                        .map(str::to_string)
-                });
-            let source = resolved_source.as_deref();
+            // records. Callers (e.g. the `Array<T>` element lower)
+            // populate `source_interface` via `type_id_to_ast_type` so
+            // this lookup does not need a fallback path.
+            let source = n.source_interface.as_deref();
             if let Some(fields) = source
                 .and_then(|s| wasi_registry.get_struct_fields_with_wado_names_by_source(s, &n.name))
             {
@@ -4104,7 +4094,7 @@ fn lower_to_flat_inner(
             let elem_type_id = type_args[0];
             let elem_ast_type = {
                 let tt = ctx.type_table.borrow();
-                type_id_to_ast_type(elem_type_id, &tt)
+                type_id_to_ast_type(elem_type_id, &tt, ctx.wasi_registry)
             };
             let elem_size =
                 crate::component_model::cm_size_with_registry(&elem_ast_type, ctx.wasi_registry);
@@ -4461,31 +4451,72 @@ fn cm_zero(vt: cm_abi::CmValType) -> TirExpr {
 
 /// Reconstruct a minimal AST `Type` surface from a TIR `TypeId`.
 ///
-/// Used by the struct/generic recursion inside
-/// [`synthesize_lift_from_flat_params`] so a field's type — which TIR
-/// stores as a `TypeId` — can be re-entered through the AST-shaped
-/// match arms. The returned value only needs the top-level `name`
-/// and (for `GenericInstance`) immediate type args; deeper structural
-/// data is already reachable through `tir_modules` + `type_table` and
-/// is looked up lazily.
-fn type_id_to_ast_type(type_id: TypeId, type_table: &TypeTable) -> Type {
+/// Used by callers that need to re-enter AST-shaped `Type` match arms
+/// (struct/generic field recursion in
+/// [`synthesize_lift_from_flat_params`], element lowering in the
+/// `Array<T>` arm of [`lower_to_flat_inner`]). The returned value only
+/// needs the top-level `name` and (for `GenericInstance`) immediate
+/// type args; deeper structural data is already reachable through
+/// `tir_modules` + `type_table` and is looked up lazily.
+///
+/// Named types receive their `source_interface` populated via
+/// [`WasiRegistry::resolve_cm_source_for`] when the registry knows the
+/// type (`wasi:*` records or `core:kiln/*` records). Without this,
+/// downstream lower / lift helpers can't find the record's field
+/// layout because they key the registry lookup by
+/// `(source_interface, name)`.
+fn type_id_to_ast_type(
+    type_id: TypeId,
+    type_table: &TypeTable,
+    wasi_registry: &WasiRegistry,
+) -> Type {
     use crate::tir::ResolvedType;
     let span = synth_span();
     let resolved = type_table.get(type_id);
-    let named = |name: &str| Type::Named(NamedType::new(AstId::fresh(), name.to_string(), span));
+    // Only populate `source_interface` when the TIR type's `module_source`
+    // proves the type came from a CM namespace (`wasi:*` or
+    // `core:kiln/*`). User-local structs may share names with WASI / kiln
+    // records (`Span`, `Error`, `Token` …) but must not pick up the CM
+    // source — otherwise downstream lift/lower paths look up the wrong
+    // record layout and the WIR ends up with mismatched struct refs.
+    let named_no_source =
+        |name: &str| Type::Named(NamedType::new(AstId::fresh(), name.to_string(), span));
+    let cm_named = |name: &str, ms: &ModuleSource| {
+        let mut nt = NamedType::new(AstId::fresh(), name.to_string(), span);
+        let cm_namespace = match ms {
+            ModuleSource::Wasi { .. } => true,
+            ModuleSource::Core { name } => name.starts_with("kiln"),
+            _ => false,
+        };
+        if cm_namespace && let Some(source) = wasi_registry.resolve_cm_source_for(&nt, None) {
+            nt.source_interface = Some(source.to_string());
+        }
+        Type::Named(nt)
+    };
     match resolved {
-        ResolvedType::Primitive(p) => named(p.as_str()),
+        ResolvedType::Primitive(p) => named_no_source(p.as_str()),
         ResolvedType::Unit => Type::Tuple(Vec::new()),
-        ResolvedType::Struct { name, .. } => named(name),
-        ResolvedType::Variant { name, .. } => named(name),
-        ResolvedType::Enum { name, .. } => named(name),
-        ResolvedType::Resource { name, .. } => named(name),
+        ResolvedType::Struct {
+            name,
+            module_source,
+            ..
+        } => cm_named(name, module_source),
+        ResolvedType::Variant {
+            name,
+            module_source,
+            ..
+        } => cm_named(name, module_source),
+        ResolvedType::Enum {
+            name,
+            module_source,
+        } => cm_named(name, module_source),
+        ResolvedType::Resource { name, .. } => named_no_source(name),
         ResolvedType::GenericInstance {
             name, type_args, ..
         } => {
             let args: Vec<Type> = type_args
                 .iter()
-                .map(|&tid| type_id_to_ast_type(tid, type_table))
+                .map(|&tid| type_id_to_ast_type(tid, type_table, wasi_registry))
                 .collect();
             Type::Generic(GenericType {
                 id: AstId::fresh(),
@@ -4499,7 +4530,7 @@ fn type_id_to_ast_type(type_id: TypeId, type_table: &TypeTable) -> Type {
         } => {
             let args: Vec<Type> = type_args
                 .iter()
-                .map(|&tid| type_id_to_ast_type(tid, type_table))
+                .map(|&tid| type_id_to_ast_type(tid, type_table, wasi_registry))
                 .collect();
             Type::Generic(GenericType {
                 id: AstId::fresh(),
@@ -4508,13 +4539,17 @@ fn type_id_to_ast_type(type_id: TypeId, type_table: &TypeTable) -> Type {
                 span,
             })
         }
-        ResolvedType::Ref(inner) => {
-            Type::Reference(Box::new(type_id_to_ast_type(*inner, type_table)))
-        }
-        ResolvedType::MutRef(inner) => {
-            Type::MutReference(Box::new(type_id_to_ast_type(*inner, type_table)))
-        }
-        _ => named("i32"),
+        ResolvedType::Ref(inner) => Type::Reference(Box::new(type_id_to_ast_type(
+            *inner,
+            type_table,
+            wasi_registry,
+        ))),
+        ResolvedType::MutRef(inner) => Type::MutReference(Box::new(type_id_to_ast_type(
+            *inner,
+            type_table,
+            wasi_registry,
+        ))),
+        _ => named_no_source("i32"),
     }
 }
 
@@ -4597,10 +4632,14 @@ fn synthesize_lift_from_flat_params(
                     // `StructLiteral` WIR pass expects.
                     let (field_ast_tys, struct_type_id) = {
                         let tt = type_table_cell.borrow();
+                        let registry = lift_ctx
+                            .as_ref()
+                            .map(|c| c.wasi_registry)
+                            .expect("lift_ctx required when reconstructing struct field AST types");
                         let field_tys: Vec<Type> = struct_decl
                             .fields
                             .iter()
-                            .map(|f| type_id_to_ast_type(f.type_id, &tt))
+                            .map(|f| type_id_to_ast_type(f.type_id, &tt, registry))
                             .collect();
                         // Prefer the already-registered TypeId so the WIR
                         // `struct_type_map` lookup hits — the

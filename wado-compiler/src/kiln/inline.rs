@@ -41,11 +41,30 @@ pub const DEFAULT_INLINE_OUTPUT_DIR_PREFIX: &str = "build/kiln";
 /// Lookups are keyed by `(declaring_file_normalized, from_path_normalized)`.
 /// Two clauses declared in different files can redirect to the same entry
 /// iff the manifest + inline merge keeps them under a single invocation.
+/// Scope at which an [`InvocationIndex`] entry takes effect.
+///
+/// Drop-in replacement for the former "empty-string decl_file means
+/// any importer" sentinel: manifest-declared invocations use
+/// [`DeclScope::Any`] (redirect any importer that imports the
+/// matching `from`), while inline-declared invocations use
+/// [`DeclScope::LocalTo`] with the declaring file path and only
+/// redirect that specific file's imports.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum DeclScope {
+    /// Match any importer. Used for manifest-declared invocations.
+    Any,
+    /// Match only the named importing file (normalized path). Used
+    /// for inline `use ... with { generator: { ... } }` clauses.
+    LocalTo(String),
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct InvocationIndex {
-    /// Entries mapping `(decl_file, from_path)` → entry module path (relative
-    /// to the project root, forward-slash normalized).
-    entries: IndexMap<(String, String), String>,
+    /// Entries mapping `(scope, from_path)` → entry module URI. The URI
+    /// is an opaque resource identifier (typically a `file:` URI
+    /// produced by the CLI pipeline) that the loader hands verbatim to
+    /// `CompilerHost::load_source` — it is not normalized as a path.
+    entries: IndexMap<(DeclScope, String), String>,
 }
 
 impl InvocationIndex {
@@ -57,36 +76,37 @@ impl InvocationIndex {
         }
     }
 
-    /// Record that a `use ... from "<from>"` inside `decl_file` should
-    /// redirect to `entry_path` (project-root-relative). Paths are
-    /// normalized before insertion so callers may pass raw user input.
+    /// Record that a `use ... from "<from>"` within `scope` redirects to
+    /// `entry_uri`. The `from` path is normalized for matching; the
+    /// `entry_uri` is stored opaquely.
     ///
     /// Silently overwrites a prior entry with the same key. The caller is
     /// responsible for ensuring the set of recorded invocations is
     /// conflict-free (see [`merge_manifest_and_inline`]).
-    pub fn insert(&mut self, decl_file: &str, from: &str, entry_path: &str) {
-        let decl = InvocationPath::normalize(decl_file).as_str().to_string();
+    pub fn insert(&mut self, scope: DeclScope, from: &str, entry_uri: &str) {
         let from = InvocationPath::normalize(from).as_str().to_string();
-        let entry = InvocationPath::normalize(entry_path).as_str().to_string();
-        self.entries.insert((decl, from), entry);
+        self.entries.insert((scope, from), entry_uri.to_string());
     }
 
-    /// Look up the entry module path for a `(decl_file, from)` pair. Returns
-    /// the project-root-relative path of the entry module, or `None` if no
-    /// invocation matches.
+    /// Look up the entry URI for a `(decl_file, from)` pair. Returns the
+    /// opaque URI of the entry module, or `None` if no invocation
+    /// matches.
     ///
-    /// Manifest-declared invocations are recorded with an empty `decl_file`
-    /// (see `CliGeneratorProvider` lowering): those redirect any `from` match
-    /// regardless of the importer. Inline-declared invocations keep the
-    /// importing module path and only redirect that specific file.
+    /// The `(LocalTo(decl_file), from)` key is tried first; on miss the
+    /// lookup falls back to `(Any, from)` so manifest-scoped invocations
+    /// redirect any importer.
     #[must_use]
     pub fn redirect(&self, decl_file: &str, from: &str) -> Option<&str> {
-        let decl = InvocationPath::normalize(decl_file).as_str().to_string();
         let from = InvocationPath::normalize(from).as_str().to_string();
-        if let Some(entry) = self.entries.get(&(decl, from.clone())) {
+        if let Some(entry) = self
+            .entries
+            .get(&(DeclScope::LocalTo(decl_file.to_string()), from.clone()))
+        {
             return Some(entry.as_str());
         }
-        self.entries.get(&(String::new(), from)).map(String::as_str)
+        self.entries
+            .get(&(DeclScope::Any, from))
+            .map(String::as_str)
     }
 
     /// Returns `true` when no invocations have been recorded. Consumers
@@ -347,6 +367,7 @@ fn lower_inline(
         inputs,
         output_dir,
         options_canonical,
+        raw_options: cfg.get("options").cloned(),
     })
 }
 
@@ -562,6 +583,7 @@ mod tests {
             inputs: vec![],
             output_dir: InvocationPath::normalize("build/kiln/proto"),
             options_canonical: vec![],
+            raw_options: None,
         };
         let inline_inv = Invocation {
             decl_site: DeclSite::Inline {
@@ -573,6 +595,7 @@ mod tests {
             inputs: vec![],
             output_dir: InvocationPath::normalize("build/kiln/kiln-deadbeef"),
             options_canonical: vec![],
+            raw_options: None,
         };
         let errs = merge_manifest_and_inline(vec![manifest_inv], vec![inline_inv]).unwrap_err();
         assert!(errs.iter().any(|d| d.message.contains("disagree between")));
@@ -582,24 +605,61 @@ mod tests {
     fn invocation_index_redirects_on_match() {
         let mut idx = InvocationIndex::new();
         idx.insert(
-            "src/main.wado",
+            DeclScope::LocalTo("src/main.wado".to_string()),
             "./grammar.g4",
-            "build/kiln/proto/grammar.wado",
+            "file:///abs/build/kiln/proto/grammar.wado",
         );
         assert_eq!(
             idx.redirect("src/main.wado", "./grammar.g4"),
-            Some("build/kiln/proto/grammar.wado"),
+            Some("file:///abs/build/kiln/proto/grammar.wado"),
         );
         assert_eq!(idx.redirect("src/main.wado", "./other.g4"), None);
     }
 
     #[test]
-    fn invocation_index_normalizes_paths() {
+    fn invocation_index_normalizes_from_path() {
         let mut idx = InvocationIndex::new();
-        idx.insert("./src/main.wado", "./grammar.g4", "./build/kiln/x/g.wado");
+        idx.insert(
+            DeclScope::LocalTo("src/main.wado".to_string()),
+            "./grammar.g4",
+            "file:///abs/build/kiln/x/g.wado",
+        );
         assert_eq!(
             idx.redirect("src/main.wado", "grammar.g4"),
-            Some("build/kiln/x/g.wado"),
+            Some("file:///abs/build/kiln/x/g.wado"),
+        );
+    }
+
+    #[test]
+    fn invocation_index_any_scope_matches_every_importer() {
+        let mut idx = InvocationIndex::new();
+        idx.insert(DeclScope::Any, "./grammar.g4", "file:///abs/g.wado");
+        assert_eq!(
+            idx.redirect("src/main.wado", "grammar.g4"),
+            Some("file:///abs/g.wado"),
+        );
+        assert_eq!(
+            idx.redirect("tests/other.wado", "./grammar.g4"),
+            Some("file:///abs/g.wado"),
+        );
+    }
+
+    #[test]
+    fn invocation_index_local_scope_takes_precedence_over_any() {
+        let mut idx = InvocationIndex::new();
+        idx.insert(DeclScope::Any, "./grammar.g4", "file:///abs/manifest.wado");
+        idx.insert(
+            DeclScope::LocalTo("src/main.wado".to_string()),
+            "./grammar.g4",
+            "file:///abs/local.wado",
+        );
+        assert_eq!(
+            idx.redirect("src/main.wado", "./grammar.g4"),
+            Some("file:///abs/local.wado"),
+        );
+        assert_eq!(
+            idx.redirect("tests/other.wado", "./grammar.g4"),
+            Some("file:///abs/manifest.wado"),
         );
     }
 
@@ -614,6 +674,7 @@ mod tests {
             inputs: vec![],
             output_dir: InvocationPath::normalize("build/kiln/proto"),
             options_canonical: vec![],
+            raw_options: None,
         };
         let merged = merge_manifest_and_inline(vec![a.clone()], vec![a]).unwrap();
         assert_eq!(merged.len(), 1);

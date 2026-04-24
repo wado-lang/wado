@@ -83,6 +83,22 @@ pub enum ModuleSource {
         /// Filename of the entry point (e.g., "hello.wado", "<stdin>", "<entry>")
         filename: String,
     },
+    /// Module loaded through a Kiln invocation redirect.
+    ///
+    /// The contained `uri` is opaque to most of the compiler — it is
+    /// passed verbatim to `CompilerHost::load_source`, which decides
+    /// how to interpret it. The CLI's `FilesystemCompilerHost` accepts
+    /// `file:` URIs and reads the absolute path; in-memory hosts use
+    /// the URI as a key. Using a URI keeps `wado-compiler` free of
+    /// `std::path` (and therefore `wasm32-unknown-unknown`-friendly).
+    ///
+    /// Created by [`crate::loader::ModuleLoader::resolve_import`] when
+    /// an import target matches an entry in the
+    /// [`crate::kiln::InvocationIndex`]; never written by user source.
+    Redirected {
+        /// Absolute URI (typically `file:///abs/path/to/file.wado`).
+        uri: String,
+    },
 }
 
 impl PartialEq for ModuleSource {
@@ -92,6 +108,7 @@ impl PartialEq for ModuleSource {
             (Self::Wasi { interface: a }, Self::Wasi { interface: b }) => a == b,
             (Self::Local { path: a }, Self::Local { path: b }) => a == b,
             (Self::Remote { url: a }, Self::Remote { url: b }) => a == b,
+            (Self::Redirected { uri: a }, Self::Redirected { uri: b }) => a == b,
             // Entry points are equal regardless of filename
             (Self::EntryPoint { .. }, Self::EntryPoint { .. }) => true,
             _ => false,
@@ -110,6 +127,7 @@ impl std::hash::Hash for ModuleSource {
             Self::Wasi { interface } => interface.hash(state),
             Self::Local { path } => path.hash(state),
             Self::Remote { url } => url.hash(state),
+            Self::Redirected { uri } => uri.hash(state),
             // Entry points hash the same regardless of filename
             Self::EntryPoint { .. } => {}
         }
@@ -270,6 +288,7 @@ impl ModuleSource {
             Self::Local { path } => vec![path.clone()],
             Self::Remote { url } => vec![url.clone()],
             Self::EntryPoint { filename } => vec![filename.clone()],
+            Self::Redirected { uri } => vec![uri.clone()],
         }
     }
 
@@ -406,6 +425,7 @@ impl fmt::Display for ModuleSource {
             Self::EntryPoint { filename } => {
                 write!(f, "{filename}")
             }
+            Self::Redirected { uri } => write!(f, "{uri}"),
         }
     }
 }
@@ -511,6 +531,7 @@ impl fmt::Display for FreeFunctionName {
             ModuleSource::Wasi { interface } => write!(f, "wasi/{}/{}", interface, self.name),
             ModuleSource::Local { path } => write!(f, "{}/{}", path, self.name),
             ModuleSource::Remote { url } => write!(f, "{}/{}", url, self.name),
+            ModuleSource::Redirected { uri } => write!(f, "{}/{}", uri, self.name),
         }
     }
 }
@@ -1049,11 +1070,12 @@ pub fn resolve_import_with_invocations(
         let decl_file = match from_module {
             ModuleSource::Local { path } => path.as_str(),
             ModuleSource::EntryPoint { filename } => filename.as_str(),
+            ModuleSource::Redirected { uri } => uri.as_str(),
             _ => "",
         };
-        if let Some(entry_path) = invocations.redirect(decl_file, import_source) {
-            return ModuleSource::Local {
-                path: normalize_module_path(entry_path),
+        if let Some(entry_uri) = invocations.redirect(decl_file, import_source) {
+            return ModuleSource::Redirected {
+                uri: entry_uri.to_string(),
             };
         }
     }
@@ -1184,7 +1206,6 @@ fn remove_dot_segments(path: &str) -> String {
     // Split into segments and process
     let mut segments: Vec<&str> = Vec::new();
     let has_leading_dot = path.starts_with("./");
-    let has_leading_slash = path.starts_with('/');
 
     for segment in path.split('/') {
         match segment {
@@ -1209,8 +1230,6 @@ fn remove_dot_segments(path: &str) -> String {
     // Preserve leading ./ for relative paths
     if has_leading_dot && !result.starts_with("..") {
         format!("./{result}")
-    } else if has_leading_slash {
-        format!("/{result}")
     } else if result.is_empty() {
         ".".to_string()
     } else {

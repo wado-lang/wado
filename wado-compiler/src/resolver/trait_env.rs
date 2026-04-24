@@ -219,7 +219,9 @@ impl TraitEnv {
 fn is_user_local(ms: &ModuleSource) -> bool {
     matches!(
         ms,
-        ModuleSource::Local { .. } | ModuleSource::EntryPoint { .. }
+        ModuleSource::Local { .. }
+            | ModuleSource::EntryPoint { .. }
+            | ModuleSource::Redirected { .. }
     )
 }
 

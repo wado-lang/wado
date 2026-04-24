@@ -363,6 +363,7 @@ version = "0.1.0"
         inputs: vec![],
         output_dir: InvocationPath::normalize("build/kiln/kiln-abc12345"),
         options_canonical: Vec::new(),
+        raw_options: None,
     };
 
     let generated_content = "pub fn greet() {}\n";
@@ -423,6 +424,7 @@ version = "0.1.0"
         inputs: vec![],
         output_dir: InvocationPath::normalize("build/kiln/kiln-deadbeef"),
         options_canonical: Vec::new(),
+        raw_options: None,
     };
 
     let host = StubHost::new(

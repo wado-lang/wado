@@ -893,104 +893,129 @@ fn emit_kiln_world_types(builder: &mut ComponentBuilder, ctx: &mut ComponentMode
     let string_vt = ComponentValType::Primitive(PrimitiveValType::String);
     let bool_vt = ComponentValType::Primitive(PrimitiveValType::Bool);
 
-    // Build the instance type. Indices below are instance-local; each
-    // `ty()` call advances the instance's type counter, and each
-    // `export(..Eq(idx)..)` creates an alias at the next counter slot.
+    // Build the instance type. Each `ty()` call advances the instance's
+    // type counter by one, and each `export(..Eq(idx)..)` creates an
+    // alias at the next slot. The local helpers track that counter
+    // explicitly so we can name the indices we actually reference down
+    // the function and drop the rest without a dead `let _ = ...`.
+    fn alloc(next_idx: &mut u32) -> u32 {
+        let idx = *next_idx;
+        *next_idx += 1;
+        idx
+    }
+    fn emit_record(
+        it: &mut InstanceType,
+        next_idx: &mut u32,
+        fields: &[(&'static str, ComponentValType)],
+    ) -> u32 {
+        it.ty().defined_type().record(fields.iter().copied());
+        alloc(next_idx)
+    }
+    fn emit_variant(
+        it: &mut InstanceType,
+        next_idx: &mut u32,
+        cases: &[(&'static str, Option<ComponentValType>)],
+    ) -> u32 {
+        it.ty().defined_type().variant(cases.iter().copied());
+        alloc(next_idx)
+    }
+    fn emit_list(it: &mut InstanceType, next_idx: &mut u32, elem: ComponentValType) -> u32 {
+        it.ty().defined_type().list(elem);
+        alloc(next_idx)
+    }
+    fn emit_export(it: &mut InstanceType, next_idx: &mut u32, name: &str, eq_idx: u32) -> u32 {
+        it.export(
+            name,
+            wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(eq_idx)),
+        );
+        alloc(next_idx)
+    }
+
     let mut instance_type = InstanceType::new();
-    let mut local_idx: u32 = 0;
+    let mut next_idx: u32 = 0;
 
     // input-file
-    instance_type
-        .ty()
-        .defined_type()
-        .record([("path", string_vt), ("content", string_vt)]);
-    let input_file_local = local_idx;
-    local_idx += 1;
-    instance_type.export(
-        "input-file",
-        wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(input_file_local)),
+    let input_file_local = emit_record(
+        &mut instance_type,
+        &mut next_idx,
+        &[("path", string_vt), ("content", string_vt)],
     );
-    let input_file_export = local_idx;
-    local_idx += 1;
+    let input_file_export = emit_export(
+        &mut instance_type,
+        &mut next_idx,
+        "input-file",
+        input_file_local,
+    );
 
     // output-file
-    instance_type.ty().defined_type().record([
-        ("path", string_vt),
-        ("content", string_vt),
-        ("is-entry", bool_vt),
-    ]);
-    let output_file_local = local_idx;
-    local_idx += 1;
-    instance_type.export(
+    let output_file_local = emit_record(
+        &mut instance_type,
+        &mut next_idx,
+        &[
+            ("path", string_vt),
+            ("content", string_vt),
+            ("is-entry", bool_vt),
+        ],
+    );
+    let output_file_export = emit_export(
+        &mut instance_type,
+        &mut next_idx,
         "output-file",
-        wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(output_file_local)),
+        output_file_local,
     );
-    let output_file_export = local_idx;
-    local_idx += 1;
 
-    // list<output-file> — anonymous list referencing the exported alias.
-    instance_type
-        .ty()
-        .defined_type()
-        .list(ComponentValType::Type(output_file_export));
-    let list_output_local = local_idx;
-    local_idx += 1;
-
-    // response = record { files: list<output-file> }
-    instance_type
-        .ty()
-        .defined_type()
-        .record([("files", ComponentValType::Type(list_output_local))]);
-    let response_local = local_idx;
-    local_idx += 1;
-    instance_type.export(
+    // list<output-file> + response record
+    let list_output_local = emit_list(
+        &mut instance_type,
+        &mut next_idx,
+        ComponentValType::Type(output_file_export),
+    );
+    let response_local = emit_record(
+        &mut instance_type,
+        &mut next_idx,
+        &[("files", ComponentValType::Type(list_output_local))],
+    );
+    emit_export(
+        &mut instance_type,
+        &mut next_idx,
         "response",
-        wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(response_local)),
+        response_local,
     );
-    #[allow(unused_assignments)]
-    {
-        local_idx += 1;
-    }
 
     // error variant
-    instance_type.ty().defined_type().variant([
-        ("invalid-schema", Some(string_vt)),
-        ("unsupported", Some(string_vt)),
-        ("other", Some(string_vt)),
-    ]);
-    let error_local = local_idx;
-    local_idx += 1;
-    instance_type.export(
-        "error",
-        wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(error_local)),
+    let error_local = emit_variant(
+        &mut instance_type,
+        &mut next_idx,
+        &[
+            ("invalid-schema", Some(string_vt)),
+            ("unsupported", Some(string_vt)),
+            ("other", Some(string_vt)),
+        ],
     );
-    #[allow(unused_assignments)]
-    {
-        local_idx += 1;
-    }
+    emit_export(&mut instance_type, &mut next_idx, "error", error_local);
 
-    // list<input-file>
-    instance_type
-        .ty()
-        .defined_type()
-        .list(ComponentValType::Type(input_file_export));
-    let list_input_local = local_idx;
-    local_idx += 1;
-
-    // raw-request = record { primary: input-file, inputs: list<input-file>, options: string }
-    instance_type.ty().defined_type().record([
-        ("primary", ComponentValType::Type(input_file_export)),
-        ("inputs", ComponentValType::Type(list_input_local)),
-        ("options", string_vt),
-    ]);
-    let raw_request_local = local_idx;
-    // No further local_idx uses after this point inside the instance
-    // type; the export alias below advances the encoder's internal
-    // counter but we don't reference it by index from here.
+    // list<input-file> + raw-request record
+    let list_input_local = emit_list(
+        &mut instance_type,
+        &mut next_idx,
+        ComponentValType::Type(input_file_export),
+    );
+    let raw_request_local = emit_record(
+        &mut instance_type,
+        &mut next_idx,
+        &[
+            ("primary", ComponentValType::Type(input_file_export)),
+            ("inputs", ComponentValType::Type(list_input_local)),
+            ("options", string_vt),
+        ],
+    );
+    // The raw-request export advances the encoder counter once more,
+    // but we never reference that slot again so we drop the result.
     instance_type.export(
         "raw-request",
         wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(raw_request_local)),
     );
+    let _ = next_idx;
 
     // Register the instance type at the component level.
     let instance_type_idx = ctx.register_type("kiln-types-instance-type");
