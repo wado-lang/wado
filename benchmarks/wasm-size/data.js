@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776991467906,
+  "lastUpdate": 1777002778293,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -15765,6 +15765,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/fd623887707f231fa02def31fedf40e875fac900"
         },
         "date": 1776991467588,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8982,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18988,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 635264,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "12cc51a07861813b68b3284424edd756531aab29",
+          "message": "Merge pull request #910 from wado-lang/claude/auto-derived-defaults-InJ99\n\nfeat(compiler): auto-derive Default for all-defaulted structs",
+          "timestamp": "2026-04-24T12:48:20+09:00",
+          "tree_id": "9a8476b8b369d3057e8fbeb08946e43be7b10926",
+          "url": "https://github.com/wado-lang/wado/commit/12cc51a07861813b68b3284424edd756531aab29"
+        },
+        "date": 1777002777986,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
