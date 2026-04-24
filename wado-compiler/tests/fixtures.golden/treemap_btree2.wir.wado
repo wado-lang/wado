@@ -367,7 +367,7 @@ fn "wado-compiler/tests/fixtures/treemap_btree2.wado/run"() with Stdout {
     drop(__inline_TreeMap_String_i32___delete_27: block -> bool {
         __local_76 = map;
         __local_77 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("cherry"), used: 6 };
-        __local_79 = __local_76.root;
+        __local_79 = value_copy "core:prelude/types.wado//Option<BTreeNode<String,i32>>"(__local_76.root);
         if ref.is_null(__local_79) == 0 {
             __local_78 = ref.as_non_null(__local_79);
             break __inline_TreeMap_String_i32___delete_27: "wado-compiler/tests/fixtures/treemap_btree2.wado/TreeMap<String,i32>::delete_in_node"(__local_76, __local_78, __local_77);

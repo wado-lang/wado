@@ -136,7 +136,7 @@ impl FunctionTranslator<'_, '_> {
             "builtin::copy_value" => {
                 let arg_expr = &args[0].expr;
                 let translated = self.translate_expr(arg_expr);
-                return Some(self.build_value_copy(arg_expr.type_id, translated));
+                Some(self.build_value_copy(arg_expr.type_id, translated))
             }
             "builtin::i32_load" => {
                 let addr = self.translate_expr(&args[0].expr);

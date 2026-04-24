@@ -20,14 +20,14 @@ use crate::tir::{
 };
 use crate::tir_visitor::{TirOptVisitor, opt_walk_expr, opt_walk_stmt};
 
-/// Run the value-copy insertion pass on every user-defined function body.
+/// Run the value-copy insertion pass on every function body, including CM
+/// binding adapters — they still carry Wado value semantics on the guest
+/// side of the ABI boundary and need the same defensive copies as ordinary
+/// functions.
 pub fn insert_value_copy_calls(project: &mut FlatPackage) {
     let type_table = project.type_table.clone();
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
-        if func.is_cm_binding {
-            continue;
-        }
         let immutable_locals = collect_immutable_locals(func.body.as_ref());
         let mut visitor = ValueCopyInserter {
             type_table: type_table.clone(),
@@ -97,7 +97,7 @@ impl ValueCopyInserter {
                 if name == "Box" {
                     return false;
                 }
-                if TypeTable::is_tuple_type(&name, &module_source) && type_args.is_empty() {
+                if TypeTable::is_tuple_type(name, module_source) && type_args.is_empty() {
                     return false;
                 }
                 true
@@ -193,11 +193,7 @@ impl ValueCopyInserter {
         }
     }
 
-    fn block_breaks_are_fresh(
-        label: &str,
-        block: &TirBlock,
-        parent_fresh: &IndexSet<u32>,
-    ) -> bool {
+    fn block_breaks_are_fresh(label: &str, block: &TirBlock, parent_fresh: &IndexSet<u32>) -> bool {
         let mut found = false;
         let mut fresh_locals = parent_fresh.clone();
         if Self::scan_block_for_breaks(label, block, &mut found, &mut fresh_locals) {
@@ -372,8 +368,17 @@ impl TirOptVisitor for ValueCopyInserter {
                     self.wrap_slot_if_needed(arg);
                 }
             }
-            TirExprKind::Assign { value, .. } => {
-                self.wrap_slot_if_needed(value);
+            TirExprKind::Assign { target, value } => {
+                // Only Local targets receive a defensive copy. StructSet /
+                // ArraySet / IndexAssign on an existing container stash the
+                // reference as-is — matching the old WIR-side rule that no
+                // wrapper was emitted for field/index writes. SROA-renamed
+                // locals (`__sroa_*`) are alias-preserving and also skip.
+                if let TirExprKind::Local { name, .. } = &target.kind
+                    && !name.starts_with("__sroa_")
+                {
+                    self.wrap_slot_if_needed(value);
+                }
             }
             _ => {}
         }

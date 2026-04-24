@@ -8,9 +8,8 @@ use crate::flat_package::FlatPackage;
 use crate::name::ModuleSource;
 use crate::tir::FunctionRef;
 use crate::tir::{
-    FunctionKind,
-    InlineHint, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirGlobal, TirModule,
-    TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
+    FunctionKind, InlineHint, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirGlobal,
+    TirModule, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::token::Span;
 

@@ -9,9 +9,8 @@ use crate::hashmap::IndexSet;
 
 use crate::name::{LocalMethodName, ModuleSource};
 use crate::tir::{
-    FunctionKind,
-    CallArg, FunctionRef, InlineHint, MonomorphInfo, TirBinaryOp, TirBlock, TirExpr, TirExprKind,
-    TirFunction, TirParam, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
+    CallArg, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, TirBinaryOp, TirBlock, TirExpr,
+    TirExprKind, TirFunction, TirParam, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::token::Span;
 

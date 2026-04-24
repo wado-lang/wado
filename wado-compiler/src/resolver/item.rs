@@ -5,9 +5,8 @@ use crate::compiler_host::CompilerHost;
 use crate::hashmap::IndexSet;
 use crate::name::{LocalMethodName, MethodName, ModuleSource};
 use crate::tir::{
-    FunctionKind,
-    TirEffect, TirEffectOp, TirFunction, TirGlobal, TirParam, TirResource, TirStruct, TirTest,
-    TirVariantCase, TirVariantDecl, TypeId, TypeTable,
+    FunctionKind, TirEffect, TirEffectOp, TirFunction, TirGlobal, TirParam, TirResource, TirStruct,
+    TirTest, TirVariantCase, TirVariantDecl, TypeId, TypeTable,
 };
 
 use super::Resolver;

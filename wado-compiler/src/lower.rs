@@ -17,7 +17,6 @@ mod cm_intrinsics;
 mod globals;
 mod pattern;
 mod string;
-mod value_copy;
 mod wide_int;
 
 use crate::flat_package::FlatPackage;
@@ -31,7 +30,6 @@ use closure::ClosureLowerer;
 use globals::{generate_initialize_modules_flat, lower_global_initializers};
 use pattern::lower_patterns;
 use string::StringCollector;
-use value_copy::insert_value_copy_calls;
 use wide_int::lower_wide_int_match_patterns;
 
 /// Run pre-boxing per-module lowering passes.
@@ -162,9 +160,4 @@ pub fn lower(flat: &mut FlatPackage) {
 
     // Rebuild variant index since data may have changed
     flat.rebuild_variant_indices();
-
-    // Insert `builtin::copy_value::<T>(x)` wrappers at every position where
-    // value semantics require a defensive deep-copy. Runs last so it sees the
-    // final TIR shape (patterns, closures, and globals already lowered).
-    insert_value_copy_calls(flat);
 }

@@ -22,9 +22,8 @@ use crate::name::LocalMethodName;
 use crate::name::ModuleSource;
 use crate::package::Package;
 use crate::tir::{
-    FunctionKind,
-    CallArg, EffectRef, FunctionRef, InlineHint, MonomorphInfo, TirBinaryOp, TirBlock, TirExpr,
-    TirExprKind, TirFunction, TirParam, TirStmt, TirStmtKind, TypeId, TypeTable,
+    CallArg, EffectRef, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, TirBinaryOp,
+    TirBlock, TirExpr, TirExprKind, TirFunction, TirParam, TirStmt, TirStmtKind, TypeId, TypeTable,
 };
 
 use super::common::{

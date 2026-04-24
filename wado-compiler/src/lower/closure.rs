@@ -6,11 +6,10 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::name::{LocalMethodName, MethodName, ModuleSource};
 use crate::tir::{
-    FunctionKind,
-    CallArg, ClosureFunctor, FunctionRef, InlineHint, ResolvedType, TirBlock, TirCapture, TirExpr,
-    TirExprKind, TirField, TirFunction, TirImpl, TirMatchArm, TirModule, TirParam, TirPattern,
-    TirStmt, TirStmtKind, TirStruct, TirStructField, TirStructPatternField, TirUnaryOp, TypeId,
-    TypeTable,
+    CallArg, ClosureFunctor, FunctionKind, FunctionRef, InlineHint, ResolvedType, TirBlock,
+    TirCapture, TirExpr, TirExprKind, TirField, TirFunction, TirImpl, TirMatchArm, TirModule,
+    TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirStructPatternField,
+    TirUnaryOp, TypeId, TypeTable,
 };
 use crate::token::Span;
 

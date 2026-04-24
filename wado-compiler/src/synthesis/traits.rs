@@ -17,10 +17,9 @@ use crate::hashmap::IndexSet;
 use crate::name::{LocalMethodName, MethodName, ModuleSource};
 use crate::package::Package;
 use crate::tir::{
-    FunctionKind,
-    CallArg, FunctionRef, InlineHint, MonomorphInfo, ResolvedType, TirBinaryOp, TirBlock, TirExpr,
-    TirExprKind, TirFunction, TirModule, TirParam, TirStmt, TirStmtKind, TirTypeParam, TirUnaryOp,
-    TypeId, TypeTable,
+    CallArg, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ResolvedType, TirBinaryOp,
+    TirBlock, TirExpr, TirExprKind, TirFunction, TirModule, TirParam, TirStmt, TirStmtKind,
+    TirTypeParam, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::token::Span;
 

@@ -35,6 +35,7 @@ mod select_lowering;
 mod sroa;
 mod store_load_forward;
 mod tmpl_hoist;
+mod value_copy;
 
 use condition_implication::eliminate_implied_conditions;
 use const_branch_prune::prune_constant_branches;
@@ -178,6 +179,16 @@ pub fn optimize(
     profiler.span_start("tir/select_lowering");
     select_lowering::select_lowering(&mut project);
     profiler.span_end("tir/select_lowering");
+
+    // Materialise `builtin::copy_value::<T>(x)` wrappers at every semantic
+    // deep-copy position. Runs last so it sees the final post-optimize TIR —
+    // inlining and branch folding have already resolved `if` expressions to
+    // concrete StructLiteral branches, matching what the freshness check
+    // expects to elide. WIR build lowers each call to the shared
+    // `build_value_copy` descriptor.
+    profiler.span_start("tir/value_copy_insertion");
+    value_copy::insert_value_copy_calls(&mut project);
+    profiler.span_end("tir/value_copy_insertion");
 
     project
 }

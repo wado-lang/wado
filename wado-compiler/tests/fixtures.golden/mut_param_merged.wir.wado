@@ -292,7 +292,7 @@ fn "wado-compiler/tests/fixtures/mut_param_merged.wado/mut_param_string"() with 
     let __local_217: ref "core:prelude/format.wado//Formatter";
     original = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("original"), used: 8 };
     result = __inline_replace_0: block -> ref "core:prelude/string.wado//String" {
-        __local_67 = value_copy "core:prelude/string.wado//String"(original);
+        __local_67 = original;
         __local_67 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("new value"), used: 9 };
         break __inline_replace_0: __local_67;
         unreachable;
@@ -531,10 +531,8 @@ condition: a[0] == 1
         unreachable;
     };
     __v0_22 = __inline_Array_i32__IndexValue_i32___index_value_53: block -> i32 {
-        if 0 >= d.used {
-            "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-            unreachable;
-        }
+        block {
+        };
         break __inline_Array_i32__IndexValue_i32___index_value_53: builtin::array_get<i32>(d.repr, 0);
         unreachable;
     };
@@ -718,7 +716,6 @@ condition: compute(p, q) == 13
 
 fn "wado-compiler/tests/fixtures/mut_param_merged.wado/mut_param_struct"() with Stdout {
     let p: ref "wado-compiler/tests/fixtures/mut_param_merged.wado//Point";
-    let q: ref "wado-compiler/tests/fixtures/mut_param_merged.wado//Point";
     let __v0_2: i32;
     let __cond_3: bool;
     let __v0_4: i32;
@@ -786,13 +783,13 @@ fn "wado-compiler/tests/fixtures/mut_param_merged.wado/mut_param_struct"() with 
     let __local_151: ref "core:prelude/format.wado//Formatter";
     let __local_156: ref "core:prelude/format.wado//Formatter";
     p = struct.new "wado-compiler/tests/fixtures/mut_param_merged.wado//Point" { x: 5, y: 10 };
-    q = __inline_zero_out_0: block -> ref "wado-compiler/tests/fixtures/mut_param_merged.wado//Point" {
+    drop(__inline_zero_out_0: block -> ref "wado-compiler/tests/fixtures/mut_param_merged.wado//Point" {
         __local_46 = p;
         __local_46 = struct.new "wado-compiler/tests/fixtures/mut_param_merged.wado//Point" { x: 0, y: 0 };
         break __inline_zero_out_0: __local_46;
         unreachable;
-    };
-    __v0_2 = q.x;
+    });
+    __v0_2 = 0;
     __cond_3 = __v0_2 == 0;
     if __cond_3 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -825,7 +822,7 @@ condition: q.x == 0
         });
         unreachable;
     }
-    __v0_4 = q.y;
+    __v0_4 = 0;
     __cond_5 = __v0_4 == 0;
     if __cond_5 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
