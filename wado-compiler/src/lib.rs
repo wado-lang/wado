@@ -309,6 +309,18 @@ fn compile_after_load<H: CompilerHost>(
         &mut load_result.modules,
     );
 
+    // === Phase 1c: Kiln `Request<T>` adapter rewrite ===
+    // Lets authors write `fn generate(req: Request<Options>)` and have
+    // the compiler inject the `bind_request::<Options>(req)?`
+    // boilerplate at the top of the body. The v1 explicit
+    // `fn generate(raw: RawRequest)` path is unchanged; this phase is a
+    // no-op when the param is not `Request<T>`.
+    kiln::import_check::inject_kiln_request_adapter(
+        options.target_world.as_deref(),
+        &load_result.entry_module_source,
+        &mut load_result.modules,
+    );
+
     // === Phases 2 + 6a + 6b: Analyze + Annotate + Lower TIR ===
     // `annotate` performs analyze, type resolution, and body-level TIR
     // lowering. The resulting `Annotated` carries the `TirModule`s the batch

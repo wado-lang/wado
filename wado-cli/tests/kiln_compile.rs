@@ -37,6 +37,25 @@ export fn generate(raw: RawRequest) -> Result<Response, Error> {
 }
 "#;
 
+/// v2-ergonomic form: author writes `fn generate(req: Request<Options>)`
+/// directly and the compiler's
+/// `kiln::import_check::inject_kiln_request_adapter` phase rewrites it
+/// to the internal `RawRequest + bind_request?` shape before analyze
+/// runs. Note we don't import `bind_request` or `RawRequest` — the
+/// phase extends the existing `use` automatically.
+const ADAPTER_GENERATOR: &str = r#"
+use { Request, Response, Error } from "core:kiln";
+
+pub struct Options {
+    pub verbose: bool,
+}
+
+export fn generate(req: Request<Options>) -> Result<Response, Error> {
+    let _ = req.options.verbose;
+    return Result::Ok(Response { files: [] });
+}
+"#;
+
 fn runtime() -> tokio::runtime::Runtime {
     tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -150,6 +169,34 @@ fn source_edit_invalidates_cache() {
         "second compile should produce valid component bytes"
     );
     let _ = first;
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+#[test]
+fn adapter_generator_compiles_like_raw_request_generator() {
+    let tmp = unique_tmp("kiln-compile-adapter");
+    let _ = std::fs::remove_dir_all(&tmp);
+    std::fs::create_dir_all(&tmp).unwrap();
+
+    let gen_path = tmp.join("adapter_generator.wado");
+    std::fs::write(&gen_path, ADAPTER_GENERATOR).unwrap();
+
+    let provider = CliGeneratorProvider::new(tmp.clone());
+    let module =
+        GeneratorModule::LocalPath(InvocationPath::normalize("./adapter_generator.wado"));
+
+    let wasm = runtime()
+        .block_on(async { provider.get_component(&module).await })
+        .expect("adapter-form generator must compile");
+    assert!(
+        wasm.starts_with(b"\0asm"),
+        "adapter generator must produce a valid wasm component"
+    );
+    assert!(
+        wasm.len() > 100,
+        "adapter generator must produce a non-trivial component"
+    );
+
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
