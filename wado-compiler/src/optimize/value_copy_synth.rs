@@ -5,13 +5,11 @@
 //!
 //! For struct types the body is a `StructLiteral` with field-by-field
 //! shallow projections, plus `builtin::array_clone::<T>` for raw
-//! `builtin::array<T>` fields — matching the semantics that the former
-//! `WirInstr::ValueCopy` had (one-level shallow copy with deep array
-//! reallocation).
+//! `builtin::array<T>` fields — a one-level shallow copy that does not
+//! recurse into nested aggregates.
 //!
 //! For variant / option / fall-through types the body is `return v;`
-//! (identity), again matching the WIR-level pass-through behavior of the
-//! former `WirCopyType::Variant` arm.
+//! (identity).
 
 use std::cell::RefCell;
 use std::rc::Rc;

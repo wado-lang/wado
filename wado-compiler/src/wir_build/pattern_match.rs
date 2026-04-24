@@ -1564,9 +1564,7 @@ impl FunctionTranslator<'_, '_> {
                     // wraps its value with `RefAsNonNull`, so the extracted
                     // value is invariantly non-null at runtime. Narrow the
                     // WIR type so downstream call-sites and struct writes
-                    // see it as non-null (matches what the former
-                    // `WirInstr::ValueCopy { nullable }` handling guaranteed
-                    // implicitly).
+                    // see it as non-null.
                     if matches!(payload_result_ty, WirType::Ref { nullable: true, .. }) {
                         return WirInstr::RefAsNonNull(Box::new(get));
                     }
