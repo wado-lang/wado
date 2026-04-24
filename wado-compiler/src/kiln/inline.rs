@@ -74,11 +74,19 @@ impl InvocationIndex {
     /// Look up the entry module path for a `(decl_file, from)` pair. Returns
     /// the project-root-relative path of the entry module, or `None` if no
     /// invocation matches.
+    ///
+    /// Manifest-declared invocations are recorded with an empty `decl_file`
+    /// (see `CliGeneratorProvider` lowering): those redirect any `from` match
+    /// regardless of the importer. Inline-declared invocations keep the
+    /// importing module path and only redirect that specific file.
     #[must_use]
     pub fn redirect(&self, decl_file: &str, from: &str) -> Option<&str> {
         let decl = InvocationPath::normalize(decl_file).as_str().to_string();
         let from = InvocationPath::normalize(from).as_str().to_string();
-        self.entries.get(&(decl, from)).map(String::as_str)
+        if let Some(entry) = self.entries.get(&(decl, from.clone())) {
+            return Some(entry.as_str());
+        }
+        self.entries.get(&(String::new(), from)).map(String::as_str)
     }
 
     /// Returns `true` when no invocations have been recorded. Consumers

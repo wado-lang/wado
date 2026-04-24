@@ -1059,9 +1059,13 @@ where
                     wado_compiler::kiln::DeclSite::Manifest { .. } => String::new(),
                     wado_compiler::kiln::DeclSite::Inline { module, .. } => module.clone(),
                 };
+                // Store an absolute path in the invocation index so the
+                // compiler's module loader can resolve the entry without
+                // knowing the manifest root or the importer's directory.
+                let absolute = manifest_root.join(entry_path).to_string_lossy().to_string();
                 outcome
                     .invocations
-                    .insert(&decl_file, invocation.from.as_str(), entry_path);
+                    .insert(&decl_file, invocation.from.as_str(), &absolute);
             }
             new_cache.push(entry);
         }

@@ -1184,6 +1184,7 @@ fn remove_dot_segments(path: &str) -> String {
     // Split into segments and process
     let mut segments: Vec<&str> = Vec::new();
     let has_leading_dot = path.starts_with("./");
+    let has_leading_slash = path.starts_with('/');
 
     for segment in path.split('/') {
         match segment {
@@ -1208,6 +1209,8 @@ fn remove_dot_segments(path: &str) -> String {
     // Preserve leading ./ for relative paths
     if has_leading_dot && !result.starts_with("..") {
         format!("./{result}")
+    } else if has_leading_slash {
+        format!("/{result}")
     } else if result.is_empty() {
         ".".to_string()
     } else {

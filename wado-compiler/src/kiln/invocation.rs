@@ -34,8 +34,14 @@ impl InvocationPath {
         while s.ends_with('/') {
             s.pop();
         }
+        let is_absolute = s.starts_with('/');
         let parts: Vec<&str> = s.split('/').filter(|p| !p.is_empty()).collect();
-        Self(parts.join("/"))
+        let joined = parts.join("/");
+        if is_absolute {
+            Self(format!("/{joined}"))
+        } else {
+            Self(joined)
+        }
     }
 
     #[must_use]
