@@ -25,21 +25,21 @@ Compares WebAssembly binary sizes across different languages.
 
 | Language | Size (bytes) |
 | -------- | -----------: |
-| wado     |        1,795 |
+| wado     |        1,773 |
 | c        |        3,076 |
 | zig      |        4,449 |
-| moonbit  |       15,319 |
-| rust     |       40,754 |
+| moonbit  |       13,577 |
+| rust     |       40,115 |
 
 ### pi_approx
 
 | Language | Size (bytes) |
 | -------- | -----------: |
-| wado     |        8,927 |
+| wado     |        8,982 |
 | zig      |       10,608 |
 | c        |       16,786 |
-| moonbit  |       25,006 |
-| rust     |       60,683 |
+| moonbit  |       23,078 |
+| rust     |       59,496 |
 
 ### zlib
 
@@ -47,10 +47,10 @@ Reads gzip data from stdin and decompresses it.
 
 | Language | Size (bytes) | Notes                                  |
 | -------- | -----------: | -------------------------------------- |
-| wado     |       18,708 | stdin + gzip decompress (core:zlib)    |
+| wado     |       18,935 | stdin + gzip decompress (core:zlib)    |
 | zig      |       20,072 | stdin + gzip decompress (std.compress) |
 | c        |       33,439 | stdin + gzip decompress (zlib 1.3.1)   |
-| rust     |       88,014 | stdin + gzip decompress (zlib-rs)      |
+| rust     |       88,563 | stdin + gzip decompress (zlib-rs)      |
 
 ### sqlite_highlight
 
@@ -58,7 +58,7 @@ Reads SQL from stdin and writes syntax-highlighted HTML to stdout.
 
 | Language | Size (bytes) | Notes                                       |
 | -------- | -----------: | ------------------------------------------- |
-| wado     |      664,108 | Gale-generated highlighter from `SQLite.g4` |
+| wado     |      622,193 | Gale-generated highlighter from `SQLite.g4` |
 | rust     |    3,481,212 | tree-sitter + tree-sitter-sequel            |
 
 ## Usage

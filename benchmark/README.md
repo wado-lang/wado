@@ -2,7 +2,7 @@
 
 Performance comparison of Wado (Wasm/wasmtime) against native compilers.
 
-Environment: Wado 2026-04-17, wasmtime 43.0.0, gcc 13.3.0, rustc 1.94.1, Zig 0.15.2, Node.js v24.14.1, Linux x86_64.
+Environment: Wado 2026-04-24, wasmtime 44.0.0, gcc 13.3.0, rustc 1.95.0, Zig 0.15.2, Node.js v24.14.1, Linux x86_64.
 
 ## Prime Counting
 
@@ -10,9 +10,9 @@ Count primes up to 10M (integer arithmetic).
 
 | Implementation    |     Time | vs best |
 | ----------------- | -------: | ------: |
-| C (gcc -O3)       | 3,282 ms |   1.00x |
-| **Wado**          | 3,336 ms |   1.02x |
-| JavaScript (Node) | 3,337 ms |   1.02x |
+| **Wado**          | 3,769 ms |   1.00x |
+| C (gcc -O3)       | 3,847 ms |   1.02x |
+| JavaScript (Node) | 4,390 ms |   1.16x |
 
 ## Mandelbrot
 
@@ -20,9 +20,9 @@ Count primes up to 10M (integer arithmetic).
 
 | Implementation    |   Time | vs best |
 | ----------------- | -----: | ------: |
-| C (gcc -O3)       | 121 ms |   1.00x |
-| **Wado**          | 139 ms |   1.15x |
-| JavaScript (Node) | 140 ms |   1.16x |
+| C (gcc -O3)       | 168 ms |   1.00x |
+| JavaScript (Node) | 172 ms |   1.03x |
+| **Wado**          | 188 ms |   1.12x |
 
 ## Sieve
 
@@ -30,9 +30,9 @@ Sieve of Eratosthenes up to 10M (array operations).
 
 | Implementation    |  Time | vs best |
 | ----------------- | ----: | ------: |
-| C (gcc -O3)       | 46 ms |   1.00x |
-| JavaScript (Node) | 68 ms |   1.48x |
-| **Wado**          | 77 ms |   1.67x |
+| C (gcc -O3)       | 44 ms |   1.00x |
+| JavaScript (Node) | 66 ms |   1.50x |
+| **Wado**          | 80 ms |   1.82x |
 
 ## Float-to-String
 
@@ -40,10 +40,10 @@ Sieve of Eratosthenes up to 10M (array operations).
 
 | Implementation |  Time | vs best |
 | -------------- | ----: | ------: |
-| Zig (RelFast)  | 24 ms |   1.00x |
-| Rust (native)  | 33 ms |   1.38x |
-| **Wado**       | 47 ms |   1.96x |
-| C (gcc -O3)    | 56 ms |   2.33x |
+| Zig (RelFast)  | 31 ms |   1.00x |
+| Rust (native)  | 45 ms |   1.45x |
+| **Wado**       | 48 ms |   1.55x |
+| C (gcc -O3)    | 65 ms |   2.10x |
 
 ## Compression
 
@@ -51,9 +51,9 @@ zlib compress/decompress of twitter.json (631 KB) x 10 iterations.
 
 | Implementation        | Compress | Decompress |  Total | vs best |
 | --------------------- | -------: | ---------: | -----: | ------: |
-| zlib-rs (Rust native) |    60 ms |      10 ms |  70 ms |   1.00x |
-| C zlib (Wasm)         |   110 ms |      16 ms | 126 ms |   1.80x |
-| **Wado** core:zlib    |   224 ms |     117 ms | 341 ms |   4.87x |
+| zlib-rs (Rust native) |    33 ms |       4 ms |  38 ms |   1.00x |
+| C zlib (Wasm)         |    78 ms |      11 ms |  89 ms |   2.35x |
+| **Wado** core:zlib    |   215 ms |     105 ms | 321 ms |   8.49x |
 
 ## JSON: twitter
 
@@ -61,9 +61,9 @@ Deserialize twitter.json (631 KB).
 
 | Implementation           |    Time | vs best |
 | ------------------------ | ------: | ------: |
-| serde_json (Rust native) | 1.30 ms |   1.00x |
-| JSON.parse (Node)        | 2.69 ms |   2.07x |
-| **Wado** core:json       | 18.3 ms |  14.08x |
+| serde_json (Rust native) | 0.74 ms |   1.00x |
+| JSON.parse (Node)        | 1.72 ms |   2.32x |
+| **Wado** core:json       | 14.9 ms |  20.11x |
 
 ## JSON: canada
 
@@ -71,9 +71,9 @@ Deserialize canada.json (2.3 MB, geographic coordinates).
 
 | Implementation           |     Time | vs best |
 | ------------------------ | -------: | ------: |
-| serde_json (Rust native) |  16.4 ms |   1.00x |
-| JSON.parse (Node)        |  25.3 ms |   1.54x |
-| **Wado** core:json       | 168.4 ms |  10.27x |
+| serde_json (Rust native) |   8.6 ms |   1.00x |
+| JSON.parse (Node)        |  11.7 ms |   1.37x |
+| **Wado** core:json       | 128.9 ms |  15.07x |
 
 ## JSON: catalog
 
@@ -81,9 +81,9 @@ Deserialize citm_catalog.json (1.7 MB, event catalog).
 
 | Implementation           |    Time | vs best |
 | ------------------------ | ------: | ------: |
-| serde_json (Rust native) | 3.59 ms |   1.00x |
-| JSON.parse (Node)        | 8.66 ms |   2.41x |
-| **Wado** core:json       | 62.3 ms |  17.35x |
+| serde_json (Rust native) | 2.46 ms |   1.00x |
+| JSON.parse (Node)        | 4.42 ms |   1.80x |
+| **Wado** core:json       | 48.2 ms |  19.62x |
 
 ## SQL Parse
 
@@ -91,8 +91,8 @@ Parse 81 SQL statements (13 KB) x 100 iterations. Gale-generated parser vs sqlpa
 
 | Implementation             |     Time | vs best |
 | -------------------------- | -------: | ------: |
-| sqlparser-rs (Rust native) |   188 ms |   1.00x |
-| **Wado** (Gale)            | 1,227 ms |   6.53x |
+| sqlparser-rs (Rust native) |   180 ms |   1.00x |
+| **Wado** (Gale)            | 1,196 ms |   6.64x |
 
 ## Syntax Highlight
 
@@ -100,9 +100,9 @@ Highlight 81 SQL statements (13 KB) x 100 iterations. Gale-generated highlighter
 
 | Implementation              |     Time | vs best |
 | --------------------------- | -------: | ------: |
-| tree-sitter (Rust native)   |   545 ms |   1.00x |
-| tree-sitter (Wasm/wasmtime) |   694 ms |   1.27x |
-| **Wado** (Gale)             | 5,121 ms |   9.39x |
+| tree-sitter (Rust native)   |   514 ms |   1.00x |
+| tree-sitter (Wasm/wasmtime) |   668 ms |   1.30x |
+| **Wado** (Gale)             | 4,619 ms |   8.98x |
 
 ## Running
 
