@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777039694281,
+  "lastUpdate": 1777045312173,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -15985,6 +15985,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/1c6dcb19a56626eed82fe5df10d53e81f1601193"
         },
         "date": 1777039694169,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8982,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18935,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 622193,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f82dbb692e923de3ec77dc14e654b6e815dd33c6",
+          "message": "Merge pull request #915 from wado-lang/gfx/example_tls\n\nchore: example/hello_tsl.wado (not working yet)",
+          "timestamp": "2026-04-25T00:37:17+09:00",
+          "tree_id": "99c2fa49d7e05b79ae783b06197e9f3d2c1a71f2",
+          "url": "https://github.com/wado-lang/wado/commit/f82dbb692e923de3ec77dc14e654b6e815dd33c6"
+        },
+        "date": 1777045311873,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
