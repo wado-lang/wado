@@ -57,6 +57,7 @@ pub const WASI_FILESYSTEM: &str = include_str!("../lib/wasi/filesystem.wado");
 pub const WASI_CLOCKS: &str = include_str!("../lib/wasi/clocks.wado");
 pub const WASI_RANDOM: &str = include_str!("../lib/wasi/random.wado");
 pub const WASI_SOCKETS: &str = include_str!("../lib/wasi/sockets.wado");
+pub const WASI_TLS: &str = include_str!("../lib/wasi/tls.wado");
 pub const WASI_HTTP: &str = include_str!("../lib/wasi/http.wado");
 
 // WASI interfaces — one constant per interface
@@ -100,6 +101,10 @@ pub const WASI_SOCKETS_IP_NAME_LOOKUP: &str =
     include_str!("../lib/wasi/sockets/ip_name_lookup.wado");
 pub const WASI_SOCKETS_WORLDS: &str = include_str!("../lib/wasi/sockets/worlds.wado");
 
+pub const WASI_TLS_TYPES: &str = include_str!("../lib/wasi/tls/types.wado");
+pub const WASI_TLS_CLIENT: &str = include_str!("../lib/wasi/tls/client.wado");
+pub const WASI_TLS_WORLDS: &str = include_str!("../lib/wasi/tls/worlds.wado");
+
 /// All WASI interface statics, used for registry building.
 ///
 /// Each entry is `(import_path, source)` where `import_path` matches
@@ -111,6 +116,7 @@ pub const ALL_WASI_MODULES: &[(&str, &str)] = &[
     ("wasi:clocks", WASI_CLOCKS),
     ("wasi:random", WASI_RANDOM),
     ("wasi:sockets", WASI_SOCKETS),
+    ("wasi:tls", WASI_TLS),
     ("wasi:http", WASI_HTTP),
     // Per-interface paths (for specific imports and cross-package references)
     ("wasi:cli/environment.wado", WASI_CLI_ENVIRONMENT),
@@ -151,6 +157,9 @@ pub const ALL_WASI_MODULES: &[(&str, &str)] = &[
         WASI_SOCKETS_IP_NAME_LOOKUP,
     ),
     ("wasi:sockets/worlds.wado", WASI_SOCKETS_WORLDS),
+    ("wasi:tls/types.wado", WASI_TLS_TYPES),
+    ("wasi:tls/client.wado", WASI_TLS_CLIENT),
+    ("wasi:tls/worlds.wado", WASI_TLS_WORLDS),
 ];
 
 /// Get embedded module source by import path.
@@ -259,6 +268,20 @@ mod tests {
         let source = get_stdlib_module("wasi:sockets/types.wado");
         assert!(source.is_some());
         assert!(source.unwrap().contains("TcpSocket"));
+    }
+
+    #[test]
+    fn test_get_wasi_tls_client() {
+        let source = get_stdlib_module("wasi:tls/client.wado");
+        assert!(source.is_some());
+        assert!(source.unwrap().contains("Connector"));
+    }
+
+    #[test]
+    fn test_get_wasi_tls_flat() {
+        let source = get_stdlib_module("wasi:tls");
+        assert!(source.is_some());
+        assert!(source.unwrap().contains("Connector"));
     }
 
     #[test]
