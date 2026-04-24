@@ -1,5 +1,11 @@
-use calc from "./golden/calculator.wado";
-use { normalize_tree } from "./golden/calculator.wado";
+use calc from "./grammars/calculator.g4"
+    with {
+        generator: {
+            module: { path: "src/generator.wado" },
+            options: { highlight: false },
+        },
+    };
+use { normalize_tree } from "./grammars/calculator.g4";
 
 fn assert_tree(input: &String, expected: &String) {
     let root = calc::parse(input).unwrap();

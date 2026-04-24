@@ -1062,7 +1062,14 @@ where
                 // Store an absolute path in the invocation index so the
                 // compiler's module loader can resolve the entry without
                 // knowing the manifest root or the importer's directory.
-                let absolute = manifest_root.join(entry_path).to_string_lossy().to_string();
+                // Canonicalize so a relative `manifest_root` (e.g. when the
+                // user runs `wado test package-gale/...` from the workspace
+                // root) still lands as a true absolute path.
+                let joined = manifest_root.join(entry_path);
+                let absolute = std::fs::canonicalize(&joined)
+                    .unwrap_or(joined)
+                    .to_string_lossy()
+                    .to_string();
                 outcome
                     .invocations
                     .insert(&decl_file, invocation.from.as_str(), &absolute);
@@ -1148,17 +1155,33 @@ async fn typed_encode_options<H, P>(
 {
     use wado_compiler::{Code, Diagnostic, Severity};
 
-    let Some(build) = manifest.build.as_ref() else {
-        return;
-    };
+    let build = manifest.build.as_ref();
 
     for inv in invocations.iter_mut() {
-        let name = match &inv.decl_site {
-            DeclSite::Manifest { name } => name.clone(),
-            DeclSite::Inline { .. } => continue,
-        };
-        let Some(gi) = build.generators.get(&name) else {
-            continue;
+        let (display_name, supplied_attr): (String, Option<AttrValue>) = match &inv.decl_site {
+            DeclSite::Manifest { name } => {
+                let Some(gi) = build.and_then(|b| b.generators.get(name)) else {
+                    continue;
+                };
+                (name.clone(), Some(toml_to_attr_value(&gi.options)))
+            }
+            DeclSite::Inline {
+                module,
+                synthetic_id,
+            } => {
+                // Re-parse the source file that carried the `use ... with {
+                // generator: {...} }` clause to recover the raw `options`
+                // `AttrValue`. `collect_inline_invocations_for_entry` ran
+                // before any descriptor was known, so the `options_canonical`
+                // bytes stashed on the invocation are empty — this second
+                // pass fills them in now that the provider can describe the
+                // generator's `Options` type.
+                let Some(attr) = reparse_inline_options(module, &inv.from, &inv.module, host)
+                else {
+                    continue;
+                };
+                (synthetic_id.clone(), Some(attr))
+            }
         };
 
         let descriptor = match provider.descriptor(&inv.module).await {
@@ -1169,8 +1192,8 @@ async fn typed_encode_options<H, P>(
                     severity: Severity::Warning,
                     code: Code::Log,
                     message: format!(
-                        "kiln[{name}]: failed to introspect generator options schema ({message}); \
-                         falling back to raw TOML encoding",
+                        "kiln[{display_name}]: failed to introspect generator options schema \
+                         ({message}); falling back to raw TOML encoding",
                     ),
                     span: None,
                 });
@@ -1178,10 +1201,9 @@ async fn typed_encode_options<H, P>(
             }
         };
 
-        let attr = toml_to_attr_value(&gi.options);
-        let supplied: Option<&AttrValue> = match &attr {
-            AttrValue::Object(obj) if obj.is_empty() => None,
-            other => Some(other),
+        let supplied: Option<&AttrValue> = match supplied_attr.as_ref() {
+            Some(AttrValue::Object(obj)) if obj.is_empty() => None,
+            other => other,
         };
         match validate_options(&descriptor, supplied) {
             Ok(canonical) => {
@@ -1194,6 +1216,53 @@ async fn typed_encode_options<H, P>(
             }
         }
     }
+}
+
+/// Re-parse the decl file that owns an inline invocation to recover the raw
+/// `generator.options` `AttrValue`. Returns `None` if the file cannot be read
+/// or parsed, or if no matching `use ... with { generator: {...} }` clause is
+/// found — in those cases `typed_encode_options` simply leaves the
+/// invocation's `options_canonical` alone.
+fn reparse_inline_options<H: CompilerHost>(
+    decl_path: &str,
+    from: &InvocationPath,
+    module: &GeneratorModule,
+    _host: &H,
+) -> Option<AttrValue> {
+    use wado_compiler::ast::Item;
+
+    let source = std::fs::read_to_string(decl_path).ok()?;
+    let parsed = wado_compiler::parse(&source).ok()?;
+    for item in &parsed.ast.items {
+        let Item::Use(use_decl) = item else { continue };
+        if InvocationPath::normalize(&use_decl.source).as_str() != from.as_str() {
+            continue;
+        }
+        let attrs = use_decl.attributes.as_ref()?;
+        let cfg = attrs.generator()?;
+        // Match by module, so two clauses with the same `from` but different
+        // generators don't cross-contaminate.
+        let cfg_module = cfg.get("module")?;
+        let clause_module = match cfg_module {
+            AttrValue::String(s) => GeneratorModule::Spec(s.clone()),
+            AttrValue::Object(obj) => match obj.get("path") {
+                Some(AttrValue::String(p)) => {
+                    GeneratorModule::LocalPath(InvocationPath::normalize(p))
+                }
+                _ => return None,
+            },
+            _ => return None,
+        };
+        if &clause_module != module {
+            continue;
+        }
+        return Some(
+            cfg.get("options")
+                .cloned()
+                .unwrap_or(AttrValue::Object(CompilerIndexMap::default())),
+        );
+    }
+    None
 }
 
 async fn run_and_build_entry<H, P>(

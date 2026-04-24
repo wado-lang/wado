@@ -475,11 +475,12 @@ fn collect_inline_invocations_for_entry(entry_file: &Path) -> Vec<wado_compiler:
     };
     let mut modules =
         wado_compiler::hashmap::IndexMap::<String, wado_compiler::ast::Module>::default();
-    let entry_name = entry_file
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("entry.wado")
-        .to_string();
+    // Key the module by the same string the loader uses as the entry's
+    // `ModuleSource::EntryPoint { filename }` — the full path — so the
+    // `DeclSite::Inline { module }` recorded here matches the `decl_file`
+    // the loader feeds into `InvocationIndex::redirect` at resolve time.
+    // Without this, the inline redirect misses entirely.
+    let entry_name = entry_file.to_string_lossy().to_string();
     modules.insert(entry_name, parsed.ast);
     let descriptors = wado_compiler::hashmap::IndexMap::default();
     wado_compiler::kiln::collect_inline_invocations(&modules, &descriptors).unwrap_or_default()
