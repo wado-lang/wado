@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777011117016,
+  "lastUpdate": 1777027550150,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -15853,6 +15853,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/9dee8ac91ce45872dfeb9657391ee36da3be09e1"
         },
         "date": 1777011116761,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8982,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18935,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 622193,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d26ad5968a615885fd60f18f51de26eb1a4f0ed5",
+          "message": "Merge pull request #912 from wado-lang/claude/update-benchmark-readmes-oC5g0\n\ndocs: refresh benchmark and wasm-size results for wasmtime 44 / rustc 1.95",
+          "timestamp": "2026-04-24T19:41:53+09:00",
+          "tree_id": "72ef1884d1ff0e1106487a9bf2187046308e631a",
+          "url": "https://github.com/wado-lang/wado/commit/d26ad5968a615885fd60f18f51de26eb1a4f0ed5"
+        },
+        "date": 1777027549904,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
