@@ -1997,36 +1997,41 @@ fn rewrite_call_sites(
             }
 
             // Track which SROA locals hold ref types that need ref.as_non_null when read.
-            // Only non-nullable ref fields in the ORIGINAL case struct need this wrapping.
-            // Fields that are nullable in the case struct (e.g., nullable_ref-optimized
-            // Option<T> payloads) must NOT be wrapped, since the value may legitimately be null.
+            // The check must be against the ORIGINAL variant-case payload type from
+            // `WirVariantCase::payload`, not the case struct's field type: the latter
+            // is always declared nullable for the Option<&T> boxing optimisation,
+            // which loses the information that a `Some(non_null_ref)` payload is
+            // semantically non-null at the Wado source level.
             let mut ref_locals = crate::hashmap::IndexSet::default();
-            for (disc_val_2, case_type_opt_2) in vi.case_type_indices.iter().enumerate() {
-                if let Some(case_type_idx_2) = case_type_opt_2
-                    && let Some(WirTypeDef::Struct(st)) = types.get(*case_type_idx_2 as usize)
-                {
-                    for (field_pos, field) in st.fields.iter().enumerate() {
-                        if field_pos == 0 {
-                            continue; // skip discriminant
-                        }
-                        // Check if the original field type is a non-nullable ref
+            if let Some(WirTypeDef::Variant(wv)) = types.get(candidate.struct_type_idx as usize)
+            {
+                for (disc_val_2, case_type_opt_2) in vi.case_type_indices.iter().enumerate() {
+                    if case_type_opt_2.is_none() {
+                        continue;
+                    }
+                    // Locate the corresponding variant case by discriminant value.
+                    let Some(wir_case) = wv.cases.iter().find(|c| c.index as usize == disc_val_2)
+                    else {
+                        continue;
+                    };
+                    for (payload_idx, payload_ty) in wir_case.payload.iter().enumerate() {
                         let is_non_nullable_ref = matches!(
-                            &field.ty,
+                            payload_ty,
                             WirType::Ref {
                                 nullable: false,
                                 ..
                             }
                         );
-                        if is_non_nullable_ref {
-                            let payload_idx = field_pos - 1;
-                            let payload_name = if vi.case_slot_offsets.is_some() {
-                                format!("case{disc_val_2}_payload_{payload_idx}")
-                            } else {
-                                format!("payload_{payload_idx}")
-                            };
-                            if let Some(sroa_local) = field_map.get(&payload_name) {
-                                ref_locals.insert(sroa_local.clone());
-                            }
+                        if !is_non_nullable_ref {
+                            continue;
+                        }
+                        let payload_name = if vi.case_slot_offsets.is_some() {
+                            format!("case{disc_val_2}_payload_{payload_idx}")
+                        } else {
+                            format!("payload_{payload_idx}")
+                        };
+                        if let Some(sroa_local) = field_map.get(&payload_name) {
+                            ref_locals.insert(sroa_local.clone());
                         }
                     }
                 }
@@ -2194,14 +2199,36 @@ fn sroa_local_get(
     ref_locals: &crate::hashmap::IndexSet<String>,
     result_ty: crate::wir::WirType,
 ) -> WirInstr {
-    let get = WirInstr::LocalGet {
-        name: local_name.to_string(),
-        result_ty,
-    };
     if ref_locals.contains(local_name) {
+        // Set the LocalGet's own result type to nullable so downstream
+        // cleanup passes don't strip the RefAsNonNull wrapper as
+        // redundant. The wrapper is what narrows to the non-null
+        // `result_ty` expected by the surrounding consumer (e.g., the
+        // callee's non-null `ref T` parameter), after the variant case
+        // test has already proved the payload is non-null at runtime.
+        let nullable_ty = match &result_ty {
+            crate::wir::WirType::Ref { type_id, .. } => crate::wir::WirType::Ref {
+                type_id: type_id.clone(),
+                nullable: true,
+            },
+            crate::wir::WirType::AbstractRef { heap_type, .. } => {
+                crate::wir::WirType::AbstractRef {
+                    heap_type: heap_type.clone(),
+                    nullable: true,
+                }
+            }
+            _ => result_ty.clone(),
+        };
+        let get = WirInstr::LocalGet {
+            name: local_name.to_string(),
+            result_ty: nullable_ty,
+        };
         WirInstr::RefAsNonNull(Box::new(get))
     } else {
-        get
+        WirInstr::LocalGet {
+            name: local_name.to_string(),
+            result_ty,
+        }
     }
 }
 
@@ -2273,6 +2300,37 @@ fn replace_variant_accesses(
             result_ty,
             ..
         } = expr.as_ref()
+        && let WirInstr::RefCast {
+            type_id: cast_type_id,
+            expr: rc_expr,
+            ..
+        } = sg_expr.as_ref()
+        && let WirInstr::LocalGet {
+            name: temp_name, ..
+        } = rc_expr.as_ref()
+        && let Some(vr) = variant_replacements.get(temp_name.as_str())
+    {
+        let key = (cast_type_id.index(), field_name.clone());
+        if let Some(local_name) = vr.field_to_local.get(&key) {
+            *instr = sroa_local_get(local_name, &vr.ref_locals, result_ty.clone());
+            return;
+        }
+    }
+
+    // Pattern 4: `RefAsNonNull(StructGet(RefCast(LocalGet(temp))))` — the
+    // variant-payload extraction form emitted by `wir_build::pattern_match`
+    // since the `WirInstr::ValueCopy` wrap was removed. Matches the same
+    // outer structure as pattern 3, but `RefAsNonNull` in place of
+    // `ValueCopy`. Replaces with `sroa_local_get`, which applies a
+    // non-null narrowing when the original variant payload field was
+    // non-nullable.
+    if let WirInstr::RefAsNonNull(inner) = instr
+        && let WirInstr::StructGet {
+            field_name,
+            expr: sg_expr,
+            result_ty,
+            ..
+        } = inner.as_ref()
         && let WirInstr::RefCast {
             type_id: cast_type_id,
             expr: rc_expr,
