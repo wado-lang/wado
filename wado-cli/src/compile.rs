@@ -427,7 +427,15 @@ async fn maybe_run_pipeline(
     host: &FilesystemCompilerHost,
 ) -> Result<PipelineOutcome, PipelineError> {
     let manifest_pair = load_nearest_manifest(entry_file);
-    let inline = collect_inline_invocations_for_entry(entry_file);
+
+    let manifest_root_for_inline = manifest_pair.as_ref().map(|(_, root)| root.clone());
+    let probe_manifest_root = manifest_root_for_inline.clone().unwrap_or_else(|| {
+        entry_file
+            .parent()
+            .map(std::path::Path::to_path_buf)
+            .unwrap_or_else(|| std::path::PathBuf::from("."))
+    });
+    let inline = collect_inline_invocations_for_entry(entry_file, &probe_manifest_root);
 
     let (manifest, manifest_root) = match manifest_pair {
         Some(pair) => pair,
@@ -442,11 +450,7 @@ async fn maybe_run_pipeline(
                 build: None,
                 workspace: None,
             };
-            let root = entry_file
-                .parent()
-                .map(std::path::Path::to_path_buf)
-                .unwrap_or_else(|| std::path::PathBuf::from("."));
-            (manifest, root)
+            (manifest, probe_manifest_root)
         }
     };
 
@@ -466,7 +470,10 @@ async fn maybe_run_pipeline(
 /// `use ... with { generator: { ... } }` clauses. Returns an empty vector when
 /// the file cannot be parsed — downstream compilation will surface the parse
 /// error, so we don't need to report it twice.
-fn collect_inline_invocations_for_entry(entry_file: &Path) -> Vec<wado_compiler::kiln::Invocation> {
+fn collect_inline_invocations_for_entry(
+    entry_file: &Path,
+    manifest_root: &Path,
+) -> Vec<wado_compiler::kiln::Invocation> {
     let Ok(source) = fs::read_to_string(entry_file) else {
         return Vec::new();
     };
@@ -483,7 +490,9 @@ fn collect_inline_invocations_for_entry(entry_file: &Path) -> Vec<wado_compiler:
     let entry_name = entry_file.to_string_lossy().to_string();
     modules.insert(entry_name, parsed.ast);
     let descriptors = wado_compiler::hashmap::IndexMap::default();
-    wado_compiler::kiln::collect_inline_invocations(&modules, &descriptors).unwrap_or_default()
+    let manifest_root_str = manifest_root.to_string_lossy();
+    wado_compiler::kiln::collect_inline_invocations(&modules, &descriptors, &manifest_root_str)
+        .unwrap_or_default()
 }
 
 /// Walk up from `entry_file` looking for the nearest `wado.toml`. Returns the
