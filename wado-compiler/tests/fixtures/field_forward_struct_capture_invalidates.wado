@@ -1,0 +1,45 @@
+// Regression test: when a freshly built aggregate captures `&local`
+// (or a Local of reference type via implicit coercion), every
+// already-aliased local must have its field knowledge invalidated.
+// Otherwise, code reachable through the captured handle could have
+// mutated the local without our seeing it.
+//
+// Pattern:
+//
+//   let p = Pair { a: 42 };       // record p.a = 42
+//   let h = Holder { pair: &p };  // captures &p — invalidate p.a
+//   leak(h);                       // opaque sink; could mutate via h.pair.a
+//   read(p.a);                    // must NOT fold to 42
+//
+// `field_forward` flags `Holder { pair: &p }` as a capture site by
+// scanning each StructLiteral field value for `Ref/MutRef(Local)` or
+// for a plain `Local` whose index is in the aliased set. Either case
+// triggers `invalidate_aliased`, dropping recorded fields for `p`.
+
+use { println } from "core:cli";
+
+struct Pair {
+    a: i32,
+    b: i32,
+}
+
+struct Holder {
+    pair: &Pair,
+}
+
+#[inline(never)]
+fn touch(h: &Holder) -> i32 with stores[h] {
+    return h.pair.a;
+}
+
+export fn run() with Stdout {
+    let p = Pair { a: 42, b: 99 };
+    let h = Holder { pair: &p };
+    let _ = touch(&h);
+    println(`{p.a}`);
+}
+
+__DATA__
+{
+    "stdout": "42\n"
+}

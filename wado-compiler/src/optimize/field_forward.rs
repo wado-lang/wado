@@ -21,7 +21,9 @@
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::ModuleSource;
-use crate::tir::{TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind, TypeId};
+use crate::tir::{
+    ResolvedType, TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind, TypeId, TypeTable,
+};
 
 /// `(local_index, field_name)` → forwardable value (constant literal or
 /// `Local` reference).
@@ -233,6 +235,8 @@ pub fn forward_struct_field_constants(project: &mut FlatPackage) -> bool {
                 .map(|t| ((f.module_source.clone(), f.name.clone()), t))
         })
         .collect();
+    let type_table = project.type_table.clone();
+    let type_table = type_table.borrow();
     let mut changed = false;
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
@@ -260,7 +264,7 @@ pub fn forward_struct_field_constants(project: &mut FlatPackage) -> bool {
         // in the current body (e.g. inlined-in copies). Conservative —
         // extra entries only mean missed optimizations.
         collect_aliased_in_block(body, &mut aliased);
-        let alias_groups = collect_alias_groups(body);
+        let alias_groups = collect_alias_groups(body, &type_table);
         let mut known = FieldKnowledge {
             aliased,
             untrackable,
@@ -274,13 +278,17 @@ pub fn forward_struct_field_constants(project: &mut FlatPackage) -> bool {
 
 /// Build the alias-group map. Two locals end up in the same group
 /// when they're connected by a chain of `let dst = src` Local→Local
-/// copies — i.e., they share storage for reference-typed values like
-/// `Box<T>`, `Array<T>`, or post-elide value-semantic copies. The
-/// group is used to widen field-assignment invalidation: writing
+/// copies of a reference-typed value (`Box<T>`, `Array<T>`, `&T`,
+/// `&mut T`). For value-semantic types (plain structs, variants),
+/// `let dst = src` will later be wrapped in `$value_copy$T(src)` by
+/// the value-copy synthesis pass — `dst` is then a fresh allocation
+/// and does not share storage with `src`, so we don't connect them.
+///
+/// The group is used to widen field-assignment invalidation: writing
 /// `dst.field = ...` invalidates the same field of every alias.
-fn collect_alias_groups(body: &TirBlock) -> IndexMap<u32, IndexSet<u32>> {
+fn collect_alias_groups(body: &TirBlock, type_table: &TypeTable) -> IndexMap<u32, IndexSet<u32>> {
     let mut edges: Vec<(u32, u32)> = Vec::new();
-    collect_alias_edges_in_block(body, &mut edges);
+    collect_alias_edges_in_block(body, type_table, &mut edges);
     if edges.is_empty() {
         return IndexMap::default();
     }
@@ -320,35 +328,63 @@ fn collect_alias_groups(body: &TirBlock) -> IndexMap<u32, IndexSet<u32>> {
     out
 }
 
-fn collect_alias_edges_in_block(block: &TirBlock, edges: &mut Vec<(u32, u32)>) {
+fn collect_alias_edges_in_block(
+    block: &TirBlock,
+    type_table: &TypeTable,
+    edges: &mut Vec<(u32, u32)>,
+) {
     for stmt in &block.stmts {
-        collect_alias_edges_in_stmt(stmt, edges);
+        collect_alias_edges_in_stmt(stmt, type_table, edges);
     }
 }
 
-fn collect_alias_edges_in_stmt(stmt: &TirStmt, edges: &mut Vec<(u32, u32)>) {
+/// True when assigning a value of `type_id` from one local to another
+/// produces aliasing — both names refer to the same heap object. This
+/// is the case for reference types (`Box<T>`, `Array<T>`, `&T`,
+/// `&mut T`). Value-semantic types (plain structs, variants) are
+/// turned into a `$value_copy$T(src)` wrapper post-loop, so during
+/// the loop a `let dst = src` edge between two value-typed locals
+/// would over-merge groups that should stay separate.
+fn type_creates_alias(type_id: TypeId, type_table: &TypeTable) -> bool {
+    match type_table.get(type_id) {
+        ResolvedType::Ref { .. } => true,
+        ResolvedType::GenericInstance { name, .. } if name == "Box" || name == "Array" => true,
+        _ => false,
+    }
+}
+
+fn collect_alias_edges_in_stmt(
+    stmt: &TirStmt,
+    type_table: &TypeTable,
+    edges: &mut Vec<(u32, u32)>,
+) {
     match &stmt.kind {
         TirStmtKind::Let {
             local_index, value, ..
         } => {
-            if let TirExprKind::Local { index: src, .. } = &value.kind {
+            if let TirExprKind::Local { index: src, .. } = &value.kind
+                && type_creates_alias(value.type_id, type_table)
+            {
                 edges.push((*local_index, *src));
             }
-            collect_alias_edges_in_expr(value, edges);
+            collect_alias_edges_in_expr(value, type_table, edges);
         }
-        TirStmtKind::LetDestructure { value, .. } => collect_alias_edges_in_expr(value, edges),
+        TirStmtKind::LetDestructure { value, .. } => {
+            collect_alias_edges_in_expr(value, type_table, edges);
+        }
         TirStmtKind::Expr(expr) => {
             if let TirExprKind::Assign { target, value } = &expr.kind
                 && let TirExprKind::Local { index: dst, .. } = &target.kind
                 && let TirExprKind::Local { index: src, .. } = &value.kind
+                && type_creates_alias(value.type_id, type_table)
             {
                 edges.push((*dst, *src));
             }
-            collect_alias_edges_in_expr(expr, edges);
+            collect_alias_edges_in_expr(expr, type_table, edges);
         }
         TirStmtKind::Return { value } | TirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
-                collect_alias_edges_in_expr(v, edges);
+                collect_alias_edges_in_expr(v, type_table, edges);
             }
         }
         TirStmtKind::If {
@@ -356,14 +392,14 @@ fn collect_alias_edges_in_stmt(stmt: &TirStmt, edges: &mut Vec<(u32, u32)>) {
             then_block,
             else_block,
         } => {
-            collect_alias_edges_in_expr(condition, edges);
-            collect_alias_edges_in_block(then_block, edges);
+            collect_alias_edges_in_expr(condition, type_table, edges);
+            collect_alias_edges_in_block(then_block, type_table, edges);
             if let Some(eb) = else_block {
-                collect_alias_edges_in_block(eb, edges);
+                collect_alias_edges_in_block(eb, type_table, edges);
             }
         }
         TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-            collect_alias_edges_in_block(body, edges);
+            collect_alias_edges_in_block(body, type_table, edges);
         }
         TirStmtKind::IfLet {
             scrutinee,
@@ -371,18 +407,24 @@ fn collect_alias_edges_in_stmt(stmt: &TirStmt, edges: &mut Vec<(u32, u32)>) {
             else_block,
             ..
         } => {
-            collect_alias_edges_in_expr(scrutinee, edges);
-            collect_alias_edges_in_block(then_block, edges);
+            collect_alias_edges_in_expr(scrutinee, type_table, edges);
+            collect_alias_edges_in_block(then_block, type_table, edges);
             if let Some(eb) = else_block {
-                collect_alias_edges_in_block(eb, edges);
+                collect_alias_edges_in_block(eb, type_table, edges);
             }
         }
         _ => {}
     }
 }
 
-fn collect_alias_edges_in_expr(expr: &TirExpr, edges: &mut Vec<(u32, u32)>) {
-    expr_for_each_child(expr, &mut |child| collect_alias_edges_in_expr(child, edges));
+fn collect_alias_edges_in_expr(
+    expr: &TirExpr,
+    type_table: &TypeTable,
+    edges: &mut Vec<(u32, u32)>,
+) {
+    expr_for_each_child(expr, &mut |child| {
+        collect_alias_edges_in_expr(child, type_table, edges)
+    });
 }
 
 /// Walk `expr`'s direct sub-expressions. Used to recurse without
@@ -922,7 +964,11 @@ fn forward_in_expr(
             changed |= forward_in_expr(left, known, helpers);
             changed |= forward_in_expr(right, known, helpers);
         }
-        TirExprKind::Call { args, .. } => {
+        TirExprKind::Call { func, args, .. } => {
+            let is_value_copy = args.len() == 1
+                && helpers
+                    .get(&(func.module_source.clone(), func.name.clone()))
+                    .is_some();
             for arg in args {
                 changed |= forward_in_expr(&mut arg.expr, known, helpers);
                 if arg.is_mut
@@ -932,8 +978,14 @@ fn forward_in_expr(
                 }
             }
             // The callee may have mutated any of its captured /
-            // stored / aliased operands. Drop their fields.
-            known.invalidate_aliased();
+            // stored / aliased operands. Drop their fields. Skip for
+            // synthesized `$value_copy$T(arg)` helpers — those are
+            // pure shallow copies that don't mutate `arg` and the
+            // caller (update_knowledge_from_let) wants to copy field
+            // knowledge from `arg` to the binding's target.
+            if !is_value_copy {
+                known.invalidate_aliased();
+            }
         }
         TirExprKind::CmRawCall { args, .. } => {
             for arg in args {

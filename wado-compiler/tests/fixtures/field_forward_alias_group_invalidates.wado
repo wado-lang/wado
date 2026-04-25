@@ -1,0 +1,33 @@
+// Regression test: a chain of `let r = source` Local→Local copies of
+// a reference-typed local (e.g. `Box<i32>`, `&mut T`) forms an alias
+// group. Writing through any member must invalidate the same field
+// across every alias.
+//
+// Pattern:
+//
+//   let mut x = 0;       // boxed → x: Box<i32>
+//   let r1 = &mut x;     // r1, x in same alias group
+//   let r2 = r1;         // r2 joins the group
+//   *r2 = 7;             // observable as `*r1 == 7` and `x == 7`
+//   assert *r1 == 7;     // must NOT fold to 0
+//
+// If field_forward's alias-group widening misses this, the read of
+// `*r1` (i.e. `r1.value`) folds to 0 (the value at `&mut x`'s
+// inception), and the assert's panic is wrongly eliminated.
+
+export fn run() {
+    let mut x = 0;
+    let r1 = &mut x;
+    let r2 = r1;
+    *r2 = 7;
+    assert *r1 == 7;
+    assert x == 7;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": [
+        "7"
+    ]
+}

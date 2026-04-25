@@ -1,0 +1,51 @@
+// Regression test: TIR-level field_forward must propagate field
+// constants from a struct literal across a `$value_copy$T` call, so
+// the snapshot retains the source's pre-mutation value even after the
+// source is later mutated.
+//
+// Pattern:
+//
+//   let mut c = Counter { value: 0 };
+//   let snapshot = c;     // → $value_copy$T(c)
+//   c.increment();        // mutates c.value, but snapshot is fresh
+//   assert snapshot.get() == 0;   // must fold to `true` and panic must vanish
+//
+// Verified at the WIR level by checking that:
+//   - the assert's `core:internal/panic` call is gone (folded away), and
+//   - the synthesized `$value_copy$T<id>` helper itself is dead-code-
+//     eliminated because every call site was elided or its result folded.
+//
+// If field_forward stops tracking field knowledge through the synth
+// helper (or stops being flow-sensitive about `c.value` mutation
+// invalidation), this assertion's panic survives in the WIR and the
+// test catches the regression.
+
+struct Counter {
+    value: i32,
+}
+
+impl Counter {
+    fn increment(&mut self) {
+        self.value += 1;
+    }
+
+    fn get(&self) -> i32 {
+        return self.value;
+    }
+}
+
+test {
+    let mut c = Counter { value: 0 };
+    let snapshot = c;
+    c.increment();
+    assert snapshot.get() == 0;
+    assert c.get() == 1;
+}
+
+__DATA__
+{
+    "test": {},
+    "wir_not_expect:O2": [
+        "core:internal/panic"
+    ]
+}
