@@ -51,9 +51,22 @@ fn is_mut_ref_type(type_id: TypeId, type_table: &TypeTable) -> bool {
 
 #[derive(Debug, Default)]
 struct LocalUsage {
-    is_assigned: bool,
+    /// Count of `local = expr` assignments. Used by the Assign-form
+    /// elision branch to recognize "binding-style" assignments (count
+    /// == 1) — those behave like a `Let` and are eligible to strip.
+    assign_count: u32,
     has_field_mutation: bool,
     is_captured: bool,
+}
+
+impl LocalUsage {
+    /// True when the local is assigned at least once after its
+    /// initialization. The Let-form elision uses this to refuse stripping
+    /// a binding whose target is later overwritten (and therefore can't
+    /// be safely aliased to the source).
+    fn is_assigned(&self) -> bool {
+        self.assign_count > 0
+    }
 }
 
 fn analyze_usage(body: &TirBlock, type_table: &TypeTable) -> IndexMap<u32, LocalUsage> {
@@ -137,7 +150,7 @@ fn analyze_expr(expr: &TirExpr, usage: &mut IndexMap<u32, LocalUsage>, type_tabl
         TirExprKind::Local { .. } => {}
         TirExprKind::Assign { target, value } => {
             if let TirExprKind::Local { index, .. } = &target.kind {
-                usage.entry(*index).or_default().is_assigned = true;
+                usage.entry(*index).or_default().assign_count += 1;
             }
             if let TirExprKind::FieldAccess { expr: inner, .. } = &target.kind {
                 mark_root_field_mutated(inner, usage);
@@ -322,50 +335,91 @@ fn strip_in_block(
     }
 }
 
+/// Check whether `value` is a `$value_copy$T(arg)` call whose wrapper
+/// can be safely stripped given the binding target's local index and
+/// the function-wide usage map.
+fn elision_safe(
+    target_index: u32,
+    target_assign_limit: u32,
+    value: &TirExpr,
+    value_copy_set: &IndexMap<(ModuleSource, String), TypeId>,
+    usage: &IndexMap<u32, LocalUsage>,
+) -> bool {
+    if !is_value_copy_call(value, value_copy_set) {
+        return false;
+    }
+    let target_ok = match usage.get(&target_index) {
+        Some(u) => {
+            u.assign_count <= target_assign_limit && !u.has_field_mutation && !u.is_captured
+        }
+        None => true,
+    };
+    if !target_ok {
+        return false;
+    }
+    let TirExprKind::Call { args, .. } = &value.kind else {
+        return false;
+    };
+    let Some(arg) = args.first() else {
+        return false;
+    };
+    match arg_source_root(&arg.expr) {
+        Some(root) => match usage.get(&root) {
+            Some(u) => !u.is_assigned() && !u.has_field_mutation && !u.is_captured,
+            None => true,
+        },
+        None => true,
+    }
+}
+
+/// Replace `value` (a `$value_copy$T(arg)` call) with `arg` in place,
+/// extracting the call's single argument and dropping the wrapper.
+fn strip_wrapper(value: &mut TirExpr) {
+    if let TirExprKind::Call { args, .. } = &mut value.kind
+        && let Some(arg) = args.first_mut()
+    {
+        let span = value.span;
+        let mut taken = TirExpr::new(TirExprKind::Unit, value.type_id, span);
+        std::mem::swap(&mut arg.expr, &mut taken);
+        taken.span = span;
+        *value = taken;
+    }
+}
+
 fn strip_in_stmt(
     stmt: &mut TirStmt,
     value_copy_set: &IndexMap<(ModuleSource, String), TypeId>,
     usage: &IndexMap<u32, LocalUsage>,
 ) {
-    if let TirStmtKind::Let {
-        local_index,
-        value,
-        is_mut,
-        skip_value_copy,
-        ..
-    } = &mut stmt.kind
-        && !*is_mut
-        && !*skip_value_copy
-        && is_value_copy_call(value, value_copy_set)
-    {
-        let target_ok = match usage.get(local_index) {
-            Some(u) => !u.is_assigned && !u.has_field_mutation && !u.is_captured,
-            None => true,
-        };
-        let arg_ok = if let TirExprKind::Call { args, .. } = &value.kind
-            && let Some(arg) = args.first()
+    match &mut stmt.kind {
+        // `let x = $value_copy$T(arg)` — Let establishes a fresh binding,
+        // so any subsequent assignment to `x` invalidates the snapshot;
+        // require `assign_count == 0`.
+        TirStmtKind::Let {
+            local_index,
+            value,
+            is_mut,
+            skip_value_copy,
+            ..
+        } if !*is_mut
+            && !*skip_value_copy
+            && elision_safe(*local_index, 0, value, value_copy_set, usage) =>
         {
-            match arg_source_root(&arg.expr) {
-                Some(root) => match usage.get(&root) {
-                    Some(u) => !u.is_assigned && !u.has_field_mutation && !u.is_captured,
-                    None => true,
-                },
-                None => true,
-            }
-        } else {
-            false
-        };
-        if target_ok
-            && arg_ok
-            && let TirExprKind::Call { args, .. } = &mut value.kind
-            && let Some(arg) = args.first_mut()
-        {
-            let span = value.span;
-            let mut taken = TirExpr::new(TirExprKind::Unit, value.type_id, span);
-            std::mem::swap(&mut arg.expr, &mut taken);
-            taken.span = span;
-            *value = taken;
+            strip_wrapper(value);
         }
+        // `x = $value_copy$T(arg)` as a top-level statement — the Assign
+        // *is* the binding. Allow elision when this is the only
+        // assignment to `x` (`assign_count == 1`); a second assignment
+        // would invalidate the snapshot just like a re-bound Let.
+        TirStmtKind::Expr(expr) => {
+            if let TirExprKind::Assign { target, value } = &mut expr.kind
+                && let TirExprKind::Local { index, .. } = &target.kind
+                && elision_safe(*index, 1, value, value_copy_set, usage)
+            {
+                strip_wrapper(value);
+            }
+        }
+        _ => {}
     }
     match &mut stmt.kind {
         TirStmtKind::If {
