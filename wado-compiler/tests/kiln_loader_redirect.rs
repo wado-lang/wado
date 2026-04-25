@@ -89,8 +89,8 @@ pub fn greet() {}
         );
     };
 
-    let redirected = ModuleSource::Local {
-        path: "build/kiln/test-invocation/sample.wado".to_string(),
+    let redirected = ModuleSource::Redirected {
+        uri: "build/kiln/test-invocation/sample.wado".to_string(),
     };
     assert!(
         annotated.modules.contains_key(&redirected),
