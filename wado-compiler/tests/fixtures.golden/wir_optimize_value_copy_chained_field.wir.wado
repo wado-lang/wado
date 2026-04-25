@@ -87,9 +87,7 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(32)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(33)
 
-type "functype//wado-compiler/tests/fixtures/wir_optimize_value_copy_chained_field.wado/$value_copy$T21" = fn(ref "wado-compiler/tests/fixtures/wir_optimize_value_copy_chained_field.wado//Outer") -> [ref "wado-compiler/tests/fixtures/wir_optimize_value_copy_chained_field.wado//Inner", ref "core:prelude/string.wado//String"];  // TypeId(34)
-
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(35)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(34)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -106,17 +104,16 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 
 fn "wado-compiler/tests/fixtures/wir_optimize_value_copy_chained_field.wado/run"() with Stdout {
     let c: ref null "wado-compiler/tests/fixtures/wir_optimize_value_copy_chained_field.wado//Outer";
+    let o: ref "wado-compiler/tests/fixtures/wir_optimize_value_copy_chained_field.wado//Outer";
     let v: i32;
     let n: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
     c = struct.new "wado-compiler/tests/fixtures/wir_optimize_value_copy_chained_field.wado//Outer" { inner: struct.new "wado-compiler/tests/fixtures/wir_optimize_value_copy_chained_field.wado//Inner" { value: 42 }, name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 } };
     if ref.is_null(c) == 0 {
-        let __sroa_o_inner: ref "wado-compiler/tests/fixtures/wir_optimize_value_copy_chained_field.wado//Inner";
-        let __sroa_o_name: ref "core:prelude/string.wado//String";
-        multivalue_bind [__sroa_o_inner, __sroa_o_name] = "wado-compiler/tests/fixtures/wir_optimize_value_copy_chained_field.wado/$value_copy$T21"(ref.as_non_null(c));
-        v = __sroa_o_inner.value;
-        n = __sroa_o_name;
+        o = ref.as_non_null(c);
+        v = o.inner.value;
+        n = o.name;
         "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
             __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
             __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
@@ -135,10 +132,6 @@ fn "wado-compiler/tests/fixtures/wir_optimize_value_copy_chained_field.wado/__cm
 fn "wado-compiler/tests/fixtures/wir_optimize_value_copy_chained_field.wado/__cm_export__run"() {
     "wado-compiler/tests/fixtures/wir_optimize_value_copy_chained_field.wado/run"();
     "wasi/task-return"(0);
-}
-
-fn "wado-compiler/tests/fixtures/wir_optimize_value_copy_chained_field.wado/$value_copy$T21"(v) {
-    return v.inner, v.name;
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {

@@ -12329,8 +12329,8 @@ fn parse_sql_stmt_list(p: &mut Parser) -> Result<SqlStmtListNode, ParseError> {
         }
         let sql_stmt = parse_sql_stmt(p)?;
         let semicolon_sql_stmt = SemicolonListSqlStmtItem {
-            semicolon_list,
-            sql_stmt,
+            semicolon_list_2,
+            sql_stmt_2,
         };
         semicolon_sql_stmt_list.push(semicolon_sql_stmt);
     }
@@ -12366,16 +12366,16 @@ fn parse_sql_stmt(p: &mut Parser) -> Result<SqlStmtNode, ParseError> {
             let k_query = p.expect(TK_K_QUERY)?;
             let k_plan = p.expect(TK_K_PLAN)?;
             let k_query_k_plan = KQueryKPlanItem {
-                k_query,
-                k_plan,
+                k_query_2,
+                k_plan_2,
             };
             Option::<KQueryKPlanItem>::Some(k_query_k_plan)
         } else {
             null
         };
         let k_explain_item = KExplainItemOptItem {
-            k_explain,
-            k_query_k_plan,
+            k_explain_2,
+            k_query_k_plan_2,
         };
         Option::<KExplainItemOptItem>::Some(k_explain_item)
     } else {
@@ -12852,8 +12852,8 @@ fn parse_begin_stmt(p: &mut Parser) -> Result<BeginStmtNode, ParseError> {
             null
         };
         let k_transaction_transaction_name = KTransactionTransactionNameOptItem {
-            k_transaction,
-            transaction_name,
+            k_transaction_2,
+            transaction_name_2,
         };
         Option::<KTransactionTransactionNameOptItem>::Some(k_transaction_transaction_name)
     } else {
@@ -12879,8 +12879,8 @@ fn parse_commit_stmt(p: &mut Parser) -> Result<CommitStmtNode, ParseError> {
             null
         };
         let k_transaction_transaction_name = KTransactionTransactionNameOptItem {
-            k_transaction,
-            transaction_name,
+            k_transaction_2,
+            transaction_name_2,
         };
         Option::<KTransactionTransactionNameOptItem>::Some(k_transaction_transaction_name)
     } else {
@@ -12934,8 +12934,8 @@ fn parse_compound_select_stmt(p: &mut Parser) -> Result<CompoundSelectStmtNode, 
         let group_0 = group_0_inner;
         let select_core = parse_select_core(p)?;
         let item_select_core = ItemSelectCoreItem {
-            group_0,
-            select_core,
+            group_0_2,
+            select_core_2,
         };
         item_select_core_list.push(item_select_core);
     }
@@ -12948,16 +12948,16 @@ fn parse_compound_select_stmt(p: &mut Parser) -> Result<CompoundSelectStmtNode, 
             let comma = p.expect(TK_LIT_COMMA)?;
             let ordering_term = parse_ordering_term(p)?;
             let comma_ordering_term = CommaOrderingTermItem {
-                comma,
-                ordering_term,
+                comma_2,
+                ordering_term_2,
             };
             comma_ordering_term_list.push(comma_ordering_term);
         }
         let k_order_k_by_ordering_term_item = KOrderKByOrderingTermItemListItem {
-            k_order,
-            k_by,
-            ordering_term,
-            comma_ordering_term_list,
+            k_order_2,
+            k_by_2,
+            ordering_term_2,
+            comma_ordering_term_list_2,
         };
         Option::<KOrderKByOrderingTermItemListItem>::Some(k_order_k_by_ordering_term_item)
     } else {
@@ -12985,9 +12985,9 @@ fn parse_compound_select_stmt(p: &mut Parser) -> Result<CompoundSelectStmtNode, 
             null
         };
         let k_limit_expr_item = KLimitExprItemOptItem {
-            k_limit,
-            expr,
-            item_expr,
+            k_limit_2,
+            expr_2,
+            item_expr_2,
         };
         Option::<KLimitExprItemOptItem>::Some(k_limit_expr_item)
     } else {
@@ -13018,9 +13018,9 @@ fn parse_create_index_stmt(p: &mut Parser) -> Result<CreateIndexStmtNode, ParseE
         let k_not = p.expect(TK_K_NOT)?;
         let k_exists = p.expect(TK_K_EXISTS)?;
         let k_if_k_not_k_exists = KIfKNotKExistsItem {
-            k_if,
-            k_not,
-            k_exists,
+            k_if_2,
+            k_not_2,
+            k_exists_2,
         };
         Option::<KIfKNotKExistsItem>::Some(k_if_k_not_k_exists)
     } else {
@@ -13069,8 +13069,8 @@ fn parse_create_index_stmt(p: &mut Parser) -> Result<CreateIndexStmtNode, ParseE
         let comma = p.expect(TK_LIT_COMMA)?;
         let indexed_column = parse_indexed_column(p)?;
         let comma_indexed_column = CommaIndexedColumnItem {
-            comma,
-            indexed_column,
+            comma_2,
+            indexed_column_2,
         };
         comma_indexed_column_list.push(comma_indexed_column);
     }
@@ -13079,8 +13079,8 @@ fn parse_create_index_stmt(p: &mut Parser) -> Result<CreateIndexStmtNode, ParseE
         let k_where = p.expect(TK_K_WHERE)?;
         let expr = parse_expr(p)?;
         let k_where_expr = KWhereExprItem {
-            k_where,
-            expr,
+            k_where_2,
+            expr_2,
         };
         Option::<KWhereExprItem>::Some(k_where_expr)
     } else {
@@ -13141,9 +13141,9 @@ fn parse_create_table_stmt(p: &mut Parser) -> Result<CreateTableStmtNode, ParseE
         let k_not = p.expect(TK_K_NOT)?;
         let k_exists = p.expect(TK_K_EXISTS)?;
         let k_if_k_not_k_exists = KIfKNotKExistsItem {
-            k_if,
-            k_not,
-            k_exists,
+            k_if_2,
+            k_not_2,
+            k_exists_2,
         };
         Option::<KIfKNotKExistsItem>::Some(k_if_k_not_k_exists)
     } else {
@@ -13181,8 +13181,8 @@ fn parse_create_table_stmt(p: &mut Parser) -> Result<CreateTableStmtNode, ParseE
             let comma = p.expect(TK_LIT_COMMA)?;
             let column_def = parse_column_def(p)?;
             let comma_column_def = CommaColumnDefItem {
-                comma,
-                column_def,
+                comma_2,
+                column_def_2,
             };
             comma_column_def_list.push(comma_column_def);
         }
@@ -13191,8 +13191,8 @@ fn parse_create_table_stmt(p: &mut Parser) -> Result<CreateTableStmtNode, ParseE
             let comma = p.expect(TK_LIT_COMMA)?;
             let table_constraint = parse_table_constraint(p)?;
             let comma_table_constraint = CommaTableConstraintItem {
-                comma,
-                table_constraint,
+                comma_2,
+                table_constraint_2,
             };
             comma_table_constraint_list.push(comma_table_constraint);
         }
@@ -13201,8 +13201,8 @@ fn parse_create_table_stmt(p: &mut Parser) -> Result<CreateTableStmtNode, ParseE
             let k_without = p.expect(TK_K_WITHOUT)?;
             let identifier = p.expect(TK_IDENTIFIER)?;
             let k_without_identifier = KWithoutIdentifierItem {
-                k_without,
-                identifier,
+                k_without_2,
+                identifier_2,
             };
             Option::<KWithoutIdentifierItem>::Some(k_without_identifier)
         } else {
@@ -13274,9 +13274,9 @@ fn parse_create_trigger_stmt(p: &mut Parser) -> Result<CreateTriggerStmtNode, Pa
         let k_not = p.expect(TK_K_NOT)?;
         let k_exists = p.expect(TK_K_EXISTS)?;
         let k_if_k_not_k_exists = KIfKNotKExistsItem {
-            k_if,
-            k_not,
-            k_exists,
+            k_if_2,
+            k_not_2,
+            k_exists_2,
         };
         Option::<KIfKNotKExistsItem>::Some(k_if_k_not_k_exists)
     } else {
@@ -13391,15 +13391,15 @@ fn parse_create_trigger_stmt(p: &mut Parser) -> Result<CreateTriggerStmtNode, Pa
                 let comma = p.expect(TK_LIT_COMMA)?;
                 let column_name = parse_column_name(p)?;
                 let comma_column_name = CommaColumnNameItem {
-                    comma,
-                    column_name,
+                    comma_2,
+                    column_name_2,
                 };
                 comma_column_name_list.push(comma_column_name);
             }
             let k_of_column_name_item = KOfColumnNameItemListItem {
-                k_of,
-                column_name,
-                comma_column_name_list,
+                k_of_2,
+                column_name_2,
+                comma_column_name_list_2,
             };
             Option::<KOfColumnNameItemListItem>::Some(k_of_column_name_item)
         } else {
@@ -13439,9 +13439,9 @@ fn parse_create_trigger_stmt(p: &mut Parser) -> Result<CreateTriggerStmtNode, Pa
         let k_each = p.expect(TK_K_EACH)?;
         let k_row = p.expect(TK_K_ROW)?;
         let k_for_k_each_k_row = KForKEachKRowItem {
-            k_for,
-            k_each,
-            k_row,
+            k_for_2,
+            k_each_2,
+            k_row_2,
         };
         Option::<KForKEachKRowItem>::Some(k_for_k_each_k_row)
     } else {
@@ -13451,8 +13451,8 @@ fn parse_create_trigger_stmt(p: &mut Parser) -> Result<CreateTriggerStmtNode, Pa
         let k_when = p.expect(TK_K_WHEN)?;
         let expr = parse_expr(p)?;
         let k_when_expr = KWhenExprItem {
-            k_when,
-            expr,
+            k_when_2,
+            expr_2,
         };
         Option::<KWhenExprItem>::Some(k_when_expr)
     } else {
@@ -13500,8 +13500,8 @@ fn parse_create_trigger_stmt(p: &mut Parser) -> Result<CreateTriggerStmtNode, Pa
         let update_stmt_or_insert_stmt_or_delete_stmt_or_select_stmt = update_stmt_or_insert_stmt_or_delete_stmt_or_select_stmt_inner;
         let semicolon = p.expect(TK_LIT_SEMI)?;
         let item_semicolon = ItemSemicolonItem {
-            update_stmt_or_insert_stmt_or_delete_stmt_or_select_stmt,
-            semicolon,
+            update_stmt_or_insert_stmt_or_delete_stmt_or_select_stmt_2,
+            semicolon_2,
         };
         item_semicolon_list.push(item_semicolon);
     }
@@ -13564,9 +13564,9 @@ fn parse_create_view_stmt(p: &mut Parser) -> Result<CreateViewStmtNode, ParseErr
         let k_not = p.expect(TK_K_NOT)?;
         let k_exists = p.expect(TK_K_EXISTS)?;
         let k_if_k_not_k_exists = KIfKNotKExistsItem {
-            k_if,
-            k_not,
-            k_exists,
+            k_if_2,
+            k_not_2,
+            k_exists_2,
         };
         Option::<KIfKNotKExistsItem>::Some(k_if_k_not_k_exists)
     } else {
@@ -13619,9 +13619,9 @@ fn parse_create_virtual_table_stmt(p: &mut Parser) -> Result<CreateVirtualTableS
         let k_not = p.expect(TK_K_NOT)?;
         let k_exists = p.expect(TK_K_EXISTS)?;
         let k_if_k_not_k_exists = KIfKNotKExistsItem {
-            k_if,
-            k_not,
-            k_exists,
+            k_if_2,
+            k_not_2,
+            k_exists_2,
         };
         Option::<KIfKNotKExistsItem>::Some(k_if_k_not_k_exists)
     } else {
@@ -13659,17 +13659,17 @@ fn parse_create_virtual_table_stmt(p: &mut Parser) -> Result<CreateVirtualTableS
             let comma = p.expect(TK_LIT_COMMA)?;
             let module_argument = parse_module_argument(p)?;
             let comma_module_argument = CommaModuleArgumentItem {
-                comma,
-                module_argument,
+                comma_2,
+                module_argument_2,
             };
             comma_module_argument_list.push(comma_module_argument);
         }
         let rparen = p.expect(TK_LIT_RPAREN)?;
         let lparen_module_argument_item_rparen = LparenModuleArgumentItemListRparenItem {
-            lparen,
-            module_argument,
-            comma_module_argument_list,
-            rparen,
+            lparen_2,
+            module_argument_2,
+            comma_module_argument_list_2,
+            rparen_2,
         };
         Option::<LparenModuleArgumentItemListRparenItem>::Some(lparen_module_argument_item_rparen)
     } else {
@@ -13704,8 +13704,8 @@ fn parse_delete_stmt(p: &mut Parser) -> Result<DeleteStmtNode, ParseError> {
         let k_where = p.expect(TK_K_WHERE)?;
         let expr = parse_expr(p)?;
         let k_where_expr = KWhereExprItem {
-            k_where,
-            expr,
+            k_where_2,
+            expr_2,
         };
         Option::<KWhereExprItem>::Some(k_where_expr)
     } else {
@@ -13736,8 +13736,8 @@ fn parse_delete_stmt_limited(p: &mut Parser) -> Result<DeleteStmtLimitedNode, Pa
         let k_where = p.expect(TK_K_WHERE)?;
         let expr = parse_expr(p)?;
         let k_where_expr = KWhereExprItem {
-            k_where,
-            expr,
+            k_where_2,
+            expr_2,
         };
         Option::<KWhereExprItem>::Some(k_where_expr)
     } else {
@@ -13753,16 +13753,16 @@ fn parse_delete_stmt_limited(p: &mut Parser) -> Result<DeleteStmtLimitedNode, Pa
                 let comma = p.expect(TK_LIT_COMMA)?;
                 let ordering_term = parse_ordering_term(p)?;
                 let comma_ordering_term = CommaOrderingTermItem {
-                    comma,
-                    ordering_term,
+                    comma_2,
+                    ordering_term_2,
                 };
                 comma_ordering_term_list.push(comma_ordering_term);
             }
             let k_order_k_by_ordering_term_item = KOrderKByOrderingTermItemListItem {
-                k_order,
-                k_by,
-                ordering_term,
-                comma_ordering_term_list,
+                k_order_2,
+                k_by_2,
+                ordering_term_2,
+                comma_ordering_term_list_2,
             };
             Option::<KOrderKByOrderingTermItemListItem>::Some(k_order_k_by_ordering_term_item)
         } else {
@@ -13834,16 +13834,16 @@ fn parse_delete_stmt_limited(p: &mut Parser) -> Result<DeleteStmtLimitedNode, Pa
                 let comma = p.expect(TK_LIT_COMMA)?;
                 let ordering_term = parse_ordering_term(p)?;
                 let comma_ordering_term = CommaOrderingTermItem {
-                    comma,
-                    ordering_term,
+                    comma_2,
+                    ordering_term_2,
                 };
                 comma_ordering_term_list.push(comma_ordering_term);
             }
             let k_order_k_by_ordering_term_item = KOrderKByOrderingTermItemListItem {
-                k_order,
-                k_by,
-                ordering_term,
-                comma_ordering_term_list,
+                k_order_2,
+                k_by_2,
+                ordering_term_2,
+                comma_ordering_term_list_2,
             };
             Option::<KOrderKByOrderingTermItemListItem>::Some(k_order_k_by_ordering_term_item)
         } else {
@@ -13911,8 +13911,8 @@ fn parse_drop_index_stmt(p: &mut Parser) -> Result<DropIndexStmtNode, ParseError
         let k_if = p.expect(TK_K_IF)?;
         let k_exists = p.expect(TK_K_EXISTS)?;
         let k_if_k_exists = KIfKExistsItem {
-            k_if,
-            k_exists,
+            k_if_2,
+            k_exists_2,
         };
         Option::<KIfKExistsItem>::Some(k_if_k_exists)
     } else {
@@ -13958,8 +13958,8 @@ fn parse_drop_table_stmt(p: &mut Parser) -> Result<DropTableStmtNode, ParseError
         let k_if = p.expect(TK_K_IF)?;
         let k_exists = p.expect(TK_K_EXISTS)?;
         let k_if_k_exists = KIfKExistsItem {
-            k_if,
-            k_exists,
+            k_if_2,
+            k_exists_2,
         };
         Option::<KIfKExistsItem>::Some(k_if_k_exists)
     } else {
@@ -14005,8 +14005,8 @@ fn parse_drop_trigger_stmt(p: &mut Parser) -> Result<DropTriggerStmtNode, ParseE
         let k_if = p.expect(TK_K_IF)?;
         let k_exists = p.expect(TK_K_EXISTS)?;
         let k_if_k_exists = KIfKExistsItem {
-            k_if,
-            k_exists,
+            k_if_2,
+            k_exists_2,
         };
         Option::<KIfKExistsItem>::Some(k_if_k_exists)
     } else {
@@ -14052,8 +14052,8 @@ fn parse_drop_view_stmt(p: &mut Parser) -> Result<DropViewStmtNode, ParseError> 
         let k_if = p.expect(TK_K_IF)?;
         let k_exists = p.expect(TK_K_EXISTS)?;
         let k_if_k_exists = KIfKExistsItem {
-            k_if,
-            k_exists,
+            k_if_2,
+            k_exists_2,
         };
         Option::<KIfKExistsItem>::Some(k_if_k_exists)
     } else {
@@ -14105,8 +14105,8 @@ fn parse_factored_select_stmt(p: &mut Parser) -> Result<FactoredSelectStmtNode, 
         let compound_operator = parse_compound_operator(p)?;
         let select_core = parse_select_core(p)?;
         let compound_operator_select_core = CompoundOperatorSelectCoreItem {
-            compound_operator,
-            select_core,
+            compound_operator_2,
+            select_core_2,
         };
         compound_operator_select_core_list.push(compound_operator_select_core);
     }
@@ -14119,16 +14119,16 @@ fn parse_factored_select_stmt(p: &mut Parser) -> Result<FactoredSelectStmtNode, 
             let comma = p.expect(TK_LIT_COMMA)?;
             let ordering_term = parse_ordering_term(p)?;
             let comma_ordering_term = CommaOrderingTermItem {
-                comma,
-                ordering_term,
+                comma_2,
+                ordering_term_2,
             };
             comma_ordering_term_list.push(comma_ordering_term);
         }
         let k_order_k_by_ordering_term_item = KOrderKByOrderingTermItemListItem {
-            k_order,
-            k_by,
-            ordering_term,
-            comma_ordering_term_list,
+            k_order_2,
+            k_by_2,
+            ordering_term_2,
+            comma_ordering_term_list_2,
         };
         Option::<KOrderKByOrderingTermItemListItem>::Some(k_order_k_by_ordering_term_item)
     } else {
@@ -14156,9 +14156,9 @@ fn parse_factored_select_stmt(p: &mut Parser) -> Result<FactoredSelectStmtNode, 
             null
         };
         let k_limit_expr_item = KLimitExprItemOptItem {
-            k_limit,
-            expr,
-            item_expr,
+            k_limit_2,
+            expr_2,
+            item_expr_2,
         };
         Option::<KLimitExprItemOptItem>::Some(k_limit_expr_item)
     } else {
@@ -14380,17 +14380,17 @@ fn parse_insert_stmt(p: &mut Parser) -> Result<InsertStmtNode, ParseError> {
             let comma = p.expect(TK_LIT_COMMA)?;
             let column_name = parse_column_name(p)?;
             let comma_column_name = CommaColumnNameItem {
-                comma,
-                column_name,
+                comma_2,
+                column_name_2,
             };
             comma_column_name_list.push(comma_column_name);
         }
         let rparen = p.expect(TK_LIT_RPAREN)?;
         let lparen_column_name_item_rparen = LparenColumnNameItemListRparenItem {
-            lparen,
-            column_name,
-            comma_column_name_list,
-            rparen,
+            lparen_2,
+            column_name_2,
+            comma_column_name_list_2,
+            rparen_2,
         };
         Option::<LparenColumnNameItemListRparenItem>::Some(lparen_column_name_item_rparen)
     } else {
@@ -14417,8 +14417,8 @@ fn parse_insert_stmt(p: &mut Parser) -> Result<InsertStmtNode, ParseError> {
                     let comma = p.expect(TK_LIT_COMMA)?;
                     let expr = parse_expr(p)?;
                     let comma_expr = CommaExprItem {
-                        comma,
-                        expr,
+                        comma_2,
+                        expr_2,
                     };
                     comma_expr_list.push(comma_expr);
                 }
@@ -14435,18 +14435,18 @@ fn parse_insert_stmt(p: &mut Parser) -> Result<InsertStmtNode, ParseError> {
                         let comma = p.expect(TK_LIT_COMMA)?;
                         let expr = parse_expr(p)?;
                         let comma_expr = CommaExprItem {
-                            comma,
-                            expr,
+                            comma_2,
+                            expr_2,
                         };
                         comma_expr_list.push(comma_expr);
                     }
                     let rparen = p.expect(TK_LIT_RPAREN)?;
                     let comma_lparen_expr_item_rparen = CommaLparenExprItemListRparenItem {
-                        comma,
-                        lparen,
-                        expr,
-                        comma_expr_list,
-                        rparen,
+                        comma_2,
+                        lparen_2,
+                        expr_2,
+                        comma_expr_list_2,
+                        rparen_2,
                     };
                     comma_lparen_expr_item_rparen_list.push(comma_lparen_expr_item_rparen);
                 }
@@ -14811,8 +14811,8 @@ fn parse_rollback_stmt(p: &mut Parser) -> Result<RollbackStmtNode, ParseError> {
             null
         };
         let k_transaction_transaction_name = KTransactionTransactionNameOptItem {
-            k_transaction,
-            transaction_name,
+            k_transaction_2,
+            transaction_name_2,
         };
         Option::<KTransactionTransactionNameOptItem>::Some(k_transaction_transaction_name)
     } else {
@@ -14828,9 +14828,9 @@ fn parse_rollback_stmt(p: &mut Parser) -> Result<RollbackStmtNode, ParseError> {
         };
         let savepoint_name = parse_savepoint_name(p)?;
         let k_to_k_savepoint_savepoint_name = KToKSavepointOptSavepointNameItem {
-            k_to,
-            k_savepoint,
-            savepoint_name,
+            k_to_2,
+            k_savepoint_2,
+            savepoint_name_2,
         };
         Option::<KToKSavepointOptSavepointNameItem>::Some(k_to_k_savepoint_savepoint_name)
     } else {
@@ -14873,16 +14873,16 @@ fn parse_simple_select_stmt(p: &mut Parser) -> Result<SimpleSelectStmtNode, Pars
             let comma = p.expect(TK_LIT_COMMA)?;
             let ordering_term = parse_ordering_term(p)?;
             let comma_ordering_term = CommaOrderingTermItem {
-                comma,
-                ordering_term,
+                comma_2,
+                ordering_term_2,
             };
             comma_ordering_term_list.push(comma_ordering_term);
         }
         let k_order_k_by_ordering_term_item = KOrderKByOrderingTermItemListItem {
-            k_order,
-            k_by,
-            ordering_term,
-            comma_ordering_term_list,
+            k_order_2,
+            k_by_2,
+            ordering_term_2,
+            comma_ordering_term_list_2,
         };
         Option::<KOrderKByOrderingTermItemListItem>::Some(k_order_k_by_ordering_term_item)
     } else {
@@ -14910,9 +14910,9 @@ fn parse_simple_select_stmt(p: &mut Parser) -> Result<SimpleSelectStmtNode, Pars
             null
         };
         let k_limit_expr_item = KLimitExprItemOptItem {
-            k_limit,
-            expr,
-            item_expr,
+            k_limit_2,
+            expr_2,
+            item_expr_2,
         };
         Option::<KLimitExprItemOptItem>::Some(k_limit_expr_item)
     } else {
@@ -14941,8 +14941,8 @@ fn parse_select_stmt(p: &mut Parser) -> Result<SelectStmtNode, ParseError> {
         let compound_operator = parse_compound_operator(p)?;
         let select_or_values = parse_select_or_values(p)?;
         let compound_operator_select_or_values = CompoundOperatorSelectOrValuesItem {
-            compound_operator,
-            select_or_values,
+            compound_operator_2,
+            select_or_values_2,
         };
         compound_operator_select_or_values_list.push(compound_operator_select_or_values);
     }
@@ -14955,16 +14955,16 @@ fn parse_select_stmt(p: &mut Parser) -> Result<SelectStmtNode, ParseError> {
             let comma = p.expect(TK_LIT_COMMA)?;
             let ordering_term = parse_ordering_term(p)?;
             let comma_ordering_term = CommaOrderingTermItem {
-                comma,
-                ordering_term,
+                comma_2,
+                ordering_term_2,
             };
             comma_ordering_term_list.push(comma_ordering_term);
         }
         let k_order_k_by_ordering_term_item = KOrderKByOrderingTermItemListItem {
-            k_order,
-            k_by,
-            ordering_term,
-            comma_ordering_term_list,
+            k_order_2,
+            k_by_2,
+            ordering_term_2,
+            comma_ordering_term_list_2,
         };
         Option::<KOrderKByOrderingTermItemListItem>::Some(k_order_k_by_ordering_term_item)
     } else {
@@ -14992,9 +14992,9 @@ fn parse_select_stmt(p: &mut Parser) -> Result<SelectStmtNode, ParseError> {
             null
         };
         let k_limit_expr_item = KLimitExprItemOptItem {
-            k_limit,
-            expr,
-            item_expr,
+            k_limit_2,
+            expr_2,
+            item_expr_2,
         };
         Option::<KLimitExprItemOptItem>::Some(k_limit_expr_item)
     } else {
@@ -15049,8 +15049,8 @@ fn parse_select_or_values(p: &mut Parser) -> Result<SelectOrValuesNode, ParseErr
             let comma = p.expect(TK_LIT_COMMA)?;
             let result_column = parse_result_column(p)?;
             let comma_result_column = CommaResultColumnItem {
-                comma,
-                result_column,
+                comma_2,
+                result_column_2,
             };
             comma_result_column_list.push(comma_result_column);
         }
@@ -15079,8 +15079,8 @@ fn parse_select_or_values(p: &mut Parser) -> Result<SelectOrValuesNode, ParseErr
                         let comma = p.expect(TK_LIT_COMMA)?;
                         let table_or_subquery = parse_table_or_subquery(p)?;
                         let comma_table_or_subquery = CommaTableOrSubqueryItem {
-                            comma,
-                            table_or_subquery,
+                            comma_2,
+                            table_or_subquery_2,
                         };
                         comma_table_or_subquery_list.push(comma_table_or_subquery);
                     }
@@ -15092,8 +15092,8 @@ fn parse_select_or_values(p: &mut Parser) -> Result<SelectOrValuesNode, ParseErr
             }
             let group_0 = group_0_inner;
             let k_from_item = KFromItemItem {
-                k_from,
-                group_0,
+                k_from_2,
+                group_0_2,
             };
             Option::<KFromItemItem>::Some(k_from_item)
         } else {
@@ -15103,8 +15103,8 @@ fn parse_select_or_values(p: &mut Parser) -> Result<SelectOrValuesNode, ParseErr
             let k_where = p.expect(TK_K_WHERE)?;
             let expr = parse_expr(p)?;
             let k_where_expr = KWhereExprItem {
-                k_where,
-                expr,
+                k_where_2,
+                expr_2,
             };
             Option::<KWhereExprItem>::Some(k_where_expr)
         } else {
@@ -15119,8 +15119,8 @@ fn parse_select_or_values(p: &mut Parser) -> Result<SelectOrValuesNode, ParseErr
                 let comma = p.expect(TK_LIT_COMMA)?;
                 let expr = parse_expr(p)?;
                 let comma_expr = CommaExprItem {
-                    comma,
-                    expr,
+                    comma_2,
+                    expr_2,
                 };
                 comma_expr_list.push(comma_expr);
             }
@@ -15128,19 +15128,19 @@ fn parse_select_or_values(p: &mut Parser) -> Result<SelectOrValuesNode, ParseErr
                 let k_having = p.expect(TK_K_HAVING)?;
                 let expr = parse_expr(p)?;
                 let k_having_expr = KHavingExprItem {
-                    k_having,
-                    expr,
+                    k_having_2,
+                    expr_2,
                 };
                 Option::<KHavingExprItem>::Some(k_having_expr)
             } else {
                 null
             };
             let k_group_k_by_expr_item_item = KGroupKByExprItemListItemOptItem {
-                k_group,
-                k_by,
-                expr,
-                comma_expr_list,
-                k_having_expr,
+                k_group_2,
+                k_by_2,
+                expr_2,
+                comma_expr_list_2,
+                k_having_expr_2,
             };
             Option::<KGroupKByExprItemListItemOptItem>::Some(k_group_k_by_expr_item_item)
         } else {
@@ -15166,8 +15166,8 @@ fn parse_select_or_values(p: &mut Parser) -> Result<SelectOrValuesNode, ParseErr
             let comma = p.expect(TK_LIT_COMMA)?;
             let expr = parse_expr(p)?;
             let comma_expr = CommaExprItem {
-                comma,
-                expr,
+                comma_2,
+                expr_2,
             };
             comma_expr_list.push(comma_expr);
         }
@@ -15182,18 +15182,18 @@ fn parse_select_or_values(p: &mut Parser) -> Result<SelectOrValuesNode, ParseErr
                 let comma = p.expect(TK_LIT_COMMA)?;
                 let expr = parse_expr(p)?;
                 let comma_expr = CommaExprItem {
-                    comma,
-                    expr,
+                    comma_2,
+                    expr_2,
                 };
                 comma_expr_list.push(comma_expr);
             }
             let rparen = p.expect(TK_LIT_RPAREN)?;
             let comma_lparen_expr_item_rparen = CommaLparenExprItemListRparenItem {
-                comma,
-                lparen,
-                expr,
-                comma_expr_list,
-                rparen,
+                comma_2,
+                lparen_2,
+                expr_2,
+                comma_expr_list_2,
+                rparen_2,
             };
             comma_lparen_expr_item_rparen_list.push(comma_lparen_expr_item_rparen);
         }
@@ -15408,10 +15408,10 @@ fn parse_update_stmt(p: &mut Parser) -> Result<UpdateStmtNode, ParseError> {
         let eq = p.expect(TK_LIT_EQ)?;
         let expr = parse_expr(p)?;
         let comma_column_name_eq_expr = CommaColumnNameEqExprItem {
-            comma,
-            column_name,
-            eq,
-            expr,
+            comma_2,
+            column_name_2,
+            eq_2,
+            expr_2,
         };
         comma_column_name_eq_expr_list.push(comma_column_name_eq_expr);
     }
@@ -15419,8 +15419,8 @@ fn parse_update_stmt(p: &mut Parser) -> Result<UpdateStmtNode, ParseError> {
         let k_where = p.expect(TK_K_WHERE)?;
         let expr = parse_expr(p)?;
         let k_where_expr = KWhereExprItem {
-            k_where,
-            expr,
+            k_where_2,
+            expr_2,
         };
         Option::<KWhereExprItem>::Some(k_where_expr)
     } else {
@@ -15635,10 +15635,10 @@ fn parse_update_stmt_limited(p: &mut Parser) -> Result<UpdateStmtLimitedNode, Pa
         let eq = p.expect(TK_LIT_EQ)?;
         let expr = parse_expr(p)?;
         let comma_column_name_eq_expr = CommaColumnNameEqExprItem {
-            comma,
-            column_name,
-            eq,
-            expr,
+            comma_2,
+            column_name_2,
+            eq_2,
+            expr_2,
         };
         comma_column_name_eq_expr_list.push(comma_column_name_eq_expr);
     }
@@ -15646,8 +15646,8 @@ fn parse_update_stmt_limited(p: &mut Parser) -> Result<UpdateStmtLimitedNode, Pa
         let k_where = p.expect(TK_K_WHERE)?;
         let expr = parse_expr(p)?;
         let k_where_expr = KWhereExprItem {
-            k_where,
-            expr,
+            k_where_2,
+            expr_2,
         };
         Option::<KWhereExprItem>::Some(k_where_expr)
     } else {
@@ -15663,16 +15663,16 @@ fn parse_update_stmt_limited(p: &mut Parser) -> Result<UpdateStmtLimitedNode, Pa
                 let comma = p.expect(TK_LIT_COMMA)?;
                 let ordering_term = parse_ordering_term(p)?;
                 let comma_ordering_term = CommaOrderingTermItem {
-                    comma,
-                    ordering_term,
+                    comma_2,
+                    ordering_term_2,
                 };
                 comma_ordering_term_list.push(comma_ordering_term);
             }
             let k_order_k_by_ordering_term_item = KOrderKByOrderingTermItemListItem {
-                k_order,
-                k_by,
-                ordering_term,
-                comma_ordering_term_list,
+                k_order_2,
+                k_by_2,
+                ordering_term_2,
+                comma_ordering_term_list_2,
             };
             Option::<KOrderKByOrderingTermItemListItem>::Some(k_order_k_by_ordering_term_item)
         } else {
@@ -15744,16 +15744,16 @@ fn parse_update_stmt_limited(p: &mut Parser) -> Result<UpdateStmtLimitedNode, Pa
                 let comma = p.expect(TK_LIT_COMMA)?;
                 let ordering_term = parse_ordering_term(p)?;
                 let comma_ordering_term = CommaOrderingTermItem {
-                    comma,
-                    ordering_term,
+                    comma_2,
+                    ordering_term_2,
                 };
                 comma_ordering_term_list.push(comma_ordering_term);
             }
             let k_order_k_by_ordering_term_item = KOrderKByOrderingTermItemListItem {
-                k_order,
-                k_by,
-                ordering_term,
-                comma_ordering_term_list,
+                k_order_2,
+                k_by_2,
+                ordering_term_2,
+                comma_ordering_term_list_2,
             };
             Option::<KOrderKByOrderingTermItemListItem>::Some(k_order_k_by_ordering_term_item)
         } else {
@@ -15958,8 +15958,8 @@ fn parse_column_constraint(p: &mut Parser) -> Result<ColumnConstraintNode, Parse
         let k_constraint = p.expect(TK_K_CONSTRAINT)?;
         let name = parse_name(p)?;
         let k_constraint_name = KConstraintNameItem {
-            k_constraint,
-            name,
+            k_constraint_2,
+            name_2,
         };
         Option::<KConstraintNameItem>::Some(k_constraint_name)
     } else {
@@ -16129,9 +16129,9 @@ fn parse_conflict_clause(p: &mut Parser) -> Result<ConflictClauseNode, ParseErro
         let k_conflict = p.expect(TK_K_CONFLICT)?;
         let k_rollback_or_k_abort_or_k_fail_or_k_ignore_or_k_replace = p.advance();
         let k_on_k_conflict_item = KOnKConflictItemItem {
-            k_on,
-            k_conflict,
-            k_rollback_or_k_abort_or_k_fail_or_k_ignore_or_k_replace,
+            k_on_2,
+            k_conflict_2,
+            k_rollback_or_k_abort_or_k_fail_or_k_ignore_or_k_replace_2,
         };
         Option::<KOnKConflictItemItem>::Some(k_on_k_conflict_item)
     } else {
@@ -16189,10 +16189,10 @@ fn parse_expr_bt_22(p: &mut Parser) -> Result<ExprNode, ParseError> {
         let k_then = p.expect(TK_K_THEN)?;
         let expr_2 = parse_expr(p)?;
         let k_when_expr_k_then_expr = KWhenExprKThenExprItem {
-            k_when,
-            expr,
-            k_then,
-            expr_2,
+            k_when_2,
+            expr_3,
+            k_then_2,
+            expr_4,
         };
         k_when_expr_k_then_expr_list.push(k_when_expr_k_then_expr);
     }
@@ -16200,8 +16200,8 @@ fn parse_expr_bt_22(p: &mut Parser) -> Result<ExprNode, ParseError> {
         let k_else = p.expect(TK_K_ELSE)?;
         let expr = parse_expr(p)?;
         let k_else_expr = KElseExprItem {
-            k_else,
-            expr,
+            k_else_2,
+            expr_2,
         };
         Option::<KElseExprItem>::Some(k_else_expr)
     } else {
@@ -16350,8 +16350,8 @@ fn parse_expr_bt_13(p: &mut Parser) -> Result<ExprNode, ParseError> {
                     let comma = p.expect(TK_LIT_COMMA)?;
                     let expr = parse_expr(p)?;
                     let comma_expr = CommaExprItem {
-                        comma,
-                        expr,
+                        comma_2,
+                        expr_2,
                     };
                     comma_expr_list.push(comma_expr);
                 }
@@ -16768,8 +16768,8 @@ fn parse_expr_lr_10(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNo
                                     let comma = p.expect(TK_LIT_COMMA)?;
                                     let expr = parse_expr(p)?;
                                     let comma_expr = CommaExprItem {
-                                        comma,
-                                        expr,
+                                        comma_2,
+                                        expr_2,
                                     };
                                     comma_expr_list.push(comma_expr);
                                 }
@@ -16885,8 +16885,8 @@ fn parse_expr_lr_17(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNo
         let k_escape = p.expect(TK_K_ESCAPE)?;
         let expr = parse_expr(p)?;
         let k_escape_expr = KEscapeExprItem {
-            k_escape,
-            expr,
+            k_escape_2,
+            expr_2,
         };
         Option::<KEscapeExprItem>::Some(k_escape_expr)
     } else {
@@ -17143,17 +17143,17 @@ fn parse_foreign_key_clause(p: &mut Parser) -> Result<ForeignKeyClauseNode, Pars
             let comma = p.expect(TK_LIT_COMMA)?;
             let column_name = parse_column_name(p)?;
             let comma_column_name = CommaColumnNameItem {
-                comma,
-                column_name,
+                comma_2,
+                column_name_2,
             };
             comma_column_name_list.push(comma_column_name);
         }
         let rparen = p.expect(TK_LIT_RPAREN)?;
         let lparen_column_name_item_rparen = LparenColumnNameItemListRparenItem {
-            lparen,
-            column_name,
-            comma_column_name_list,
-            rparen,
+            lparen_2,
+            column_name_2,
+            comma_column_name_list_2,
+            rparen_2,
         };
         Option::<LparenColumnNameItemListRparenItem>::Some(lparen_column_name_item_rparen)
     } else {
@@ -17608,8 +17608,8 @@ fn parse_indexed_column(p: &mut Parser) -> Result<IndexedColumnNode, ParseError>
         let k_collate = p.expect(TK_K_COLLATE)?;
         let collation_name = parse_collation_name(p)?;
         let k_collate_collation_name = KCollateCollationNameItem {
-            k_collate,
-            collation_name,
+            k_collate_2,
+            collation_name_2,
         };
         Option::<KCollateCollationNameItem>::Some(k_collate_collation_name)
     } else {
@@ -17657,8 +17657,8 @@ fn parse_table_constraint(p: &mut Parser) -> Result<TableConstraintNode, ParseEr
         let k_constraint = p.expect(TK_K_CONSTRAINT)?;
         let name = parse_name(p)?;
         let k_constraint_name = KConstraintNameItem {
-            k_constraint,
-            name,
+            k_constraint_2,
+            name_2,
         };
         Option::<KConstraintNameItem>::Some(k_constraint_name)
     } else {
@@ -17702,8 +17702,8 @@ fn parse_table_constraint(p: &mut Parser) -> Result<TableConstraintNode, ParseEr
             let comma = p.expect(TK_LIT_COMMA)?;
             let indexed_column = parse_indexed_column(p)?;
             let comma_indexed_column = CommaIndexedColumnItem {
-                comma,
-                indexed_column,
+                comma_2,
+                indexed_column_2,
             };
             comma_indexed_column_list.push(comma_indexed_column);
         }
@@ -17750,8 +17750,8 @@ fn parse_table_constraint(p: &mut Parser) -> Result<TableConstraintNode, ParseEr
             let comma = p.expect(TK_LIT_COMMA)?;
             let column_name = parse_column_name(p)?;
             let comma_column_name = CommaColumnNameItem {
-                comma,
-                column_name,
+                comma_2,
+                column_name_2,
             };
             comma_column_name_list.push(comma_column_name);
         }
@@ -17790,8 +17790,8 @@ fn parse_with_clause(p: &mut Parser) -> Result<WithClauseNode, ParseError> {
         let comma = p.expect(TK_LIT_COMMA)?;
         let common_table_expression = parse_common_table_expression(p)?;
         let comma_common_table_expression = CommaCommonTableExpressionItem {
-            comma,
-            common_table_expression,
+            comma_2,
+            common_table_expression_2,
         };
         comma_common_table_expression_list.push(comma_common_table_expression);
     }
@@ -17893,8 +17893,8 @@ fn parse_ordering_term(p: &mut Parser) -> Result<OrderingTermNode, ParseError> {
         let k_collate = p.expect(TK_K_COLLATE)?;
         let collation_name = parse_collation_name(p)?;
         let k_collate_collation_name = KCollateCollationNameItem {
-            k_collate,
-            collation_name,
+            k_collate_2,
+            collation_name_2,
         };
         Option::<KCollateCollationNameItem>::Some(k_collate_collation_name)
     } else {
@@ -18035,17 +18035,17 @@ fn parse_common_table_expression(p: &mut Parser) -> Result<CommonTableExpression
             let comma = p.expect(TK_LIT_COMMA)?;
             let column_name = parse_column_name(p)?;
             let comma_column_name = CommaColumnNameItem {
-                comma,
-                column_name,
+                comma_2,
+                column_name_2,
             };
             comma_column_name_list.push(comma_column_name);
         }
         let rparen = p.expect(TK_LIT_RPAREN)?;
         let lparen_column_name_item_rparen = LparenColumnNameItemListRparenItem {
-            lparen,
-            column_name,
-            comma_column_name_list,
-            rparen,
+            lparen_2,
+            column_name_2,
+            comma_column_name_list_2,
+            rparen_2,
         };
         Option::<LparenColumnNameItemListRparenItem>::Some(lparen_column_name_item_rparen)
     } else {
@@ -18223,8 +18223,8 @@ fn parse_table_or_subquery_bt_2(p: &mut Parser) -> Result<TableOrSubqueryNode, P
                 let comma = p.expect(TK_LIT_COMMA)?;
                 let table_or_subquery = parse_table_or_subquery(p)?;
                 let comma_table_or_subquery = CommaTableOrSubqueryItem {
-                    comma,
-                    table_or_subquery,
+                    comma_2,
+                    table_or_subquery_2,
                 };
                 comma_table_or_subquery_list.push(comma_table_or_subquery);
             }
@@ -18288,8 +18288,8 @@ fn parse_table_or_subquery_bt_1(p: &mut Parser) -> Result<TableOrSubqueryNode, P
                 let comma = p.expect(TK_LIT_COMMA)?;
                 let expr = parse_expr(p)?;
                 let comma_expr = CommaExprItem {
-                    comma,
-                    expr,
+                    comma_2,
+                    expr_2,
                 };
                 comma_expr_list.push(comma_expr);
             }
@@ -18589,9 +18589,9 @@ fn parse_join_clause(p: &mut Parser) -> Result<JoinClauseNode, ParseError> {
         let table_or_subquery = parse_table_or_subquery(p)?;
         let join_constraint = parse_join_constraint(p)?;
         let join_operator_table_or_subquery_join_constraint = JoinOperatorTableOrSubqueryJoinConstraintItem {
-            join_operator,
-            table_or_subquery,
-            join_constraint,
+            join_operator_2,
+            table_or_subquery_2,
+            join_constraint_2,
         };
         join_operator_table_or_subquery_join_constraint_list.push(join_operator_table_or_subquery_join_constraint);
     }
@@ -18729,8 +18729,8 @@ fn parse_join_constraint(p: &mut Parser) -> Result<JoinConstraintNode, ParseErro
                     let comma = p.expect(TK_LIT_COMMA)?;
                     let column_name = parse_column_name(p)?;
                     let comma_column_name = CommaColumnNameItem {
-                        comma,
-                        column_name,
+                        comma_2,
+                        column_name_2,
                     };
                     comma_column_name_list.push(comma_column_name);
                 }
@@ -18794,8 +18794,8 @@ fn parse_select_core(p: &mut Parser) -> Result<SelectCoreNode, ParseError> {
             let comma = p.expect(TK_LIT_COMMA)?;
             let result_column = parse_result_column(p)?;
             let comma_result_column = CommaResultColumnItem {
-                comma,
-                result_column,
+                comma_2,
+                result_column_2,
             };
             comma_result_column_list.push(comma_result_column);
         }
@@ -18824,8 +18824,8 @@ fn parse_select_core(p: &mut Parser) -> Result<SelectCoreNode, ParseError> {
                         let comma = p.expect(TK_LIT_COMMA)?;
                         let table_or_subquery = parse_table_or_subquery(p)?;
                         let comma_table_or_subquery = CommaTableOrSubqueryItem {
-                            comma,
-                            table_or_subquery,
+                            comma_2,
+                            table_or_subquery_2,
                         };
                         comma_table_or_subquery_list.push(comma_table_or_subquery);
                     }
@@ -18837,8 +18837,8 @@ fn parse_select_core(p: &mut Parser) -> Result<SelectCoreNode, ParseError> {
             }
             let group_0 = group_0_inner;
             let k_from_item = KFromItemItem {
-                k_from,
-                group_0,
+                k_from_2,
+                group_0_2,
             };
             Option::<KFromItemItem>::Some(k_from_item)
         } else {
@@ -18848,8 +18848,8 @@ fn parse_select_core(p: &mut Parser) -> Result<SelectCoreNode, ParseError> {
             let k_where = p.expect(TK_K_WHERE)?;
             let expr = parse_expr(p)?;
             let k_where_expr = KWhereExprItem {
-                k_where,
-                expr,
+                k_where_2,
+                expr_2,
             };
             Option::<KWhereExprItem>::Some(k_where_expr)
         } else {
@@ -18864,8 +18864,8 @@ fn parse_select_core(p: &mut Parser) -> Result<SelectCoreNode, ParseError> {
                 let comma = p.expect(TK_LIT_COMMA)?;
                 let expr = parse_expr(p)?;
                 let comma_expr = CommaExprItem {
-                    comma,
-                    expr,
+                    comma_2,
+                    expr_2,
                 };
                 comma_expr_list.push(comma_expr);
             }
@@ -18873,19 +18873,19 @@ fn parse_select_core(p: &mut Parser) -> Result<SelectCoreNode, ParseError> {
                 let k_having = p.expect(TK_K_HAVING)?;
                 let expr = parse_expr(p)?;
                 let k_having_expr = KHavingExprItem {
-                    k_having,
-                    expr,
+                    k_having_2,
+                    expr_2,
                 };
                 Option::<KHavingExprItem>::Some(k_having_expr)
             } else {
                 null
             };
             let k_group_k_by_expr_item_item = KGroupKByExprItemListItemOptItem {
-                k_group,
-                k_by,
-                expr,
-                comma_expr_list,
-                k_having_expr,
+                k_group_2,
+                k_by_2,
+                expr_2,
+                comma_expr_list_2,
+                k_having_expr_2,
             };
             Option::<KGroupKByExprItemListItemOptItem>::Some(k_group_k_by_expr_item_item)
         } else {
@@ -18911,8 +18911,8 @@ fn parse_select_core(p: &mut Parser) -> Result<SelectCoreNode, ParseError> {
             let comma = p.expect(TK_LIT_COMMA)?;
             let expr = parse_expr(p)?;
             let comma_expr = CommaExprItem {
-                comma,
-                expr,
+                comma_2,
+                expr_2,
             };
             comma_expr_list.push(comma_expr);
         }
@@ -18927,18 +18927,18 @@ fn parse_select_core(p: &mut Parser) -> Result<SelectCoreNode, ParseError> {
                 let comma = p.expect(TK_LIT_COMMA)?;
                 let expr = parse_expr(p)?;
                 let comma_expr = CommaExprItem {
-                    comma,
-                    expr,
+                    comma_2,
+                    expr_2,
                 };
                 comma_expr_list.push(comma_expr);
             }
             let rparen = p.expect(TK_LIT_RPAREN)?;
             let comma_lparen_expr_item_rparen = CommaLparenExprItemListRparenItem {
-                comma,
-                lparen,
-                expr,
-                comma_expr_list,
-                rparen,
+                comma_2,
+                lparen_2,
+                expr_2,
+                comma_expr_list_2,
+                rparen_2,
             };
             comma_lparen_expr_item_rparen_list.push(comma_lparen_expr_item_rparen);
         }

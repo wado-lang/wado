@@ -217,11 +217,9 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(79)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(80)
 
-type "functype//wado-compiler/tests/fixtures/treemap_btree.wado/$value_copy$T431" = fn(ref "tuple//[String, i32]") -> [ref "core:prelude/string.wado//String", i32];  // TypeId(81)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(81)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(82)
-
-type "functype//wado-compiler/tests/fixtures/treemap_btree.wado/TreeMap<String,i32>::sort_node_entries" = fn(ref "wado-compiler/tests/fixtures/treemap_btree.wado//BTreeNode<String,i32>");  // TypeId(83)
+type "functype//wado-compiler/tests/fixtures/treemap_btree.wado/TreeMap<String,i32>::sort_node_entries" = fn(ref "wado-compiler/tests/fixtures/treemap_btree.wado//BTreeNode<String,i32>");  // TypeId(82)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -244,10 +242,12 @@ fn "wado-compiler/tests/fixtures/treemap_btree.wado/run"() with Stdout {
     let val3: i32;
     let entries: ref "core:prelude//Array<Tuple<String,i32>>";
     let __iter_5: ref "core:prelude/array.wado//ArrayIter<Tuple<String,i32>>";
+    let entry_6: ref "tuple//[String, i32]";
     let key_7: ref "core:prelude/string.wado//String";
     let value_8: i32;
     let final_entries: ref "core:prelude//Array<Tuple<String,i32>>";
     let __iter_10: ref "core:prelude/array.wado//ArrayIter<Tuple<String,i32>>";
+    let entry_11: ref "tuple//[String, i32]";
     let key_12: ref "core:prelude/string.wado//String";
     let value_13: i32;
     let __local_14: ref "core:prelude/string.wado//String";
@@ -443,11 +443,9 @@ fn "wado-compiler/tests/fixtures/treemap_btree.wado/run"() with Stdout {
         l10: loop {
             __pattern_temp_4 = "core:prelude/array.wado/ArrayIter<Tuple<String,i32>>^Iterator::next"(__iter_5);
             if ref.is_null(__pattern_temp_4) == 0 {
-                let __sroa_entry_6_0: ref "core:prelude/string.wado//String";
-                let __sroa_entry_6_1: i32;
-                multivalue_bind [__sroa_entry_6_0, __sroa_entry_6_1] = "wado-compiler/tests/fixtures/treemap_btree.wado/$value_copy$T431"(ref.as_non_null(__pattern_temp_4));
-                key_7 = __sroa_entry_6_0;
-                value_8 = __sroa_entry_6_1;
+                entry_6 = ref.as_non_null(__pattern_temp_4);
+                key_7 = entry_6.0;
+                value_8 = entry_6.1;
                 "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
                     __local_24 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(35), used: 0 };
                     "core:prelude/string.wado/String::push_str"(__local_24, key_7);
@@ -507,11 +505,9 @@ fn "wado-compiler/tests/fixtures/treemap_btree.wado/run"() with Stdout {
         l15: loop {
             __pattern_temp_5 = "core:prelude/array.wado/ArrayIter<Tuple<String,i32>>^Iterator::next"(__iter_10);
             if ref.is_null(__pattern_temp_5) == 0 {
-                let __sroa_entry_11_0: ref "core:prelude/string.wado//String";
-                let __sroa_entry_11_1: i32;
-                multivalue_bind [__sroa_entry_11_0, __sroa_entry_11_1] = "wado-compiler/tests/fixtures/treemap_btree.wado/$value_copy$T431"(ref.as_non_null(__pattern_temp_5));
-                key_12 = __sroa_entry_11_0;
-                value_13 = __sroa_entry_11_1;
+                entry_11 = ref.as_non_null(__pattern_temp_5);
+                key_12 = entry_11.0;
+                value_13 = entry_11.1;
                 "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
                     __local_30 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(35), used: 0 };
                     "core:prelude/string.wado/String::push_str"(__local_30, key_12);
@@ -542,10 +538,6 @@ fn "wado-compiler/tests/fixtures/treemap_btree.wado/__cm_export__run"() {
 
 fn "wado-compiler/tests/fixtures/treemap_btree.wado/$value_copy$T683"(v) {
     return v;
-}
-
-fn "wado-compiler/tests/fixtures/treemap_btree.wado/$value_copy$T431"(v) {
-    return v.0, v.1;
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {
@@ -1233,7 +1225,7 @@ fn "wado-compiler/tests/fixtures/treemap_btree.wado/TreeMap<String,i32>::iter"(s
         break __seq_lit: __local_1;
         unreachable;
     };
-    __pattern_temp_0 = "wado-compiler/tests/fixtures/treemap_btree.wado/$value_copy$T683"(self.root);
+    __pattern_temp_0 = self.root;
     if ref.is_null(__pattern_temp_0) == 0 {
         root = ref.as_non_null(__pattern_temp_0);
         "wado-compiler/tests/fixtures/treemap_btree.wado/TreeMap<String,i32>::collect_entries"(self, root, result);

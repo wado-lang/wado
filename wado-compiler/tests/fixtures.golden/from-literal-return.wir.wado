@@ -157,13 +157,11 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(57)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(58)
 
-type "functype//wado-compiler/tests/fixtures/from-literal-return.wado/$value_copy$T833" = fn(ref "core:collections//TreeMapEntry<String,i32>") -> [ref "core:prelude/string.wado//String", i32, bool];  // TypeId(59)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(59)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(60)
+type "functype//core:collections/TreeMap<String,i32>::split" = fn(ref null "core:collections//TreeMapNode<String>") -> ref null "core:collections//TreeMapNode<String>";  // TypeId(60)
 
-type "functype//core:collections/TreeMap<String,i32>::split" = fn(ref null "core:collections//TreeMapNode<String>") -> ref null "core:collections//TreeMapNode<String>";  // TypeId(61)
-
-type "functype//core:collections/TreeMap<String,i32>::skew" = fn(ref null "core:collections//TreeMapNode<String>") -> ref null "core:collections//TreeMapNode<String>";  // TypeId(62)
+type "functype//core:collections/TreeMap<String,i32>::skew" = fn(ref null "core:collections//TreeMapNode<String>") -> ref null "core:collections//TreeMapNode<String>";  // TypeId(61)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -251,10 +249,6 @@ fn "wado-compiler/tests/fixtures/from-literal-return.wado/__cm_binding__Stdout_w
 fn "wado-compiler/tests/fixtures/from-literal-return.wado/__cm_export__run"() {
     "wado-compiler/tests/fixtures/from-literal-return.wado/run"();
     "wasi/task-return"(0);
-}
-
-fn "wado-compiler/tests/fixtures/from-literal-return.wado/$value_copy$T833"(v) {
-    return v.key, v.value, v.deleted;
 }
 
 fn "wado-compiler/tests/fixtures/from-literal-return.wado/$value_copy$T836"(v) {
@@ -737,6 +731,7 @@ fn "core:collections/TreeMap<String,i32>::keys"(self) {
     let __local_1: ref "core:prelude//Array<String>";
     let result: ref "core:prelude//Array<String>";
     let __iter_3: ref "core:prelude/array.wado//ArrayIter<TreeMapEntry<String,i32>>";
+    let entry: ref "core:collections//TreeMapEntry<String,i32>";
     let __pattern_temp_0: ref null "core:collections//TreeMapEntry<String,i32>";
     let __local_9: ref "core:prelude//Array<TreeMapEntry<String,i32>>";
     result = __seq_lit: block -> ref "core:prelude//Array<String>" {
@@ -753,12 +748,9 @@ fn "core:collections/TreeMap<String,i32>::keys"(self) {
         l60: loop {
             __pattern_temp_0 = "core:prelude/array.wado/ArrayIter<TreeMapEntry<String,i32>>^Iterator::next"(__iter_3);
             if ref.is_null(__pattern_temp_0) == 0 {
-                let __sroa_entry_key: ref "core:prelude/string.wado//String";
-                let __sroa_entry_value: i32;
-                let __sroa_entry_deleted: bool;
-                multivalue_bind [__sroa_entry_key, __sroa_entry_value, __sroa_entry_deleted] = "wado-compiler/tests/fixtures/from-literal-return.wado/$value_copy$T833"(ref.as_non_null(__pattern_temp_0));
-                if __sroa_entry_deleted == 0 {
-                    "core:prelude/array.wado/Array<String>::push"(result, __sroa_entry_key);
+                entry = ref.as_non_null(__pattern_temp_0);
+                if entry.deleted == 0 {
+                    "core:prelude/array.wado/Array<String>::push"(result, entry.key);
                 }
             } else {
                 break b59;

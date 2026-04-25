@@ -121,11 +121,9 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(44)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(45)
 
-type "functype//wado-compiler/tests/fixtures/auto_deref.wado/$value_copy$T26" = fn(ref "core:prelude/string.wado//String") -> [ref builtin::array<u8>, i32];  // TypeId(46)
+type "functype//core:prelude/string.wado/StrCharIter^Iterator::next" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(46)
 
-type "functype//core:prelude/string.wado/StrCharIter^Iterator::next" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(47)
-
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(48)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(47)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -280,6 +278,7 @@ fn "wado-compiler/tests/fixtures/auto_deref.wado/auto_deref_method"() with Stdou
     let __v0_11: i32;
     let __cond_12: bool;
     let box_str: ref "wado-compiler/tests/fixtures/auto_deref.wado//Wrapper<String>";
+    let inner: ref "core:prelude/string.wado//String";
     let __v0_16: i32;
     let __cond_17: bool;
     let s: ref "core:prelude/string.wado//String";
@@ -335,10 +334,8 @@ condition: box_ref.get() == 42
         unreachable;
     }
     box_str = struct.new "wado-compiler/tests/fixtures/auto_deref.wado//Wrapper<String>" { value: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 } };
-    let __sroa_inner_repr: ref builtin::array<u8>;
-    let __sroa_inner_used: i32;
-    multivalue_bind [__sroa_inner_repr, __sroa_inner_used] = "wado-compiler/tests/fixtures/auto_deref.wado/$value_copy$T26"(box_str.value);
-    __v0_16 = __sroa_inner_used;
+    inner = box_str.value;
+    __v0_16 = inner.used;
     __cond_17 = __v0_16 == 5;
     if __cond_17 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -447,10 +444,6 @@ fn "wado-compiler/tests/fixtures/auto_deref.wado/__cm_export__run"() {
     "wado-compiler/tests/fixtures/auto_deref.wado/auto_deref_for_of"();
     "wado-compiler/tests/fixtures/auto_deref.wado/auto_deref_method"();
     "wasi/task-return"(0);
-}
-
-fn "wado-compiler/tests/fixtures/auto_deref.wado/$value_copy$T26"(v) {
-    return ref.as_non_null(builtin::array_clone<u8>(v.repr)), v.used;
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {

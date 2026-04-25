@@ -130,13 +130,11 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(48)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(49)
 
-type "functype//wado-compiler/tests/fixtures/serde_json_error_kind.wado/$value_copy$T43" = fn(ref "core:serde//DeserializeError") -> [i32, ref "core:prelude/string.wado//String", i64];  // TypeId(50)
+type "functype//core:prelude/fpfmt.wado/pow10_coarse" = fn(i32) -> [u64, u64];  // TypeId(50)
 
-type "functype//core:prelude/fpfmt.wado/pow10_coarse" = fn(i32) -> [u64, u64];  // TypeId(51)
+type "functype//core:prelude/fpfmt.wado/mul_pow10" = fn(i32) -> [u64, u64];  // TypeId(51)
 
-type "functype//core:prelude/fpfmt.wado/mul_pow10" = fn(i32) -> [u64, u64];  // TypeId(52)
-
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(53)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(52)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -193,6 +191,7 @@ condition: r matches { Err(e) && e.kind == DeserializeErrorKind::TrailingData }
 
 fn "wado-compiler/tests/fixtures/serde_json_error_kind.wado/__test_1_enum_field_compared_directly"() {
     let r: ref "core:prelude/types.wado//Result<i32,DeserializeError>";
+    let e: ref "core:serde//DeserializeError";
     let __v0: "core:serde//enum:DeserializeErrorKind";
     let __v1: "core:serde//enum:DeserializeErrorKind";
     let __cond: bool;
@@ -201,11 +200,8 @@ fn "wado-compiler/tests/fixtures/serde_json_error_kind.wado/__test_1_enum_field_
     let __local_11: ref "core:prelude/format.wado//Formatter";
     r = "core:json/core/json/from_string<i32>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("abc"), used: 3 });
     if ref.test "core:prelude/types.wado//Result<i32,DeserializeError>::Err"(r) {
-        let __sroa_e_kind: i32;
-        let __sroa_e_message: ref "core:prelude/string.wado//String";
-        let __sroa_e_offset: i64;
-        multivalue_bind [__sroa_e_kind, __sroa_e_message, __sroa_e_offset] = "wado-compiler/tests/fixtures/serde_json_error_kind.wado/$value_copy$T43"(ref.cast "core:prelude/types.wado//Result<i32,DeserializeError>::Err"(r).payload_0);
-        __v0 = __sroa_e_kind;
+        e = ref.cast "core:prelude/types.wado//Result<i32,DeserializeError>::Err"(r).payload_0;
+        __v0 = e.kind;
         __v1 = 0;
         __cond = __v0 == __v1;
         if __cond == 0 {
@@ -256,10 +252,6 @@ fn "wado-compiler/tests/fixtures/serde_json_error_kind.wado/__cm_export____test_
 fn "wado-compiler/tests/fixtures/serde_json_error_kind.wado/__cm_export____test_1_enum_field_compared_directly"() {
     "wado-compiler/tests/fixtures/serde_json_error_kind.wado/__test_1_enum_field_compared_directly"();
     "wasi/task-return"(0);
-}
-
-fn "wado-compiler/tests/fixtures/serde_json_error_kind.wado/$value_copy$T43"(v) {
-    return v.kind, v.message, v.offset;
 }
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {

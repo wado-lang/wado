@@ -89,11 +89,9 @@ type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeI
 
 type "functype//wado-compiler/tests/fixtures/opt_sroa_return_match.wado/large_match" = fn(i32) -> [u64, u64];  // TypeId(35)
 
-type "functype//wado-compiler/tests/fixtures/opt_sroa_return_match.wado/$value_copy$T38" = fn(ref "wado-compiler/tests/fixtures/opt_sroa_return_match.wado//Pair") -> [i32, i32];  // TypeId(36)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(36)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(37)
-
-type "functype//core:prelude/primitive.wado/u64::fmt_decimal" = fn(u64, ref "core:prelude/format.wado//Formatter");  // TypeId(38)
+type "functype//core:prelude/primitive.wado/u64::fmt_decimal" = fn(u64, ref "core:prelude/format.wado//Formatter");  // TypeId(37)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -109,16 +107,17 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 fn "wado-compiler/tests/fixtures/opt_sroa_return_match.wado/use_small_match"(x) {
-    let __sroa_p_a: i32;
-    let __sroa_p_b: i32;
-    multivalue_bind [__sroa_p_a, __sroa_p_b] = "wado-compiler/tests/fixtures/opt_sroa_return_match.wado/$value_copy$T38"(let __match_scrut_0: i32; __match_scrut_0 = x; (if __match_scrut_0 == 0 -> ref "wado-compiler/tests/fixtures/opt_sroa_return_match.wado//Pair" {
+    let p: ref "wado-compiler/tests/fixtures/opt_sroa_return_match.wado//Pair";
+    let __match_scrut_0: i32;
+    __match_scrut_0 = x;
+    p = (if __match_scrut_0 == 0 -> ref "wado-compiler/tests/fixtures/opt_sroa_return_match.wado//Pair" {
         struct.new "wado-compiler/tests/fixtures/opt_sroa_return_match.wado//Pair" { a: 10, b: 20 };
     } else if __match_scrut_0 == 1 -> ref "wado-compiler/tests/fixtures/opt_sroa_return_match.wado//Pair" {
         struct.new "wado-compiler/tests/fixtures/opt_sroa_return_match.wado//Pair" { a: 30, b: 40 };
     } else {
         struct.new "wado-compiler/tests/fixtures/opt_sroa_return_match.wado//Pair" { a: 50, b: 60 };
-    }));
-    return __sroa_p_a + __sroa_p_b;
+    });
+    return p.a + p.b;
 }
 
 fn "wado-compiler/tests/fixtures/opt_sroa_return_match.wado/large_match"(i) {
@@ -432,10 +431,6 @@ condition: use_large_match(99) == 0
 fn "wado-compiler/tests/fixtures/opt_sroa_return_match.wado/__cm_export__run"() {
     "wado-compiler/tests/fixtures/opt_sroa_return_match.wado/run"();
     "wasi/task-return"(0);
-}
-
-fn "wado-compiler/tests/fixtures/opt_sroa_return_match.wado/$value_copy$T38"(v) {
-    return v.a, v.b;
 }
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {

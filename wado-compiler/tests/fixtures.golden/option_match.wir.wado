@@ -29,25 +29,23 @@ type "functype//wado-compiler/tests/fixtures/option_match.wado/__cm_binding__Std
 
 type "functype//wado-compiler/tests/fixtures/option_match.wado/__cm_export__run" = fn();  // TypeId(11)
 
-type "functype//wado-compiler/tests/fixtures/option_match.wado/$value_copy$T25" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(12)
+type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(12)
 
-type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(13)
+type "functype//core:cli/println" = fn(ref "core:prelude/string.wado//String");  // TypeId(13)
 
-type "functype//core:cli/println" = fn(ref "core:prelude/string.wado//String");  // TypeId(14)
+type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(14)
 
-type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(15)
+type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;  // TypeId(15)
 
-type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;  // TypeId(16)
+type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(16)
 
-type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(17)
+type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);  // TypeId(17)
 
-type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);  // TypeId(18)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(18)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(19)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(19)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(20)
-
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(21)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(20)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -85,16 +83,12 @@ fn "wado-compiler/tests/fixtures/option_match.wado/__cm_export__run"() {
     }
     opt_6 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
     if ref.is_null(opt_6) == 0 {
-        x = "wado-compiler/tests/fixtures/option_match.wado/$value_copy$T25"(ref.as_non_null(opt_6));
+        x = ref.as_non_null(opt_6);
         "core:cli/println"(x);
     } else {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("none"), used: 4 });
     }
     "wasi/task-return"(0);
-}
-
-fn "wado-compiler/tests/fixtures/option_match.wado/$value_copy$T25"(v) {
-    return struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(v.repr)), used: v.used };
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {

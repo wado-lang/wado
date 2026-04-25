@@ -83,9 +83,7 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(31)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(32)
 
-type "functype//wado-compiler/tests/fixtures/wir_optimize_value_copy_variant_read.wado/$value_copy$T19" = fn(ref "wado-compiler/tests/fixtures/wir_optimize_value_copy_variant_read.wado//Pair") -> [i32, i32];  // TypeId(33)
-
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(34)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(33)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -101,6 +99,7 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 fn "wado-compiler/tests/fixtures/wir_optimize_value_copy_variant_read.wado/describe"(bp) {
+    let p: ref "wado-compiler/tests/fixtures/wir_optimize_value_copy_variant_read.wado//Pair";
     let f: i32;
     let s: i32;
     let __local_4: ref "core:prelude/string.wado//String";
@@ -108,11 +107,9 @@ fn "wado-compiler/tests/fixtures/wir_optimize_value_copy_variant_read.wado/descr
     let __local_10: ref "core:prelude/format.wado//Formatter";
     let __local_15: ref "core:prelude/format.wado//Formatter";
     if ref.is_null(bp) == 0 {
-        let __sroa_p_first: i32;
-        let __sroa_p_second: i32;
-        multivalue_bind [__sroa_p_first, __sroa_p_second] = "wado-compiler/tests/fixtures/wir_optimize_value_copy_variant_read.wado/$value_copy$T19"(ref.as_non_null(bp));
-        f = __sroa_p_first;
-        s = __sroa_p_second;
+        p = ref.as_non_null(bp);
+        f = p.first;
+        s = p.second;
         return __tmpl: block -> ref "core:prelude/string.wado//String" {
             __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
             __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
@@ -137,10 +134,6 @@ fn "wado-compiler/tests/fixtures/wir_optimize_value_copy_variant_read.wado/__cm_
     "core:cli/println"("wado-compiler/tests/fixtures/wir_optimize_value_copy_variant_read.wado/describe"(struct.new "wado-compiler/tests/fixtures/wir_optimize_value_copy_variant_read.wado//Pair" { first: 10, second: 20 }));
     "core:cli/println"("wado-compiler/tests/fixtures/wir_optimize_value_copy_variant_read.wado/describe"(ref.null none));
     "wasi/task-return"(0);
-}
-
-fn "wado-compiler/tests/fixtures/wir_optimize_value_copy_variant_read.wado/$value_copy$T19"(v) {
-    return v.first, v.second;
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {

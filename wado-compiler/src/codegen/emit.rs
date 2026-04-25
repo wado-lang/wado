@@ -2264,7 +2264,6 @@ impl<'a> WirEmitter<'a> {
                 }
             }
 
-
             // Everything else - emit unreachable for unimplemented instructions
             other => {
                 eprintln!("[WIR-EMIT] unhandled instruction: {other:?}");
@@ -2334,9 +2333,6 @@ impl<'a> WirEmitter<'a> {
         f.instruction(&op);
     }
 
-
-
-
     fn emit_const_expr(&self, instr: &WirInstr) -> ConstExpr {
         match instr {
             WirInstr::I32Const(v) => ConstExpr::i32_const(*v),
@@ -2402,7 +2398,6 @@ impl<'a> WirEmitter<'a> {
         }
         None
     }
-
 
     fn is_field_packed(&self, wir_type_idx: u32, field_name: &str) -> Option<bool> {
         let idx = wir_type_idx as usize;

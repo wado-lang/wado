@@ -116,9 +116,7 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(45)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(46)
 
-type "functype//wado-compiler/tests/fixtures/newtype_generic.wado/$value_copy$T401" = fn(ref "core:prelude//Array<String>") -> [ref builtin::array<String>, i32];  // TypeId(47)
-
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(48)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(47)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -140,6 +138,7 @@ fn "wado-compiler/tests/fixtures/newtype_generic.wado/run"() with Stdout {
     let __local_2: ref "core:prelude//Array<i32>";
     let arr2: ref "core:prelude//Array<i32>";
     let __local_4: ref "core:prelude//Array<String>";
+    let strs: ref "core:prelude//Array<String>";
     let __local_6: ref "core:prelude/string.wado//String";
     let __local_7: ref "core:prelude/format.wado//Formatter";
     let __local_8: ref "core:prelude/string.wado//String";
@@ -151,11 +150,12 @@ fn "wado-compiler/tests/fixtures/newtype_generic.wado/run"() with Stdout {
     let __local_26: ref "core:prelude/types.wado//Box<i32>";
     let __local_33: ref "core:prelude/types.wado//Box<i32>";
     let __local_48: ref "core:prelude/types.wado//Box<i32>";
-    arr = "wado-compiler/tests/fixtures/newtype_generic.wado/$value_copy$T397"(__seq_lit: block -> ref "core:prelude//Array<i32>" {
+    let __local_62: ref "core:prelude/types.wado//Box<i32>";
+    arr = __seq_lit: block -> ref "core:prelude//Array<i32>" {
         __local_0 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
         break __seq_lit: __local_0;
         unreachable;
-    });
+    };
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
         "core:prelude/string.wado/String::push"(__local_6, 108);
@@ -206,13 +206,11 @@ fn "wado-compiler/tests/fixtures/newtype_generic.wado/run"() with Stdout {
         break __tmpl: __local_10;
         unreachable;
     });
-    let __sroa_strs_repr: ref builtin::array<String>;
-    let __sroa_strs_used: i32;
-    multivalue_bind [__sroa_strs_repr, __sroa_strs_used] = "wado-compiler/tests/fixtures/newtype_generic.wado/$value_copy$T401"(__seq_lit: block -> ref "core:prelude//Array<String>" {
+    strs = __seq_lit: block -> ref "core:prelude//Array<String>" {
         __local_4 = struct.new "core:prelude//Array<String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 }), used: 2 };
         break __seq_lit: __local_4;
         unreachable;
-    });
+    };
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_12 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
         "core:prelude/string.wado/String::push"(__local_12, 115);
@@ -222,7 +220,8 @@ fn "wado-compiler/tests/fixtures/newtype_generic.wado/run"() with Stdout {
         "core:prelude/string.wado/String::push"(__local_12, 58);
         "core:prelude/string.wado/String::push"(__local_12, 32);
         __local_13 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
-        "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_strs_used, __local_13);
+        __local_62 = struct.new "core:prelude/types.wado//Box<i32>" { value: strs.used };
+        "core:prelude/primitive.wado/i32::fmt_decimal"(__local_62.value, __local_13);
         break __tmpl: __local_12;
         unreachable;
     });
@@ -239,10 +238,6 @@ fn "wado-compiler/tests/fixtures/newtype_generic.wado/__cm_export__run"() {
 
 fn "wado-compiler/tests/fixtures/newtype_generic.wado/$value_copy$T397"(v) {
     return struct.new "core:prelude//Array<i32>" { repr: ref.as_non_null(builtin::array_clone<i32>(v.repr)), used: v.used };
-}
-
-fn "wado-compiler/tests/fixtures/newtype_generic.wado/$value_copy$T401"(v) {
-    return ref.as_non_null(builtin::array_clone<ref "core:prelude/string.wado//String">(v.repr)), v.used;
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {

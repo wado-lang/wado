@@ -12,9 +12,7 @@
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
 use crate::name::ModuleSource;
-use crate::tir::{
-    TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
-};
+use crate::tir::{TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind, TirUnaryOp, TypeId};
 
 pub fn elide_synthesized_value_copies(project: &mut FlatPackage) {
     let value_copy_set: IndexMap<(ModuleSource, String), TypeId> = project
@@ -179,7 +177,7 @@ fn analyze_expr(expr: &TirExpr, usage: &mut IndexMap<u32, LocalUsage>) {
         }
         TirExprKind::Cast { expr: inner, .. } => analyze_expr(inner, usage),
         TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
-            analyze_block(block, usage)
+            analyze_block(block, usage);
         }
         TirExprKind::If {
             condition,
@@ -313,16 +311,16 @@ fn strip_in_stmt(
         } else {
             false
         };
-        if target_ok && arg_ok {
-            if let TirExprKind::Call { args, .. } = &mut value.kind
-                && let Some(arg) = args.first_mut()
-            {
-                let span = value.span;
-                let mut taken = TirExpr::new(TirExprKind::Unit, value.type_id, span);
-                std::mem::swap(&mut arg.expr, &mut taken);
-                taken.span = span;
-                *value = taken;
-            }
+        if target_ok
+            && arg_ok
+            && let TirExprKind::Call { args, .. } = &mut value.kind
+            && let Some(arg) = args.first_mut()
+        {
+            let span = value.span;
+            let mut taken = TirExpr::new(TirExprKind::Unit, value.type_id, span);
+            std::mem::swap(&mut arg.expr, &mut taken);
+            taken.span = span;
+            *value = taken;
         }
     }
     match &mut stmt.kind {

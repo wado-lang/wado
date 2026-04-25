@@ -156,13 +156,11 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(54)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(55)
 
-type "functype//wado-compiler/tests/fixtures/cross_module_treemap_variant.wado/$value_copy$T841" = fn(ref "core:collections//TreeMapEntry<String,Value>") -> [ref "core:prelude/string.wado//String", ref "./sub/cross_module_treemap_variant_helper.wado//Value", bool];  // TypeId(56)
+type "functype//./sub/cross_module_treemap_variant_helper.wado/stringify" = fn(ref "./sub/cross_module_treemap_variant_helper.wado//Value") -> ref "core:prelude/string.wado//String";  // TypeId(56)
 
-type "functype//./sub/cross_module_treemap_variant_helper.wado/stringify" = fn(ref "./sub/cross_module_treemap_variant_helper.wado//Value") -> ref "core:prelude/string.wado//String";  // TypeId(57)
+type "functype//core:collections/TreeMap<String,Value>::split" = fn(ref null "core:collections//TreeMapNode<String>") -> ref null "core:collections//TreeMapNode<String>";  // TypeId(57)
 
-type "functype//core:collections/TreeMap<String,Value>::split" = fn(ref null "core:collections//TreeMapNode<String>") -> ref null "core:collections//TreeMapNode<String>";  // TypeId(58)
-
-type "functype//core:collections/TreeMap<String,Value>::skew" = fn(ref null "core:collections//TreeMapNode<String>") -> ref null "core:collections//TreeMapNode<String>";  // TypeId(59)
+type "functype//core:collections/TreeMap<String,Value>::skew" = fn(ref null "core:collections//TreeMapNode<String>") -> ref null "core:collections//TreeMapNode<String>";  // TypeId(58)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -211,10 +209,6 @@ fn "wado-compiler/tests/fixtures/cross_module_treemap_variant.wado/$value_copy$T
 
 fn "wado-compiler/tests/fixtures/cross_module_treemap_variant.wado/$value_copy$T844"(v) {
     return v;
-}
-
-fn "wado-compiler/tests/fixtures/cross_module_treemap_variant.wado/$value_copy$T841"(v) {
-    return v.key, v.value, v.deleted;
 }
 
 fn "./sub/cross_module_treemap_variant_helper.wado/stringify"(v) {
@@ -733,6 +727,7 @@ fn "core:collections/TreeMap<String,Value>::entries"(self) {
     let __local_1: ref "core:prelude//Array<Tuple<String,Value>>";
     let result: ref "core:prelude//Array<Tuple<String,Value>>";
     let __iter_3: ref "core:prelude/array.wado//ArrayIter<TreeMapEntry<String,Value>>";
+    let entry: ref "core:collections//TreeMapEntry<String,Value>";
     let __pattern_temp_0: ref null "core:collections//TreeMapEntry<String,Value>";
     let __local_9: ref "core:prelude//Array<TreeMapEntry<String,Value>>";
     result = __seq_lit: block -> ref "core:prelude//Array<Tuple<String,Value>>" {
@@ -749,12 +744,9 @@ fn "core:collections/TreeMap<String,Value>::entries"(self) {
         l52: loop {
             __pattern_temp_0 = "core:prelude/array.wado/ArrayIter<TreeMapEntry<String,Value>>^Iterator::next"(__iter_3);
             if ref.is_null(__pattern_temp_0) == 0 {
-                let __sroa_entry_key: ref "core:prelude/string.wado//String";
-                let __sroa_entry_value: ref "./sub/cross_module_treemap_variant_helper.wado//Value";
-                let __sroa_entry_deleted: bool;
-                multivalue_bind [__sroa_entry_key, __sroa_entry_value, __sroa_entry_deleted] = "wado-compiler/tests/fixtures/cross_module_treemap_variant.wado/$value_copy$T841"(ref.as_non_null(__pattern_temp_0));
-                if __sroa_entry_deleted == 0 {
-                    "core:prelude/array.wado/Array<Tuple<String,Value>>::push"(result, struct.new "tuple//[String, Value]" { 0: __sroa_entry_key, 1: __sroa_entry_value });
+                entry = ref.as_non_null(__pattern_temp_0);
+                if entry.deleted == 0 {
+                    "core:prelude/array.wado/Array<Tuple<String,Value>>::push"(result, struct.new "tuple//[String, Value]" { 0: entry.key, 1: entry.value });
                 }
             } else {
                 break b51;

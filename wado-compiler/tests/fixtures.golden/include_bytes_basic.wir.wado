@@ -91,9 +91,7 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(35)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(36)
 
-type "functype//wado-compiler/tests/fixtures/include_bytes_basic.wado/$value_copy$T105" = fn(ref "core:prelude//Array<u8>") -> [ref builtin::array<u8>, i32];  // TypeId(37)
-
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(38)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(37)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -110,6 +108,7 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 fn "wado-compiler/tests/fixtures/include_bytes_basic.wado/run"() with Stdout {
+    let data: ref "core:prelude//Array<u8>";
     let __v0_1: i32;
     let __cond_2: bool;
     let __v0_3: u8;
@@ -146,10 +145,8 @@ fn "wado-compiler/tests/fixtures/include_bytes_basic.wado/run"() with Stdout {
     let __local_87: ref "core:prelude/format.wado//Formatter";
     let __local_95: ref "core:prelude/format.wado//Formatter";
     let __local_100: ref "core:prelude/format.wado//Formatter";
-    let __sroa_data_repr: ref builtin::array<u8>;
-    let __sroa_data_used: i32;
-    multivalue_bind [__sroa_data_repr, __sroa_data_used] = "wado-compiler/tests/fixtures/include_bytes_basic.wado/$value_copy$T105"(struct.new "core:prelude//Array<u8>" { repr: array.new_data<u8>("Hello"), used: 5 });
-    __v0_1 = __sroa_data_used;
+    data = struct.new "core:prelude//Array<u8>" { repr: array.new_data<u8>("Hello"), used: 5 };
+    __v0_1 = 5;
     __cond_2 = __v0_1 == 5;
     if __cond_2 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -181,11 +178,9 @@ condition: data.len() == 5
         unreachable;
     }
     __v0_3 = __inline_Array_u8__IndexValue_i32___index_value_10: block -> u8 {
-        if 0 >= __sroa_data_used {
-            "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-            unreachable;
-        }
-        break __inline_Array_u8__IndexValue_i32___index_value_10: builtin::array_get<u8>(__sroa_data_repr, 0);
+        block {
+        };
+        break __inline_Array_u8__IndexValue_i32___index_value_10: builtin::array_get<u8>(data.repr, 0);
         unreachable;
     };
     __cond_4 = __v0_3 == 72;
@@ -219,11 +214,9 @@ condition: data[0] == 72
         unreachable;
     }
     __v0_5 = __inline_Array_u8__IndexValue_i32___index_value_18: block -> u8 {
-        if 1 >= __sroa_data_used {
-            "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-            unreachable;
-        }
-        break __inline_Array_u8__IndexValue_i32___index_value_18: builtin::array_get<u8>(__sroa_data_repr, 1);
+        block {
+        };
+        break __inline_Array_u8__IndexValue_i32___index_value_18: builtin::array_get<u8>(data.repr, 1);
         unreachable;
     };
     __cond_6 = __v0_5 == 101;
@@ -257,11 +250,9 @@ condition: data[1] == 101
         unreachable;
     }
     __v0_7 = __inline_Array_u8__IndexValue_i32___index_value_26: block -> u8 {
-        if 2 >= __sroa_data_used {
-            "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-            unreachable;
-        }
-        break __inline_Array_u8__IndexValue_i32___index_value_26: builtin::array_get<u8>(__sroa_data_repr, 2);
+        block {
+        };
+        break __inline_Array_u8__IndexValue_i32___index_value_26: builtin::array_get<u8>(data.repr, 2);
         unreachable;
     };
     __cond_8 = __v0_7 == 108;
@@ -295,11 +286,9 @@ condition: data[2] == 108
         unreachable;
     }
     __v0_9 = __inline_Array_u8__IndexValue_i32___index_value_34: block -> u8 {
-        if 3 >= __sroa_data_used {
-            "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-            unreachable;
-        }
-        break __inline_Array_u8__IndexValue_i32___index_value_34: builtin::array_get<u8>(__sroa_data_repr, 3);
+        block {
+        };
+        break __inline_Array_u8__IndexValue_i32___index_value_34: builtin::array_get<u8>(data.repr, 3);
         unreachable;
     };
     __cond_10 = __v0_9 == 108;
@@ -333,11 +322,9 @@ condition: data[3] == 108
         unreachable;
     }
     __v0_11 = __inline_Array_u8__IndexValue_i32___index_value_42: block -> u8 {
-        if 4 >= __sroa_data_used {
-            "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-            unreachable;
-        }
-        break __inline_Array_u8__IndexValue_i32___index_value_42: builtin::array_get<u8>(__sroa_data_repr, 4);
+        block {
+        };
+        break __inline_Array_u8__IndexValue_i32___index_value_42: builtin::array_get<u8>(data.repr, 4);
         unreachable;
     };
     __cond_12 = __v0_11 == 111;
@@ -380,10 +367,6 @@ fn "wado-compiler/tests/fixtures/include_bytes_basic.wado/__cm_binding__Stdout_w
 fn "wado-compiler/tests/fixtures/include_bytes_basic.wado/__cm_export__run"() {
     "wado-compiler/tests/fixtures/include_bytes_basic.wado/run"();
     "wasi/task-return"(0);
-}
-
-fn "wado-compiler/tests/fixtures/include_bytes_basic.wado/$value_copy$T105"(v) {
-    return ref.as_non_null(builtin::array_clone<u8>(v.repr)), v.used;
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {

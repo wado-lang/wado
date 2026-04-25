@@ -18240,8 +18240,8 @@ fn parse_macro_rules(p: &mut Parser) -> Result<MacroRulesNode, ParseError> {
         let semi = p.expect(TK_SEMI)?;
         let macro_rule = parse_macro_rule(p)?;
         let semi_macro_rule = SemiMacroRuleItem {
-            semi,
-            macro_rule,
+            semi_2,
+            macro_rule_2,
         };
         semi_macro_rule_list.push(semi_macro_rule);
     }
@@ -19106,8 +19106,8 @@ fn parse_use_tree_bt_1(p: &mut Parser) -> Result<UseTreeNode, ParseError> {
         }
         let group_1 = group_1_inner;
         let kw_as_item = KwAsItemItem {
-            kw_as,
-            group_1,
+            kw_as_2,
+            group_1_2,
         };
         Option::<KwAsItemItem>::Some(kw_as_item)
     } else {
@@ -19212,8 +19212,8 @@ fn parse_use_tree_bt_0(p: &mut Parser) -> Result<UseTreeNode, ParseError> {
                 let comma = p.expect(TK_COMMA)?;
                 let use_tree = parse_use_tree(p)?;
                 let comma_use_tree = CommaUseTreeItem {
-                    comma,
-                    use_tree,
+                    comma_2,
+                    use_tree_2,
                 };
                 comma_use_tree_list.push(comma_use_tree);
             }
@@ -19263,8 +19263,8 @@ fn parse_use_tree_bt_0(p: &mut Parser) -> Result<UseTreeNode, ParseError> {
                 let comma = p.expect(TK_COMMA)?;
                 let use_tree = parse_use_tree(p)?;
                 let comma_use_tree = CommaUseTreeItem {
-                    comma,
-                    use_tree,
+                    comma_2,
+                    use_tree_2,
                 };
                 comma_use_tree_list.push(comma_use_tree);
             }
@@ -19549,8 +19549,8 @@ fn parse_function_qualifiers(p: &mut Parser) -> Result<FunctionQualifiersNode, P
             null
         };
         let kw_extern_abi = KwExternAbiOptItem {
-            kw_extern,
-            abi,
+            kw_extern_2,
+            abi_2,
         };
         Option::<KwExternAbiOptItem>::Some(kw_extern_abi)
     } else {
@@ -19617,8 +19617,8 @@ fn parse_function_parameters_bt_1(p: &mut Parser) -> Result<FunctionParametersNo
         let comma = p.expect(TK_COMMA)?;
         let function_param = parse_function_param(p)?;
         let comma_function_param = CommaFunctionParamItem {
-            comma,
-            function_param,
+            comma_2,
+            function_param_2,
         };
         comma_function_param_list.push(comma_function_param);
     }
@@ -19731,8 +19731,8 @@ fn parse_shorthand_self(p: &mut Parser) -> Result<ShorthandSelfNode, ParseError>
             null
         };
         let and_lifetime = AndLifetimeOptItem {
-            and,
-            lifetime,
+            and_2,
+            lifetime_2,
         };
         Option::<AndLifetimeOptItem>::Some(and_lifetime)
     } else {
@@ -19883,8 +19883,8 @@ fn parse_type_alias(p: &mut Parser) -> Result<TypeAliasNode, ParseError> {
         let eq = p.expect(TK_EQ)?;
         let type_ = parse_type_(p)?;
         let eq_type_ = EqTypeItem {
-            eq,
-            type_,
+            eq_2,
+            type__2,
         };
         Option::<EqTypeItem>::Some(eq_type_)
     } else {
@@ -20037,8 +20037,8 @@ fn parse_struct_fields(p: &mut Parser) -> Result<StructFieldsNode, ParseError> {
         let comma = p.expect(TK_COMMA)?;
         let struct_field = parse_struct_field(p)?;
         let comma_struct_field = CommaStructFieldItem {
-            comma,
-            struct_field,
+            comma_2,
+            struct_field_2,
         };
         comma_struct_field_list.push(comma_struct_field);
     }
@@ -20100,8 +20100,8 @@ fn parse_tuple_fields(p: &mut Parser) -> Result<TupleFieldsNode, ParseError> {
         let comma = p.expect(TK_COMMA)?;
         let tuple_field = parse_tuple_field(p)?;
         let comma_tuple_field = CommaTupleFieldItem {
-            comma,
-            tuple_field,
+            comma_2,
+            tuple_field_2,
         };
         comma_tuple_field_list.push(comma_tuple_field);
     }
@@ -20195,8 +20195,8 @@ fn parse_enum_items(p: &mut Parser) -> Result<EnumItemsNode, ParseError> {
         let comma = p.expect(TK_COMMA)?;
         let enum_item = parse_enum_item(p)?;
         let comma_enum_item = CommaEnumItemItem {
-            comma,
-            enum_item,
+            comma_2,
+            enum_item_2,
         };
         comma_enum_item_list.push(comma_enum_item);
     }
@@ -20368,8 +20368,8 @@ fn parse_constant_item(p: &mut Parser) -> Result<ConstantItemNode, ParseError> {
         let eq = p.expect(TK_EQ)?;
         let expression = parse_expression(p)?;
         let eq_expression = EqExpressionItem {
-            eq,
-            expression,
+            eq_2,
+            expression_2,
         };
         Option::<EqExpressionItem>::Some(eq_expression)
     } else {
@@ -20403,8 +20403,8 @@ fn parse_static_item(p: &mut Parser) -> Result<StaticItemNode, ParseError> {
         let eq = p.expect(TK_EQ)?;
         let expression = parse_expression(p)?;
         let eq_expression = EqExpressionItem {
-            eq,
-            expression,
+            eq_2,
+            expression_2,
         };
         Option::<EqExpressionItem>::Some(eq_expression)
     } else {
@@ -20448,8 +20448,8 @@ fn parse_trait_(p: &mut Parser) -> Result<TraitNode, ParseError> {
             null
         };
         let colon_type_param_bounds = ColonTypeParamBoundsOptItem {
-            colon,
-            type_param_bounds,
+            colon_2,
+            type_param_bounds_2,
         };
         Option::<ColonTypeParamBoundsOptItem>::Some(colon_type_param_bounds)
     } else {
@@ -20767,8 +20767,8 @@ fn parse_generic_params(p: &mut Parser) -> Result<GenericParamsNode, ParseError>
             let generic_param = parse_generic_param(p)?;
             let comma = p.expect(TK_COMMA)?;
             let generic_param_comma = GenericParamCommaItem {
-                generic_param,
-                comma,
+                generic_param_2,
+                comma_2,
             };
             generic_param_comma_list.push(generic_param_comma);
         }
@@ -20806,8 +20806,8 @@ fn parse_generic_params(p: &mut Parser) -> Result<GenericParamsNode, ParseError>
             let generic_param = parse_generic_param(p)?;
             let comma = p.expect(TK_COMMA)?;
             let generic_param_comma = GenericParamCommaItem {
-                generic_param,
-                comma,
+                generic_param_2,
+                comma_2,
             };
             generic_param_comma_list.push(generic_param_comma);
         }
@@ -20900,8 +20900,8 @@ fn parse_lifetime_param(p: &mut Parser) -> Result<LifetimeParamNode, ParseError>
         let colon = p.expect(TK_COLON)?;
         let lifetime_bounds = parse_lifetime_bounds(p)?;
         let colon_lifetime_bounds = ColonLifetimeBoundsItem {
-            colon,
-            lifetime_bounds,
+            colon_2,
+            lifetime_bounds_2,
         };
         Option::<ColonLifetimeBoundsItem>::Some(colon_lifetime_bounds)
     } else {
@@ -20933,8 +20933,8 @@ fn parse_type_param(p: &mut Parser) -> Result<TypeParamNode, ParseError> {
             null
         };
         let colon_type_param_bounds = ColonTypeParamBoundsOptItem {
-            colon,
-            type_param_bounds,
+            colon_2,
+            type_param_bounds_2,
         };
         Option::<ColonTypeParamBoundsOptItem>::Some(colon_type_param_bounds)
     } else {
@@ -20944,8 +20944,8 @@ fn parse_type_param(p: &mut Parser) -> Result<TypeParamNode, ParseError> {
         let eq = p.expect(TK_EQ)?;
         let type_ = parse_type_(p)?;
         let eq_type_ = EqTypeItem {
-            eq,
-            type_,
+            eq_2,
+            type__2,
         };
         Option::<EqTypeItem>::Some(eq_type_)
     } else {
@@ -20983,8 +20983,8 @@ fn parse_where_clause(p: &mut Parser) -> Result<WhereClauseNode, ParseError> {
         let where_clause_item = parse_where_clause_item(p)?;
         let comma = p.expect(TK_COMMA)?;
         let where_clause_item_comma = WhereClauseItemCommaItem {
-            where_clause_item,
-            comma,
+            where_clause_item_2,
+            comma_2,
         };
         where_clause_item_comma_list.push(where_clause_item_comma);
     }
@@ -21363,8 +21363,8 @@ fn parse_let_statement(p: &mut Parser) -> Result<LetStatementNode, ParseError> {
         let colon = p.expect(TK_COLON)?;
         let type_ = parse_type_(p)?;
         let colon_type_ = ColonTypeItem {
-            colon,
-            type_,
+            colon_2,
+            type__2,
         };
         Option::<ColonTypeItem>::Some(colon_type_)
     } else {
@@ -21374,8 +21374,8 @@ fn parse_let_statement(p: &mut Parser) -> Result<LetStatementNode, ParseError> {
         let eq = p.expect(TK_EQ)?;
         let expression = parse_expression(p)?;
         let eq_expression = EqExpressionItem {
-            eq,
-            expression,
+            eq_2,
+            expression_2,
         };
         Option::<EqExpressionItem>::Some(eq_expression)
     } else {
@@ -22771,8 +22771,8 @@ fn parse_array_elements_bt_0(p: &mut Parser) -> Result<ArrayElementsNode, ParseE
         let comma = p.expect(TK_COMMA)?;
         let expression = parse_expression(p)?;
         let comma_expression = CommaExpressionItem {
-            comma,
-            expression,
+            comma_2,
+            expression_2,
         };
         comma_expression_list.push(comma_expression);
     }
@@ -22834,8 +22834,8 @@ fn parse_tuple_elements(p: &mut Parser) -> Result<TupleElementsNode, ParseError>
         let expression = parse_expression(p)?;
         let comma = p.expect(TK_COMMA)?;
         let expression_comma = ExpressionCommaItem {
-            expression,
-            comma,
+            expression_2,
+            comma_2,
         };
         expression_comma_list.push(expression_comma);
     }
@@ -23010,8 +23010,8 @@ fn parse_struct_expr_fields(p: &mut Parser) -> Result<StructExprFieldsNode, Pars
         let comma = p.expect(TK_COMMA)?;
         let struct_expr_field = parse_struct_expr_field(p)?;
         let comma_struct_expr_field = CommaStructExprFieldItem {
-            comma,
-            struct_expr_field,
+            comma_2,
+            struct_expr_field_2,
         };
         comma_struct_expr_field_list.push(comma_struct_expr_field);
     }
@@ -23154,8 +23154,8 @@ fn parse_struct_expr_tuple(p: &mut Parser) -> Result<StructExprTupleNode, ParseE
             let comma = p.expect(TK_COMMA)?;
             let expression = parse_expression(p)?;
             let comma_expression = CommaExpressionItem {
-                comma,
-                expression,
+                comma_2,
+                expression_2,
             };
             comma_expression_list.push(comma_expression);
         }
@@ -23193,8 +23193,8 @@ fn parse_struct_expr_tuple(p: &mut Parser) -> Result<StructExprTupleNode, ParseE
             let comma = p.expect(TK_COMMA)?;
             let expression = parse_expression(p)?;
             let comma_expression = CommaExpressionItem {
-                comma,
-                expression,
+                comma_2,
+                expression_2,
             };
             comma_expression_list.push(comma_expression);
         }
@@ -23360,8 +23360,8 @@ fn parse_enum_expr_fields(p: &mut Parser) -> Result<EnumExprFieldsNode, ParseErr
         let comma = p.expect(TK_COMMA)?;
         let enum_expr_field = parse_enum_expr_field(p)?;
         let comma_enum_expr_field = CommaEnumExprFieldItem {
-            comma,
-            enum_expr_field,
+            comma_2,
+            enum_expr_field_2,
         };
         comma_enum_expr_field_list.push(comma_enum_expr_field);
     }
@@ -23481,8 +23481,8 @@ fn parse_enum_expr_tuple(p: &mut Parser) -> Result<EnumExprTupleNode, ParseError
             let comma = p.expect(TK_COMMA)?;
             let expression = parse_expression(p)?;
             let comma_expression = CommaExpressionItem {
-                comma,
-                expression,
+                comma_2,
+                expression_2,
             };
             comma_expression_list.push(comma_expression);
         }
@@ -23520,8 +23520,8 @@ fn parse_enum_expr_tuple(p: &mut Parser) -> Result<EnumExprTupleNode, ParseError
             let comma = p.expect(TK_COMMA)?;
             let expression = parse_expression(p)?;
             let comma_expression = CommaExpressionItem {
-                comma,
-                expression,
+                comma_2,
+                expression_2,
             };
             comma_expression_list.push(comma_expression);
         }
@@ -23572,8 +23572,8 @@ fn parse_call_params(p: &mut Parser) -> Result<CallParamsNode, ParseError> {
         let comma = p.expect(TK_COMMA)?;
         let expression = parse_expression(p)?;
         let comma_expression = CommaExpressionItem {
-            comma,
-            expression,
+            comma_2,
+            expression_2,
         };
         comma_expression_list.push(comma_expression);
     }
@@ -23656,8 +23656,8 @@ fn parse_closure_parameters(p: &mut Parser) -> Result<ClosureParametersNode, Par
         let comma = p.expect(TK_COMMA)?;
         let closure_param = parse_closure_param(p)?;
         let comma_closure_param = CommaClosureParamItem {
-            comma,
-            closure_param,
+            comma_2,
+            closure_param_2,
         };
         comma_closure_param_list.push(comma_closure_param);
     }
@@ -23697,8 +23697,8 @@ fn parse_closure_param(p: &mut Parser) -> Result<ClosureParamNode, ParseError> {
         let colon = p.expect(TK_COLON)?;
         let type_ = parse_type_(p)?;
         let colon_type_ = ColonTypeItem {
-            colon,
-            type_,
+            colon_2,
+            type__2,
         };
         Option::<ColonTypeItem>::Some(colon_type_)
     } else {
@@ -23853,8 +23853,8 @@ fn parse_if_expression(p: &mut Parser) -> Result<IfExpressionNode, ParseError> {
         }
         let block_expression_or_if_expression_or_if_let_expression = block_expression_or_if_expression_or_if_let_expression_inner;
         let kw_else_item = KwElseItemItem {
-            kw_else,
-            block_expression_or_if_expression_or_if_let_expression,
+            kw_else_2,
+            block_expression_or_if_expression_or_if_let_expression_2,
         };
         Option::<KwElseItemItem>::Some(kw_else_item)
     } else {
@@ -23902,8 +23902,8 @@ fn parse_if_let_expression(p: &mut Parser) -> Result<IfLetExpressionNode, ParseE
         }
         let block_expression_or_if_expression_or_if_let_expression = block_expression_or_if_expression_or_if_let_expression_inner;
         let kw_else_item = KwElseItemItem {
-            kw_else,
-            block_expression_or_if_expression_or_if_let_expression,
+            kw_else_2,
+            block_expression_or_if_expression_or_if_let_expression_2,
         };
         Option::<KwElseItemItem>::Some(kw_else_item)
     } else {
@@ -23967,9 +23967,9 @@ fn parse_match_arms(p: &mut Parser) -> Result<MatchArmsNode, ParseError> {
         let fatarrow = p.expect(TK_FATARROW)?;
         let match_arm_expression = parse_match_arm_expression(p)?;
         let match_arm_fatarrow_match_arm_expression = MatchArmFatarrowMatchArmExpressionItem {
-            match_arm,
-            fatarrow,
-            match_arm_expression,
+            match_arm_2,
+            fatarrow_2,
+            match_arm_expression_2,
         };
         match_arm_fatarrow_match_arm_expression_list.push(match_arm_fatarrow_match_arm_expression);
     }
@@ -24100,8 +24100,8 @@ fn parse_pattern(p: &mut Parser) -> Result<PatternNode, ParseError> {
         let or = p.expect(TK_OR)?;
         let pattern_no_top_alt = parse_pattern_no_top_alt(p)?;
         let or_pattern_no_top_alt = OrPatternNoTopAltItem {
-            or,
-            pattern_no_top_alt,
+            or_2,
+            pattern_no_top_alt_2,
         };
         or_pattern_no_top_alt_list.push(or_pattern_no_top_alt);
     }
@@ -24506,8 +24506,8 @@ fn parse_identifier_pattern(p: &mut Parser) -> Result<IdentifierPatternNode, Par
         let at = p.expect(TK_AT)?;
         let pattern = parse_pattern(p)?;
         let at_pattern = AtPatternItem {
-            at,
-            pattern,
+            at_2,
+            pattern_2,
         };
         Option::<AtPatternItem>::Some(at_pattern)
     } else {
@@ -24771,8 +24771,8 @@ fn parse_struct_pattern_elements_bt_0(p: &mut Parser) -> Result<StructPatternEle
             null
         };
         let comma_struct_pattern_et_cetera = CommaStructPatternEtCeteraOptItem {
-            comma,
-            struct_pattern_et_cetera,
+            comma_2,
+            struct_pattern_et_cetera_2,
         };
         Option::<CommaStructPatternEtCeteraOptItem>::Some(comma_struct_pattern_et_cetera)
     } else {
@@ -24816,8 +24816,8 @@ fn parse_struct_pattern_fields(p: &mut Parser) -> Result<StructPatternFieldsNode
         let comma = p.expect(TK_COMMA)?;
         let struct_pattern_field = parse_struct_pattern_field(p)?;
         let comma_struct_pattern_field = CommaStructPatternFieldItem {
-            comma,
-            struct_pattern_field,
+            comma_2,
+            struct_pattern_field_2,
         };
         comma_struct_pattern_field_list.push(comma_struct_pattern_field);
     }
@@ -24960,8 +24960,8 @@ fn parse_tuple_struct_items(p: &mut Parser) -> Result<TupleStructItemsNode, Pars
         let comma = p.expect(TK_COMMA)?;
         let pattern = parse_pattern(p)?;
         let comma_pattern = CommaPatternItem {
-            comma,
-            pattern,
+            comma_2,
+            pattern_2,
         };
         comma_pattern_list.push(comma_pattern);
     }
@@ -25023,8 +25023,8 @@ fn parse_tuple_pattern_items_bt_2(p: &mut Parser) -> Result<TuplePatternItemsNod
         let comma = p.expect(TK_COMMA)?;
         let pattern = parse_pattern(p)?;
         let comma_pattern = CommaPatternItem {
-            comma,
-            pattern,
+            comma_2,
+            pattern_2,
         };
         comma_pattern_list.push(comma_pattern);
     }
@@ -25129,8 +25129,8 @@ fn parse_slice_pattern_items(p: &mut Parser) -> Result<SlicePatternItemsNode, Pa
         let comma = p.expect(TK_COMMA)?;
         let pattern = parse_pattern(p)?;
         let comma_pattern = CommaPatternItem {
-            comma,
-            pattern,
+            comma_2,
+            pattern_2,
         };
         comma_pattern_list.push(comma_pattern);
     }
@@ -25465,8 +25465,8 @@ fn parse_tuple_type(p: &mut Parser) -> Result<TupleTypeNode, ParseError> {
             let type_ = parse_type_(p)?;
             let comma = p.expect(TK_COMMA)?;
             let type__comma = TypeCommaItem {
-                type_,
-                comma,
+                type__2,
+                comma_2,
             };
             type__comma_list.push(type__comma);
         }
@@ -25489,8 +25489,8 @@ fn parse_tuple_type(p: &mut Parser) -> Result<TupleTypeNode, ParseError> {
             let type_ = parse_type_(p)?;
             let comma = p.expect(TK_COMMA)?;
             let type__comma = TypeCommaItem {
-                type_,
-                comma,
+                type__2,
+                comma_2,
             };
             type__comma_list.push(type__comma);
         }
@@ -25633,8 +25633,8 @@ fn parse_function_type_qualifiers(p: &mut Parser) -> Result<FunctionTypeQualifie
             null
         };
         let kw_extern_abi = KwExternAbiOptItem {
-            kw_extern,
-            abi,
+            kw_extern_2,
+            abi_2,
         };
         Option::<KwExternAbiOptItem>::Some(kw_extern_abi)
     } else {
@@ -25706,8 +25706,8 @@ fn parse_maybe_named_function_parameters(p: &mut Parser) -> Result<MaybeNamedFun
         let comma = p.expect(TK_COMMA)?;
         let maybe_named_param = parse_maybe_named_param(p)?;
         let comma_maybe_named_param = CommaMaybeNamedParamItem {
-            comma,
-            maybe_named_param,
+            comma_2,
+            maybe_named_param_2,
         };
         comma_maybe_named_param_list.push(comma_maybe_named_param);
     }
@@ -25809,8 +25809,8 @@ fn parse_maybe_named_function_parameters_variadic(p: &mut Parser) -> Result<Mayb
         let maybe_named_param = parse_maybe_named_param(p)?;
         let comma = p.expect(TK_COMMA)?;
         let maybe_named_param_comma = MaybeNamedParamCommaItem {
-            maybe_named_param,
-            comma,
+            maybe_named_param_2,
+            comma_2,
         };
         maybe_named_param_comma_list.push(maybe_named_param_comma);
     }
@@ -25913,8 +25913,8 @@ fn parse_type_param_bounds(p: &mut Parser) -> Result<TypeParamBoundsNode, ParseE
         let plus = p.expect(TK_PLUS)?;
         let type_param_bound = parse_type_param_bound(p)?;
         let plus_type_param_bound = PlusTypeParamBoundItem {
-            plus,
-            type_param_bound,
+            plus_2,
+            type_param_bound_2,
         };
         plus_type_param_bound_list.push(plus_type_param_bound);
     }
@@ -26031,8 +26031,8 @@ fn parse_lifetime_bounds(p: &mut Parser) -> Result<LifetimeBoundsNode, ParseErro
         let lifetime = parse_lifetime(p)?;
         let plus = p.expect(TK_PLUS)?;
         let lifetime_plus = LifetimePlusItem {
-            lifetime,
-            plus,
+            lifetime_2,
+            plus_2,
         };
         lifetime_plus_list.push(lifetime_plus);
     }
@@ -26106,8 +26106,8 @@ fn parse_simple_path(p: &mut Parser) -> Result<SimplePathNode, ParseError> {
         let pathsep = p.expect(TK_PATHSEP)?;
         let simple_path_segment = parse_simple_path_segment(p)?;
         let pathsep_simple_path_segment = PathsepSimplePathSegmentItem {
-            pathsep,
-            simple_path_segment,
+            pathsep_2,
+            simple_path_segment_2,
         };
         pathsep_simple_path_segment_list.push(pathsep_simple_path_segment);
     }
@@ -26178,8 +26178,8 @@ fn parse_path_in_expression(p: &mut Parser) -> Result<PathInExpressionNode, Pars
         let pathsep = p.expect(TK_PATHSEP)?;
         let path_expr_segment = parse_path_expr_segment(p)?;
         let pathsep_path_expr_segment = PathsepPathExprSegmentItem {
-            pathsep,
-            path_expr_segment,
+            pathsep_2,
+            path_expr_segment_2,
         };
         pathsep_path_expr_segment_list.push(pathsep_path_expr_segment);
     }
@@ -26198,8 +26198,8 @@ fn parse_path_expr_segment(p: &mut Parser) -> Result<PathExprSegmentNode, ParseE
         let pathsep = p.expect(TK_PATHSEP)?;
         let generic_args = parse_generic_args(p)?;
         let pathsep_generic_args = PathsepGenericArgsItem {
-            pathsep,
-            generic_args,
+            pathsep_2,
+            generic_args_2,
         };
         Option::<PathsepGenericArgsItem>::Some(pathsep_generic_args)
     } else {
@@ -26272,8 +26272,8 @@ fn parse_generic_args_bt_1(p: &mut Parser) -> Result<GenericArgsNode, ParseError
         let comma = p.expect(TK_COMMA)?;
         let generic_args_types = parse_generic_args_types(p)?;
         let comma_generic_args_types = CommaGenericArgsTypesItem {
-            comma,
-            generic_args_types,
+            comma_2,
+            generic_args_types_2,
         };
         Option::<CommaGenericArgsTypesItem>::Some(comma_generic_args_types)
     } else {
@@ -26283,8 +26283,8 @@ fn parse_generic_args_bt_1(p: &mut Parser) -> Result<GenericArgsNode, ParseError
         let comma = p.expect(TK_COMMA)?;
         let generic_args_bindings = parse_generic_args_bindings(p)?;
         let comma_generic_args_bindings = CommaGenericArgsBindingsItem {
-            comma,
-            generic_args_bindings,
+            comma_2,
+            generic_args_bindings_2,
         };
         Option::<CommaGenericArgsBindingsItem>::Some(comma_generic_args_bindings)
     } else {
@@ -26325,8 +26325,8 @@ fn parse_generic_args_bt_2(p: &mut Parser) -> Result<GenericArgsNode, ParseError
         let comma = p.expect(TK_COMMA)?;
         let generic_args_bindings = parse_generic_args_bindings(p)?;
         let comma_generic_args_bindings = CommaGenericArgsBindingsItem {
-            comma,
-            generic_args_bindings,
+            comma_2,
+            generic_args_bindings_2,
         };
         Option::<CommaGenericArgsBindingsItem>::Some(comma_generic_args_bindings)
     } else {
@@ -26364,8 +26364,8 @@ fn parse_generic_args_bt_3(p: &mut Parser) -> Result<GenericArgsNode, ParseError
         let generic_arg = parse_generic_arg(p)?;
         let comma = p.expect(TK_COMMA)?;
         let generic_arg_comma = GenericArgCommaItem {
-            generic_arg,
-            comma,
+            generic_arg_2,
+            comma_2,
         };
         generic_arg_comma_list.push(generic_arg_comma);
     }
@@ -26600,8 +26600,8 @@ fn parse_generic_args_lifetimes(p: &mut Parser) -> Result<GenericArgsLifetimesNo
         let comma = p.expect(TK_COMMA)?;
         let lifetime = parse_lifetime(p)?;
         let comma_lifetime = CommaLifetimeItem {
-            comma,
-            lifetime,
+            comma_2,
+            lifetime_2,
         };
         comma_lifetime_list.push(comma_lifetime);
     }
@@ -26620,8 +26620,8 @@ fn parse_generic_args_types(p: &mut Parser) -> Result<GenericArgsTypesNode, Pars
         let comma = p.expect(TK_COMMA)?;
         let type_ = parse_type_(p)?;
         let comma_type_ = CommaTypeItem {
-            comma,
-            type_,
+            comma_2,
+            type__2,
         };
         comma_type__list.push(comma_type_);
     }
@@ -26640,8 +26640,8 @@ fn parse_generic_args_bindings(p: &mut Parser) -> Result<GenericArgsBindingsNode
         let comma = p.expect(TK_COMMA)?;
         let generic_args_binding = parse_generic_args_binding(p)?;
         let comma_generic_args_binding = CommaGenericArgsBindingItem {
-            comma,
-            generic_args_binding,
+            comma_2,
+            generic_args_binding_2,
         };
         comma_generic_args_binding_list.push(comma_generic_args_binding);
     }
@@ -26675,8 +26675,8 @@ fn parse_qualified_path_in_expression(p: &mut Parser) -> Result<QualifiedPathInE
         let pathsep = p.expect(TK_PATHSEP)?;
         let path_expr_segment = parse_path_expr_segment(p)?;
         let pathsep_path_expr_segment = PathsepPathExprSegmentItem {
-            pathsep,
-            path_expr_segment,
+            pathsep_2,
+            path_expr_segment_2,
         };
         pathsep_path_expr_segment_list.push(pathsep_path_expr_segment);
     }
@@ -26695,8 +26695,8 @@ fn parse_qualified_path_type(p: &mut Parser) -> Result<QualifiedPathTypeNode, Pa
         let kw_as = p.expect(TK_KW_AS)?;
         let type_path = parse_type_path(p)?;
         let kw_as_type_path = KwAsTypePathItem {
-            kw_as,
-            type_path,
+            kw_as_2,
+            type_path_2,
         };
         Option::<KwAsTypePathItem>::Some(kw_as_type_path)
     } else {
@@ -26722,8 +26722,8 @@ fn parse_qualified_path_in_type(p: &mut Parser) -> Result<QualifiedPathInTypeNod
         let pathsep = p.expect(TK_PATHSEP)?;
         let type_path_segment = parse_type_path_segment(p)?;
         let pathsep_type_path_segment = PathsepTypePathSegmentItem {
-            pathsep,
-            type_path_segment,
+            pathsep_2,
+            type_path_segment_2,
         };
         pathsep_type_path_segment_list.push(pathsep_type_path_segment);
     }
@@ -26748,8 +26748,8 @@ fn parse_type_path(p: &mut Parser) -> Result<TypePathNode, ParseError> {
         let pathsep = p.expect(TK_PATHSEP)?;
         let type_path_segment = parse_type_path_segment(p)?;
         let pathsep_type_path_segment = PathsepTypePathSegmentItem {
-            pathsep,
-            type_path_segment,
+            pathsep_2,
+            type_path_segment_2,
         };
         pathsep_type_path_segment_list.push(pathsep_type_path_segment);
     }
@@ -26809,8 +26809,8 @@ fn parse_type_path_fn(p: &mut Parser) -> Result<TypePathFnNode, ParseError> {
         let rarrow = p.expect(TK_RARROW)?;
         let type_ = parse_type_(p)?;
         let rarrow_type_ = RarrowTypeItem {
-            rarrow,
-            type_,
+            rarrow_2,
+            type__2,
         };
         Option::<RarrowTypeItem>::Some(rarrow_type_)
     } else {
@@ -26833,8 +26833,8 @@ fn parse_type_path_inputs(p: &mut Parser) -> Result<TypePathInputsNode, ParseErr
         let comma = p.expect(TK_COMMA)?;
         let type_ = parse_type_(p)?;
         let comma_type_ = CommaTypeItem {
-            comma,
-            type_,
+            comma_2,
+            type__2,
         };
         comma_type__list.push(comma_type_);
     }
@@ -26885,9 +26885,9 @@ fn parse_visibility(p: &mut Parser) -> Result<VisibilityNode, ParseError> {
         let group_0 = group_0_inner;
         let rparen = p.expect(TK_RPAREN)?;
         let lparen_item_rparen = LparenItemRparenItem {
-            lparen,
-            group_0,
-            rparen,
+            lparen_2,
+            group_0_2,
+            rparen_2,
         };
         Option::<LparenItemRparenItem>::Some(lparen_item_rparen)
     } else {

@@ -171,27 +171,25 @@ type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeI
 
 type "functype//wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado/make_point" = fn(i32, i32) -> [i32, i32];  // TypeId(73)
 
-type "functype//wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado/$value_copy$T19" = fn(ref "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point") -> [i32, i32];  // TypeId(74)
+type "functype//core:prelude/fpfmt.wado/unpack64" = fn(f64) -> [u64, i32];  // TypeId(74)
 
-type "functype//core:prelude/fpfmt.wado/unpack64" = fn(f64) -> [u64, i32];  // TypeId(75)
+type "functype//core:prelude/fpfmt.wado/pow10_coarse" = fn(i32) -> [u64, u64];  // TypeId(75)
 
-type "functype//core:prelude/fpfmt.wado/pow10_coarse" = fn(i32) -> [u64, u64];  // TypeId(76)
+type "functype//core:prelude/fpfmt.wado/mul_pow10" = fn(i32) -> [u64, u64];  // TypeId(76)
 
-type "functype//core:prelude/fpfmt.wado/mul_pow10" = fn(i32) -> [u64, u64];  // TypeId(77)
+type "functype//core:prelude/fpfmt.wado/fixed_width_for_prec" = fn(f64, i32) -> [u64, i32];  // TypeId(77)
 
-type "functype//core:prelude/fpfmt.wado/fixed_width_for_prec" = fn(f64, i32) -> [u64, i32];  // TypeId(78)
+type "functype//core:prelude/fpfmt.wado/short" = fn(f64) -> [u64, i32];  // TypeId(78)
 
-type "functype//core:prelude/fpfmt.wado/short" = fn(f64) -> [u64, i32];  // TypeId(79)
+type "functype//core:prelude/fpfmt.wado/trim_zeros" = fn(u64, i32) -> [u64, i32];  // TypeId(79)
 
-type "functype//core:prelude/fpfmt.wado/trim_zeros" = fn(u64, i32) -> [u64, i32];  // TypeId(80)
+type "functype//core:prelude/fpfmt.wado/check_special" = fn(f64) -> [bool, bool, i32];  // TypeId(80)
 
-type "functype//core:prelude/fpfmt.wado/check_special" = fn(f64) -> [bool, bool, i32];  // TypeId(81)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(81)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(82)
+type "functype//core:prelude/primitive.wado/f64::inspect_into" = fn(f64, ref "core:prelude/format.wado//Formatter");  // TypeId(82)
 
-type "functype//core:prelude/primitive.wado/f64::inspect_into" = fn(f64, ref "core:prelude/format.wado//Formatter");  // TypeId(83)
-
-type "functype//core:prelude/primitive.wado/f64::fmt_fixed" = fn(f64, i32, ref "core:prelude/format.wado//Formatter");  // TypeId(84)
+type "functype//core:prelude/primitive.wado/f64::fmt_fixed" = fn(f64, i32, ref "core:prelude/format.wado//Formatter");  // TypeId(83)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -262,16 +260,17 @@ fn "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado/interleaved_field_ops"
 }
 
 fn "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado/struct_in_match"(n) {
-    let __sroa_p_x: i32;
-    let __sroa_p_y: i32;
-    multivalue_bind [__sroa_p_x, __sroa_p_y] = "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado/$value_copy$T19"(let __match_scrut_0: i32; __match_scrut_0 = n; (if __match_scrut_0 == 0 -> ref "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" {
+    let p: ref "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point";
+    let __match_scrut_0: i32;
+    __match_scrut_0 = n;
+    p = (if __match_scrut_0 == 0 -> ref "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" {
         struct.new "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" { x: 1, y: 2 };
     } else if __match_scrut_0 == 1 -> ref "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" {
         struct.new "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" { x: 10, y: 20 };
     } else {
         struct.new "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" { x: 100, y: 200 };
-    }));
-    return __sroa_p_x + __sroa_p_y;
+    });
+    return p.x + p.y;
 }
 
 fn "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado/add"(a, b) {
@@ -301,14 +300,13 @@ fn "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado/dependent_field_constr
 }
 
 fn "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado/struct_from_conditional"(flag) {
-    let __sroa_p_x: i32;
-    let __sroa_p_y: i32;
-    multivalue_bind [__sroa_p_x, __sroa_p_y] = "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado/$value_copy$T19"((if flag -> ref "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" {
+    let p: ref "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point";
+    p = (if flag -> ref "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" {
         struct.new "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" { x: 10, y: 20 };
     } else {
         struct.new "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" { x: 30, y: 40 };
-    }));
-    return __sroa_p_x + __sroa_p_y;
+    });
+    return p.x + p.y;
 }
 
 fn "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado/struct_reassignment"() {
@@ -1224,10 +1222,6 @@ fn "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado/__initialize_module"()
         break __seq_lit: __local_0;
         unreachable;
     };
-}
-
-fn "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado/$value_copy$T19"(v) {
-    return v.x, v.y;
 }
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {

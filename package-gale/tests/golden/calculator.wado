@@ -1901,8 +1901,8 @@ fn parse_expression(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
         let plus_or_minus = p.advance();
         let multiplying_expression = parse_multiplying_expression(p)?;
         let item_multiplying_expression = ItemMultiplyingExpressionItem {
-            plus_or_minus,
-            multiplying_expression,
+            plus_or_minus_2,
+            multiplying_expression_2,
         };
         item_multiplying_expression_list.push(item_multiplying_expression);
     }
@@ -1947,8 +1947,8 @@ fn parse_multiplying_expression(p: &mut Parser) -> Result<MultiplyingExpressionN
         let times_or_div = p.advance();
         let pow_expression = parse_pow_expression(p)?;
         let item_pow_expression = ItemPowExpressionItem {
-            times_or_div,
-            pow_expression,
+            times_or_div_2,
+            pow_expression_2,
         };
         item_pow_expression_list.push(item_pow_expression);
     }
@@ -1979,8 +1979,8 @@ fn parse_pow_expression(p: &mut Parser) -> Result<PowExpressionNode, ParseError>
         let pow = p.expect(TK_POW)?;
         let signed_atom = parse_signed_atom(p)?;
         let pow_signed_atom = PowSignedAtomItem {
-            pow,
-            signed_atom,
+            pow_2,
+            signed_atom_2,
         };
         pow_signed_atom_list.push(pow_signed_atom);
     }
@@ -2146,8 +2146,8 @@ fn parse_func_(p: &mut Parser) -> Result<FuncNode, ParseError> {
         let comma = p.expect(TK_COMMA)?;
         let expression = parse_expression(p)?;
         let comma_expression = CommaExpressionItem {
-            comma,
-            expression,
+            comma_2,
+            expression_2,
         };
         comma_expression_list.push(comma_expression);
     }

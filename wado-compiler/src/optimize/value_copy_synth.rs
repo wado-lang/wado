@@ -18,9 +18,9 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::ModuleSource;
 use crate::tir::{
-    CallArg, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ResolvedType, TirBlock,
-    TirExpr, TirExprKind, TirField, TirFunction, TirParam, TirStmt, TirStmtKind, TirStruct,
-    TirStructField, TypeId, TypeTable,
+    CallArg, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ResolvedType, TirBlock, TirExpr,
+    TirExprKind, TirField, TirFunction, TirParam, TirStmt, TirStmtKind, TirStruct, TirStructField,
+    TypeId, TypeTable,
 };
 use crate::tir_visitor::{TirOptVisitor, TirRefVisitor, opt_walk_block, opt_walk_expr};
 use crate::token::Span;
@@ -218,7 +218,14 @@ fn build_copy_body(
         && name == "Array"
         && type_args.len() == 1
     {
-        return build_array_wrapper_copy(type_id, &mangled, type_args[0], v_local, type_table, span);
+        return build_array_wrapper_copy(
+            type_id,
+            &mangled,
+            type_args[0],
+            v_local,
+            type_table,
+            span,
+        );
     }
     // Tuples are likewise synthesized at WIR build with positional fields
     // `0`, `1`, …; reconstruct the body from the type-arg list.

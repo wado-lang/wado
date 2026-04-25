@@ -106,9 +106,7 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(40)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(41)
 
-type "functype//wado-compiler/tests/fixtures/newtype_generic_container_return.wado/$value_copy$T20" = fn(ref "wado-compiler/tests/fixtures/newtype_generic_container_return.wado//Point") -> [i32, i32];  // TypeId(42)
-
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(43)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(42)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -125,7 +123,9 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 fn "wado-compiler/tests/fixtures/newtype_generic_container_return.wado/run"() with Stdout {
+    let loc: ref "wado-compiler/tests/fixtures/newtype_generic_container_return.wado//Point";
     let opt: ref null "wado-compiler/tests/fixtures/newtype_generic_container_return.wado//Point";
+    let l: ref "wado-compiler/tests/fixtures/newtype_generic_container_return.wado//Point";
     let arr: ref "core:prelude//Array<Point>";
     let first: ref "wado-compiler/tests/fixtures/newtype_generic_container_return.wado//Point";
     let __local_5: ref "core:prelude/string.wado//String";
@@ -134,7 +134,9 @@ fn "wado-compiler/tests/fixtures/newtype_generic_container_return.wado/run"() wi
     let __local_8: ref "core:prelude/format.wado//Formatter";
     let __local_9: ref "core:prelude/string.wado//String";
     let __local_10: ref "core:prelude/format.wado//Formatter";
+    let __local_16: ref "core:prelude/types.wado//Box<i32>";
     let __local_17: ref "core:prelude/format.wado//Formatter";
+    let __local_21: ref "core:prelude/types.wado//Box<i32>";
     let __local_22: ref "core:prelude/format.wado//Formatter";
     let __local_26: ref "core:prelude//Array<Point>";
     let __local_27: ref "core:prelude//Array<Point>";
@@ -143,25 +145,23 @@ fn "wado-compiler/tests/fixtures/newtype_generic_container_return.wado/run"() wi
     let __local_43: ref "core:prelude/format.wado//Formatter";
     let __local_47: ref "core:prelude/types.wado//Box<i32>";
     let __local_48: ref "core:prelude/format.wado//Formatter";
-    let __sroa_loc_x: i32;
-    let __sroa_loc_y: i32;
-    multivalue_bind [__sroa_loc_x, __sroa_loc_y] = "wado-compiler/tests/fixtures/newtype_generic_container_return.wado/$value_copy$T20"(struct.new "wado-compiler/tests/fixtures/newtype_generic_container_return.wado//Point" { x: 5, y: 10 });
-    opt = struct.new "wado-compiler/tests/fixtures/newtype_generic_container_return.wado//Point" { x: __sroa_loc_x, y: __sroa_loc_y };
+    loc = struct.new "wado-compiler/tests/fixtures/newtype_generic_container_return.wado//Point" { x: 5, y: 10 };
+    opt = struct.new "wado-compiler/tests/fixtures/newtype_generic_container_return.wado//Point" { x: loc.x, y: loc.y };
     if ref.is_null(opt) == 0 {
-        let __sroa_l_x: i32;
-        let __sroa_l_y: i32;
-        multivalue_bind [__sroa_l_x, __sroa_l_y] = "wado-compiler/tests/fixtures/newtype_generic_container_return.wado/$value_copy$T20"(ref.as_non_null(opt));
+        l = ref.as_non_null(opt);
         "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
             __local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(44), used: 0 };
             "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("option: ("), used: 9 });
             __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
+            __local_16 = struct.new "core:prelude/types.wado//Box<i32>" { value: l.x };
             __local_17 = __local_6;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_l_x, __local_17);
+            "core:prelude/primitive.wado/i32::fmt_decimal"(__local_16.value, __local_17);
             "core:prelude/string.wado/String::push"(__local_5, 44);
             "core:prelude/string.wado/String::push"(__local_5, 32);
             __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
+            __local_21 = struct.new "core:prelude/types.wado//Box<i32>" { value: l.y };
             __local_22 = __local_6;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_l_y, __local_22);
+            "core:prelude/primitive.wado/i32::fmt_decimal"(__local_21.value, __local_22);
             "core:prelude/string.wado/String::push"(__local_5, 41);
             break __tmpl: __local_5;
             unreachable;
@@ -173,7 +173,7 @@ fn "wado-compiler/tests/fixtures/newtype_generic_container_return.wado/run"() wi
             break __inline_Point__make_list_10____seq_lit: __local_26;
             unreachable;
         };
-        "core:prelude/array.wado/Array<Point>::push"(__local_27, struct.new "wado-compiler/tests/fixtures/newtype_generic_container_return.wado//Point" { x: __sroa_loc_x, y: __sroa_loc_y });
+        "core:prelude/array.wado/Array<Point>::push"(__local_27, struct.new "wado-compiler/tests/fixtures/newtype_generic_container_return.wado//Point" { x: loc.x, y: loc.y });
         break __inline_Point__make_list_10: __local_27;
         unreachable;
     };
@@ -220,10 +220,6 @@ fn "wado-compiler/tests/fixtures/newtype_generic_container_return.wado/__cm_bind
 fn "wado-compiler/tests/fixtures/newtype_generic_container_return.wado/__cm_export__run"() {
     "wado-compiler/tests/fixtures/newtype_generic_container_return.wado/run"();
     "wasi/task-return"(0);
-}
-
-fn "wado-compiler/tests/fixtures/newtype_generic_container_return.wado/$value_copy$T20"(v) {
-    return v.x, v.y;
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {

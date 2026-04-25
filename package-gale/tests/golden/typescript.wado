@@ -16164,8 +16164,8 @@ fn parse_type_parameter_list(p: &mut Parser) -> Result<TypeParameterListNode, Pa
         let comma = p.expect(TK_LIT_COMMA)?;
         let type_parameter = parse_type_parameter(p)?;
         let comma_type_parameter = CommaTypeParameterItem {
-            comma,
-            type_parameter,
+            comma_2,
+            type_parameter_2,
         };
         comma_type_parameter_list.push(comma_type_parameter);
     }
@@ -16398,8 +16398,8 @@ fn parse_type_argument_list(p: &mut Parser) -> Result<TypeArgumentListNode, Pars
         let comma = p.expect(TK_LIT_COMMA)?;
         let type_argument = parse_type_argument(p)?;
         let comma_type_argument = CommaTypeArgumentItem {
-            comma,
-            type_argument,
+            comma_2,
+            type_argument_2,
         };
         comma_type_argument_list.push(comma_type_argument);
     }
@@ -17110,8 +17110,8 @@ fn parse_type_member_list(p: &mut Parser) -> Result<TypeMemberListNode, ParseErr
         let semicolon_or_comma = p.advance();
         let type_member = parse_type_member(p)?;
         let item_type_member = ItemTypeMemberItem {
-            semicolon_or_comma,
-            type_member,
+            semicolon_or_comma_2,
+            type_member_2,
         };
         item_type_member_list.push(item_type_member);
     }
@@ -17147,8 +17147,8 @@ fn parse_type_member_bt_4(p: &mut Parser) -> Result<TypeMemberNode, ParseError> 
         let lit_eqgt = p.expect(TK_LIT_EQGT)?;
         let type_ = parse_type_(p)?;
         let lit_eqgt_type_ = LitEqgtTypeItem {
-            lit_eqgt,
-            type_,
+            lit_eqgt_2,
+            type__2,
         };
         Option::<LitEqgtTypeItem>::Some(lit_eqgt_type_)
     } else {
@@ -17246,8 +17246,8 @@ fn parse_tuple_element_types(p: &mut Parser) -> Result<TupleElementTypesNode, Pa
         let comma = p.expect(TK_LIT_COMMA)?;
         let type_ = parse_type_(p)?;
         let comma_type_ = CommaTypeItem {
-            comma,
-            type_,
+            comma_2,
+            type__2,
         };
         comma_type__list.push(comma_type_);
     }
@@ -17375,8 +17375,8 @@ fn parse_type_query_expression_bt_1(p: &mut Parser) -> Result<TypeQueryExpressio
         let identifier_name = parse_identifier_name(p)?;
         let dot = p.expect(TK_LIT_DOT)?;
         let identifier_name_dot = IdentifierNameDotItem {
-            identifier_name,
-            dot,
+            identifier_name_2,
+            dot_2,
         };
         identifier_name_dot_list.push(identifier_name_dot);
     }
@@ -17540,8 +17540,8 @@ fn parse_property_signatur(p: &mut Parser) -> Result<PropertySignaturNode, Parse
         let lit_eqgt = p.expect(TK_LIT_EQGT)?;
         let type_ = parse_type_(p)?;
         let lit_eqgt_type_ = LitEqgtTypeItem {
-            lit_eqgt,
-            type_,
+            lit_eqgt_2,
+            type__2,
         };
         Option::<LitEqgtTypeItem>::Some(lit_eqgt_type_)
     } else {
@@ -17617,8 +17617,8 @@ fn parse_parameter_list(p: &mut Parser) -> Result<ParameterListNode, ParseError>
             let comma = p.expect(TK_LIT_COMMA)?;
             let parameter = parse_parameter(p)?;
             let comma_parameter = CommaParameterItem {
-                comma,
-                parameter,
+                comma_2,
+                parameter_2,
             };
             comma_parameter_list.push(comma_parameter);
         }
@@ -17626,8 +17626,8 @@ fn parse_parameter_list(p: &mut Parser) -> Result<ParameterListNode, ParseError>
             let comma = p.expect(TK_LIT_COMMA)?;
             let rest_parameter = parse_rest_parameter(p)?;
             let comma_rest_parameter = CommaRestParameterItem {
-                comma,
-                rest_parameter,
+                comma_2,
+                rest_parameter_2,
             };
             Option::<CommaRestParameterItem>::Some(comma_rest_parameter)
         } else {
@@ -17662,8 +17662,8 @@ fn parse_required_parameter_list(p: &mut Parser) -> Result<RequiredParameterList
         let comma = p.expect(TK_LIT_COMMA)?;
         let required_parameter = parse_required_parameter(p)?;
         let comma_required_parameter = CommaRequiredParameterItem {
-            comma,
-            required_parameter,
+            comma_2,
+            required_parameter_2,
         };
         comma_required_parameter_list.push(comma_required_parameter);
     }
@@ -17758,9 +17758,9 @@ fn parse_optional_parameter(p: &mut Parser) -> Result<OptionalParameterNode, Par
     }
     let group_0 = group_0_inner;
     let accessibility_modifier_identifier_or_pattern_item = AccessibilityModifierOptIdentifierOrPatternItemItem {
-        accessibility_modifier,
-        identifier_or_pattern,
-        group_0,
+        accessibility_modifier_2,
+        identifier_or_pattern_2,
+        group_0_2,
     };
     return Result::<OptionalParameterNode, ParseError>::Ok(OptionalParameterNode {
         span: Span::new(start, p.last_end()),
@@ -17995,9 +17995,9 @@ fn parse_constructor_declaration(p: &mut Parser) -> Result<ConstructorDeclaratio
                 let function_body = parse_function_body(p)?;
                 let rbrace = p.expect(TK_LIT_RBRACE)?;
                 let lbrace_function_body_rbrace = LbraceFunctionBodyRbraceItem {
-                    lbrace,
-                    function_body,
-                    rbrace,
+                    lbrace_2,
+                    function_body_2,
+                    rbrace_2,
                 };
                 ConstructorDeclarationGroup0::Alt0(ConstructorDeclarationGroup0Alt0 {
                     lbrace_function_body_rbrace,
@@ -18092,8 +18092,8 @@ fn parse_class_or_interface_type_list(p: &mut Parser) -> Result<ClassOrInterface
         let comma = p.expect(TK_LIT_COMMA)?;
         let type_reference = parse_type_reference(p)?;
         let comma_type_reference = CommaTypeReferenceItem {
-            comma,
-            type_reference,
+            comma_2,
+            type_reference_2,
         };
         comma_type_reference_list.push(comma_type_reference);
     }
@@ -18157,8 +18157,8 @@ fn parse_enum_member_list(p: &mut Parser) -> Result<EnumMemberListNode, ParseErr
         let comma = p.expect(TK_LIT_COMMA)?;
         let enum_member = parse_enum_member(p)?;
         let comma_enum_member = CommaEnumMemberItem {
-            comma,
-            enum_member,
+            comma_2,
+            enum_member_2,
         };
         comma_enum_member_list.push(comma_enum_member);
     }
@@ -18176,8 +18176,8 @@ fn parse_enum_member(p: &mut Parser) -> Result<EnumMemberNode, ParseError> {
         let eq = p.expect(TK_LIT_EQ)?;
         let single_expression = parse_single_expression(p)?;
         let eq_single_expression = EqSingleExpressionItem {
-            eq,
-            single_expression,
+            eq_2,
+            single_expression_2,
         };
         Option::<EqSingleExpressionItem>::Some(eq_single_expression)
     } else {
@@ -18263,8 +18263,8 @@ fn parse_namespace_name(p: &mut Parser) -> Result<NamespaceNameNode, ParseError>
         }
         let identifier = parse_identifier(p)?;
         let dot_identifier = DotListIdentifierItem {
-            dot_list,
-            identifier,
+            dot_list_2,
+            identifier_2,
         };
         dot_identifier_list.push(dot_identifier);
     }
@@ -19378,8 +19378,8 @@ fn parse_import_module_items(p: &mut Parser) -> Result<ImportModuleItemsNode, Pa
         let import_alias_name = parse_import_alias_name(p)?;
         let comma = p.expect(TK_LIT_COMMA)?;
         let import_alias_name_comma = ImportAliasNameCommaItem {
-            import_alias_name,
-            comma,
+            import_alias_name_2,
+            comma_2,
         };
         import_alias_name_comma_list.push(import_alias_name_comma);
     }
@@ -19424,8 +19424,8 @@ fn parse_import_alias_name(p: &mut Parser) -> Result<ImportAliasNameNode, ParseE
         let as_ = p.expect(TK_As)?;
         let imported_binding = parse_imported_binding(p)?;
         let as__imported_binding = AsImportedBindingItem {
-            as_,
-            imported_binding,
+            as__2,
+            imported_binding_2,
         };
         Option::<AsImportedBindingItem>::Some(as__imported_binding)
     } else {
@@ -19524,8 +19524,8 @@ fn parse_import_namespace(p: &mut Parser) -> Result<ImportNamespaceNode, ParseEr
         let as_ = p.expect(TK_As)?;
         let identifier_name = parse_identifier_name(p)?;
         let as__identifier_name = AsIdentifierNameItem {
-            as_,
-            identifier_name,
+            as__2,
+            identifier_name_2,
         };
         Option::<AsIdentifierNameItem>::Some(as__identifier_name)
     } else {
@@ -19556,8 +19556,8 @@ fn parse_alias_name(p: &mut Parser) -> Result<AliasNameNode, ParseError> {
         let as_ = p.expect(TK_As)?;
         let identifier_name = parse_identifier_name(p)?;
         let as__identifier_name = AsIdentifierNameItem {
-            as_,
-            identifier_name,
+            as__2,
+            identifier_name_2,
         };
         Option::<AsIdentifierNameItem>::Some(as__identifier_name)
     } else {
@@ -19723,8 +19723,8 @@ fn parse_export_module_items(p: &mut Parser) -> Result<ExportModuleItemsNode, Pa
         let export_alias_name = parse_export_alias_name(p)?;
         let comma = p.expect(TK_LIT_COMMA)?;
         let export_alias_name_comma = ExportAliasNameCommaItem {
-            export_alias_name,
-            comma,
+            export_alias_name_2,
+            comma_2,
         };
         export_alias_name_comma_list.push(export_alias_name_comma);
     }
@@ -19769,8 +19769,8 @@ fn parse_export_alias_name(p: &mut Parser) -> Result<ExportAliasNameNode, ParseE
         let as_ = p.expect(TK_As)?;
         let module_export_name = parse_module_export_name(p)?;
         let as__module_export_name = AsModuleExportNameItem {
-            as_,
-            module_export_name,
+            as__2,
+            module_export_name_2,
         };
         Option::<AsModuleExportNameItem>::Some(as__module_export_name)
     } else {
@@ -19986,8 +19986,8 @@ fn parse_variable_declaration_list(p: &mut Parser) -> Result<VariableDeclaration
         let comma = p.expect(TK_LIT_COMMA)?;
         let variable_declaration = parse_variable_declaration(p)?;
         let comma_variable_declaration = CommaVariableDeclarationItem {
-            comma,
-            variable_declaration,
+            comma_2,
+            variable_declaration_2,
         };
         comma_variable_declaration_list.push(comma_variable_declaration);
     }
@@ -20035,9 +20035,9 @@ fn parse_variable_declaration(p: &mut Parser) -> Result<VariableDeclarationNode,
         };
         let single_expression = parse_single_expression(p)?;
         let eq_type_parameters_single_expression = EqTypeParametersOptSingleExpressionItem {
-            eq,
-            type_parameters,
-            single_expression,
+            eq_2,
+            type_parameters_2,
+            single_expression_2,
         };
         Option::<EqTypeParametersOptSingleExpressionItem>::Some(eq_type_parameters_single_expression)
     } else {
@@ -20088,8 +20088,8 @@ fn parse_if_statement(p: &mut Parser) -> Result<IfStatementNode, ParseError> {
         let else_ = p.expect(TK_Else)?;
         let statement = parse_statement(p)?;
         let else__statement = ElseStatementItem {
-            else_,
-            statement,
+            else__2,
+            statement_2,
         };
         Option::<ElseStatementItem>::Some(else__statement)
     } else {
@@ -20172,8 +20172,8 @@ fn parse_iteration_statement_bt_7(p: &mut Parser) -> Result<IterationStatementNo
         let as_ = p.expect(TK_As)?;
         let type_ = parse_type_(p)?;
         let as__type_ = AsTypeItem {
-            as_,
-            type_,
+            as__2,
+            type__2,
         };
         Option::<AsTypeItem>::Some(as__type_)
     } else {
@@ -20229,8 +20229,8 @@ fn parse_iteration_statement_bt_6(p: &mut Parser) -> Result<IterationStatementNo
         let as_ = p.expect(TK_As)?;
         let type_ = parse_type_(p)?;
         let as__type_ = AsTypeItem {
-            as_,
-            type_,
+            as__2,
+            type__2,
         };
         Option::<AsTypeItem>::Some(as__type_)
     } else {
@@ -20781,10 +20781,10 @@ fn parse_catch_production(p: &mut Parser) -> Result<CatchProductionNode, ParseEr
         };
         let rparen = p.expect(TK_LIT_RPAREN)?;
         let lparen_identifier_type_annotation_rparen = LparenIdentifierTypeAnnotationOptRparenItem {
-            lparen,
-            identifier,
-            type_annotation,
-            rparen,
+            lparen_2,
+            identifier_2,
+            type_annotation_2,
+            rparen_2,
         };
         Option::<LparenIdentifierTypeAnnotationOptRparenItem>::Some(lparen_identifier_type_annotation_rparen)
     } else {
@@ -20845,9 +20845,9 @@ fn parse_function_declaration(p: &mut Parser) -> Result<FunctionDeclarationNode,
         let function_body = parse_function_body(p)?;
         let rbrace = p.expect(TK_LIT_RBRACE)?;
         let lbrace_function_body_rbrace = LbraceFunctionBodyRbraceItem {
-            lbrace,
-            function_body,
-            rbrace,
+            lbrace_2,
+            function_body_2,
+            rbrace_2,
         };
         group_0_inner = Option::<FunctionDeclarationGroup0>::Some(FunctionDeclarationGroup0::Alt0(FunctionDeclarationGroup0Alt0 {
             lbrace_function_body_rbrace,
@@ -20887,8 +20887,8 @@ fn parse_class_declaration(p: &mut Parser) -> Result<ClassDeclarationNode, Parse
             null
         };
         let export__default = ExportDefaultOptItem {
-            export_,
-            default,
+            export__2,
+            default_2,
         };
         Option::<ExportDefaultOptItem>::Some(export__default)
     } else {
@@ -21136,9 +21136,9 @@ fn parse_property_member_declaration_bt_1(p: &mut Parser) -> Result<PropertyMemb
         let function_body = parse_function_body(p)?;
         let rbrace = p.expect(TK_LIT_RBRACE)?;
         let lbrace_function_body_rbrace = LbraceFunctionBodyRbraceItem {
-            lbrace,
-            function_body,
-            rbrace,
+            lbrace_2,
+            function_body_2,
+            rbrace_2,
         };
         group_0_inner = Option::<PropertyMemberDeclarationGroup0>::Some(PropertyMemberDeclarationGroup0::Alt0(PropertyMemberDeclarationGroup0Alt0 {
             lbrace_function_body_rbrace,
@@ -21374,8 +21374,8 @@ fn parse_generator_block(p: &mut Parser) -> Result<GeneratorBlockNode, ParseErro
         let comma = p.expect(TK_LIT_COMMA)?;
         let generator_definition = parse_generator_definition(p)?;
         let comma_generator_definition = CommaGeneratorDefinitionItem {
-            comma,
-            generator_definition,
+            comma_2,
+            generator_definition_2,
         };
         comma_generator_definition_list.push(comma_generator_definition);
     }
@@ -21416,8 +21416,8 @@ fn parse_iterator_block(p: &mut Parser) -> Result<IteratorBlockNode, ParseError>
         let comma = p.expect(TK_LIT_COMMA)?;
         let iterator_definition = parse_iterator_definition(p)?;
         let comma_iterator_definition = CommaIteratorDefinitionItem {
-            comma,
-            iterator_definition,
+            comma_2,
+            iterator_definition_2,
         };
         comma_iterator_definition_list.push(comma_iterator_definition);
     }
@@ -21520,8 +21520,8 @@ fn parse_formal_parameter_list_bt_0(p: &mut Parser) -> Result<FormalParameterLis
         let comma = p.expect(TK_LIT_COMMA)?;
         let formal_parameter_arg = parse_formal_parameter_arg(p)?;
         let comma_formal_parameter_arg = CommaFormalParameterArgItem {
-            comma,
-            formal_parameter_arg,
+            comma_2,
+            formal_parameter_arg_2,
         };
         comma_formal_parameter_arg_list.push(comma_formal_parameter_arg);
     }
@@ -21529,8 +21529,8 @@ fn parse_formal_parameter_list_bt_0(p: &mut Parser) -> Result<FormalParameterLis
         let comma = p.expect(TK_LIT_COMMA)?;
         let last_formal_parameter_arg = parse_last_formal_parameter_arg(p)?;
         let comma_last_formal_parameter_arg = CommaLastFormalParameterArgItem {
-            comma,
-            last_formal_parameter_arg,
+            comma_2,
+            last_formal_parameter_arg_2,
         };
         Option::<CommaLastFormalParameterArgItem>::Some(comma_last_formal_parameter_arg)
     } else {
@@ -21558,8 +21558,8 @@ fn parse_formal_parameter_list_bt_3(p: &mut Parser) -> Result<FormalParameterLis
         let colon = p.expect(TK_LIT_COLON)?;
         let formal_parameter_list = parse_formal_parameter_list(p)?;
         let colon_formal_parameter_list = ColonFormalParameterListItem {
-            colon,
-            formal_parameter_list,
+            colon_2,
+            formal_parameter_list_2,
         };
         Option::<ColonFormalParameterListItem>::Some(colon_formal_parameter_list)
     } else {
@@ -21638,8 +21638,8 @@ fn parse_formal_parameter_arg(p: &mut Parser) -> Result<FormalParameterArgNode, 
         let eq = p.expect(TK_LIT_EQ)?;
         let single_expression = parse_single_expression(p)?;
         let eq_single_expression = EqSingleExpressionItem {
-            eq,
-            single_expression,
+            eq_2,
+            single_expression_2,
         };
         Option::<EqSingleExpressionItem>::Some(eq_single_expression)
     } else {
@@ -21709,9 +21709,9 @@ fn parse_array_literal(p: &mut Parser) -> Result<ArrayLiteralNode, ParseError> {
     let element_list = parse_element_list(p)?;
     let rbracket = p.expect(TK_LIT_RBRACKET)?;
     let lbracket_element_list_rbracket = LbracketElementListRbracketItem {
-        lbracket,
-        element_list,
-        rbracket,
+        lbracket_2,
+        element_list_2,
+        rbracket_2,
     };
     return Result::<ArrayLiteralNode, ParseError>::Ok(ArrayLiteralNode {
         span: Span::new(start, p.last_end()),
@@ -21765,8 +21765,8 @@ fn parse_element_list(p: &mut Parser) -> Result<ElementListNode, ParseError> {
         }
         let array_element = parse_array_element(p)?;
         let comma_array_element = CommaListArrayElementItem {
-            comma_list,
-            array_element,
+            comma_list_2,
+            array_element_2,
         };
         comma_array_element_list.push(comma_array_element);
     }
@@ -21845,8 +21845,8 @@ fn parse_object_literal(p: &mut Parser) -> Result<ObjectLiteralNode, ParseError>
             let comma = p.expect(TK_LIT_COMMA)?;
             let property_assignment = parse_property_assignment(p)?;
             let comma_property_assignment = CommaPropertyAssignmentItem {
-                comma,
-                property_assignment,
+                comma_2,
+                property_assignment_2,
             };
             comma_property_assignment_list.push(comma_property_assignment);
         }
@@ -21884,8 +21884,8 @@ fn parse_object_literal(p: &mut Parser) -> Result<ObjectLiteralNode, ParseError>
             let comma = p.expect(TK_LIT_COMMA)?;
             let property_assignment = parse_property_assignment(p)?;
             let comma_property_assignment = CommaPropertyAssignmentItem {
-                comma,
-                property_assignment,
+                comma_2,
+                property_assignment_2,
             };
             comma_property_assignment_list.push(comma_property_assignment);
         }
@@ -22276,8 +22276,8 @@ fn parse_argument_list(p: &mut Parser) -> Result<ArgumentListNode, ParseError> {
         let comma = p.expect(TK_LIT_COMMA)?;
         let argument = parse_argument(p)?;
         let comma_argument = CommaArgumentItem {
-            comma,
-            argument,
+            comma_2,
+            argument_2,
         };
         comma_argument_list.push(comma_argument);
     }
@@ -22330,8 +22330,8 @@ fn parse_expression_sequence(p: &mut Parser) -> Result<ExpressionSequenceNode, P
         let comma = p.expect(TK_LIT_COMMA)?;
         let single_expression = parse_single_expression(p)?;
         let comma_single_expression = CommaSingleExpressionItem {
-            comma,
-            single_expression,
+            comma_2,
+            single_expression_2,
         };
         comma_single_expression_list.push(comma_single_expression);
     }
@@ -23612,8 +23612,8 @@ fn parse_as_expression_bt_0(p: &mut Parser) -> Result<AsExpressionNode, ParseErr
         let lbracket = p.expect(TK_LIT_LBRACKET)?;
         let rbracket = p.expect(TK_LIT_RBRACKET)?;
         let lbracket_rbracket = LbracketRbracketItem {
-            lbracket,
-            rbracket,
+            lbracket_2,
+            rbracket_2,
         };
         Option::<LbracketRbracketItem>::Some(lbracket_rbracket)
     } else {

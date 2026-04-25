@@ -210,41 +210,39 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(83)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(84)
 
-type "functype//wado-compiler/tests/fixtures/inspect_1.wado/$value_copy$T21" = fn(ref "tuple//[f64, f64]") -> [f64, f64];  // TypeId(85)
+type "functype//core:prelude/fpfmt.wado/unpack64" = fn(f64) -> [u64, i32];  // TypeId(85)
 
-type "functype//core:prelude/fpfmt.wado/unpack64" = fn(f64) -> [u64, i32];  // TypeId(86)
+type "functype//core:prelude/fpfmt.wado/unpack32" = fn(f32) -> [u64, i32];  // TypeId(86)
 
-type "functype//core:prelude/fpfmt.wado/unpack32" = fn(f32) -> [u64, i32];  // TypeId(87)
+type "functype//core:prelude/fpfmt.wado/pow10_coarse" = fn(i32) -> [u64, u64];  // TypeId(87)
 
-type "functype//core:prelude/fpfmt.wado/pow10_coarse" = fn(i32) -> [u64, u64];  // TypeId(88)
+type "functype//core:prelude/fpfmt.wado/mul_pow10" = fn(i32) -> [u64, u64];  // TypeId(88)
 
-type "functype//core:prelude/fpfmt.wado/mul_pow10" = fn(i32) -> [u64, u64];  // TypeId(89)
+type "functype//core:prelude/fpfmt.wado/fixed_width_for_prec" = fn(f64, i32) -> [u64, i32];  // TypeId(89)
 
-type "functype//core:prelude/fpfmt.wado/fixed_width_for_prec" = fn(f64, i32) -> [u64, i32];  // TypeId(90)
+type "functype//core:prelude/fpfmt.wado/short" = fn(f64) -> [u64, i32];  // TypeId(90)
 
-type "functype//core:prelude/fpfmt.wado/short" = fn(f64) -> [u64, i32];  // TypeId(91)
+type "functype//core:prelude/fpfmt.wado/short32" = fn(f32) -> [u64, i32];  // TypeId(91)
 
-type "functype//core:prelude/fpfmt.wado/short32" = fn(f32) -> [u64, i32];  // TypeId(92)
+type "functype//core:prelude/fpfmt.wado/trim_zeros" = fn(u64, i32) -> [u64, i32];  // TypeId(92)
 
-type "functype//core:prelude/fpfmt.wado/trim_zeros" = fn(u64, i32) -> [u64, i32];  // TypeId(93)
+type "functype//core:prelude/fpfmt.wado/check_special" = fn(f64) -> [bool, bool, i32];  // TypeId(93)
 
-type "functype//core:prelude/fpfmt.wado/check_special" = fn(f64) -> [bool, bool, i32];  // TypeId(94)
+type "functype//core:prelude/string.wado/StrCharIter^Iterator::next" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(94)
 
-type "functype//core:prelude/string.wado/StrCharIter^Iterator::next" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(95)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(95)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(96)
+type "functype//core:prelude/primitive.wado/f32::inspect_into" = fn(f32, ref "core:prelude/format.wado//Formatter");  // TypeId(96)
 
-type "functype//core:prelude/primitive.wado/f32::inspect_into" = fn(f32, ref "core:prelude/format.wado//Formatter");  // TypeId(97)
+type "functype//core:prelude/primitive.wado/f64::inspect_into" = fn(f64, ref "core:prelude/format.wado//Formatter");  // TypeId(97)
 
-type "functype//core:prelude/primitive.wado/f64::inspect_into" = fn(f64, ref "core:prelude/format.wado//Formatter");  // TypeId(98)
+type "functype//core:prelude/primitive.wado/f64::fmt_fixed" = fn(f64, i32, ref "core:prelude/format.wado//Formatter");  // TypeId(98)
 
-type "functype//core:prelude/primitive.wado/f64::fmt_fixed" = fn(f64, i32, ref "core:prelude/format.wado//Formatter");  // TypeId(99)
+type "functype//core:prelude/primitive.wado/char^Inspect::inspect" = fn(char, ref "core:prelude/format.wado//Formatter");  // TypeId(99)
 
-type "functype//core:prelude/primitive.wado/char^Inspect::inspect" = fn(char, ref "core:prelude/format.wado//Formatter");  // TypeId(100)
+type "functype//wado-compiler/tests/fixtures/inspect_1.wado/InspShape^Inspect::inspect" = fn(ref "wado-compiler/tests/fixtures/inspect_1.wado//InspShape", ref "core:prelude/format.wado//Formatter");  // TypeId(100)
 
-type "functype//wado-compiler/tests/fixtures/inspect_1.wado/InspShape^Inspect::inspect" = fn(ref "wado-compiler/tests/fixtures/inspect_1.wado//InspShape", ref "core:prelude/format.wado//Formatter");  // TypeId(101)
-
-type "functype//wado-compiler/tests/fixtures/inspect_1.wado/InspPerms^Inspect::inspect" = fn(u32, ref "core:prelude/format.wado//Formatter");  // TypeId(102)
+type "functype//wado-compiler/tests/fixtures/inspect_1.wado/InspPerms^Inspect::inspect" = fn(u32, ref "core:prelude/format.wado//Formatter");  // TypeId(101)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -1848,10 +1846,6 @@ fn "wado-compiler/tests/fixtures/inspect_1.wado/__initialize_module"() {
 
 fn "wado-compiler/tests/fixtures/inspect_1.wado/$value_copy$T71"(v) {
     return struct.new "core:prelude/string.wado//StrCharIter" { repr: ref.as_non_null(builtin::array_clone<u8>(v.repr)), used: v.used, byte_index: v.byte_index };
-}
-
-fn "wado-compiler/tests/fixtures/inspect_1.wado/$value_copy$T21"(v) {
-    return v.0, v.1;
 }
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
@@ -3942,6 +3936,7 @@ fn "core:prelude/array.wado/Array<u64>::grow"(self) {
 }
 
 fn "core:prelude/types.wado/Tuple<f64,f64>^Inspect::inspect"(self, f) {
+    let __tuple_3: ref "tuple//[f64, f64]";
     let v_5: f64;
     let v_6: f64;
     let s_8: ref "core:prelude/string.wado//String";
@@ -3949,12 +3944,10 @@ fn "core:prelude/types.wado/Tuple<f64,f64>^Inspect::inspect"(self, f) {
     let s_18: ref "core:prelude/string.wado//String";
     s_8 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("["), used: 1 };
     "core:prelude/string.wado/String::push_str"(f.buf, s_8);
-    let __sroa___tuple_3_0: f64;
-    let __sroa___tuple_3_1: f64;
-    multivalue_bind [__sroa___tuple_3_0, __sroa___tuple_3_1] = "wado-compiler/tests/fixtures/inspect_1.wado/$value_copy$T21"(self);
-    v_5 = __sroa___tuple_3_0;
+    __tuple_3 = self;
+    v_5 = __tuple_3.0;
     "core:prelude/primitive.wado/f64::inspect_into"(v_5, f);
-    v_6 = __sroa___tuple_3_1;
+    v_6 = __tuple_3.1;
     s_14 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(", "), used: 2 };
     "core:prelude/string.wado/String::push_str"(f.buf, s_14);
     "core:prelude/primitive.wado/f64::inspect_into"(v_6, f);

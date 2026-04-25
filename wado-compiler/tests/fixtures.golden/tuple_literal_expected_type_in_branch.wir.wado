@@ -109,11 +109,9 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(42)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(43)
 
-type "functype//wado-compiler/tests/fixtures/tuple_literal_expected_type_in_branch.wado/$value_copy$T392" = fn(ref "tuple//[u8, String]") -> [u8, ref "core:prelude/string.wado//String"];  // TypeId(44)
+type "functype//core:prelude/string.wado/StrCharIter^Iterator::next" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(44)
 
-type "functype//core:prelude/string.wado/StrCharIter^Iterator::next" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(45)
-
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(46)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(45)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -214,6 +212,7 @@ condition: body == \"NF\"
 }
 
 fn "wado-compiler/tests/fixtures/tuple_literal_expected_type_in_branch.wado/__test_2_tuple_literal_in_match_branch_with_narrow_int"() {
+    let t: ref "tuple//[u8, String]";
     let __v0_2: u8;
     let __cond_3: bool;
     let __v0_4: ref "core:prelude/string.wado//String";
@@ -225,16 +224,16 @@ fn "wado-compiler/tests/fixtures/tuple_literal_expected_type_in_branch.wado/__te
     let __local_13: ref "core:prelude/format.wado//Formatter";
     let __local_18: ref "core:prelude/format.wado//Formatter";
     let __local_24: ref "core:prelude/format.wado//Formatter";
-    let __sroa_t_0: u8;
-    let __sroa_t_1: ref "core:prelude/string.wado//String";
-    multivalue_bind [__sroa_t_0, __sroa_t_1] = "wado-compiler/tests/fixtures/tuple_literal_expected_type_in_branch.wado/$value_copy$T392"(let __match_scrut_0: i32; __match_scrut_0 = 1; (if __match_scrut_0 == 0 -> ref "tuple//[u8, String]" {
+    let __match_scrut_0: i32;
+    __match_scrut_0 = 1;
+    t = (if __match_scrut_0 == 0 -> ref "tuple//[u8, String]" {
         struct.new "tuple//[u8, String]" { 0: 0, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("zero"), used: 4 } };
     } else if __match_scrut_0 == 1 -> ref "tuple//[u8, String]" {
         struct.new "tuple//[u8, String]" { 0: 1, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("one"), used: 3 } };
     } else {
         struct.new "tuple//[u8, String]" { 0: 255, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("other"), used: 5 } };
-    }));
-    __v0_2 = __sroa_t_0;
+    });
+    __v0_2 = t.0;
     __cond_3 = __v0_2 == 1;
     if __cond_3 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -267,7 +266,7 @@ condition: t.0 == 1 as u8
         });
         unreachable;
     }
-    __v0_4 = __sroa_t_1;
+    __v0_4 = t.1;
     __cond_5 = "core:prelude/string.wado/String^Eq::eq"(__v0_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("one"), used: 3 });
     if __cond_5 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -361,10 +360,6 @@ fn "wado-compiler/tests/fixtures/tuple_literal_expected_type_in_branch.wado/__cm
 fn "wado-compiler/tests/fixtures/tuple_literal_expected_type_in_branch.wado/__cm_export____test_3_tuple_literal_via_identity_function_with_narrow_int"() {
     "wado-compiler/tests/fixtures/tuple_literal_expected_type_in_branch.wado/__test_3_tuple_literal_via_identity_function_with_narrow_int"();
     "wasi/task-return"(0);
-}
-
-fn "wado-compiler/tests/fixtures/tuple_literal_expected_type_in_branch.wado/$value_copy$T392"(v) {
-    return v.0, v.1;
 }
 
 fn "wado-compiler/tests/fixtures/tuple_literal_expected_type_in_branch.wado/$value_copy$T65"(v) {

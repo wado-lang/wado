@@ -1126,23 +1126,20 @@ fn find_candidate_calls_in_block_prefix(
     candidate_ids: &IndexSet<u32>,
     invalid: &mut IndexSet<u32>,
 ) {
-    match instr {
-        WirInstr::Block { body, .. } => {
-            // All instructions except the last (which is the result value) are prefix.
-            // Skip trailing Unreachable — translate_stmts_as_value may append one after
-            // a break-with-value; it is dead code and must not be treated as the result.
-            let effective_body = if matches!(body.last(), Some(WirInstr::Unreachable)) {
-                &body[..body.len() - 1]
-            } else {
-                body.as_slice()
-            };
-            if let Some((_, prefix)) = effective_body.split_last() {
-                for prefix_instr in prefix {
-                    find_nested_candidate_calls(prefix_instr, candidate_ids, invalid);
-                }
+    if let WirInstr::Block { body, .. } = instr {
+        // All instructions except the last (which is the result value) are prefix.
+        // Skip trailing Unreachable — translate_stmts_as_value may append one after
+        // a break-with-value; it is dead code and must not be treated as the result.
+        let effective_body = if matches!(body.last(), Some(WirInstr::Unreachable)) {
+            &body[..body.len() - 1]
+        } else {
+            body.as_slice()
+        };
+        if let Some((_, prefix)) = effective_body.split_last() {
+            for prefix_instr in prefix {
+                find_nested_candidate_calls(prefix_instr, candidate_ids, invalid);
             }
         }
-        _ => {}
     }
 }
 
@@ -1997,8 +1994,7 @@ fn rewrite_call_sites(
             // which loses the information that a `Some(non_null_ref)` payload is
             // semantically non-null at the Wado source level.
             let mut ref_locals = crate::hashmap::IndexSet::default();
-            if let Some(WirTypeDef::Variant(wv)) = types.get(candidate.struct_type_idx as usize)
-            {
+            if let Some(WirTypeDef::Variant(wv)) = types.get(candidate.struct_type_idx as usize) {
                 for (disc_val_2, case_type_opt_2) in vi.case_type_indices.iter().enumerate() {
                     if case_type_opt_2.is_none() {
                         continue;

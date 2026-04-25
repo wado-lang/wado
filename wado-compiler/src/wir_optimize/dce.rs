@@ -355,7 +355,6 @@ fn collect_instr_type_refs(instr: &WirInstr, out: &mut IndexSet<u32>) {
         | WirInstr::RefTest { type_id, .. }
         | WirInstr::CallIndirect { type_id, .. }
         | WirInstr::CallRef { type_id, .. }
-        
         | WirInstr::MultiValueStructNew { type_id, .. } => {
             out.insert(type_id.index());
         }
@@ -623,7 +622,6 @@ fn remap_type_ids_in_instr(instr: &mut WirInstr, remap: &IndexMap<u32, u32>) {
         | WirInstr::RefTest { type_id, .. }
         | WirInstr::CallIndirect { type_id, .. }
         | WirInstr::CallRef { type_id, .. }
-        
         | WirInstr::MultiValueStructNew { type_id, .. } => {
             remap_type_id(type_id, remap);
         }
