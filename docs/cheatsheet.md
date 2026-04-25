@@ -882,11 +882,11 @@ let pi = f64::PI;
 let max = i32::MAX;
 ```
 
-Primitives provide built-in constants: `f64::PI`, `f64::INFINITY`, `f64::NAN`, `i32::MAX`, `i32::MIN`, etc. See [Core Standard Library Reference](./cheatsheet-stdlib-core.md#primitive-types).
+Primitives provide built-in constants: `f64::PI`, `f64::INFINITY`, `f64::NAN`, `i32::MAX`, `i32::MIN`, etc. See [`core:prelude`](./stdlib-core-prelude.md).
 
 ## Primitive Type Methods
 
-See [Core Standard Library Reference](./cheatsheet-stdlib-core.md#primitive-types) for the full API.
+See [`core:prelude`](./stdlib-core-prelude.md) for the full API.
 
 ```wado
 f64::sin(x)    f64::cos(x)    f64::sqrt(x)
@@ -944,7 +944,7 @@ let result = arr.into_iter()
 
 ### Custom Iterables
 
-Implement `IntoIterator` to make custom types work with `for-of`. See [Core Standard Library Reference](./cheatsheet-stdlib-core.md) for trait definitions.
+Implement `IntoIterator` to make custom types work with `for-of`. See [`core:prelude`](./stdlib-core-prelude.md) for trait definitions.
 
 ## Ranges
 
@@ -1075,8 +1075,20 @@ test "not yet implemented" {
 
 For full API reference, see:
 
-- [Core Standard Library Reference](./cheatsheet-stdlib-core.md) - `core:prelude`, `core:cli`, `core:collections`, `core:serde`, `core:json`, `core:base64`, `core:zlib`
-- [WASI Standard Library Reference](./cheatsheet-stdlib-wasi.md) - `wasi:cli`, `wasi:filesystem`, `wasi:http`, `wasi:clocks`, `wasi:random`, `wasi:sockets`
+- Core stdlib (one file per module):
+  - [`core:prelude`](./stdlib-core-prelude.md) - auto-imported types, traits, primitive APIs
+  - [`core:cli`](./stdlib-core-cli.md) - stdout/stderr printing
+  - [`core:collections`](./stdlib-core-collections.md) - `TreeMap`, `TreeSet`
+  - [`core:serde`](./stdlib-core-serde.md) - `Serialize` / `Deserialize` framework
+  - [`core:json`](./stdlib-core-json.md) - JSON (self-describing)
+  - [`core:json_nsd`](./stdlib-core-json_nsd.md) - JSON (non-self-describing)
+  - [`core:json_value`](./stdlib-core-json_value.md) - dynamic JSON value
+  - [`core:base64`](./stdlib-core-base64.md) - base64 encoding
+  - [`core:zlib`](./stdlib-core-zlib.md) - zlib (de)compression
+  - [`core:simd`](./stdlib-core-simd.md) - Wasm 128-bit SIMD
+  - [`core:url`](./stdlib-core-url.md) - WHATWG URL parsing
+  - [`core:kiln`](./stdlib-core-kiln.md) - Kiln IDL host bindings
+- [WASI Standard Library Reference](./stdlib-wasi.md) - `wasi:cli`, `wasi:filesystem`, `wasi:http`, `wasi:clocks`, `wasi:random`, `wasi:sockets`
 
 ```wado
 // core:prelude (auto-imported)
@@ -1150,6 +1162,6 @@ Wado supports 128-bit SIMD operations including Relaxed SIMD. See [WEP: SIMD v12
 ## See Also
 
 - [Language Specification](./spec.md) - Full language specification
-- [Core Standard Library Reference](./cheatsheet-stdlib-core.md) - Core stdlib quick reference
-- [WASI Standard Library Reference](./cheatsheet-stdlib-wasi.md) - WASI stdlib quick reference
+- Core Standard Library — one reference per module: [`prelude`](./stdlib-core-prelude.md), [`cli`](./stdlib-core-cli.md), [`collections`](./stdlib-core-collections.md), [`serde`](./stdlib-core-serde.md), [`json`](./stdlib-core-json.md), [`json_nsd`](./stdlib-core-json_nsd.md), [`json_value`](./stdlib-core-json_value.md), [`base64`](./stdlib-core-base64.md), [`zlib`](./stdlib-core-zlib.md), [`simd`](./stdlib-core-simd.md), [`url`](./stdlib-core-url.md), [`kiln`](./stdlib-core-kiln.md)
+- [WASI Standard Library Reference](./stdlib-wasi.md) - WASI stdlib reference
 - [wado-compiler/tests/fixtures/\*.wado](wado-compiler/tests/fixtures) - E2E test fixtures
