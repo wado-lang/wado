@@ -7,6 +7,7 @@
 //! - Boxing lowering (transform `&primitive` / `&mut primitive` to `Box<T>` struct operations)
 //! - Closure lowering (transform closures to functor structs with `__call` methods)
 //! - String literal collection (for data section)
+//! - Value-copy materialization (insert + synthesize `$value_copy$T` helpers)
 //!
 //! Note: All loop constructs are desugared at the AST level in desugar.rs.
 //! Monomorphization has been moved to a separate phase (see `monomorphize.rs`).
@@ -17,6 +18,7 @@ mod cm_intrinsics;
 mod globals;
 mod pattern;
 mod string;
+mod value_copy;
 mod wide_int;
 
 use crate::flat_package::FlatPackage;
@@ -160,4 +162,14 @@ pub fn lower(flat: &mut FlatPackage) {
 
     // Rebuild variant index since data may have changed
     flat.rebuild_variant_indices();
+
+    // Materialize Wado's value-copy semantics in TIR. Insertion places
+    // `builtin::copy_value::<T>(x)` wrappers at every defensive deep-copy
+    // position; synthesis replaces those wrappers with calls to per-type
+    // `$value_copy$T_<id>` helpers. Both run here — before the optimizer —
+    // so that every aliasing edge downstream passes care about is explicit
+    // in the TIR fed to `optimize`. Wrapper elision happens later as a
+    // regular pass inside the optimizer fixed-point loop.
+    value_copy::insert_value_copy_calls(flat);
+    value_copy::synthesize_value_copy_funcs(flat);
 }

@@ -16,6 +16,13 @@
 //! - Template buffer hoisting via `tmpl_hoist` module
 //! - Hot Field Scalarization (HFS) via `field_scalarize` module
 //! - Select lowering via `select_lowering` module
+//! - Value-copy elision via `value_copy_elide` module
+//!
+//! The `$value_copy$T` insertion + synthesis steps that materialize Wado's
+//! value-copy semantics live in the lower phase (`lower::value_copy`) — by
+//! the time TIR reaches the optimizer, every defensive deep-copy is
+//! explicit. The optimizer only *removes* redundant copies via
+//! `value_copy_elide`, which runs as a regular pass in the fixed-point loop.
 
 mod condition_implication;
 mod const_branch_prune;
@@ -36,9 +43,7 @@ mod select_lowering;
 mod sroa;
 mod store_load_forward;
 mod tmpl_hoist;
-mod value_copy;
 mod value_copy_elide;
-mod value_copy_synth;
 
 use condition_implication::eliminate_implied_conditions;
 use const_branch_prune::prune_constant_branches;
@@ -61,6 +66,7 @@ use ref_elim::eliminate_unnecessary_refs;
 use sroa::scalar_replace_aggregates;
 use store_load_forward::forward_stores_to_loads;
 use tmpl_hoist::hoist_template_buffers;
+use value_copy_elide::elide_synthesized_value_copies;
 
 use crate::compiler_host::SpanEmitter;
 use crate::flat_package::FlatPackage;
@@ -184,36 +190,6 @@ pub fn optimize(
     select_lowering::select_lowering(&mut project);
     profiler.span_end("tir/select_lowering");
 
-    // Materialise `builtin::copy_value::<T>(x)` wrappers at every semantic
-    // deep-copy position. Runs last so it sees the final post-optimize TIR —
-    // inlining and branch folding have already resolved `if` expressions to
-    // concrete StructLiteral branches, matching what the freshness check
-    // expects to elide. WIR build lowers each call to the shared
-    // `build_value_copy` descriptor.
-    profiler.span_start("tir/value_copy_insertion");
-    value_copy::insert_value_copy_calls(&mut project);
-    profiler.span_end("tir/value_copy_insertion");
-
-    // Replace each `builtin::copy_value::<T>(x)` placeholder with a call to
-    // a synthesized concrete `$value_copy$` helper, so WIR build no longer
-    // needs a special case for the builtin and the per-type cost is visible
-    // in `wado dump`.
-    profiler.span_start("tir/value_copy_synthesis");
-    value_copy_synth::synthesize_value_copy_funcs(&mut project);
-    profiler.span_end("tir/value_copy_synthesis");
-
-    // Elide single-use, immutable `$value_copy$T<id>` calls — recovers the
-    // freshness optimization that the former WIR-level `value_copy`
-    // instruction performed inline. The remaining helpers are visible in
-    // `wado dump` exactly when their cost is actually paid.
-    profiler.span_start("tir/value_copy_elide");
-    value_copy_elide::elide_synthesized_value_copies(&mut project);
-    profiler.span_end("tir/value_copy_elide");
-
-    // Final DCE — drop synthesized `$value_copy$T<id>` helpers whose only
-    // call sites were elided.
-    run_dce(&mut project, profiler);
-
     project
 }
 
@@ -267,6 +243,7 @@ fn run_pass(
 /// 13. Loop-invariant code motion (`licm`)
 /// 14. Condition implication elimination (`condition_implication`)
 /// 15. Template buffer hoisting (`tmpl_hoist`)
+/// 16. Value-copy elision (`value_copy_elide`)
 ///
 /// The `config` parameter controls the number of iterations and inline threshold.
 /// More iterations can find more optimization opportunities but take longer.
@@ -328,6 +305,16 @@ fn run_optimization_passes(
         });
         changed |= run_pass("tir/tmpl_hoist", project, profiler, |p| {
             hoist_template_buffers(p)
+        });
+        // Elide single-use `$value_copy$T<id>` wrappers whose source is
+        // observably read-only. Runs inside the loop so newly-exposed
+        // wrappers from inlining/SROA get removed in the same fixed-point
+        // pass. Returns no `changed` signal (the optimizer doesn't depend
+        // on its output to make further progress); follow-up DCE picks up
+        // helpers whose call sites all got elided.
+        run_pass("tir/value_copy_elide", project, profiler, |p| {
+            elide_synthesized_value_copies(p);
+            false
         });
         profiler.span_end(&format!("tir/iteration {}", i + 1));
         if !changed {
