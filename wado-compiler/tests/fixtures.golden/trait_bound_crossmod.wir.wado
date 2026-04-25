@@ -100,6 +100,7 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 
 fn "wado-compiler/tests/fixtures/trait_bound_crossmod.wado/run"() with Stdout {
     let p: ref "./sub/trait_bound_helper.wado//Pair";
+    let t: i32;
     let bt: i32;
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
@@ -108,10 +109,11 @@ fn "wado-compiler/tests/fixtures/trait_bound_crossmod.wado/run"() with Stdout {
     let __sroa_b_item: ref "./sub/trait_bound_helper.wado//Pair";
     p = struct.new "./sub/trait_bound_helper.wado//Pair" { x: 10, y: 20 };
     __sroa_b_item = p;
+    t = p.x + p.y;
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
-        "core:prelude/primitive.wado/i32::fmt_decimal"(30, __local_5);
+        "core:prelude/primitive.wado/i32::fmt_decimal"(t, __local_5);
         break __tmpl: __local_4;
         unreachable;
     });

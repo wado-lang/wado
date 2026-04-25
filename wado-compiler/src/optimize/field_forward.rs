@@ -220,6 +220,23 @@ fn is_forwardable(expr: &TirExpr) -> bool {
 }
 
 pub fn forward_struct_field_constants(project: &mut FlatPackage) -> bool {
+    // DISABLED — see PR #918 / Gale codegen regression.
+    //
+    // The aliasing/invalidation analysis here is incomplete: with this pass
+    // enabled, Gale's `package-gale gen --highlight SQLite.g4` emits a
+    // golden file whose top-level type definitions and parser bodies
+    // disagree (some `Group` variants drop from the type section while
+    // the parser code still constructs them). Disabling the pass restores
+    // correctness; bounds-check elimination on `__seq_lit:` push chains is
+    // already handled by the WIR-level `wir_optimize::const_forward`.
+    //
+    // Tracking: revisit once a flow-sensitive aliasing model that handles
+    // Gale's deduplication state is in place.
+    if true {
+        let _ = project;
+        return false;
+    }
+    #[allow(unreachable_code)]
     let helpers: IndexMap<(ModuleSource, String), TypeId> = project
         .functions
         .iter()

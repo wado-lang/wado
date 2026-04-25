@@ -431,7 +431,7 @@ fn "wado-compiler/tests/fixtures/ref_3.wado/ref_closure_mut_param"() with Stdout
     let r: ref "core:prelude/types.wado//Box<i32>";
     y = struct.new "core:prelude/types.wado//Box<i32>" { value: 10 };
     r = y;
-    r.value = 15;
+    r.value = r.value + 5;
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(26), used: 0 };
         "core:prelude/string.wado/String::push_str"(__local_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("modified: "), used: 10 });
@@ -507,7 +507,7 @@ fn "wado-compiler/tests/fixtures/ref_3.wado/ref_edge_multi_mut"() with Stdout {
     let x_5: ref "core:prelude/types.wado//Box<i32>";
     a = struct.new "core:prelude/types.wado//Box<i32>" { value: 10 };
     x_3 = a;
-    x_3.value = 11;
+    x_3.value = x_3.value + 1;
     x_4 = a;
     x_4.value = x_4.value + 1;
     x_5 = a;

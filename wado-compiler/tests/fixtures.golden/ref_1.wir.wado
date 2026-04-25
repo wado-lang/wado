@@ -324,11 +324,13 @@ fn "wado-compiler/tests/fixtures/ref_1.wado/ref_primitive_semantic"() with Stdou
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
     let __local_6: ref "core:prelude/types.wado//Box<i32>";
+    let __local_7: i32;
     a = struct.new "core:prelude/types.wado//Box<i32>" { value: 42 };
     result = __inline_get_and_modify_0: block -> i32 {
         __local_6 = a;
+        __local_7 = __local_6.value;
         __local_6.value = 999;
-        break __inline_get_and_modify_0: 42;
+        break __inline_get_and_modify_0: __local_7;
         unreachable;
     };
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -521,6 +523,7 @@ fn "wado-compiler/tests/fixtures/ref_1.wado/ref_deref_assign_variant"() with Std
 fn "wado-compiler/tests/fixtures/ref_1.wado/ref_deref_reassign"() with Stdout {
     let original: ref "core:prelude/types.wado//Box<i32>";
     let r: ref "core:prelude/types.wado//Box<i32>";
+    let val: i32;
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
     let __local_7: ref "core:prelude/string.wado//String";
@@ -530,7 +533,8 @@ fn "wado-compiler/tests/fixtures/ref_1.wado/ref_deref_reassign"() with Stdout {
     let __sroa_val2_value: i32;
     original = struct.new "core:prelude/types.wado//Box<i32>" { value: 42 };
     r = original;
-    r.value = 85;
+    val = r.value;
+    r.value = (val * 2) + 1;
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(26), used: 0 };
         "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("modified: "), used: 10 });
@@ -854,7 +858,7 @@ fn "wado-compiler/tests/fixtures/ref_1.wado/run"() with Stdout {
     r_5 = n;
     r_6 = r_5;
     r_7 = r_6;
-    r_7.value = 1;
+    r_7.value = r_7.value + 1;
     r_8 = r_6;
     r_8.value = r_8.value + 1;
     r_9 = r_5;
@@ -1025,9 +1029,7 @@ fn "core:prelude/fpfmt.wado/unpack64"(f) {
     let s: u64;
     let m_12: u64;
     let e: i32;
-    let __local_14: ref "core:prelude/types.wado//Box<f64>";
     bits = __inline_f64__to_bits_0: block -> i64 {
-        __local_14 = struct.new "core:prelude/types.wado//Box<f64>" { value: f };
         break __inline_f64__to_bits_0: builtin::i64_reinterpret_f64(f);
         unreachable;
     };
