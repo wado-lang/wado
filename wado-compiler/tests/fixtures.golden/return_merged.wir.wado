@@ -273,6 +273,7 @@ condition: nums[2] == 3
 }
 
 fn "wado-compiler/tests/fixtures/return_merged.wado/__test_1_empty_array"() {
+    let arr: ref "core:prelude//Array<i32>";
     let __v0: i32;
     let __cond: bool;
     let __local_3: ref "core:prelude/string.wado//String";
@@ -280,12 +281,12 @@ fn "wado-compiler/tests/fixtures/return_merged.wado/__test_1_empty_array"() {
     let __local_5: ref "core:prelude//Array<i32>";
     let __local_13: ref "core:prelude/format.wado//Formatter";
     let __local_18: ref "core:prelude/format.wado//Formatter";
-    drop(__inline_get_empty_0____seq_lit: block -> ref "core:prelude//Array<i32>" {
+    arr = __inline_get_empty_0____seq_lit: block -> ref "core:prelude//Array<i32>" {
         __local_5 = struct.new "core:prelude//Array<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
         break __inline_get_empty_0____seq_lit: __local_5;
         unreachable;
-    });
-    __v0 = 0;
+    };
+    __v0 = arr.used;
     __cond = __v0 == 0;
     if __cond == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -335,7 +336,7 @@ fn "wado-compiler/tests/fixtures/return_merged.wado/__test_3_tuple_var"() {
         break __inline_get_pair_0: __local_9;
         unreachable;
     };
-    __v0_1 = 42;
+    __v0_1 = pair.0;
     __cond_2 = __v0_1 == 42;
     if __cond_2 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {

@@ -349,9 +349,7 @@ fn elision_safe(
         return false;
     }
     let target_ok = match usage.get(&target_index) {
-        Some(u) => {
-            u.assign_count <= target_assign_limit && !u.has_field_mutation && !u.is_captured
-        }
+        Some(u) => u.assign_count <= target_assign_limit && !u.has_field_mutation && !u.is_captured,
         None => true,
     };
     if !target_ok {

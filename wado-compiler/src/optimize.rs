@@ -45,7 +45,6 @@ use const_branch_prune::prune_constant_branches;
 use const_folding::fold_constants;
 use const_global_promotion::promote_constant_globals;
 use const_propagation::propagate_constants;
-use field_forward::forward_struct_field_constants;
 use container_sroa::scalarize_containers;
 use copy_prop::propagate_copies;
 use cse::eliminate_common_subexprs;
@@ -53,6 +52,7 @@ use dce::{
     analyze_project, filter_bytes_literals, remove_unreachable_closure_functors,
     remove_unreachable_functions, remove_unreachable_globals, remove_unreachable_types,
 };
+use field_forward::forward_struct_field_constants;
 use field_scalarize::scalarize_hot_fields;
 use inline::inline_functions;
 use labeled_block_fusion::fuse_labeled_blocks;

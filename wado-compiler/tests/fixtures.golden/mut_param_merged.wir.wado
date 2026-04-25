@@ -732,6 +732,7 @@ condition: compute(p, q) == 13
 
 fn "wado-compiler/tests/fixtures/mut_param_merged.wado/mut_param_struct"() with Stdout {
     let p: ref "wado-compiler/tests/fixtures/mut_param_merged.wado//Point";
+    let q: ref "wado-compiler/tests/fixtures/mut_param_merged.wado//Point";
     let __v0_2: i32;
     let __cond_3: bool;
     let __v0_4: i32;
@@ -799,13 +800,13 @@ fn "wado-compiler/tests/fixtures/mut_param_merged.wado/mut_param_struct"() with 
     let __local_151: ref "core:prelude/format.wado//Formatter";
     let __local_156: ref "core:prelude/format.wado//Formatter";
     p = struct.new "wado-compiler/tests/fixtures/mut_param_merged.wado//Point" { x: 5, y: 10 };
-    drop(__inline_zero_out_0: block -> ref "wado-compiler/tests/fixtures/mut_param_merged.wado//Point" {
+    q = __inline_zero_out_0: block -> ref "wado-compiler/tests/fixtures/mut_param_merged.wado//Point" {
         __local_46 = "wado-compiler/tests/fixtures/mut_param_merged.wado/$value_copy$T38"(p);
         __local_46 = struct.new "wado-compiler/tests/fixtures/mut_param_merged.wado//Point" { x: 0, y: 0 };
         break __inline_zero_out_0: __local_46;
         unreachable;
-    });
-    __v0_2 = 0;
+    };
+    __v0_2 = q.x;
     __cond_3 = __v0_2 == 0;
     if __cond_3 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -838,7 +839,7 @@ condition: q.x == 0
         });
         unreachable;
     }
-    __v0_4 = 0;
+    __v0_4 = q.y;
     __cond_5 = __v0_4 == 0;
     if __cond_5 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -1074,7 +1075,7 @@ condition: a.y == 2
     c = struct.new "wado-compiler/tests/fixtures/mut_param_merged.wado//Point" { x: 3, y: 4 };
     d = __inline_shift_57: block -> ref "wado-compiler/tests/fixtures/mut_param_merged.wado//Point" {
         __local_136 = "wado-compiler/tests/fixtures/mut_param_merged.wado/$value_copy$T38"(c);
-        __local_136.x = __local_136.x + 1;
+        __local_136.x = 4;
         break __inline_shift_57: __local_136;
         unreachable;
     };

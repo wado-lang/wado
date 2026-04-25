@@ -169,8 +169,7 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 fn "wado-compiler/tests/fixtures/struct_2.wado/destruct_basic"() with Stdout {
-    let x: i32;
-    let y: i32;
+    let p: ref "wado-compiler/tests/fixtures/struct_2.wado//SDPoint";
     let a: i32;
     let b: i32;
     let x2: i32;
@@ -190,23 +189,22 @@ fn "wado-compiler/tests/fixtures/struct_2.wado/destruct_basic"() with Stdout {
     let __local_39: ref "core:prelude/format.wado//Formatter";
     let __local_51: ref "core:prelude/format.wado//Formatter";
     let __local_56: ref "core:prelude/format.wado//Formatter";
-    x = 10;
-    y = 20;
+    p = struct.new "wado-compiler/tests/fixtures/struct_2.wado//SDPoint" { x: 10, y: 20 };
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 };
         __local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_8 };
         __local_23 = __local_9;
-        "core:prelude/primitive.wado/i32::fmt_decimal"(x, __local_23);
+        "core:prelude/primitive.wado/i32::fmt_decimal"(10, __local_23);
         "core:prelude/string.wado/String::push"(__local_8, 44);
         "core:prelude/string.wado/String::push"(__local_8, 32);
         __local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_8 };
         __local_28 = __local_9;
-        "core:prelude/primitive.wado/i32::fmt_decimal"(y, __local_28);
+        "core:prelude/primitive.wado/i32::fmt_decimal"(20, __local_28);
         break __tmpl: __local_8;
         unreachable;
     });
-    a = 10;
-    b = 20;
+    a = p.x;
+    b = p.y;
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 };
         __local_11 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
@@ -220,7 +218,7 @@ fn "wado-compiler/tests/fixtures/struct_2.wado/destruct_basic"() with Stdout {
         break __tmpl: __local_10;
         unreachable;
     });
-    x2 = 10;
+    x2 = p.x;
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_12 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_13 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
@@ -228,8 +226,8 @@ fn "wado-compiler/tests/fixtures/struct_2.wado/destruct_basic"() with Stdout {
         break __tmpl: __local_12;
         unreachable;
     });
-    mx = 10;
-    my = 20;
+    mx = p.x;
+    my = p.y;
     mx = mx + 1;
     my = my + 2;
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -269,7 +267,7 @@ fn "wado-compiler/tests/fixtures/struct_2.wado/destruct_for_of"() with Stdout {
         break __seq_lit: __local_0;
         unreachable;
     };
-    __iter_2 = struct.new "core:prelude/array.wado//ArrayIter<SDPoint>" { repr: points.repr, used: 3, index: 0 };
+    __iter_2 = struct.new "core:prelude/array.wado//ArrayIter<SDPoint>" { repr: points.repr, used: points.used, index: 0 };
     b0: block {
         l1: loop {
             __pattern_temp_0 = "core:prelude/array.wado/ArrayIter<SDPoint>^Iterator::next"(__iter_2);
@@ -290,7 +288,7 @@ fn "wado-compiler/tests/fixtures/struct_2.wado/destruct_for_of"() with Stdout {
             continue l1;
         };
     };
-    __iter_5 = struct.new "core:prelude/array.wado//ArrayIter<SDPoint>" { repr: points.repr, used: 3, index: 0 };
+    __iter_5 = struct.new "core:prelude/array.wado//ArrayIter<SDPoint>" { repr: points.repr, used: points.used, index: 0 };
     b3: block {
         l4: loop {
             __pattern_temp_2 = "core:prelude/array.wado/ArrayIter<SDPoint>^Iterator::next"(__iter_5);
@@ -314,10 +312,9 @@ fn "wado-compiler/tests/fixtures/struct_2.wado/destruct_for_of"() with Stdout {
 }
 
 fn "wado-compiler/tests/fixtures/struct_2.wado/destruct_if_let"() with Stdout {
-    let x_1: i32;
-    let y_2: i32;
-    let x_3: i32;
-    let y_4: i32;
+    let p: ref "wado-compiler/tests/fixtures/struct_2.wado//SDPoint";
+    let x: i32;
+    let y: i32;
     let a: i32;
     let b: i32;
     let __local_9: ref "core:prelude/string.wado//String";
@@ -329,34 +326,33 @@ fn "wado-compiler/tests/fixtures/struct_2.wado/destruct_if_let"() with Stdout {
     let __local_22: ref "core:prelude/format.wado//Formatter";
     let __local_27: ref "core:prelude/format.wado//Formatter";
     let __sroa_person_name: ref "core:prelude/string.wado//String";
-    x_1 = 5;
-    y_2 = 15;
+    p = struct.new "wado-compiler/tests/fixtures/struct_2.wado//SDPoint" { x: 5, y: 15 };
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_9 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 };
         __local_10 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_9 };
         __local_22 = __local_10;
-        "core:prelude/primitive.wado/i32::fmt_decimal"(x_1, __local_22);
+        "core:prelude/primitive.wado/i32::fmt_decimal"(5, __local_22);
         "core:prelude/string.wado/String::push"(__local_9, 44);
         "core:prelude/string.wado/String::push"(__local_9, 32);
         __local_10 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_9 };
         __local_27 = __local_10;
-        "core:prelude/primitive.wado/i32::fmt_decimal"(y_2, __local_27);
+        "core:prelude/primitive.wado/i32::fmt_decimal"(15, __local_27);
         break __tmpl: __local_9;
         unreachable;
     });
-    x_3 = 5;
-    y_4 = 15;
+    x = p.x;
+    y = p.y;
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_11 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_12 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_11 };
-        "core:prelude/primitive.wado/i32::fmt_decimal"(x_3 + y_4, __local_12);
+        "core:prelude/primitive.wado/i32::fmt_decimal"(x + y, __local_12);
         break __tmpl: __local_11;
         unreachable;
     });
     __sroa_person_name = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 };
     "core:cli/println"(__sroa_person_name);
-    a = 5;
-    b = 15;
+    a = p.x;
+    b = p.y;
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_13 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_14 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_13 };
@@ -426,8 +422,7 @@ fn "wado-compiler/tests/fixtures/struct_2.wado/destruct_nested"() with Stdout {
 }
 
 fn "wado-compiler/tests/fixtures/struct_2.wado/destruct_rename"() with Stdout {
-    let horizontal: i32;
-    let vertical: i32;
+    let p: ref "wado-compiler/tests/fixtures/struct_2.wado//SDPoint";
     let x: i32;
     let vertical2: i32;
     let a: i32;
@@ -445,23 +440,22 @@ fn "wado-compiler/tests/fixtures/struct_2.wado/destruct_rename"() with Stdout {
     let __local_44: ref "core:prelude/format.wado//Formatter";
     let __local_49: ref "core:prelude/format.wado//Formatter";
     let __sroa_person_name: ref "core:prelude/string.wado//String";
-    horizontal = 10;
-    vertical = 20;
+    p = struct.new "wado-compiler/tests/fixtures/struct_2.wado//SDPoint" { x: 10, y: 20 };
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_9 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 };
         __local_10 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_9 };
         __local_22 = __local_10;
-        "core:prelude/primitive.wado/i32::fmt_decimal"(horizontal, __local_22);
+        "core:prelude/primitive.wado/i32::fmt_decimal"(10, __local_22);
         "core:prelude/string.wado/String::push"(__local_9, 44);
         "core:prelude/string.wado/String::push"(__local_9, 32);
         __local_10 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_9 };
         __local_27 = __local_10;
-        "core:prelude/primitive.wado/i32::fmt_decimal"(vertical, __local_27);
+        "core:prelude/primitive.wado/i32::fmt_decimal"(20, __local_27);
         break __tmpl: __local_9;
         unreachable;
     });
-    x = 10;
-    vertical2 = 20;
+    x = p.x;
+    vertical2 = p.y;
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_11 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 };
         __local_12 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_11 };
@@ -477,8 +471,8 @@ fn "wado-compiler/tests/fixtures/struct_2.wado/destruct_rename"() with Stdout {
     });
     __sroa_person_name = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 };
     "core:cli/println"(__sroa_person_name);
-    a = 10;
-    b = 20;
+    a = p.x;
+    b = p.y;
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_13 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 };
         __local_14 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_13 };
@@ -495,8 +489,6 @@ fn "wado-compiler/tests/fixtures/struct_2.wado/destruct_rename"() with Stdout {
 }
 
 fn "wado-compiler/tests/fixtures/struct_2.wado/destruct_wildcard"() with Stdout {
-    let x: i32;
-    let y: i32;
     let person: ref "wado-compiler/tests/fixtures/struct_2.wado//SDPerson";
     let name: ref "core:prelude/string.wado//String";
     let age: i32;
@@ -506,21 +498,19 @@ fn "wado-compiler/tests/fixtures/struct_2.wado/destruct_wildcard"() with Stdout 
     let __local_9: ref "core:prelude/format.wado//Formatter";
     let __local_10: ref "core:prelude/string.wado//String";
     let __local_11: ref "core:prelude/format.wado//Formatter";
-    x = 10;
     drop(20);
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
-        "core:prelude/primitive.wado/i32::fmt_decimal"(x, __local_7);
+        "core:prelude/primitive.wado/i32::fmt_decimal"(10, __local_7);
         break __tmpl: __local_6;
         unreachable;
     });
     drop(10);
-    y = 20;
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_8 };
-        "core:prelude/primitive.wado/i32::fmt_decimal"(y, __local_9);
+        "core:prelude/primitive.wado/i32::fmt_decimal"(20, __local_9);
         break __tmpl: __local_8;
         unreachable;
     });
@@ -530,7 +520,7 @@ fn "wado-compiler/tests/fixtures/struct_2.wado/destruct_wildcard"() with Stdout 
     drop(person.email);
     "core:cli/println"(name);
     drop(person.name);
-    age = 25;
+    age = person.age;
     drop(person.email);
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };

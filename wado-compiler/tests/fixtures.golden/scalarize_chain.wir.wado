@@ -101,15 +101,16 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 fn "wado-compiler/tests/fixtures/scalarize_chain.wado/transform"(p) {
+    let inner: ref "wado-compiler/tests/fixtures/scalarize_chain.wado//Pair";
     let __local_2: i32;
     let __local_3: i32;
-    drop(__inline_make_pair_0: block -> ref "wado-compiler/tests/fixtures/scalarize_chain.wado//Pair" {
+    inner = __inline_make_pair_0: block -> ref "wado-compiler/tests/fixtures/scalarize_chain.wado//Pair" {
         __local_2 = p.x + 1;
         __local_3 = p.y + 2;
         break __inline_make_pair_0: struct.new "wado-compiler/tests/fixtures/scalarize_chain.wado//Pair" { x: __local_2, y: __local_3 };
         unreachable;
-    });
-    return __local_2 * 2, __local_3 * 3;
+    };
+    return inner.x * 2, inner.y * 3;
 }
 
 fn "wado-compiler/tests/fixtures/scalarize_chain.wado/run"() with Stdout {

@@ -81,10 +81,10 @@ fn "wado-compiler/tests/fixtures/array_bounds_check_oob_write.wado/run"() {
         break __seq_lit: __local_0;
         unreachable;
     };
-    block {
+    if 3 >= arr.used {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
-    };
+    }
     builtin::array_set<i32>(arr.repr, 3, 99);
 }
 

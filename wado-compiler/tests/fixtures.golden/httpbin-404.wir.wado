@@ -2405,7 +2405,7 @@ fn "core:base64/build_decode_table"() {
     };
     __for_0: block {
         i_1 = 0;
-        _licm_used_31 = 256;
+        _licm_used_31 = table.used;
         _licm_repr_32 = table.repr;
         block {
             l138: loop {
@@ -2426,7 +2426,7 @@ fn "core:base64/build_decode_table"() {
     };
     __for_1: block {
         i_2 = 0;
-        _licm_used_33 = 256;
+        _licm_used_33 = table.used;
         _licm_repr_34 = table.repr;
         block {
             l142: loop {
@@ -2447,7 +2447,7 @@ fn "core:base64/build_decode_table"() {
     };
     __for_2: block {
         i_3 = 0;
-        _licm_used_35 = 256;
+        _licm_used_35 = table.used;
         _licm_repr_36 = table.repr;
         block {
             l146: loop {
@@ -2466,20 +2466,30 @@ fn "core:base64/build_decode_table"() {
             };
         };
     };
-    block {
-    };
+    if 43 >= table.used {
+        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+        unreachable;
+    }
     builtin::array_set_u8(table.repr, 43, 62);
-    block {
-    };
+    if 47 >= table.used {
+        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+        unreachable;
+    }
     builtin::array_set_u8(table.repr, 47, 63);
-    block {
-    };
+    if 45 >= table.used {
+        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+        unreachable;
+    }
     builtin::array_set_u8(table.repr, 45, 62);
-    block {
-    };
+    if 95 >= table.used {
+        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+        unreachable;
+    }
     builtin::array_set_u8(table.repr, 95, 63);
-    block {
-    };
+    if 61 >= table.used {
+        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+        unreachable;
+    }
     builtin::array_set_u8(table.repr, 61, 254);
     return table;
 }
@@ -2940,7 +2950,9 @@ fn "core:prelude/fpfmt.wado/unpack64"(f) {
     let s: u64;
     let m_12: u64;
     let e: i32;
+    let __local_14: ref "core:prelude/types.wado//Box<f64>";
     bits = __inline_f64__to_bits_0: block -> i64 {
+        __local_14 = struct.new "core:prelude/types.wado//Box<f64>" { value: f };
         break __inline_f64__to_bits_0: builtin::i64_reinterpret_f64(f);
         unreachable;
     };

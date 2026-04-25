@@ -14,7 +14,7 @@
 //! known. Invalidates entries on field assignment, full reassignment,
 //! address-take, capture, or call args that may mutate the local.
 //!
-//! Runs inside the optimization loop so that newly-exposed StructLiteral
+//! Runs inside the optimization loop so that newly-exposed `StructLiteral`
 //! / `$value_copy$T<id>` patterns from inlining or synthesis cascade
 //! into further folding.
 
@@ -41,7 +41,7 @@ struct FieldKnowledge {
     /// reference-typed values like `Box<T>` or post-elide value
     /// types), `&` / `&mut` references that escape, and locals
     /// captured by closures. Field knowledge IS recorded for these
-    /// locals (record_struct_literal / copy_from never gate on
+    /// locals (`record_struct_literal` / `copy_from` never gate on
     /// aliasing); the flow-sensitive walk drops their entries at
     /// every side-effect boundary (call, dereferenced write, etc.)
     /// where an unseen alias could have mutated the storage.
@@ -72,11 +72,7 @@ impl FieldKnowledge {
     /// makes any later read potentially observe an unseen mutation).
     /// Plain `aliased` locals do still get recorded; the flow-
     /// sensitive walk drops them at side-effect points.
-    fn record_struct_literal(
-        &mut self,
-        local_index: u32,
-        fields: &[crate::tir::TirStructField],
-    ) {
+    fn record_struct_literal(&mut self, local_index: u32, fields: &[crate::tir::TirStructField]) {
         if self.untrackable.contains(&local_index) {
             return;
         }
@@ -202,8 +198,9 @@ fn value_captures_alias(expr: &TirExpr, aliased: &IndexSet<u32>) -> bool {
                 || value_captures_alias(inner, aliased)
         }
         TirExprKind::Local { index, .. } => aliased.contains(index),
-        TirExprKind::FieldAccess { expr: inner, .. }
-        | TirExprKind::Cast { expr: inner, .. } => value_captures_alias(inner, aliased),
+        TirExprKind::FieldAccess { expr: inner, .. } | TirExprKind::Cast { expr: inner, .. } => {
+            value_captures_alias(inner, aliased)
+        }
         _ => false,
     }
 }
@@ -351,8 +348,7 @@ fn type_creates_alias(type_id: TypeId, type_table: &TypeTable) -> bool {
         ResolvedType::Ref { .. } => true,
         ResolvedType::GenericInstance { name, .. } if name == "Box" || name == "Array" => true,
         ResolvedType::Struct { base_name, .. }
-            if base_name.as_deref() == Some("Box")
-                || base_name.as_deref() == Some("Array") =>
+            if base_name.as_deref() == Some("Box") || base_name.as_deref() == Some("Array") =>
         {
             true
         }
@@ -430,7 +426,7 @@ fn collect_alias_edges_in_expr(
     edges: &mut Vec<(u32, u32)>,
 ) {
     expr_for_each_child(expr, &mut |child| {
-        collect_alias_edges_in_expr(child, type_table, edges)
+        collect_alias_edges_in_expr(child, type_table, edges);
     });
 }
 
@@ -477,7 +473,9 @@ fn expr_for_each_child(expr: &TirExpr, f: &mut dyn FnMut(&TirExpr)) {
             }
         }
         TirExprKind::ClosureToCanonical { functor, .. } => f(functor),
-        TirExprKind::Index { expr: inner, index, .. } => {
+        TirExprKind::Index {
+            expr: inner, index, ..
+        } => {
             f(inner);
             f(index);
         }
@@ -763,7 +761,9 @@ fn collect_aliased_in_expr(expr: &TirExpr, out: &mut IndexSet<u32>) {
         | TirExprKind::VariantPayload { expr: inner, .. } => {
             collect_aliased_in_expr(inner, out);
         }
-        TirExprKind::Index { expr: inner, index, .. } => {
+        TirExprKind::Index {
+            expr: inner, index, ..
+        } => {
             collect_aliased_in_expr(inner, out);
             collect_aliased_in_expr(index, out);
         }
@@ -1038,7 +1038,9 @@ fn forward_in_expr(
         | TirExprKind::Cast { expr: inner, .. } => {
             changed |= forward_in_expr(inner, known, helpers);
         }
-        TirExprKind::Index { expr: inner, index, .. } => {
+        TirExprKind::Index {
+            expr: inner, index, ..
+        } => {
             changed |= forward_in_expr(inner, known, helpers);
             changed |= forward_in_expr(index, known, helpers);
         }

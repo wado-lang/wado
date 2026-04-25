@@ -345,20 +345,26 @@ fn "wado-compiler/tests/fixtures/array_index_1.wado/array_index_inline_generic"(
         unreachable;
     };
     first = __inline_Array_i32__IndexValue_i32___index_value_6: block -> i32 {
-        block {
-        };
+        if 0 >= __sroa_c_items.used {
+            "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+            unreachable;
+        }
         break __inline_Array_i32__IndexValue_i32___index_value_6: builtin::array_get<i32>(__sroa_c_items.repr, 0);
         unreachable;
     };
     second = __inline_Array_i32__IndexValue_i32___index_value_7: block -> i32 {
-        block {
-        };
+        if 1 >= __sroa_c_items.used {
+            "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+            unreachable;
+        }
         break __inline_Array_i32__IndexValue_i32___index_value_7: builtin::array_get<i32>(__sroa_c_items.repr, 1);
         unreachable;
     };
     third = __inline_Array_i32__IndexValue_i32___index_value_8: block -> i32 {
-        block {
-        };
+        if 2 >= __sroa_c_items.used {
+            "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+            unreachable;
+        }
         break __inline_Array_i32__IndexValue_i32___index_value_8: builtin::array_get<i32>(__sroa_c_items.repr, 2);
         unreachable;
     };
@@ -413,7 +419,7 @@ fn "wado-compiler/tests/fixtures/array_index_1.wado/array_index_inline_loop"() w
     sum = 0;
     __for_2: block {
         i_3 = 0;
-        _licm_used_67 = 5;
+        _licm_used_67 = arr.used;
         _licm_repr_68 = arr.repr;
         block {
             l13: loop {

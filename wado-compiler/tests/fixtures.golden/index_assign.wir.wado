@@ -240,11 +240,15 @@ fn "wado-compiler/tests/fixtures/index_assign.wado/create_and_fill"() {
         break __seq_lit: __local_0;
         unreachable;
     };
-    block {
-    };
+    if 0 >= arr.used {
+        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+        unreachable;
+    }
     builtin::array_set<i32>(arr.repr, 0, 42);
-    block {
-    };
+    if 1 >= arr.used {
+        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+        unreachable;
+    }
     builtin::array_set<i32>(arr.repr, 1, 84);
     return arr;
 }
@@ -360,8 +364,10 @@ fn "wado-compiler/tests/fixtures/index_assign.wado/index_assign_expression_value
         unreachable;
     };
     value_31 = __inline_Array_i32__IndexValue_i32___index_value_15: block -> i32 {
-        block {
-        };
+        if 0 >= other.used {
+            "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+            unreachable;
+        }
         break __inline_Array_i32__IndexValue_i32___index_value_15: builtin::array_get<i32>(other.repr, 0);
         unreachable;
     } + 50;
@@ -1207,8 +1213,10 @@ fn "wado-compiler/tests/fixtures/index_assign.wado/index_assign_nested"() with S
         unreachable;
     };
     index_31 = __inline_Array_i32__IndexValue_i32___index_value_13: block -> i32 {
-        block {
-        };
+        if 0 >= indices.used {
+            "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+            unreachable;
+        }
         break __inline_Array_i32__IndexValue_i32___index_value_13: builtin::array_get<i32>(indices.repr, 0);
         unreachable;
     };
@@ -1218,8 +1226,10 @@ fn "wado-compiler/tests/fixtures/index_assign.wado/index_assign_nested"() with S
     }
     builtin::array_set<i32>(values.repr, index_31, 100);
     index_36 = __inline_Array_i32__IndexValue_i32___index_value_15: block -> i32 {
-        block {
-        };
+        if 1 >= indices.used {
+            "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+            unreachable;
+        }
         break __inline_Array_i32__IndexValue_i32___index_value_15: builtin::array_get<i32>(indices.repr, 1);
         unreachable;
     };
@@ -1229,8 +1239,10 @@ fn "wado-compiler/tests/fixtures/index_assign.wado/index_assign_nested"() with S
     }
     builtin::array_set<i32>(values.repr, index_36, 200);
     index_41 = __inline_Array_i32__IndexValue_i32___index_value_17: block -> i32 {
-        block {
-        };
+        if 2 >= indices.used {
+            "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+            unreachable;
+        }
         break __inline_Array_i32__IndexValue_i32___index_value_17: builtin::array_get<i32>(indices.repr, 2);
         unreachable;
     };
@@ -1290,8 +1302,10 @@ fn "wado-compiler/tests/fixtures/index_assign.wado/index_assign_nested"() with S
         unreachable;
     };
     value_87 = __inline_Array_i32__IndexValue_i32___index_value_44: block -> i32 {
-        block {
-        };
+        if 2 >= source.used {
+            "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+            unreachable;
+        }
         break __inline_Array_i32__IndexValue_i32___index_value_44: builtin::array_get<i32>(source.repr, 2);
         unreachable;
     };
@@ -1301,8 +1315,10 @@ fn "wado-compiler/tests/fixtures/index_assign.wado/index_assign_nested"() with S
     }
     builtin::array_set<i32>(dest.repr, 0, value_87);
     value_92 = __inline_Array_i32__IndexValue_i32___index_value_46: block -> i32 {
-        block {
-        };
+        if 0 >= source.used {
+            "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+            unreachable;
+        }
         break __inline_Array_i32__IndexValue_i32___index_value_46: builtin::array_get<i32>(source.repr, 0);
         unreachable;
     };
@@ -1312,8 +1328,10 @@ fn "wado-compiler/tests/fixtures/index_assign.wado/index_assign_nested"() with S
     }
     builtin::array_set<i32>(dest.repr, 1, value_92);
     value_97 = __inline_Array_i32__IndexValue_i32___index_value_48: block -> i32 {
-        block {
-        };
+        if 1 >= source.used {
+            "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+            unreachable;
+        }
         break __inline_Array_i32__IndexValue_i32___index_value_48: builtin::array_get<i32>(source.repr, 1);
         unreachable;
     };
@@ -1635,7 +1653,9 @@ fn "core:prelude/fpfmt.wado/unpack64"(f) {
     let s: u64;
     let m_12: u64;
     let e: i32;
+    let __local_14: ref "core:prelude/types.wado//Box<f64>";
     bits = __inline_f64__to_bits_0: block -> i64 {
+        __local_14 = struct.new "core:prelude/types.wado//Box<f64>" { value: f };
         break __inline_f64__to_bits_0: builtin::i64_reinterpret_f64(f);
         unreachable;
     };

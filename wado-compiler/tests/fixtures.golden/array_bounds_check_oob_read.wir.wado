@@ -82,10 +82,10 @@ fn "wado-compiler/tests/fixtures/array_bounds_check_oob_read.wado/run"() {
         unreachable;
     };
     drop(__inline_Array_i32__IndexValue_i32___index_value_8: block -> i32 {
-        block {
+        if 3 >= arr.used {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
-        };
+        }
         break __inline_Array_i32__IndexValue_i32___index_value_8: builtin::array_get<i32>(arr.repr, 3);
         unreachable;
     });

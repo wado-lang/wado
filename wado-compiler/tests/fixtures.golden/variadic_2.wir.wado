@@ -246,6 +246,7 @@ condition: c.2 == \"hello\"
 }
 
 fn "wado-compiler/tests/fixtures/variadic_2.wado/__test_2_spread_eval_once"() {
+    let __local_0: ref "tuple//[i32, i32]";
     let a: ref "tuple//[i32, i32, i32]";
     let __v0_2: i32;
     let __cond_3: bool;
@@ -253,6 +254,7 @@ fn "wado-compiler/tests/fixtures/variadic_2.wado/__test_2_spread_eval_once"() {
     let __cond_5: bool;
     let __v0_6: i32;
     let __cond_7: bool;
+    let b: ref "tuple//[i32, i32, i32]";
     let __v0_9: i32;
     let __cond_10: bool;
     let __v0_11: i32;
@@ -290,12 +292,12 @@ fn "wado-compiler/tests/fixtures/variadic_2.wado/__test_2_spread_eval_once"() {
     let __local_96: ref "core:prelude/format.wado//Formatter";
     let __local_102: ref "core:prelude/format.wado//Formatter";
     let __local_107: ref "core:prelude/format.wado//Formatter";
-    drop(__inline_make_pair_0: block -> ref "tuple//[i32, i32]" {
+    __local_0 = __inline_make_pair_0: block -> ref "tuple//[i32, i32]" {
         global:call_count = global:call_count + 1;
         break __inline_make_pair_0: struct.new "tuple//[i32, i32]" { 0: 10, 1: 20 };
         unreachable;
-    });
-    a = struct.new "tuple//[i32, i32, i32]" { 0: 10, 1: 20, 2: 30 };
+    };
+    a = struct.new "tuple//[i32, i32, i32]" { 0: __local_0.0, 1: __local_0.1, 2: 30 };
     __v0_2 = a.0;
     __cond_3 = __v0_2 == 10;
     if __cond_3 == 0 {
@@ -394,16 +396,16 @@ condition: call_count == 1
         });
         unreachable;
     }
-    drop(__inline_eval_prepend_i32_Tuple_i32_i32___22: block -> ref "tuple//[i32, i32, i32]" {
+    b = __inline_eval_prepend_i32_Tuple_i32_i32___22: block -> ref "tuple//[i32, i32, i32]" {
         __local_65 = __inline_make_pair_23: block -> ref "tuple//[i32, i32]" {
             global:call_count = global:call_count + 1;
             break __inline_make_pair_23: struct.new "tuple//[i32, i32]" { 0: 10, 1: 20 };
             unreachable;
         };
-        break __inline_eval_prepend_i32_Tuple_i32_i32___22: struct.new "tuple//[i32, i32, i32]" { 0: 99, 1: 10, 2: 20 };
+        break __inline_eval_prepend_i32_Tuple_i32_i32___22: struct.new "tuple//[i32, i32, i32]" { 0: 99, 1: __local_65.0, 2: __local_65.1 };
         unreachable;
-    });
-    __v0_9 = 99;
+    };
+    __v0_9 = b.0;
     __cond_10 = __v0_9 == 99;
     if __cond_10 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -436,7 +438,7 @@ condition: b.0 == 99
         });
         unreachable;
     }
-    __v0_11 = 10;
+    __v0_11 = b.1;
     __cond_12 = __v0_11 == 10;
     if __cond_12 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -469,7 +471,7 @@ condition: b.1 == 10
         });
         unreachable;
     }
-    __v0_13 = 20;
+    __v0_13 = b.2;
     __cond_14 = __v0_13 == 20;
     if __cond_14 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -625,6 +627,7 @@ condition: d.2 == \"hello\"
 }
 
 fn "wado-compiler/tests/fixtures/variadic_2.wado/__test_5_spread_vs_field_access"() {
+    let result: ref "tuple//[i32, i32, i32]";
     let __v0_1: i32;
     let __cond_2: bool;
     let __v0_3: i32;
@@ -641,15 +644,15 @@ fn "wado-compiler/tests/fixtures/variadic_2.wado/__test_5_spread_vs_field_access
     let __local_34: i32;
     let __local_35: i32;
     let __local_36: i32;
-    drop(__inline_combine_Tuple_i32_i32___0: block -> ref "tuple//[i32, i32, i32]" {
+    result = __inline_combine_Tuple_i32_i32___0: block -> ref "tuple//[i32, i32, i32]" {
         __local_33 = 10;
         __local_34 = 20;
         __local_35 = 30;
         __local_36 = 40;
         break __inline_combine_Tuple_i32_i32___0: struct.new "tuple//[i32, i32, i32]" { 0: 10, 1: 30, 2: 40 };
         unreachable;
-    });
-    __v0_1 = 10;
+    };
+    __v0_1 = result.0;
     __cond_2 = __v0_1 == 10;
     if __cond_2 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -678,7 +681,7 @@ condition: result.0 == 10
         });
         unreachable;
     }
-    __v0_3 = 30;
+    __v0_3 = result.1;
     __cond_4 = __v0_3 == 30;
     if __cond_4 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
