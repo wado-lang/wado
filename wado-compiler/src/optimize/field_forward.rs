@@ -1,4 +1,3 @@
-#![allow(dead_code)] // WIP: helpers wired up by follow-up commits
 //! TIR-level struct field constant forwarding.
 //!
 //! Tracks per-local field values (constants and aliased locals) along
@@ -20,7 +19,7 @@
 //! into further folding.
 
 use crate::flat_package::FlatPackage;
-use crate::hashmap::IndexMap;
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::ModuleSource;
 use crate::tir::{TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind, TypeId};
 
@@ -35,16 +34,27 @@ struct FieldKnowledge {
     /// (see [`is_forwardable`]) so substituting them at a use site
     /// doesn't change semantics.
     fields: IndexMap<FieldKey, TirExpr>,
+    /// Locals that may be aliased — either both sides of a `let dst =
+    /// src` Local→Local copy (which makes them share storage for
+    /// reference-typed values like `Box<T>` or post-elide value
+    /// types), or whose `&mut` reference escapes. Field knowledge is
+    /// never recorded for aliased locals because mutations through
+    /// any alias would invalidate it without our seeing it.
+    aliased: IndexSet<u32>,
 }
 
 impl FieldKnowledge {
     /// Record forwardable fields from a `StructLiteral { f0: e0, ... }`
-    /// assigned to `local_index`.
+    /// assigned to `local_index`. Skipped when `local_index` is in the
+    /// aliased set — its fields may be modified through aliases.
     fn record_struct_literal(
         &mut self,
         local_index: u32,
         fields: &[crate::tir::TirStructField],
     ) {
+        if self.aliased.contains(&local_index) {
+            return;
+        }
         for field in fields {
             if is_forwardable(&field.value) {
                 self.fields
@@ -53,8 +63,12 @@ impl FieldKnowledge {
         }
     }
 
-    /// Copy every recorded field of `src` to `dst`.
+    /// Copy every recorded field of `src` to `dst`. Skipped when `dst`
+    /// is aliased (its fields could be modified via the alias source).
     fn copy_from(&mut self, src: u32, dst: u32) {
+        if self.aliased.contains(&dst) {
+            return;
+        }
         let copies: Vec<(String, TirExpr)> = self
             .fields
             .iter()
@@ -154,13 +168,241 @@ pub fn forward_struct_field_constants(project: &mut FlatPackage) -> bool {
     let mut changed = false;
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
+        let func_name = func.name.clone();
+        let module = func.module_source.clone();
         let Some(ref mut body) = func.body else {
             continue;
         };
-        let mut known = FieldKnowledge::default();
+        let aliased = collect_aliased_locals(body);
+        let _ = (&func_name, &module);
+        let mut known = FieldKnowledge {
+            aliased,
+            ..Default::default()
+        };
         changed |= forward_in_block(body, &mut known, &helpers);
     }
     changed
+}
+
+/// Pre-pass: collect every local whose storage may be observed
+/// through more than one name, and is therefore unsafe to record
+/// field knowledge for. Conservative — false positives only cost
+/// missed optimizations.
+fn collect_aliased_locals(body: &TirBlock) -> IndexSet<u32> {
+    let mut out = IndexSet::default();
+    collect_aliased_in_block(body, &mut out);
+    out
+}
+
+fn collect_aliased_in_block(block: &TirBlock, out: &mut IndexSet<u32>) {
+    for stmt in &block.stmts {
+        collect_aliased_in_stmt(stmt, out);
+    }
+}
+
+fn collect_aliased_in_stmt(stmt: &TirStmt, out: &mut IndexSet<u32>) {
+    match &stmt.kind {
+        // `let dst = src` (Local→Local copy) → both share storage.
+        TirStmtKind::Let {
+            local_index, value, ..
+        } => {
+            if let TirExprKind::Local { index: src, .. } = &value.kind {
+                out.insert(*local_index);
+                out.insert(*src);
+            }
+            collect_aliased_in_expr(value, out);
+        }
+        TirStmtKind::LetDestructure { value, .. } => collect_aliased_in_expr(value, out),
+        TirStmtKind::Expr(expr) => {
+            // `dst = src` (Assign Local→Local) — same aliasing.
+            if let TirExprKind::Assign { target, value } = &expr.kind
+                && let TirExprKind::Local { index: dst, .. } = &target.kind
+                && let TirExprKind::Local { index: src, .. } = &value.kind
+            {
+                out.insert(*dst);
+                out.insert(*src);
+            }
+            collect_aliased_in_expr(expr, out);
+        }
+        TirStmtKind::Return { value } | TirStmtKind::Break { value, .. } => {
+            if let Some(v) = value {
+                collect_aliased_in_expr(v, out);
+            }
+        }
+        TirStmtKind::If {
+            condition,
+            then_block,
+            else_block,
+        } => {
+            collect_aliased_in_expr(condition, out);
+            collect_aliased_in_block(then_block, out);
+            if let Some(eb) = else_block {
+                collect_aliased_in_block(eb, out);
+            }
+        }
+        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+            collect_aliased_in_block(body, out);
+        }
+        TirStmtKind::IfLet {
+            scrutinee,
+            then_block,
+            else_block,
+            ..
+        } => {
+            collect_aliased_in_expr(scrutinee, out);
+            collect_aliased_in_block(then_block, out);
+            if let Some(eb) = else_block {
+                collect_aliased_in_block(eb, out);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn collect_aliased_in_expr(expr: &TirExpr, out: &mut IndexSet<u32>) {
+    match &expr.kind {
+        // `&local` or `&mut local` escapes a reference. The OLD
+        // WIR-level pass distinguished by `stores` annotation, but at
+        // TIR we don't have a callee-level view here — be conservative
+        // and treat any Ref/MutRef on a Local as alias-creating.
+        TirExprKind::Unary { op, expr: inner } => {
+            if matches!(
+                op,
+                crate::tir::TirUnaryOp::MutRef | crate::tir::TirUnaryOp::Ref
+            ) && let TirExprKind::Local { index, .. } = &inner.kind
+            {
+                out.insert(*index);
+            }
+            collect_aliased_in_expr(inner, out);
+        }
+        // Calls with mut args may stash the reference — alias.
+        TirExprKind::Call { args, .. } | TirExprKind::MethodCall { args, .. } => {
+            for arg in args {
+                if arg.is_mut
+                    && let TirExprKind::Local { index, .. } = &arg.expr.kind
+                {
+                    out.insert(*index);
+                }
+                collect_aliased_in_expr(&arg.expr, out);
+            }
+            if let TirExprKind::MethodCall { receiver, .. } = &expr.kind {
+                // Auto-ref: receiver may be passed as `&mut self`.
+                if let TirExprKind::Local { index, .. } = &receiver.kind {
+                    out.insert(*index);
+                }
+                collect_aliased_in_expr(receiver, out);
+            }
+        }
+        TirExprKind::CmRawCall { args, .. } => {
+            for arg in args {
+                collect_aliased_in_expr(arg, out);
+            }
+        }
+        TirExprKind::IndirectCall { callee, args, .. } => {
+            collect_aliased_in_expr(callee, out);
+            for arg in args {
+                collect_aliased_in_expr(arg, out);
+            }
+        }
+        TirExprKind::Closure { captures, body, .. } => {
+            for capture in captures {
+                out.insert(capture.outer_index);
+            }
+            collect_aliased_in_expr(body, out);
+        }
+        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+            collect_aliased_in_block(block, out);
+        }
+        TirExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            collect_aliased_in_expr(condition, out);
+            collect_aliased_in_block(then_branch, out);
+            if let Some(eb) = else_branch {
+                collect_aliased_in_block(eb, out);
+            }
+        }
+        TirExprKind::Match { expr: inner, arms } => {
+            collect_aliased_in_expr(inner, out);
+            for arm in arms {
+                if let Some(g) = &arm.guard {
+                    collect_aliased_in_expr(g, out);
+                }
+                collect_aliased_in_expr(&arm.body, out);
+            }
+        }
+        TirExprKind::ClosureToCanonical { functor, .. } => {
+            collect_aliased_in_expr(functor, out);
+        }
+        TirExprKind::Assign { target, value } => {
+            collect_aliased_in_expr(target, out);
+            collect_aliased_in_expr(value, out);
+        }
+        TirExprKind::Binary { left, right, .. } => {
+            collect_aliased_in_expr(left, out);
+            collect_aliased_in_expr(right, out);
+        }
+        TirExprKind::FieldAccess { expr: inner, .. }
+        | TirExprKind::Cast { expr: inner, .. }
+        | TirExprKind::TupleSpread { expr: inner }
+        | TirExprKind::TupleZip { expr: inner }
+        | TirExprKind::TypePackExpansion {
+            call_expr: inner, ..
+        }
+        | TirExprKind::VariantTag { expr: inner }
+        | TirExprKind::VariantTest { expr: inner, .. }
+        | TirExprKind::VariantPayload { expr: inner, .. } => {
+            collect_aliased_in_expr(inner, out);
+        }
+        TirExprKind::Index { expr: inner, index, .. } => {
+            collect_aliased_in_expr(inner, out);
+            collect_aliased_in_expr(index, out);
+        }
+        // Locals stored as field values of a fresh aggregate become
+        // reachable through that aggregate; future reads through the
+        // aggregate (including via captured-closure access or stored
+        // references) may modify them. Mark aliased.
+        TirExprKind::StructLiteral { fields, .. } => {
+            for field in fields {
+                if let TirExprKind::Local { index, .. } = &field.value.kind {
+                    out.insert(*index);
+                }
+                collect_aliased_in_expr(&field.value, out);
+            }
+        }
+        TirExprKind::TupleLiteral { elements, .. } => {
+            for elem in elements {
+                if let TirExprKind::Local { index, .. } = &elem.kind {
+                    out.insert(*index);
+                }
+                collect_aliased_in_expr(elem, out);
+            }
+        }
+        TirExprKind::VariantConstruct { payload, .. } => {
+            if let Some(p) = payload {
+                if let TirExprKind::Local { index, .. } = &p.kind {
+                    out.insert(*index);
+                }
+                collect_aliased_in_expr(p, out);
+            }
+        }
+        TirExprKind::GlobalVarSet { value, .. } => collect_aliased_in_expr(value, out),
+        TirExprKind::Switch {
+            scrutinee,
+            arms,
+            default,
+            ..
+        } => {
+            collect_aliased_in_expr(scrutinee, out);
+            for arm in arms {
+                collect_aliased_in_block(arm, out);
+            }
+            collect_aliased_in_block(default, out);
+        }
+        _ => {}
+    }
 }
 
 /// Update `known` after a `let local = value` binding has been
@@ -207,8 +449,8 @@ fn update_knowledge_from_expr_stmt(
                 expr: inner,
                 field_name,
                 ..
-            } => {
-                if let TirExprKind::Local { index, .. } = &inner.kind {
+            } => match &inner.kind {
+                TirExprKind::Local { index, .. } => {
                     known.invalidate_field(*index, field_name);
                     if is_forwardable(value) {
                         known
@@ -216,8 +458,15 @@ fn update_knowledge_from_expr_stmt(
                             .insert((*index, field_name.clone()), (**value).clone());
                     }
                 }
-            }
-            _ => {}
+                // Anything more complex than `local.field = expr`
+                // (e.g. `(*p).field = ...` or `q.outer.inner = ...`)
+                // could mutate aliased state we don't track. Fall back
+                // to clearing all knowledge.
+                _ => known.clear(),
+            },
+            // Writes through Deref / Index / etc. may alias arbitrary
+            // locals; conservatively clear.
+            _ => known.clear(),
         }
     }
 }
@@ -228,9 +477,9 @@ fn update_knowledge_from_expr_stmt(
 fn forward_in_expr(
     expr: &mut TirExpr,
     known: &mut FieldKnowledge,
-    _helpers: &IndexMap<(ModuleSource, String), TypeId>,
+    helpers: &IndexMap<(ModuleSource, String), TypeId>,
 ) -> bool {
-    // First, try to fold `local.field` here itself.
+    // Try to fold `local.field` here itself.
     if let TirExprKind::FieldAccess {
         expr: inner,
         field_name,
@@ -245,8 +494,201 @@ fn forward_in_expr(
         *expr = new_expr;
         return true;
     }
-    // TODO: recurse into children + invalidate on aliasing operations.
-    false
+    let mut changed = false;
+    match &mut expr.kind {
+        TirExprKind::Local { .. }
+        | TirExprKind::IntLiteral { .. }
+        | TirExprKind::FloatLiteral { .. }
+        | TirExprKind::BoolLiteral(_)
+        | TirExprKind::CharLiteral(_)
+        | TirExprKind::StringLiteral(_)
+        | TirExprKind::BytesLiteral(_)
+        | TirExprKind::Null
+        | TirExprKind::Unit
+        | TirExprKind::FuncRef { .. }
+        | TirExprKind::GlobalVarGet { .. }
+        | TirExprKind::Capture { .. }
+        | TirExprKind::EnumConstruct { .. } => {}
+        TirExprKind::Assign { target, value } => {
+            // Walk `value` normally — that side is read.
+            changed |= forward_in_expr(value, known, helpers);
+            // For `target`, the OUTER expression is an lvalue (write
+            // position) and must not be folded. Only its sub-expressions
+            // (the receiver of a FieldAccess, the indexee of an Index)
+            // are read positions. Walk those without touching the outer
+            // shape.
+            match &mut target.kind {
+                TirExprKind::FieldAccess { expr: inner, .. }
+                | TirExprKind::Index { expr: inner, .. } => {
+                    changed |= forward_in_expr(inner, known, helpers);
+                }
+                _ => {}
+            }
+            // Invalidate based on target shape. Unrecognized lvalue
+            // shapes (e.g. `*self = ...` writing through a Deref) may
+            // mutate any aliased local, so fall back to clearing all
+            // knowledge.
+            match &target.kind {
+                TirExprKind::Local { index, .. } => {
+                    known.invalidate_local(*index);
+                }
+                TirExprKind::FieldAccess {
+                    expr: inner,
+                    field_name,
+                    ..
+                } => match &inner.kind {
+                    TirExprKind::Local { index, .. } => {
+                        known.invalidate_field(*index, field_name);
+                    }
+                    _ => known.clear(),
+                },
+                _ => known.clear(),
+            }
+        }
+        TirExprKind::Unary { op, expr: inner } => {
+            changed |= forward_in_expr(inner, known, helpers);
+            if matches!(op, crate::tir::TirUnaryOp::MutRef)
+                && let TirExprKind::Local { index, .. } = &inner.kind
+            {
+                known.invalidate_local(*index);
+            }
+        }
+        TirExprKind::Binary { left, right, .. } => {
+            changed |= forward_in_expr(left, known, helpers);
+            changed |= forward_in_expr(right, known, helpers);
+        }
+        TirExprKind::Call { args, .. } => {
+            for arg in args {
+                changed |= forward_in_expr(&mut arg.expr, known, helpers);
+                if arg.is_mut
+                    && let TirExprKind::Local { index, .. } = &arg.expr.kind
+                {
+                    known.invalidate_local(*index);
+                }
+            }
+        }
+        TirExprKind::CmRawCall { args, .. } => {
+            for arg in args {
+                changed |= forward_in_expr(arg, known, helpers);
+            }
+        }
+        TirExprKind::MethodCall { receiver, args, .. } => {
+            changed |= forward_in_expr(receiver, known, helpers);
+            // Auto-ref hides &mut self, so be conservative: any local
+            // receiver may have been mutated by the call.
+            if let TirExprKind::Local { index, .. } = &receiver.kind {
+                known.invalidate_local(*index);
+            }
+            for arg in args {
+                changed |= forward_in_expr(&mut arg.expr, known, helpers);
+                if arg.is_mut
+                    && let TirExprKind::Local { index, .. } = &arg.expr.kind
+                {
+                    known.invalidate_local(*index);
+                }
+            }
+        }
+        TirExprKind::IndirectCall { callee, args, .. } => {
+            changed |= forward_in_expr(callee, known, helpers);
+            for arg in args {
+                changed |= forward_in_expr(arg, known, helpers);
+            }
+        }
+        TirExprKind::ClosureToCanonical { functor, .. } => {
+            changed |= forward_in_expr(functor, known, helpers);
+        }
+        TirExprKind::FieldAccess { expr: inner, .. }
+        | TirExprKind::TupleSpread { expr: inner }
+        | TirExprKind::TupleZip { expr: inner }
+        | TirExprKind::TypePackExpansion {
+            call_expr: inner, ..
+        }
+        | TirExprKind::Cast { expr: inner, .. } => {
+            changed |= forward_in_expr(inner, known, helpers);
+        }
+        TirExprKind::Index { expr: inner, index, .. } => {
+            changed |= forward_in_expr(inner, known, helpers);
+            changed |= forward_in_expr(index, known, helpers);
+        }
+        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+            // Conservative: blocks may re-execute via labels; clear
+            // outer knowledge and start fresh inside.
+            known.clear();
+            let mut inner = FieldKnowledge::default();
+            changed |= forward_in_block(block, &mut inner, helpers);
+        }
+        TirExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            changed |= forward_in_expr(condition, known, helpers);
+            let mut then_known = known.clone();
+            changed |= forward_in_block(then_branch, &mut then_known, helpers);
+            if let Some(eb) = else_branch {
+                let mut else_known = known.clone();
+                changed |= forward_in_block(eb, &mut else_known, helpers);
+            }
+            known.clear();
+        }
+        TirExprKind::StructLiteral { fields, .. } => {
+            for field in fields {
+                changed |= forward_in_expr(&mut field.value, known, helpers);
+            }
+        }
+        TirExprKind::TupleLiteral { elements, .. } => {
+            for elem in elements {
+                changed |= forward_in_expr(elem, known, helpers);
+            }
+        }
+        TirExprKind::VariantConstruct { payload, .. } => {
+            if let Some(p) = payload {
+                changed |= forward_in_expr(p, known, helpers);
+            }
+        }
+        TirExprKind::Closure { body, .. } => {
+            // Closure body executes in its own scope — clear and walk.
+            known.clear();
+            let mut inner = FieldKnowledge::default();
+            changed |= forward_in_expr(body, &mut inner, helpers);
+        }
+        TirExprKind::Match { expr: inner, arms } => {
+            changed |= forward_in_expr(inner, known, helpers);
+            for arm in arms {
+                let mut arm_known = known.clone();
+                if let Some(guard) = &mut arm.guard {
+                    changed |= forward_in_expr(guard, &mut arm_known, helpers);
+                }
+                changed |= forward_in_expr(&mut arm.body, &mut arm_known, helpers);
+            }
+            known.clear();
+        }
+        TirExprKind::GlobalVarSet { value, .. } => {
+            changed |= forward_in_expr(value, known, helpers);
+        }
+        TirExprKind::VariantTag { expr }
+        | TirExprKind::VariantTest { expr, .. }
+        | TirExprKind::VariantPayload { expr, .. } => {
+            changed |= forward_in_expr(expr, known, helpers);
+        }
+        TirExprKind::Switch {
+            scrutinee,
+            arms,
+            default,
+            ..
+        } => {
+            changed |= forward_in_expr(scrutinee, known, helpers);
+            for arm in arms {
+                let mut arm_known = known.clone();
+                changed |= forward_in_block(arm, &mut arm_known, helpers);
+            }
+            let mut def_known = known.clone();
+            changed |= forward_in_block(default, &mut def_known, helpers);
+            known.clear();
+        }
+        _ => {}
+    }
+    changed
 }
 
 fn forward_in_block(

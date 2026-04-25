@@ -45,6 +45,7 @@ use const_branch_prune::prune_constant_branches;
 use const_folding::fold_constants;
 use const_global_promotion::promote_constant_globals;
 use const_propagation::propagate_constants;
+use field_forward::forward_struct_field_constants;
 use container_sroa::scalarize_containers;
 use copy_prop::propagate_copies;
 use cse::eliminate_common_subexprs;
@@ -310,6 +311,9 @@ fn run_optimization_passes(
         });
         changed |= run_pass("tir/const_prop", project, profiler, |p| {
             propagate_constants(p)
+        });
+        changed |= run_pass("tir/field_forward", project, profiler, |p| {
+            forward_struct_field_constants(p)
         });
         changed |= run_pass("tir/const_fold", project, profiler, fold_constants);
         changed |= run_pass("tir/const_global_promotion", project, profiler, |p| {
