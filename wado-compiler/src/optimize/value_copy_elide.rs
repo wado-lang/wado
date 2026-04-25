@@ -12,7 +12,10 @@
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
 use crate::name::ModuleSource;
-use crate::tir::{TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind, TirUnaryOp, TypeId};
+use crate::tir::{
+    ResolvedType, TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
+    TypeTable,
+};
 
 pub fn elide_synthesized_value_copies(project: &mut FlatPackage) {
     let value_copy_set: IndexMap<(ModuleSource, String), TypeId> = project
@@ -27,6 +30,7 @@ pub fn elide_synthesized_value_copies(project: &mut FlatPackage) {
     if value_copy_set.is_empty() {
         return;
     }
+    let type_table = project.type_table.clone();
 
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
@@ -36,9 +40,13 @@ pub fn elide_synthesized_value_copies(project: &mut FlatPackage) {
         let Some(ref mut body) = func.body else {
             continue;
         };
-        let usage = analyze_usage(body);
+        let usage = analyze_usage(body, &type_table.borrow());
         strip_in_block(body, &value_copy_set, &usage);
     }
+}
+
+fn is_mut_ref_type(type_id: TypeId, type_table: &TypeTable) -> bool {
+    matches!(type_table.get(type_id), ResolvedType::MutRef(_))
 }
 
 #[derive(Debug, Default)]
@@ -48,27 +56,27 @@ struct LocalUsage {
     is_captured: bool,
 }
 
-fn analyze_usage(body: &TirBlock) -> IndexMap<u32, LocalUsage> {
+fn analyze_usage(body: &TirBlock, type_table: &TypeTable) -> IndexMap<u32, LocalUsage> {
     let mut usage: IndexMap<u32, LocalUsage> = IndexMap::default();
-    analyze_block(body, &mut usage);
+    analyze_block(body, &mut usage, type_table);
     usage
 }
 
-fn analyze_block(block: &TirBlock, usage: &mut IndexMap<u32, LocalUsage>) {
+fn analyze_block(block: &TirBlock, usage: &mut IndexMap<u32, LocalUsage>, type_table: &TypeTable) {
     for stmt in &block.stmts {
-        analyze_stmt(stmt, usage);
+        analyze_stmt(stmt, usage, type_table);
     }
 }
 
-fn analyze_stmt(stmt: &TirStmt, usage: &mut IndexMap<u32, LocalUsage>) {
+fn analyze_stmt(stmt: &TirStmt, usage: &mut IndexMap<u32, LocalUsage>, type_table: &TypeTable) {
     match &stmt.kind {
         TirStmtKind::Let { value, .. } | TirStmtKind::LetDestructure { value, .. } => {
-            analyze_expr(value, usage);
+            analyze_expr(value, usage, type_table);
         }
-        TirStmtKind::Expr(expr) => analyze_expr(expr, usage),
+        TirStmtKind::Expr(expr) => analyze_expr(expr, usage, type_table),
         TirStmtKind::Return { value } | TirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
-                analyze_expr(v, usage);
+                analyze_expr(v, usage, type_table);
             }
         }
         TirStmtKind::If {
@@ -76,14 +84,14 @@ fn analyze_stmt(stmt: &TirStmt, usage: &mut IndexMap<u32, LocalUsage>) {
             then_block,
             else_block,
         } => {
-            analyze_expr(condition, usage);
-            analyze_block(then_block, usage);
+            analyze_expr(condition, usage, type_table);
+            analyze_block(then_block, usage, type_table);
             if let Some(eb) = else_block {
-                analyze_block(eb, usage);
+                analyze_block(eb, usage, type_table);
             }
         }
         TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-            analyze_block(body, usage);
+            analyze_block(body, usage, type_table);
         }
         TirStmtKind::IfLet {
             scrutinee,
@@ -91,10 +99,10 @@ fn analyze_stmt(stmt: &TirStmt, usage: &mut IndexMap<u32, LocalUsage>) {
             else_block,
             ..
         } => {
-            analyze_expr(scrutinee, usage);
-            analyze_block(then_block, usage);
+            analyze_expr(scrutinee, usage, type_table);
+            analyze_block(then_block, usage, type_table);
             if let Some(eb) = else_block {
-                analyze_block(eb, usage);
+                analyze_block(eb, usage, type_table);
             }
         }
         TirStmtKind::Continue
@@ -103,138 +111,161 @@ fn analyze_stmt(stmt: &TirStmt, usage: &mut IndexMap<u32, LocalUsage>) {
     }
 }
 
-fn analyze_expr(expr: &TirExpr, usage: &mut IndexMap<u32, LocalUsage>) {
+/// Mark every local that contributes to `expr`'s observable storage as
+/// potentially field-mutated, following pure projections (FieldAccess,
+/// VariantPayload, Cast, Unary). This is the analog of copy_prop's
+/// `mark_potentially_mutated_local` and conservatively tracks the
+/// receiver / mut-ref-arg paths through which a callee can mutate
+/// caller state.
+fn mark_root_field_mutated(expr: &TirExpr, usage: &mut IndexMap<u32, LocalUsage>) {
+    match &expr.kind {
+        TirExprKind::Local { index, .. } => {
+            usage.entry(*index).or_default().has_field_mutation = true;
+        }
+        TirExprKind::Unary { expr: inner, .. }
+        | TirExprKind::Cast { expr: inner, .. }
+        | TirExprKind::FieldAccess { expr: inner, .. }
+        | TirExprKind::VariantPayload { expr: inner, .. } => {
+            mark_root_field_mutated(inner, usage);
+        }
+        _ => {}
+    }
+}
+
+fn analyze_expr(expr: &TirExpr, usage: &mut IndexMap<u32, LocalUsage>, type_table: &TypeTable) {
     match &expr.kind {
         TirExprKind::Local { .. } => {}
         TirExprKind::Assign { target, value } => {
             if let TirExprKind::Local { index, .. } = &target.kind {
                 usage.entry(*index).or_default().is_assigned = true;
             }
-            if let TirExprKind::FieldAccess { expr: inner, .. } = &target.kind
-                && let TirExprKind::Local { index, .. } = &inner.kind
-            {
-                usage.entry(*index).or_default().has_field_mutation = true;
+            if let TirExprKind::FieldAccess { expr: inner, .. } = &target.kind {
+                mark_root_field_mutated(inner, usage);
             }
-            analyze_expr(target, usage);
-            analyze_expr(value, usage);
+            analyze_expr(target, usage, type_table);
+            analyze_expr(value, usage, type_table);
         }
         TirExprKind::Unary { op, expr: inner } => {
-            if matches!(op, TirUnaryOp::MutRef)
-                && let TirExprKind::Local { index, .. } = &inner.kind
-            {
-                usage.entry(*index).or_default().has_field_mutation = true;
+            if matches!(op, TirUnaryOp::MutRef) {
+                mark_root_field_mutated(inner, usage);
             }
-            analyze_expr(inner, usage);
+            analyze_expr(inner, usage, type_table);
         }
         TirExprKind::Binary { left, right, .. } => {
-            analyze_expr(left, usage);
-            analyze_expr(right, usage);
+            analyze_expr(left, usage, type_table);
+            analyze_expr(right, usage, type_table);
         }
         TirExprKind::Call { args, .. } => {
             for arg in args {
-                if arg.is_mut
-                    && let TirExprKind::Local { index, .. } = &arg.expr.kind
-                {
-                    usage.entry(*index).or_default().has_field_mutation = true;
+                if arg.is_mut || is_mut_ref_type(arg.expr.type_id, type_table) {
+                    mark_root_field_mutated(&arg.expr, usage);
                 }
-                analyze_expr(&arg.expr, usage);
+                analyze_expr(&arg.expr, usage, type_table);
             }
         }
         TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
-                analyze_expr(arg, usage);
+                analyze_expr(arg, usage, type_table);
             }
         }
         TirExprKind::MethodCall { receiver, args, .. } => {
-            analyze_expr(receiver, usage);
+            // Auto-ref: the receiver expression carries `T` even for
+            // `&mut self` methods, so a precise check needs the callee's
+            // first-param type. Be conservative and treat any local
+            // receiver as potentially field-mutated by the call.
+            mark_root_field_mutated(receiver, usage);
+            analyze_expr(receiver, usage, type_table);
             for arg in args {
-                if arg.is_mut
-                    && let TirExprKind::Local { index, .. } = &arg.expr.kind
-                {
-                    usage.entry(*index).or_default().has_field_mutation = true;
+                if arg.is_mut || is_mut_ref_type(arg.expr.type_id, type_table) {
+                    mark_root_field_mutated(&arg.expr, usage);
                 }
-                analyze_expr(&arg.expr, usage);
+                analyze_expr(&arg.expr, usage, type_table);
             }
         }
         TirExprKind::IndirectCall { callee, args, .. } => {
-            analyze_expr(callee, usage);
+            analyze_expr(callee, usage, type_table);
             for arg in args {
-                analyze_expr(arg, usage);
+                if is_mut_ref_type(arg.type_id, type_table) {
+                    mark_root_field_mutated(arg, usage);
+                }
+                analyze_expr(arg, usage, type_table);
             }
         }
-        TirExprKind::ClosureToCanonical { functor, .. } => analyze_expr(functor, usage),
+        TirExprKind::ClosureToCanonical { functor, .. } => {
+            analyze_expr(functor, usage, type_table)
+        }
         TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::TupleSpread { expr: inner }
         | TirExprKind::TupleZip { expr: inner }
         | TirExprKind::TypePackExpansion {
             call_expr: inner, ..
-        } => analyze_expr(inner, usage),
+        } => analyze_expr(inner, usage, type_table),
         TirExprKind::Index {
             expr: inner, index, ..
         } => {
-            analyze_expr(inner, usage);
-            analyze_expr(index, usage);
+            analyze_expr(inner, usage, type_table);
+            analyze_expr(index, usage, type_table);
         }
-        TirExprKind::Cast { expr: inner, .. } => analyze_expr(inner, usage),
+        TirExprKind::Cast { expr: inner, .. } => analyze_expr(inner, usage, type_table),
         TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
-            analyze_block(block, usage);
+            analyze_block(block, usage, type_table);
         }
         TirExprKind::If {
             condition,
             then_branch,
             else_branch,
         } => {
-            analyze_expr(condition, usage);
-            analyze_block(then_branch, usage);
+            analyze_expr(condition, usage, type_table);
+            analyze_block(then_branch, usage, type_table);
             if let Some(eb) = else_branch {
-                analyze_block(eb, usage);
+                analyze_block(eb, usage, type_table);
             }
         }
         TirExprKind::StructLiteral { fields, .. } => {
             for field in fields {
-                analyze_expr(&field.value, usage);
+                analyze_expr(&field.value, usage, type_table);
             }
         }
         TirExprKind::TupleLiteral { elements, .. } => {
             for elem in elements {
-                analyze_expr(elem, usage);
+                analyze_expr(elem, usage, type_table);
             }
         }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {
-                analyze_expr(p, usage);
+                analyze_expr(p, usage, type_table);
             }
         }
         TirExprKind::Closure { body, captures, .. } => {
             for capture in captures {
                 usage.entry(capture.outer_index).or_default().is_captured = true;
             }
-            analyze_expr(body, usage);
+            analyze_expr(body, usage, type_table);
         }
         TirExprKind::Match { expr: inner, arms } => {
-            analyze_expr(inner, usage);
+            analyze_expr(inner, usage, type_table);
             for arm in arms {
                 if let Some(guard) = &arm.guard {
-                    analyze_expr(guard, usage);
+                    analyze_expr(guard, usage, type_table);
                 }
-                analyze_expr(&arm.body, usage);
+                analyze_expr(&arm.body, usage, type_table);
             }
         }
-        TirExprKind::GlobalVarSet { value, .. } => analyze_expr(value, usage),
+        TirExprKind::GlobalVarSet { value, .. } => analyze_expr(value, usage, type_table),
         TirExprKind::VariantTag { expr }
         | TirExprKind::VariantTest { expr, .. }
-        | TirExprKind::VariantPayload { expr, .. } => analyze_expr(expr, usage),
+        | TirExprKind::VariantPayload { expr, .. } => analyze_expr(expr, usage, type_table),
         TirExprKind::Switch {
             scrutinee,
             arms,
             default,
             ..
         } => {
-            analyze_expr(scrutinee, usage);
+            analyze_expr(scrutinee, usage, type_table);
             for arm in arms {
-                analyze_block(arm, usage);
+                analyze_block(arm, usage, type_table);
             }
-            analyze_block(default, usage);
+            analyze_block(default, usage, type_table);
         }
         _ => {}
     }
@@ -254,16 +285,29 @@ fn is_value_copy_call(
 }
 
 /// Find the root local that `arg` reads from, descending through pure
-/// projections (`FieldAccess`, `VariantPayload`, `Index` on a local).
-/// Returns `None` for fresh expressions (calls, literals, struct/variant
-/// constructors) — those produce new GC values that cannot be aliased
-/// from outside, so elision is safe regardless of the surrounding state.
+/// projections that share storage with their inner expression — field
+/// access, variant payload extraction, casts, and unary ops that simply
+/// alias (`Deref`, `Ref`, `MutRef`). Eliding the wrapper makes the
+/// binding alias whatever this root local references, so the safety
+/// check must verify that the root is not mutated between binding and
+/// use.
+///
+/// Returns `Some(EXTERNAL_SOURCE)` when the root is something we cannot
+/// inspect locally (e.g., a global or a function parameter passed by
+/// reference at the language level). Use `external_source_unsafe` to
+/// gate elision in that case.
+///
+/// Returns `None` only for genuinely fresh expressions (calls,
+/// literals, struct/variant constructors) — those produce new GC
+/// values that cannot be aliased from outside, so elision is always
+/// safe regardless of the surrounding state.
 fn arg_source_root(expr: &TirExpr) -> Option<u32> {
     match &expr.kind {
         TirExprKind::Local { index, .. } => Some(*index),
         TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::VariantPayload { expr: inner, .. }
-        | TirExprKind::Cast { expr: inner, .. } => arg_source_root(inner),
+        | TirExprKind::Cast { expr: inner, .. }
+        | TirExprKind::Unary { expr: inner, .. } => arg_source_root(inner),
         _ => None,
     }
 }
