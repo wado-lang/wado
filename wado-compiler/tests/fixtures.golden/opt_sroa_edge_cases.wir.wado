@@ -261,15 +261,20 @@ fn "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado/interleaved_field_ops"
 
 fn "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado/struct_in_match"(n) {
     let p: ref "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point";
-    let __match_scrut_0: i32;
-    __match_scrut_0 = n;
-    p = (if __match_scrut_0 == 0 -> ref "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" {
-        struct.new "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" { x: 1, y: 2 };
-    } else if __match_scrut_0 == 1 -> ref "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" {
-        struct.new "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" { x: 10, y: 20 };
-    } else {
-        struct.new "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" { x: 100, y: 200 };
-    });
+    let __local_2: ref "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point";
+    p = __inline__value_copy_T19_0: block -> ref "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" {
+        let __match_scrut_0: i32;
+        __match_scrut_0 = n;
+        __local_2 = (if __match_scrut_0 == 0 -> ref "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" {
+            struct.new "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" { x: 1, y: 2 };
+        } else if __match_scrut_0 == 1 -> ref "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" {
+            struct.new "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" { x: 10, y: 20 };
+        } else {
+            struct.new "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" { x: 100, y: 200 };
+        });
+        break __inline__value_copy_T19_0: struct.new "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" { x: __local_2.x, y: __local_2.y };
+        unreachable;
+    };
     return p.x + p.y;
 }
 
@@ -301,20 +306,21 @@ fn "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado/dependent_field_constr
 
 fn "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado/struct_from_conditional"(flag) {
     let p: ref "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point";
-    p = (if flag -> ref "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" {
-        struct.new "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" { x: 10, y: 20 };
-    } else {
-        struct.new "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" { x: 30, y: 40 };
-    });
+    let __local_2: ref "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point";
+    p = __inline__value_copy_T19_0: block -> ref "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" {
+        __local_2 = (if flag -> ref "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" {
+            struct.new "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" { x: 10, y: 20 };
+        } else {
+            struct.new "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" { x: 30, y: 40 };
+        });
+        break __inline__value_copy_T19_0: struct.new "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" { x: __local_2.x, y: __local_2.y };
+        unreachable;
+    };
     return p.x + p.y;
 }
 
 fn "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado/struct_reassignment"() {
-    let first: i32;
-    let second: i32;
-    first = 1 + 2;
-    second = 10 + 20;
-    return first + second;
+    return 33;
 }
 
 fn "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado/same_value_fields"() {
@@ -322,11 +328,7 @@ fn "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado/same_value_fields"() {
 }
 
 fn "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado/deep_nesting"() {
-    let inner: ref "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point";
-    let __sroa_outer_p: ref "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point";
-    inner = struct.new "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" { x: 3, y: 4 };
-    __sroa_outer_p = inner;
-    return (__sroa_outer_p.x * __sroa_outer_p.x) + (__sroa_outer_p.y * __sroa_outer_p.y);
+    return 25;
 }
 
 fn "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado/float_wrapper_ops"() {

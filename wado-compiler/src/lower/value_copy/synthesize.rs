@@ -1,7 +1,7 @@
 //! Replace each `builtin::copy_value::<T>(x)` call with a call to a
 //! synthesized concrete `$value_copy$T_<id>` function carrying
-//! `FunctionKind::ValueCopy { type_id }`. Runs at the end of `optimize`,
-//! immediately after `value_copy::insert_value_copy_calls`.
+//! `FunctionKind::ValueCopy { type_id }`. Runs at the end of `lower`,
+//! immediately after `value_copy::insert::insert_value_copy_calls`.
 //!
 //! For struct types the body is a `StructLiteral` with field-by-field
 //! shallow projections, plus `builtin::array_clone::<T>` for raw

@@ -196,6 +196,7 @@ fn "wado-compiler/tests/fixtures/treemap-literal-fn-arg.wado/sum_values"(m) {
     let entry: ref "tuple//[String, i32]";
     let __pattern_temp_0: ref null "tuple//[String, i32]";
     let __local_5: ref "core:prelude//Array<Tuple<String,i32>>";
+    let __local_6: ref "tuple//[String, i32]";
     total = 0;
     __iter_2 = __inline_Array_Tuple_String_i32___IntoIterator__into_iter_0: block -> ref "core:prelude/array.wado//ArrayIter<Tuple<String,i32>>" {
         __local_5 = "core:collections/TreeMap<String,i32>::entries"(m);
@@ -206,7 +207,11 @@ fn "wado-compiler/tests/fixtures/treemap-literal-fn-arg.wado/sum_values"(m) {
         l1: loop {
             __pattern_temp_0 = "core:prelude/array.wado/ArrayIter<Tuple<String,i32>>^Iterator::next"(__iter_2);
             if ref.is_null(__pattern_temp_0) == 0 {
-                entry = ref.as_non_null(__pattern_temp_0);
+                entry = __inline__value_copy_T517_1: block -> ref "tuple//[String, i32]" {
+                    __local_6 = ref.as_non_null(__pattern_temp_0);
+                    break __inline__value_copy_T517_1: struct.new "tuple//[String, i32]" { 0: __local_6.0, 1: __local_6.1 };
+                    unreachable;
+                };
                 total = total + entry.1;
             } else {
                 break b0;

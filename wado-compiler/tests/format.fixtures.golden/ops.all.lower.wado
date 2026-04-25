@@ -5036,10 +5036,10 @@ fn u128::fmt_decimal(self: &u128, f: &mut Formatter) {
         return;
     }
     let ten: u128 = "core::prelude/int128.wado::u128::from_u64"(10);
-    let mut temp: u128 = *self;
+    let mut temp: u128 = "$value_copy$T72"(*self);
     let mut digit_count: i32 = 0;
     __for_0: {
-        let mut temp: u128 = *self;
+        let mut temp: u128 = "$value_copy$T72"(*self);
         loop {
             if !(temp."u128^Ord::cmp"(&"core::prelude/int128.wado::u128::from_u64"(0)) == Ordering::Greater) {
                 break __for_0;
@@ -5054,7 +5054,7 @@ fn u128::fmt_decimal(self: &u128, f: &mut Formatter) {
     let arr: builtin::array<u8> = f.buf.String::internal_raw_bytes();
     let mut pos: i32 = (offset + digit_count);
     __for_1: {
-        let mut temp: u128 = *self;
+        let mut temp: u128 = "$value_copy$T72"(*self);
         loop {
             if !(temp."u128^Ord::cmp"(&"core::prelude/int128.wado::u128::from_u64"(0)) == Ordering::Greater) {
                 break __for_1;
@@ -5349,12 +5349,12 @@ pub fn i128::from_str_hex(s: String) -> Result<i128, ParseIntError> {
 
 pub fn i128::from_str_radix(s: String, radix: u32) -> Result<i128, ParseIntError> {
     "core::prelude/intparse.wado::assert_radix"(radix);
-    let __pattern_temp_0: [bool, i32] = match "core::prelude/intparse.wado::parse_signed_prefix"(s) {
+    let __pattern_temp_0: [bool, i32] = "$value_copy$T215"(match "core::prelude/intparse.wado::parse_signed_prefix"(s) {
         Ok(p) => p,
         Err(k) => {
             return Result<i128, ParseIntError>::Err("core::prelude/intparse.wado::ParseIntError::new"(k));
         },
-    };
+    });
     let is_negative: bool = __pattern_temp_0.0;
     let start: i32 = __pattern_temp_0.1;
     let max_pos: u128 = "core::prelude/int128.wado::u128::from_pair"(18446744073709551615, 9223372036854775807 as u64);
@@ -5474,10 +5474,10 @@ fn i128::fmt_decimal(self: &i128, f: &mut Formatter) {
         return;
     }
     let ten: u128 = "core::prelude/int128.wado::u128::from_u64"(10);
-    let mut temp: u128 = abs_val;
+    let mut temp: u128 = "$value_copy$T72"(abs_val);
     let mut digit_count: i32 = 0;
     __for_2: {
-        let mut temp: u128 = abs_val;
+        let mut temp: u128 = "$value_copy$T72"(abs_val);
         loop {
             if !(temp."u128^Ord::cmp"(&"core::prelude/int128.wado::u128::from_u64"(0)) == Ordering::Greater) {
                 break __for_2;
@@ -5491,9 +5491,9 @@ fn i128::fmt_decimal(self: &i128, f: &mut Formatter) {
     let offset: i32 = f.Formatter::prepare_int_write(is_neg, "", digit_count);
     let arr: builtin::array<u8> = f.buf.String::internal_raw_bytes();
     let mut pos: i32 = (offset + digit_count);
-    temp = abs_val;
+    temp = "$value_copy$T72"(abs_val);
     __for_3: {
-        let mut temp: u128 = abs_val;
+        let mut temp: u128 = "$value_copy$T72"(abs_val);
         loop {
             if !(temp."u128^Ord::cmp"(&"core::prelude/int128.wado::u128::from_u64"(0)) == Ordering::Greater) {
                 break __for_3;
@@ -6365,12 +6365,12 @@ pub fn assert_radix(radix: u32) {
 
 pub fn parse_i64_radix(s: String, radix: u32, max: i64, min_abs: u64) -> Result<i64, ParseIntError> {
     "core::prelude/intparse.wado::assert_radix"(radix);
-    let __pattern_temp_0: [bool, i32] = match "core::prelude/intparse.wado::parse_signed_prefix"(s) {
+    let __pattern_temp_0: [bool, i32] = "$value_copy$T215"(match "core::prelude/intparse.wado::parse_signed_prefix"(s) {
         Ok(p) => p,
         Err(k) => {
             return Result<i64, ParseIntError>::Err("core::prelude/intparse.wado::ParseIntError::new"(k));
         },
-    };
+    });
     let is_negative: bool = __pattern_temp_0.0;
     let start: i32 = __pattern_temp_0.1;
     return match "core::prelude/intparse.wado::parse_u64_digits"(s, start, s.String::len(), radix) {
@@ -12024,7 +12024,7 @@ pub fn "StrSplitIter^Iterator::collect"(self: &mut StrSplitIter) -> Array<String
     loop {
         let __pattern_temp_0: Option<String> = self."StrSplitIter^Iterator::next"();
         if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = __variant_payload(__pattern_temp_0, case=0);
+            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
             result."Array<String>::push"(item);
         } else {
             break;
@@ -12050,8 +12050,8 @@ pub fn "StrSplitIter^Iterator::find"(self: &mut StrSplitIter, pred: fn(String) -
     loop {
         let __pattern_temp_0: Option<String> = self."StrSplitIter^Iterator::next"();
         if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = __variant_payload(__pattern_temp_0, case=0);
-            if pred(item) {
+            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
+            if pred("$value_copy$T25"(item)) {
                 return Option<String>::Some(item);
             }
         } else {
@@ -12065,8 +12065,8 @@ pub fn "StrSplitIter^Iterator::any"(self: &mut StrSplitIter, pred: fn(String) ->
     loop {
         let __pattern_temp_0: Option<String> = self."StrSplitIter^Iterator::next"();
         if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = __variant_payload(__pattern_temp_0, case=0);
-            if pred(item) {
+            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
+            if pred("$value_copy$T25"(item)) {
                 return true;
             }
         } else {
@@ -12080,8 +12080,8 @@ pub fn "StrSplitIter^Iterator::all"(self: &mut StrSplitIter, pred: fn(String) ->
     loop {
         let __pattern_temp_0: Option<String> = self."StrSplitIter^Iterator::next"();
         if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = __variant_payload(__pattern_temp_0, case=0);
-            if !pred(item) {
+            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
+            if !pred("$value_copy$T25"(item)) {
                 return false;
             }
         } else {
@@ -12096,7 +12096,7 @@ pub fn "StrSplitIter^Iterator::last"(self: &mut StrSplitIter) -> Option<String> 
     loop {
         let __pattern_temp_0: Option<String> = self."StrSplitIter^Iterator::next"();
         if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = __variant_payload(__pattern_temp_0, case=0);
+            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
             result = Option<String>::Some(item);
         } else {
             break;
@@ -12110,7 +12110,7 @@ pub fn "StrSplitIter^Iterator::nth"(self: &mut StrSplitIter, n: i32) -> Option<S
     loop {
         let __pattern_temp_0: Option<String> = self."StrSplitIter^Iterator::next"();
         if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = __variant_payload(__pattern_temp_0, case=0);
+            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
             if (remaining <= 0) {
                 return Option<String>::Some(item);
             }
@@ -12127,8 +12127,8 @@ pub fn "StrSplitIter^Iterator::position"(self: &mut StrSplitIter, pred: fn(Strin
     loop {
         let __pattern_temp_0: Option<String> = self."StrSplitIter^Iterator::next"();
         if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = __variant_payload(__pattern_temp_0, case=0);
-            if pred(item) {
+            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
+            if pred("$value_copy$T25"(item)) {
                 return Option<i32>::Some(idx);
             }
             idx = (idx + 1);
@@ -12142,13 +12142,13 @@ pub fn "StrSplitIter^Iterator::position"(self: &mut StrSplitIter, pred: fn(Strin
 pub fn "StrSplitIter^Iterator::reduce"(self: &mut StrSplitIter, f: fn(String, String) -> String) -> Option<String> {
     let __pattern_temp_0: Option<String> = self."StrSplitIter^Iterator::next"();
     if __variant_test(__pattern_temp_0, case=0, name=Some) {
-        let first: String = __variant_payload(__pattern_temp_0, case=0);
-        let mut acc: String = first;
+        let first: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
+        let mut acc: String = "$value_copy$T25"(first);
         loop {
             let __pattern_temp_1: Option<String> = self."StrSplitIter^Iterator::next"();
             if __variant_test(__pattern_temp_1, case=0, name=Some) {
-                let item: String = __variant_payload(__pattern_temp_1, case=0);
-                acc = f(acc, item);
+                let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_1, case=0));
+                acc = f("$value_copy$T25"(acc), "$value_copy$T25"(item));
             } else {
                 break;
             }
@@ -12232,7 +12232,7 @@ pub fn "StrSplitNIter^Iterator::collect"(self: &mut StrSplitNIter) -> Array<Stri
     loop {
         let __pattern_temp_0: Option<String> = self."StrSplitNIter^Iterator::next"();
         if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = __variant_payload(__pattern_temp_0, case=0);
+            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
             result."Array<String>::push"(item);
         } else {
             break;
@@ -12258,8 +12258,8 @@ pub fn "StrSplitNIter^Iterator::find"(self: &mut StrSplitNIter, pred: fn(String)
     loop {
         let __pattern_temp_0: Option<String> = self."StrSplitNIter^Iterator::next"();
         if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = __variant_payload(__pattern_temp_0, case=0);
-            if pred(item) {
+            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
+            if pred("$value_copy$T25"(item)) {
                 return Option<String>::Some(item);
             }
         } else {
@@ -12273,8 +12273,8 @@ pub fn "StrSplitNIter^Iterator::any"(self: &mut StrSplitNIter, pred: fn(String) 
     loop {
         let __pattern_temp_0: Option<String> = self."StrSplitNIter^Iterator::next"();
         if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = __variant_payload(__pattern_temp_0, case=0);
-            if pred(item) {
+            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
+            if pred("$value_copy$T25"(item)) {
                 return true;
             }
         } else {
@@ -12288,8 +12288,8 @@ pub fn "StrSplitNIter^Iterator::all"(self: &mut StrSplitNIter, pred: fn(String) 
     loop {
         let __pattern_temp_0: Option<String> = self."StrSplitNIter^Iterator::next"();
         if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = __variant_payload(__pattern_temp_0, case=0);
-            if !pred(item) {
+            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
+            if !pred("$value_copy$T25"(item)) {
                 return false;
             }
         } else {
@@ -12304,7 +12304,7 @@ pub fn "StrSplitNIter^Iterator::last"(self: &mut StrSplitNIter) -> Option<String
     loop {
         let __pattern_temp_0: Option<String> = self."StrSplitNIter^Iterator::next"();
         if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = __variant_payload(__pattern_temp_0, case=0);
+            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
             result = Option<String>::Some(item);
         } else {
             break;
@@ -12318,7 +12318,7 @@ pub fn "StrSplitNIter^Iterator::nth"(self: &mut StrSplitNIter, n: i32) -> Option
     loop {
         let __pattern_temp_0: Option<String> = self."StrSplitNIter^Iterator::next"();
         if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = __variant_payload(__pattern_temp_0, case=0);
+            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
             if (remaining <= 0) {
                 return Option<String>::Some(item);
             }
@@ -12335,8 +12335,8 @@ pub fn "StrSplitNIter^Iterator::position"(self: &mut StrSplitNIter, pred: fn(Str
     loop {
         let __pattern_temp_0: Option<String> = self."StrSplitNIter^Iterator::next"();
         if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = __variant_payload(__pattern_temp_0, case=0);
-            if pred(item) {
+            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
+            if pred("$value_copy$T25"(item)) {
                 return Option<i32>::Some(idx);
             }
             idx = (idx + 1);
@@ -12350,13 +12350,13 @@ pub fn "StrSplitNIter^Iterator::position"(self: &mut StrSplitNIter, pred: fn(Str
 pub fn "StrSplitNIter^Iterator::reduce"(self: &mut StrSplitNIter, f: fn(String, String) -> String) -> Option<String> {
     let __pattern_temp_0: Option<String> = self."StrSplitNIter^Iterator::next"();
     if __variant_test(__pattern_temp_0, case=0, name=Some) {
-        let first: String = __variant_payload(__pattern_temp_0, case=0);
-        let mut acc: String = first;
+        let first: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
+        let mut acc: String = "$value_copy$T25"(first);
         loop {
             let __pattern_temp_1: Option<String> = self."StrSplitNIter^Iterator::next"();
             if __variant_test(__pattern_temp_1, case=0, name=Some) {
-                let item: String = __variant_payload(__pattern_temp_1, case=0);
-                acc = f(acc, item);
+                let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_1, case=0));
+                acc = f("$value_copy$T25"(acc), "$value_copy$T25"(item));
             } else {
                 break;
             }
@@ -12417,7 +12417,7 @@ pub fn "StrSplitWhitespaceIter^Iterator::collect"(self: &mut StrSplitWhitespaceI
     loop {
         let __pattern_temp_0: Option<String> = self."StrSplitWhitespaceIter^Iterator::next"();
         if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = __variant_payload(__pattern_temp_0, case=0);
+            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
             result."Array<String>::push"(item);
         } else {
             break;
@@ -12443,8 +12443,8 @@ pub fn "StrSplitWhitespaceIter^Iterator::find"(self: &mut StrSplitWhitespaceIter
     loop {
         let __pattern_temp_0: Option<String> = self."StrSplitWhitespaceIter^Iterator::next"();
         if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = __variant_payload(__pattern_temp_0, case=0);
-            if pred(item) {
+            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
+            if pred("$value_copy$T25"(item)) {
                 return Option<String>::Some(item);
             }
         } else {
@@ -12458,8 +12458,8 @@ pub fn "StrSplitWhitespaceIter^Iterator::any"(self: &mut StrSplitWhitespaceIter,
     loop {
         let __pattern_temp_0: Option<String> = self."StrSplitWhitespaceIter^Iterator::next"();
         if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = __variant_payload(__pattern_temp_0, case=0);
-            if pred(item) {
+            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
+            if pred("$value_copy$T25"(item)) {
                 return true;
             }
         } else {
@@ -12473,8 +12473,8 @@ pub fn "StrSplitWhitespaceIter^Iterator::all"(self: &mut StrSplitWhitespaceIter,
     loop {
         let __pattern_temp_0: Option<String> = self."StrSplitWhitespaceIter^Iterator::next"();
         if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = __variant_payload(__pattern_temp_0, case=0);
-            if !pred(item) {
+            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
+            if !pred("$value_copy$T25"(item)) {
                 return false;
             }
         } else {
@@ -12489,7 +12489,7 @@ pub fn "StrSplitWhitespaceIter^Iterator::last"(self: &mut StrSplitWhitespaceIter
     loop {
         let __pattern_temp_0: Option<String> = self."StrSplitWhitespaceIter^Iterator::next"();
         if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = __variant_payload(__pattern_temp_0, case=0);
+            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
             result = Option<String>::Some(item);
         } else {
             break;
@@ -12503,7 +12503,7 @@ pub fn "StrSplitWhitespaceIter^Iterator::nth"(self: &mut StrSplitWhitespaceIter,
     loop {
         let __pattern_temp_0: Option<String> = self."StrSplitWhitespaceIter^Iterator::next"();
         if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = __variant_payload(__pattern_temp_0, case=0);
+            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
             if (remaining <= 0) {
                 return Option<String>::Some(item);
             }
@@ -12520,8 +12520,8 @@ pub fn "StrSplitWhitespaceIter^Iterator::position"(self: &mut StrSplitWhitespace
     loop {
         let __pattern_temp_0: Option<String> = self."StrSplitWhitespaceIter^Iterator::next"();
         if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = __variant_payload(__pattern_temp_0, case=0);
-            if pred(item) {
+            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
+            if pred("$value_copy$T25"(item)) {
                 return Option<i32>::Some(idx);
             }
             idx = (idx + 1);
@@ -12535,13 +12535,13 @@ pub fn "StrSplitWhitespaceIter^Iterator::position"(self: &mut StrSplitWhitespace
 pub fn "StrSplitWhitespaceIter^Iterator::reduce"(self: &mut StrSplitWhitespaceIter, f: fn(String, String) -> String) -> Option<String> {
     let __pattern_temp_0: Option<String> = self."StrSplitWhitespaceIter^Iterator::next"();
     if __variant_test(__pattern_temp_0, case=0, name=Some) {
-        let first: String = __variant_payload(__pattern_temp_0, case=0);
-        let mut acc: String = first;
+        let first: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
+        let mut acc: String = "$value_copy$T25"(first);
         loop {
             let __pattern_temp_1: Option<String> = self."StrSplitWhitespaceIter^Iterator::next"();
             if __variant_test(__pattern_temp_1, case=0, name=Some) {
-                let item: String = __variant_payload(__pattern_temp_1, case=0);
-                acc = f(acc, item);
+                let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_1, case=0));
+                acc = f("$value_copy$T25"(acc), "$value_copy$T25"(item));
             } else {
                 break;
             }
@@ -12619,7 +12619,7 @@ pub fn "StrLinesIter^Iterator::collect"(self: &mut StrLinesIter) -> Array<String
     loop {
         let __pattern_temp_0: Option<String> = self."StrLinesIter^Iterator::next"();
         if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = __variant_payload(__pattern_temp_0, case=0);
+            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
             result."Array<String>::push"(item);
         } else {
             break;
@@ -12645,8 +12645,8 @@ pub fn "StrLinesIter^Iterator::find"(self: &mut StrLinesIter, pred: fn(String) -
     loop {
         let __pattern_temp_0: Option<String> = self."StrLinesIter^Iterator::next"();
         if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = __variant_payload(__pattern_temp_0, case=0);
-            if pred(item) {
+            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
+            if pred("$value_copy$T25"(item)) {
                 return Option<String>::Some(item);
             }
         } else {
@@ -12660,8 +12660,8 @@ pub fn "StrLinesIter^Iterator::any"(self: &mut StrLinesIter, pred: fn(String) ->
     loop {
         let __pattern_temp_0: Option<String> = self."StrLinesIter^Iterator::next"();
         if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = __variant_payload(__pattern_temp_0, case=0);
-            if pred(item) {
+            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
+            if pred("$value_copy$T25"(item)) {
                 return true;
             }
         } else {
@@ -12675,8 +12675,8 @@ pub fn "StrLinesIter^Iterator::all"(self: &mut StrLinesIter, pred: fn(String) ->
     loop {
         let __pattern_temp_0: Option<String> = self."StrLinesIter^Iterator::next"();
         if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = __variant_payload(__pattern_temp_0, case=0);
-            if !pred(item) {
+            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
+            if !pred("$value_copy$T25"(item)) {
                 return false;
             }
         } else {
@@ -12691,7 +12691,7 @@ pub fn "StrLinesIter^Iterator::last"(self: &mut StrLinesIter) -> Option<String> 
     loop {
         let __pattern_temp_0: Option<String> = self."StrLinesIter^Iterator::next"();
         if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = __variant_payload(__pattern_temp_0, case=0);
+            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
             result = Option<String>::Some(item);
         } else {
             break;
@@ -12705,7 +12705,7 @@ pub fn "StrLinesIter^Iterator::nth"(self: &mut StrLinesIter, n: i32) -> Option<S
     loop {
         let __pattern_temp_0: Option<String> = self."StrLinesIter^Iterator::next"();
         if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = __variant_payload(__pattern_temp_0, case=0);
+            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
             if (remaining <= 0) {
                 return Option<String>::Some(item);
             }
@@ -12722,8 +12722,8 @@ pub fn "StrLinesIter^Iterator::position"(self: &mut StrLinesIter, pred: fn(Strin
     loop {
         let __pattern_temp_0: Option<String> = self."StrLinesIter^Iterator::next"();
         if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = __variant_payload(__pattern_temp_0, case=0);
-            if pred(item) {
+            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
+            if pred("$value_copy$T25"(item)) {
                 return Option<i32>::Some(idx);
             }
             idx = (idx + 1);
@@ -12737,13 +12737,13 @@ pub fn "StrLinesIter^Iterator::position"(self: &mut StrLinesIter, pred: fn(Strin
 pub fn "StrLinesIter^Iterator::reduce"(self: &mut StrLinesIter, f: fn(String, String) -> String) -> Option<String> {
     let __pattern_temp_0: Option<String> = self."StrLinesIter^Iterator::next"();
     if __variant_test(__pattern_temp_0, case=0, name=Some) {
-        let first: String = __variant_payload(__pattern_temp_0, case=0);
-        let mut acc: String = first;
+        let first: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
+        let mut acc: String = "$value_copy$T25"(first);
         loop {
             let __pattern_temp_1: Option<String> = self."StrLinesIter^Iterator::next"();
             if __variant_test(__pattern_temp_1, case=0, name=Some) {
-                let item: String = __variant_payload(__pattern_temp_1, case=0);
-                acc = f(acc, item);
+                let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_1, case=0));
+                acc = f("$value_copy$T25"(acc), "$value_copy$T25"(item));
             } else {
                 break;
             }
@@ -12808,7 +12808,7 @@ pub fn "StrCharIndicesIter^Iterator::collect"(self: &mut StrCharIndicesIter) -> 
     loop {
         let __pattern_temp_0: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
         if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: [i32, char] = __variant_payload(__pattern_temp_0, case=0);
+            let item: [i32, char] = "$value_copy$T278"(__variant_payload(__pattern_temp_0, case=0));
             result."Array<Tuple<i32,char>>::push"(item);
         } else {
             break;
@@ -12834,8 +12834,8 @@ pub fn "StrCharIndicesIter^Iterator::find"(self: &mut StrCharIndicesIter, pred: 
     loop {
         let __pattern_temp_0: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
         if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: [i32, char] = __variant_payload(__pattern_temp_0, case=0);
-            if pred(item) {
+            let item: [i32, char] = "$value_copy$T278"(__variant_payload(__pattern_temp_0, case=0));
+            if pred("$value_copy$T278"(item)) {
                 return Option<[i32, char]>::Some(item);
             }
         } else {
@@ -12849,8 +12849,8 @@ pub fn "StrCharIndicesIter^Iterator::any"(self: &mut StrCharIndicesIter, pred: f
     loop {
         let __pattern_temp_0: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
         if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: [i32, char] = __variant_payload(__pattern_temp_0, case=0);
-            if pred(item) {
+            let item: [i32, char] = "$value_copy$T278"(__variant_payload(__pattern_temp_0, case=0));
+            if pred("$value_copy$T278"(item)) {
                 return true;
             }
         } else {
@@ -12864,8 +12864,8 @@ pub fn "StrCharIndicesIter^Iterator::all"(self: &mut StrCharIndicesIter, pred: f
     loop {
         let __pattern_temp_0: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
         if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: [i32, char] = __variant_payload(__pattern_temp_0, case=0);
-            if !pred(item) {
+            let item: [i32, char] = "$value_copy$T278"(__variant_payload(__pattern_temp_0, case=0));
+            if !pred("$value_copy$T278"(item)) {
                 return false;
             }
         } else {
@@ -12880,7 +12880,7 @@ pub fn "StrCharIndicesIter^Iterator::last"(self: &mut StrCharIndicesIter) -> Opt
     loop {
         let __pattern_temp_0: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
         if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: [i32, char] = __variant_payload(__pattern_temp_0, case=0);
+            let item: [i32, char] = "$value_copy$T278"(__variant_payload(__pattern_temp_0, case=0));
             result = Option<[i32, char]>::Some(item);
         } else {
             break;
@@ -12894,7 +12894,7 @@ pub fn "StrCharIndicesIter^Iterator::nth"(self: &mut StrCharIndicesIter, n: i32)
     loop {
         let __pattern_temp_0: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
         if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: [i32, char] = __variant_payload(__pattern_temp_0, case=0);
+            let item: [i32, char] = "$value_copy$T278"(__variant_payload(__pattern_temp_0, case=0));
             if (remaining <= 0) {
                 return Option<[i32, char]>::Some(item);
             }
@@ -12911,8 +12911,8 @@ pub fn "StrCharIndicesIter^Iterator::position"(self: &mut StrCharIndicesIter, pr
     loop {
         let __pattern_temp_0: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
         if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: [i32, char] = __variant_payload(__pattern_temp_0, case=0);
-            if pred(item) {
+            let item: [i32, char] = "$value_copy$T278"(__variant_payload(__pattern_temp_0, case=0));
+            if pred("$value_copy$T278"(item)) {
                 return Option<i32>::Some(idx);
             }
             idx = (idx + 1);
@@ -12926,13 +12926,13 @@ pub fn "StrCharIndicesIter^Iterator::position"(self: &mut StrCharIndicesIter, pr
 pub fn "StrCharIndicesIter^Iterator::reduce"(self: &mut StrCharIndicesIter, f: fn([i32, char], [i32, char]) -> [i32, char]) -> Option<[i32, char]> {
     let __pattern_temp_0: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
     if __variant_test(__pattern_temp_0, case=0, name=Some) {
-        let first: [i32, char] = __variant_payload(__pattern_temp_0, case=0);
-        let mut acc: [i32, char] = first;
+        let first: [i32, char] = "$value_copy$T278"(__variant_payload(__pattern_temp_0, case=0));
+        let mut acc: [i32, char] = "$value_copy$T278"(first);
         loop {
             let __pattern_temp_1: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
             if __variant_test(__pattern_temp_1, case=0, name=Some) {
-                let item: [i32, char] = __variant_payload(__pattern_temp_1, case=0);
-                acc = f(acc, item);
+                let item: [i32, char] = "$value_copy$T278"(__variant_payload(__pattern_temp_1, case=0));
+                acc = f("$value_copy$T278"(acc), "$value_copy$T278"(item));
             } else {
                 break;
             }
@@ -17632,7 +17632,7 @@ fn "Array<u8>^SequenceLiteralBuilder::new_literal"(capacity: i32) -> Array<u8> {
 }
 
 pub fn "Result<i32,IntErrorKind>::unwrap"(self: Box<Result<i32,IntErrorKind>>) -> i32 {
-    let __pattern_temp_0: Result<i32, IntErrorKind> = self.value;
+    let __pattern_temp_0: Result<i32, IntErrorKind> = "$value_copy$T211"(self.value);
     if __variant_test(__pattern_temp_0, case=0, name=Ok) {
         let v: i32 = __variant_payload(__pattern_temp_0, case=0);
         return v;
@@ -17714,5 +17714,25 @@ fn __initialize_modules() {
     }
     __initialize_module();
     __modules_initialized = true;
+}
+
+fn "$value_copy$T72"(v: u128) -> u128 {
+    return u128 { low: v.low, high: v.high };
+}
+
+fn "$value_copy$T215"(v: [bool, i32]) -> [bool, i32] {
+    return Tuple<bool,i32> { 0: v.0, 1: v.1 };
+}
+
+fn "$value_copy$T25"(v: String) -> String {
+    return String { repr: core::builtin::array_clone::<u8>(v.repr), used: v.used };
+}
+
+fn "$value_copy$T278"(v: [i32, char]) -> [i32, char] {
+    return Tuple<i32,char> { 0: v.0, 1: v.1 };
+}
+
+fn "$value_copy$T211"(v: Result<i32, IntErrorKind>) -> Result<i32, IntErrorKind> {
+    return v;
 }
 
