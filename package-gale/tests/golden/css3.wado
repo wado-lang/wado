@@ -33161,8 +33161,8 @@ fn parse_stylesheet(p: &mut Parser) -> Result<StylesheetNode, ParseError> {
             comment_or_space_or_cdo_or_cdc_list.push(comment_or_space_or_cdo_or_cdc);
         }
         let charset_item = CharsetItemListItem {
-            charset_2,
-            comment_or_space_or_cdo_or_cdc_list_2,
+            charset,
+            comment_or_space_or_cdo_or_cdc_list,
         };
         charset_item_list.push(charset_item);
     }
@@ -33254,8 +33254,8 @@ fn parse_stylesheet(p: &mut Parser) -> Result<StylesheetNode, ParseError> {
             comment_or_space_or_cdo_or_cdc_list.push(comment_or_space_or_cdo_or_cdc);
         }
         let imports_item = ImportsItemListItem {
-            imports_2,
-            comment_or_space_or_cdo_or_cdc_list_2,
+            imports,
+            comment_or_space_or_cdo_or_cdc_list,
         };
         imports_item_list.push(imports_item);
     }
@@ -33347,8 +33347,8 @@ fn parse_stylesheet(p: &mut Parser) -> Result<StylesheetNode, ParseError> {
             comment_or_space_or_cdo_or_cdc_list.push(comment_or_space_or_cdo_or_cdc);
         }
         let namespace__item = NamespaceItemListItem {
-            namespace__2,
-            comment_or_space_or_cdo_or_cdc_list_2,
+            namespace_,
+            comment_or_space_or_cdo_or_cdc_list,
         };
         namespace__item_list.push(namespace__item);
     }
@@ -33440,8 +33440,8 @@ fn parse_stylesheet(p: &mut Parser) -> Result<StylesheetNode, ParseError> {
             comment_or_space_or_cdo_or_cdc_list.push(comment_or_space_or_cdo_or_cdc);
         }
         let nested_statement_item = NestedStatementItemListItem {
-            nested_statement_2,
-            comment_or_space_or_cdo_or_cdc_list_2,
+            nested_statement,
+            comment_or_space_or_cdo_or_cdc_list,
         };
         nested_statement_item_list.push(nested_statement_item);
     }
@@ -34163,9 +34163,9 @@ fn parse_media_query_list(p: &mut Parser) -> Result<MediaQueryListNode, ParseErr
             let ws = parse_ws(p)?;
             let media_query = parse_media_query(p)?;
             let comma_ws_media_query = CommaWsMediaQueryItem {
-                comma_2,
-                ws_2,
-                media_query_2,
+                comma,
+                ws,
+                media_query,
             };
             comma_ws_media_query_list.push(comma_ws_media_query);
         }
@@ -34240,9 +34240,9 @@ fn parse_media_query(p: &mut Parser) -> Result<MediaQueryNode, ParseError> {
             let ws = parse_ws(p)?;
             let media_expression = parse_media_expression(p)?;
             let and_ws_media_expression = AndWsMediaExpressionItem {
-                and_2,
-                ws_2,
-                media_expression_2,
+                and,
+                ws,
+                media_expression,
             };
             and_ws_media_expression_list.push(and_ws_media_expression);
         }
@@ -34277,9 +34277,9 @@ fn parse_media_query(p: &mut Parser) -> Result<MediaQueryNode, ParseError> {
             let ws = parse_ws(p)?;
             let media_expression = parse_media_expression(p)?;
             let and_ws_media_expression = AndWsMediaExpressionItem {
-                and_2,
-                ws_2,
-                media_expression_2,
+                and,
+                ws,
+                media_expression,
             };
             and_ws_media_expression_list.push(and_ws_media_expression);
         }
@@ -34315,9 +34315,9 @@ fn parse_media_expression(p: &mut Parser) -> Result<MediaExpressionNode, ParseEr
         let ws = parse_ws(p)?;
         let expr = parse_expr(p)?;
         let colon_ws_expr = ColonWsExprItem {
-            colon_2,
-            ws_2,
-            expr_2,
+            colon,
+            ws,
+            expr,
         };
         Option::<ColonWsExprItem>::Some(colon_ws_expr)
     } else {
@@ -34393,9 +34393,9 @@ fn parse_page(p: &mut Parser) -> Result<PageNode, ParseError> {
             null
         };
         let semicolon_ws_declaration = SemicolonWsDeclarationOptItem {
-            semicolon_2,
-            ws_2,
-            declaration_2,
+            semicolon,
+            ws,
+            declaration,
         };
         semicolon_ws_declaration_list.push(semicolon_ws_declaration);
     }
@@ -34451,9 +34451,9 @@ fn parse_selector_group(p: &mut Parser) -> Result<SelectorGroupNode, ParseError>
         let ws = parse_ws(p)?;
         let selector = parse_selector(p)?;
         let comma_ws_selector = CommaWsSelectorItem {
-            comma_2,
-            ws_2,
-            selector_2,
+            comma,
+            ws,
+            selector,
         };
         comma_ws_selector_list.push(comma_ws_selector);
     }
@@ -34488,9 +34488,9 @@ fn parse_selector(p: &mut Parser) -> Result<SelectorNode, ParseError> {
         let simple_selector_sequence = parse_simple_selector_sequence(p)?;
         let ws = parse_ws(p)?;
         let combinator_simple_selector_sequence_ws = CombinatorSimpleSelectorSequenceWsItem {
-            combinator_2,
-            simple_selector_sequence_2,
-            ws_2,
+            combinator,
+            simple_selector_sequence,
+            ws,
         };
         combinator_simple_selector_sequence_ws_list.push(combinator_simple_selector_sequence_ws);
     }
@@ -35129,8 +35129,8 @@ fn parse_expression(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
         let group_0 = group_0_inner;
         let ws = parse_ws(p)?;
         let item_ws = ItemWsItem {
-            group_0_2,
-            ws_2,
+            group_0,
+            ws,
         };
         item_ws_list.push(item_ws);
     }
@@ -35508,8 +35508,8 @@ fn parse_declaration_list(p: &mut Parser) -> Result<DeclarationListNode, ParseEr
         let semicolon = p.expect(TK_LIT_SEMI)?;
         let ws = parse_ws(p)?;
         let semicolon_ws = SemicolonWsItem {
-            semicolon_2,
-            ws_2,
+            semicolon,
+            ws,
         };
         semicolon_ws_list.push(semicolon_ws);
     }
@@ -35543,9 +35543,9 @@ fn parse_declaration_list(p: &mut Parser) -> Result<DeclarationListNode, ParseEr
             null
         };
         let semicolon_ws_declaration = SemicolonWsDeclarationOptItem {
-            semicolon_2,
-            ws_2,
-            declaration_2,
+            semicolon,
+            ws,
+            declaration,
         };
         semicolon_ws_declaration_list.push(semicolon_ws_declaration);
     }
@@ -35766,8 +35766,8 @@ fn parse_expr(p: &mut Parser) -> Result<ExprNode, ParseError> {
         };
         let term = parse_term(p)?;
         let operator__term = OperatorOptTermItem {
-            operator__2,
-            term_2,
+            operator_,
+            term,
         };
         operator__term_list.push(operator__term);
     }
@@ -37313,14 +37313,14 @@ fn parse_supports_conjunction(p: &mut Parser) -> Result<SupportsConjunctionNode,
         let ws_4 = parse_ws(p)?;
         let supports_condition_in_parens = parse_supports_condition_in_parens(p)?;
         let ws_space_ws_and_ws_space_ws_supports_condition_in_parens = WsSpaceWsAndWsSpaceWsSupportsConditionInParensItem {
-            ws_5,
-            space_3,
-            ws_6,
-            and_2,
-            ws_7,
-            space_4,
-            ws_8,
-            supports_condition_in_parens_2,
+            ws,
+            space,
+            ws_2,
+            and,
+            ws_3,
+            space_2,
+            ws_4,
+            supports_condition_in_parens,
         };
         ws_space_ws_and_ws_space_ws_supports_condition_in_parens_list.push(ws_space_ws_and_ws_space_ws_supports_condition_in_parens);
     }
@@ -37373,14 +37373,14 @@ fn parse_supports_disjunction(p: &mut Parser) -> Result<SupportsDisjunctionNode,
         let ws_4 = parse_ws(p)?;
         let supports_condition_in_parens = parse_supports_condition_in_parens(p)?;
         let ws_space_ws_or_ws_space_ws_supports_condition_in_parens = WsSpaceWsOrWsSpaceWsSupportsConditionInParensItem {
-            ws_5,
-            space_3,
-            ws_6,
-            or_2,
-            ws_7,
-            space_4,
-            ws_8,
-            supports_condition_in_parens_2,
+            ws,
+            space,
+            ws_2,
+            or,
+            ws_3,
+            space_2,
+            ws_4,
+            supports_condition_in_parens,
         };
         ws_space_ws_or_ws_space_ws_supports_condition_in_parens_list.push(ws_space_ws_or_ws_space_ws_supports_condition_in_parens);
     }
@@ -37570,13 +37570,13 @@ fn parse_calc_sum(p: &mut Parser) -> Result<CalcSumNode, ParseError> {
         let ws_3 = parse_ws(p)?;
         let calc_product = parse_calc_product(p)?;
         let space_ws_item_ws_space_ws_calc_product = SpaceWsItemWsSpaceWsCalcProductItem {
-            space_3,
-            ws_4,
-            plus_or_minus_2,
-            ws_5,
-            space_4,
-            ws_6,
-            calc_product_2,
+            space,
+            ws,
+            plus_or_minus,
+            ws_2,
+            space_2,
+            ws_3,
+            calc_product,
         };
         space_ws_item_ws_space_ws_calc_product_list.push(space_ws_item_ws_space_ws_calc_product);
     }
@@ -37892,9 +37892,9 @@ fn parse_font_face_rule(p: &mut Parser) -> Result<FontFaceRuleNode, ParseError> 
             null
         };
         let semicolon_ws_font_face_declaration = SemicolonWsFontFaceDeclarationOptItem {
-            semicolon_2,
-            ws_2,
-            font_face_declaration_2,
+            semicolon,
+            ws,
+            font_face_declaration,
         };
         semicolon_ws_font_face_declaration_list.push(semicolon_ws_font_face_declaration);
     }
@@ -38061,12 +38061,12 @@ fn parse_keyframe_block(p: &mut Parser) -> Result<KeyframeBlockNode, ParseError>
     let rbrace = p.expect(TK_LIT_RBRACE)?;
     let ws_2 = parse_ws(p)?;
     let keyframe_selector_lbrace_ws_declaration_list_rbrace_ws = KeyframeSelectorLbraceWsDeclarationListOptRbraceWsItem {
-        keyframe_selector_2,
-        lbrace_2,
-        ws_3,
-        declaration_list_2,
-        rbrace_2,
-        ws_4,
+        keyframe_selector,
+        lbrace,
+        ws,
+        declaration_list,
+        rbrace,
+        ws_2,
     };
     return Result::<KeyframeBlockNode, ParseError>::Ok(KeyframeBlockNode {
         span: Span::new(start, p.last_end()),
@@ -38121,10 +38121,10 @@ fn parse_keyframe_selector(p: &mut Parser) -> Result<KeyframeSelectorNode, Parse
         let from__or_to_or_percentage = p.advance();
         let ws_2 = parse_ws(p)?;
         let comma_ws_item_ws = CommaWsItemWsItem {
-            comma_2,
-            ws_3,
-            from__or_to_or_percentage_2,
-            ws_4,
+            comma,
+            ws,
+            from__or_to_or_percentage,
+            ws_2,
         };
         comma_ws_item_ws_list.push(comma_ws_item_ws);
     }
@@ -38257,10 +38257,10 @@ fn parse_font_family_name_list(p: &mut Parser) -> Result<FontFamilyNameListNode,
         let ws_2 = parse_ws(p)?;
         let font_family_name = parse_font_family_name(p)?;
         let ws_comma_ws_font_family_name = WsCommaWsFontFamilyNameItem {
-            ws_3,
-            comma_2,
-            ws_4,
-            font_family_name_2,
+            ws,
+            comma,
+            ws_2,
+            font_family_name,
         };
         ws_comma_ws_font_family_name_list.push(ws_comma_ws_font_family_name);
     }
@@ -38300,8 +38300,8 @@ fn parse_font_family_name(p: &mut Parser) -> Result<FontFamilyNameNode, ParseErr
             let ws = parse_ws(p)?;
             let ident = parse_ident(p)?;
             let ws_ident = WsIdentItem {
-                ws_2,
-                ident_2,
+                ws,
+                ident,
             };
             ws_ident_list.push(ws_ident);
         }
@@ -38361,10 +38361,10 @@ fn parse_feature_value_block(p: &mut Parser) -> Result<FeatureValueBlockNode, Pa
             null
         };
         let ws_semicolon_ws_feature_value_definition = WsSemicolonWsFeatureValueDefinitionOptItem {
-            ws_3,
-            semicolon_2,
-            ws_4,
-            feature_value_definition_2,
+            ws,
+            semicolon,
+            ws_2,
+            feature_value_definition,
         };
         ws_semicolon_ws_feature_value_definition_list.push(ws_semicolon_ws_feature_value_definition);
     }
@@ -38416,8 +38416,8 @@ fn parse_feature_value_definition(p: &mut Parser) -> Result<FeatureValueDefiniti
         let ws = parse_ws(p)?;
         let number = parse_number(p)?;
         let ws_number = WsNumberItem {
-            ws_2,
-            number_2,
+            ws,
+            number,
         };
         ws_number_list.push(ws_number);
     }

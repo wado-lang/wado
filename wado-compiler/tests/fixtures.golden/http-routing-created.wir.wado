@@ -233,27 +233,29 @@ type "functype//wado-compiler/tests/fixtures/http-routing-created.wado/__cm_bind
 
 type "functype//wado-compiler/tests/fixtures/http-routing-created.wado/__cm_export__handle" = fn(i32);  // TypeId(45)
 
-type "functype//core:internal/memory_to_gc_array" = fn(i32, i32) -> ref builtin::array<u8>;  // TypeId(46)
+type "functype//wado-compiler/tests/fixtures/http-routing-created.wado/$value_copy$T19" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(46)
 
-type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(47)
+type "functype//core:internal/memory_to_gc_array" = fn(i32, i32) -> ref builtin::array<u8>;  // TypeId(47)
 
-type "functype//core:internal/cm_lower_string" = fn(ref "core:prelude/string.wado//String") -> i64;  // TypeId(48)
+type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(48)
 
-type "functype//core:prelude/string.wado/String^Eq::eq" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> bool;  // TypeId(49)
+type "functype//core:internal/cm_lower_string" = fn(ref "core:prelude/string.wado//String") -> i64;  // TypeId(49)
 
-type "functype//core:prelude/string.wado/String^Eq::eq_bytes" = fn(ref builtin::array<u8>, ref builtin::array<u8>, i32) -> bool;  // TypeId(50)
+type "functype//core:prelude/string.wado/String^Eq::eq" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> bool;  // TypeId(50)
 
-type "functype//wasi/future-new" = fn() -> i64;  // TypeId(51)
+type "functype//core:prelude/string.wado/String^Eq::eq_bytes" = fn(ref builtin::array<u8>, ref builtin::array<u8>, i32) -> bool;  // TypeId(51)
 
-type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(52)
+type "functype//wasi/future-new" = fn() -> i64;  // TypeId(52)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(53)
+type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(53)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(54)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(54)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(55)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(55)
 
-type "functype//wado-compiler/tests/fixtures/http-routing-created.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> [i32, i32];  // TypeId(56)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(56)
+
+type "functype//wado-compiler/tests/fixtures/http-routing-created.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> [i32, i32];  // TypeId(57)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
@@ -420,7 +422,7 @@ fn "wado-compiler/tests/fixtures/http-routing-created.wado/handle"(request) {
     multivalue_bind [__sroa___pattern_temp_1_0, __sroa___pattern_temp_1_1] = "wado-compiler/tests/fixtures/http-routing-created.wado/__cm_binding__Response_new"(headers, struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, trailers_future);
     response = __sroa___pattern_temp_1_0;
     if ref.is_null(path) == 0 {
-        p = ref.as_non_null(path);
+        p = "wado-compiler/tests/fixtures/http-routing-created.wado/$value_copy$T19"(ref.as_non_null(path));
         if "core:prelude/string.wado/String^Eq::eq"(p, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("/created"), used: 8 }) {
             drop("wado-compiler/tests/fixtures/http-routing-created.wado/__cm_binding__Response_set_status_code"(response, 201));
         }
@@ -812,6 +814,10 @@ fn "wado-compiler/tests/fixtures/http-routing-created.wado/__cm_binding__Respons
 
 fn "wado-compiler/tests/fixtures/http-routing-created.wado/__cm_export__handle"(request) {
     "wado-compiler/tests/fixtures/http-routing-created.wado/handle"(request);
+}
+
+fn "wado-compiler/tests/fixtures/http-routing-created.wado/$value_copy$T19"(v) {
+    return struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(v.repr)), used: v.used };
 }
 
 fn "core:internal/memory_to_gc_array"(ptr, len) {

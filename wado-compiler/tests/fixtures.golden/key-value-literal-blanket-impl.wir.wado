@@ -113,7 +113,9 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(43)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(44)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(45)
+type "functype//wado-compiler/tests/fixtures/key-value-literal-blanket-impl.wado/$value_copy$T604" = fn(ref "wado-compiler/tests/fixtures/key-value-literal-blanket-impl.wado//Bag<i32>") -> [ref "core:prelude//Array<String>", ref "core:prelude//Array<i32>"];  // TypeId(45)
+
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(46)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -131,7 +133,6 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 
 fn "wado-compiler/tests/fixtures/key-value-literal-blanket-impl.wado/run"() with Stdout {
     let b: ref "wado-compiler/tests/fixtures/key-value-literal-blanket-impl.wado//Bag<i32>";
-    let bag: ref "wado-compiler/tests/fixtures/key-value-literal-blanket-impl.wado//Bag<i32>";
     let __v0_2: i32;
     let __cond_3: bool;
     let __v0_4: i32;
@@ -165,9 +166,11 @@ fn "wado-compiler/tests/fixtures/key-value-literal-blanket-impl.wado/run"() with
     key_24 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("y"), used: 1 };
     "core:prelude/array.wado/Array<String>::push"(b.keys, key_24);
     "core:prelude/array.wado/Array<i32>::push"(b.values, 2);
-    bag = b;
+    let __sroa_bag_keys: ref "core:prelude//Array<String>";
+    let __sroa_bag_values: ref "core:prelude//Array<i32>";
+    multivalue_bind [__sroa_bag_keys, __sroa_bag_values] = "wado-compiler/tests/fixtures/key-value-literal-blanket-impl.wado/$value_copy$T604"(b);
     __v0_2 = __inline_Array_String___len_12: block -> i32 {
-        __local_27 = bag.keys;
+        __local_27 = __sroa_bag_keys;
         break __inline_Array_String___len_12: __local_27.used;
         unreachable;
     };
@@ -202,7 +205,7 @@ condition: bag.keys.len() == 2
         unreachable;
     }
     __v0_4 = __inline_Array_i32__IndexValue_i32___index_value_20: block -> i32 {
-        __local_39 = bag.values;
+        __local_39 = __sroa_bag_values;
         if 0 >= __local_39.used {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
@@ -250,6 +253,10 @@ fn "wado-compiler/tests/fixtures/key-value-literal-blanket-impl.wado/__cm_bindin
 fn "wado-compiler/tests/fixtures/key-value-literal-blanket-impl.wado/__cm_export__run"() {
     "wado-compiler/tests/fixtures/key-value-literal-blanket-impl.wado/run"();
     "wasi/task-return"(0);
+}
+
+fn "wado-compiler/tests/fixtures/key-value-literal-blanket-impl.wado/$value_copy$T604"(v) {
+    return v.keys, v.values;
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {

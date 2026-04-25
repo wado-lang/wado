@@ -86,7 +86,9 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(32)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(33)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(34)
+type "functype//wado-compiler/tests/fixtures/index_trait_complex_static.wado/$value_copy$T19" = fn(i32) -> ref "wado-compiler/tests/fixtures/index_trait_complex_static.wado//Value";  // TypeId(34)
+
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(35)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -115,7 +117,7 @@ fn "wado-compiler/tests/fixtures/index_trait_complex_static.wado/run"() with Std
     let __local_33: ref "core:prelude/types.wado//Box<i32>";
     let __sroa_c_item: ref "wado-compiler/tests/fixtures/index_trait_complex_static.wado//Value";
     __sroa_c_item = struct.new "wado-compiler/tests/fixtures/index_trait_complex_static.wado//Value" { n: 10 };
-    v = __sroa_c_item;
+    v = "wado-compiler/tests/fixtures/index_trait_complex_static.wado/$value_copy$T19"(__sroa_c_item.n);
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(25), used: 0 };
         "core:prelude/string.wado/String::push_str"(__local_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Initial: "), used: 9 });
@@ -155,6 +157,10 @@ fn "wado-compiler/tests/fixtures/index_trait_complex_static.wado/__cm_binding__S
 fn "wado-compiler/tests/fixtures/index_trait_complex_static.wado/__cm_export__run"() {
     "wado-compiler/tests/fixtures/index_trait_complex_static.wado/run"();
     "wasi/task-return"(0);
+}
+
+fn "wado-compiler/tests/fixtures/index_trait_complex_static.wado/$value_copy$T19"(v) {
+    return struct.new "wado-compiler/tests/fixtures/index_trait_complex_static.wado//Value" { n: v };
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {

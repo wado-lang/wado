@@ -90,7 +90,9 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(33)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(34)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(35)
+type "functype//wado-compiler/tests/fixtures/index_trait_function.wado/$value_copy$T19" = fn(i32) -> ref "wado-compiler/tests/fixtures/index_trait_function.wado//Data";  // TypeId(35)
+
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(36)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -115,7 +117,7 @@ fn "wado-compiler/tests/fixtures/index_trait_function.wado/run"() with Stdout {
     h = struct.new "wado-compiler/tests/fixtures/index_trait_function.wado//Holder" { data: struct.new "wado-compiler/tests/fixtures/index_trait_function.wado//Data" { value: 0 } };
     self = h.data;
     self.value = 42;
-    d = h.data;
+    d = "wado-compiler/tests/fixtures/index_trait_function.wado/$value_copy$T19"(h.data.value);
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(23), used: 0 };
         "core:prelude/string.wado/String::push"(__local_2, 86);
@@ -140,6 +142,10 @@ fn "wado-compiler/tests/fixtures/index_trait_function.wado/__cm_binding__Stdout_
 fn "wado-compiler/tests/fixtures/index_trait_function.wado/__cm_export__run"() {
     "wado-compiler/tests/fixtures/index_trait_function.wado/run"();
     "wasi/task-return"(0);
+}
+
+fn "wado-compiler/tests/fixtures/index_trait_function.wado/$value_copy$T19"(v) {
+    return struct.new "wado-compiler/tests/fixtures/index_trait_function.wado//Data" { value: v };
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {

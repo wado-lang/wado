@@ -112,8 +112,8 @@ fn analyze_stmt(stmt: &TirStmt, usage: &mut IndexMap<u32, LocalUsage>, type_tabl
 }
 
 /// Mark every local that contributes to `expr`'s observable storage as
-/// potentially field-mutated, following pure projections (FieldAccess,
-/// VariantPayload, Cast, Unary). This is the analog of copy_prop's
+/// potentially field-mutated, following pure projections (`FieldAccess`,
+/// `VariantPayload`, Cast, Unary). This is the analog of `copy_prop`'s
 /// `mark_potentially_mutated_local` and conservatively tracks the
 /// receiver / mut-ref-arg paths through which a callee can mutate
 /// caller state.
@@ -192,7 +192,7 @@ fn analyze_expr(expr: &TirExpr, usage: &mut IndexMap<u32, LocalUsage>, type_tabl
             }
         }
         TirExprKind::ClosureToCanonical { functor, .. } => {
-            analyze_expr(functor, usage, type_table)
+            analyze_expr(functor, usage, type_table);
         }
         TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::TupleSpread { expr: inner }
