@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777119264089,
+  "lastUpdate": 1777154870421,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -16269,6 +16269,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 613612,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1ee31210d2506c870f946a9d6c2c37bcc0544f02",
+          "message": "Merge pull request #924 from wado-lang/claude/fix-issue-920-QbEHi\n\nvalue_copy redesign follow-ups: phase placement, optimizer regression, field_forward fix",
+          "timestamp": "2026-04-26T07:02:59+09:00",
+          "tree_id": "92d9eb69a7d6382109774fc8ca0f0a976f4daeb8",
+          "url": "https://github.com/wado-lang/wado/commit/1ee31210d2506c870f946a9d6c2c37bcc0544f02"
+        },
+        "date": 1777154870123,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8982,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19110,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 614203,
             "unit": "bytes"
           }
         ]
