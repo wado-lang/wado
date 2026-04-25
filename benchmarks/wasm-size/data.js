@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777108150743,
+  "lastUpdate": 1777119264089,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -16205,6 +16205,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/65f945030c2ee579c9c0faf302cfd1b26f6331aa"
         },
         "date": 1777108150451,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8982,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19033,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 613612,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f2631cc2d59d748456f37e8c1cba56c9dc47109a",
+          "message": "Merge pull request #923 from wado-lang/claude/investigate-sqlite-kiln-bug-S2D82\n\nkiln: drop fuel ceiling default; finish Gale Kiln migration (incl. SQLite)",
+          "timestamp": "2026-04-25T21:09:34+09:00",
+          "tree_id": "1fba1f7e13d5762eb21236d7fb5895839156c759",
+          "url": "https://github.com/wado-lang/wado/commit/f2631cc2d59d748456f37e8c1cba56c9dc47109a"
+        },
+        "date": 1777119263788,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
