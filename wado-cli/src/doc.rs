@@ -80,7 +80,11 @@ fn format_usage() -> String {
         "Accepts file paths or module names (e.g., core:cli, wasi:http)."
     )
     .unwrap();
-    writeln!(buf, "Outputs to stdout by default; use `-o` to write to a file.").unwrap();
+    writeln!(
+        buf,
+        "Outputs to stdout by default; use `-o` to write to a file."
+    )
+    .unwrap();
     writeln!(
         buf,
         "Use `-o <path>` with a `{{module}}` placeholder to write one file per module."
@@ -257,13 +261,12 @@ fn module_filename_stem(input: &str) -> String {
 }
 
 fn write_to_file(path: &str, content: &str) {
-    if let Some(parent) = Path::new(path).parent() {
-        if !parent.as_os_str().is_empty() {
-            if let Err(e) = fs::create_dir_all(parent) {
-                eprintln!("Error creating '{}': {e}", parent.display());
-                process::exit(1);
-            }
-        }
+    if let Some(parent) = Path::new(path).parent()
+        && !parent.as_os_str().is_empty()
+        && let Err(e) = fs::create_dir_all(parent)
+    {
+        eprintln!("Error creating '{}': {e}", parent.display());
+        process::exit(1);
     }
     if let Err(e) = fs::write(path, content) {
         eprintln!("Error writing '{path}': {e}");
@@ -271,12 +274,7 @@ fn write_to_file(path: &str, content: &str) {
     }
 }
 
-fn render_single(
-    doc: &DocModule,
-    format_name: &str,
-    input: &str,
-    format: OutputFormat,
-) -> String {
+fn render_single(doc: &DocModule, format_name: &str, input: &str, format: OutputFormat) -> String {
     match format {
         OutputFormat::Json => format!("{}\n", serde_json::to_string_pretty(doc).unwrap()),
         OutputFormat::Markdown | OutputFormat::Simple => {
