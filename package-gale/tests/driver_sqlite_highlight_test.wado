@@ -1,4 +1,10 @@
-use sqlite_hl from "./golden/sqlite_highlight.wado";
+use sqlite_hl from "./grammars/SQLite.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: true },
+        },
+    };
 
 fn str_contains(haystack: &String, needle: &String) -> bool {
     let h_len = haystack.len();

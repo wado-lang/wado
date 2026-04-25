@@ -93,11 +93,17 @@ Gale has two layers of e2e testing, both driven by `.g4` files in `tests/grammar
 
 ### Driver Tests: S-expression Tree Assertions
 
-Driver tests verify generated parsers by parsing real input and checking the CST structure. Use `to_string_tree()` for ANTLR4-style S-expression output and `normalize_tree()` to write readable multi-line expected values:
+Driver tests verify generated parsers by parsing real input and checking the CST structure. Each test invokes the generator at compile time via `use ... with { generator: ... }` (Kiln inline invocation), then parses real input and uses `to_string_tree()` for ANTLR4-style S-expression output and `normalize_tree()` to write readable multi-line expected values:
 
 ```wado
-use json from "./golden/json.wado";
-use { normalize_tree } from "./golden/json.wado";
+use json from "./grammars/JSON.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+        },
+    };
+use { normalize_tree } from "./grammars/JSON.g4";
 
 fn assert_tree(input: &String, expected: &String) {
     let root = json::parse(input).unwrap();
@@ -120,8 +126,8 @@ test "tree: nested object with array" {
 }
 ```
 
-- **`to_string_tree()`** outputs `(ruleName child1 child2 ...)` with tokens as their text. EOF is omitted.
-- **`normalize_tree()`** collapses whitespace (preserving quoted strings) so multi-line indented expected values compare correctly with compact single-line output.
+- `to_string_tree()` outputs `(ruleName child1 child2 ...)` with tokens as their text. EOF is omitted.
+- `normalize_tree()` collapses whitespace (preserving quoted strings) so multi-line indented expected values compare correctly with compact single-line output.
 - Both functions are defined in `runtime.wado` and available in all generated parsers.
 
 ### Layer 1: G4 Parse Tests (`g4/integration_test.wado`)
@@ -135,24 +141,6 @@ test "parse JSON.g4" {
     assert g.name == "JSON";
     assert g.parser_rules.len() == 5;
 }
-```
-
-### Layer 2: Golden Tests (`codegen_test.wado`)
-
-Verify that code generation from `Grammar` IR produces the expected `.wado` output. Each test compares `generate(parse(...))` against a golden file in `tests/golden/`.
-
-```wado
-test "generate json golden" {
-    let output = generate(parse_grammar(JSON_G4));
-    let expected = #include_str("../tests/golden/json.wado");
-    assert output == expected, `golden mismatch: ...`;
-}
-```
-
-Golden fixtures are regenerated with:
-
-```sh
-mise run update-gale-golden
 ```
 
 ### Test Grammars (`tests/grammars/`)
@@ -182,19 +170,7 @@ Grammars with actions/predicates (ANTLR4, Rust, TypeScript) contain `{...}` acti
 
 1. Add the `.g4` file to `tests/grammars/` (include `// Source:` and `// License:` headers)
 2. Add a parse test in `g4/integration_test.wado`
-3. For golden tests: add an entry in `mise.toml` under `[tasks.update-gale-golden]`, run `mise run update-gale-golden`, and add a test case in `codegen_test.wado`
-
-## Golden Fixtures
-
-Golden fixtures live in `tests/golden/` and contain the expected `.wado` output generated from the `.g4` grammars in `tests/grammars/`.
-
-**When to regenerate**: whenever `codegen.wado`, `lexer_gen.wado`, `parser_gen.wado`, or `runtime.wado` changes in a way that affects generated output:
-
-```sh
-mise run update-gale-golden
-```
-
-Commit the updated golden files.
+3. Add a driver test under `tests/` that imports the grammar via `use ... with { generator: { module: "../src/generator.wado", options: { ... } } }`. The compiler runs Gale on the `.g4` at build time and resolves the `use` against the freshly generated parser.
 
 ## Inlined Runtime
 

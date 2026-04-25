@@ -31,19 +31,15 @@ use self::core::kiln::types as kiln_types;
 
 /// Host policy for a single generator invocation.
 ///
-/// WEP open-question #10 targets a 120s wall-clock budget alongside 1 GiB
-/// of fuel; only the fuel half is enforced today (see [`run_generator`]).
-/// A wall-clock epoch-interrupt deadline is deferred.
+/// `fuel` is the wasmtime fuel ceiling for the call; `0` means no ceiling
+/// (the store is seeded with `u64::MAX`). The default is `0` because no
+/// finite ceiling has yet proven to fit every Gale-sized grammar — the
+/// 1 GiB initial pick tripped on `SQLite`. WEP 2026-04-12 (Kiln)
+/// open-question #10 tracks exposing this as a `wado.toml` knob and
+/// pairing it with a wall-clock deadline.
+#[derive(Default)]
 pub struct KilnRunPolicy {
     pub fuel: u64,
-}
-
-impl Default for KilnRunPolicy {
-    fn default() -> Self {
-        Self {
-            fuel: 1024 * 1024 * 1024,
-        }
-    }
 }
 
 struct KilnHostState<H: CompilerHost> {
@@ -149,11 +145,14 @@ pub async fn run_generator<H: CompilerHost + 'static>(
         .map_err(|e| GeneratorRunnerError::Host(format!("linker setup: {e}")))?;
 
     let mut store = Store::new(engine, state);
-    if policy.fuel > 0 {
-        store
-            .set_fuel(policy.fuel)
-            .map_err(|e| GeneratorRunnerError::Host(format!("set fuel: {e}")))?;
-    }
+    let fuel = if policy.fuel == 0 {
+        u64::MAX
+    } else {
+        policy.fuel
+    };
+    store
+        .set_fuel(fuel)
+        .map_err(|e| GeneratorRunnerError::Host(format!("set fuel: {e}")))?;
 
     let generator = Generator::instantiate_async(&mut store, &component, &linker)
         .await

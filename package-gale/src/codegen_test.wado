@@ -20,7 +20,6 @@ use {
     LexerAlt,
     LexerElement,
     Visibility,
-    merge_grammars,
 } from "./ir.wado";
 use { generate, GenerateOptions } from "./codegen.wado";
 use { parse } from "./g4/parser.wado";
@@ -732,91 +731,6 @@ fn parse_grammar(input: String, path: String) -> Grammar {
     let mut g = parse(input).unwrap();
     g.source_files.push(path);
     return g;
-}
-
-
-#[timeout_ms(30000)]
-test "generate html golden" {
-    let lexer_g = parse_grammar(
-        #include_str("../tests/grammars/HTMLLexer.g4"),
-        "package-gale/tests/grammars/HTMLLexer.g4",
-    );
-    let parser_g = parse_grammar(
-        #include_str("../tests/grammars/HTMLParser.g4"),
-        "package-gale/tests/grammars/HTMLParser.g4",
-    );
-    let grammar = merge_grammars([lexer_g, parser_g]);
-    let output = generate(&grammar, &DEFAULT_OPTIONS);
-    let expected = #include_str("../tests/golden/html.wado");
-    assert output == expected, "HTML golden mismatch";
-}
-
-
-#[timeout_ms(120000)]
-test "generate css3 golden" {
-    let lexer_g = parse_grammar(
-        #include_str("../tests/grammars/css3Lexer.g4"),
-        "package-gale/tests/grammars/css3Lexer.g4",
-    );
-    let parser_g = parse_grammar(
-        #include_str("../tests/grammars/css3Parser.g4"),
-        "package-gale/tests/grammars/css3Parser.g4",
-    );
-    let grammar = merge_grammars([lexer_g, parser_g]);
-    let output = generate(&grammar, &DEFAULT_OPTIONS);
-    let expected = #include_str("../tests/golden/css3.wado");
-    assert output == expected, "CSS3 golden mismatch";
-}
-
-
-#[timeout_ms(60000)]
-test "generate antlr4 golden" {
-    let lexer_g = parse_grammar(
-        #include_str("../tests/grammars/ANTLRv4Lexer.g4"),
-        "package-gale/tests/grammars/ANTLRv4Lexer.g4",
-    );
-    let parser_g = parse_grammar(
-        #include_str("../tests/grammars/ANTLRv4Parser.g4"),
-        "package-gale/tests/grammars/ANTLRv4Parser.g4",
-    );
-    let grammar = merge_grammars([lexer_g, parser_g]);
-    let output = generate(&grammar, &DEFAULT_OPTIONS);
-    let expected = #include_str("../tests/golden/antlr4.wado");
-    assert output == expected, "ANTLR4 golden mismatch";
-}
-
-
-#[timeout_ms(120000)]
-test "generate typescript golden" {
-    let lexer_g = parse_grammar(
-        #include_str("../tests/grammars/TypeScriptLexer.g4"),
-        "package-gale/tests/grammars/TypeScriptLexer.g4",
-    );
-    let parser_g = parse_grammar(
-        #include_str("../tests/grammars/TypeScriptParser.g4"),
-        "package-gale/tests/grammars/TypeScriptParser.g4",
-    );
-    let grammar = merge_grammars([lexer_g, parser_g]);
-    let output = generate(&grammar, &DEFAULT_OPTIONS);
-    let expected = #include_str("../tests/golden/typescript.wado");
-    assert output == expected, "TypeScript golden mismatch";
-}
-
-
-#[timeout_ms(120000)]
-test "generate rust golden" {
-    let lexer_g = parse_grammar(
-        #include_str("../tests/grammars/RustLexer.g4"),
-        "package-gale/tests/grammars/RustLexer.g4",
-    );
-    let parser_g = parse_grammar(
-        #include_str("../tests/grammars/RustParser.g4"),
-        "package-gale/tests/grammars/RustParser.g4",
-    );
-    let grammar = merge_grammars([lexer_g, parser_g]);
-    let output = generate(&grammar, &DEFAULT_OPTIONS);
-    let expected = #include_str("../tests/golden/rust.wado");
-    assert output == expected, "Rust golden mismatch";
 }
 
 test "caseInsensitive grammar option makes literal match CI" {

@@ -442,22 +442,37 @@ fn lower_module_specifier(
     None
 }
 
-/// Strip the `manifest_root` prefix from `resolved` so the result matches the
-/// manifest TOML form's invariant (paths in [`GeneratorModule::LocalPath`]
-/// are relative to the manifest root). When `manifest_root` is empty, or when
-/// `resolved` does not live under `manifest_root`, `resolved` is returned
-/// verbatim.
+/// Re-anchor `resolved` (project-root-relative) to `manifest_root` so the
+/// result matches the manifest TOML form's invariant: paths in
+/// [`GeneratorModule::LocalPath`] are relative to the manifest root, and
+/// the provider resolves them as `manifest_root.join(path)`.
+///
+/// When `resolved` lies under `manifest_root` the shared prefix is stripped.
+/// When `resolved` lies above or beside `manifest_root` (e.g. an inline
+/// clause in `wasm-size/foo/bar.wado` referencing
+/// `../../package-gale/src/generator.wado`), `..` segments are emitted to
+/// walk up out of `manifest_root` before descending into `resolved`. An
+/// empty `manifest_root` means the path is already project-root-relative
+/// and is returned verbatim.
 fn strip_manifest_root_prefix(manifest_root: &str, resolved: &str) -> String {
     let root = manifest_root.trim_end_matches('/');
     if root.is_empty() {
         return resolved.to_string();
     }
-    if let Some(rest) = resolved.strip_prefix(root)
-        && let Some(rest) = rest.strip_prefix('/')
-    {
-        return rest.to_string();
+    let root_parts: Vec<&str> = root.split('/').filter(|p| !p.is_empty()).collect();
+    let resolved_parts: Vec<&str> = resolved.split('/').filter(|p| !p.is_empty()).collect();
+    let common = root_parts
+        .iter()
+        .zip(resolved_parts.iter())
+        .take_while(|(a, b)| a == b)
+        .count();
+    let ups = root_parts.len() - common;
+    let mut out = Vec::with_capacity(ups + resolved_parts.len() - common);
+    for _ in 0..ups {
+        out.push("..");
     }
-    resolved.to_string()
+    out.extend(resolved_parts.iter().skip(common).copied());
+    out.join("/")
 }
 
 fn encode_options(
@@ -729,6 +744,33 @@ mod tests {
             idx.redirect("tests/other.wado", "./grammar.g4"),
             Some("file:///abs/manifest.wado"),
         );
+    }
+
+    #[test]
+    fn strip_manifest_root_prefix_strips_when_inside() {
+        let p = strip_manifest_root_prefix("project/sub", "project/sub/dir/gen.wado");
+        assert_eq!(p, "dir/gen.wado");
+    }
+
+    #[test]
+    fn strip_manifest_root_prefix_emits_dotdots_when_above() {
+        let p = strip_manifest_root_prefix(
+            "wasm-size/sqlite_highlight",
+            "package-gale/src/generator.wado",
+        );
+        assert_eq!(p, "../../package-gale/src/generator.wado");
+    }
+
+    #[test]
+    fn strip_manifest_root_prefix_handles_partial_overlap() {
+        let p = strip_manifest_root_prefix("a/b/c", "a/x/y/gen.wado");
+        assert_eq!(p, "../../x/y/gen.wado");
+    }
+
+    #[test]
+    fn strip_manifest_root_prefix_empty_root_is_passthrough() {
+        let p = strip_manifest_root_prefix("", "package/src/gen.wado");
+        assert_eq!(p, "package/src/gen.wado");
     }
 
     #[test]
