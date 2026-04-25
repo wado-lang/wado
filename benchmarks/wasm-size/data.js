@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777083785424,
+  "lastUpdate": 1777097168746,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -16117,6 +16117,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/20225982b12389cabd6dac0a350846b04731b35e"
         },
         "date": 1777083785115,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8982,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18935,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 622193,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a35a577e355ddb3d4c52787613fed5d034440bdc",
+          "message": "Merge pull request #919 from wado-lang/claude/wado-landing-page-GGpfN\n\ndocs: add landing page at docs/wado-lang.md",
+          "timestamp": "2026-04-25T15:01:16+09:00",
+          "tree_id": "0c94679fa0fa959853b9973bd014d1941394144d",
+          "url": "https://github.com/wado-lang/wado/commit/a35a577e355ddb3d4c52787613fed5d034440bdc"
+        },
+        "date": 1777097168432,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
