@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777154870421,
+  "lastUpdate": 1777160940228,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -16293,6 +16293,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/1ee31210d2506c870f946a9d6c2c37bcc0544f02"
         },
         "date": 1777154870123,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8982,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19110,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 614203,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "16ae26769ec626859b7caccdb76ee484afd3ffad",
+          "message": "Merge pull request #925 from wado-lang/claude/reorganize-stdlib-docs-7IaAy\n\ndocs: split stdlib reference per-module + add `wado doc` batch output",
+          "timestamp": "2026-04-26T08:44:10+09:00",
+          "tree_id": "6d5d89ae7322ebe8cee3803f5c5388ee73856caa",
+          "url": "https://github.com/wado-lang/wado/commit/16ae26769ec626859b7caccdb76ee484afd3ffad"
+        },
+        "date": 1777160940142,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
