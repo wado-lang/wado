@@ -1,4 +1,10 @@
-use sqlite from "./golden/sqlite.wado";
+use sqlite from "./grammars/SQLite.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+        },
+    };
 use { log_stdout } from "core:cli";
 
 test "parse create table single col" {

@@ -15,11 +15,11 @@
 //!    `CliGeneratorProvider::compile_count`).
 //!
 //! Full runtime invocation (instantiating the Gale component via
-//! wasmtime and generating `calculator.wado` from the grammar) requires
-//! the CM-type-instance-wrapping follow-up that removes
-//! `skip_validation: true` on the generator compile. When that follow-up
-//! lands, extend this test with a `run_pipeline`-based assertion that
-//! diffs the generated output against `tests/golden/calculator.wado`.
+//! wasmtime and generating `calculator.wado` from the grammar) is now
+//! covered by the kiln-consumer's own `wado test` invocation through the
+//! Wado-level driver tests in `package-gale/tests/`. This Rust test only
+//! pins the host-side plumbing (manifest lower + generator compile + cache
+//! hit) so a regression there shows up before the longer Wado tests run.
 
 #![allow(unused_crate_dependencies)]
 

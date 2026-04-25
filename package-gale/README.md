@@ -52,8 +52,7 @@ package-gale/
   docs/
     antlr4-grammars.md   — ANTLR4 grammar format reference
   tests/
-    grammars/            — .g4 input grammars for e2e/golden tests
-    golden/              — expected generated output (golden fixtures)
+    grammars/            — .g4 input grammars for e2e tests
   src/
     main.wado            — CLI entry point (gen subcommand)
     main_test.wado       — smoke test for the public API
@@ -62,8 +61,8 @@ package-gale/
     runtime.wado         — Span, Token, ParseError (inlined into generated files)
     runtime_test.wado
     codegen.wado         — GrammarIR → .wado source (inlines runtime via #include_str)
-    codegen_test.wado    — golden tests against tests/golden/
-    generator.wado       — Kiln-shape entry (stub; replaced by real impl in M6.7)
+    codegen_test.wado    — unit tests for code generation
+    generator.wado       — Kiln-shape entry exposed to the compiler
     lexer_gen.wado       — lexer function code generation
     parser_gen.wado      — parser function code generation
     gen_util.wado        — shared code generation utilities

@@ -46,7 +46,6 @@ mise run clippy-fix
 # mise run update-bundled # platform affects the WAT
 mise run update-golden-fixtures
 mise run update-golden-format-fixtures
-mise run update-gale-golden
 mise run doc-stdlib
 mise run format
 mise run test
@@ -182,82 +181,6 @@ rm -rf wado-compiler/tests/fixtures.golden/*.*
     --in 'wado-compiler/tests/fixtures/{name}.wado' \
     --out 'wado-compiler/tests/fixtures.golden/{name}.wir.wado' \
     --phase wir -O2
-"""
-
-[tasks.update-gale-golden]
-description = "Regenerate gale golden fixtures from .g4 grammars"
-run = """
-#!/usr/bin/env bash
-set -xe -o pipefail
-mkdir -p package-gale/tests/golden
-./target/debug/wado run package-gale/src/main.wado \
-    gen "package-gale/tests/grammars/sexpression.g4" \
-    > "package-gale/tests/golden/sexpression.wado"
-./target/debug/wado run package-gale/src/main.wado \
-    gen "package-gale/tests/grammars/JSON.g4" \
-    > "package-gale/tests/golden/json.wado"
-./target/debug/wado run package-gale/src/main.wado \
-    gen "package-gale/tests/grammars/calculator.g4" \
-    > "package-gale/tests/golden/calculator.wado"
-./target/debug/wado run package-gale/src/main.wado \
-    gen "package-gale/tests/grammars/ci_sql.g4" \
-    > "package-gale/tests/golden/ci_sql.wado"
-./target/debug/wado run package-gale/src/main.wado \
-    gen "package-gale/tests/grammars/parser_gaps.g4" \
-    > "package-gale/tests/golden/parser_gaps.wado"
-./target/debug/wado run package-gale/src/main.wado \
-    gen "package-gale/tests/grammars/mode_gaps.g4" \
-    > "package-gale/tests/golden/mode_gaps.wado"
-./target/debug/wado run package-gale/src/main.wado \
-    gen "package-gale/tests/grammars/label_gaps.g4" \
-    > "package-gale/tests/golden/label_gaps.wado"
-./target/debug/wado run package-gale/src/main.wado \
-    gen "package-gale/tests/grammars/right_assoc_gaps.g4" \
-    > "package-gale/tests/golden/right_assoc_gaps.wado"
-./target/debug/wado run package-gale/src/main.wado \
-    gen "package-gale/tests/grammars/non_greedy_gaps.g4" \
-    > "package-gale/tests/golden/non_greedy_gaps.wado"
-./target/debug/wado run package-gale/src/main.wado \
-    gen "package-gale/tests/grammars/lexer_command_gaps.g4" \
-    > "package-gale/tests/golden/lexer_command_gaps.wado"
-./target/debug/wado run package-gale/src/main.wado \
-    gen "package-gale/tests/grammars/ci_rule_override.g4" \
-    > "package-gale/tests/golden/ci_rule_override.wado"
-./target/debug/wado run package-gale/src/main.wado \
-    gen "package-gale/tests/grammars/recursive_lexer.g4" \
-    > "package-gale/tests/golden/recursive_lexer.wado"
-./target/debug/wado run package-gale/src/main.wado \
-    gen "package-gale/tests/grammars/unicode_props.g4" \
-    > "package-gale/tests/golden/unicode_props.wado"
-./target/debug/wado run package-gale/src/main.wado \
-    gen "package-gale/tests/grammars/SQLite.g4" \
-    > "package-gale/tests/golden/sqlite.wado"
-./target/debug/wado run package-gale/src/main.wado \
-    gen "package-gale/tests/grammars/HTMLLexer.g4" \
-    "package-gale/tests/grammars/HTMLParser.g4" \
-    > "package-gale/tests/golden/html.wado"
-./target/debug/wado run package-gale/src/main.wado \
-    gen "package-gale/tests/grammars/css3Lexer.g4" \
-    "package-gale/tests/grammars/css3Parser.g4" \
-    > "package-gale/tests/golden/css3.wado"
-./target/debug/wado run package-gale/src/main.wado \
-    gen "package-gale/tests/grammars/ANTLRv4Lexer.g4" \
-    "package-gale/tests/grammars/ANTLRv4Parser.g4" \
-    > "package-gale/tests/golden/antlr4.wado"
-./target/debug/wado run package-gale/src/main.wado \
-    gen "package-gale/tests/grammars/TypeScriptLexer.g4" \
-    "package-gale/tests/grammars/TypeScriptParser.g4" \
-    > "package-gale/tests/golden/typescript.wado"
-./target/debug/wado run package-gale/src/main.wado \
-    gen "package-gale/tests/grammars/RustLexer.g4" \
-    "package-gale/tests/grammars/RustParser.g4" \
-    > "package-gale/tests/golden/rust.wado"
-./target/debug/wado run package-gale/src/main.wado \
-    gen --highlight "package-gale/tests/grammars/JSON.g4" \
-    > "package-gale/tests/golden/json_highlight.wado"
-./target/debug/wado run package-gale/src/main.wado \
-    gen --highlight "package-gale/tests/grammars/SQLite.g4" \
-    > "package-gale/tests/golden/sqlite_highlight.wado"
 """
 
 [tasks.update-golden-format-fixtures]

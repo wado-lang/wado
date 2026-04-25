@@ -1,7 +1,13 @@
 // Regression: CASE WHEN parsing where the leading expr? optional must not
 // greedily consume WHEN via the column_ref → any_name → keyword first-set path.
 // See scan-side follow-set pruning in gen_scan_repeat_optional_with_follow.
-use sqlite from "./golden/sqlite.wado";
+use sqlite from "./grammars/SQLite.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+        },
+    };
 
 fn check(label: &String, sql: &String) {
     let r = sqlite::parse(sql);

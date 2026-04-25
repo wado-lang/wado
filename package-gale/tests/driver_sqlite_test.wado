@@ -1,5 +1,11 @@
-use sqlite from "./golden/sqlite.wado";
-use { CstNode, CstChild, normalize_tree } from "./golden/sqlite.wado";
+use sqlite from "./grammars/SQLite.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+        },
+    };
+use { CstNode, CstChild, normalize_tree } from "./grammars/SQLite.g4";
 
 fn assert_tree(input: &String, expected: &String) {
     let root = sqlite::parse(input).unwrap();

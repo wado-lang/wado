@@ -19,7 +19,6 @@ cargo build
 mise run clippy-fix
 mise run update-golden-fixtures
 mise run update-golden-format-fixtures
-mise run update-gale-golden
 mise run doc-stdlib
 mise run format
 mise run test

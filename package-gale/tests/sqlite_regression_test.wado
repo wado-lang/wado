@@ -1,4 +1,10 @@
-use sqlite from "./golden/sqlite.wado";
+use sqlite from "./grammars/SQLite.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+        },
+    };
 
 // The simpler form (expr c.id isolated)
 test "m1 select c.id" {
