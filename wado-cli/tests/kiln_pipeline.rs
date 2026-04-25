@@ -363,6 +363,7 @@ version = "0.1.0"
         inputs: vec![],
         output_dir: InvocationPath::normalize("build/kiln/kiln-abc12345"),
         options_canonical: Vec::new(),
+        raw_options: None,
     };
 
     let generated_content = "pub fn greet() {}\n";
@@ -395,9 +396,17 @@ version = "0.1.0"
         ..CompilerOptions::default()
     };
     assert!(!options.invocations.is_empty());
-    assert_eq!(
-        options.invocations.redirect("entry.wado", "./schema.proto"),
-        Some("build/kiln/kiln-abc12345/schema.wado"),
+    let redirect = options
+        .invocations
+        .redirect("entry.wado", "./schema.proto")
+        .expect("redirect must be populated for the inline decl_file + from pair");
+    assert!(
+        redirect.starts_with("kiln:"),
+        "redirect URI must use the kiln: scheme, got `{redirect}`"
+    );
+    assert!(
+        redirect.ends_with("/build/kiln/kiln-abc12345/schema.wado"),
+        "redirect URI must point at the generated entry path, got `{redirect}`"
     );
 }
 
@@ -423,6 +432,7 @@ version = "0.1.0"
         inputs: vec![],
         output_dir: InvocationPath::normalize("build/kiln/kiln-deadbeef"),
         options_canonical: Vec::new(),
+        raw_options: None,
     };
 
     let host = StubHost::new(
@@ -442,9 +452,16 @@ version = "0.1.0"
         !outcome.invocations.is_empty(),
         "inline outcome must populate InvocationIndex"
     );
-    assert_eq!(
-        outcome.invocations.redirect("entry.wado", "./sample.proto"),
-        Some("build/kiln/kiln-deadbeef/sample.wado"),
-        "inline decl_file + from should redirect to the generated entry path"
+    let redirect = outcome
+        .invocations
+        .redirect("entry.wado", "./sample.proto")
+        .expect("inline decl_file + from should redirect to the generated entry path");
+    assert!(
+        redirect.starts_with("kiln:"),
+        "redirect URI must use the kiln: scheme, got `{redirect}`"
+    );
+    assert!(
+        redirect.ends_with("/build/kiln/kiln-deadbeef/sample.wado"),
+        "redirect URI must point at the generated entry path, got `{redirect}`"
     );
 }

@@ -1,5 +1,11 @@
-use lg from "./golden/label_gaps.wado";
-use { normalize_tree } from "./golden/label_gaps.wado";
+use lg from "./grammars/label_gaps.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+        },
+    };
+use { normalize_tree } from "./grammars/label_gaps.g4";
 
 fn assert_tree(input: &String, expected: &String) {
     let root = lg::parse(input).unwrap();

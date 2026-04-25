@@ -1,4 +1,10 @@
-use json_hl from "./golden/json_highlight.wado";
+use json_hl from "./grammars/JSON.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: true },
+        },
+    };
 
 test "highlight produces HTML" {
     let html = json_hl::highlight(&"{\"key\": 42}");

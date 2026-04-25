@@ -1,5 +1,11 @@
-use pg from "./golden/parser_gaps.wado";
-use { normalize_tree } from "./golden/parser_gaps.wado";
+use pg from "./grammars/parser_gaps.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+        },
+    };
+use { normalize_tree } from "./grammars/parser_gaps.g4";
 
 fn assert_tree(input: &String, expected: &String) {
     let root = pg::parse(input).unwrap();

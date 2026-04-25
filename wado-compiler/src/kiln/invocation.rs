@@ -114,6 +114,15 @@ pub struct Invocation {
     /// cache keys never flip when M4 ships unless the user-facing options
     /// actually change.
     pub options_canonical: Vec<u8>,
+    /// Raw `options` `AttrValue` recovered from the declaration site
+    /// (manifest TOML or inline `with { generator: { options: { ... } } }`).
+    /// Stashed so the driver's typed-encode pass can re-validate against
+    /// the generator's `OptionsDescriptor` once it becomes available
+    /// without re-reading or re-parsing the source. `None` when no
+    /// `options` clause was supplied. Excluded from
+    /// [`Invocation::identity_tuple`] — equivalence is decided by
+    /// `options_canonical` alone.
+    pub raw_options: Option<crate::ast::AttrValue>,
 }
 
 impl Invocation {
@@ -179,6 +188,7 @@ mod tests {
             inputs: vec![],
             output_dir: InvocationPath::normalize("build/kiln/a"),
             options_canonical: vec![],
+            raw_options: None,
         };
         let inv_b = Invocation {
             decl_site: DeclSite::Inline {

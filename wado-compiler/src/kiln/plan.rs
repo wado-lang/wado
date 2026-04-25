@@ -227,6 +227,7 @@ mod tests {
                 .collect(),
             output_dir: InvocationPath::normalize(out),
             options_canonical: vec![],
+            raw_options: None,
         }
     }
 

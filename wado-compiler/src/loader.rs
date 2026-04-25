@@ -197,6 +197,34 @@ pub struct LoadResult {
 
 use crate::compiler_host::LogLevel;
 
+/// Strip a leading `kiln:` URI scheme, returning the path component.
+///
+/// Used by [`ModuleLoader::get_source`] when handling
+/// `ModuleSource::Redirected` so the host receives a plain absolute
+/// path instead of a `kiln:/abs/path` URI. Returns `None` when the
+/// input does not look like a `kiln:` URI; callers fall back to
+/// passing the raw URI through to the host (in-memory hosts may use it
+/// as a key directly).
+///
+/// Parses with [`fluent_uri::UriRef`] so RFC 3986 percent-encoding and
+/// scheme validation behave correctly without depending on
+/// `std::path`. The returned path is the URI's `path()` segment as a
+/// `String`; percent-decoding happens at the host boundary via
+/// standard `read_to_string`.
+///
+/// The `kiln:` (rather than `file://`) scheme is intentional: the
+/// compiler's qualified-name format (`{module_source}//{name}`) treats
+/// `//` as the boundary, and `file://` URIs would introduce a
+/// spurious `//` that breaks every parser splitting on it. See
+/// `wado-cli::kiln_driver::path_to_kiln_uri` for the producer side.
+fn strip_kiln_scheme(uri: &str) -> Option<String> {
+    let parsed = fluent_uri::UriRef::parse(uri).ok()?;
+    if parsed.scheme()?.as_str() != "kiln" {
+        return None;
+    }
+    Some(parsed.path().as_str().to_string())
+}
+
 /// Module loader
 ///
 /// Loads all modules upfront before analysis and codegen.
@@ -600,18 +628,21 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
     ) -> Result<ModuleSource, LoadError> {
         // Kiln invocation redirect: `use { X } from "./grammar.g4"` picks up
         // the generated entry module when the `(decl_file, from_path)` pair
-        // is recorded on the loader.
+        // is recorded on the loader. The returned `Redirected` wraps an
+        // absolute URI the loader hands verbatim to the host — no further
+        // base-path joining or relative-path normalization happens.
         if !self.invocations.is_empty() {
             let decl_file = match from_module_source {
                 ModuleSource::Local { path } => path.as_str(),
                 ModuleSource::EntryPoint { filename } => filename.as_str(),
+                ModuleSource::Redirected { uri } => uri.as_str(),
                 _ => "",
             };
             if !decl_file.is_empty()
-                && let Some(entry_path) = self.invocations.redirect(decl_file, import_source)
+                && let Some(entry_uri) = self.invocations.redirect(decl_file, import_source)
             {
-                return Ok(ModuleSource::Local {
-                    path: entry_path.to_string(),
+                return Ok(ModuleSource::Redirected {
+                    uri: entry_uri.to_string(),
                 });
             }
         }
@@ -727,6 +758,21 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                 // Entry point source is provided directly, not loaded from host
                 Err(LoadError::ModuleNotFound {
                     module_source: module_source.clone(),
+                })
+            }
+            ModuleSource::Redirected { uri } => {
+                // Strip the `file:` scheme so the host sees a plain
+                // absolute path. Other schemes are passed through
+                // unchanged so in-memory hosts can use the URI as a key.
+                let host_path = strip_kiln_scheme(uri).unwrap_or_else(|| uri.clone());
+                let bytes = self
+                    .host
+                    .load_source(&host_path)
+                    .await
+                    .map_err(LoadError::from)?;
+                String::from_utf8(bytes).map_err(|_| LoadError::IoError {
+                    path: host_path,
+                    message: "file is not valid UTF-8".to_string(),
                 })
             }
         }

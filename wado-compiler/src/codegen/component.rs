@@ -43,6 +43,17 @@ pub fn build_component(
         enc.defined_type().result(None, None);
     }
 
+    // Kiln world types: defined inline at the component level (not
+    // inside an imported instance) because `core:kiln/types` enters the
+    // world scope via `use types.{...}`, not as an interface import.
+    // The generator's single export `generate(raw: raw-request) ->
+    // result<response, error>` plus its task-return canon need these
+    // types defined before `emit_canonical_intrinsics` and
+    // `emit_world_exports` run.
+    if project.is_kiln_generator_world() {
+        emit_kiln_world_types(&mut builder, &mut ctx);
+    }
+
     // Bundled modules (FTS and libm) — computed from post-DCE imports
     let component_plan = &project.component_plan;
     let bundled_functions: Vec<String> = project
@@ -198,6 +209,7 @@ pub fn build_component(
         &transmission_future_types,
         &scalar_future_types,
         project.has_http_handler_export,
+        project.is_kiln_generator_world(),
     );
 
     // Lower WASI functions
@@ -323,7 +335,13 @@ pub fn build_component(
     builder.core_instantiate(Some("main"), ctx.core_module_idx("main-mod"), main_args);
 
     // World exports
-    emit_world_exports(&mut builder, &mut ctx, component_plan, result_unit_type);
+    emit_world_exports(
+        &mut builder,
+        &mut ctx,
+        component_plan,
+        result_unit_type,
+        project.is_kiln_generator_world(),
+    );
 
     if !project.strip_names {
         builder.append_names();
@@ -850,6 +868,202 @@ fn build_transmission_future_type_for(
     ctx.type_idx(&future_key)
 }
 
+/// Emit the `core:kiln/types` record/variant surface via an imported
+/// instance. Called once per `core:kiln/generator` component.
+///
+/// Structure:
+/// - Build an `InstanceType` whose interior defines `input-file`,
+///   `output-file`, `response`, `error`, `raw-request` as records/variants
+///   and exports each one by its WIT name. The CM validator's
+///   `all_valtypes_named_in_defined` check requires records/variants
+///   referenced by a component-level export to have their original type
+///   ids in `exported_types`; the instance-wrap satisfies that because
+///   inserting exported types into the set happens as the instance's
+///   exports are processed in declaration order.
+/// - Import that instance at the component level as
+///   `core:kiln/types@0.1.0`. No runtime code is required — wasmtime
+///   satisfies the import trivially because the instance has no function
+///   members.
+/// - Alias each exported type from the instance into the component's
+///   local type index space so `emit_world_exports` and the canon
+///   `task-return` routing can reference them by `ctx.type_idx(...)`.
+/// - Also register a component-local `kiln-handler-result` =
+///   `result<response, error>` (anonymous `result` doesn't need naming).
+fn emit_kiln_world_types(builder: &mut ComponentBuilder, ctx: &mut ComponentModelContext) {
+    let string_vt = ComponentValType::Primitive(PrimitiveValType::String);
+    let bool_vt = ComponentValType::Primitive(PrimitiveValType::Bool);
+
+    // Build the instance type. Each `ty()` call advances the instance's
+    // type counter by one, and each `export(..Eq(idx)..)` creates an
+    // alias at the next slot. The local helpers track that counter
+    // explicitly so we can name the indices we actually reference down
+    // the function and drop the rest without a dead `let _ = ...`.
+    fn alloc(next_idx: &mut u32) -> u32 {
+        let idx = *next_idx;
+        *next_idx += 1;
+        idx
+    }
+    fn emit_record(
+        it: &mut InstanceType,
+        next_idx: &mut u32,
+        fields: &[(&'static str, ComponentValType)],
+    ) -> u32 {
+        it.ty().defined_type().record(fields.iter().copied());
+        alloc(next_idx)
+    }
+    fn emit_variant(
+        it: &mut InstanceType,
+        next_idx: &mut u32,
+        cases: &[(&'static str, Option<ComponentValType>)],
+    ) -> u32 {
+        it.ty().defined_type().variant(cases.iter().copied());
+        alloc(next_idx)
+    }
+    fn emit_list(it: &mut InstanceType, next_idx: &mut u32, elem: ComponentValType) -> u32 {
+        it.ty().defined_type().list(elem);
+        alloc(next_idx)
+    }
+    fn emit_export(it: &mut InstanceType, next_idx: &mut u32, name: &str, eq_idx: u32) -> u32 {
+        it.export(
+            name,
+            wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(eq_idx)),
+        );
+        alloc(next_idx)
+    }
+
+    let mut instance_type = InstanceType::new();
+    let mut next_idx: u32 = 0;
+
+    // input-file
+    let input_file_local = emit_record(
+        &mut instance_type,
+        &mut next_idx,
+        &[("path", string_vt), ("content", string_vt)],
+    );
+    let input_file_export = emit_export(
+        &mut instance_type,
+        &mut next_idx,
+        "input-file",
+        input_file_local,
+    );
+
+    // output-file
+    let output_file_local = emit_record(
+        &mut instance_type,
+        &mut next_idx,
+        &[
+            ("path", string_vt),
+            ("content", string_vt),
+            ("is-entry", bool_vt),
+        ],
+    );
+    let output_file_export = emit_export(
+        &mut instance_type,
+        &mut next_idx,
+        "output-file",
+        output_file_local,
+    );
+
+    // list<output-file> + response record
+    let list_output_local = emit_list(
+        &mut instance_type,
+        &mut next_idx,
+        ComponentValType::Type(output_file_export),
+    );
+    let response_local = emit_record(
+        &mut instance_type,
+        &mut next_idx,
+        &[("files", ComponentValType::Type(list_output_local))],
+    );
+    emit_export(
+        &mut instance_type,
+        &mut next_idx,
+        "response",
+        response_local,
+    );
+
+    // error variant
+    let error_local = emit_variant(
+        &mut instance_type,
+        &mut next_idx,
+        &[
+            ("invalid-schema", Some(string_vt)),
+            ("unsupported", Some(string_vt)),
+            ("other", Some(string_vt)),
+        ],
+    );
+    emit_export(&mut instance_type, &mut next_idx, "error", error_local);
+
+    // list<input-file> + raw-request record
+    let list_input_local = emit_list(
+        &mut instance_type,
+        &mut next_idx,
+        ComponentValType::Type(input_file_export),
+    );
+    let raw_request_local = emit_record(
+        &mut instance_type,
+        &mut next_idx,
+        &[
+            ("primary", ComponentValType::Type(input_file_export)),
+            ("inputs", ComponentValType::Type(list_input_local)),
+            ("options", string_vt),
+        ],
+    );
+    // The raw-request export advances the encoder counter once more,
+    // but we never reference that slot again so we drop the result.
+    instance_type.export(
+        "raw-request",
+        wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(raw_request_local)),
+    );
+    let _ = next_idx;
+
+    // Register the instance type at the component level.
+    let instance_type_idx = ctx.register_type("kiln-types-instance-type");
+    {
+        let (_, enc) = builder.ty(Some("kiln-types-instance-type"));
+        enc.instance(&instance_type);
+    }
+
+    // Import the instance as `core:kiln/types@0.1.0`.
+    ctx.register_instance("kiln-types");
+    builder.import(
+        "core:kiln/types@0.1.0",
+        wasm_encoder::ComponentTypeRef::Instance(instance_type_idx),
+    );
+
+    // Alias each exported type into the component's local type space.
+    // `ctx.register_type(name)` bumps the component's type counter in
+    // lockstep with the encoder's so downstream registrations stay in
+    // sync.
+    for (export_name, local_name) in [
+        ("input-file", "kiln-input-file"),
+        ("output-file", "kiln-output-file"),
+        ("response", "kiln-response"),
+        ("error", "kiln-error"),
+        ("raw-request", "kiln-raw-request"),
+    ] {
+        builder.alias_export(
+            ctx.instance_idx("kiln-types"),
+            export_name,
+            ComponentExportKind::Type,
+        );
+        ctx.register_type(local_name);
+    }
+
+    // `result<response, error>` — anonymous, component-local. Used by
+    // the canon `task-return` and by `emit_world_exports`.
+    ctx.register_type("kiln-handler-result");
+    {
+        let response_idx = ctx.type_idx("kiln-response");
+        let error_idx = ctx.type_idx("kiln-error");
+        let (_, enc) = builder.ty(Some("kiln-handler-result"));
+        enc.defined_type().result(
+            Some(ComponentValType::Type(response_idx)),
+            Some(ComponentValType::Type(error_idx)),
+        );
+    }
+}
+
 fn build_future_intrinsic_types(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
@@ -976,6 +1190,7 @@ fn emit_canonical_intrinsics(
     transmission_future_types: &IndexMap<String, u32>,
     scalar_future_types: &IndexSet<(CmScalarType, u32)>,
     has_http_handler_export: bool,
+    is_kiln_generator: bool,
 ) {
     for intrinsic in canonical_intrinsics {
         ctx.register_core_func(&intrinsic.import_name());
@@ -1095,15 +1310,25 @@ fn emit_canonical_intrinsics(
                 builder.future_drop_readable(ft);
             }
             CanonicalIntrinsic::TaskReturn => {
-                // Use the HTTP handler result type only when the world actually
-                // exports an HTTP handler (not just when HTTP types are imported
-                // for client usage).
-                let task_return_type =
-                    if has_http_handler_export && ctx.has_type("http-handler-result") {
-                        ctx.type_idx("http-handler-result")
-                    } else {
-                        result_unit_type
-                    };
+                // Select the task-return result shape based on the
+                // active world: `result<response, error>` for the kiln
+                // generator, `http-handler-result` for HTTP service,
+                // bare `result<>` otherwise. The flat decomposition of
+                // this type must match the core module's task-return
+                // import signature (computed via
+                // `compute_export_flat_return_types`) or component
+                // validation fails at instantiation.
+                let task_return_type = if is_kiln_generator && ctx.has_type("kiln-handler-result") {
+                    ctx.type_idx("kiln-handler-result")
+                } else if has_http_handler_export && ctx.has_type("http-handler-result") {
+                    ctx.type_idx("http-handler-result")
+                } else {
+                    result_unit_type
+                };
+                // task.return lifts payloads from linear memory into
+                // component values; it does not allocate, so `realloc`
+                // must not appear in the option list (wasm-tools
+                // rejects it).
                 builder.task_return(
                     Some(ComponentValType::Type(task_return_type)),
                     [CanonicalOption::Memory(ctx.memory_idx())],
@@ -1178,6 +1403,7 @@ fn emit_world_exports(
     ctx: &mut ComponentModelContext,
     component_plan: &crate::wir_build::component_plan::ComponentPlan,
     result_unit_type: u32,
+    is_kiln_generator: bool,
 ) {
     for export in &component_plan.world_exports {
         let core_name = format!("{}-core", export.name);
@@ -1202,6 +1428,16 @@ fn emit_world_exports(
                     .async_(export.is_async)
                     .params([("request", ComponentValType::Type(request_type_idx))])
                     .result(Some(ComponentValType::Type(handler_result_type_idx)));
+            } else if is_kiln_generator
+                && ctx.has_type("kiln-raw-request")
+                && ctx.has_type("kiln-handler-result")
+            {
+                let raw_request_idx = ctx.type_idx("kiln-raw-request");
+                let handler_result_idx = ctx.type_idx("kiln-handler-result");
+                enc.function()
+                    .async_(export.is_async)
+                    .params([("req", ComponentValType::Type(raw_request_idx))])
+                    .result(Some(ComponentValType::Type(handler_result_idx)));
             } else {
                 enc.function()
                     .async_(export.is_async)
@@ -1211,14 +1447,23 @@ fn emit_world_exports(
         }
 
         ctx.register_comp_func(&export.name);
+        let mut lift_opts = vec![
+            CanonicalOption::Async,
+            CanonicalOption::Memory(ctx.memory_idx()),
+        ];
+        // HTTP and Kiln exports pass CM-level records / lists / strings
+        // through their params, so the canon must materialize them into
+        // linear memory for the core function. `realloc` satisfies the
+        // validator; `result_unit_type` exports take no params so stay
+        // realloc-free.
+        if export.is_http_handler || (is_kiln_generator && ctx.has_type("kiln-raw-request")) {
+            lift_opts.push(CanonicalOption::Realloc(ctx.core_func_idx("realloc")));
+        }
         builder.lift_func(
             Some(&export.name),
             ctx.core_func_idx(&core_name),
             func_type,
-            [
-                CanonicalOption::Async,
-                CanonicalOption::Memory(ctx.memory_idx()),
-            ],
+            lift_opts,
         );
 
         builder.export(

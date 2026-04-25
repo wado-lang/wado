@@ -1,4 +1,11 @@
-use css3 from "./golden/css3.wado";
+use css3 from "./grammars/css3Lexer.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            inputs: ["./grammars/css3Parser.g4"],
+            options: { highlight: false },
+        },
+    };
 
 fn assert_parses(input: &String) {
     let result = css3::parse(input);

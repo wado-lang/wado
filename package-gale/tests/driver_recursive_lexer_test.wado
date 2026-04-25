@@ -1,5 +1,11 @@
-use rl from "./golden/recursive_lexer.wado";
-use { normalize_tree } from "./golden/recursive_lexer.wado";
+use rl from "./grammars/recursive_lexer.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+        },
+    };
+use { normalize_tree } from "./grammars/recursive_lexer.g4";
 
 fn assert_tree(input: &String, expected: &String) {
     let root = rl::parse(input).unwrap();

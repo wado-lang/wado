@@ -108,22 +108,31 @@ fn resolve_imports(
     let is_builtin_func =
         |f: &FreeFunctionName| f.module_source.is_core_builtin() || f.name.starts_with("builtin::");
 
-    // Also mark WASI functions as used if indirect calls are present (for ambient logging)
-    if reachable.iter().any(|func_id| {
-        matches!(func_id, FunctionId::Free(f) if is_builtin_func(f) && {
-            let name = f.name.strip_prefix("builtin::").unwrap_or(&f.name);
-            name.starts_with("call_indirect_stdout")
-        })
-    }) {
-        used_wasi_functions.insert("Stdout::write_via_stream".to_string());
-    }
-    if reachable.iter().any(|func_id| {
-        matches!(func_id, FunctionId::Free(f) if is_builtin_func(f) && {
-            let name = f.name.strip_prefix("builtin::").unwrap_or(&f.name);
-            name.starts_with("call_indirect_stderr")
-        })
-    }) {
-        used_wasi_functions.insert("Stderr::write_via_stream".to_string());
+    // Also mark WASI functions as used if indirect calls are present
+    // (for ambient logging). The kiln generator world forbids every
+    // WASI interface (WEP 2026-04-12 §"Design principles" #1), so the
+    // `call_indirect_{stdout,stderr}_*` builtins are rewritten to
+    // `unreachable` at the WIR level and never need the matching WASI
+    // function registered as "used" — skip the usage registration so
+    // the component doesn't transitively import `wasi:cli/stderr` or
+    // `wasi:cli/stdout`.
+    if !project.is_kiln_generator_world() {
+        if reachable.iter().any(|func_id| {
+            matches!(func_id, FunctionId::Free(f) if is_builtin_func(f) && {
+                let name = f.name.strip_prefix("builtin::").unwrap_or(&f.name);
+                name.starts_with("call_indirect_stdout")
+            })
+        }) {
+            used_wasi_functions.insert("Stdout::write_via_stream".to_string());
+        }
+        if reachable.iter().any(|func_id| {
+            matches!(func_id, FunctionId::Free(f) if is_builtin_func(f) && {
+                let name = f.name.strip_prefix("builtin::").unwrap_or(&f.name);
+                name.starts_with("call_indirect_stderr")
+            })
+        }) {
+            used_wasi_functions.insert("Stderr::write_via_stream".to_string());
+        }
     }
 
     // Collect imports using registry lookup instead of hard-coded match

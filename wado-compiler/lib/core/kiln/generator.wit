@@ -95,5 +95,10 @@ world generator {
     import kiln-host;
     use types.{raw-request, response, error};
 
-    export generate: func(req: raw-request) -> result<response, error>;
+    /// Declared `async func` so the CM canon lifts via `task.return` —
+    /// matches how `wado-compiler` synthesizes the export body (its
+    /// `Result<T, E>` binding always uses task-return) and how the
+    /// wasmtime host bindgen drives the call
+    /// (`exports: { default: async }`).
+    export generate: async func(req: raw-request) -> result<response, error>;
 }

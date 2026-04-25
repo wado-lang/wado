@@ -44,6 +44,9 @@ pub(crate) fn module_uri(
         ModuleSource::Core { name } => Some(format!("core:{name}")),
         ModuleSource::Wasi { interface } => Some(format!("wasi:{interface}")),
         ModuleSource::Remote { url } => Some(url.clone()),
+        // Kiln-redirected modules already carry a fully-qualified URI;
+        // hand it to the LSP client unchanged.
+        ModuleSource::Redirected { uri } => Some(uri.clone()),
     }
 }
 

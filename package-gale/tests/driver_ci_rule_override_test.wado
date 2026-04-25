@@ -1,5 +1,11 @@
-use ci from "./golden/ci_rule_override.wado";
-use { normalize_tree } from "./golden/ci_rule_override.wado";
+use ci from "./grammars/ci_rule_override.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+        },
+    };
+use { normalize_tree } from "./grammars/ci_rule_override.g4";
 
 fn assert_tree(input: &String, expected: &String) {
     let root = ci::parse(input).unwrap();

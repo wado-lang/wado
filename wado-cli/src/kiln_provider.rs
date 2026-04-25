@@ -86,6 +86,156 @@ impl CliGeneratorProvider {
             .join(CACHE_DIR)
             .join(format!("{stable_id}.wasm"))
     }
+
+    fn descriptor_cache_path(&self, stable_id: &str) -> PathBuf {
+        self.manifest_root
+            .join(METADATA_DIR)
+            .join(format!("{stable_id}.descriptor"))
+    }
+
+    /// Resolve a `LocalPath` generator source, returning the absolute
+    /// path, raw bytes, UTF-8 source string, and stable id. Emits the
+    /// same not-found / not-UTF-8 diagnostics for both `get_component`
+    /// and `descriptor` code paths.
+    fn read_local_source(
+        &self,
+        path: &wado_compiler::kiln::InvocationPath,
+    ) -> Result<(PathBuf, Vec<u8>, String, String), ProviderError> {
+        let abs = self.resolve_path(path.as_str());
+        if !abs.exists() {
+            return Err(ProviderError::Internal {
+                message: format!(
+                    "kiln: generator path `{}` does not exist (relative to manifest root {})",
+                    path.as_str(),
+                    self.manifest_root.display(),
+                ),
+            });
+        }
+        let source = std::fs::read(&abs).map_err(|e| ProviderError::Internal {
+            message: format!(
+                "kiln: failed to read generator source at `{}`: {e}",
+                abs.display()
+            ),
+        })?;
+        let source_str = match std::str::from_utf8(&source) {
+            Ok(s) => s.to_string(),
+            Err(_) => {
+                return Err(ProviderError::Internal {
+                    message: format!(
+                        "kiln: generator source at `{}` is not valid UTF-8",
+                        abs.display()
+                    ),
+                });
+            }
+        };
+        let stable_id = stable_id_for_local(path.as_str(), &source);
+        Ok((abs, source, source_str, stable_id))
+    }
+
+    /// Run the inner wado-compiler pipeline on the given source, then
+    /// persist both caches (`build/kiln/generators/<id>.wasm` and, when
+    /// the compile produces one, `build/kiln/metadata/<id>.descriptor`).
+    /// Whichever of `get_component` or `descriptor` runs the first
+    /// compile warms both, so the second call is a pure disk read.
+    async fn compile_local(
+        &self,
+        path_str: String,
+        abs: PathBuf,
+        source_str: String,
+        stable_id: String,
+    ) -> Result<CompileArtifacts, ProviderError> {
+        self.compile_count.fetch_add(1, Ordering::SeqCst);
+
+        let base_path = abs.parent().map(Path::to_path_buf).unwrap_or_default();
+        let abs_str = abs.to_string_lossy().to_string();
+
+        // `compile_with_options` captures a `Logger<H>` whose internal
+        // `Cell<usize>` makes the returned future `!Send`. Run the whole
+        // async compile on a blocking thread with its own current-thread
+        // runtime so the multi-thread driver runtime only sees a `Send`-
+        // able `spawn_blocking` future.
+        let artifacts: Result<CompileArtifacts, ProviderError> =
+            tokio::task::spawn_blocking(move || {
+                let host = SilentHost {
+                    inner: FilesystemCompilerHost::with_log_level(base_path, LogLevel::Warn),
+                };
+                let options = CompilerOptions {
+                    // `O2` matches what `mise run update-gale-golden` uses
+                    // for the CLI path, so Kiln-invoked generators see the
+                    // same optimization level their authors tested against.
+                    // O0 also uncovers O0-visible bugs in generators (e.g.
+                    // `package-gale`'s `parser_gen` SQLite path) that are
+                    // orthogonal to the Kiln wiring.
+                    opt_level: wado_compiler::OptLevel::O2,
+                    target_world: Some("core:kiln/generator".to_string()),
+                    skip_validation: false,
+                    log_level: Some(LogLevel::Warn),
+                    ..CompilerOptions::default()
+                };
+                let rt = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .map_err(|e| ProviderError::Internal {
+                        message: format!(
+                            "kiln: failed to start inner runtime for generator compile: {e}"
+                        ),
+                    })?;
+                let result = rt.block_on(async {
+                    wado_compiler::compile_with_options(&source_str, &host, Some(&abs_str), options)
+                        .await
+                });
+                match result {
+                    Ok(r) => Ok(CompileArtifacts {
+                        wasm: r.wasm,
+                        descriptor: r.kiln_options_descriptor,
+                    }),
+                    Err(_) => Err(ProviderError::Internal {
+                        message: format!(
+                            "kiln: failed to compile generator `{path_str}` to component"
+                        ),
+                    }),
+                }
+            })
+            .await
+            .map_err(|e| ProviderError::Internal {
+                message: format!("kiln: generator compile task panicked or was cancelled: {e}"),
+            })?;
+
+        let artifacts = artifacts?;
+
+        // Cache writes are best-effort: if the filesystem refuses we
+        // still return the fresh bytes. The next invocation just repeats
+        // the compile instead of observing a broken cache state.
+        let wasm_path = self.cache_path(&stable_id);
+        if let Some(parent) = wasm_path.parent()
+            && !parent.exists()
+        {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let _ = std::fs::write(&wasm_path, &artifacts.wasm);
+
+        if let Some(ref descriptor) = artifacts.descriptor {
+            let desc_path = self.descriptor_cache_path(&stable_id);
+            if let Some(parent) = desc_path.parent()
+                && !parent.exists()
+            {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            if let Ok(bytes) = serde_json::to_vec_pretty(descriptor) {
+                let _ = std::fs::write(&desc_path, &bytes);
+            }
+        }
+
+        Ok(artifacts)
+    }
+}
+
+/// Both artefacts produced by a single invocation of the inner compiler
+/// on a kiln generator package: the component bytes plus the extracted
+/// `Options` descriptor (when extraction succeeded).
+struct CompileArtifacts {
+    wasm: Vec<u8>,
+    descriptor: Option<OptionsDescriptor>,
 }
 
 /// Compute the stable id for a local generator source file.
@@ -153,127 +303,18 @@ impl GeneratorProvider for CliGeneratorProvider {
                 ),
             }),
             GeneratorModule::LocalPath(path) => {
-                let abs = self.resolve_path(path.as_str());
-                if !abs.exists() {
-                    return Err(ProviderError::Internal {
-                        message: format!(
-                            "kiln: generator path `{}` does not exist (relative to manifest root {})",
-                            path.as_str(),
-                            self.manifest_root.display(),
-                        ),
-                    });
-                }
-
-                let source = std::fs::read(&abs).map_err(|e| ProviderError::Internal {
-                    message: format!(
-                        "kiln: failed to read generator source at `{}`: {e}",
-                        abs.display()
-                    ),
-                })?;
-                let source_str = match std::str::from_utf8(&source) {
-                    Ok(s) => s.to_string(),
-                    Err(_) => {
-                        return Err(ProviderError::Internal {
-                            message: format!(
-                                "kiln: generator source at `{}` is not valid UTF-8",
-                                abs.display()
-                            ),
-                        });
-                    }
-                };
-
-                let stable_id = stable_id_for_local(path.as_str(), &source);
+                let (abs, source, source_str, stable_id) = self.read_local_source(path)?;
                 let cache_path = self.cache_path(&stable_id);
-
                 if cache_path.is_file()
                     && let Ok(bytes) = std::fs::read(&cache_path)
                 {
                     return Ok(bytes);
                 }
-
-                // Cache miss: fall through to the real compile. Record it on
-                // the shared counter so tests can assert cache behaviour
-                // without fiddling with mtime resolutions on tmpfs/NFS.
-                self.compile_count.fetch_add(1, Ordering::SeqCst);
-
-                let base_path = abs.parent().map(Path::to_path_buf).unwrap_or_default();
-                let abs_str = abs.to_string_lossy().to_string();
-                let path_str = path.as_str().to_string();
-
-                // `compile_with_options` captures a `Logger<H>` whose internal
-                // `Cell<usize>` makes the returned future `!Send`. Run the
-                // whole async compile on a blocking thread with its own
-                // current-thread runtime so the multi-thread driver runtime
-                // only sees a `Send`-able `spawn_blocking` future.
-                let compile_result: Result<Vec<u8>, ProviderError> =
-                    tokio::task::spawn_blocking(move || {
-                        let host = SilentHost {
-                            inner: FilesystemCompilerHost::with_log_level(
-                                base_path,
-                                LogLevel::Warn,
-                            ),
-                        };
-                        // `skip_validation: true` tracks the open M6.5
-                        // adapter-synthesis follow-up: today the CM wrapper
-                        // treats the `raw: RawRequest` parameter as a Wasm
-                        // GC reference while canonical async lift expects
-                        // it in linear memory. The core Wasm is otherwise
-                        // well-formed and the component shell is valid;
-                        // the mismatch only shows at the validator. Flip
-                        // this off once the adapter lands.
-                        let options = CompilerOptions {
-                            opt_level: wado_compiler::OptLevel::O0,
-                            target_world: Some("core:kiln/generator".to_string()),
-                            skip_validation: true,
-                            log_level: Some(LogLevel::Warn),
-                            ..CompilerOptions::default()
-                        };
-                        let rt = tokio::runtime::Builder::new_current_thread()
-                            .enable_all()
-                            .build()
-                            .map_err(|e| ProviderError::Internal {
-                                message: format!(
-                                    "kiln: failed to start inner runtime for generator \
-                                     compile: {e}"
-                                ),
-                            })?;
-                        let result = rt.block_on(async {
-                            wado_compiler::compile_with_options(
-                                &source_str,
-                                &host,
-                                Some(&abs_str),
-                                options,
-                            )
-                            .await
-                        });
-                        match result {
-                            Ok(r) => Ok(r.wasm),
-                            Err(_) => Err(ProviderError::Internal {
-                                message: format!(
-                                    "kiln: failed to compile generator `{path_str}` to component"
-                                ),
-                            }),
-                        }
-                    })
-                    .await
-                    .map_err(|e| ProviderError::Internal {
-                        message: format!(
-                            "kiln: generator compile task panicked or was cancelled: {e}"
-                        ),
-                    })?;
-
-                let wasm = compile_result?;
-
-                if let Some(parent) = cache_path.parent()
-                    && !parent.exists()
-                    && std::fs::create_dir_all(parent).is_err()
-                {
-                    // Cache is best-effort; fall through with the fresh
-                    // bytes rather than failing the whole compile.
-                }
-                let _ = std::fs::write(&cache_path, &wasm);
-
-                Ok(wasm)
+                let artifacts = self
+                    .compile_local(path.as_str().to_string(), abs, source_str, stable_id)
+                    .await?;
+                let _ = source;
+                Ok(artifacts.wasm)
             }
         }
     }
@@ -288,26 +329,26 @@ impl GeneratorProvider for CliGeneratorProvider {
                     .to_string(),
             }),
             GeneratorModule::LocalPath(path) => {
-                let abs = self.resolve_path(path.as_str());
-                if !abs.exists() {
-                    return Err(ProviderError::Internal {
-                        message: format!("kiln: generator path `{}` does not exist", path.as_str()),
-                    });
+                let (abs, _source, source_str, stable_id) = self.read_local_source(path)?;
+                let desc_path = self.descriptor_cache_path(&stable_id);
+                if desc_path.is_file()
+                    && let Ok(bytes) = std::fs::read(&desc_path)
+                    && let Ok(descriptor) = serde_json::from_slice::<OptionsDescriptor>(&bytes)
+                {
+                    return Ok(descriptor);
                 }
-                // v1 provider: exercising `extract_options_descriptor`
-                // requires running `annotate` through the compiler, which
-                // duplicates the work `get_component` already does.
-                // Keep surfacing `Unsupported` until the descriptor-cache
-                // follow-up wires these together; the driver's fallback
-                // path (provisional TOML encoder) still produces a valid
-                // cache key.
-                Err(ProviderError::Unsupported {
-                    message: format!(
-                        "kiln: typed options descriptor for local generator `{}` is not yet \
-                         available — falling back to provisional TOML encoding",
-                        path.as_str(),
-                    ),
-                })
+                let artifacts = self
+                    .compile_local(path.as_str().to_string(), abs, source_str, stable_id)
+                    .await?;
+                artifacts
+                    .descriptor
+                    .ok_or_else(|| ProviderError::Unsupported {
+                        message: format!(
+                            "kiln: generator `{}` did not expose a `pub struct Options` the \
+                             compiler could describe — falling back to provisional TOML encoding",
+                            path.as_str(),
+                        ),
+                    })
             }
         }
     }
@@ -432,6 +473,106 @@ export fn generate(raw: RawRequest) -> Result<Response, Error> {\n\
             provider.compile_count(),
             1,
             "cache hit must not re-invoke the inner compiler"
+        );
+
+        // The first compile also populated the descriptor cache; an
+        // explicit descriptor() call must not trigger a second compile.
+        let descriptor = runtime()
+            .block_on(async { provider.descriptor(&module).await })
+            .expect("descriptor() should succeed once the compile cache is warm");
+        assert_eq!(descriptor.fields.len(), 1);
+        assert_eq!(descriptor.fields[0].name, "verbose");
+        assert_eq!(
+            provider.compile_count(),
+            1,
+            "descriptor cache hit after warm component cache must not re-compile"
+        );
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn descriptor_populates_metadata_cache_and_hits_on_second_call() {
+        let tmp = std::env::temp_dir().join(format!(
+            "wado-kiln-provider-descriptor-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+
+        let generator_src = "\
+use { RawRequest, Response, Error, bind_request } from \"core:kiln\";\n\
+\n\
+pub struct Options {\n\
+    pub highlight: bool,\n\
+    pub depth: i32,\n\
+}\n\
+\n\
+export fn generate(raw: RawRequest) -> Result<Response, Error> {\n\
+    let req = match bind_request::<Options>(raw) {\n\
+        Ok(r) => r,\n\
+        Err(e) => return Result::Err(e),\n\
+    };\n\
+    let _ = req.options.highlight;\n\
+    let _ = req.options.depth;\n\
+    return Result::Ok(Response { files: [] });\n\
+}\n";
+        let gen_path = tmp.join("generator.wado");
+        std::fs::write(&gen_path, generator_src).unwrap();
+
+        let provider = CliGeneratorProvider::new(tmp.clone());
+        let module = GeneratorModule::LocalPath(InvocationPath::normalize("./generator.wado"));
+
+        let first = runtime()
+            .block_on(async { provider.descriptor(&module).await })
+            .expect("first descriptor call");
+        assert_eq!(first.fields.len(), 2);
+        assert_eq!(first.fields[0].name, "highlight");
+        assert_eq!(first.fields[1].name, "depth");
+        assert_eq!(provider.compile_count(), 1);
+
+        let metadata_dir = tmp.join(METADATA_DIR);
+        let desc_entries: Vec<_> = std::fs::read_dir(&metadata_dir)
+            .map(|it| it.filter_map(Result::ok).collect())
+            .unwrap_or_default();
+        assert_eq!(
+            desc_entries.len(),
+            1,
+            "exactly one cached descriptor expected"
+        );
+
+        // Second call: disk cache hits, no recompile. Spans are not
+        // persisted (intentionally — they would drift across edits), so
+        // compare the persisted facets instead of full equality.
+        let second = runtime()
+            .block_on(async { provider.descriptor(&module).await })
+            .expect("second descriptor call");
+        assert_eq!(second.fields.len(), first.fields.len());
+        for (a, b) in second.fields.iter().zip(first.fields.iter()) {
+            assert_eq!(a.name, b.name);
+            assert_eq!(a.ty, b.ty);
+            assert_eq!(a.default, b.default);
+        }
+        assert_eq!(
+            provider.compile_count(),
+            1,
+            "descriptor cache hit must not re-invoke the inner compiler"
+        );
+
+        // Editing the source invalidates the stable-id and forces a
+        // fresh compile that populates a new descriptor entry.
+        let updated_src = generator_src.replace("pub depth: i32,\n", "pub depth: i64,\n");
+        std::fs::write(&gen_path, &updated_src).unwrap();
+
+        let third = runtime()
+            .block_on(async { provider.descriptor(&module).await })
+            .expect("descriptor after source edit");
+        assert_eq!(third.fields.len(), 2);
+        assert_eq!(third.fields[1].name, "depth");
+        assert_eq!(
+            provider.compile_count(),
+            2,
+            "source edit must re-compile exactly once"
         );
 
         let _ = std::fs::remove_dir_all(&tmp);

@@ -136,10 +136,18 @@ pub fn plan(manifest: &Manifest, manifest_root: &Path) -> Result<PlanOutcome, Dr
 fn lower(name: &str, gi: &GeneratorInvocation) -> Result<Invocation, DriverError> {
     let module = match &gi.module {
         GeneratorModuleRef::Spec(spec) => GeneratorModule::Spec(spec.clone()),
-        GeneratorModuleRef::Inline(_) => {
-            return Err(DriverError::UnsupportedInlineModule {
-                invocation: name.to_string(),
-            });
+        GeneratorModuleRef::Inline(dep) => {
+            use wado_manifest::DependencySource;
+            match &dep.source {
+                DependencySource::Path { path, .. } => {
+                    GeneratorModule::LocalPath(InvocationPath::normalize(path))
+                }
+                _ => {
+                    return Err(DriverError::UnsupportedInlineModule {
+                        invocation: name.to_string(),
+                    });
+                }
+            }
         }
     };
 
@@ -157,6 +165,10 @@ fn lower(name: &str, gi: &GeneratorInvocation) -> Result<Invocation, DriverError
             .as_str(),
     );
     let options_canonical = encode_options_canonical_provisional(&gi.options);
+    let raw_options = match toml_to_attr_value(&gi.options) {
+        AttrValue::Object(obj) if obj.is_empty() => None,
+        other => Some(other),
+    };
     Ok(Invocation {
         decl_site: DeclSite::Manifest {
             name: name.to_string(),
@@ -166,20 +178,24 @@ fn lower(name: &str, gi: &GeneratorInvocation) -> Result<Invocation, DriverError
         inputs,
         output_dir,
         options_canonical,
+        raw_options,
     })
 }
 
-/// Provisional canonical TOML encoder — used by M3 until M4 replaces it with
-/// the Component-Model lifted form.
+/// Provisional canonical encoder over the raw TOML tree — used only when
+/// the provider cannot hand back a typed `OptionsDescriptor` (spec-form
+/// generators, `Unsupported`, etc.). It emits canonical JSON matching
+/// the wire `options: string` layout so cache keys stay byte-identical
+/// with the typed path on the common subset.
 ///
-/// Format (length-prefixed, depth-first, keys sorted alphabetically):
-/// - `0` bool, 1 byte (0 / 1)
-/// - `1` integer, 8 BE bytes
-/// - `2` float, 8 BE bytes (IEEE-754 bits)
-/// - `3` string, u64 BE length-prefix + UTF-8 bytes
-/// - `4` array, u64 BE count + each element
-/// - `5` table, u64 BE count + each (key string + value)
-/// - `6` datetime, u64 BE length-prefix + RFC3339 string
+/// Rules mirror [`wado_compiler::kiln::encode_options_canonical`]:
+/// - Object keys sorted lexicographically (UTF-8 byte order).
+/// - Strings NFC-normalized, minimal JSON escapes.
+/// - Integers: shortest base-10, no leading sign on zero.
+/// - Floats: shortest-roundtrip decimal. Integer-valued floats drop
+///   their trailing `.0`. `NaN` / `±Inf` panic.
+/// - Arrays: JSON arrays in source order.
+/// - Datetimes: string-encoded via `Display`, wrapped as JSON strings.
 #[must_use]
 pub fn encode_options_canonical_provisional(value: &toml::Value) -> Vec<u8> {
     let mut out = Vec::new();
@@ -189,53 +205,90 @@ pub fn encode_options_canonical_provisional(value: &toml::Value) -> Vec<u8> {
 
 fn write_toml(out: &mut Vec<u8>, v: &toml::Value) {
     match v {
-        toml::Value::Boolean(b) => {
-            out.push(0);
-            out.push(u8::from(*b));
-        }
+        toml::Value::Boolean(true) => out.extend_from_slice(b"true"),
+        toml::Value::Boolean(false) => out.extend_from_slice(b"false"),
         toml::Value::Integer(i) => {
-            out.push(1);
-            out.extend_from_slice(&i.to_be_bytes());
+            use std::io::Write;
+            let _ = write!(out, "{i}");
         }
         toml::Value::Float(f) => {
-            out.push(2);
-            out.extend_from_slice(&f.to_bits().to_be_bytes());
+            assert!(
+                f.is_finite(),
+                "kiln: canonical JSON cannot encode non-finite float {f}"
+            );
+            write_json_float(out, *f);
         }
         toml::Value::String(s) => {
-            out.push(3);
-            write_str(out, s);
+            write_json_string(out, s);
         }
         toml::Value::Array(a) => {
-            out.push(4);
-            write_len(out, a.len());
-            for item in a {
+            out.push(b'[');
+            for (i, item) in a.iter().enumerate() {
+                if i > 0 {
+                    out.push(b',');
+                }
                 write_toml(out, item);
             }
+            out.push(b']');
         }
         toml::Value::Table(t) => {
-            out.push(5);
+            out.push(b'{');
             let mut entries: Vec<(&String, &toml::Value)> = t.iter().collect();
             entries.sort_by(|a, b| a.0.cmp(b.0));
-            write_len(out, entries.len());
+            let mut first = true;
             for (k, val) in entries {
-                write_str(out, k);
+                if !first {
+                    out.push(b',');
+                }
+                first = false;
+                write_json_string(out, k);
+                out.push(b':');
                 write_toml(out, val);
             }
+            out.push(b'}');
         }
         toml::Value::Datetime(dt) => {
-            out.push(6);
-            write_str(out, &dt.to_string());
+            write_json_string(out, &dt.to_string());
         }
     }
 }
 
-fn write_str(out: &mut Vec<u8>, s: &str) {
-    write_len(out, s.len());
-    out.extend_from_slice(s.as_bytes());
+fn write_json_string(out: &mut Vec<u8>, s: &str) {
+    use unicode_normalization::UnicodeNormalization;
+    out.push(b'"');
+    for ch in s.nfc() {
+        match ch {
+            '"' => out.extend_from_slice(b"\\\""),
+            '\\' => out.extend_from_slice(b"\\\\"),
+            '\u{0008}' => out.extend_from_slice(b"\\b"),
+            '\u{000C}' => out.extend_from_slice(b"\\f"),
+            '\n' => out.extend_from_slice(b"\\n"),
+            '\r' => out.extend_from_slice(b"\\r"),
+            '\t' => out.extend_from_slice(b"\\t"),
+            c if (c as u32) < 0x20 => {
+                use std::io::Write;
+                let _ = write!(out, "\\u{:04x}", c as u32);
+            }
+            c => {
+                let mut buf = [0u8; 4];
+                out.extend_from_slice(c.encode_utf8(&mut buf).as_bytes());
+            }
+        }
+    }
+    out.push(b'"');
 }
 
-fn write_len(out: &mut Vec<u8>, n: usize) {
-    out.extend_from_slice(&(n as u64).to_be_bytes());
+fn write_json_float(out: &mut Vec<u8>, f: f64) {
+    use std::io::Write;
+    if f == 0.0 {
+        out.push(b'0');
+        return;
+    }
+    if f.fract() == 0.0 && f.abs() < 9_007_199_254_740_992.0 {
+        let _ = write!(out, "{}", f as i64);
+        return;
+    }
+    let _ = write!(out, "{f}");
 }
 
 /// Convert a `toml::Value` to the compiler-side generic [`AttrValue`] tree so
@@ -502,6 +555,42 @@ fn to_manifest_file_hash(f: &FileHash) -> ManifestFileHash {
     ManifestFileHash {
         path: f.path.clone(),
         hash: hex_digest(&f.hash),
+    }
+}
+
+/// Compose a `file:` URI from an absolute filesystem path.
+///
+/// Used to populate the [`wado_compiler::kiln::InvocationIndex`] entries
+/// the loader consults at module-resolve time.
+///
+/// Uses the `kiln:` scheme without authority (`kiln:/abs/path`) rather
+/// than `file://` because the compiler's qualified-name format
+/// (`{module_source}//{name}`) treats `//` as the separator between
+/// module source and symbol name. A `file:///abs/path` URI contains its
+/// own `//` and confuses every parser that splits on `//` — see
+/// `wir_build::types::sort_types_topologically` and the equivalent
+/// keying in `register_struct`. The `kiln:/path` form has no internal
+/// `//`, so the qualified-name boundary stays unambiguous.
+///
+/// The URI is RFC 3986–valid (single-segment scheme followed by an
+/// absolute-path reference), so `fluent_uri::UriRef::parse` accepts it
+/// and the loader's `strip_kiln_scheme` recovers the absolute path.
+/// Relative paths are not supported; the caller must canonicalize
+/// first.
+fn path_to_kiln_uri(path: &Path) -> String {
+    // `Path::display` is sufficient on Unix where every absolute path is
+    // a `/`-separated UTF-8 string. The CLI is host-only, so any
+    // platform-specific path quirk is the kiln_driver's problem to
+    // solve, not the wasm32-compatible compiler crate's.
+    let s = path.display().to_string().replace('\\', "/");
+    if s.starts_with('/') {
+        format!("kiln:{s}")
+    } else {
+        // Relative-path fallback. The leading `/` keeps the URI
+        // RFC 3986–valid even though the loader will fail to find the
+        // file at runtime — a useful diagnostic shape for callers that
+        // forgot to canonicalize.
+        format!("kiln:/{s}")
     }
 }
 
@@ -1007,13 +1096,27 @@ where
                 }
             }
             if let Some(entry_path) = entry.outputs.iter().find(|o| o.entry).map(|o| &o.path) {
-                let decl_file = match &invocation.decl_site {
-                    wado_compiler::kiln::DeclSite::Manifest { .. } => String::new(),
-                    wado_compiler::kiln::DeclSite::Inline { module, .. } => module.clone(),
+                let scope = match &invocation.decl_site {
+                    wado_compiler::kiln::DeclSite::Manifest { .. } => {
+                        wado_compiler::kiln::DeclScope::Any
+                    }
+                    wado_compiler::kiln::DeclSite::Inline { module, .. } => {
+                        wado_compiler::kiln::DeclScope::LocalTo(module.clone())
+                    }
                 };
+                // Compose a `file:` URI from the canonicalized absolute
+                // path. Canonicalizing here means the loader does not
+                // need to know the manifest root or the importer's
+                // working directory at resolve time. Falling back to the
+                // un-canonicalized join (rare: only when the file does
+                // not yet exist on disk, e.g. a stale-cache path) keeps
+                // the URI well-formed enough for diagnostics.
+                let joined = manifest_root.join(entry_path);
+                let abs = std::fs::canonicalize(&joined).unwrap_or(joined);
+                let uri = path_to_kiln_uri(&abs);
                 outcome
                     .invocations
-                    .insert(&decl_file, invocation.from.as_str(), entry_path);
+                    .insert(scope, invocation.from.as_str(), &uri);
             }
             new_cache.push(entry);
         }
@@ -1096,17 +1199,13 @@ async fn typed_encode_options<H, P>(
 {
     use wado_compiler::{Code, Diagnostic, Severity};
 
-    let Some(build) = manifest.build.as_ref() else {
-        return;
-    };
+    let build = manifest.build.as_ref();
 
+    let _ = build;
     for inv in invocations.iter_mut() {
-        let name = match &inv.decl_site {
+        let display_name = match &inv.decl_site {
             DeclSite::Manifest { name } => name.clone(),
-            DeclSite::Inline { .. } => continue,
-        };
-        let Some(gi) = build.generators.get(&name) else {
-            continue;
+            DeclSite::Inline { synthetic_id, .. } => synthetic_id.clone(),
         };
 
         let descriptor = match provider.descriptor(&inv.module).await {
@@ -1117,8 +1216,8 @@ async fn typed_encode_options<H, P>(
                     severity: Severity::Warning,
                     code: Code::Log,
                     message: format!(
-                        "kiln[{name}]: failed to introspect generator options schema ({message}); \
-                         falling back to raw TOML encoding",
+                        "kiln[{display_name}]: failed to introspect generator options schema \
+                         ({message}); falling back to raw TOML encoding",
                     ),
                     span: None,
                 });
@@ -1126,10 +1225,9 @@ async fn typed_encode_options<H, P>(
             }
         };
 
-        let attr = toml_to_attr_value(&gi.options);
-        let supplied: Option<&AttrValue> = match &attr {
-            AttrValue::Object(obj) if obj.is_empty() => None,
-            other => Some(other),
+        let supplied: Option<&AttrValue> = match inv.raw_options.as_ref() {
+            Some(AttrValue::Object(obj)) if obj.is_empty() => None,
+            other => other,
         };
         match validate_options(&descriptor, supplied) {
             Ok(canonical) => {
@@ -1334,7 +1432,7 @@ from = "./a.g4"
     }
 
     #[test]
-    fn inline_module_record_is_rejected() {
+    fn inline_path_module_lowers_to_local_path() {
         let (m, root) = parse(
             r#"
 [package]
@@ -1346,12 +1444,13 @@ module = { path = "../tools/proto" }
 from = "./schema.proto"
 "#,
         );
-        let err = plan(&m, &root).unwrap_err();
-        match err {
-            DriverError::UnsupportedInlineModule { invocation } => {
-                assert_eq!(invocation, "proto");
+        let outcome = plan(&m, &root).expect("inline path module must lower");
+        assert_eq!(outcome.plan.order.len(), 1);
+        match &outcome.plan.order[0].module {
+            GeneratorModule::LocalPath(p) => {
+                assert_eq!(p.as_str(), "../tools/proto");
             }
-            other => panic!("expected UnsupportedInlineModule, got {other:?}"),
+            other => panic!("expected LocalPath, got {other:?}"),
         }
     }
 
@@ -1781,6 +1880,7 @@ d_string = "hi"
                 inputs: vec![InvocationPath::normalize("dep.proto")],
                 output_dir: InvocationPath::normalize("build/kiln/proto"),
                 options_canonical: vec![],
+                raw_options: None,
             }
         }
 
@@ -1990,6 +2090,7 @@ d_string = "hi"
                 inputs: vec![InvocationPath::normalize("dep.proto")],
                 output_dir: InvocationPath::normalize("build/kiln/proto"),
                 options_canonical: vec![],
+                raw_options: None,
             }
         }
 

@@ -3,8 +3,15 @@
 /// The Rust grammar uses semantic predicates for disambiguation, so some
 /// constructs (fn, match, use paths) are not supported without predicate
 /// evaluation. These tests cover items and expressions that parse correctly.
-use rust from "./golden/rust.wado";
-use { normalize_tree } from "./golden/rust.wado";
+use rust from "./grammars/RustLexer.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            inputs: ["./grammars/RustParser.g4"],
+            options: { highlight: false },
+        },
+    };
+use { normalize_tree } from "./grammars/RustLexer.g4";
 
 // --- Tokenize tests ---
 

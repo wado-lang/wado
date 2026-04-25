@@ -1,6 +1,13 @@
-use html from "./golden/html.wado";
-use { CstNode, CstChild, normalize_tree } from "./golden/html.wado";
-use { TK_TAG_WHITESPACE, TK_TAG_NAME } from "./golden/html.wado";
+use html from "./grammars/HTMLLexer.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            inputs: ["./grammars/HTMLParser.g4"],
+            options: { highlight: false },
+        },
+    };
+use { CstNode, CstChild, normalize_tree } from "./grammars/HTMLLexer.g4";
+use { TK_TAG_WHITESPACE, TK_TAG_NAME } from "./grammars/HTMLLexer.g4";
 
 fn assert_tree(input: &String, expected: &String) {
     let root = html::parse(input).unwrap();

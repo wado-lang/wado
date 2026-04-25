@@ -345,6 +345,11 @@ mod tests {
             .get_export("core:kiln/generator", "generate")
             .expect("generate export not found");
         assert_eq!(generate.params.len(), 1, "generate takes one parameter");
+        assert!(
+            generate.is_async,
+            "generate is declared `async func` — the CM lift uses task.return \
+             and the wasmtime runtime drives the call through Accessor"
+        );
     }
 
     fn world_info(fq: &str) -> WorldInfo {

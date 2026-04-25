@@ -16,7 +16,10 @@
 //! machinery as any other import error.
 //!
 //! See WEP 2026-04-12 §"M6.5 stage 2".
-use crate::ast::{ImplBlock, Item, Module, NamedType, Type};
+use crate::ast::{
+    AstId, CallExpr, Expr, IdentExpr, ImplBlock, Item, LetStmt, Module, NamedType, Pattern, Stmt,
+    TryOpExpr, Type, UseDecl, UseItem,
+};
 use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
 use crate::hashmap::IndexMap;
 use crate::logger::Logger;
@@ -116,6 +119,187 @@ pub fn inject_deserialize_impl(
     module.items.push(Item::Impl(block));
 }
 
+/// Rewrite a kiln generator's `fn generate(req: Request<T>) -> Result<...>`
+/// so the first parameter becomes `req: RawRequest` and the body starts
+/// with `let req = bind_request::<T>(req)?;`. The user's subsequent body
+/// keeps seeing `req` as `Request<T>` via same-scope shadowing (WEP
+/// 2026-03-25), so the UX is "author writes `fn generate(req:
+/// Request<Options>)`".
+///
+/// Gated on `target_world == core:kiln/generator` and only fires when
+/// the first param's type is syntactically `Request<…>` with exactly
+/// one type argument. Generator authors who prefer the explicit v1
+/// `fn generate(raw: RawRequest)` shape keep working unchanged — this
+/// pass is a no-op for them.
+pub fn inject_kiln_request_adapter(
+    target_world: Option<&str>,
+    entry_module: &ModuleSource,
+    modules: &mut IndexMap<ModuleSource, Module>,
+) {
+    if target_world != Some(KILN_GENERATOR_WORLD) {
+        return;
+    }
+
+    let Some(module) = modules.get_mut(entry_module) else {
+        return;
+    };
+
+    let span = synthesized_span();
+
+    // First pass (read-only): locate the matching `fn generate` and
+    // extract the `Request<T>` inner type. Iterates by index so the
+    // mutation pass can bypass Rust's borrow checker when it needs to
+    // call `module.alloc_ast_id()`.
+    let mut target: Option<(usize, String, Type)> = None;
+    for (idx, item) in module.items.iter().enumerate() {
+        let Item::Function(func) = item else { continue };
+        if !func.is_export || func.name != "generate" {
+            continue;
+        }
+        let Some(first) = func.params.first() else {
+            continue;
+        };
+        let Type::Generic(generic_ty) = &first.ty else {
+            continue;
+        };
+        if generic_ty.name != "Request" || generic_ty.args.len() != 1 {
+            continue;
+        }
+        target = Some((idx, first.name.clone(), generic_ty.args[0].clone()));
+        break;
+    }
+
+    let Some((item_idx, param_name, inner_type)) = target else {
+        return;
+    };
+
+    // Allocate every synthesized AstId up front so `module.items` stays
+    // free of mutable borrows when we reach back into the function.
+    let raw_ty_id = module.alloc_ast_id();
+    let bind_ident_id = module.alloc_ast_id();
+    let raw_arg_id = module.alloc_ast_id();
+    let call_id = module.alloc_ast_id();
+    let try_id = module.alloc_ast_id();
+    let let_id = module.alloc_ast_id();
+    let pattern_id = module.alloc_ast_id();
+
+    let raw_request_type = Type::Named(NamedType::new(raw_ty_id, "RawRequest".to_string(), span));
+
+    let bind_callee = Expr::Ident(IdentExpr {
+        id: bind_ident_id,
+        name: "bind_request".to_string(),
+        span,
+        segments: Vec::new(),
+    });
+    let raw_arg = Expr::Ident(IdentExpr {
+        id: raw_arg_id,
+        name: param_name.clone(),
+        span,
+        segments: Vec::new(),
+    });
+    let bind_call = Expr::Call(Box::new(CallExpr {
+        id: call_id,
+        callee: bind_callee,
+        type_args: vec![inner_type],
+        args: vec![raw_arg],
+        has_trailing_comma: false,
+        span,
+    }));
+    let try_expr = Expr::TryOp(Box::new(TryOpExpr {
+        id: try_id,
+        expr: bind_call,
+        span,
+    }));
+    let let_stmt = Stmt::Let(LetStmt {
+        id: let_id,
+        pattern: Pattern::Ident {
+            id: pattern_id,
+            name: param_name,
+            span,
+        },
+        name_span: span,
+        is_mut: false,
+        is_reactive: false,
+        ty: None,
+        value: Some(try_expr),
+        span,
+    });
+
+    // Ensure `bind_request` and `RawRequest` are imported from
+    // `core:kiln` (the author only wrote `Request`/`Response`/`Error`;
+    // the synthesis needs the other two).
+    ensure_kiln_imports(module, span, &["bind_request", "RawRequest"]);
+
+    if let Some(Item::Function(func)) = module.items.get_mut(item_idx) {
+        if let Some(first) = func.params.first_mut() {
+            first.ty = raw_request_type;
+        }
+        if let Some(body) = func.body.as_mut() {
+            body.stmts.insert(0, let_stmt);
+        }
+    }
+}
+
+/// Ensure every listed item is imported from `core:kiln`. Mutates an
+/// existing `use { ... } from "core:kiln"` declaration when present,
+/// otherwise inserts a fresh one at the top of `module.items`.
+fn ensure_kiln_imports(module: &mut Module, span: Span, needed: &[&str]) {
+    let mut missing: Vec<&&str> = needed.iter().collect();
+    for item in &module.items {
+        let Item::Use(decl) = item else { continue };
+        if decl.source != "core:kiln" {
+            continue;
+        }
+        missing.retain(|name| {
+            !decl
+                .items
+                .iter()
+                .any(|u| matches!(u, UseItem::Simple { name: n, .. } if n == **name))
+        });
+    }
+    if missing.is_empty() {
+        return;
+    }
+
+    // Try to extend an existing `use ... from "core:kiln"` first.
+    for item in &mut module.items {
+        let Item::Use(decl) = item else { continue };
+        if decl.source != "core:kiln" {
+            continue;
+        }
+        for name in &missing {
+            decl.items.push(UseItem::Simple {
+                id: AstId::fresh(),
+                name: (**name).to_string(),
+                name_span: span,
+                alias: None,
+            });
+        }
+        return;
+    }
+
+    // No existing core:kiln use — synthesize one at the top.
+    let decl = UseDecl {
+        id: module.alloc_ast_id(),
+        is_pub: false,
+        source: "core:kiln".to_string(),
+        source_span: span,
+        source_id: module.alloc_ast_id(),
+        items: missing
+            .iter()
+            .map(|name| UseItem::Simple {
+                id: AstId::fresh(),
+                name: (**name).to_string(),
+                name_span: span,
+                alias: None,
+            })
+            .collect(),
+        attributes: None,
+        span,
+    };
+    module.items.insert(0, Item::Use(decl));
+}
+
 fn type_name(ty: &Type) -> Option<&str> {
     match ty {
         Type::Named(n) => Some(n.name.as_str()),
@@ -132,7 +316,8 @@ fn should_check(source: &ModuleSource) -> bool {
     match source {
         ModuleSource::EntryPoint { .. }
         | ModuleSource::Local { .. }
-        | ModuleSource::Remote { .. } => true,
+        | ModuleSource::Remote { .. }
+        | ModuleSource::Redirected { .. } => true,
         ModuleSource::Core { .. } | ModuleSource::Wasi { .. } => false,
     }
 }

@@ -9,7 +9,7 @@ use std::sync::Mutex;
 use indexmap::IndexMap;
 use wado_compiler::{
     CompilerHost, Diagnostic, ModuleSource, SourceError, annotate_with_invocations,
-    kiln::InvocationIndex,
+    kiln::{DeclScope, InvocationIndex},
 };
 
 struct MapHost {
@@ -69,7 +69,7 @@ pub fn greet() {}
 
     let mut idx = InvocationIndex::new();
     idx.insert(
-        "entry.wado",
+        DeclScope::LocalTo("entry.wado".to_string()),
         "./sample.proto",
         "build/kiln/test-invocation/sample.wado",
     );
@@ -89,8 +89,8 @@ pub fn greet() {}
         );
     };
 
-    let redirected = ModuleSource::Local {
-        path: "build/kiln/test-invocation/sample.wado".to_string(),
+    let redirected = ModuleSource::Redirected {
+        uri: "build/kiln/test-invocation/sample.wado".to_string(),
     };
     assert!(
         annotated.modules.contains_key(&redirected),
