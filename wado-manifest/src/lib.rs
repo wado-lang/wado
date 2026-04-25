@@ -8,8 +8,7 @@ pub use lockfile::{
     FileHash, GeneratorCacheEntry, LockFile, LockFileError, LockedPackage, OutputHash,
 };
 pub use manifest::{
-    BuildSection, Dependency, DependencySource, GeneratorInvocation, GeneratorModuleRef, GitPin,
-    Manifest, ManifestError, Package, Workspace,
+    Dependency, DependencySource, GitPin, Manifest, ManifestError, Package, Workspace,
 };
 pub use provider::{
     DependencyProvider, GitTagInfo, InMemoryDependencyProvider, ProviderError, RegistryPackageInfo,

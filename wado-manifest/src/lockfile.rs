@@ -22,8 +22,7 @@ pub struct LockFile {
 /// generator invocation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GeneratorCacheEntry {
-    /// Invocation id (either the `[build.generators.<name>]` key or a
-    /// synthesized `"kiln-<12-hex>"` id for inline invocations).
+    /// Synthesized invocation id derived from `(decl_file, from)`.
     pub invocation: String,
     /// Generator identity as resolved: `"ns:name@version"` plus any module path.
     pub generator: String,

@@ -413,11 +413,10 @@ pub async fn compile_with_full_opts(
     }
 }
 
-/// Walk up from `entry_file` to find an adjacent `wado.toml`, then drive the
-/// Kiln pipeline via [`run_pipeline`]. Returns `Ok(PipelineOutcome)` when a
-/// manifest is found and the pipeline ran (possibly a no-op when the manifest
-/// has no `[build.generators]` section). Returns `Ok(PipelineOutcome::default())`
-/// when there is no adjacent manifest — single-file scripts don't need Kiln.
+/// Collect inline `with { generator: { ... } }` clauses from `entry_file`
+/// (and any sibling manifest's directory if one is found), then drive the
+/// Kiln pipeline via [`run_pipeline`]. Returns `Ok(PipelineOutcome::default())`
+/// when no inline clauses were collected.
 ///
 /// Errors from [`run_pipeline`] are surfaced unchanged; the caller decides
 /// whether to abort or continue (e.g. for consume-only mode, a stale-cache
@@ -447,23 +446,17 @@ async fn maybe_run_pipeline(
                 dependencies: indexmap::IndexMap::new(),
                 dev_dependencies: indexmap::IndexMap::new(),
                 build_dependencies: indexmap::IndexMap::new(),
-                build: None,
                 workspace: None,
             };
             (manifest, probe_manifest_root)
         }
     };
 
-    let no_manifest_generators = manifest
-        .build
-        .as_ref()
-        .is_none_or(|b| b.generators.is_empty());
-    if no_manifest_generators && inline.is_empty() {
+    if inline.is_empty() {
         return Ok(PipelineOutcome::default());
     }
     let provider = CliGeneratorProvider::new(manifest_root.clone());
-    crate::kiln_driver::run_pipeline_with_inline(&manifest, &manifest_root, host, &provider, inline)
-        .await
+    crate::kiln_driver::run_pipeline(&manifest, &manifest_root, host, &provider, inline).await
 }
 
 /// Parse the entry file to collect inline Kiln invocations from
@@ -484,7 +477,7 @@ fn collect_inline_invocations_for_entry(
         wado_compiler::hashmap::IndexMap::<String, wado_compiler::ast::Module>::default();
     // Key the module by the same string the loader uses as the entry's
     // `ModuleSource::EntryPoint { filename }` — the full path — so the
-    // `DeclSite::Inline { module }` recorded here matches the `decl_file`
+    // The `decl_site.module` recorded here matches the `decl_file`
     // the loader feeds into `InvocationIndex::redirect` at resolve time.
     // Without this, the inline redirect misses entirely.
     let entry_name = entry_file.to_string_lossy().to_string();

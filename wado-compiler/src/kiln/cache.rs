@@ -451,8 +451,9 @@ mod tests {
     #[test]
     fn gather_file_hashes_threads_errors() {
         let inv = Invocation {
-            decl_site: DeclSite::Manifest {
-                name: "proto".to_string(),
+            decl_site: DeclSite {
+                module: "src/main.wado".to_string(),
+                synthetic_id: "kiln-proto".to_string(),
             },
             module: GeneratorModule::Spec("ns:p@1.0.0".to_string()),
             from: InvocationPath::normalize("schema.proto"),

@@ -21,8 +21,8 @@ pub enum PlanError {
     /// involved with its decl site for diagnostics.
     Cycle { participants: Vec<DeclSite> },
     /// Two invocations share a `from` path but disagree on configuration
-    /// (module / inputs / options / `output_dir`). Per WEP line 368-371 such
-    /// declarations must be merged; when they cannot the compiler refuses.
+    /// (module / inputs / options / `output_dir`). Identical tuples merge;
+    /// non-matching tuples raise this error.
     DuplicateGenerator { from: String, sites: Vec<DeclSite> },
 }
 
@@ -216,8 +216,9 @@ mod tests {
 
     fn inv(name: &str, from: &str, inputs: &[&str], out: &str) -> Invocation {
         Invocation {
-            decl_site: DeclSite::Manifest {
-                name: name.to_string(),
+            decl_site: DeclSite {
+                module: format!("src/{name}.wado"),
+                synthetic_id: format!("kiln-{name}"),
             },
             module: GeneratorModule::Spec(format!("ns:{name}@1.0.0")),
             from: InvocationPath::normalize(from),
@@ -294,13 +295,10 @@ mod tests {
         let positions: Vec<_> = plan
             .order
             .iter()
-            .map(|i| match &i.decl_site {
-                DeclSite::Manifest { name } => name.clone(),
-                _ => panic!(),
-            })
+            .map(|i| i.decl_site.synthetic_id.clone())
             .collect();
-        let producer_pos = positions.iter().position(|s| s == "producer").unwrap();
-        let consumer_pos = positions.iter().position(|s| s == "consumer").unwrap();
+        let producer_pos = positions.iter().position(|s| s == "kiln-producer").unwrap();
+        let consumer_pos = positions.iter().position(|s| s == "kiln-consumer").unwrap();
         assert!(producer_pos < consumer_pos);
     }
 
@@ -343,10 +341,7 @@ mod tests {
     fn names(plan: &Plan) -> Vec<String> {
         plan.order
             .iter()
-            .map(|i| match &i.decl_site {
-                DeclSite::Manifest { name } => name.clone(),
-                _ => panic!("expected manifest decl site"),
-            })
+            .map(|i| i.decl_site.synthetic_id.clone())
             .collect()
     }
 
@@ -355,7 +350,7 @@ mod tests {
         let alpha = inv("alpha", "a.proto", &[], "build/kiln/alpha");
         let beta = inv("beta", "b.proto", &[], "build/kiln/beta");
         let plan = build_plan(vec![alpha, beta]).unwrap();
-        assert_eq!(names(&plan), vec!["alpha", "beta"]);
+        assert_eq!(names(&plan), vec!["kiln-alpha", "kiln-beta"]);
     }
 
     #[test]
@@ -387,9 +382,9 @@ mod tests {
         assert_eq!(names(&a), names(&b));
         let positions = names(&a);
         let pos = |name: &str| positions.iter().position(|s| s == name).unwrap();
-        assert!(pos("producer") < pos("left"));
-        assert!(pos("producer") < pos("right"));
-        assert!(pos("left") < pos("sink"));
-        assert!(pos("right") < pos("sink"));
+        assert!(pos("kiln-producer") < pos("kiln-left"));
+        assert!(pos("kiln-producer") < pos("kiln-right"));
+        assert!(pos("kiln-left") < pos("kiln-sink"));
+        assert!(pos("kiln-right") < pos("kiln-sink"));
     }
 }

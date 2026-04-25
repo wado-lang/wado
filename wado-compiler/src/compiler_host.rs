@@ -138,6 +138,9 @@ pub enum Code {
     KilnStaleCache,
     /// A Kiln generator package imports an interface the sandbox forbids.
     KilnGeneratorForbiddenImport,
+    /// A `use ... from "<path>"` whose source is a non-`.wado` schema is missing
+    /// the required `with { generator: { ... } }` clause.
+    KilnMissingWith,
 }
 
 impl std::fmt::Display for Code {
@@ -171,6 +174,7 @@ impl std::fmt::Display for Code {
             Code::GeneratorOptionsInvalid => "GENERATOR_OPTIONS_INVALID",
             Code::KilnStaleCache => "KILN_STALE_CACHE",
             Code::KilnGeneratorForbiddenImport => "KILN_GENERATOR_FORBIDDEN_IMPORT",
+            Code::KilnMissingWith => "KILN_MISSING_WITH",
         };
         write!(f, "{name}")
     }

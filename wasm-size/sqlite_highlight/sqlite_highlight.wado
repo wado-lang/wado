@@ -5,7 +5,13 @@
 
 use { print, Stdout } from "core:cli";
 use { Stdin } from "wasi:cli";
-use sqlite from "../../package-gale/tests/grammars/SQLite.g4";
+use sqlite from "../../package-gale/tests/grammars/SQLite.g4"
+    with {
+        generator: {
+            module: "../../package-gale/src/generator.wado",
+            options: { highlight: true },
+        },
+    };
 
 export fn run() with Stdout, Stdin {
     let [stream, _done] = Stdin::read_via_stream();
