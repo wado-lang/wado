@@ -254,9 +254,8 @@ fn write_toml(out: &mut Vec<u8>, v: &toml::Value) {
 }
 
 fn write_json_string(out: &mut Vec<u8>, s: &str) {
-    use unicode_normalization::UnicodeNormalization;
     out.push(b'"');
-    for ch in s.nfc() {
+    for ch in s.chars() {
         match ch {
             '"' => out.extend_from_slice(b"\\\""),
             '\\' => out.extend_from_slice(b"\\\\"),

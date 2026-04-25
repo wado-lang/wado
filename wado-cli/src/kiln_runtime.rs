@@ -42,7 +42,6 @@ pub struct KilnRunPolicy {
     pub fuel: u64,
 }
 
-
 struct KilnHostState<H: CompilerHost> {
     host: Arc<H>,
     reads: Arc<Mutex<Vec<GeneratorReadRecord>>>,

@@ -20,7 +20,6 @@
 //! user-facing options actually change.
 
 use sha2::{Digest, Sha256};
-use unicode_normalization::UnicodeNormalization;
 
 use super::invocation::{GeneratorModule, Invocation, InvocationPath};
 use super::options::CanonicalValue;
@@ -43,9 +42,11 @@ fn hex(bytes: &[u8; 32]) -> String {
 }
 
 /// Magic + version prefix. Bump when the canonical layout changes in a
-/// way that must invalidate every existing lockfile entry. `v2` marks
-/// the M6.4 switch from the binary options encoder to canonical JSON.
-const MAGIC: &[u8] = b"kiln-cache-key-v2\0";
+/// way that must invalidate every existing lockfile entry. `v2` marked
+/// the M6.4 switch from the binary options encoder to canonical JSON;
+/// `v3` drops NFC normalization on string values so cache keys reflect
+/// the literal UTF-8 bytes the user supplied.
+const MAGIC: &[u8] = b"kiln-cache-key-v3\0";
 
 /// The core:kiln world version the generator was built against. Part of the
 /// cache key so a future world-version bump invalidates every cached entry.
@@ -114,9 +115,12 @@ pub fn hex_digest(digest: &[u8; 32]) -> String {
 /// string (canonical JSON, RFC 8785–style).
 ///
 /// - Object keys are lexicographically sorted (UTF-8 byte order).
-/// - String values are NFC-normalized and escaped minimally: `"`, `\`,
-///   and the ASCII control set use `\"`, `\\`, `\b`, `\f`, `\n`, `\r`,
-///   `\t`, or `\uXXXX`. Non-ASCII characters survive as raw UTF-8 bytes.
+/// - String values are written as their literal UTF-8 bytes and escaped
+///   minimally: `"`, `\`, and the ASCII control set use `\"`, `\\`,
+///   `\b`, `\f`, `\n`, `\r`, `\t`, or `\uXXXX`. Non-ASCII characters
+///   survive as raw UTF-8 bytes; no Unicode normalization is applied,
+///   so two strings that differ only in NFC vs NFD form hash to
+///   different cache keys (intended: keys reflect literal input).
 /// - Integers render as shortest base-10 with no leading sign on zero.
 /// - Floats render shortest-roundtrip. Integer-valued floats drop their
 ///   trailing `.0`. `-0.0` canonicalizes to `0`. `NaN` / `±Inf` panic
@@ -186,11 +190,12 @@ fn encode_canonical_value(out: &mut Vec<u8>, v: &CanonicalValue) {
     }
 }
 
-/// Write a JSON string literal: surrounding quotes, NFC-normalized
-/// payload, minimal escapes.
+/// Write a JSON string literal: surrounding quotes, literal UTF-8
+/// payload, minimal escapes. No Unicode normalization is applied —
+/// see the encoder docstring above for rationale.
 fn write_json_string(out: &mut Vec<u8>, s: &str) {
     out.push(b'"');
-    for ch in s.nfc() {
+    for ch in s.chars() {
         match ch {
             '"' => out.extend_from_slice(b"\\\""),
             '\\' => out.extend_from_slice(b"\\\\"),
@@ -509,7 +514,7 @@ mod tests {
     }
 
     #[test]
-    fn canonical_json_string_nfc_normalizes_compound_char() {
+    fn canonical_json_string_preserves_literal_utf8_without_normalization() {
         let decomposed = "e\u{0301}";
         let composed = "\u{00e9}";
         let bytes_d = encode_options_canonical(&opts(vec![(
@@ -520,10 +525,11 @@ mod tests {
             "accent",
             CanonicalValue::String(composed.to_string()),
         )]));
-        assert_eq!(
+        assert_ne!(
             bytes_d, bytes_c,
-            "decomposed and composed forms must canonicalize to the same bytes"
+            "literal UTF-8 bytes must survive the encoder; NFC vs NFD differ"
         );
+        assert!(std::str::from_utf8(&bytes_d).unwrap().contains(decomposed));
         assert!(std::str::from_utf8(&bytes_c).unwrap().contains(composed));
     }
 
