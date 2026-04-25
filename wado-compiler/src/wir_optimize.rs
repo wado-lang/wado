@@ -11,6 +11,7 @@
 //! | `sroa_param`      | Single-field parameter SROA                |
 //! | `elide_struct`    | Struct local elimination (single + multi)   |
 //! | `array`           | Push collapse / data promotion / splitting  |
+//! | `const_forward`   | Struct field constant forwarding            |
 //! | `string`          | Short string push_str simplification        |
 //! | `peephole`        | Constant folding, copy elision, MV elision  |
 //! | `cleanup`         | Nop/dead-code removal, normalization        |
@@ -22,6 +23,7 @@
 
 mod array;
 mod cleanup;
+mod const_forward;
 mod dae;
 mod dce;
 mod drve;
@@ -45,6 +47,7 @@ use array::{
     collapse_array_push_sequences, promote_constant_arrays_to_data, split_large_array_literals,
 };
 use cleanup::cleanup;
+use const_forward::forward_struct_field_constants;
 use dae::eliminate_dead_arguments;
 use drve::eliminate_dead_return_values;
 use elide_local::elide_write_only_locals;
@@ -109,6 +112,13 @@ pub fn optimize_wir(module: &mut WirPackage, opt_level: OptLevel, profiler: &dyn
     // condition_implication pass.
     profiler.span_start("wir/phase3_data_flow");
     collapse_array_push_sequences(module);
+    // Struct-field constant forwarding. Recovers the
+    // bounds-check-elimination path that ran on `array_push_collapse`'s
+    // output (a fresh `StructNew Array<T> { used: N, ... }` literal).
+    // The TIR-level `field_forward` pass cannot see through the
+    // `__seq_lit:` block + push() chain, so this WIR-level pass remains
+    // for that pattern.
+    forward_struct_field_constants(module);
     profiler.span_end("wir/phase3_data_flow");
 
     // Phase 4: Library-specific rewrites

@@ -1,10 +1,5 @@
-// Bounds-check elimination on constant-known array length. Previously
-// pinned via `wir_not_expect:O2: ["if 0"]` against the WIR-level
-// const_forward pass (now removed in favor of the TIR-level
-// field_forward, which doesn't see through the `let arr = __seq_lit:
-// { ... __b.push(...) ... break *__b }` MethodCall chain). The
-// correctness assertion (sum == 30) keeps the dead-code-elimination
-// path honest. Recovering the WIR pattern is tracked as future work.
+// Verify that `if 0 { panic(...) }` from constant-folded bounds checks
+// is eliminated by the WIR peephole pass.
 
 fn sum_first_two(arr: Array<u16>) -> i32 {
     return arr[0] as i32 + arr[1] as i32;
@@ -17,5 +12,6 @@ export fn run() {
 
 __DATA__
 {
-    "stdout": ""
+    "stdout": "",
+    "wir_not_expect:O2": ["if 0"]
 }
