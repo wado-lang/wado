@@ -889,7 +889,7 @@ impl f64 {
 let pi = f64::PI;  // inlined as the literal value
 ```
 
-Primitive types provide built-in associated constants and static methods. See [Core Standard Library Reference](./stdlib-core.md) for the full list.
+Primitive types provide built-in associated constants and static methods. See [`core:prelude`](./stdlib-core-prelude.md) for the full list.
 
 ### 128-bit Integer Types (i128/u128)
 
@@ -1379,7 +1379,7 @@ let c = char::from_u32(65 as u32);  // Option<char>: Some('A')
 let c = char::from_i32(65);         // Option<char>: Some('A')
 ```
 
-See [Core Standard Library Reference](./stdlib-core.md) for the full `char` API.
+See [`core:prelude`](./stdlib-core-prelude.md) for the full `char` API.
 
 Casting `char` to non-integer types is a compile error:
 
@@ -3252,7 +3252,7 @@ wasi            # wasi: namespace for system interfaces
 
 For full API documentation, see:
 
-- [Core Standard Library Reference](./stdlib-core.md)
+- Core Standard Library — one reference per module: [`prelude`](./stdlib-core-prelude.md), [`cli`](./stdlib-core-cli.md), [`collections`](./stdlib-core-collections.md), [`serde`](./stdlib-core-serde.md), [`json`](./stdlib-core-json.md), [`json_nsd`](./stdlib-core-json_nsd.md), [`json_value`](./stdlib-core-json_value.md), [`base64`](./stdlib-core-base64.md), [`zlib`](./stdlib-core-zlib.md), [`simd`](./stdlib-core-simd.md), [`url`](./stdlib-core-url.md), [`kiln`](./stdlib-core-kiln.md)
 - [WASI Standard Library Reference](./stdlib-wasi.md)
 
 ### Global Functions defined in `core:prelude`

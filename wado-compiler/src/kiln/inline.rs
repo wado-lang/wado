@@ -468,9 +468,7 @@ fn strip_manifest_root_prefix(manifest_root: &str, resolved: &str) -> String {
         .count();
     let ups = root_parts.len() - common;
     let mut out = Vec::with_capacity(ups + resolved_parts.len() - common);
-    for _ in 0..ups {
-        out.push("..");
-    }
+    out.extend(std::iter::repeat_n("..", ups));
     out.extend(resolved_parts.iter().skip(common).copied());
     out.join("/")
 }

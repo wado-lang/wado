@@ -5,22 +5,6 @@
 
 ## wasi:cli
 
-### Enums
-
-#### `pub enum ErrorCode`
-
-##### `Io`
-
-Input/output error
-
-##### `IllegalByteSequence`
-
-Invalid or incomplete multibyte or wide character
-
-##### `Pipe`
-
-Broken pipe
-
 ### Effects
 
 #### `pub effect Environment`
@@ -152,135 +136,23 @@ The input side of a terminal.
 
 The output side of a terminal.
 
-## wasi:filesystem
-
-### Types
-
-#### `pub type Filesize = u64`
-
-#### `pub type LinkCount = u64`
-
-### Flags
-
-#### `pub flags DescriptorFlags`
-
-Descriptor flags.
-
-Note: This was called `fdflags` in earlier versions of WASI.
-
-##### `Read`
-
-Read mode: Data can be read.
-
-##### `Write`
-
-Write mode: Data can be written to.
-
-##### `FileIntegritySync`
-
-Request that writes be performed according to synchronized I/O file
-integrity completion. The data stored in the file and the file's
-metadata are synchronized. This is similar to `O_SYNC` in POSIX.
-
-The precise semantics of this operation have not yet been defined for
-WASI. At this time, it should be interpreted as a request, and not a
-requirement.
-
-##### `DataIntegritySync`
-
-Request that writes be performed according to synchronized I/O data
-integrity completion. Only the data stored in the file is
-synchronized. This is similar to `O_DSYNC` in POSIX.
-
-The precise semantics of this operation have not yet been defined for
-WASI. At this time, it should be interpreted as a request, and not a
-requirement.
-
-##### `RequestedWriteSync`
-
-Requests that reads be performed at the same level of integrity
-requested for writes. This is similar to `O_RSYNC` in POSIX.
-
-The precise semantics of this operation have not yet been defined for
-WASI. At this time, it should be interpreted as a request, and not a
-requirement.
-
-##### `MutateDirectory`
-
-Mutating directories mode: Directory contents may be mutated.
-
-When this flag is unset on a descriptor, operations using the
-descriptor which would create, rename, delete, modify the data or
-metadata of filesystem objects, or obtain another handle which
-would permit any of those, shall fail with `error-code::read-only` if
-they would otherwise succeed.
-
-This may only be set on directories.
-
-#### `pub flags PathFlags`
-
-Flags determining the method of how paths are resolved.
-
-##### `SymlinkFollow`
-
-As long as the resolved path corresponds to a symbolic link, it is
-expanded.
-
-#### `pub flags OpenFlags`
-
-Open flags used by `open-at`.
-
-##### `Create`
-
-Create file if it does not exist, similar to `O_CREAT` in POSIX.
-
-##### `Directory`
-
-Fail if not a directory, similar to `O_DIRECTORY` in POSIX.
-
-##### `Exclusive`
-
-Fail if file already exists, similar to `O_EXCL` in POSIX.
-
-##### `Truncate`
-
-Truncate file to size 0, similar to `O_TRUNC` in POSIX.
-
 ### Enums
 
-#### `pub enum Advice`
+#### `pub enum ErrorCode`
 
-File or memory access pattern advisory information.
+##### `Io`
 
-##### `Normal`
+Input/output error
 
-The application has no advice to give on its behavior with respect
-to the specified data.
+##### `IllegalByteSequence`
 
-##### `Sequential`
+Invalid or incomplete multibyte or wide character
 
-The application expects to access the specified data sequentially
-from lower offsets to higher offsets.
+##### `Pipe`
 
-##### `Random`
+Broken pipe
 
-The application expects to access the specified data in a random
-order.
-
-##### `WillNeed`
-
-The application expects to access the specified data in the near
-future.
-
-##### `DontNeed`
-
-The application expects that it will not access the specified data
-in the near future.
-
-##### `NoReuse`
-
-The application expects to access the specified data once and then
-not reuse it thereafter.
+## wasi:filesystem
 
 ### Effects
 
@@ -562,6 +434,12 @@ Return a hash of the metadata associated with a filesystem object referred
 to by a directory descriptor and a relative path.
 
 This performs the same hash computation as `metadata-hash`.
+
+### Types
+
+#### `pub type Filesize = u64`
+
+#### `pub type LinkCount = u64`
 
 ### Structs
 
@@ -845,19 +723,129 @@ A catch-all for errors not captured by the existing variants.
 Implementations can use this to extend the error type without
 breaking existing code.
 
+### Enums
+
+#### `pub enum Advice`
+
+File or memory access pattern advisory information.
+
+##### `Normal`
+
+The application has no advice to give on its behavior with respect
+to the specified data.
+
+##### `Sequential`
+
+The application expects to access the specified data sequentially
+from lower offsets to higher offsets.
+
+##### `Random`
+
+The application expects to access the specified data in a random
+order.
+
+##### `WillNeed`
+
+The application expects to access the specified data in the near
+future.
+
+##### `DontNeed`
+
+The application expects that it will not access the specified data
+in the near future.
+
+##### `NoReuse`
+
+The application expects to access the specified data once and then
+not reuse it thereafter.
+
+### Flags
+
+#### `pub flags DescriptorFlags`
+
+Descriptor flags.
+
+Note: This was called `fdflags` in earlier versions of WASI.
+
+##### `Read`
+
+Read mode: Data can be read.
+
+##### `Write`
+
+Write mode: Data can be written to.
+
+##### `FileIntegritySync`
+
+Request that writes be performed according to synchronized I/O file
+integrity completion. The data stored in the file and the file's
+metadata are synchronized. This is similar to `O_SYNC` in POSIX.
+
+The precise semantics of this operation have not yet been defined for
+WASI. At this time, it should be interpreted as a request, and not a
+requirement.
+
+##### `DataIntegritySync`
+
+Request that writes be performed according to synchronized I/O data
+integrity completion. Only the data stored in the file is
+synchronized. This is similar to `O_DSYNC` in POSIX.
+
+The precise semantics of this operation have not yet been defined for
+WASI. At this time, it should be interpreted as a request, and not a
+requirement.
+
+##### `RequestedWriteSync`
+
+Requests that reads be performed at the same level of integrity
+requested for writes. This is similar to `O_RSYNC` in POSIX.
+
+The precise semantics of this operation have not yet been defined for
+WASI. At this time, it should be interpreted as a request, and not a
+requirement.
+
+##### `MutateDirectory`
+
+Mutating directories mode: Directory contents may be mutated.
+
+When this flag is unset on a descriptor, operations using the
+descriptor which would create, rename, delete, modify the data or
+metadata of filesystem objects, or obtain another handle which
+would permit any of those, shall fail with `error-code::read-only` if
+they would otherwise succeed.
+
+This may only be set on directories.
+
+#### `pub flags PathFlags`
+
+Flags determining the method of how paths are resolved.
+
+##### `SymlinkFollow`
+
+As long as the resolved path corresponds to a symbolic link, it is
+expanded.
+
+#### `pub flags OpenFlags`
+
+Open flags used by `open-at`.
+
+##### `Create`
+
+Create file if it does not exist, similar to `O_CREAT` in POSIX.
+
+##### `Directory`
+
+Fail if not a directory, similar to `O_DIRECTORY` in POSIX.
+
+##### `Exclusive`
+
+Fail if file already exists, similar to `O_EXCL` in POSIX.
+
+##### `Truncate`
+
+Truncate file to size 0, similar to `O_TRUNC` in POSIX.
+
 ## wasi:http
-
-### Types
-
-#### `pub type FieldName = String`
-
-#### `pub type FieldValue = Array<u8>`
-
-#### `pub type Headers = Fields`
-
-#### `pub type Trailers = Fields`
-
-#### `pub type StatusCode = u16`
 
 ### Effects
 
@@ -1214,6 +1202,18 @@ communicate an error in handling of the response.
 Note that function will move the `response`, but references to headers
 acquired from it previously will remain valid.
 
+### Types
+
+#### `pub type FieldName = String`
+
+#### `pub type FieldValue = Array<u8>`
+
+#### `pub type Headers = Fields`
+
+#### `pub type Trailers = Fields`
+
+#### `pub type StatusCode = u16`
+
 ### Structs
 
 #### `pub struct DnsErrorPayload`
@@ -1427,12 +1427,6 @@ consistent between implementations.
 
 ## wasi:clocks
 
-### Types
-
-#### `pub type Duration = u64`
-
-#### `pub type Mark = u64`
-
 ### Effects
 
 #### `pub effect MonotonicClock`
@@ -1538,6 +1532,12 @@ as `iana-id`, or a formatted representation of the UTC offset such as
 WARNING: The returned string should not be consumed mechanically! It may
 change across platforms, hosts, or other implementation details. Parsing
 this string is a major platform-compatibility hazard.
+
+### Types
+
+#### `pub type Duration = u64`
+
+#### `pub type Mark = u64`
 
 ### Structs
 
@@ -1665,24 +1665,6 @@ This function returns the same type of data as `get-random-bytes`,
 represented as a `u64`.
 
 ## wasi:sockets
-
-### Types
-
-#### `pub type Ipv4Address = [u8, u8, u8, u8]`
-
-#### `pub type Ipv6Address = [u16, u16, u16, u16, u16, u16, u16, u16]`
-
-### Enums
-
-#### `pub enum IpAddressFamily`
-
-##### `Ipv4`
-
-Similar to `AF_INET` in POSIX.
-
-##### `Ipv6`
-
-Similar to `AF_INET6` in POSIX.
 
 ### Effects
 
@@ -2435,6 +2417,12 @@ Equivalent to the SO_RCVBUF and SO_SNDBUF socket options.
 
 ##### `fn set_send_buffer_size(self: &UdpSocket, value: u64) -> Result<(), ErrorCode>`
 
+### Types
+
+#### `pub type Ipv4Address = [u8, u8, u8, u8]`
+
+#### `pub type Ipv6Address = [u16, u16, u16, u16, u16, u16, u16, u16]`
+
 ### Structs
 
 #### `pub struct Ipv4SocketAddress`
@@ -2623,3 +2611,15 @@ POSIX equivalent: EAI_FAIL
 A catch-all for errors not captured by the existing variants.
 Implementations can use this to extend the error type without
 breaking existing code.
+
+### Enums
+
+#### `pub enum IpAddressFamily`
+
+##### `Ipv4`
+
+Similar to `AF_INET` in POSIX.
+
+##### `Ipv6`
+
+Similar to `AF_INET6` in POSIX.
