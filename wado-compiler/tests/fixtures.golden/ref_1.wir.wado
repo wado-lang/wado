@@ -779,10 +779,8 @@ fn "wado-compiler/tests/fixtures/ref_1.wado/ref_return_test"() with Stdout {
         unreachable;
     };
     __sroa_first_value = __inline_Array_i32__IndexValue_i32___index_value_7: block -> i32 {
-        if 0 >= nums.used {
-            "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-            unreachable;
-        }
+        block {
+        };
         break __inline_Array_i32__IndexValue_i32___index_value_7: builtin::array_get<i32>(nums.repr, 0);
         unreachable;
     };
@@ -843,7 +841,7 @@ fn "wado-compiler/tests/fixtures/ref_1.wado/run"() with Stdout {
     "core:cli/println"(greeting);
     __deref_val_2 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("goodbye"), used: 7 };
     greeting.repr = __deref_val_2.repr;
-    greeting.used = __deref_val_2.used;
+    greeting.used = 7;
     "core:cli/println"(greeting);
     "wado-compiler/tests/fixtures/ref_1.wado/ref_deref_assign_struct"();
     "wado-compiler/tests/fixtures/ref_1.wado/ref_deref_assign_variant"();

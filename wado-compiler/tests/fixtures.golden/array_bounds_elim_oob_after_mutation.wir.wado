@@ -118,16 +118,12 @@ fn "wado-compiler/tests/fixtures/array_bounds_elim_oob_after_mutation.wado/run"(
         break __seq_lit: __local_0;
         unreachable;
     };
-    if 0 >= arr.used {
-        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-        unreachable;
-    }
+    block {
+    };
     builtin::array_set<i32>(arr.repr, 0, 999);
     __v0 = __inline_Array_i32__IndexValue_i32___index_value_10: block -> i32 {
-        if 0 >= arr.used {
-            "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-            unreachable;
-        }
+        block {
+        };
         break __inline_Array_i32__IndexValue_i32___index_value_10: builtin::array_get<i32>(arr.repr, 0);
         unreachable;
     };
@@ -169,10 +165,10 @@ condition: arr[0] == 999
         unreachable;
     }
     drop(__inline_Array_i32__IndexValue_i32___index_value_18: block -> i32 {
-        if 3 >= arr.used {
+        block {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
-        }
+        };
         break __inline_Array_i32__IndexValue_i32___index_value_18: builtin::array_get<i32>(arr.repr, 3);
         unreachable;
     });

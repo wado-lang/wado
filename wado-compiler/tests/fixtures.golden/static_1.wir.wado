@@ -182,12 +182,10 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 fn "wado-compiler/tests/fixtures/static_1.wado/__test_2_static_method_nested"() {
-    let p1: ref "wado-compiler/tests/fixtures/static_1.wado//Point";
     let __v0_1: i32;
     let __cond_2: bool;
     let __v0_3: i32;
     let __cond_4: bool;
-    let p2: ref "wado-compiler/tests/fixtures/static_1.wado//Point";
     let __v0_6: i32;
     let __cond_7: bool;
     let __v0_8: i32;
@@ -220,13 +218,13 @@ fn "wado-compiler/tests/fixtures/static_1.wado/__test_2_static_method_nested"() 
     let __local_91: i32;
     let __local_92: i32;
     let __local_93: i32;
-    p1 = __inline_Point__scale_0: block -> ref "wado-compiler/tests/fixtures/static_1.wado//Point" {
+    drop(__inline_Point__scale_0: block -> ref "wado-compiler/tests/fixtures/static_1.wado//Point" {
         __local_88 = 0;
         __local_89 = 0;
         break __inline_Point__scale_0: struct.new "wado-compiler/tests/fixtures/static_1.wado//Point" { x: 0, y: 0 };
         unreachable;
-    };
-    __v0_1 = p1.x;
+    });
+    __v0_1 = 0;
     __cond_2 = __v0_1 == 0;
     if __cond_2 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -260,7 +258,7 @@ condition: p1.x == 0
         });
         unreachable;
     }
-    __v0_3 = p1.y;
+    __v0_3 = 0;
     __cond_4 = __v0_3 == 0;
     if __cond_4 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -294,15 +292,15 @@ condition: p1.y == 0
         });
         unreachable;
     }
-    p2 = __inline_Point__add_16: block -> ref "wado-compiler/tests/fixtures/static_1.wado//Point" {
+    drop(__inline_Point__add_16: block -> ref "wado-compiler/tests/fixtures/static_1.wado//Point" {
         __local_90 = 1;
         __local_91 = 2;
         __local_92 = 3;
         __local_93 = 4;
         break __inline_Point__add_16: struct.new "wado-compiler/tests/fixtures/static_1.wado//Point" { x: 4, y: 6 };
         unreachable;
-    };
-    __v0_6 = p2.x;
+    });
+    __v0_6 = 4;
     __cond_7 = __v0_6 == 4;
     if __cond_7 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -336,7 +334,7 @@ condition: p2.x == 4
         });
         unreachable;
     }
-    __v0_8 = p2.y;
+    __v0_8 = 6;
     __cond_9 = __v0_8 == 6;
     if __cond_9 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -420,13 +418,13 @@ fn "wado-compiler/tests/fixtures/static_1.wado/__test_3_static_method_chained"()
         __local_66 = __inline_GenericBox_i32___new_33: block -> ref "wado-compiler/tests/fixtures/static_1.wado//GenericBox<i32>" {
             __local_70 = __inline_Pair_i32_i32___get_second_32: block -> i32 {
                 __local_69 = struct.new "wado-compiler/tests/fixtures/static_1.wado//Pair<i32,i32>" { first: 5, second: 10 };
-                break __inline_Pair_i32_i32___get_second_32: __local_69.second;
+                break __inline_Pair_i32_i32___get_second_32: 10;
                 unreachable;
             };
             break __inline_GenericBox_i32___new_33: struct.new "wado-compiler/tests/fixtures/static_1.wado//GenericBox<i32>" { value: __local_70 };
             unreachable;
         };
-        break __inline_GenericBox_i32___get_30: __local_66.value;
+        break __inline_GenericBox_i32___get_30: __local_70;
         unreachable;
     };
     __cond = val == 10;
@@ -664,13 +662,16 @@ fn "wado-compiler/tests/fixtures/static_1.wado/__test_8_static_method_in_other_m
     let __local_9: ref "core:prelude/format.wado//Formatter";
     let __local_10: ref "core:prelude/string.wado//String";
     let __local_11: ref "core:prelude/format.wado//Formatter";
+    let __local_15: ref "core:prelude/int128.wado//u128";
     let __local_20: ref "core:prelude/format.wado//Formatter";
     let __local_25: ref "core:prelude/format.wado//Formatter";
+    let __local_32: ref "core:prelude/int128.wado//i128";
     let __local_38: ref "core:prelude/format.wado//Formatter";
     let __local_43: ref "core:prelude/format.wado//Formatter";
     y = struct.new "core:prelude/int128.wado//u128" { low: 42_i64, high: 0_i64 };
     __v0_2 = y;
     __cond_3 = __inline_u128_Eq__eq_2: block -> bool {
+        __local_15 = struct.new "core:prelude/int128.wado//u128" { low: 42_i64, high: 0_i64 };
         if 42_i64 == 42_i64 -> i32 {
             0_i64 == 0_i64;
         } else {
@@ -711,6 +712,7 @@ condition: y == 42 as u128
     y2 = struct.new "core:prelude/int128.wado//i128" { low: -10_i64, high: -1_i64 };
     __v0_6 = y2;
     __cond_7 = __inline_i128_Eq__eq_13: block -> bool {
+        __local_32 = struct.new "core:prelude/int128.wado//i128" { low: -10_i64, high: -1_i64 };
         if -10_i64 == -10_i64 -> i32 {
             -1_i64 == -1_i64;
         } else {
@@ -1023,6 +1025,7 @@ fn "core:prelude/int128.wado/u128::fmt_decimal"(self, f) {
     let temp_11: ref "core:prelude/int128.wado//u128";
     let digit: i32;
     let __local_14: ref "core:prelude/int128.wado//u128";
+    let __local_15: ref "core:prelude/int128.wado//u128";
     let __local_16: ref "core:prelude/string.wado//String";
     let __local_19: ref "core:prelude/int128.wado//u128";
     let __local_21: ref "tuple//[u128, u128]";
@@ -1034,6 +1037,7 @@ fn "core:prelude/int128.wado/u128::fmt_decimal"(self, f) {
     let __local_30: ref "tuple//[u128, u128]";
     if __inline_u128_Eq__eq_1: block -> bool {
         __local_14 = self;
+        __local_15 = struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: 0_i64 };
         if __local_14.low == 0_i64 -> i32 {
             __local_14.high == 0_i64;
         } else {

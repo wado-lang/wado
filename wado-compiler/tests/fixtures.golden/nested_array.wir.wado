@@ -405,10 +405,8 @@ fn "wado-compiler/tests/fixtures/nested_array.wado/nested_array_iterate_test"() 
         unreachable;
     };
     first_row = __inline_Array_Array_i32___IndexValue_i32___index_value_15: block -> ref "core:prelude//Array<i32>" {
-        if 0 >= matrix.used {
-            "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-            unreachable;
-        }
+        block {
+        };
         break __inline_Array_Array_i32___IndexValue_i32___index_value_15: builtin::array_get<ref "core:prelude//Array<i32>">(matrix.repr, 0);
         unreachable;
     };
@@ -428,7 +426,7 @@ fn "wado-compiler/tests/fixtures/nested_array.wado/nested_array_iterate_test"() 
         unreachable;
     });
     buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-    __iter_6 = struct.new "core:prelude/array.wado//ArrayIter<Array<i32>>" { repr: matrix.repr, used: matrix.used, index: 0 };
+    __iter_6 = struct.new "core:prelude/array.wado//ArrayIter<Array<i32>>" { repr: matrix.repr, used: 2, index: 0 };
     b17: block {
         l18: loop {
             __pattern_temp_0 = "core:prelude/array.wado/ArrayIter<Array<i32>>^Iterator::next"(__iter_6);
@@ -620,10 +618,8 @@ fn "wado-compiler/tests/fixtures/nested_array.wado/nested_array_option_access_te
         unreachable;
     };
     __pattern_temp_0 = __inline_Array_Option_i32___IndexValue_i32___index_value_6: block -> ref "core:prelude/types.wado//Option<i32>" {
-        if 0 >= arr.used {
-            "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-            unreachable;
-        }
+        block {
+        };
         break __inline_Array_Option_i32___IndexValue_i32___index_value_6: builtin::array_get<ref "core:prelude/types.wado//Option<i32>">(arr.repr, 0);
         unreachable;
     };
@@ -645,17 +641,15 @@ fn "wado-compiler/tests/fixtures/nested_array.wado/nested_array_option_access_te
         });
     }
     __pattern_temp_1 = __inline_Array_Option_i32___IndexValue_i32___index_value_11: block -> ref "core:prelude/types.wado//Option<i32>" {
-        if 1 >= arr.used {
-            "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-            unreachable;
-        }
+        block {
+        };
         break __inline_Array_Option_i32___IndexValue_i32___index_value_11: builtin::array_get<ref "core:prelude/types.wado//Option<i32>">(arr.repr, 1);
         unreachable;
     };
     if __pattern_temp_1.discriminant == 1 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("second: null"), used: 12 });
     }
-    __iter_6 = struct.new "core:prelude/array.wado//ArrayIter<Option<i32>>" { repr: arr.repr, used: arr.used, index: 0 };
+    __iter_6 = struct.new "core:prelude/array.wado//ArrayIter<Option<i32>>" { repr: arr.repr, used: 3, index: 0 };
     b31: block {
         l32: loop {
             __pattern_temp_2 = "core:prelude/array.wado/ArrayIter<Option<i32>>^Iterator::next"(__iter_6);
