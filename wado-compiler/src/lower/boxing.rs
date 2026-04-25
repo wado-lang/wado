@@ -489,8 +489,11 @@ impl BoxLowerer {
             );
         }
 
-        // Clear address_taken_locals since boxing is now handled in TIR
-        func.address_taken_locals.clear();
+        // Keep `address_taken_locals` populated past lowering: downstream
+        // optimization passes (e.g. `field_forward`) use it as a stable
+        // "this local was ever address-taken in source" signal that
+        // survives optimizer iterations even after the syntactic `&x`
+        // markers in the body have been inlined/elided.
     }
 
     /// Transform a block of statements.
