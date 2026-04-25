@@ -6,13 +6,7 @@
 use { println, Stdout } from "core:cli";
 use { MonotonicClock } from "wasi:clocks";
 use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
-use sqlite from "../../package-gale/tests/grammars/SQLite.g4"
-    with {
-        generator: {
-            module: "../../package-gale/src/generator.wado",
-            options: { highlight: true },
-        },
-    };
+use sqlite from "../../package-gale/tests/grammars/SQLite.g4";
 
 fn read_file(path: String) -> String with Preopens {
     let dirs = Preopens::get_directories();
