@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777045312173,
+  "lastUpdate": 1777080583118,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -16029,6 +16029,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/f82dbb692e923de3ec77dc14e654b6e815dd33c6"
         },
         "date": 1777045311873,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8982,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18935,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 622193,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4e344d6629387bb6bbbcb59bebd7f9d119c02916",
+          "message": "Merge pull request #917 from wado-lang/gfx/tweaks_working\n\nchore: wording: \"Write proper code based on a sound design.\"",
+          "timestamp": "2026-04-25T10:25:06+09:00",
+          "tree_id": "731d7a335cae67651fd9024cf0084ee0a73d8ed7",
+          "url": "https://github.com/wado-lang/wado/commit/4e344d6629387bb6bbbcb59bebd7f9d119c02916"
+        },
+        "date": 1777080582803,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
