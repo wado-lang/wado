@@ -144,9 +144,6 @@ impl FieldKnowledge {
     fn invalidate_field(&mut self, local_index: u32, field_name: &str) {
         self.fields
             .swap_remove(&(local_index, field_name.to_string()));
-        // If the local participates in an alias group (Local→Local
-        // copies of a reference type), the assignment is observable
-        // through every named alias too — drop those entries.
         if let Some(group) = self.alias_groups.get(&local_index).cloned() {
             for other in &group {
                 if *other == local_index {
@@ -345,10 +342,20 @@ fn collect_alias_edges_in_block(
 /// turned into a `$value_copy$T(src)` wrapper post-loop, so during
 /// the loop a `let dst = src` edge between two value-typed locals
 /// would over-merge groups that should stay separate.
+///
+/// `Box<T>` and `Array<T>` may surface either as `GenericInstance`
+/// (pre-monomorphization) or as concrete monomorphized `Struct`
+/// records carrying the original generic name in `base_name`.
 fn type_creates_alias(type_id: TypeId, type_table: &TypeTable) -> bool {
     match type_table.get(type_id) {
         ResolvedType::Ref { .. } => true,
         ResolvedType::GenericInstance { name, .. } if name == "Box" || name == "Array" => true,
+        ResolvedType::Struct { base_name, .. }
+            if base_name.as_deref() == Some("Box")
+                || base_name.as_deref() == Some("Array") =>
+        {
+            true
+        }
         _ => false,
     }
 }
