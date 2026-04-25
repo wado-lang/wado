@@ -34,18 +34,14 @@ use self::core::kiln::types as kiln_types;
 /// `fuel` is the wasmtime fuel ceiling for the call; `0` means no ceiling
 /// (the store is seeded with `u64::MAX`). The default is `0` because no
 /// finite ceiling has yet proven to fit every Gale-sized grammar — the
-/// 1 GiB initial pick tripped on SQLite. WEP 2026-04-12 (Kiln)
+/// 1 GiB initial pick tripped on `SQLite`. WEP 2026-04-12 (Kiln)
 /// open-question #10 tracks exposing this as a `wado.toml` knob and
 /// pairing it with a wall-clock deadline.
+#[derive(Default)]
 pub struct KilnRunPolicy {
     pub fuel: u64,
 }
 
-impl Default for KilnRunPolicy {
-    fn default() -> Self {
-        Self { fuel: 0 }
-    }
-}
 
 struct KilnHostState<H: CompilerHost> {
     host: Arc<H>,
