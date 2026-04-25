@@ -168,13 +168,23 @@ pub fn forward_struct_field_constants(project: &mut FlatPackage) -> bool {
     let mut changed = false;
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
-        let func_name = func.name.clone();
-        let module = func.module_source.clone();
+        // Seed with the function's stable aliasing annotations: any
+        // local that ever had its address taken (`&x` / `&mut x`) and
+        // any local stored across a `stores`-annotated callee. These
+        // sets persist across optimization iterations, so subsequent
+        // passes (ref_elim, SROA) erasing the syntactic markers won't
+        // make us forget the alias.
+        let mut aliased = func.address_taken_locals.clone();
+        for idx in &func.stores_aliased_locals {
+            aliased.insert(*idx);
+        }
         let Some(ref mut body) = func.body else {
             continue;
         };
-        let aliased = collect_aliased_locals(body);
-        let _ = (&func_name, &module);
+        // Augment with locals whose aliasing is visible only in the
+        // current body (e.g. inlined-in copies). Conservative — extra
+        // entries only mean missed optimizations.
+        collect_aliased_in_block(body, &mut aliased);
         let mut known = FieldKnowledge {
             aliased,
             ..Default::default()
@@ -184,16 +194,11 @@ pub fn forward_struct_field_constants(project: &mut FlatPackage) -> bool {
     changed
 }
 
-/// Pre-pass: collect every local whose storage may be observed
-/// through more than one name, and is therefore unsafe to record
-/// field knowledge for. Conservative — false positives only cost
-/// missed optimizations.
-fn collect_aliased_locals(body: &TirBlock) -> IndexSet<u32> {
-    let mut out = IndexSet::default();
-    collect_aliased_in_block(body, &mut out);
-    out
-}
-
+/// Augment `out` with body-visible aliasing markers. Used in addition
+/// to the function's stable `address_taken_locals` /
+/// `stores_aliased_locals` to catch transient aliasings introduced by
+/// inlining. Conservative — false positives only cost missed
+/// optimizations.
 fn collect_aliased_in_block(block: &TirBlock, out: &mut IndexSet<u32>) {
     for stmt in &block.stmts {
         collect_aliased_in_stmt(stmt, out);
