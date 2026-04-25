@@ -150,21 +150,26 @@ fn "wado-compiler/tests/fixtures/wir_optimize_vcopy_return_struct.wado/make_oute
     let __local_1: ref "wado-compiler/tests/fixtures/wir_optimize_vcopy_return_struct.wado//Inner";
     let __local_2: ref "core:prelude/string.wado//String";
     let inner: ref "wado-compiler/tests/fixtures/wir_optimize_vcopy_return_struct.wado//Inner";
-    let __match_scrut_0: ref "core:prelude/types.wado//Result<Inner,String>";
-    __match_scrut_0 = "wado-compiler/tests/fixtures/wir_optimize_vcopy_return_struct.wado/make_inner"(v);
-    inner = (if ref.test "core:prelude/types.wado//Result<Inner,String>::Ok"(__match_scrut_0) -> ref "wado-compiler/tests/fixtures/wir_optimize_vcopy_return_struct.wado//Inner" {
-        let __cast_2: ref "core:prelude/types.wado//Result<Inner,String>::Ok";
-        __cast_2 = ref.cast "core:prelude/types.wado//Result<Inner,String>::Ok"(__match_scrut_0);
-        __local_1 = __cast_2.payload_0;
-        __local_1;
-    } else {
-        let __cast_1: ref "core:prelude/types.wado//Result<Inner,String>::Err";
-        __cast_1 = ref.cast "core:prelude/types.wado//Result<Inner,String>::Err"(__match_scrut_0);
-        __local_2 = __cast_1.payload_0;
-        return 1, ref.null none, __local_2;
+    let __local_4: ref "wado-compiler/tests/fixtures/wir_optimize_vcopy_return_struct.wado//Inner";
+    inner = __inline__value_copy_T20_0: block -> ref "wado-compiler/tests/fixtures/wir_optimize_vcopy_return_struct.wado//Inner" {
+        let __match_scrut_0: ref "core:prelude/types.wado//Result<Inner,String>";
+        __match_scrut_0 = "wado-compiler/tests/fixtures/wir_optimize_vcopy_return_struct.wado/make_inner"(v);
+        __local_4 = (if ref.test "core:prelude/types.wado//Result<Inner,String>::Ok"(__match_scrut_0) -> ref "wado-compiler/tests/fixtures/wir_optimize_vcopy_return_struct.wado//Inner" {
+            let __cast_2: ref "core:prelude/types.wado//Result<Inner,String>::Ok";
+            __cast_2 = ref.cast "core:prelude/types.wado//Result<Inner,String>::Ok"(__match_scrut_0);
+            __local_1 = __cast_2.payload_0;
+            __local_1;
+        } else {
+            let __cast_1: ref "core:prelude/types.wado//Result<Inner,String>::Err";
+            __cast_1 = ref.cast "core:prelude/types.wado//Result<Inner,String>::Err"(__match_scrut_0);
+            __local_2 = __cast_1.payload_0;
+            return 1, ref.null none, __local_2;
+            unreachable;
+            unreachable;
+        });
+        break __inline__value_copy_T20_0: struct.new "wado-compiler/tests/fixtures/wir_optimize_vcopy_return_struct.wado//Inner" { value: __local_4.value, name: __local_4.name };
         unreachable;
-        unreachable;
-    });
+    };
     return 0, struct.new "wado-compiler/tests/fixtures/wir_optimize_vcopy_return_struct.wado//Outer" { inner: inner, tag: v * 10 }, ref.null none;
 }
 
@@ -173,29 +178,35 @@ fn "wado-compiler/tests/fixtures/wir_optimize_vcopy_return_struct.wado/run"() wi
     let e: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
-    let __local_11: ref "core:prelude/types.wado//Box<i32>";
-    let __local_12: ref "core:prelude/format.wado//Formatter";
-    let __local_16: ref "core:prelude/types.wado//Box<i32>";
-    let __local_17: ref "core:prelude/format.wado//Formatter";
+    let __local_9: ref "wado-compiler/tests/fixtures/wir_optimize_vcopy_return_struct.wado//Outer";
+    let __local_12: ref "core:prelude/types.wado//Box<i32>";
+    let __local_13: ref "core:prelude/format.wado//Formatter";
+    let __local_17: ref "core:prelude/types.wado//Box<i32>";
+    let __local_18: ref "core:prelude/format.wado//Formatter";
+    let __local_21: ref "core:prelude/string.wado//String";
     let __sroa_r_discriminant: i32;
     let __sroa_r_case0_payload_0: ref null "wado-compiler/tests/fixtures/wir_optimize_vcopy_return_struct.wado//Outer";
     let __sroa_r_case1_payload_0: ref null "core:prelude/string.wado//String";
     multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "wado-compiler/tests/fixtures/wir_optimize_vcopy_return_struct.wado/make_outer"(5);
     if __sroa_r_discriminant == 0 {
-        o = ref.as_non_null(__sroa_r_case0_payload_0);
+        o = __inline__value_copy_T39_2: block -> ref "wado-compiler/tests/fixtures/wir_optimize_vcopy_return_struct.wado//Outer" {
+            __local_9 = ref.as_non_null(__sroa_r_case0_payload_0);
+            break __inline__value_copy_T39_2: struct.new "wado-compiler/tests/fixtures/wir_optimize_vcopy_return_struct.wado//Outer" { inner: __local_9.inner, tag: __local_9.tag };
+            unreachable;
+        };
         "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
             __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 };
             __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
-            __local_11 = struct.new "core:prelude/types.wado//Box<i32>" { value: o.inner.value };
-            __local_12 = __local_5;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(__local_11.value, __local_12);
+            __local_12 = struct.new "core:prelude/types.wado//Box<i32>" { value: o.inner.value };
+            __local_13 = __local_5;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(__local_12.value, __local_13);
             "core:prelude/string.wado/String::push"(__local_4, 32);
             "core:prelude/string.wado/String::push_str"(__local_4, o.inner.name);
             "core:prelude/string.wado/String::push"(__local_4, 32);
             __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
-            __local_16 = struct.new "core:prelude/types.wado//Box<i32>" { value: o.tag };
-            __local_17 = __local_5;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(__local_16.value, __local_17);
+            __local_17 = struct.new "core:prelude/types.wado//Box<i32>" { value: o.tag };
+            __local_18 = __local_5;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(__local_17.value, __local_18);
             break __tmpl: __local_4;
             unreachable;
         });
@@ -205,7 +216,11 @@ fn "wado-compiler/tests/fixtures/wir_optimize_vcopy_return_struct.wado/run"() wi
     let __sroa_r2_case1_payload_0: ref null "core:prelude/string.wado//String";
     multivalue_bind [__sroa_r2_discriminant, __sroa_r2_case0_payload_0, __sroa_r2_case1_payload_0] = "wado-compiler/tests/fixtures/wir_optimize_vcopy_return_struct.wado/make_outer"(-1);
     if __sroa_r2_discriminant == 1 {
-        e = ref.as_non_null(__sroa_r2_case1_payload_0);
+        e = __inline__value_copy_T19_10: block -> ref "core:prelude/string.wado//String" {
+            __local_21 = ref.as_non_null(__sroa_r2_case1_payload_0);
+            break __inline__value_copy_T19_10: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(__local_21.repr)), used: __local_21.used };
+            unreachable;
+        };
         "core:cli/println"(e);
     }
 }

@@ -109,9 +109,14 @@ fn "wado-compiler/tests/fixtures/wir_optimize_value_copy_chained_field.wado/run"
     let n: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
+    let __local_8: ref "wado-compiler/tests/fixtures/wir_optimize_value_copy_chained_field.wado//Outer";
     c = struct.new "wado-compiler/tests/fixtures/wir_optimize_value_copy_chained_field.wado//Outer" { inner: struct.new "wado-compiler/tests/fixtures/wir_optimize_value_copy_chained_field.wado//Inner" { value: 42 }, name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 } };
     if ref.is_null(c) == 0 {
-        o = ref.as_non_null(c);
+        o = __inline__value_copy_T21_3: block -> ref "wado-compiler/tests/fixtures/wir_optimize_value_copy_chained_field.wado//Outer" {
+            __local_8 = ref.as_non_null(c);
+            break __inline__value_copy_T21_3: struct.new "wado-compiler/tests/fixtures/wir_optimize_value_copy_chained_field.wado//Outer" { inner: __local_8.inner, name: __local_8.name };
+            unreachable;
+        };
         v = o.inner.value;
         n = o.name;
         "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {

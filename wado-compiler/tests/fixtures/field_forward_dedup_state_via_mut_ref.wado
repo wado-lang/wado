@@ -1,0 +1,40 @@
+// Regression test for the dedup-state aliasing pattern that triggered
+// the Gale codegen bug (issue #920, task 3).
+//
+// Pattern: a snapshot of a struct (value-copy semantics) followed by
+// a `&mut`-passed call that mutates the original. The snapshot's
+// fields must retain the original values.
+//
+// Companion to `field_forward_snapshot_after_mutation.wado`, which
+// covers the same pattern via `&mut self` method invocation. This
+// fixture covers explicit `&mut` parameter passing — closer to the
+// Gale codegen pattern where `gen_alt_elements(w, ..., ctx)` was
+// passed a `&mut GenContext` carrying a `group_counter` field.
+//
+// Root cause (now fixed): `field_forward::is_forwardable` previously
+// admitted `TirExprKind::Local` as a forwardable value. After
+// inlining, snapshot field reads against an aliased Local could
+// substitute the post-mutation value of the source.
+
+struct Counter {
+    value: i32,
+}
+
+#[inline(never)]
+fn advance(c: &mut Counter) {
+    c.value = c.value + 1;
+}
+
+test "snapshot of struct survives advance via &mut parameter" {
+    let mut c = Counter { value: 5 };
+    let snap = c;
+    advance(&mut c);
+    advance(&mut c);
+    assert snap.value == 5;
+    assert c.value == 7;
+}
+
+__DATA__
+{
+    "test": {}
+}

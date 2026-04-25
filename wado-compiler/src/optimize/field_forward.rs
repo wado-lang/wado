@@ -1,22 +1,25 @@
 //! TIR-level struct field constant forwarding.
 //!
-//! Tracks per-local field values (constants and aliased locals) along
-//! straight-line code, propagating them through:
+//! Tracks per-local field constants along straight-line code, propagating
+//! them through:
 //!
 //! - `let local = StructLiteral { ... }` — record each forwardable field
 //! - `let dst = $value_copy$T(src)` — recognize calls to
-//!   `FunctionKind::ValueCopy` helpers and copy `src`'s field knowledge
-//!   to `dst`. This is the TIR replacement for the WIR-level
-//!   `WirInstr::ValueCopy` arm in `wir_optimize::const_forward`.
-//! - `let dst = local` — copy `local`'s knowledge to `dst`
+//!   `FunctionKind::ValueCopy` helpers (synthesized in `lower::value_copy`)
+//!   and copy `src`'s field knowledge to `dst`, which is a fresh deep copy
+//!   carrying the same field values. This is the TIR replacement for the
+//!   WIR-level `WirInstr::ValueCopy` arm in `wir_optimize::const_forward`.
+//! - `let dst = local` — copy `local`'s knowledge to `dst` (only meaningful
+//!   for reference-typed locals; value-typed copies always go through the
+//!   `$value_copy$T(src)` wrapper above).
 //!
 //! Replaces field reads (`local.field`) with the recorded value when
 //! known. Invalidates entries on field assignment, full reassignment,
 //! address-take, capture, or call args that may mutate the local.
 //!
 //! Runs inside the optimization loop so that newly-exposed `StructLiteral`
-//! / `$value_copy$T<id>` patterns from inlining or synthesis cascade
-//! into further folding.
+//! / `$value_copy$T<id>` patterns from inlining cascade into further
+//! folding.
 
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -25,8 +28,9 @@ use crate::tir::{
     ResolvedType, TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind, TypeId, TypeTable,
 };
 
-/// `(local_index, field_name)` → forwardable value (constant literal or
-/// `Local` reference).
+/// `(local_index, field_name)` → forwardable constant value. Only
+/// literals are recorded — see [`is_forwardable`] for why `Local` is
+/// excluded.
 type FieldKey = (u32, String);
 
 /// Per-function field-value knowledge tracked along straight-line code.
@@ -37,14 +41,16 @@ struct FieldKnowledge {
     /// doesn't change semantics.
     fields: IndexMap<FieldKey, TirExpr>,
     /// Locals that may be aliased — both sides of a `let dst = src`
-    /// Local→Local copy (which makes them share storage for
-    /// reference-typed values like `Box<T>` or post-elide value
-    /// types), `&` / `&mut` references that escape, and locals
-    /// captured by closures. Field knowledge IS recorded for these
-    /// locals (`record_struct_literal` / `copy_from` never gate on
-    /// aliasing); the flow-sensitive walk drops their entries at
-    /// every side-effect boundary (call, dereferenced write, etc.)
-    /// where an unseen alias could have mutated the storage.
+    /// Local→Local copy of a reference-typed value (`Box<T>`,
+    /// `Array<T>`, `&T`, `&mut T`), `&` / `&mut` references that
+    /// escape, and locals captured by closures. Value-typed
+    /// `let dst = src` is wrapped in `$value_copy$T(src)` by the
+    /// lower phase, so it doesn't create aliasing here. Field
+    /// knowledge IS recorded for aliased locals
+    /// (`record_struct_literal` / `copy_from` never gate on aliasing);
+    /// the flow-sensitive walk drops their entries at every
+    /// side-effect boundary (call, dereferenced write, etc.) where an
+    /// unseen alias could have mutated the storage.
     aliased: IndexSet<u32>,
     /// Locals whose aliasing is *untrackable*: an inlined
     /// `stores`-annotated call has stashed their reference somewhere
@@ -119,20 +125,9 @@ impl FieldKnowledge {
 
     /// Invalidate all knowledge about `local_index` — the local was
     /// fully reassigned, captured, or had its address taken with mut
-    /// access. Also drops entries whose stored value references the
-    /// reassigned local, which would otherwise read stale data.
+    /// access.
     fn invalidate_local(&mut self, local_index: u32) {
-        self.fields.retain(|(idx, _), val| {
-            if *idx == local_index {
-                return false;
-            }
-            if let TirExprKind::Local { index: src_idx, .. } = &val.kind
-                && *src_idx == local_index
-            {
-                return false;
-            }
-            true
-        });
+        self.fields.retain(|(idx, _), _| *idx != local_index);
     }
 
     /// Invalidate just `(local_index, field)` — the field was assigned
@@ -207,7 +202,14 @@ fn value_captures_alias(expr: &TirExpr, aliased: &IndexSet<u32>) -> bool {
 
 /// True when an expression is safe to forward into a use site —
 /// substituting it preserves semantics regardless of the surrounding
-/// state. Mirrors the WIR-level `is_forwardable` predicate.
+/// state. Restricted to literals: a `Local` substitution would read
+/// the local's *current* value at the use site, which differs from
+/// the snapshot the field captured if the local was mutated in
+/// between via any path the analyzer doesn't fully track (mutation
+/// through a `&mut`-passed callee, dereferenced write through an
+/// alias, …). The WIR-level `const_forward` admitted `Local` because
+/// its caller had already proven the local immutable; that proof is
+/// not available to a flow-sensitive TIR pass.
 fn is_forwardable(expr: &TirExpr) -> bool {
     matches!(
         &expr.kind,
@@ -215,28 +217,10 @@ fn is_forwardable(expr: &TirExpr) -> bool {
             | TirExprKind::FloatLiteral { .. }
             | TirExprKind::BoolLiteral(_)
             | TirExprKind::CharLiteral(_)
-            | TirExprKind::Local { .. }
     )
 }
 
 pub fn forward_struct_field_constants(project: &mut FlatPackage) -> bool {
-    // DISABLED — see PR #918 / Gale codegen regression.
-    //
-    // The aliasing/invalidation analysis here is incomplete: with this pass
-    // enabled, Gale's `package-gale gen --highlight SQLite.g4` emits a
-    // golden file whose top-level type definitions and parser bodies
-    // disagree (some `Group` variants drop from the type section while
-    // the parser code still constructs them). Disabling the pass restores
-    // correctness; bounds-check elimination on `__seq_lit:` push chains is
-    // already handled by the WIR-level `wir_optimize::const_forward`.
-    //
-    // Tracking: revisit once a flow-sensitive aliasing model that handles
-    // Gale's deduplication state is in place.
-    if true {
-        let _ = project;
-        return false;
-    }
-    #[allow(unreachable_code)]
     let helpers: IndexMap<(ModuleSource, String), TypeId> = project
         .functions
         .iter()

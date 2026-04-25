@@ -233,7 +233,7 @@ type "functype//wado-compiler/tests/fixtures/inspect_2.wado/__cm_export____test_
 
 type "functype//wado-compiler/tests/fixtures/inspect_2.wado/__cm_export____test_15_fallback" = fn();  // TypeId(74)
 
-type "functype//wado-compiler/tests/fixtures/inspect_2.wado/$value_copy$T76" = fn(ref "core:prelude/string.wado//StrCharIter") -> ref "core:prelude/string.wado//StrCharIter";  // TypeId(75)
+type "functype//wado-compiler/tests/fixtures/inspect_2.wado/$value_copy$T24" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(75)
 
 type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(76)
 
@@ -1773,8 +1773,8 @@ fn "wado-compiler/tests/fixtures/inspect_2.wado/__cm_export____test_15_fallback"
     "wasi/task-return"(0);
 }
 
-fn "wado-compiler/tests/fixtures/inspect_2.wado/$value_copy$T76"(v) {
-    return struct.new "core:prelude/string.wado//StrCharIter" { repr: ref.as_non_null(builtin::array_clone<u8>(v.repr)), used: v.used, byte_index: v.byte_index };
+fn "wado-compiler/tests/fixtures/inspect_2.wado/$value_copy$T24"(v) {
+    return struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(v.repr)), used: v.used };
 }
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
@@ -2299,7 +2299,7 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     let __local_8: ref "core:prelude/string.wado//String";
     let _licm_buf_33: ref "core:prelude/string.wado//String";
     "core:prelude/string.wado/String::push"(f.buf, 34);
-    __iter_2 = "wado-compiler/tests/fixtures/inspect_2.wado/$value_copy$T76"(__inline_StrCharIter_IntoIterator__into_iter_1: block -> ref "core:prelude/string.wado//StrCharIter" {
+    __iter_2 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref "core:prelude/string.wado//StrCharIter" {
         __local_7 = __inline_String__chars_2: block -> ref "core:prelude/string.wado//StrCharIter" {
             __local_8 = self;
             break __inline_String__chars_2: struct.new "core:prelude/string.wado//StrCharIter" { repr: __local_8.repr, used: __local_8.used, byte_index: 0 };
@@ -2307,7 +2307,7 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
         };
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
         unreachable;
-    });
+    };
     _licm_buf_33 = f.buf;
     b84: block {
         l85: loop {
@@ -2491,7 +2491,7 @@ fn "core:prelude/types.wado/Tuple<i32,String>^Inspect::inspect"(self, f) {
     __tuple_3 = self;
     v_5 = __tuple_3.0;
     "core:prelude/primitive.wado/i32::fmt_decimal"(v_5, f);
-    v_6 = __tuple_3.1;
+    v_6 = "wado-compiler/tests/fixtures/inspect_2.wado/$value_copy$T24"(__tuple_3.1);
     s_16 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(", "), used: 2 };
     "core:prelude/string.wado/String::push_str"(f.buf, s_16);
     "core:prelude/format.wado/String^Inspect::inspect"(v_6, f);

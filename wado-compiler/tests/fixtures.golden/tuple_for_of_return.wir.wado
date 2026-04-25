@@ -98,14 +98,18 @@ fn "wado-compiler/tests/fixtures/tuple_for_of_return.wado/run"() {
     let __cond: bool;
     let __local_2: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/format.wado//Formatter";
-    let __local_12: ref "core:prelude/format.wado//Formatter";
-    let __local_17: ref "core:prelude/format.wado//Formatter";
-    let __local_20: i32;
-    let __local_21: ref "core:prelude/string.wado//String";
+    let __local_13: ref "core:prelude/format.wado//Formatter";
+    let __local_18: ref "core:prelude/format.wado//Formatter";
+    let __local_21: i32;
+    let __local_22: ref "core:prelude/string.wado//String";
+    let __local_23: ref builtin::array<u8>;
+    let __local_24: i32;
     __v0 = __inline_find_string_2: block -> i32 {
-        __local_20 = 1;
-        __local_21 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
+        __local_21 = 1;
+        __local_22 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
         break __inline_find_string_2: 0;
+        __local_23 = builtin::array_clone<u8>(__local_22.repr);
+        __local_24 = 5;
         break __inline_find_string_2: 0;
         break __inline_find_string_2: 1;
         unreachable;
@@ -125,15 +129,15 @@ fn "wado-compiler/tests/fixtures/tuple_for_of_return.wado/run"() {
             "core:prelude/string.wado/String::push_str"(__local_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/tuple_for_of_return.wado"), used: 53 });
             "core:prelude/string.wado/String::push"(__local_2, 58);
             __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };
-            __local_12 = __local_3;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(11, __local_12);
+            __local_13 = __local_3;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(11, __local_13);
             "core:prelude/string.wado/String::push_str"(__local_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: find_string() == 0
 "), used: 31 });
             "core:prelude/string.wado/String::push_str"(__local_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("find_string(): "), used: 15 });
             __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };
-            __local_17 = __local_3;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(__v0, __local_17);
+            __local_18 = __local_3;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(__v0, __local_18);
             "core:prelude/string.wado/String::push"(__local_2, 10);
             break __tmpl: __local_2;
             unreachable;

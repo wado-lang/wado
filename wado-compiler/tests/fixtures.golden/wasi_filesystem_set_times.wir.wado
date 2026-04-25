@@ -319,6 +319,8 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_times.wado/run"() with Stdo
     let times_at_result: ref "core:prelude/types.wado//Result<unit,ErrorCode>";
     let __pattern_temp_4: ref null "wasi:clocks/system_clock.wado//Instant";
     let __pattern_temp_5: ref null "wasi:clocks/system_clock.wado//Instant";
+    let __local_35: ref "wasi:clocks/system_clock.wado//Instant";
+    let __local_36: ref "wasi:clocks/system_clock.wado//Instant";
     dirs = "wado-compiler/tests/fixtures/wasi_filesystem_set_times.wado/__cm_binding__Preopens_get_directories"();
     if dirs.used == 0 {
         "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no preopened directories available"), used: 34 });
@@ -359,12 +361,22 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_times.wado/run"() with Stdo
             stat = ref.cast "core:prelude/types.wado//Result<DescriptorStat,ErrorCode>::Ok"(stat_result).payload_0;
             __pattern_temp_4 = stat.data_access_timestamp;
             if ref.is_null(__pattern_temp_4) == 0 {
+                drop(__inline__value_copy_T27_9: block -> ref "wasi:clocks/system_clock.wado//Instant" {
+                    __local_35 = ref.as_non_null(__pattern_temp_4);
+                    break __inline__value_copy_T27_9: struct.new "wasi:clocks/system_clock.wado//Instant" { seconds: __local_35.seconds, nanoseconds: __local_35.nanoseconds };
+                    unreachable;
+                });
                 "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("set_times: access timestamp is set"), used: 34 });
             } else {
                 "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("set_times: access timestamp is null"), used: 35 });
             }
             __pattern_temp_5 = stat.data_modification_timestamp;
             if ref.is_null(__pattern_temp_5) == 0 {
+                drop(__inline__value_copy_T27_10: block -> ref "wasi:clocks/system_clock.wado//Instant" {
+                    __local_36 = ref.as_non_null(__pattern_temp_5);
+                    break __inline__value_copy_T27_10: struct.new "wasi:clocks/system_clock.wado//Instant" { seconds: __local_36.seconds, nanoseconds: __local_36.nanoseconds };
+                    unreachable;
+                });
                 "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("set_times: modification timestamp is set"), used: 40 });
             } else {
                 "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("set_times: modification timestamp is null"), used: 41 });
@@ -473,18 +485,28 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_times.wado/__cm_binding__De
     let __struct_val_6: ref "wasi:clocks/system_clock.wado//Instant";
     let __struct_val_8: ref "wasi:clocks/system_clock.wado//Instant";
     let __subtask_packed: i32;
+    let __local_11: ref "wasi:clocks/system_clock.wado//Instant";
+    let __local_13: ref "wasi:clocks/system_clock.wado//Instant";
     __async_outptr = "mem/realloc"(0, 0, 4, 20);
     __params_buf = "mem/realloc"(0, 0, 8, 56);
     builtin::store_i32(__params_buf, self);
     builtin::store_u8(__params_buf + 8, data_access_timestamp.discriminant);
     if ref.test "wasi:filesystem/types.wado//NewTimestamp::Timestamp"(data_access_timestamp) {
-        __struct_val_6 = ref.cast "wasi:filesystem/types.wado//NewTimestamp::Timestamp"(data_access_timestamp).payload_0;
+        __struct_val_6 = __inline__value_copy_T27_1: block -> ref "wasi:clocks/system_clock.wado//Instant" {
+            __local_11 = ref.cast "wasi:filesystem/types.wado//NewTimestamp::Timestamp"(data_access_timestamp).payload_0;
+            break __inline__value_copy_T27_1: struct.new "wasi:clocks/system_clock.wado//Instant" { seconds: __local_11.seconds, nanoseconds: __local_11.nanoseconds };
+            unreachable;
+        };
         builtin::store_i64((__params_buf + 8) + 8, __struct_val_6.seconds);
         builtin::store_i32(((__params_buf + 8) + 8) + 8, __struct_val_6.nanoseconds);
     }
     builtin::store_u8(__params_buf + 32, data_modification_timestamp.discriminant);
     if ref.test "wasi:filesystem/types.wado//NewTimestamp::Timestamp"(data_modification_timestamp) {
-        __struct_val_8 = ref.cast "wasi:filesystem/types.wado//NewTimestamp::Timestamp"(data_modification_timestamp).payload_0;
+        __struct_val_8 = __inline__value_copy_T27_3: block -> ref "wasi:clocks/system_clock.wado//Instant" {
+            __local_13 = ref.cast "wasi:filesystem/types.wado//NewTimestamp::Timestamp"(data_modification_timestamp).payload_0;
+            break __inline__value_copy_T27_3: struct.new "wasi:clocks/system_clock.wado//Instant" { seconds: __local_13.seconds, nanoseconds: __local_13.nanoseconds };
+            unreachable;
+        };
         builtin::store_i64((__params_buf + 32) + 8, __struct_val_8.seconds);
         builtin::store_i32(((__params_buf + 32) + 8) + 8, __struct_val_8.nanoseconds);
     }
@@ -507,6 +529,8 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_times.wado/__cm_binding__De
     let __struct_val_9: ref "wasi:clocks/system_clock.wado//Instant";
     let __struct_val_11: ref "wasi:clocks/system_clock.wado//Instant";
     let __subtask_packed: i32;
+    let __local_14: ref "wasi:clocks/system_clock.wado//Instant";
+    let __local_16: ref "wasi:clocks/system_clock.wado//Instant";
     __path_packed = "core:internal/cm_lower_string"(path);
     __async_outptr = "mem/realloc"(0, 0, 4, 20);
     __params_buf = "mem/realloc"(0, 0, 8, 64);
@@ -516,13 +540,21 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_times.wado/__cm_binding__De
     builtin::store_i32(__params_buf + 12, builtin::i32_wrap_i64(__path_packed >> 32_i64));
     builtin::store_u8(__params_buf + 16, data_access_timestamp.discriminant);
     if ref.test "wasi:filesystem/types.wado//NewTimestamp::Timestamp"(data_access_timestamp) {
-        __struct_val_9 = ref.cast "wasi:filesystem/types.wado//NewTimestamp::Timestamp"(data_access_timestamp).payload_0;
+        __struct_val_9 = __inline__value_copy_T27_1: block -> ref "wasi:clocks/system_clock.wado//Instant" {
+            __local_14 = ref.cast "wasi:filesystem/types.wado//NewTimestamp::Timestamp"(data_access_timestamp).payload_0;
+            break __inline__value_copy_T27_1: struct.new "wasi:clocks/system_clock.wado//Instant" { seconds: __local_14.seconds, nanoseconds: __local_14.nanoseconds };
+            unreachable;
+        };
         builtin::store_i64((__params_buf + 16) + 8, __struct_val_9.seconds);
         builtin::store_i32(((__params_buf + 16) + 8) + 8, __struct_val_9.nanoseconds);
     }
     builtin::store_u8(__params_buf + 40, data_modification_timestamp.discriminant);
     if ref.test "wasi:filesystem/types.wado//NewTimestamp::Timestamp"(data_modification_timestamp) {
-        __struct_val_11 = ref.cast "wasi:filesystem/types.wado//NewTimestamp::Timestamp"(data_modification_timestamp).payload_0;
+        __struct_val_11 = __inline__value_copy_T27_3: block -> ref "wasi:clocks/system_clock.wado//Instant" {
+            __local_16 = ref.cast "wasi:filesystem/types.wado//NewTimestamp::Timestamp"(data_modification_timestamp).payload_0;
+            break __inline__value_copy_T27_3: struct.new "wasi:clocks/system_clock.wado//Instant" { seconds: __local_16.seconds, nanoseconds: __local_16.nanoseconds };
+            unreachable;
+        };
         builtin::store_i64((__params_buf + 40) + 8, __struct_val_11.seconds);
         builtin::store_i32(((__params_buf + 40) + 8) + 8, __struct_val_11.nanoseconds);
     }
