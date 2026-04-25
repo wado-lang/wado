@@ -38,12 +38,12 @@ The compiled `.wasm` for this program is **1,773 bytes** — smaller than the sa
 
 Existing Wasm-targeting languages bundle their own memory management runtime into every `.wasm` file. The result is bloated binaries even for trivial programs:
 
-| Program            |       Wado | Rust (wasm32-wasip1) |   ratio |
-| ------------------ | ---------: | -------------------: | ------: |
-| `hello_world`      |  1,773 B   |        40,115 B      |  22.6×  |
-| `pi_approx`        |  8,982 B   |        59,496 B      |   6.6×  |
-| `zlib` (gzip)      | 18,935 B   |        88,563 B      |   4.7×  |
-| `sqlite_highlight` |  622 KB    |         3,481 KB     |   5.6×  |
+| Program            |     Wado | Rust (wasm32-wasip1) | ratio |
+| ------------------ | -------: | -------------------: | ----: |
+| `hello_world`      |  1,773 B |             40,115 B | 22.6× |
+| `pi_approx`        |  8,982 B |             59,496 B |  6.6× |
+| `zlib` (gzip)      | 18,935 B |             88,563 B |  4.7× |
+| `sqlite_highlight` |   622 KB |             3,481 KB |  5.6× |
 
 Wado takes a different approach. By targeting **Wasm GC**, the garbage collector is provided by the host runtime itself — so it doesn't have to ship inside the module. The output is a thin shell of pure logic.
 
@@ -212,103 +212,7 @@ if let Some(a) = request.get_authority() && !a.is_empty() {
 
 Pattern binding and a boolean guard combine in a single condition. The bound name `a` is in scope for both the guard and the body.
 
-<details>
-<summary><strong>Full source: <code>example/http-bin.wado</code></strong></summary>
-
-```wado
-// httpbin clone — a simple HTTP request & response inspection service
-//
-// Compile and run with wado serve:
-//   cargo run --bin wado -- serve example/http-bin.wado
-//
-// Endpoints:
-//   GET  /              — HTML homepage
-//   GET  /get           — returns request info as JSON
-//   POST /post          — returns request info + body as JSON
-//   PUT  /put           — returns request info + body as JSON
-//   PATCH /patch        — returns request info + body as JSON
-//   DELETE /delete      — returns request info as JSON
-//   GET  /headers       — returns request headers as JSON
-//   GET  /ip            — returns origin IP as JSON
-//   GET  /user-agent    — returns User-Agent as JSON
-//   GET  /status/:code  — returns the given HTTP status code
-//   GET  /base64/:val   — decodes base64-encoded value
-//   *    /anything      — returns request info for any method
-
-use {
-    Request,
-    Response,
-    ErrorCode,
-    Fields,
-    FieldName,
-    FieldValue,
-    Trailers,
-    StatusCode,
-    Method,
-    Scheme,
-} from "wasi:http";
-use { TreeMap } from "core:collections";
-use { decode } from "core:base64";
-use { Serialize } from "core:serde";
-use { Url } from "core:url";
-use { log_stderr } from "core:cli";
-use { MonotonicClock } from "wasi:clocks";
-use json from "core:json";
-
-struct RequestInfo {
-    method: String,
-    path: String,
-    args: TreeMap<String, String>,
-    headers: TreeMap<String, String>,
-    origin: String,
-    url: String,
-    data: Option<String>,
-}
-impl Serialize for RequestInfo;
-
-struct ErrorResponse {
-    error: String,
-}
-impl Serialize for ErrorResponse;
-
-struct HeadersResponse {
-    headers: TreeMap<String, String>,
-}
-impl Serialize for HeadersResponse;
-
-struct IpResponse {
-    origin: Option<String>,
-}
-impl Serialize for IpResponse;
-
-#[serde(rename_all = "kebab-case")]
-struct UserAgentResponse {
-    user_agent: Option<String>,
-}
-impl Serialize for UserAgentResponse;
-
-#[serde(rename_all = "kebab-case")]
-struct AccessLog {
-    method: String,
-    path: String,
-    user_agent: Option<String>,
-    status: StatusCode,
-    duration_us: u64,
-}
-impl Serialize for AccessLog;
-
-// ... (see example/http-bin.wado for the full source, ~345 lines)
-
-global HOMEPAGE: String = #include_str("./http-bin-index.html");
-
-export async fn handle(request: Request) -> Result<Response, ErrorCode> with MonotonicClock {
-    // ... see example/http-bin.wado
-}
-```
-
-The complete file is at [`example/http-bin.wado`](../example/http-bin.wado).
-
-</details>
+The full source is at [`example/http-bin.wado`](../example/http-bin.wado) (~345 lines).
 
 ---
 
