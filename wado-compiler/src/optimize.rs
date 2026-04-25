@@ -26,6 +26,7 @@ mod container_sroa;
 mod copy_prop;
 mod cse;
 pub mod dce;
+mod field_forward;
 mod field_scalarize;
 mod inline;
 mod labeled_block_fusion;
