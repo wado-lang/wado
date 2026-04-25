@@ -105,40 +105,45 @@ fn "wado-compiler/tests/fixtures/match_nested_struct_in_variant.wado/run"() with
     let result: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
-    let __local_10: ref "core:prelude/format.wado//Formatter";
-    let __local_15: ref "core:prelude/format.wado//Formatter";
+    let __local_7: ref "core:prelude/string.wado//String";
+    let __local_11: ref "core:prelude/format.wado//Formatter";
+    let __local_16: ref "core:prelude/format.wado//Formatter";
     opt = struct.new "wado-compiler/tests/fixtures/match_nested_struct_in_variant.wado//Point" { x: 5, y: 10 };
-    let __match_scrut_0: ref null "wado-compiler/tests/fixtures/match_nested_struct_in_variant.wado//Point";
-    __match_scrut_0 = opt;
-    result = (if ref.is_null(__match_scrut_0) == 0 -> ref "core:prelude/string.wado//String" {
-        let __cast_1: ref null "wado-compiler/tests/fixtures/match_nested_struct_in_variant.wado//Point";
-        __cast_1 = ref.as_non_null(__match_scrut_0);
-        let __variant_payload_2: ref "wado-compiler/tests/fixtures/match_nested_struct_in_variant.wado//Point";
-        __variant_payload_2 = ref.as_non_null(__cast_1);
-        __local_1 = __variant_payload_2.x;
-        __local_2 = __variant_payload_2.y;
-        __tmpl: block -> ref "core:prelude/string.wado//String" {
-            __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(40), used: 0 };
-            "core:prelude/string.wado/String::push"(__local_4, 112);
-            "core:prelude/string.wado/String::push"(__local_4, 111);
-            "core:prelude/string.wado/String::push"(__local_4, 105);
-            "core:prelude/string.wado/String::push"(__local_4, 110);
-            "core:prelude/string.wado/String::push"(__local_4, 116);
-            "core:prelude/string.wado/String::push"(__local_4, 58);
-            "core:prelude/string.wado/String::push"(__local_4, 32);
-            __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
-            __local_10 = __local_5;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(__local_1, __local_10);
-            "core:prelude/string.wado/String::push"(__local_4, 44);
-            __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
-            __local_15 = __local_5;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(__local_2, __local_15);
-            break __tmpl: __local_4;
-            unreachable;
-        };
-    } else {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("none"), used: 4 };
-    });
+    result = __inline__value_copy_T25_2: block -> ref "core:prelude/string.wado//String" {
+        let __match_scrut_0: ref null "wado-compiler/tests/fixtures/match_nested_struct_in_variant.wado//Point";
+        __match_scrut_0 = opt;
+        __local_7 = (if ref.is_null(__match_scrut_0) == 0 -> ref "core:prelude/string.wado//String" {
+            let __cast_1: ref null "wado-compiler/tests/fixtures/match_nested_struct_in_variant.wado//Point";
+            __cast_1 = ref.as_non_null(__match_scrut_0);
+            let __variant_payload_2: ref "wado-compiler/tests/fixtures/match_nested_struct_in_variant.wado//Point";
+            __variant_payload_2 = ref.as_non_null(__cast_1);
+            __local_1 = __variant_payload_2.x;
+            __local_2 = __variant_payload_2.y;
+            __tmpl: block -> ref "core:prelude/string.wado//String" {
+                __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(40), used: 0 };
+                "core:prelude/string.wado/String::push"(__local_4, 112);
+                "core:prelude/string.wado/String::push"(__local_4, 111);
+                "core:prelude/string.wado/String::push"(__local_4, 105);
+                "core:prelude/string.wado/String::push"(__local_4, 110);
+                "core:prelude/string.wado/String::push"(__local_4, 116);
+                "core:prelude/string.wado/String::push"(__local_4, 58);
+                "core:prelude/string.wado/String::push"(__local_4, 32);
+                __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
+                __local_11 = __local_5;
+                "core:prelude/primitive.wado/i32::fmt_decimal"(__local_1, __local_11);
+                "core:prelude/string.wado/String::push"(__local_4, 44);
+                __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
+                __local_16 = __local_5;
+                "core:prelude/primitive.wado/i32::fmt_decimal"(__local_2, __local_16);
+                break __tmpl: __local_4;
+                unreachable;
+            };
+        } else {
+            struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("none"), used: 4 };
+        });
+        break __inline__value_copy_T25_2: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(__local_7.repr)), used: __local_7.used };
+        unreachable;
+    };
     "core:cli/println"(result);
 }
 

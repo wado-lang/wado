@@ -268,6 +268,8 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_get_type.wado/run"() with Stdou
     let rw_file: i32;
     let rw_flags_result: ref "core:prelude/types.wado//Result<u32,ErrorCode>";
     let rw_flags: u32;
+    let __local_24: ref "wasi:filesystem/types.wado//DescriptorType";
+    let __local_25: ref "wasi:filesystem/types.wado//DescriptorType";
     dirs = "wado-compiler/tests/fixtures/wasi_filesystem_get_type.wado/__cm_binding__Preopens_get_directories"();
     if dirs.used == 0 {
         "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no preopened directories available"), used: 34 });
@@ -283,7 +285,11 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_get_type.wado/run"() with Stdou
     }.0;
     dir_type_result = "core:prelude/types.wado/AsyncCall<Result<DescriptorType,ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_get_type.wado/__cm_binding__Descriptor_get_type"(dir));
     if ref.test "core:prelude/types.wado//Result<DescriptorType,ErrorCode>::Ok"(dir_type_result) {
-        dt = ref.cast "core:prelude/types.wado//Result<DescriptorType,ErrorCode>::Ok"(dir_type_result).payload_0;
+        dt = __inline__value_copy_T26_4: block -> ref "wasi:filesystem/types.wado//DescriptorType" {
+            __local_24 = ref.cast "core:prelude/types.wado//Result<DescriptorType,ErrorCode>::Ok"(dir_type_result).payload_0;
+            break __inline__value_copy_T26_4: __local_24;
+            unreachable;
+        };
         let __match_scrut_0: ref "wasi:filesystem/types.wado//DescriptorType";
         __match_scrut_0 = dt;
         if __match_scrut_0.discriminant == 2 {
@@ -299,7 +305,11 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_get_type.wado/run"() with Stdou
         file = ref.cast "core:prelude/types.wado//Result<Descriptor,ErrorCode>::Ok"(open_result).payload_0;
         file_type_result = "core:prelude/types.wado/AsyncCall<Result<DescriptorType,ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_get_type.wado/__cm_binding__Descriptor_get_type"(file));
         if ref.test "core:prelude/types.wado//Result<DescriptorType,ErrorCode>::Ok"(file_type_result) {
-            ft = ref.cast "core:prelude/types.wado//Result<DescriptorType,ErrorCode>::Ok"(file_type_result).payload_0;
+            ft = __inline__value_copy_T26_5: block -> ref "wasi:filesystem/types.wado//DescriptorType" {
+                __local_25 = ref.cast "core:prelude/types.wado//Result<DescriptorType,ErrorCode>::Ok"(file_type_result).payload_0;
+                break __inline__value_copy_T26_5: __local_25;
+                unreachable;
+            };
             let __match_scrut_1: ref "wasi:filesystem/types.wado//DescriptorType";
             __match_scrut_1 = ft;
             if __match_scrut_1.discriminant == 5 {

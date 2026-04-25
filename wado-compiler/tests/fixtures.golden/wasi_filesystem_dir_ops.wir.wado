@@ -244,11 +244,9 @@ type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(73)
 
 type "functype//wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/__cm_binding__Descriptor_read_directory" = fn(i32) -> [i32, i32];  // TypeId(74)
 
-type "functype//wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/$value_copy$T50" = fn(ref "wasi:filesystem/types.wado//DirectoryEntry") -> [ref "wasi:filesystem/types.wado//DescriptorType", ref "core:prelude/string.wado//String"];  // TypeId(75)
+type "functype//core:internal/cm_waitable_set_wait" = fn(i32) -> [i32, i32, u32];  // TypeId(75)
 
-type "functype//core:internal/cm_waitable_set_wait" = fn(i32) -> [i32, i32, u32];  // TypeId(76)
-
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(77)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(76)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -287,11 +285,14 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/run"() with Stdout
     let entry_count: i32;
     let entries: ref "core:prelude//Array<DirectoryEntry>";
     let __iter_13: ref "core:prelude/array.wado//ArrayIter<DirectoryEntry>";
+    let entry: ref "wasi:filesystem/types.wado//DirectoryEntry";
     let rmdir_result: ref "core:prelude/types.wado//Result<unit,ErrorCode>";
     let rmdir_again: ref "core:prelude/types.wado//Result<unit,ErrorCode>";
     let __local_17: ref "core:prelude/string.wado//String";
     let __local_18: ref "core:prelude/format.wado//Formatter";
     let __pattern_temp_3: ref null "wasi:filesystem/types.wado//DirectoryEntry";
+    let __local_29: ref "wasi:filesystem/types.wado//ErrorCode";
+    let __local_31: ref "wasi:filesystem/types.wado//DirectoryEntry";
     dirs = "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/__cm_binding__Preopens_get_directories"();
     if dirs.used == 0 {
         "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no preopened directories available"), used: 34 });
@@ -315,7 +316,11 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/run"() with Stdout
     }
     mkdir_dup = "core:prelude/types.wado/AsyncCall<Result<unit,ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/__cm_binding__Descriptor_create_directory_at"(dir, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test_newdir"), used: 11 }));
     if ref.test "core:prelude/types.wado//Result<unit,ErrorCode>::Err"(mkdir_dup) {
-        err = ref.cast "core:prelude/types.wado//Result<unit,ErrorCode>::Err"(mkdir_dup).payload_0;
+        err = __inline__value_copy_T51_4: block -> ref "wasi:filesystem/types.wado//ErrorCode" {
+            __local_29 = ref.cast "core:prelude/types.wado//Result<unit,ErrorCode>::Err"(mkdir_dup).payload_0;
+            break __inline__value_copy_T51_4: __local_29;
+            unreachable;
+        };
         let __match_scrut_0: ref "wasi:filesystem/types.wado//ErrorCode";
         __match_scrut_0 = err;
         if __match_scrut_0.discriminant == 6 {
@@ -342,33 +347,35 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/run"() with Stdout
         l6: loop {
             __pattern_temp_3 = "core:prelude/array.wado/ArrayIter<DirectoryEntry>^Iterator::next"(__iter_13);
             if ref.is_null(__pattern_temp_3) == 0 {
-                let __sroa_entry_type: ref "wasi:filesystem/types.wado//DescriptorType";
-                let __sroa_entry_name: ref "core:prelude/string.wado//String";
-                multivalue_bind [__sroa_entry_type, __sroa_entry_name] = "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/$value_copy$T50"(ref.as_non_null(__pattern_temp_3));
+                entry = __inline__value_copy_T50_6: block -> ref "wasi:filesystem/types.wado//DirectoryEntry" {
+                    __local_31 = ref.as_non_null(__pattern_temp_3);
+                    break __inline__value_copy_T50_6: struct.new "wasi:filesystem/types.wado//DirectoryEntry" { type: __local_31.type, name: __local_31.name };
+                    unreachable;
+                };
                 entry_count = entry_count + 1;
-                if "core:prelude/string.wado/String^Eq::eq"(__sroa_entry_name, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello.txt"), used: 9 }) {
+                if "core:prelude/string.wado/String^Eq::eq"(entry.name, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello.txt"), used: 9 }) {
                     found_hello = 1;
                     let __match_scrut_1: ref "wasi:filesystem/types.wado//DescriptorType";
-                    __match_scrut_1 = __sroa_entry_type;
+                    __match_scrut_1 = entry.type;
                     if __match_scrut_1.discriminant == 5 {
                         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("read_directory: hello.txt is RegularFile (correct)"), used: 50 });
                     }
                 }
-                if "core:prelude/string.wado/String^Eq::eq"(__sroa_entry_name, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("binary.dat"), used: 10 }) {
+                if "core:prelude/string.wado/String^Eq::eq"(entry.name, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("binary.dat"), used: 10 }) {
                     found_binary = 1;
                 }
-                if "core:prelude/string.wado/String^Eq::eq"(__sroa_entry_name, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("subdir"), used: 6 }) {
+                if "core:prelude/string.wado/String^Eq::eq"(entry.name, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("subdir"), used: 6 }) {
                     found_subdir = 1;
                     let __match_scrut_2: ref "wasi:filesystem/types.wado//DescriptorType";
-                    __match_scrut_2 = __sroa_entry_type;
+                    __match_scrut_2 = entry.type;
                     if __match_scrut_2.discriminant == 2 {
                         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("read_directory: subdir is Directory (correct)"), used: 45 });
                     }
                 }
-                if "core:prelude/string.wado/String^Eq::eq"(__sroa_entry_name, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test_newdir"), used: 11 }) {
+                if "core:prelude/string.wado/String^Eq::eq"(entry.name, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test_newdir"), used: 11 }) {
                     found_newdir = 1;
                     let __match_scrut_3: ref "wasi:filesystem/types.wado//DescriptorType";
-                    __match_scrut_3 = __sroa_entry_type;
+                    __match_scrut_3 = entry.type;
                     if __match_scrut_3.discriminant == 2 {
                         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("read_directory: test_newdir is Directory (correct)"), used: 50 });
                     }
@@ -595,10 +602,6 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/__cm_stream_read_D
     };
     drop("mem/realloc"(ptr, byte_count, 4, 0));
     return arr;
-}
-
-fn "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/$value_copy$T50"(v) {
-    return v.type, v.name;
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {
