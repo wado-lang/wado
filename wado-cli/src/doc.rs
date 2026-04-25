@@ -11,6 +11,8 @@ use wado_compiler::doc::{
 
 use crate::args::{self, CliExit};
 
+const MODULE_PLACEHOLDER: &str = "{module}";
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum OutputFormat {
     Markdown,
@@ -22,17 +24,21 @@ pub struct DocOptions {
     pub inputs: Vec<String>,
     pub format: OutputFormat,
     pub title: Option<String>,
+    /// Output destination. `None` writes to stdout. A path containing
+    /// `{module}` enables batch mode (one file per input module).
+    pub output: Option<String>,
 }
 
 #[derive(Clone, Copy)]
 enum Opt {
     Format,
     Title,
+    Output,
     Help,
 }
 
 impl Opt {
-    const ALL: &[Self] = &[Self::Format, Self::Title, Self::Help];
+    const ALL: &[Self] = &[Self::Format, Self::Title, Self::Output, Self::Help];
 
     const fn spec(self) -> args::OptSpec {
         match self {
@@ -47,6 +53,13 @@ impl Opt {
                 short: None,
                 value: Some("<title>"),
                 desc: "Document title (required for multiple modules)",
+            },
+            Self::Output => args::OptSpec {
+                long: Some("output"),
+                short: Some('o'),
+                value: Some("<path>"),
+                desc: "Write to file instead of stdout. \
+                       A `{module}` placeholder enables batch mode (one file per module).",
             },
             Self::Help => args::HELP_SPEC,
         }
@@ -67,7 +80,12 @@ fn format_usage() -> String {
         "Accepts file paths or module names (e.g., core:cli, wasi:http)."
     )
     .unwrap();
-    writeln!(buf, "Outputs to stdout.").unwrap();
+    writeln!(buf, "Outputs to stdout by default; use `-o` to write to a file.").unwrap();
+    writeln!(
+        buf,
+        "Use `-o <path>` with a `{{module}}` placeholder to write one file per module."
+    )
+    .unwrap();
     writeln!(buf).unwrap();
     writeln!(buf, "Formats:").unwrap();
     writeln!(
@@ -101,6 +119,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DocOptions, CliExit> {
     let mut inputs: Vec<String> = Vec::new();
     let mut format = OutputFormat::Markdown;
     let mut title: Option<String> = None;
+    let mut output: Option<String> = None;
 
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
@@ -121,6 +140,9 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DocOptions, CliExit> {
                 Opt::Title => {
                     title = Some(args::require_string(&mut parser)?);
                 }
+                Opt::Output => {
+                    output = Some(args::require_string(&mut parser)?);
+                }
                 Opt::Help => return Err(CliExit::help(usage)),
             }
         } else if let Value(val) = arg {
@@ -131,8 +153,19 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DocOptions, CliExit> {
     }
 
     let inputs = args::require_inputs(inputs, &usage)?;
+    let is_batch = output
+        .as_deref()
+        .is_some_and(|p| p.contains(MODULE_PLACEHOLDER));
 
-    if inputs.len() > 1 && title.is_none() {
+    if is_batch && title.is_some() {
+        return Err(CliExit::error(
+            "--title cannot be combined with batch output (`{module}` template); \
+             each file is rendered as a single module"
+                .to_string(),
+        ));
+    }
+
+    if !is_batch && inputs.len() > 1 && title.is_none() {
         return Err(CliExit::error(
             "--title is required when generating docs for multiple modules".to_string(),
         ));
@@ -142,6 +175,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DocOptions, CliExit> {
         inputs,
         format,
         title,
+        output,
     })
 }
 
@@ -150,48 +184,11 @@ fn is_stdlib_module(input: &str) -> bool {
 }
 
 pub fn run(opts: DocOptions) {
-    let mut doc_modules: Vec<DocModule> = Vec::new();
-
-    for input in &opts.inputs {
-        if is_stdlib_module(input) {
-            // Resolve stdlib module by name (e.g., "core:cli", "wasi:http")
-            if let Some(doc) = extract_stdlib_doc(input) {
-                doc_modules.push(doc);
-            } else {
-                eprintln!("Unknown stdlib module: {input}");
-                process::exit(1);
-            }
-            continue;
-        }
-
-        let path = Path::new(input);
-
-        let source = match fs::read_to_string(path) {
-            Ok(s) => s,
-            Err(e) => {
-                eprintln!("Error reading '{}': {e}", path.display());
-                process::exit(1);
-            }
-        };
-
-        let parsed = match wado_compiler::parse(&source) {
-            Ok(r) => r,
-            Err(e) => {
-                eprintln!("Error parsing '{}': {e:?}", path.display());
-                process::exit(1);
-            }
-        };
-
-        let module_name = path
-            .file_stem()
-            .map_or("unknown", |s| s.to_str().unwrap_or("unknown"));
-
-        let doc = extract_doc(&parsed.ast, &parsed.comments, module_name);
-        doc_modules.push(doc);
-    }
-
-    let multi = opts.title.is_some();
-    let h_offset: usize = usize::from(multi);
+    let docs: Vec<(String, DocModule)> = opts
+        .inputs
+        .iter()
+        .map(|input| (input.clone(), load_doc(input)))
+        .collect();
 
     let format_name = match opts.format {
         OutputFormat::Markdown => "markdown",
@@ -199,45 +196,151 @@ pub fn run(opts: DocOptions) {
         OutputFormat::Json => "json",
     };
 
-    match opts.format {
-        OutputFormat::Json => {
-            if doc_modules.len() == 1 {
-                println!("{}", serde_json::to_string_pretty(&doc_modules[0]).unwrap());
-            } else {
-                println!("{}", serde_json::to_string_pretty(&doc_modules).unwrap());
+    let is_batch = opts
+        .output
+        .as_deref()
+        .is_some_and(|p| p.contains(MODULE_PLACEHOLDER));
+
+    if is_batch {
+        let template = opts.output.as_deref().expect("batch mode requires output");
+        for (input, doc) in &docs {
+            let path = template.replace(MODULE_PLACEHOLDER, &module_filename_stem(input));
+            let content = render_single(doc, format_name, input, opts.format);
+            write_to_file(&path, &content);
+        }
+        return;
+    }
+
+    let combined = render_combined(&docs, opts.title.as_deref(), format_name, &opts);
+    match opts.output.as_deref() {
+        Some(path) => write_to_file(path, &combined),
+        None => print!("{combined}"),
+    }
+}
+
+fn load_doc(input: &str) -> DocModule {
+    if is_stdlib_module(input) {
+        return extract_stdlib_doc(input).unwrap_or_else(|| {
+            eprintln!("Unknown stdlib module: {input}");
+            process::exit(1);
+        });
+    }
+
+    let path = Path::new(input);
+    let source = fs::read_to_string(path).unwrap_or_else(|e| {
+        eprintln!("Error reading '{}': {e}", path.display());
+        process::exit(1);
+    });
+
+    let parsed = wado_compiler::parse(&source).unwrap_or_else(|e| {
+        eprintln!("Error parsing '{}': {e:?}", path.display());
+        process::exit(1);
+    });
+
+    let module_name = path
+        .file_stem()
+        .map_or("unknown", |s| s.to_str().unwrap_or("unknown"));
+
+    extract_doc(&parsed.ast, &parsed.comments, module_name)
+}
+
+/// Filesystem-safe stem for a module input: stdlib `core:cli` -> `core-cli`,
+/// file paths -> file stem.
+fn module_filename_stem(input: &str) -> String {
+    if is_stdlib_module(input) {
+        return input.replace(':', "-");
+    }
+    Path::new(input)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .map_or_else(|| input.to_string(), str::to_string)
+}
+
+fn write_to_file(path: &str, content: &str) {
+    if let Some(parent) = Path::new(path).parent() {
+        if !parent.as_os_str().is_empty() {
+            if let Err(e) = fs::create_dir_all(parent) {
+                eprintln!("Error creating '{}': {e}", parent.display());
+                process::exit(1);
             }
         }
+    }
+    if let Err(e) = fs::write(path, content) {
+        eprintln!("Error writing '{path}': {e}");
+        process::exit(1);
+    }
+}
+
+fn render_single(
+    doc: &DocModule,
+    format_name: &str,
+    input: &str,
+    format: OutputFormat,
+) -> String {
+    match format {
+        OutputFormat::Json => format!("{}\n", serde_json::to_string_pretty(doc).unwrap()),
         OutputFormat::Markdown | OutputFormat::Simple => {
             let mut out = String::new();
-            render_auto_generated_comment(&mut out, format_name, &opts);
-            if let Some(ref title) = opts.title {
-                writeln!(out, "# {title}\n").unwrap();
+            render_auto_generated_header(&mut out, format_name, None, &[input.to_string()]);
+            match format {
+                OutputFormat::Markdown => out.push_str(&render_markdown(doc, 0)),
+                OutputFormat::Simple => out.push_str(&render_simple(doc, 0)),
+                OutputFormat::Json => unreachable!(),
             }
-            for (i, doc) in doc_modules.iter().enumerate() {
-                if i > 0 && !out.ends_with("\n\n") {
-                    if out.ends_with('\n') {
-                        out.push('\n');
-                    } else {
-                        out.push_str("\n\n");
-                    }
-                }
-                match opts.format {
-                    OutputFormat::Markdown => out.push_str(&render_markdown(doc, h_offset)),
-                    OutputFormat::Simple => out.push_str(&render_simple(doc, h_offset)),
-                    OutputFormat::Json => unreachable!(),
-                }
-            }
-            print!("{out}");
+            out
         }
     }
 }
 
-fn render_auto_generated_comment(out: &mut String, format_name: &str, opts: &DocOptions) {
-    write!(out, "<!-- Auto-generated by: wado doc -f {format_name}").unwrap();
-    if let Some(ref title) = opts.title {
-        write!(out, " --title \"{title}\"").unwrap();
+fn render_combined(
+    docs: &[(String, DocModule)],
+    title: Option<&str>,
+    format_name: &str,
+    opts: &DocOptions,
+) -> String {
+    if matches!(opts.format, OutputFormat::Json) {
+        return if docs.len() == 1 {
+            format!("{}\n", serde_json::to_string_pretty(&docs[0].1).unwrap())
+        } else {
+            let modules: Vec<&DocModule> = docs.iter().map(|(_, d)| d).collect();
+            format!("{}\n", serde_json::to_string_pretty(&modules).unwrap())
+        };
     }
-    for input in &opts.inputs {
+
+    let h_offset: usize = usize::from(title.is_some());
+    let mut out = String::new();
+    render_auto_generated_header(&mut out, format_name, title, &opts.inputs);
+    if let Some(t) = title {
+        writeln!(out, "# {t}\n").unwrap();
+    }
+    for (i, (_, doc)) in docs.iter().enumerate() {
+        if i > 0 && !out.ends_with("\n\n") {
+            if out.ends_with('\n') {
+                out.push('\n');
+            } else {
+                out.push_str("\n\n");
+            }
+        }
+        match opts.format {
+            OutputFormat::Markdown => out.push_str(&render_markdown(doc, h_offset)),
+            OutputFormat::Simple => out.push_str(&render_simple(doc, h_offset)),
+            OutputFormat::Json => unreachable!(),
+        }
+    }
+    out
+}
+
+fn render_auto_generated_header(
+    out: &mut String,
+    format_name: &str,
+    title: Option<&str>,
+    inputs: &[String],
+) {
+    write!(out, "<!-- Auto-generated by: wado doc -f {format_name}").unwrap();
+    if let Some(t) = title {
+        write!(out, " --title \"{t}\"").unwrap();
+    }
+    for input in inputs {
         write!(out, " {input}").unwrap();
     }
     writeln!(out, " -->").unwrap();

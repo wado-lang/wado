@@ -194,15 +194,14 @@ run = """
 set -xe -o pipefail
 cargo build --bin wado --quiet
 
-CORE_MODULES="prelude cli collections base64 zlib serde json json_nsd json_value simd url kiln"
+CORE_MODULES="core:prelude core:cli core:collections core:base64 core:zlib \
+  core:serde core:json core:json_nsd core:json_value core:simd core:url core:kiln"
 WASI_MODULES="wasi:cli wasi:filesystem wasi:http wasi:clocks wasi:random wasi:sockets"
 
-for m in $CORE_MODULES; do
-  cargo run --bin wado --quiet -- doc -f markdown "core:$m" \
-    > "docs/stdlib-core-$m.md"
-done
+cargo run --bin wado --quiet -- doc -f markdown -o 'docs/stdlib-{module}.md' \
+  $CORE_MODULES
 cargo run --bin wado --quiet -- doc -f markdown --title "WASI Standard Library" \
-  $WASI_MODULES > docs/stdlib-wasi.md
+  -o docs/stdlib-wasi.md $WASI_MODULES
 """
 
 [tasks.clean]
