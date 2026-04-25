@@ -142,16 +142,15 @@ The compiler bundles Wasm modules for the language futures:
 
 Wado is designed on the following Wasm features:
 
-- Wasm 3.0 (2025-09-17)
-- Wasm GC
-- Wasm Component Model
-  - CM spec: `vendor/component-model/design/mvp/`
-  - Canonical built-ins: `vendor/component-model/design/mvp/CanonicalABI.md`
+- Wasm 3.0 (2025-09-17), including GC
+- Wasm Component Model (CM)
+  - Design: `vendor/component-model/design/mvp/`
+  - Canonical ABI: `vendor/component-model/design/mvp/CanonicalABI.md`
   - Concurrency (async, streams, futures): `vendor/component-model/design/mvp/Concurrency.md`
-- Wasm Stack Switching (not fully implemented in wasmtime yet)
 - WASI 0.3.0 (P3)
-  - P3 is supported by wasmtime v42
+  - P3 is supported by wasmtime
   - See wasmtime P3 support: `find vendor/wasmtime/crates/wasi/src/p3/wit -name '*.wit'`
+- Wasm Stack Switching
 
 ## Vendor submodules
 
@@ -167,7 +166,7 @@ To initialize: `git submodule update --init --recommend-shallow`
 
 ## Rules for Rust
 
-- Avoid ad-hoc fixes. Write correct code with the correct design.
+- Avoid ad-hoc workarounds. Write proper code based on a sound design.
 - Manage dependencies in the workspace `Cargo.toml`.
 - Use `panic!` macro for things that are not yet implemented or not supported.
 - Use `IndexMap` and `IndexSet` from the `indexmap` crate in order to ensure deterministic behaviors.
