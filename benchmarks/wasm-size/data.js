@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777080583118,
+  "lastUpdate": 1777083785424,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -16073,6 +16073,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/4e344d6629387bb6bbbcb59bebd7f9d119c02916"
         },
         "date": 1777080582803,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8982,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18935,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 622193,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "20225982b12389cabd6dac0a350846b04731b35e",
+          "message": "Merge pull request #916 from wado-lang/claude/complete-m6-milestone-qbxNA\n\nfeat: complete the Kiln pipeline end-to-end (M6)",
+          "timestamp": "2026-04-25T11:17:10+09:00",
+          "tree_id": "bc687f68ff6ce8f397bbd32d758537e1704e2b04",
+          "url": "https://github.com/wado-lang/wado/commit/20225982b12389cabd6dac0a350846b04731b35e"
+        },
+        "date": 1777083785115,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
