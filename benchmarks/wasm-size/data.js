@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777097168746,
+  "lastUpdate": 1777108150743,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -16181,6 +16181,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 622193,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "65f945030c2ee579c9c0faf302cfd1b26f6331aa",
+          "message": "Merge pull request #918 from wado-lang/claude/redesign-value-copy-gSThO\n\nRedesign value_copy: TIR-level synthesis + elision, abolish WirInstr::ValueCopy",
+          "timestamp": "2026-04-25T18:04:21+09:00",
+          "tree_id": "7d9c00c59654f82f49c6bc43426f8e76c03b1442",
+          "url": "https://github.com/wado-lang/wado/commit/65f945030c2ee579c9c0faf302cfd1b26f6331aa"
+        },
+        "date": 1777108150451,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8982,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19033,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 613612,
             "unit": "bytes"
           }
         ]
