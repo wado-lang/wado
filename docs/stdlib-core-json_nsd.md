@@ -19,6 +19,16 @@ impl Deserialize for Point;
 let json = to_string(&Point { x: 1, y: 2 }); // "[1,2]"
 let val: Result<Point, DeserializeError> = from_string("[1,2]"); // Ok(Point { x: 1, y: 2 })
 
+## Functions
+
+### `pub fn to_string<T: Serialize>(value: &T) -> Result<String, SerializeError>`
+
+Serializes a value to a JSON NSD string.
+
+### `pub fn from_string<T: Deserialize>(input: String) -> Result<T, DeserializeError>`
+
+Deserializes a value from a JSON NSD string.
+
 ## Structs
 
 ### `pub struct NsdSerializer`
@@ -100,13 +110,3 @@ _Fields are private._
 ##### `fn begin_variant(&mut self, type_name: &String, num_cases: i32) -> Result<NsdVariantAccess, DeserializeError>`
 
 ##### `fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError>`
-
-## Functions
-
-### `pub fn to_string<T: Serialize>(value: &T) -> Result<String, SerializeError>`
-
-Serializes a value to a JSON NSD string.
-
-### `pub fn from_string<T: Deserialize>(input: String) -> Result<T, DeserializeError>`
-
-Deserializes a value from a JSON NSD string.

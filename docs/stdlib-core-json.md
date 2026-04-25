@@ -13,6 +13,24 @@ use { to_string, from_string } from "core:json";
 let json = to_string::<i32>(&42); // "42"
 let val = from_string::<i32>("42"); // Result::Ok(42)
 
+## Functions
+
+### `pub fn write_escaped_string(buf: &mut String, s: &String)`
+
+Writes a JSON-escaped string (with surrounding quotes) into buf.
+
+### `pub fn to_string<T: Serialize>(value: &T) -> Result<String, SerializeError>`
+
+Serializes a value to a JSON string.
+
+### `pub fn to_string_pretty<T: Serialize>(value: &T) -> Result<String, SerializeError>`
+
+Serializes a value to a pretty JSON string.
+
+### `pub fn from_string<T: Deserialize>(input: String) -> Result<T, DeserializeError>`
+
+Deserializes a value from a JSON string.
+
 ## Structs
 
 ### `pub struct JsonSerializer`
@@ -192,21 +210,3 @@ Skips the next JSON value without allocating.
 ##### `fn begin_variant(&mut self, type_name: &String, num_cases: i32) -> Result<JsonVariantAccess, DeserializeError>`
 
 ##### `fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError>`
-
-## Functions
-
-### `pub fn write_escaped_string(buf: &mut String, s: &String)`
-
-Writes a JSON-escaped string (with surrounding quotes) into buf.
-
-### `pub fn to_string<T: Serialize>(value: &T) -> Result<String, SerializeError>`
-
-Serializes a value to a JSON string.
-
-### `pub fn to_string_pretty<T: Serialize>(value: &T) -> Result<String, SerializeError>`
-
-Serializes a value to a pretty JSON string.
-
-### `pub fn from_string<T: Deserialize>(input: String) -> Result<T, DeserializeError>`
-
-Deserializes a value from a JSON string.

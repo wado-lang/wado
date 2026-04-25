@@ -15,6 +15,31 @@ if let Ok(url) = url {
 let pq = url.path_with_query(); // "/path?key=val"
 }
 
+## Functions
+
+### `pub fn percent_encode(input: String) -> String`
+
+Percent-encodes a string. Encodes all characters except unreserved
+characters (A-Z, a-z, 0-9, '-', '.', '_', '~') per RFC 3986 §2.3.
+
+### `pub fn percent_decode(input: String) -> Result<String, ParseError>`
+
+Decodes percent-encoded sequences (%XX).
+Returns Err if the input contains invalid percent-encoding or invalid UTF-8.
+
+### `pub fn parse_query(query: String) -> TreeMap<String, String>`
+
+Parses a query string into key-value pairs (insertion-order preserved).
+Input should not include the leading "?".
+Handles "+" as space and decodes percent-encoding.
+Duplicate keys use last-value-wins semantics.
+
+### `pub fn format_query(params: TreeMap<String, String>) -> String`
+
+Formats key-value pairs into a query string (insertion-order preserved).
+Output does not include the leading "?".
+Keys and values are percent-encoded; spaces become "+".
+
 ## Structs
 
 ### `pub struct Url`
@@ -150,28 +175,3 @@ Error type for URL parsing failures.
 #### `InvalidPath`
 
 #### `InvalidPercentEncoding`
-
-## Functions
-
-### `pub fn percent_encode(input: String) -> String`
-
-Percent-encodes a string. Encodes all characters except unreserved
-characters (A-Z, a-z, 0-9, '-', '.', '_', '~') per RFC 3986 §2.3.
-
-### `pub fn percent_decode(input: String) -> Result<String, ParseError>`
-
-Decodes percent-encoded sequences (%XX).
-Returns Err if the input contains invalid percent-encoding or invalid UTF-8.
-
-### `pub fn parse_query(query: String) -> TreeMap<String, String>`
-
-Parses a query string into key-value pairs (insertion-order preserved).
-Input should not include the leading "?".
-Handles "+" as space and decodes percent-encoding.
-Duplicate keys use last-value-wins semantics.
-
-### `pub fn format_query(params: TreeMap<String, String>) -> String`
-
-Formats key-value pairs into a query string (insertion-order preserved).
-Output does not include the leading "?".
-Keys and values are percent-encoded; spaces become "+".

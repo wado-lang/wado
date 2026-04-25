@@ -13,17 +13,30 @@ against.
 
 See WEP 2026-04-12 (Kiln) §"The `kiln` world" and §"M6.5 stage 2".
 
-## Enums
+## Functions
 
-### `pub enum DiagnosticLevel`
+### `pub fn bind_request<T: Deserialize>(raw: RawRequest) -> Result<Request<T>, Error>`
 
-#### `Error`
+Decode a wire-form `RawRequest` into a typed `Request<T>`.
 
-#### `Warning`
+Generator authors call this at the top of their `generate` entry:
 
-#### `Info`
+```wado
+export fn generate(raw: RawRequest) -> Result<Response, Error> {
+let req = bind_request::<Options>(raw)?;
+// ... read req.primary.content, honor req.options, emit files ...
+}
+```
 
-#### `Hint`
+`T` must be the generator's `pub struct Options`. The compiler
+auto-synthesizes `Options::deserialize` for every package targeting
+the `core:kiln/generator` world, so authors never write
+`impl Deserialize for Options;` explicitly.
+
+A `Result::Err` return signals a corrupt `options` payload; the
+compiler's caller-side encoder guarantees well-formed JSON, so this
+branch should only fire if the wire bytes were tampered with
+out-of-band.
 
 ## Effects
 
@@ -153,27 +166,14 @@ files are referenced from the entry via ordinary Wado `use`.
 
 #### `Other(String)`
 
-## Functions
+## Enums
 
-### `pub fn bind_request<T: Deserialize>(raw: RawRequest) -> Result<Request<T>, Error>`
+### `pub enum DiagnosticLevel`
 
-Decode a wire-form `RawRequest` into a typed `Request<T>`.
+#### `Error`
 
-Generator authors call this at the top of their `generate` entry:
+#### `Warning`
 
-```wado
-export fn generate(raw: RawRequest) -> Result<Response, Error> {
-let req = bind_request::<Options>(raw)?;
-// ... read req.primary.content, honor req.options, emit files ...
-}
-```
+#### `Info`
 
-`T` must be the generator's `pub struct Options`. The compiler
-auto-synthesizes `Options::deserialize` for every package targeting
-the `core:kiln/generator` world, so authors never write
-`impl Deserialize for Options;` explicitly.
-
-A `Result::Err` return signals a corrupt `options` payload; the
-compiler's caller-side encoder guarantees well-formed JSON, so this
-branch should only fire if the wire bytes were tampered with
-out-of-band.
+#### `Hint`

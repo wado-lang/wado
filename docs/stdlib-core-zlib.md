@@ -106,35 +106,96 @@ let decompressed_gz = inflate_gzip(&gzipped_data);
 
 ### `pub global AUTO_FORMAT: i32`
 
-## Enums
+## Functions
 
-### `pub enum ZlibError`
+### `pub fn zlib_version() -> String`
 
-Error type for zlib/gzip decompression operations.
+Returns the zlib version string.
 
-#### `DataTooShort`
+### `pub fn adler32(adler: u32, buf: &Array<u8>, offset: i32, len: i32) -> u32`
 
-#### `InvalidHeader`
+Computes an Adler-32 checksum over `buf[offset..offset+len]`, starting from `adler`.
 
-#### `InvalidMagicNumber`
+### `pub fn adler32_init() -> u32`
 
-#### `UnsupportedCompressionMethod`
+Returns the initial Adler-32 checksum value (1).
 
-#### `PresetDictionaryNotSupported`
+### `pub fn adler32_combine(adler1: u32, adler2: u32, len2: i32) -> u32`
 
-#### `Adler32Mismatch`
+Combines two Adler-32 checksums into one for concatenated data.
 
-#### `Crc32Mismatch`
+### `pub fn crc32(crc: u32, buf: &Array<u8>, offset: i32, len: i32) -> u32`
 
-#### `TruncatedExtraField`
+Computes a CRC-32 checksum over `buf[offset..offset+len]`, starting from `crc`.
 
-#### `HeaderExtendsPastEnd`
+### `pub fn crc32_init() -> u32`
 
-#### `TruncatedTrailer`
+Returns the initial CRC-32 checksum value (0).
 
-#### `IsizeMismatch`
+### `pub fn crc32_combine(crc1: u32, crc2: u32, len2: i32) -> u32`
 
-#### `OutputExceedsMax`
+Combines two CRC-32 checksums into one for concatenated data.
+
+### `pub fn compress_bound(source_len: i32) -> i32`
+
+Returns the maximum compressed size for a given source length.
+
+### `pub fn inflate_raw(input: &Array<u8>) -> Array<u8>`
+
+Decompresses raw DEFLATE data (no header/checksum).
+
+### `pub fn inflate_zlib(input: &Array<u8>) -> Result<Array<u8>, ZlibError>`
+
+Decompresses zlib-wrapped data (RFC 1950).
+
+### `pub fn deflate_stored(input: &Array<u8>) -> Array<u8>`
+
+Compresses data using DEFLATE stored blocks (no compression, raw).
+
+### `pub fn zlib_compress_stored(input: &Array<u8>) -> Array<u8>`
+
+Wraps data in zlib format using stored blocks (no actual compression).
+
+### `pub fn deflate_huffman(input: &Array<u8>) -> Array<u8>`
+
+Compresses data using DEFLATE with Huffman-only encoding (no LZ77).
+
+### `pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array<u8>`
+
+Compresses data using DEFLATE with the specified compression level and strategy.
+
+### `pub fn zlib_compress(input: &Array<u8>, level: i32, strategy: i32) -> Array<u8>`
+
+Compresses data in zlib format with the specified compression level (defaults to Z_DEFAULT_COMPRESSION) and strategy (defaults to Z_DEFAULT_STRATEGY).
+
+### `pub fn inflate_gzip(input: &Array<u8>) -> Result<Array<u8>, ZlibError>`
+
+Decompresses gzip-wrapped data (RFC 1952).
+
+### `pub fn gzip_compress(input: &Array<u8>, level: i32, strategy: i32) -> Array<u8>`
+
+Compresses data in gzip format with the specified compression level and strategy.
+
+### `pub fn uncompress(input: &Array<u8>, max_output: i32) -> Result<Array<u8>, ZlibError>`
+
+Auto-detect format and decompress (zlib or gzip) with the specified output size limit.
+
+### `pub fn deflate_raw(input: &Array<u8>, level: i32, strategy: i32) -> Array<u8>`
+
+Compresses data as raw DEFLATE (no zlib/gzip header or trailer) with the specified level and strategy.
+
+### `pub fn gzip_compress_with_header(input: &Array<u8>, level: i32, header: &GzipHeader) -> Array<u8>`
+
+Compresses data in gzip format with a custom header and compression level.
+
+### `pub fn inflate_get_gzip_header(input: &Array<u8>) -> Result<GzipHeader, ZlibError>`
+
+Extracts the gzip header from compressed data without decompressing.
+
+### `pub fn inflate_sync_find(input: &Array<u8>, start: i32) -> i32`
+
+Finds the next sync point in a DEFLATE stream, starting from the given offset.
+Returns the offset or -1 if not found.
 
 ## Structs
 
@@ -270,93 +331,32 @@ Decompresses all buffered data and returns the result.
 
 Decompresses data in one shot and returns the result.
 
-## Functions
+## Enums
 
-### `pub fn zlib_version() -> String`
+### `pub enum ZlibError`
 
-Returns the zlib version string.
+Error type for zlib/gzip decompression operations.
 
-### `pub fn adler32(adler: u32, buf: &Array<u8>, offset: i32, len: i32) -> u32`
+#### `DataTooShort`
 
-Computes an Adler-32 checksum over `buf[offset..offset+len]`, starting from `adler`.
+#### `InvalidHeader`
 
-### `pub fn adler32_init() -> u32`
+#### `InvalidMagicNumber`
 
-Returns the initial Adler-32 checksum value (1).
+#### `UnsupportedCompressionMethod`
 
-### `pub fn adler32_combine(adler1: u32, adler2: u32, len2: i32) -> u32`
+#### `PresetDictionaryNotSupported`
 
-Combines two Adler-32 checksums into one for concatenated data.
+#### `Adler32Mismatch`
 
-### `pub fn crc32(crc: u32, buf: &Array<u8>, offset: i32, len: i32) -> u32`
+#### `Crc32Mismatch`
 
-Computes a CRC-32 checksum over `buf[offset..offset+len]`, starting from `crc`.
+#### `TruncatedExtraField`
 
-### `pub fn crc32_init() -> u32`
+#### `HeaderExtendsPastEnd`
 
-Returns the initial CRC-32 checksum value (0).
+#### `TruncatedTrailer`
 
-### `pub fn crc32_combine(crc1: u32, crc2: u32, len2: i32) -> u32`
+#### `IsizeMismatch`
 
-Combines two CRC-32 checksums into one for concatenated data.
-
-### `pub fn compress_bound(source_len: i32) -> i32`
-
-Returns the maximum compressed size for a given source length.
-
-### `pub fn inflate_raw(input: &Array<u8>) -> Array<u8>`
-
-Decompresses raw DEFLATE data (no header/checksum).
-
-### `pub fn inflate_zlib(input: &Array<u8>) -> Result<Array<u8>, ZlibError>`
-
-Decompresses zlib-wrapped data (RFC 1950).
-
-### `pub fn deflate_stored(input: &Array<u8>) -> Array<u8>`
-
-Compresses data using DEFLATE stored blocks (no compression, raw).
-
-### `pub fn zlib_compress_stored(input: &Array<u8>) -> Array<u8>`
-
-Wraps data in zlib format using stored blocks (no actual compression).
-
-### `pub fn deflate_huffman(input: &Array<u8>) -> Array<u8>`
-
-Compresses data using DEFLATE with Huffman-only encoding (no LZ77).
-
-### `pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array<u8>`
-
-Compresses data using DEFLATE with the specified compression level and strategy.
-
-### `pub fn zlib_compress(input: &Array<u8>, level: i32, strategy: i32) -> Array<u8>`
-
-Compresses data in zlib format with the specified compression level (defaults to Z_DEFAULT_COMPRESSION) and strategy (defaults to Z_DEFAULT_STRATEGY).
-
-### `pub fn inflate_gzip(input: &Array<u8>) -> Result<Array<u8>, ZlibError>`
-
-Decompresses gzip-wrapped data (RFC 1952).
-
-### `pub fn gzip_compress(input: &Array<u8>, level: i32, strategy: i32) -> Array<u8>`
-
-Compresses data in gzip format with the specified compression level and strategy.
-
-### `pub fn uncompress(input: &Array<u8>, max_output: i32) -> Result<Array<u8>, ZlibError>`
-
-Auto-detect format and decompress (zlib or gzip) with the specified output size limit.
-
-### `pub fn deflate_raw(input: &Array<u8>, level: i32, strategy: i32) -> Array<u8>`
-
-Compresses data as raw DEFLATE (no zlib/gzip header or trailer) with the specified level and strategy.
-
-### `pub fn gzip_compress_with_header(input: &Array<u8>, level: i32, header: &GzipHeader) -> Array<u8>`
-
-Compresses data in gzip format with a custom header and compression level.
-
-### `pub fn inflate_get_gzip_header(input: &Array<u8>) -> Result<GzipHeader, ZlibError>`
-
-Extracts the gzip header from compressed data without decompressing.
-
-### `pub fn inflate_sync_find(input: &Array<u8>, start: i32) -> i32`
-
-Finds the next sync point in a DEFLATE stream, starting from the given offset.
-Returns the offset or -1 if not found.
+#### `OutputExceedsMax`

@@ -12,36 +12,6 @@ implement `Serializer` and `Deserializer` to support specific wire formats.
 Usage:
 use { Serialize, Deserialize, SerializeError, DeserializeError } from "core:serde";
 
-## Enums
-
-### `pub enum SerializeErrorKind`
-
-#### `UnsupportedValue`
-
-#### `Custom`
-
-### `pub enum DeserializeErrorKind`
-
-#### `UnexpectedType`
-
-#### `MissingField`
-
-#### `UnknownVariant`
-
-#### `DuplicateField`
-
-#### `InvalidValue`
-
-#### `Overflow`
-
-#### `MalformedInput`
-
-#### `TrailingData`
-
-#### `Eof`
-
-#### `Custom`
-
 ## Traits
 
 ### `pub trait SerializeSeq`
@@ -234,3 +204,33 @@ Used by variadic tuple deserialization via type pack expansion.
 #### `pub fn trailing(offset: i64) -> DeserializeError`
 
 #### `pub fn overflow(msg: String, offset: i64) -> DeserializeError`
+
+## Enums
+
+### `pub enum SerializeErrorKind`
+
+#### `UnsupportedValue`
+
+#### `Custom`
+
+### `pub enum DeserializeErrorKind`
+
+#### `UnexpectedType`
+
+#### `MissingField`
+
+#### `UnknownVariant`
+
+#### `DuplicateField`
+
+#### `InvalidValue`
+
+#### `Overflow`
+
+#### `MalformedInput`
+
+#### `TrailingData`
+
+#### `Eof`
+
+#### `Custom`

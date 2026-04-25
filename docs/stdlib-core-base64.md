@@ -5,14 +5,6 @@
 
 Base64 encoding and decoding (RFC 4648).
 
-## Flags
-
-### `pub flags Encoding`
-
-#### `UrlSafe`
-
-#### `NoPadding`
-
 ## Functions
 
 ### `pub fn encode(data: &Array<u8>) -> String`
@@ -38,3 +30,11 @@ Returns null on invalid input.
 
 Decodes Base64 from raw bytes (e.g., HTTP body, file content).
 Same lenient behavior as `decode`.
+
+## Flags
+
+### `pub flags Encoding`
+
+#### `UrlSafe`
+
+#### `NoPadding`

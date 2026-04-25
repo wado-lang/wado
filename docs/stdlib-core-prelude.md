@@ -5,270 +5,15 @@
 
 Auto-imported in every module. Disable with `#![no_prelude]`.
 
-## Enums
+## Functions
 
-### `pub enum Ordering`
+### `pub fn panic(message: String) -> !`
 
-Result of a comparison between two values.
+Logs a message to stderr and traps.
 
-#### `Less`
+### `pub fn unreachable() -> !`
 
-The first value is less than the second.
-
-#### `Equal`
-
-The two values are equal.
-
-#### `Greater`
-
-The first value is greater than the second.
-
-### `pub enum Alignment`
-
-Text alignment for padding.
-
-#### `Left`
-
-Left-aligned: `{x:<5}` -> "42 "
-
-#### `Center`
-
-Center-aligned: `{x:^5}` -> " 42 "
-
-#### `Right`
-
-Right-aligned (default for numbers): `{x:>5}` -> " 42"
-
-### `pub enum IntErrorKind`
-
-Kind of failure returned by integer parsing.
-
-#### `Empty`
-
-The input string was empty.
-
-#### `InvalidDigit`
-
-The input contained a character that is not a valid digit in the radix.
-
-#### `PosOverflow`
-
-The value was greater than the maximum representable in the target type.
-
-#### `NegOverflow`
-
-The value was less than the minimum representable in the target type.
-
-### `pub enum FloatErrorKind`
-
-Kind of failure returned by float parsing.
-
-#### `Empty`
-
-The input string was empty.
-
-#### `Invalid`
-
-The input was malformed.
-
-### `pub enum Ordering`
-
-Result of a comparison between two values.
-
-#### `Less`
-
-The first value is less than the second.
-
-#### `Equal`
-
-The two values are equal.
-
-#### `Greater`
-
-The first value is greater than the second.
-
-## Resources
-
-### `pub resource Future<T>`
-
-Readable end of an async value (WASI Component Model future).
-Opaque i32 handle managed by the runtime.
-
-Use `Future::<T>::new()` to create a `[Future<T>, FutureWritable<T>]` pair.
-The readable end is passed to consumers; the writable end fulfills the future.
-
-#### `fn new() -> [Future<T>, FutureWritable<T>]`
-
-Create a new future pair: [Future<T>, FutureWritable<T>].
-
-#### `fn read(&self) -> Option<T>`
-
-Read the value from the future.
-Returns Some(value) when fulfilled, None if the writer dropped without writing.
-
-#### `fn cancel_read(&self)`
-
-Cancel an in-progress read. Blocks until cancellation completes.
-
-#### `fn drop(&self)`
-
-Drop the readable end of the future.
-
-### `pub resource FutureWritable<T>`
-
-Writable end of an async value (WASI Component Model future).
-Opaque i32 handle managed by the runtime.
-
-#### `fn write(&self, value: T)`
-
-Fulfill the future with a value.
-
-#### `fn cancel_write(&self)`
-
-Cancel an in-progress write. Blocks until cancellation completes.
-
-#### `fn drop(&self)`
-
-Drop this writable end handle. Traps if no value has been written yet.
-
-### `pub resource Stream<T>`
-
-Readable end of an async sequence (WASI Component Model stream).
-Opaque i32 handle managed by the runtime.
-
-Use `Stream::<T>::new()` to create a `[Stream<T>, StreamWritable<T>]` pair.
-
-#### `fn new() -> [Stream<T>, StreamWritable<T>]`
-
-Create a new stream pair: [Stream<T>, StreamWritable<T>].
-
-#### `fn read(&self, max: i32) -> Array<T>`
-
-Read up to `max` elements from the stream.
-Blocks until data is available or the writer drops.
-Returns an empty array on end-of-stream.
-
-#### `fn cancel_read(&self)`
-
-Cancel an in-progress read. Blocks until cancellation completes.
-
-#### `fn drop(&self)`
-
-Drop the readable end of the stream.
-
-### `pub resource StreamWritable<T>`
-
-Writable end of an async sequence (WASI Component Model stream).
-Opaque i32 handle managed by the runtime.
-
-#### `fn write(&self, data: Array<T>)`
-
-Write a chunk of data to the stream.
-
-#### `fn write_raw(&self, data: builtin::array<T>, len: i32)`
-
-Write raw GC array directly to the stream.
-`len` is the number of valid elements (may be less than array capacity).
-
-#### `fn cancel_write(&self)`
-
-Cancel an in-progress write. Blocks until cancellation completes.
-
-#### `fn drop(&self)`
-
-Drop the writable end, signaling end-of-stream.
-
-### `pub resource Waitable`
-
-Opaque token identifying a waitable handle within a WaitableSet.
-Obtained from `Subtask::join`. Compared by handle identity (==).
-
-### `pub resource WaitableSet`
-
-A set of waitable handles used for async task coordination.
-
-Lifecycle: create with `new()`, join waitables into the set, wait/poll for
-events, then drop. A WaitableSet can only be dropped when it has no joined
-children — `Subtask::drop()` automatically removes the subtask from its
-joined set (via the CM spec's `Waitable.join(None)` semantics), so always
-drop subtasks before dropping the set.
-
-#### `fn new() -> WaitableSet`
-
-Create a new waitable set.
-
-#### `fn wait(&self) -> WaitEvent`
-
-Block until an event occurs. Returns the event details.
-
-#### `fn poll(&self) -> Option<WaitEvent>`
-
-Non-blocking poll. Returns Some(event) if ready, None otherwise.
-
-#### `fn drop(&self)`
-
-Drop the waitable set. Traps if waitables are still joined to this set.
-
-### `pub resource Subtask`
-
-A raw CM subtask handle. Internal — most users should hold `AsyncCall<T>`
-(see below) which pairs the handle with its result buffer.
-
-`Subtask` extends `Waitable` in the CM spec. When dropped, it
-automatically removes itself from any joined `WaitableSet` (the CM
-runtime calls `Waitable.join(None)` internally), so `WaitableSet::drop`
-can succeed.
-
-Correct lifecycle:
-let subtask = handle as Subtask;
-subtask.join(&ws);
-ws.wait();
-subtask.drop(); // removes from ws
-ws.drop(); // safe — no children
-
-#### `fn drop(&self)`
-
-Drop a completed subtask. Automatically unjoins from its WaitableSet.
-Traps if the subtask has not yet resolved.
-
-#### `fn cancel(&self)`
-
-Cancel this in-progress subtask. Blocks until cancellation completes.
-
-#### `fn join(&self, set: &WaitableSet) -> Waitable`
-
-Join this subtask to a waitable set for monitoring.
-Returns a Waitable token identifying this subtask in wait results.
-
-### `pub resource ErrorContext`
-
-An error context carrying a debug message across component boundaries.
-
-#### `fn new(message: String) -> ErrorContext`
-
-Create a new error context with the given message.
-
-#### `fn debug_message(&self) -> String`
-
-Get the debug message from this error context.
-
-#### `fn drop(&self)`
-
-Drop the error context.
-
-### `pub resource Task`
-
-The current async task handle.
-
-Provides operations that apply to the currently executing async task.
-
-#### `fn cancel()`
-
-Acknowledge cancellation of the current task.
-
-Call this in response to a cancellation signal (e.g. after receiving
-`WaitEvent { code: 6 }` from `WaitableSet::wait`). Signals to the CM
-runtime that the task accepts being cancelled and will clean up.
+Traps unconditionally, marking unreachable code.
 
 ## Traits
 
@@ -971,6 +716,1571 @@ syntax which is not yet supported.
 Types that can be incremented by one step (for range iteration).
 
 #### `fn next_step(&self) -> Option<Self>`
+
+## Resources
+
+### `pub resource Future<T>`
+
+Readable end of an async value (WASI Component Model future).
+Opaque i32 handle managed by the runtime.
+
+Use `Future::<T>::new()` to create a `[Future<T>, FutureWritable<T>]` pair.
+The readable end is passed to consumers; the writable end fulfills the future.
+
+#### `fn new() -> [Future<T>, FutureWritable<T>]`
+
+Create a new future pair: [Future<T>, FutureWritable<T>].
+
+#### `fn read(&self) -> Option<T>`
+
+Read the value from the future.
+Returns Some(value) when fulfilled, None if the writer dropped without writing.
+
+#### `fn cancel_read(&self)`
+
+Cancel an in-progress read. Blocks until cancellation completes.
+
+#### `fn drop(&self)`
+
+Drop the readable end of the future.
+
+### `pub resource FutureWritable<T>`
+
+Writable end of an async value (WASI Component Model future).
+Opaque i32 handle managed by the runtime.
+
+#### `fn write(&self, value: T)`
+
+Fulfill the future with a value.
+
+#### `fn cancel_write(&self)`
+
+Cancel an in-progress write. Blocks until cancellation completes.
+
+#### `fn drop(&self)`
+
+Drop this writable end handle. Traps if no value has been written yet.
+
+### `pub resource Stream<T>`
+
+Readable end of an async sequence (WASI Component Model stream).
+Opaque i32 handle managed by the runtime.
+
+Use `Stream::<T>::new()` to create a `[Stream<T>, StreamWritable<T>]` pair.
+
+#### `fn new() -> [Stream<T>, StreamWritable<T>]`
+
+Create a new stream pair: [Stream<T>, StreamWritable<T>].
+
+#### `fn read(&self, max: i32) -> Array<T>`
+
+Read up to `max` elements from the stream.
+Blocks until data is available or the writer drops.
+Returns an empty array on end-of-stream.
+
+#### `fn cancel_read(&self)`
+
+Cancel an in-progress read. Blocks until cancellation completes.
+
+#### `fn drop(&self)`
+
+Drop the readable end of the stream.
+
+### `pub resource StreamWritable<T>`
+
+Writable end of an async sequence (WASI Component Model stream).
+Opaque i32 handle managed by the runtime.
+
+#### `fn write(&self, data: Array<T>)`
+
+Write a chunk of data to the stream.
+
+#### `fn write_raw(&self, data: builtin::array<T>, len: i32)`
+
+Write raw GC array directly to the stream.
+`len` is the number of valid elements (may be less than array capacity).
+
+#### `fn cancel_write(&self)`
+
+Cancel an in-progress write. Blocks until cancellation completes.
+
+#### `fn drop(&self)`
+
+Drop the writable end, signaling end-of-stream.
+
+### `pub resource Waitable`
+
+Opaque token identifying a waitable handle within a WaitableSet.
+Obtained from `Subtask::join`. Compared by handle identity (==).
+
+### `pub resource WaitableSet`
+
+A set of waitable handles used for async task coordination.
+
+Lifecycle: create with `new()`, join waitables into the set, wait/poll for
+events, then drop. A WaitableSet can only be dropped when it has no joined
+children — `Subtask::drop()` automatically removes the subtask from its
+joined set (via the CM spec's `Waitable.join(None)` semantics), so always
+drop subtasks before dropping the set.
+
+#### `fn new() -> WaitableSet`
+
+Create a new waitable set.
+
+#### `fn wait(&self) -> WaitEvent`
+
+Block until an event occurs. Returns the event details.
+
+#### `fn poll(&self) -> Option<WaitEvent>`
+
+Non-blocking poll. Returns Some(event) if ready, None otherwise.
+
+#### `fn drop(&self)`
+
+Drop the waitable set. Traps if waitables are still joined to this set.
+
+### `pub resource Subtask`
+
+A raw CM subtask handle. Internal — most users should hold `AsyncCall<T>`
+(see below) which pairs the handle with its result buffer.
+
+`Subtask` extends `Waitable` in the CM spec. When dropped, it
+automatically removes itself from any joined `WaitableSet` (the CM
+runtime calls `Waitable.join(None)` internally), so `WaitableSet::drop`
+can succeed.
+
+Correct lifecycle:
+let subtask = handle as Subtask;
+subtask.join(&ws);
+ws.wait();
+subtask.drop(); // removes from ws
+ws.drop(); // safe — no children
+
+#### `fn drop(&self)`
+
+Drop a completed subtask. Automatically unjoins from its WaitableSet.
+Traps if the subtask has not yet resolved.
+
+#### `fn cancel(&self)`
+
+Cancel this in-progress subtask. Blocks until cancellation completes.
+
+#### `fn join(&self, set: &WaitableSet) -> Waitable`
+
+Join this subtask to a waitable set for monitoring.
+Returns a Waitable token identifying this subtask in wait results.
+
+### `pub resource ErrorContext`
+
+An error context carrying a debug message across component boundaries.
+
+#### `fn new(message: String) -> ErrorContext`
+
+Create a new error context with the given message.
+
+#### `fn debug_message(&self) -> String`
+
+Get the debug message from this error context.
+
+#### `fn drop(&self)`
+
+Drop the error context.
+
+### `pub resource Task`
+
+The current async task handle.
+
+Provides operations that apply to the currently executing async task.
+
+#### `fn cancel()`
+
+Acknowledge cancellation of the current task.
+
+Call this in response to a cancellation signal (e.g. after receiving
+`WaitEvent { code: 6 }` from `WaitableSet::wait`). Signals to the CM
+runtime that the task accepts being cancelled and will clean up.
+
+## Primitive Types
+
+### `bool`
+
+#### `pub fn to_string(&self) -> String`
+
+#### `impl Display for bool`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl Inspect for bool`
+
+##### `pub fn inspect(&self, f: &mut Formatter)`
+
+#### `impl InspectAlt for bool`
+
+##### `pub fn inspect_alt(&self, f: &mut Formatter)`
+
+#### `impl Eq for bool`
+
+##### `pub fn eq(&self, other: &Self) -> bool`
+
+#### `impl Ord for bool`
+
+##### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `impl Default for bool`
+
+##### `pub fn default() -> bool`
+
+#### `impl From<bool> for bool`
+
+##### `pub fn from(value: bool) -> bool`
+
+### `char`
+
+#### `pub fn from_u32(value: u32) -> Option<char>`
+
+Converts a Unicode scalar value (u32) to a char.
+Returns null if the value is not a valid Unicode scalar value
+(i.e., surrogates 0xD800..0xDFFF or values > 0x10FFFF).
+
+#### `pub fn from_i32(value: i32) -> Option<char>`
+
+Converts a signed integer to a char.
+Returns null if the value is negative or not a valid Unicode scalar value.
+
+#### `pub fn from_u32_unchecked(value: u32) -> char`
+
+Converts a u32 to a char without validation.
+The caller must ensure the value is a valid Unicode scalar value
+(0..=0xD7FF or 0xE000..=0x10FFFF). Passing an invalid value
+results in an invalid char, which may cause incorrect behavior
+in string operations.
+
+#### `pub fn to_string(&self) -> String`
+
+#### `pub fn is_ascii_whitespace(&self) -> bool`
+
+Returns true if the character is an ASCII whitespace character:
+SP (0x20), HT (0x09), LF (0x0A), VT (0x0B), FF (0x0C), CR (0x0D).
+Matches POSIX isspace() for the ASCII range.
+
+#### `pub fn is_whitespace(&self) -> bool`
+
+Returns true if the character is a Unicode whitespace character.
+Covers ASCII whitespace plus Unicode general category Zs/Zl/Zp code points.
+
+#### `pub fn is_ascii_lowercase(&self) -> bool`
+
+Returns true if the character is an ASCII lowercase letter: a-z.
+
+#### `pub fn is_ascii_uppercase(&self) -> bool`
+
+Returns true if the character is an ASCII uppercase letter: A-Z.
+
+#### `pub fn to_ascii_lowercase(&self) -> char`
+
+Converts an ASCII uppercase letter to lowercase. Non-ASCII and
+non-uppercase characters are returned unchanged.
+
+#### `pub fn to_ascii_uppercase(&self) -> char`
+
+Converts an ASCII lowercase letter to uppercase. Non-ASCII and
+non-lowercase characters are returned unchanged.
+
+#### `pub fn eq_ignore_ascii_case(&self, other: &char) -> bool`
+
+Checks that two characters are an ASCII case-insensitive match.
+
+Equivalent to `to_ascii_lowercase() == other.to_ascii_lowercase()`,
+but implemented branchlessly.
+
+#### `pub fn is_hexdigit(&self) -> bool`
+
+Returns true if the character is a hexadecimal digit: 0-9, a-f, A-F.
+
+#### `pub fn hex_digit_value(&self) -> i32`
+
+Returns the numeric value of an ASCII hexadecimal digit (0–15).
+Panics if the character is not a valid hex digit.
+
+#### `pub fn len_utf8(&self) -> i32`
+
+Returns the number of bytes this character needs in UTF-8 encoding.
+
+#### `pub fn encode_utf8(&self) -> Array<u8>`
+
+Encodes this character as UTF-8, returning the bytes.
+
+#### `impl Display for char`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl Inspect for char`
+
+##### `pub fn inspect(&self, f: &mut Formatter)`
+
+#### `impl InspectAlt for char`
+
+##### `pub fn inspect_alt(&self, f: &mut Formatter)`
+
+#### `impl Eq for char`
+
+##### `pub fn eq(&self, other: &Self) -> bool`
+
+#### `impl Ord for char`
+
+##### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `impl Default for char`
+
+##### `pub fn default() -> char`
+
+#### `impl Step for char`
+
+##### `fn next_step(&self) -> Option<char>`
+
+### `i8`
+
+#### `pub const MAX: i8`
+
+#### `pub const MIN: i8`
+
+#### `pub fn max(a: i8, b: i8) -> i8`
+
+#### `pub fn min(a: i8, b: i8) -> i8`
+
+#### `pub fn to_string(&self) -> String`
+
+#### `pub fn from_str(s: String) -> Result<i8, ParseIntError>`
+
+#### `pub fn from_str_hex(s: String) -> Result<i8, ParseIntError>`
+
+#### `pub fn from_str_radix(s: String, radix: u32) -> Result<i8, ParseIntError>`
+
+#### `impl Display for i8`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl Inspect for i8`
+
+##### `pub fn inspect(&self, f: &mut Formatter)`
+
+#### `impl InspectAlt for i8`
+
+##### `pub fn inspect_alt(&self, f: &mut Formatter)`
+
+#### `impl Binary for i8`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl Octal for i8`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl LowerHex for i8`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl UpperHex for i8`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl BinaryAlt for i8`
+
+##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+#### `impl OctalAlt for i8`
+
+##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+#### `impl LowerHexAlt for i8`
+
+##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+#### `impl UpperHexAlt for i8`
+
+##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+#### `impl Eq for i8`
+
+##### `pub fn eq(&self, other: &Self) -> bool`
+
+#### `impl Ord for i8`
+
+##### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `impl Default for i8`
+
+##### `pub fn default() -> i8`
+
+#### `impl TryFrom<i64> for i8`
+
+##### `pub fn try_from(value: i64) -> Result<i8, ConvertError>`
+
+#### `impl TryFrom<i32> for i8`
+
+##### `pub fn try_from(value: i32) -> Result<i8, ConvertError>`
+
+#### `impl TryFrom<i16> for i8`
+
+##### `pub fn try_from(value: i16) -> Result<i8, ConvertError>`
+
+#### `impl Step for i8`
+
+##### `fn next_step(&self) -> Option<i8>`
+
+### `u8`
+
+#### `pub const MAX: u8`
+
+#### `pub const MIN: u8`
+
+#### `pub fn max(a: u8, b: u8) -> u8`
+
+#### `pub fn min(a: u8, b: u8) -> u8`
+
+#### `pub fn to_string(&self) -> String`
+
+#### `pub fn from_str(s: String) -> Result<u8, ParseIntError>`
+
+#### `pub fn from_str_hex(s: String) -> Result<u8, ParseIntError>`
+
+#### `pub fn from_str_radix(s: String, radix: u32) -> Result<u8, ParseIntError>`
+
+#### `impl Display for u8`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl Inspect for u8`
+
+##### `pub fn inspect(&self, f: &mut Formatter)`
+
+#### `impl InspectAlt for u8`
+
+##### `pub fn inspect_alt(&self, f: &mut Formatter)`
+
+#### `impl Binary for u8`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl Octal for u8`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl LowerHex for u8`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl UpperHex for u8`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl BinaryAlt for u8`
+
+##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+#### `impl OctalAlt for u8`
+
+##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+#### `impl LowerHexAlt for u8`
+
+##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+#### `impl UpperHexAlt for u8`
+
+##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+#### `impl Eq for u8`
+
+##### `pub fn eq(&self, other: &Self) -> bool`
+
+#### `impl Ord for u8`
+
+##### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `impl Default for u8`
+
+##### `pub fn default() -> u8`
+
+#### `impl TryFrom<u32> for u8`
+
+##### `pub fn try_from(value: u32) -> Result<u8, ConvertError>`
+
+#### `impl TryFrom<u16> for u8`
+
+##### `pub fn try_from(value: u16) -> Result<u8, ConvertError>`
+
+#### `impl Step for u8`
+
+##### `fn next_step(&self) -> Option<u8>`
+
+### `i16`
+
+#### `pub const MAX: i16`
+
+#### `pub const MIN: i16`
+
+#### `pub fn max(a: i16, b: i16) -> i16`
+
+#### `pub fn min(a: i16, b: i16) -> i16`
+
+#### `pub fn to_string(&self) -> String`
+
+#### `pub fn from_str(s: String) -> Result<i16, ParseIntError>`
+
+#### `pub fn from_str_hex(s: String) -> Result<i16, ParseIntError>`
+
+#### `pub fn from_str_radix(s: String, radix: u32) -> Result<i16, ParseIntError>`
+
+#### `impl Display for i16`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl Inspect for i16`
+
+##### `pub fn inspect(&self, f: &mut Formatter)`
+
+#### `impl InspectAlt for i16`
+
+##### `pub fn inspect_alt(&self, f: &mut Formatter)`
+
+#### `impl Binary for i16`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl Octal for i16`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl LowerHex for i16`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl UpperHex for i16`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl BinaryAlt for i16`
+
+##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+#### `impl OctalAlt for i16`
+
+##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+#### `impl LowerHexAlt for i16`
+
+##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+#### `impl UpperHexAlt for i16`
+
+##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+#### `impl Eq for i16`
+
+##### `pub fn eq(&self, other: &Self) -> bool`
+
+#### `impl Ord for i16`
+
+##### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `impl Default for i16`
+
+##### `pub fn default() -> i16`
+
+#### `impl From<i8> for i16`
+
+##### `pub fn from(value: i8) -> i16`
+
+#### `impl From<u8> for i16`
+
+##### `pub fn from(value: u8) -> i16`
+
+#### `impl TryFrom<i64> for i16`
+
+##### `pub fn try_from(value: i64) -> Result<i16, ConvertError>`
+
+#### `impl TryFrom<i32> for i16`
+
+##### `pub fn try_from(value: i32) -> Result<i16, ConvertError>`
+
+#### `impl Step for i16`
+
+##### `fn next_step(&self) -> Option<i16>`
+
+### `u16`
+
+#### `pub const MAX: u16`
+
+#### `pub const MIN: u16`
+
+#### `pub fn max(a: u16, b: u16) -> u16`
+
+#### `pub fn min(a: u16, b: u16) -> u16`
+
+#### `pub fn to_string(&self) -> String`
+
+#### `pub fn from_str(s: String) -> Result<u16, ParseIntError>`
+
+#### `pub fn from_str_hex(s: String) -> Result<u16, ParseIntError>`
+
+#### `pub fn from_str_radix(s: String, radix: u32) -> Result<u16, ParseIntError>`
+
+#### `impl Display for u16`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl Inspect for u16`
+
+##### `pub fn inspect(&self, f: &mut Formatter)`
+
+#### `impl InspectAlt for u16`
+
+##### `pub fn inspect_alt(&self, f: &mut Formatter)`
+
+#### `impl Binary for u16`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl Octal for u16`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl LowerHex for u16`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl UpperHex for u16`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl BinaryAlt for u16`
+
+##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+#### `impl OctalAlt for u16`
+
+##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+#### `impl LowerHexAlt for u16`
+
+##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+#### `impl UpperHexAlt for u16`
+
+##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+#### `impl Eq for u16`
+
+##### `pub fn eq(&self, other: &Self) -> bool`
+
+#### `impl Ord for u16`
+
+##### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `impl Default for u16`
+
+##### `pub fn default() -> u16`
+
+#### `impl From<u8> for u16`
+
+##### `pub fn from(value: u8) -> u16`
+
+#### `impl TryFrom<u32> for u16`
+
+##### `pub fn try_from(value: u32) -> Result<u16, ConvertError>`
+
+#### `impl Step for u16`
+
+##### `fn next_step(&self) -> Option<u16>`
+
+### `i32`
+
+#### `pub const MAX: i32`
+
+#### `pub const MIN: i32`
+
+#### `pub fn max(a: i32, b: i32) -> i32`
+
+#### `pub fn min(a: i32, b: i32) -> i32`
+
+#### `pub fn clz(x: i32) -> i32`
+
+Counts the leading zeros in this integer.
+
+#### `pub fn ctz(x: i32) -> i32`
+
+Counts the trailing zeros in this integer.
+
+#### `pub fn popcnt(x: i32) -> i32`
+
+Counts the number of set bits (population count).
+
+#### `pub fn to_string(&self) -> String`
+
+#### `pub fn from_str(s: String) -> Result<i32, ParseIntError>`
+
+#### `pub fn from_str_hex(s: String) -> Result<i32, ParseIntError>`
+
+#### `pub fn from_str_radix(s: String, radix: u32) -> Result<i32, ParseIntError>`
+
+#### `impl Display for i32`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl Inspect for i32`
+
+##### `pub fn inspect(&self, f: &mut Formatter)`
+
+#### `impl InspectAlt for i32`
+
+##### `pub fn inspect_alt(&self, f: &mut Formatter)`
+
+#### `impl Binary for i32`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl Octal for i32`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl LowerHex for i32`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl UpperHex for i32`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl BinaryAlt for i32`
+
+##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+#### `impl OctalAlt for i32`
+
+##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+#### `impl LowerHexAlt for i32`
+
+##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+#### `impl UpperHexAlt for i32`
+
+##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+#### `impl Eq for i32`
+
+##### `pub fn eq(&self, other: &Self) -> bool`
+
+#### `impl Ord for i32`
+
+##### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `impl Default for i32`
+
+##### `pub fn default() -> i32`
+
+#### `impl From<i8> for i32`
+
+##### `pub fn from(value: i8) -> i32`
+
+#### `impl From<i16> for i32`
+
+##### `pub fn from(value: i16) -> i32`
+
+#### `impl From<u8> for i32`
+
+##### `pub fn from(value: u8) -> i32`
+
+#### `impl From<u16> for i32`
+
+##### `pub fn from(value: u16) -> i32`
+
+#### `impl From<bool> for i32`
+
+##### `pub fn from(value: bool) -> i32`
+
+#### `impl TryFrom<i64> for i32`
+
+##### `pub fn try_from(value: i64) -> Result<i32, ConvertError>`
+
+#### `impl Step for i32`
+
+##### `fn next_step(&self) -> Option<i32>`
+
+### `u32`
+
+#### `pub const MAX: u32`
+
+#### `pub const MIN: u32`
+
+#### `pub fn max(a: u32, b: u32) -> u32`
+
+#### `pub fn min(a: u32, b: u32) -> u32`
+
+#### `pub fn to_string(&self) -> String`
+
+#### `pub fn from_str(s: String) -> Result<u32, ParseIntError>`
+
+#### `pub fn from_str_hex(s: String) -> Result<u32, ParseIntError>`
+
+#### `pub fn from_str_radix(s: String, radix: u32) -> Result<u32, ParseIntError>`
+
+#### `impl Display for u32`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl Inspect for u32`
+
+##### `pub fn inspect(&self, f: &mut Formatter)`
+
+#### `impl InspectAlt for u32`
+
+##### `pub fn inspect_alt(&self, f: &mut Formatter)`
+
+#### `impl Binary for u32`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl Octal for u32`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl LowerHex for u32`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl UpperHex for u32`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl BinaryAlt for u32`
+
+##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+#### `impl OctalAlt for u32`
+
+##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+#### `impl LowerHexAlt for u32`
+
+##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+#### `impl UpperHexAlt for u32`
+
+##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+#### `impl Eq for u32`
+
+##### `pub fn eq(&self, other: &Self) -> bool`
+
+#### `impl Ord for u32`
+
+##### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `impl Default for u32`
+
+##### `pub fn default() -> u32`
+
+#### `impl From<u8> for u32`
+
+##### `pub fn from(value: u8) -> u32`
+
+#### `impl From<u16> for u32`
+
+##### `pub fn from(value: u16) -> u32`
+
+#### `impl TryFrom<i32> for u32`
+
+##### `pub fn try_from(value: i32) -> Result<u32, ConvertError>`
+
+#### `impl TryFrom<i64> for u32`
+
+##### `pub fn try_from(value: i64) -> Result<u32, ConvertError>`
+
+#### `impl TryFrom<u64> for u32`
+
+##### `pub fn try_from(value: u64) -> Result<u32, ConvertError>`
+
+#### `impl Step for u32`
+
+##### `fn next_step(&self) -> Option<u32>`
+
+### `i64`
+
+#### `pub const MAX: i64`
+
+#### `pub const MIN: i64`
+
+#### `pub fn max(a: i64, b: i64) -> i64`
+
+#### `pub fn min(a: i64, b: i64) -> i64`
+
+#### `pub fn clz(x: i64) -> i64`
+
+Counts the leading zeros in this integer.
+
+#### `pub fn ctz(x: i64) -> i64`
+
+Counts the trailing zeros in this integer.
+
+#### `pub fn popcnt(x: i64) -> i64`
+
+Counts the number of set bits (population count).
+
+#### `pub fn to_string(&self) -> String`
+
+#### `pub fn from_str(s: String) -> Result<i64, ParseIntError>`
+
+#### `pub fn from_str_hex(s: String) -> Result<i64, ParseIntError>`
+
+#### `pub fn from_str_radix(s: String, radix: u32) -> Result<i64, ParseIntError>`
+
+#### `impl Display for i64`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl Inspect for i64`
+
+##### `pub fn inspect(&self, f: &mut Formatter)`
+
+#### `impl InspectAlt for i64`
+
+##### `pub fn inspect_alt(&self, f: &mut Formatter)`
+
+#### `impl Binary for i64`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl Octal for i64`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl LowerHex for i64`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl UpperHex for i64`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl BinaryAlt for i64`
+
+##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+#### `impl OctalAlt for i64`
+
+##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+#### `impl LowerHexAlt for i64`
+
+##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+#### `impl UpperHexAlt for i64`
+
+##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+#### `impl Eq for i64`
+
+##### `pub fn eq(&self, other: &Self) -> bool`
+
+#### `impl Ord for i64`
+
+##### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `impl Default for i64`
+
+##### `pub fn default() -> i64`
+
+#### `impl From<i8> for i64`
+
+##### `pub fn from(value: i8) -> i64`
+
+#### `impl From<i16> for i64`
+
+##### `pub fn from(value: i16) -> i64`
+
+#### `impl From<i32> for i64`
+
+##### `pub fn from(value: i32) -> i64`
+
+#### `impl From<u8> for i64`
+
+##### `pub fn from(value: u8) -> i64`
+
+#### `impl From<u16> for i64`
+
+##### `pub fn from(value: u16) -> i64`
+
+#### `impl From<u32> for i64`
+
+##### `pub fn from(value: u32) -> i64`
+
+#### `impl TryFrom<u64> for i64`
+
+##### `pub fn try_from(value: u64) -> Result<i64, ConvertError>`
+
+#### `impl TryFrom<i128> for i64`
+
+##### `pub fn try_from(value: i128) -> Result<i64, ConvertError>`
+
+#### `impl Step for i64`
+
+##### `fn next_step(&self) -> Option<i64>`
+
+### `u64`
+
+#### `pub const MAX: u64`
+
+#### `pub const MIN: u64`
+
+#### `pub fn max(a: u64, b: u64) -> u64`
+
+#### `pub fn min(a: u64, b: u64) -> u64`
+
+#### `pub fn to_string(&self) -> String`
+
+#### `pub fn from_str(s: String) -> Result<u64, ParseIntError>`
+
+#### `pub fn from_str_hex(s: String) -> Result<u64, ParseIntError>`
+
+#### `pub fn from_str_radix(s: String, radix: u32) -> Result<u64, ParseIntError>`
+
+#### `impl Display for u64`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl Inspect for u64`
+
+##### `pub fn inspect(&self, f: &mut Formatter)`
+
+#### `impl InspectAlt for u64`
+
+##### `pub fn inspect_alt(&self, f: &mut Formatter)`
+
+#### `impl Binary for u64`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl Octal for u64`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl LowerHex for u64`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl UpperHex for u64`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl BinaryAlt for u64`
+
+##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+#### `impl OctalAlt for u64`
+
+##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+#### `impl LowerHexAlt for u64`
+
+##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+#### `impl UpperHexAlt for u64`
+
+##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+#### `impl Eq for u64`
+
+##### `pub fn eq(&self, other: &Self) -> bool`
+
+#### `impl Ord for u64`
+
+##### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `impl Default for u64`
+
+##### `pub fn default() -> u64`
+
+#### `impl From<u8> for u64`
+
+##### `pub fn from(value: u8) -> u64`
+
+#### `impl From<u16> for u64`
+
+##### `pub fn from(value: u16) -> u64`
+
+#### `impl From<u32> for u64`
+
+##### `pub fn from(value: u32) -> u64`
+
+#### `impl TryFrom<i64> for u64`
+
+##### `pub fn try_from(value: i64) -> Result<u64, ConvertError>`
+
+#### `impl TryFrom<u128> for u64`
+
+##### `pub fn try_from(value: u128) -> Result<u64, ConvertError>`
+
+#### `impl Step for u64`
+
+##### `fn next_step(&self) -> Option<u64>`
+
+### `f32`
+
+#### `pub const PI: f32`
+
+#### `pub const TAU: f32`
+
+#### `pub const E: f32`
+
+#### `pub const LN2: f32`
+
+#### `pub const LN10: f32`
+
+#### `pub const LOG2_E: f32`
+
+#### `pub const LOG10_E: f32`
+
+#### `pub const SQRT2: f32`
+
+#### `pub const FRAC_1_SQRT2: f32`
+
+#### `pub const FRAC_PI_2: f32`
+
+#### `pub const FRAC_PI_4: f32`
+
+#### `pub const INFINITY: f32`
+
+#### `pub const NEG_INFINITY: f32`
+
+#### `pub const NAN: f32`
+
+#### `pub fn to_string(&self) -> String`
+
+#### `pub fn abs(x: f32) -> f32`
+
+Absolute value
+
+#### `pub fn ceil(x: f32) -> f32`
+
+Ceiling (round toward +infinity)
+
+#### `pub fn floor(x: f32) -> f32`
+
+Floor (round toward -infinity)
+
+#### `pub fn trunc(x: f32) -> f32`
+
+Truncate toward zero
+
+#### `pub fn round(x: f32) -> f32`
+
+Round to nearest even
+
+#### `pub fn sqrt(x: f32) -> f32`
+
+Square root
+
+#### `pub fn min(x: f32, y: f32) -> f32`
+
+Minimum of two values
+
+#### `pub fn max(x: f32, y: f32) -> f32`
+
+Maximum of two values
+
+#### `pub fn copysign(x: f32, y: f32) -> f32`
+
+Copy sign from y to x
+
+#### `pub fn sin(x: f32) -> f32`
+
+Sine (in radians)
+
+#### `pub fn cos(x: f32) -> f32`
+
+Cosine (in radians)
+
+#### `pub fn tan(x: f32) -> f32`
+
+Tangent (in radians)
+
+#### `pub fn asin(x: f32) -> f32`
+
+Arc sine (returns radians)
+
+#### `pub fn acos(x: f32) -> f32`
+
+Arc cosine (returns radians)
+
+#### `pub fn atan(x: f32) -> f32`
+
+Arc tangent (returns radians)
+
+#### `pub fn atan2(y: f32, x: f32) -> f32`
+
+Arc tangent of y/x (returns radians)
+
+#### `pub fn sinh(x: f32) -> f32`
+
+Hyperbolic sine
+
+#### `pub fn cosh(x: f32) -> f32`
+
+Hyperbolic cosine
+
+#### `pub fn tanh(x: f32) -> f32`
+
+Hyperbolic tangent
+
+#### `pub fn asinh(x: f32) -> f32`
+
+Inverse hyperbolic sine
+
+#### `pub fn acosh(x: f32) -> f32`
+
+Inverse hyperbolic cosine
+
+#### `pub fn atanh(x: f32) -> f32`
+
+Inverse hyperbolic tangent
+
+#### `pub fn exp(x: f32) -> f32`
+
+e raised to the power x
+
+#### `pub fn exp2(x: f32) -> f32`
+
+2 raised to the power x
+
+#### `pub fn expm1(x: f32) -> f32`
+
+e^x - 1 (more accurate for small x)
+
+#### `pub fn ln(x: f32) -> f32`
+
+Natural logarithm (base e)
+
+#### `pub fn log2(x: f32) -> f32`
+
+Logarithm base 2
+
+#### `pub fn log10(x: f32) -> f32`
+
+Logarithm base 10
+
+#### `pub fn ln1p(x: f32) -> f32`
+
+ln(1 + x) (more accurate for small x)
+
+#### `pub fn pow(x: f32, y: f32) -> f32`
+
+x raised to the power y
+
+#### `pub fn cbrt(x: f32) -> f32`
+
+Cube root
+
+#### `pub fn hypot(x: f32, y: f32) -> f32`
+
+Euclidean distance: sqrt(x^2 + y^2)
+
+#### `pub fn fmod(x: f32, y: f32) -> f32`
+
+Floating-point remainder of x/y
+
+#### `pub fn is_nan(&self) -> bool`
+
+#### `pub fn is_finite(&self) -> bool`
+
+#### `pub fn from_str(s: String) -> Result<f32, ParseFloatError>`
+
+#### `pub fn to_bits(&self) -> i32`
+
+Reinterprets the bits of this f32 as an i32.
+
+#### `pub fn from_bits(bits: i32) -> f32`
+
+Creates an f32 from its bit representation.
+
+#### `impl Display for f32`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl Inspect for f32`
+
+##### `pub fn inspect(&self, f: &mut Formatter)`
+
+#### `impl InspectAlt for f32`
+
+##### `pub fn inspect_alt(&self, f: &mut Formatter)`
+
+#### `impl LowerExp for f32`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl UpperExp for f32`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl Eq for f32`
+
+##### `pub fn eq(&self, other: &Self) -> bool`
+
+#### `impl Ord for f32`
+
+##### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `impl Default for f32`
+
+##### `pub fn default() -> f32`
+
+#### `impl TryFrom<i64> for f32`
+
+##### `pub fn try_from(value: i64) -> Result<f32, ConvertError>`
+
+#### `impl TryFrom<u64> for f32`
+
+##### `pub fn try_from(value: u64) -> Result<f32, ConvertError>`
+
+#### `impl TryFrom<i128> for f32`
+
+##### `pub fn try_from(value: i128) -> Result<f32, ConvertError>`
+
+#### `impl TryFrom<u128> for f32`
+
+##### `pub fn try_from(value: u128) -> Result<f32, ConvertError>`
+
+### `f64`
+
+#### `pub const PI: f64`
+
+#### `pub const TAU: f64`
+
+#### `pub const E: f64`
+
+#### `pub const LN2: f64`
+
+#### `pub const LN10: f64`
+
+#### `pub const LOG2_E: f64`
+
+#### `pub const LOG10_E: f64`
+
+#### `pub const SQRT2: f64`
+
+#### `pub const FRAC_1_SQRT2: f64`
+
+#### `pub const FRAC_PI_2: f64`
+
+#### `pub const FRAC_PI_4: f64`
+
+#### `pub const INFINITY: f64`
+
+#### `pub const NEG_INFINITY: f64`
+
+#### `pub const NAN: f64`
+
+#### `pub fn to_string(&self) -> String`
+
+#### `pub fn abs(x: f64) -> f64`
+
+Absolute value
+
+#### `pub fn ceil(x: f64) -> f64`
+
+Ceiling (round toward +infinity)
+
+#### `pub fn floor(x: f64) -> f64`
+
+Floor (round toward -infinity)
+
+#### `pub fn trunc(x: f64) -> f64`
+
+Truncate toward zero
+
+#### `pub fn round(x: f64) -> f64`
+
+Round to nearest even
+
+#### `pub fn sqrt(x: f64) -> f64`
+
+Square root
+
+#### `pub fn min(x: f64, y: f64) -> f64`
+
+Minimum of two values
+
+#### `pub fn max(x: f64, y: f64) -> f64`
+
+Maximum of two values
+
+#### `pub fn copysign(x: f64, y: f64) -> f64`
+
+Copy sign from y to x
+
+#### `pub fn sin(x: f64) -> f64`
+
+Sine (in radians)
+
+#### `pub fn cos(x: f64) -> f64`
+
+Cosine (in radians)
+
+#### `pub fn tan(x: f64) -> f64`
+
+Tangent (in radians)
+
+#### `pub fn asin(x: f64) -> f64`
+
+Arc sine (returns radians)
+
+#### `pub fn acos(x: f64) -> f64`
+
+Arc cosine (returns radians)
+
+#### `pub fn atan(x: f64) -> f64`
+
+Arc tangent (returns radians)
+
+#### `pub fn atan2(y: f64, x: f64) -> f64`
+
+Arc tangent of y/x (returns radians)
+
+#### `pub fn sinh(x: f64) -> f64`
+
+Hyperbolic sine
+
+#### `pub fn cosh(x: f64) -> f64`
+
+Hyperbolic cosine
+
+#### `pub fn tanh(x: f64) -> f64`
+
+Hyperbolic tangent
+
+#### `pub fn asinh(x: f64) -> f64`
+
+Inverse hyperbolic sine
+
+#### `pub fn acosh(x: f64) -> f64`
+
+Inverse hyperbolic cosine
+
+#### `pub fn atanh(x: f64) -> f64`
+
+Inverse hyperbolic tangent
+
+#### `pub fn exp(x: f64) -> f64`
+
+e raised to the power x
+
+#### `pub fn exp2(x: f64) -> f64`
+
+2 raised to the power x
+
+#### `pub fn expm1(x: f64) -> f64`
+
+e^x - 1 (more accurate for small x)
+
+#### `pub fn ln(x: f64) -> f64`
+
+Natural logarithm (base e)
+
+#### `pub fn log2(x: f64) -> f64`
+
+Logarithm base 2
+
+#### `pub fn log10(x: f64) -> f64`
+
+Logarithm base 10
+
+#### `pub fn ln1p(x: f64) -> f64`
+
+ln(1 + x) (more accurate for small x)
+
+#### `pub fn pow(x: f64, y: f64) -> f64`
+
+x raised to the power y
+
+#### `pub fn cbrt(x: f64) -> f64`
+
+Cube root
+
+#### `pub fn hypot(x: f64, y: f64) -> f64`
+
+Euclidean distance: sqrt(x^2 + y^2)
+
+#### `pub fn fmod(x: f64, y: f64) -> f64`
+
+Floating-point remainder of x/y
+
+#### `pub fn is_nan(&self) -> bool`
+
+#### `pub fn is_finite(&self) -> bool`
+
+#### `pub fn from_str(s: String) -> Result<f64, ParseFloatError>`
+
+#### `pub fn to_bits(&self) -> i64`
+
+Reinterprets the bits of this f64 as an i64.
+
+#### `pub fn from_bits(bits: i64) -> f64`
+
+Creates an f64 from its bit representation.
+
+#### `impl Display for f64`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl Inspect for f64`
+
+##### `pub fn inspect(&self, f: &mut Formatter)`
+
+#### `impl InspectAlt for f64`
+
+##### `pub fn inspect_alt(&self, f: &mut Formatter)`
+
+#### `impl LowerExp for f64`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl UpperExp for f64`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl Eq for f64`
+
+##### `pub fn eq(&self, other: &Self) -> bool`
+
+#### `impl Ord for f64`
+
+##### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `impl Default for f64`
+
+##### `pub fn default() -> f64`
+
+#### `impl From<f32> for f64`
+
+##### `pub fn from(value: f32) -> f64`
+
+#### `impl TryFrom<i64> for f64`
+
+##### `pub fn try_from(value: i64) -> Result<f64, ConvertError>`
+
+#### `impl TryFrom<u64> for f64`
+
+##### `pub fn try_from(value: u64) -> Result<f64, ConvertError>`
+
+#### `impl TryFrom<i128> for f64`
+
+##### `pub fn try_from(value: i128) -> Result<f64, ConvertError>`
+
+#### `impl TryFrom<u128> for f64`
+
+##### `pub fn try_from(value: u128) -> Result<f64, ConvertError>`
 
 ## Structs
 
@@ -2388,1388 +3698,6 @@ Returns true if the range contains no elements.
 
 ##### `pub fn fmt(&self, f: &mut Formatter)`
 
-## Primitive Types
-
-### `bool`
-
-#### `pub fn to_string(&self) -> String`
-
-#### `impl Display for bool`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl Inspect for bool`
-
-##### `pub fn inspect(&self, f: &mut Formatter)`
-
-#### `impl InspectAlt for bool`
-
-##### `pub fn inspect_alt(&self, f: &mut Formatter)`
-
-#### `impl Eq for bool`
-
-##### `pub fn eq(&self, other: &Self) -> bool`
-
-#### `impl Ord for bool`
-
-##### `pub fn cmp(&self, other: &Self) -> Ordering`
-
-#### `impl Default for bool`
-
-##### `pub fn default() -> bool`
-
-#### `impl From<bool> for bool`
-
-##### `pub fn from(value: bool) -> bool`
-
-### `char`
-
-#### `pub fn from_u32(value: u32) -> Option<char>`
-
-Converts a Unicode scalar value (u32) to a char.
-Returns null if the value is not a valid Unicode scalar value
-(i.e., surrogates 0xD800..0xDFFF or values > 0x10FFFF).
-
-#### `pub fn from_i32(value: i32) -> Option<char>`
-
-Converts a signed integer to a char.
-Returns null if the value is negative or not a valid Unicode scalar value.
-
-#### `pub fn from_u32_unchecked(value: u32) -> char`
-
-Converts a u32 to a char without validation.
-The caller must ensure the value is a valid Unicode scalar value
-(0..=0xD7FF or 0xE000..=0x10FFFF). Passing an invalid value
-results in an invalid char, which may cause incorrect behavior
-in string operations.
-
-#### `pub fn to_string(&self) -> String`
-
-#### `pub fn is_ascii_whitespace(&self) -> bool`
-
-Returns true if the character is an ASCII whitespace character:
-SP (0x20), HT (0x09), LF (0x0A), VT (0x0B), FF (0x0C), CR (0x0D).
-Matches POSIX isspace() for the ASCII range.
-
-#### `pub fn is_whitespace(&self) -> bool`
-
-Returns true if the character is a Unicode whitespace character.
-Covers ASCII whitespace plus Unicode general category Zs/Zl/Zp code points.
-
-#### `pub fn is_ascii_lowercase(&self) -> bool`
-
-Returns true if the character is an ASCII lowercase letter: a-z.
-
-#### `pub fn is_ascii_uppercase(&self) -> bool`
-
-Returns true if the character is an ASCII uppercase letter: A-Z.
-
-#### `pub fn to_ascii_lowercase(&self) -> char`
-
-Converts an ASCII uppercase letter to lowercase. Non-ASCII and
-non-uppercase characters are returned unchanged.
-
-#### `pub fn to_ascii_uppercase(&self) -> char`
-
-Converts an ASCII lowercase letter to uppercase. Non-ASCII and
-non-lowercase characters are returned unchanged.
-
-#### `pub fn eq_ignore_ascii_case(&self, other: &char) -> bool`
-
-Checks that two characters are an ASCII case-insensitive match.
-
-Equivalent to `to_ascii_lowercase() == other.to_ascii_lowercase()`,
-but implemented branchlessly.
-
-#### `pub fn is_hexdigit(&self) -> bool`
-
-Returns true if the character is a hexadecimal digit: 0-9, a-f, A-F.
-
-#### `pub fn hex_digit_value(&self) -> i32`
-
-Returns the numeric value of an ASCII hexadecimal digit (0–15).
-Panics if the character is not a valid hex digit.
-
-#### `pub fn len_utf8(&self) -> i32`
-
-Returns the number of bytes this character needs in UTF-8 encoding.
-
-#### `pub fn encode_utf8(&self) -> Array<u8>`
-
-Encodes this character as UTF-8, returning the bytes.
-
-#### `impl Display for char`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl Inspect for char`
-
-##### `pub fn inspect(&self, f: &mut Formatter)`
-
-#### `impl InspectAlt for char`
-
-##### `pub fn inspect_alt(&self, f: &mut Formatter)`
-
-#### `impl Eq for char`
-
-##### `pub fn eq(&self, other: &Self) -> bool`
-
-#### `impl Ord for char`
-
-##### `pub fn cmp(&self, other: &Self) -> Ordering`
-
-#### `impl Default for char`
-
-##### `pub fn default() -> char`
-
-#### `impl Step for char`
-
-##### `fn next_step(&self) -> Option<char>`
-
-### `i8`
-
-#### `pub const MAX: i8`
-
-#### `pub const MIN: i8`
-
-#### `pub fn max(a: i8, b: i8) -> i8`
-
-#### `pub fn min(a: i8, b: i8) -> i8`
-
-#### `pub fn to_string(&self) -> String`
-
-#### `pub fn from_str(s: String) -> Result<i8, ParseIntError>`
-
-#### `pub fn from_str_hex(s: String) -> Result<i8, ParseIntError>`
-
-#### `pub fn from_str_radix(s: String, radix: u32) -> Result<i8, ParseIntError>`
-
-#### `impl Display for i8`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl Inspect for i8`
-
-##### `pub fn inspect(&self, f: &mut Formatter)`
-
-#### `impl InspectAlt for i8`
-
-##### `pub fn inspect_alt(&self, f: &mut Formatter)`
-
-#### `impl Binary for i8`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl Octal for i8`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl LowerHex for i8`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl UpperHex for i8`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl BinaryAlt for i8`
-
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
-
-#### `impl OctalAlt for i8`
-
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
-
-#### `impl LowerHexAlt for i8`
-
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
-
-#### `impl UpperHexAlt for i8`
-
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
-
-#### `impl Eq for i8`
-
-##### `pub fn eq(&self, other: &Self) -> bool`
-
-#### `impl Ord for i8`
-
-##### `pub fn cmp(&self, other: &Self) -> Ordering`
-
-#### `impl Default for i8`
-
-##### `pub fn default() -> i8`
-
-#### `impl TryFrom<i64> for i8`
-
-##### `pub fn try_from(value: i64) -> Result<i8, ConvertError>`
-
-#### `impl TryFrom<i32> for i8`
-
-##### `pub fn try_from(value: i32) -> Result<i8, ConvertError>`
-
-#### `impl TryFrom<i16> for i8`
-
-##### `pub fn try_from(value: i16) -> Result<i8, ConvertError>`
-
-#### `impl Step for i8`
-
-##### `fn next_step(&self) -> Option<i8>`
-
-### `u8`
-
-#### `pub const MAX: u8`
-
-#### `pub const MIN: u8`
-
-#### `pub fn max(a: u8, b: u8) -> u8`
-
-#### `pub fn min(a: u8, b: u8) -> u8`
-
-#### `pub fn to_string(&self) -> String`
-
-#### `pub fn from_str(s: String) -> Result<u8, ParseIntError>`
-
-#### `pub fn from_str_hex(s: String) -> Result<u8, ParseIntError>`
-
-#### `pub fn from_str_radix(s: String, radix: u32) -> Result<u8, ParseIntError>`
-
-#### `impl Display for u8`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl Inspect for u8`
-
-##### `pub fn inspect(&self, f: &mut Formatter)`
-
-#### `impl InspectAlt for u8`
-
-##### `pub fn inspect_alt(&self, f: &mut Formatter)`
-
-#### `impl Binary for u8`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl Octal for u8`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl LowerHex for u8`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl UpperHex for u8`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl BinaryAlt for u8`
-
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
-
-#### `impl OctalAlt for u8`
-
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
-
-#### `impl LowerHexAlt for u8`
-
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
-
-#### `impl UpperHexAlt for u8`
-
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
-
-#### `impl Eq for u8`
-
-##### `pub fn eq(&self, other: &Self) -> bool`
-
-#### `impl Ord for u8`
-
-##### `pub fn cmp(&self, other: &Self) -> Ordering`
-
-#### `impl Default for u8`
-
-##### `pub fn default() -> u8`
-
-#### `impl TryFrom<u32> for u8`
-
-##### `pub fn try_from(value: u32) -> Result<u8, ConvertError>`
-
-#### `impl TryFrom<u16> for u8`
-
-##### `pub fn try_from(value: u16) -> Result<u8, ConvertError>`
-
-#### `impl Step for u8`
-
-##### `fn next_step(&self) -> Option<u8>`
-
-### `i16`
-
-#### `pub const MAX: i16`
-
-#### `pub const MIN: i16`
-
-#### `pub fn max(a: i16, b: i16) -> i16`
-
-#### `pub fn min(a: i16, b: i16) -> i16`
-
-#### `pub fn to_string(&self) -> String`
-
-#### `pub fn from_str(s: String) -> Result<i16, ParseIntError>`
-
-#### `pub fn from_str_hex(s: String) -> Result<i16, ParseIntError>`
-
-#### `pub fn from_str_radix(s: String, radix: u32) -> Result<i16, ParseIntError>`
-
-#### `impl Display for i16`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl Inspect for i16`
-
-##### `pub fn inspect(&self, f: &mut Formatter)`
-
-#### `impl InspectAlt for i16`
-
-##### `pub fn inspect_alt(&self, f: &mut Formatter)`
-
-#### `impl Binary for i16`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl Octal for i16`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl LowerHex for i16`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl UpperHex for i16`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl BinaryAlt for i16`
-
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
-
-#### `impl OctalAlt for i16`
-
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
-
-#### `impl LowerHexAlt for i16`
-
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
-
-#### `impl UpperHexAlt for i16`
-
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
-
-#### `impl Eq for i16`
-
-##### `pub fn eq(&self, other: &Self) -> bool`
-
-#### `impl Ord for i16`
-
-##### `pub fn cmp(&self, other: &Self) -> Ordering`
-
-#### `impl Default for i16`
-
-##### `pub fn default() -> i16`
-
-#### `impl From<i8> for i16`
-
-##### `pub fn from(value: i8) -> i16`
-
-#### `impl From<u8> for i16`
-
-##### `pub fn from(value: u8) -> i16`
-
-#### `impl TryFrom<i64> for i16`
-
-##### `pub fn try_from(value: i64) -> Result<i16, ConvertError>`
-
-#### `impl TryFrom<i32> for i16`
-
-##### `pub fn try_from(value: i32) -> Result<i16, ConvertError>`
-
-#### `impl Step for i16`
-
-##### `fn next_step(&self) -> Option<i16>`
-
-### `u16`
-
-#### `pub const MAX: u16`
-
-#### `pub const MIN: u16`
-
-#### `pub fn max(a: u16, b: u16) -> u16`
-
-#### `pub fn min(a: u16, b: u16) -> u16`
-
-#### `pub fn to_string(&self) -> String`
-
-#### `pub fn from_str(s: String) -> Result<u16, ParseIntError>`
-
-#### `pub fn from_str_hex(s: String) -> Result<u16, ParseIntError>`
-
-#### `pub fn from_str_radix(s: String, radix: u32) -> Result<u16, ParseIntError>`
-
-#### `impl Display for u16`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl Inspect for u16`
-
-##### `pub fn inspect(&self, f: &mut Formatter)`
-
-#### `impl InspectAlt for u16`
-
-##### `pub fn inspect_alt(&self, f: &mut Formatter)`
-
-#### `impl Binary for u16`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl Octal for u16`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl LowerHex for u16`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl UpperHex for u16`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl BinaryAlt for u16`
-
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
-
-#### `impl OctalAlt for u16`
-
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
-
-#### `impl LowerHexAlt for u16`
-
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
-
-#### `impl UpperHexAlt for u16`
-
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
-
-#### `impl Eq for u16`
-
-##### `pub fn eq(&self, other: &Self) -> bool`
-
-#### `impl Ord for u16`
-
-##### `pub fn cmp(&self, other: &Self) -> Ordering`
-
-#### `impl Default for u16`
-
-##### `pub fn default() -> u16`
-
-#### `impl From<u8> for u16`
-
-##### `pub fn from(value: u8) -> u16`
-
-#### `impl TryFrom<u32> for u16`
-
-##### `pub fn try_from(value: u32) -> Result<u16, ConvertError>`
-
-#### `impl Step for u16`
-
-##### `fn next_step(&self) -> Option<u16>`
-
-### `i32`
-
-#### `pub const MAX: i32`
-
-#### `pub const MIN: i32`
-
-#### `pub fn max(a: i32, b: i32) -> i32`
-
-#### `pub fn min(a: i32, b: i32) -> i32`
-
-#### `pub fn clz(x: i32) -> i32`
-
-Counts the leading zeros in this integer.
-
-#### `pub fn ctz(x: i32) -> i32`
-
-Counts the trailing zeros in this integer.
-
-#### `pub fn popcnt(x: i32) -> i32`
-
-Counts the number of set bits (population count).
-
-#### `pub fn to_string(&self) -> String`
-
-#### `pub fn from_str(s: String) -> Result<i32, ParseIntError>`
-
-#### `pub fn from_str_hex(s: String) -> Result<i32, ParseIntError>`
-
-#### `pub fn from_str_radix(s: String, radix: u32) -> Result<i32, ParseIntError>`
-
-#### `impl Display for i32`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl Inspect for i32`
-
-##### `pub fn inspect(&self, f: &mut Formatter)`
-
-#### `impl InspectAlt for i32`
-
-##### `pub fn inspect_alt(&self, f: &mut Formatter)`
-
-#### `impl Binary for i32`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl Octal for i32`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl LowerHex for i32`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl UpperHex for i32`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl BinaryAlt for i32`
-
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
-
-#### `impl OctalAlt for i32`
-
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
-
-#### `impl LowerHexAlt for i32`
-
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
-
-#### `impl UpperHexAlt for i32`
-
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
-
-#### `impl Eq for i32`
-
-##### `pub fn eq(&self, other: &Self) -> bool`
-
-#### `impl Ord for i32`
-
-##### `pub fn cmp(&self, other: &Self) -> Ordering`
-
-#### `impl Default for i32`
-
-##### `pub fn default() -> i32`
-
-#### `impl From<i8> for i32`
-
-##### `pub fn from(value: i8) -> i32`
-
-#### `impl From<i16> for i32`
-
-##### `pub fn from(value: i16) -> i32`
-
-#### `impl From<u8> for i32`
-
-##### `pub fn from(value: u8) -> i32`
-
-#### `impl From<u16> for i32`
-
-##### `pub fn from(value: u16) -> i32`
-
-#### `impl From<bool> for i32`
-
-##### `pub fn from(value: bool) -> i32`
-
-#### `impl TryFrom<i64> for i32`
-
-##### `pub fn try_from(value: i64) -> Result<i32, ConvertError>`
-
-#### `impl Step for i32`
-
-##### `fn next_step(&self) -> Option<i32>`
-
-### `u32`
-
-#### `pub const MAX: u32`
-
-#### `pub const MIN: u32`
-
-#### `pub fn max(a: u32, b: u32) -> u32`
-
-#### `pub fn min(a: u32, b: u32) -> u32`
-
-#### `pub fn to_string(&self) -> String`
-
-#### `pub fn from_str(s: String) -> Result<u32, ParseIntError>`
-
-#### `pub fn from_str_hex(s: String) -> Result<u32, ParseIntError>`
-
-#### `pub fn from_str_radix(s: String, radix: u32) -> Result<u32, ParseIntError>`
-
-#### `impl Display for u32`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl Inspect for u32`
-
-##### `pub fn inspect(&self, f: &mut Formatter)`
-
-#### `impl InspectAlt for u32`
-
-##### `pub fn inspect_alt(&self, f: &mut Formatter)`
-
-#### `impl Binary for u32`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl Octal for u32`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl LowerHex for u32`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl UpperHex for u32`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl BinaryAlt for u32`
-
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
-
-#### `impl OctalAlt for u32`
-
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
-
-#### `impl LowerHexAlt for u32`
-
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
-
-#### `impl UpperHexAlt for u32`
-
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
-
-#### `impl Eq for u32`
-
-##### `pub fn eq(&self, other: &Self) -> bool`
-
-#### `impl Ord for u32`
-
-##### `pub fn cmp(&self, other: &Self) -> Ordering`
-
-#### `impl Default for u32`
-
-##### `pub fn default() -> u32`
-
-#### `impl From<u8> for u32`
-
-##### `pub fn from(value: u8) -> u32`
-
-#### `impl From<u16> for u32`
-
-##### `pub fn from(value: u16) -> u32`
-
-#### `impl TryFrom<i32> for u32`
-
-##### `pub fn try_from(value: i32) -> Result<u32, ConvertError>`
-
-#### `impl TryFrom<i64> for u32`
-
-##### `pub fn try_from(value: i64) -> Result<u32, ConvertError>`
-
-#### `impl TryFrom<u64> for u32`
-
-##### `pub fn try_from(value: u64) -> Result<u32, ConvertError>`
-
-#### `impl Step for u32`
-
-##### `fn next_step(&self) -> Option<u32>`
-
-### `i64`
-
-#### `pub const MAX: i64`
-
-#### `pub const MIN: i64`
-
-#### `pub fn max(a: i64, b: i64) -> i64`
-
-#### `pub fn min(a: i64, b: i64) -> i64`
-
-#### `pub fn clz(x: i64) -> i64`
-
-Counts the leading zeros in this integer.
-
-#### `pub fn ctz(x: i64) -> i64`
-
-Counts the trailing zeros in this integer.
-
-#### `pub fn popcnt(x: i64) -> i64`
-
-Counts the number of set bits (population count).
-
-#### `pub fn to_string(&self) -> String`
-
-#### `pub fn from_str(s: String) -> Result<i64, ParseIntError>`
-
-#### `pub fn from_str_hex(s: String) -> Result<i64, ParseIntError>`
-
-#### `pub fn from_str_radix(s: String, radix: u32) -> Result<i64, ParseIntError>`
-
-#### `impl Display for i64`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl Inspect for i64`
-
-##### `pub fn inspect(&self, f: &mut Formatter)`
-
-#### `impl InspectAlt for i64`
-
-##### `pub fn inspect_alt(&self, f: &mut Formatter)`
-
-#### `impl Binary for i64`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl Octal for i64`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl LowerHex for i64`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl UpperHex for i64`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl BinaryAlt for i64`
-
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
-
-#### `impl OctalAlt for i64`
-
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
-
-#### `impl LowerHexAlt for i64`
-
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
-
-#### `impl UpperHexAlt for i64`
-
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
-
-#### `impl Eq for i64`
-
-##### `pub fn eq(&self, other: &Self) -> bool`
-
-#### `impl Ord for i64`
-
-##### `pub fn cmp(&self, other: &Self) -> Ordering`
-
-#### `impl Default for i64`
-
-##### `pub fn default() -> i64`
-
-#### `impl From<i8> for i64`
-
-##### `pub fn from(value: i8) -> i64`
-
-#### `impl From<i16> for i64`
-
-##### `pub fn from(value: i16) -> i64`
-
-#### `impl From<i32> for i64`
-
-##### `pub fn from(value: i32) -> i64`
-
-#### `impl From<u8> for i64`
-
-##### `pub fn from(value: u8) -> i64`
-
-#### `impl From<u16> for i64`
-
-##### `pub fn from(value: u16) -> i64`
-
-#### `impl From<u32> for i64`
-
-##### `pub fn from(value: u32) -> i64`
-
-#### `impl TryFrom<u64> for i64`
-
-##### `pub fn try_from(value: u64) -> Result<i64, ConvertError>`
-
-#### `impl TryFrom<i128> for i64`
-
-##### `pub fn try_from(value: i128) -> Result<i64, ConvertError>`
-
-#### `impl Step for i64`
-
-##### `fn next_step(&self) -> Option<i64>`
-
-### `u64`
-
-#### `pub const MAX: u64`
-
-#### `pub const MIN: u64`
-
-#### `pub fn max(a: u64, b: u64) -> u64`
-
-#### `pub fn min(a: u64, b: u64) -> u64`
-
-#### `pub fn to_string(&self) -> String`
-
-#### `pub fn from_str(s: String) -> Result<u64, ParseIntError>`
-
-#### `pub fn from_str_hex(s: String) -> Result<u64, ParseIntError>`
-
-#### `pub fn from_str_radix(s: String, radix: u32) -> Result<u64, ParseIntError>`
-
-#### `impl Display for u64`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl Inspect for u64`
-
-##### `pub fn inspect(&self, f: &mut Formatter)`
-
-#### `impl InspectAlt for u64`
-
-##### `pub fn inspect_alt(&self, f: &mut Formatter)`
-
-#### `impl Binary for u64`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl Octal for u64`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl LowerHex for u64`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl UpperHex for u64`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl BinaryAlt for u64`
-
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
-
-#### `impl OctalAlt for u64`
-
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
-
-#### `impl LowerHexAlt for u64`
-
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
-
-#### `impl UpperHexAlt for u64`
-
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
-
-#### `impl Eq for u64`
-
-##### `pub fn eq(&self, other: &Self) -> bool`
-
-#### `impl Ord for u64`
-
-##### `pub fn cmp(&self, other: &Self) -> Ordering`
-
-#### `impl Default for u64`
-
-##### `pub fn default() -> u64`
-
-#### `impl From<u8> for u64`
-
-##### `pub fn from(value: u8) -> u64`
-
-#### `impl From<u16> for u64`
-
-##### `pub fn from(value: u16) -> u64`
-
-#### `impl From<u32> for u64`
-
-##### `pub fn from(value: u32) -> u64`
-
-#### `impl TryFrom<i64> for u64`
-
-##### `pub fn try_from(value: i64) -> Result<u64, ConvertError>`
-
-#### `impl TryFrom<u128> for u64`
-
-##### `pub fn try_from(value: u128) -> Result<u64, ConvertError>`
-
-#### `impl Step for u64`
-
-##### `fn next_step(&self) -> Option<u64>`
-
-### `f32`
-
-#### `pub const PI: f32`
-
-#### `pub const TAU: f32`
-
-#### `pub const E: f32`
-
-#### `pub const LN2: f32`
-
-#### `pub const LN10: f32`
-
-#### `pub const LOG2_E: f32`
-
-#### `pub const LOG10_E: f32`
-
-#### `pub const SQRT2: f32`
-
-#### `pub const FRAC_1_SQRT2: f32`
-
-#### `pub const FRAC_PI_2: f32`
-
-#### `pub const FRAC_PI_4: f32`
-
-#### `pub const INFINITY: f32`
-
-#### `pub const NEG_INFINITY: f32`
-
-#### `pub const NAN: f32`
-
-#### `pub fn to_string(&self) -> String`
-
-#### `pub fn abs(x: f32) -> f32`
-
-Absolute value
-
-#### `pub fn ceil(x: f32) -> f32`
-
-Ceiling (round toward +infinity)
-
-#### `pub fn floor(x: f32) -> f32`
-
-Floor (round toward -infinity)
-
-#### `pub fn trunc(x: f32) -> f32`
-
-Truncate toward zero
-
-#### `pub fn round(x: f32) -> f32`
-
-Round to nearest even
-
-#### `pub fn sqrt(x: f32) -> f32`
-
-Square root
-
-#### `pub fn min(x: f32, y: f32) -> f32`
-
-Minimum of two values
-
-#### `pub fn max(x: f32, y: f32) -> f32`
-
-Maximum of two values
-
-#### `pub fn copysign(x: f32, y: f32) -> f32`
-
-Copy sign from y to x
-
-#### `pub fn sin(x: f32) -> f32`
-
-Sine (in radians)
-
-#### `pub fn cos(x: f32) -> f32`
-
-Cosine (in radians)
-
-#### `pub fn tan(x: f32) -> f32`
-
-Tangent (in radians)
-
-#### `pub fn asin(x: f32) -> f32`
-
-Arc sine (returns radians)
-
-#### `pub fn acos(x: f32) -> f32`
-
-Arc cosine (returns radians)
-
-#### `pub fn atan(x: f32) -> f32`
-
-Arc tangent (returns radians)
-
-#### `pub fn atan2(y: f32, x: f32) -> f32`
-
-Arc tangent of y/x (returns radians)
-
-#### `pub fn sinh(x: f32) -> f32`
-
-Hyperbolic sine
-
-#### `pub fn cosh(x: f32) -> f32`
-
-Hyperbolic cosine
-
-#### `pub fn tanh(x: f32) -> f32`
-
-Hyperbolic tangent
-
-#### `pub fn asinh(x: f32) -> f32`
-
-Inverse hyperbolic sine
-
-#### `pub fn acosh(x: f32) -> f32`
-
-Inverse hyperbolic cosine
-
-#### `pub fn atanh(x: f32) -> f32`
-
-Inverse hyperbolic tangent
-
-#### `pub fn exp(x: f32) -> f32`
-
-e raised to the power x
-
-#### `pub fn exp2(x: f32) -> f32`
-
-2 raised to the power x
-
-#### `pub fn expm1(x: f32) -> f32`
-
-e^x - 1 (more accurate for small x)
-
-#### `pub fn ln(x: f32) -> f32`
-
-Natural logarithm (base e)
-
-#### `pub fn log2(x: f32) -> f32`
-
-Logarithm base 2
-
-#### `pub fn log10(x: f32) -> f32`
-
-Logarithm base 10
-
-#### `pub fn ln1p(x: f32) -> f32`
-
-ln(1 + x) (more accurate for small x)
-
-#### `pub fn pow(x: f32, y: f32) -> f32`
-
-x raised to the power y
-
-#### `pub fn cbrt(x: f32) -> f32`
-
-Cube root
-
-#### `pub fn hypot(x: f32, y: f32) -> f32`
-
-Euclidean distance: sqrt(x^2 + y^2)
-
-#### `pub fn fmod(x: f32, y: f32) -> f32`
-
-Floating-point remainder of x/y
-
-#### `pub fn is_nan(&self) -> bool`
-
-#### `pub fn is_finite(&self) -> bool`
-
-#### `pub fn from_str(s: String) -> Result<f32, ParseFloatError>`
-
-#### `pub fn to_bits(&self) -> i32`
-
-Reinterprets the bits of this f32 as an i32.
-
-#### `pub fn from_bits(bits: i32) -> f32`
-
-Creates an f32 from its bit representation.
-
-#### `impl Display for f32`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl Inspect for f32`
-
-##### `pub fn inspect(&self, f: &mut Formatter)`
-
-#### `impl InspectAlt for f32`
-
-##### `pub fn inspect_alt(&self, f: &mut Formatter)`
-
-#### `impl LowerExp for f32`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl UpperExp for f32`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl Eq for f32`
-
-##### `pub fn eq(&self, other: &Self) -> bool`
-
-#### `impl Ord for f32`
-
-##### `pub fn cmp(&self, other: &Self) -> Ordering`
-
-#### `impl Default for f32`
-
-##### `pub fn default() -> f32`
-
-#### `impl TryFrom<i64> for f32`
-
-##### `pub fn try_from(value: i64) -> Result<f32, ConvertError>`
-
-#### `impl TryFrom<u64> for f32`
-
-##### `pub fn try_from(value: u64) -> Result<f32, ConvertError>`
-
-#### `impl TryFrom<i128> for f32`
-
-##### `pub fn try_from(value: i128) -> Result<f32, ConvertError>`
-
-#### `impl TryFrom<u128> for f32`
-
-##### `pub fn try_from(value: u128) -> Result<f32, ConvertError>`
-
-### `f64`
-
-#### `pub const PI: f64`
-
-#### `pub const TAU: f64`
-
-#### `pub const E: f64`
-
-#### `pub const LN2: f64`
-
-#### `pub const LN10: f64`
-
-#### `pub const LOG2_E: f64`
-
-#### `pub const LOG10_E: f64`
-
-#### `pub const SQRT2: f64`
-
-#### `pub const FRAC_1_SQRT2: f64`
-
-#### `pub const FRAC_PI_2: f64`
-
-#### `pub const FRAC_PI_4: f64`
-
-#### `pub const INFINITY: f64`
-
-#### `pub const NEG_INFINITY: f64`
-
-#### `pub const NAN: f64`
-
-#### `pub fn to_string(&self) -> String`
-
-#### `pub fn abs(x: f64) -> f64`
-
-Absolute value
-
-#### `pub fn ceil(x: f64) -> f64`
-
-Ceiling (round toward +infinity)
-
-#### `pub fn floor(x: f64) -> f64`
-
-Floor (round toward -infinity)
-
-#### `pub fn trunc(x: f64) -> f64`
-
-Truncate toward zero
-
-#### `pub fn round(x: f64) -> f64`
-
-Round to nearest even
-
-#### `pub fn sqrt(x: f64) -> f64`
-
-Square root
-
-#### `pub fn min(x: f64, y: f64) -> f64`
-
-Minimum of two values
-
-#### `pub fn max(x: f64, y: f64) -> f64`
-
-Maximum of two values
-
-#### `pub fn copysign(x: f64, y: f64) -> f64`
-
-Copy sign from y to x
-
-#### `pub fn sin(x: f64) -> f64`
-
-Sine (in radians)
-
-#### `pub fn cos(x: f64) -> f64`
-
-Cosine (in radians)
-
-#### `pub fn tan(x: f64) -> f64`
-
-Tangent (in radians)
-
-#### `pub fn asin(x: f64) -> f64`
-
-Arc sine (returns radians)
-
-#### `pub fn acos(x: f64) -> f64`
-
-Arc cosine (returns radians)
-
-#### `pub fn atan(x: f64) -> f64`
-
-Arc tangent (returns radians)
-
-#### `pub fn atan2(y: f64, x: f64) -> f64`
-
-Arc tangent of y/x (returns radians)
-
-#### `pub fn sinh(x: f64) -> f64`
-
-Hyperbolic sine
-
-#### `pub fn cosh(x: f64) -> f64`
-
-Hyperbolic cosine
-
-#### `pub fn tanh(x: f64) -> f64`
-
-Hyperbolic tangent
-
-#### `pub fn asinh(x: f64) -> f64`
-
-Inverse hyperbolic sine
-
-#### `pub fn acosh(x: f64) -> f64`
-
-Inverse hyperbolic cosine
-
-#### `pub fn atanh(x: f64) -> f64`
-
-Inverse hyperbolic tangent
-
-#### `pub fn exp(x: f64) -> f64`
-
-e raised to the power x
-
-#### `pub fn exp2(x: f64) -> f64`
-
-2 raised to the power x
-
-#### `pub fn expm1(x: f64) -> f64`
-
-e^x - 1 (more accurate for small x)
-
-#### `pub fn ln(x: f64) -> f64`
-
-Natural logarithm (base e)
-
-#### `pub fn log2(x: f64) -> f64`
-
-Logarithm base 2
-
-#### `pub fn log10(x: f64) -> f64`
-
-Logarithm base 10
-
-#### `pub fn ln1p(x: f64) -> f64`
-
-ln(1 + x) (more accurate for small x)
-
-#### `pub fn pow(x: f64, y: f64) -> f64`
-
-x raised to the power y
-
-#### `pub fn cbrt(x: f64) -> f64`
-
-Cube root
-
-#### `pub fn hypot(x: f64, y: f64) -> f64`
-
-Euclidean distance: sqrt(x^2 + y^2)
-
-#### `pub fn fmod(x: f64, y: f64) -> f64`
-
-Floating-point remainder of x/y
-
-#### `pub fn is_nan(&self) -> bool`
-
-#### `pub fn is_finite(&self) -> bool`
-
-#### `pub fn from_str(s: String) -> Result<f64, ParseFloatError>`
-
-#### `pub fn to_bits(&self) -> i64`
-
-Reinterprets the bits of this f64 as an i64.
-
-#### `pub fn from_bits(bits: i64) -> f64`
-
-Creates an f64 from its bit representation.
-
-#### `impl Display for f64`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl Inspect for f64`
-
-##### `pub fn inspect(&self, f: &mut Formatter)`
-
-#### `impl InspectAlt for f64`
-
-##### `pub fn inspect_alt(&self, f: &mut Formatter)`
-
-#### `impl LowerExp for f64`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl UpperExp for f64`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl Eq for f64`
-
-##### `pub fn eq(&self, other: &Self) -> bool`
-
-#### `impl Ord for f64`
-
-##### `pub fn cmp(&self, other: &Self) -> Ordering`
-
-#### `impl Default for f64`
-
-##### `pub fn default() -> f64`
-
-#### `impl From<f32> for f64`
-
-##### `pub fn from(value: f32) -> f64`
-
-#### `impl TryFrom<i64> for f64`
-
-##### `pub fn try_from(value: i64) -> Result<f64, ConvertError>`
-
-#### `impl TryFrom<u64> for f64`
-
-##### `pub fn try_from(value: u64) -> Result<f64, ConvertError>`
-
-#### `impl TryFrom<i128> for f64`
-
-##### `pub fn try_from(value: i128) -> Result<f64, ConvertError>`
-
-#### `impl TryFrom<u128> for f64`
-
-##### `pub fn try_from(value: u128) -> Result<f64, ConvertError>`
-
 ## Variants
 
 ### `pub variant Option<T>`
@@ -3788,12 +3716,84 @@ Result type - either Ok(T) or Err(E)
 
 #### `Err(E)`
 
-## Functions
+## Enums
 
-### `pub fn panic(message: String) -> !`
+### `pub enum Ordering`
 
-Logs a message to stderr and traps.
+Result of a comparison between two values.
 
-### `pub fn unreachable() -> !`
+#### `Less`
 
-Traps unconditionally, marking unreachable code.
+The first value is less than the second.
+
+#### `Equal`
+
+The two values are equal.
+
+#### `Greater`
+
+The first value is greater than the second.
+
+### `pub enum Alignment`
+
+Text alignment for padding.
+
+#### `Left`
+
+Left-aligned: `{x:<5}` -> "42 "
+
+#### `Center`
+
+Center-aligned: `{x:^5}` -> " 42 "
+
+#### `Right`
+
+Right-aligned (default for numbers): `{x:>5}` -> " 42"
+
+### `pub enum IntErrorKind`
+
+Kind of failure returned by integer parsing.
+
+#### `Empty`
+
+The input string was empty.
+
+#### `InvalidDigit`
+
+The input contained a character that is not a valid digit in the radix.
+
+#### `PosOverflow`
+
+The value was greater than the maximum representable in the target type.
+
+#### `NegOverflow`
+
+The value was less than the minimum representable in the target type.
+
+### `pub enum FloatErrorKind`
+
+Kind of failure returned by float parsing.
+
+#### `Empty`
+
+The input string was empty.
+
+#### `Invalid`
+
+The input was malformed.
+
+### `pub enum Ordering`
+
+Result of a comparison between two values.
+
+#### `Less`
+
+The first value is less than the second.
+
+#### `Equal`
+
+The two values are equal.
+
+#### `Greater`
+
+The first value is greater than the second.
