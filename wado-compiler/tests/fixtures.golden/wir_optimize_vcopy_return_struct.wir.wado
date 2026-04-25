@@ -182,7 +182,7 @@ fn "wado-compiler/tests/fixtures/wir_optimize_vcopy_return_struct.wado/run"() wi
     let __sroa_r_case1_payload_0: ref null "core:prelude/string.wado//String";
     multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "wado-compiler/tests/fixtures/wir_optimize_vcopy_return_struct.wado/make_outer"(5);
     if __sroa_r_discriminant == 0 {
-        o = __sroa_r_case0_payload_0;
+        o = ref.as_non_null(__sroa_r_case0_payload_0);
         "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
             __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 };
             __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
@@ -205,7 +205,7 @@ fn "wado-compiler/tests/fixtures/wir_optimize_vcopy_return_struct.wado/run"() wi
     let __sroa_r2_case1_payload_0: ref null "core:prelude/string.wado//String";
     multivalue_bind [__sroa_r2_discriminant, __sroa_r2_case0_payload_0, __sroa_r2_case1_payload_0] = "wado-compiler/tests/fixtures/wir_optimize_vcopy_return_struct.wado/make_outer"(-1);
     if __sroa_r2_discriminant == 1 {
-        e = __sroa_r2_case1_payload_0;
+        e = ref.as_non_null(__sroa_r2_case1_payload_0);
         "core:cli/println"(e);
     }
 }

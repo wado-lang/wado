@@ -22,8 +22,8 @@ use crate::name::LocalMethodName;
 use crate::name::ModuleSource;
 use crate::package::Package;
 use crate::tir::{
-    CallArg, EffectRef, FunctionRef, InlineHint, MonomorphInfo, TirBinaryOp, TirBlock, TirExpr,
-    TirExprKind, TirFunction, TirParam, TirStmt, TirStmtKind, TypeId, TypeTable,
+    CallArg, EffectRef, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, TirBinaryOp,
+    TirBlock, TirExpr, TirExprKind, TirFunction, TirParam, TirStmt, TirStmtKind, TypeId, TypeTable,
 };
 
 use super::common::{
@@ -2486,6 +2486,7 @@ fn make_binding_function(
         comp_features: 0,
         export_name: None,
         allocator_tag: None,
+        kind: FunctionKind::Regular,
     }))
 }
 
@@ -7228,6 +7229,7 @@ fn synthesize_stream_read_func(
         comp_features: 0,
         export_name: None,
         allocator_tag: None,
+        kind: FunctionKind::Regular,
     }
 }
 

@@ -1491,6 +1491,12 @@ impl<'a> WirUnparser<'a> {
                 self.unparse_instr_inline(len);
                 self.write(")");
             }
+            WirInstr::ArrayClone { type_id, src } => {
+                let elem = self.array_elem_type_str(type_id);
+                self.write(&format!("builtin::array_clone<{elem}>("));
+                self.unparse_instr_inline(src);
+                self.write(")");
+            }
 
             // GC: Reference
             WirInstr::RefNull { heap_type } => {
@@ -1850,15 +1856,6 @@ impl<'a> WirUnparser<'a> {
                 self.write(")");
             }
 
-            // Compound
-            WirInstr::ValueCopy { type_id, expr, .. } => {
-                let tid = type_id.to_string();
-                self.write("value_copy ");
-                self.write_name(&tid);
-                self.write("(");
-                self.unparse_instr_inline(expr);
-                self.write(")");
-            }
             WirInstr::MultiValueStructNew { type_id, instr } => {
                 let tid = type_id.to_string();
                 self.write("multivalue_struct_new ");

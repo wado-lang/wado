@@ -1500,6 +1500,14 @@ pub enum WirInstr {
         value: Box<WirInstr>,
         len: Box<WirInstr>,
     },
+    /// Deep-copy a `builtin::array<T>`: allocates a new array the same
+    /// length as `src` and copies every element. Emitted by codegen as the
+    /// same JIT-compiled loop that previously lived inside `emit_value_copy`
+    /// for raw array struct fields.
+    ArrayClone {
+        type_id: WirTypeId,
+        src: Box<WirInstr>,
+    },
 
     // === GC: Reference ===
     RefNull {
@@ -1688,17 +1696,6 @@ pub enum WirInstr {
         value: Box<WirInstr>,
     },
 
-    // === High-level compound instructions (lowered to sequences during emission) ===
-    /// Deep copy of a value type (struct, array, variant, option, tuple).
-    /// Lowered to field-by-field copy, array loop, etc. during emission.
-    /// When `nullable` is true, codegen emits a null guard (`ref.is_null` + if/else).
-    ValueCopy {
-        type_id: WirTypeId,
-        source_type: WirCopyType,
-        expr: Box<WirInstr>,
-        nullable: bool,
-    },
-
     /// Multi-value instruction with direct local binding (tuple elision).
     /// The instruction pushes N values on the stack; they are bound directly
     /// to locals without intermediate struct allocation.
@@ -1816,8 +1813,7 @@ impl WirInstr {
             | Self::GlobalSet { value, .. } => f(value),
             Self::StructGet { expr, .. }
             | Self::RefCast { expr, .. }
-            | Self::RefTest { expr, .. }
-            | Self::ValueCopy { expr, .. } => f(expr),
+            | Self::RefTest { expr, .. } => f(expr),
             Self::BrIf { condition, .. }
             | Self::BranchHint {
                 expr: condition, ..
@@ -2259,6 +2255,9 @@ impl WirInstr {
                 f(src);
                 f(src_offset);
                 f(len);
+            }
+            Self::ArrayClone { src, .. } => {
+                f(src);
             }
             Self::Select {
                 condition,
@@ -2392,8 +2391,7 @@ impl WirInstr {
             | Self::GlobalSet { value, .. } => f(value),
             Self::StructGet { expr, .. }
             | Self::RefCast { expr, .. }
-            | Self::RefTest { expr, .. }
-            | Self::ValueCopy { expr, .. } => f(expr),
+            | Self::RefTest { expr, .. } => f(expr),
             Self::BrIf { condition, .. }
             | Self::BranchHint {
                 expr: condition, ..
@@ -2836,6 +2834,9 @@ impl WirInstr {
                 f(src_offset);
                 f(len);
             }
+            Self::ArrayClone { src, .. } => {
+                f(src);
+            }
             Self::Select {
                 condition,
                 if_true,
@@ -2936,42 +2937,6 @@ impl WirInstr {
             }
         }
     }
-}
-
-/// What kind of value copy to perform.
-#[derive(Debug, Clone)]
-pub enum WirCopyType {
-    Struct {
-        fields: Vec<WirCopyField>,
-    },
-    Array {
-        element_copy: Option<Box<WirCopyType>>,
-    },
-    Variant {
-        cases: Vec<WirCopyCase>,
-    },
-    Option {
-        inner_copy: Box<WirCopyType>,
-    },
-    Tuple {
-        field_copies: Vec<Option<WirCopyType>>,
-    },
-}
-
-/// A field in a struct copy.
-#[derive(Debug, Clone)]
-pub struct WirCopyField {
-    pub index: u32,
-    pub needs_copy: bool,
-    pub copy_type: Option<WirCopyType>,
-}
-
-/// A case in a variant copy.
-#[derive(Debug, Clone)]
-pub struct WirCopyCase {
-    pub index: u32,
-    pub name: String,
-    pub payload_copy: Option<WirCopyType>,
 }
 
 /// An import entry.

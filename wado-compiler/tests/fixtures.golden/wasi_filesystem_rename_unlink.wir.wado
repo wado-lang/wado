@@ -1138,7 +1138,9 @@ fn "core:prelude/types.wado/AsyncCall<Result<DescriptorStat,ErrorCode>>::wait"(s
         "wasi/subtask-drop"(raw);
         "wasi/waitable-set-drop"(ws);
     }
-    result = value_copy "core:prelude/types.wado//Result<DescriptorStat,ErrorCode>"(__local_6 = builtin::load_u8(self.__cm_outptr); __local_7 = ref.null none; if __local_6 == 0 {
+    __local_6 = builtin::load_u8(self.__cm_outptr);
+    __local_7 = ref.null none;
+    if __local_6 == 0 {
         __local_8 = builtin::load_u8(self.__cm_outptr + 8);
         __local_9 = ref.null none;
         if __local_8 == 0 {
@@ -1289,7 +1291,8 @@ fn "core:prelude/types.wado/AsyncCall<Result<DescriptorStat,ErrorCode>>::wait"(s
             __local_31 = struct.new "wasi:filesystem/types.wado//ErrorCode::Other" { discriminant: 36, payload_0: __local_33 };
         }
         __local_7 = struct.new "core:prelude/types.wado//Result<DescriptorStat,ErrorCode>::Err" { discriminant: 1, payload_0: __local_31 };
-    }; __local_7);
+    }
+    result = __local_7;
     drop("mem/realloc"(self.__cm_outptr, self.__cm_size, self.__cm_align, 0));
     return result;
 }
@@ -1334,7 +1337,9 @@ fn "core:prelude/types.wado/AsyncCall<Result<unit,ErrorCode>>::wait"(self) {
         "wasi/subtask-drop"(raw);
         "wasi/waitable-set-drop"(ws);
     }
-    result = value_copy "core:prelude/types.wado//Result<unit,ErrorCode>"(__local_6 = builtin::load_u8(self.__cm_outptr); __local_7 = ref.null none; if __local_6 == 0 {
+    __local_6 = builtin::load_u8(self.__cm_outptr);
+    __local_7 = ref.null none;
+    if __local_6 == 0 {
         __local_7 = struct.new "core:prelude/types.wado//Result<unit,ErrorCode>" { 0 };
     } else {
         __local_8 = builtin::load_u8(self.__cm_outptr + 4);
@@ -1427,7 +1432,8 @@ fn "core:prelude/types.wado/AsyncCall<Result<unit,ErrorCode>>::wait"(self) {
             __local_9 = struct.new "wasi:filesystem/types.wado//ErrorCode::Other" { discriminant: 36, payload_0: __local_11 };
         }
         __local_7 = struct.new "core:prelude/types.wado//Result<unit,ErrorCode>::Err" { discriminant: 1, payload_0: __local_9 };
-    }; __local_7);
+    }
+    result = __local_7;
     drop("mem/realloc"(self.__cm_outptr, self.__cm_size, self.__cm_align, 0));
     return result;
 }
@@ -1472,7 +1478,9 @@ fn "core:prelude/types.wado/AsyncCall<Result<Descriptor,ErrorCode>>::wait"(self)
         "wasi/subtask-drop"(raw);
         "wasi/waitable-set-drop"(ws);
     }
-    result = value_copy "core:prelude/types.wado//Result<Descriptor,ErrorCode>"(__local_6 = builtin::load_u8(self.__cm_outptr); __local_7 = ref.null none; if __local_6 == 0 {
+    __local_6 = builtin::load_u8(self.__cm_outptr);
+    __local_7 = ref.null none;
+    if __local_6 == 0 {
         __local_7 = struct.new "core:prelude/types.wado//Result<Descriptor,ErrorCode>::Ok" { discriminant: 0, payload_0: builtin::load_i32(self.__cm_outptr + 4) };
     } else {
         __local_8 = builtin::load_u8(self.__cm_outptr + 4);
@@ -1565,7 +1573,8 @@ fn "core:prelude/types.wado/AsyncCall<Result<Descriptor,ErrorCode>>::wait"(self)
             __local_9 = struct.new "wasi:filesystem/types.wado//ErrorCode::Other" { discriminant: 36, payload_0: __local_11 };
         }
         __local_7 = struct.new "core:prelude/types.wado//Result<Descriptor,ErrorCode>::Err" { discriminant: 1, payload_0: __local_9 };
-    }; __local_7);
+    }
+    result = __local_7;
     drop("mem/realloc"(self.__cm_outptr, self.__cm_size, self.__cm_align, 0));
     return result;
 }

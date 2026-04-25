@@ -26,6 +26,7 @@ mod container_sroa;
 mod copy_prop;
 mod cse;
 pub mod dce;
+mod field_forward;
 mod field_scalarize;
 mod inline;
 mod labeled_block_fusion;
@@ -35,6 +36,9 @@ mod select_lowering;
 mod sroa;
 mod store_load_forward;
 mod tmpl_hoist;
+mod value_copy;
+mod value_copy_elide;
+mod value_copy_synth;
 
 use condition_implication::eliminate_implied_conditions;
 use const_branch_prune::prune_constant_branches;
@@ -48,6 +52,7 @@ use dce::{
     analyze_project, filter_bytes_literals, remove_unreachable_closure_functors,
     remove_unreachable_functions, remove_unreachable_globals, remove_unreachable_types,
 };
+use field_forward::forward_struct_field_constants;
 use field_scalarize::scalarize_hot_fields;
 use inline::inline_functions;
 use labeled_block_fusion::fuse_labeled_blocks;
@@ -179,6 +184,36 @@ pub fn optimize(
     select_lowering::select_lowering(&mut project);
     profiler.span_end("tir/select_lowering");
 
+    // Materialise `builtin::copy_value::<T>(x)` wrappers at every semantic
+    // deep-copy position. Runs last so it sees the final post-optimize TIR —
+    // inlining and branch folding have already resolved `if` expressions to
+    // concrete StructLiteral branches, matching what the freshness check
+    // expects to elide. WIR build lowers each call to the shared
+    // `build_value_copy` descriptor.
+    profiler.span_start("tir/value_copy_insertion");
+    value_copy::insert_value_copy_calls(&mut project);
+    profiler.span_end("tir/value_copy_insertion");
+
+    // Replace each `builtin::copy_value::<T>(x)` placeholder with a call to
+    // a synthesized concrete `$value_copy$` helper, so WIR build no longer
+    // needs a special case for the builtin and the per-type cost is visible
+    // in `wado dump`.
+    profiler.span_start("tir/value_copy_synthesis");
+    value_copy_synth::synthesize_value_copy_funcs(&mut project);
+    profiler.span_end("tir/value_copy_synthesis");
+
+    // Elide single-use, immutable `$value_copy$T<id>` calls — recovers the
+    // freshness optimization that the former WIR-level `value_copy`
+    // instruction performed inline. The remaining helpers are visible in
+    // `wado dump` exactly when their cost is actually paid.
+    profiler.span_start("tir/value_copy_elide");
+    value_copy_elide::elide_synthesized_value_copies(&mut project);
+    profiler.span_end("tir/value_copy_elide");
+
+    // Final DCE — drop synthesized `$value_copy$T<id>` helpers whose only
+    // call sites were elided.
+    run_dce(&mut project, profiler);
+
     project
 }
 
@@ -276,6 +311,9 @@ fn run_optimization_passes(
         });
         changed |= run_pass("tir/const_prop", project, profiler, |p| {
             propagate_constants(p)
+        });
+        changed |= run_pass("tir/field_forward", project, profiler, |p| {
+            forward_struct_field_constants(p)
         });
         changed |= run_pass("tir/const_fold", project, profiler, fold_constants);
         changed |= run_pass("tir/const_global_promotion", project, profiler, |p| {

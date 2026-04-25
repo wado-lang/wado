@@ -2130,7 +2130,7 @@ impl FunctionRef {
 
         match generic_name {
             "array_get" | "array_set" | "array_new" | "array_len" | "array_copy" | "array_fill"
-            | "select" => Some(format!("builtin::{generic_name}")),
+            | "array_clone" | "select" | "copy_value" => Some(format!("builtin::{generic_name}")),
             _ => None,
         }
     }
@@ -2890,6 +2890,26 @@ pub struct TirFunction {
 
     /// Allocator tag from `#[allocator("...")]` attribute (e.g., `"bump"`, `"debug"`).
     pub allocator_tag: Option<String>,
+
+    /// Categorizes the function for kind-specific optimizations. Most functions
+    /// are `Regular`; synthesis passes set specialized kinds so the TIR
+    /// optimizer can apply targeted transformations (e.g. freshness-based
+    /// elision for `ValueCopy`).
+    pub kind: FunctionKind,
+}
+
+/// Semantic category of a `TirFunction`. Carries the type operand so the
+/// optimizer can reason about the call without re-deriving it from the
+/// signature.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum FunctionKind {
+    /// Ordinary user-defined or synthesized function.
+    #[default]
+    Regular,
+    /// Synthesized `copy_value` function that deep-copies a value of
+    /// `type_id`. Calls to such functions may be elided when the argument is
+    /// provably fresh.
+    ValueCopy { type_id: TypeId },
 }
 
 /// Inline hint for a function, extracted from `#[inline(...)]` attributes.
@@ -2926,6 +2946,21 @@ impl TirFunction {
     #[inline]
     pub fn has_real_type_params(&self) -> bool {
         self.type_params.iter().any(|p| !p.is_effect)
+    }
+
+    /// Returns the copied type if this is a synthesized value-copy function.
+    #[inline]
+    pub fn value_copy_type(&self) -> Option<TypeId> {
+        match self.kind {
+            FunctionKind::ValueCopy { type_id } => Some(type_id),
+            FunctionKind::Regular => None,
+        }
+    }
+
+    /// Returns true if this function was synthesized as a value-copy helper.
+    #[inline]
+    pub fn is_value_copy(&self) -> bool {
+        matches!(self.kind, FunctionKind::ValueCopy { .. })
     }
 }
 

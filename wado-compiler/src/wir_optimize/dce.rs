@@ -355,7 +355,6 @@ fn collect_instr_type_refs(instr: &WirInstr, out: &mut IndexSet<u32>) {
         | WirInstr::RefTest { type_id, .. }
         | WirInstr::CallIndirect { type_id, .. }
         | WirInstr::CallRef { type_id, .. }
-        | WirInstr::ValueCopy { type_id, .. }
         | WirInstr::MultiValueStructNew { type_id, .. } => {
             out.insert(type_id.index());
         }
@@ -366,6 +365,9 @@ fn collect_instr_type_refs(instr: &WirInstr, out: &mut IndexSet<u32>) {
         } => {
             out.insert(dest_type_id.index());
             out.insert(src_type_id.index());
+        }
+        WirInstr::ArrayClone { type_id, .. } => {
+            out.insert(type_id.index());
         }
         WirInstr::DeclareLocal { ty, .. } => {
             collect_wir_type_ref(ty, out);
@@ -620,7 +622,6 @@ fn remap_type_ids_in_instr(instr: &mut WirInstr, remap: &IndexMap<u32, u32>) {
         | WirInstr::RefTest { type_id, .. }
         | WirInstr::CallIndirect { type_id, .. }
         | WirInstr::CallRef { type_id, .. }
-        | WirInstr::ValueCopy { type_id, .. }
         | WirInstr::MultiValueStructNew { type_id, .. } => {
             remap_type_id(type_id, remap);
         }
@@ -631,6 +632,9 @@ fn remap_type_ids_in_instr(instr: &mut WirInstr, remap: &IndexMap<u32, u32>) {
         } => {
             remap_type_id(dest_type_id, remap);
             remap_type_id(src_type_id, remap);
+        }
+        WirInstr::ArrayClone { type_id, .. } => {
+            remap_type_id(type_id, remap);
         }
         WirInstr::DeclareLocal { ty, .. } => {
             remap_wir_type(ty, remap);

@@ -77,6 +77,23 @@ struct LocalUsage {
     is_captured: bool,
 }
 
+/// If `expr` is `builtin::copy_value::<T>(inner)`, return `inner`; otherwise
+/// return `expr` unchanged. Copy propagation treats the wrapper as
+/// transparent because its safety check at `can_propagate_copy` already
+/// refuses to eliminate bindings whose target receives field mutations on a
+/// value-semantic type — i.e. the cases where dropping the copy would be
+/// observable.
+fn unwrap_copy_value(expr: &TirExpr) -> &TirExpr {
+    if let TirExprKind::Call { func, args, .. } = &expr.kind
+        && func.module_source.is_core_builtin()
+        && func.name == "copy_value"
+        && args.len() == 1
+    {
+        return &args[0].expr;
+    }
+    expr
+}
+
 /// Analyze a Let statement to see if it's a copy binding.
 fn analyze_copy_binding(stmt: &TirStmt) -> Option<CopyBinding> {
     let TirStmtKind::Let {
@@ -94,6 +111,11 @@ fn analyze_copy_binding(stmt: &TirStmt) -> Option<CopyBinding> {
     if *skip_value_copy {
         return None;
     }
+
+    // Look through `builtin::copy_value::<T>(x)` wrappers: when the safety
+    // check later in `can_propagate_copy` rules the binding eliminable, the
+    // semantic copy is also unnecessary so both go away together.
+    let value = unwrap_copy_value(value);
 
     let source = match &value.kind {
         TirExprKind::Local { index, name } => CopySource::Local {

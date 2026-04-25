@@ -16,7 +16,6 @@ mod pattern_match;
 mod primitive_ops;
 mod translate;
 mod types;
-mod value_copy;
 
 pub use context::DEFINED_FUNC_BASE;
 

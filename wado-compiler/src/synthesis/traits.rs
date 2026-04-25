@@ -17,9 +17,9 @@ use crate::hashmap::IndexSet;
 use crate::name::{LocalMethodName, MethodName, ModuleSource};
 use crate::package::Package;
 use crate::tir::{
-    CallArg, FunctionRef, InlineHint, MonomorphInfo, ResolvedType, TirBinaryOp, TirBlock, TirExpr,
-    TirExprKind, TirFunction, TirModule, TirParam, TirStmt, TirStmtKind, TirTypeParam, TirUnaryOp,
-    TypeId, TypeTable,
+    CallArg, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ResolvedType, TirBinaryOp,
+    TirBlock, TirExpr, TirExprKind, TirFunction, TirModule, TirParam, TirStmt, TirStmtKind,
+    TirTypeParam, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -1237,6 +1237,7 @@ fn generate_generic_struct_inspect_fn(
         comp_features: 0,
         export_name: None,
         allocator_tag: None,
+        kind: FunctionKind::Regular,
     }
 }
 
@@ -1559,6 +1560,7 @@ fn generate_generic_variant_inspect_fn(
         comp_features: 0,
         export_name: None,
         allocator_tag: None,
+        kind: FunctionKind::Regular,
     }
 }
 
@@ -2371,6 +2373,7 @@ fn generate_generic_struct_inspect_alt_fn(
         comp_features: 0,
         export_name: None,
         allocator_tag: None,
+        kind: FunctionKind::Regular,
     }
 }
 
@@ -2569,6 +2572,7 @@ fn generate_generic_variant_inspect_alt_fn(
         comp_features: 0,
         export_name: None,
         allocator_tag: None,
+        kind: FunctionKind::Regular,
     }
 }
 
@@ -3143,6 +3147,7 @@ fn generate_display_fallback(
         comp_features: 0,
         export_name: None,
         allocator_tag: None,
+        kind: FunctionKind::Regular,
     }
 }
 
@@ -4602,6 +4607,7 @@ fn generate_generic_struct_eq_fn(
         comp_features: 0,
         export_name: None,
         allocator_tag: None,
+        kind: FunctionKind::Regular,
     }
 }
 
@@ -4787,6 +4793,7 @@ fn generate_generic_variant_eq_fn(
         comp_features: 0,
         export_name: None,
         allocator_tag: None,
+        kind: FunctionKind::Regular,
     }
 }
 
@@ -5130,5 +5137,6 @@ fn generate_generic_struct_ord_fn(
         comp_features: 0,
         export_name: None,
         allocator_tag: None,
+        kind: FunctionKind::Regular,
     }
 }

@@ -239,12 +239,6 @@ fn update_knowledge_from_instr(instr: &WirInstr, known: &mut FieldKnowledge<'_>)
                 WirInstr::LocalGet { name: source, .. } => {
                     copy_field_knowledge(known, source, name);
                 }
-                // ValueCopy of a LocalGet: copy knowledge
-                WirInstr::ValueCopy { expr, .. } => {
-                    if let WirInstr::LocalGet { name: source, .. } = expr.as_ref() {
-                        copy_field_knowledge(known, source, name);
-                    }
-                }
                 _ => {}
             }
         }

@@ -833,7 +833,7 @@ fn "wado-compiler/tests/fixtures/http-client-send-simple.wado/__cm_binding__Requ
     __scheme_inner1 = 0;
     __scheme_inner2 = 0;
     if ref.is_null(scheme) == 0 {
-        __scheme_s_val = value_copy "wasi:http/types.wado//Scheme"(ref.as_non_null(scheme));
+        __scheme_s_val = ref.as_non_null(scheme);
         __scheme_s_p0 = 0;
         __scheme_s_p1 = 0;
         if ref.test "wasi:http/types.wado//Scheme::Other"(__scheme_s_val) {
@@ -1090,7 +1090,9 @@ fn "core:prelude/types.wado/AsyncCall<Result<Response,ErrorCode>>::wait"(self) {
         "wasi/subtask-drop"(raw);
         "wasi/waitable-set-drop"(ws);
     }
-    result = value_copy "core:prelude/types.wado//Result<Response,ErrorCode>"(__local_6 = builtin::load_u8(self.__cm_outptr); __local_7 = ref.null none; if __local_6 == 0 {
+    __local_6 = builtin::load_u8(self.__cm_outptr);
+    __local_7 = ref.null none;
+    if __local_6 == 0 {
         __local_7 = struct.new "core:prelude/types.wado//Result<Response,ErrorCode>::Ok" { discriminant: 0, payload_0: builtin::load_i32(self.__cm_outptr + 8) };
     } else {
         __local_8 = builtin::load_u8(self.__cm_outptr + 8);
@@ -1354,7 +1356,8 @@ fn "core:prelude/types.wado/AsyncCall<Result<Response,ErrorCode>>::wait"(self) {
             __local_9 = struct.new "wasi:http/types.wado//ErrorCode::InternalError" { discriminant: 38, payload_0: __local_11 };
         }
         __local_7 = struct.new "core:prelude/types.wado//Result<Response,ErrorCode>::Err" { discriminant: 1, payload_0: __local_9 };
-    }; __local_7);
+    }
+    result = __local_7;
     drop("mem/realloc"(self.__cm_outptr, self.__cm_size, self.__cm_align, 0));
     return result;
 }

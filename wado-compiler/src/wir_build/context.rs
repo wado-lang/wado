@@ -688,13 +688,8 @@ impl<'a> WirContext<'a> {
         }
     }
 
-    /// Check if a WIR type ID refers to a variant type.
-    pub fn is_variant_type(&self, type_id: &WirTypeId) -> bool {
-        let idx = type_id.index() as usize;
-        idx < self.types.len() && matches!(&self.types[idx], WirTypeDef::Variant(_))
-    }
-
     /// Get the number of fields in a WIR struct type.
+    #[allow(dead_code)]
     pub fn get_struct_field_count(&self, type_id: &WirTypeId) -> u32 {
         let idx = type_id.index() as usize;
         if idx < self.types.len() {

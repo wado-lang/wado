@@ -8,8 +8,8 @@ use crate::flat_package::FlatPackage;
 use crate::name::ModuleSource;
 use crate::tir::FunctionRef;
 use crate::tir::{
-    InlineHint, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirGlobal, TirModule,
-    TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
+    FunctionKind, InlineHint, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirGlobal,
+    TirModule, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -220,6 +220,7 @@ pub(super) fn lower_global_initializers(module: &mut TirModule) {
         comp_features: 0,
         export_name: None,
         allocator_tag: None,
+        kind: FunctionKind::Regular,
     };
 
     module.functions.push(Rc::new(RefCell::new(init_func)));
@@ -736,6 +737,7 @@ pub(super) fn generate_initialize_modules_flat(flat: &mut FlatPackage) {
         comp_features: 0,
         export_name: None,
         allocator_tag: None,
+        kind: FunctionKind::Regular,
     };
 
     flat.functions

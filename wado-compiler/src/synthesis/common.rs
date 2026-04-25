@@ -9,8 +9,8 @@ use crate::hashmap::IndexSet;
 
 use crate::name::{LocalMethodName, ModuleSource};
 use crate::tir::{
-    CallArg, FunctionRef, InlineHint, MonomorphInfo, TirBinaryOp, TirBlock, TirExpr, TirExprKind,
-    TirFunction, TirParam, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
+    CallArg, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, TirBinaryOp, TirBlock, TirExpr,
+    TirExprKind, TirFunction, TirParam, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -402,6 +402,7 @@ pub fn make_synthetic_method(
         comp_features: 0,
         export_name: None,
         allocator_tag: None,
+        kind: FunctionKind::Regular,
     }
 }
 

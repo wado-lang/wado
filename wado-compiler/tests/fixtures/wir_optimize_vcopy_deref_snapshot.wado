@@ -1,0 +1,31 @@
+// Repro: `let snapshot = *array_ref` must deep-copy when `array_ref` is
+// later mutated. The TIR-level value_copy elision pass elided the copy
+// because its `arg_source_root` analysis didn't follow `*expr` (Deref)
+// to the underlying local — it treated `*name_counts` as a fresh
+// expression and stripped the wrapper. The result aliased the source,
+// so subsequent mutations of `*arr` were visible through `snapshot`.
+//
+// The Gale codegen exposes this bug: it snapshots a `name_counts` array
+// before parsing sub-elements (which mutate the array), then emits
+// struct field shorthand from the snapshot. Aliasing makes both the
+// snapshot and the live array see the post-mutation state, producing
+// `_2`-suffixed names where the pre-mutation state had no entry.
+
+use { println } from "core:cli";
+
+fn snapshot_then_mutate(arr: &mut Array<i32>) -> Array<i32> {
+    let snapshot = *arr;
+    arr.push(100);
+    return snapshot;
+}
+
+export fn run() with Stdout {
+    let mut arr: Array<i32> = [1, 2, 3];
+    let snap = snapshot_then_mutate(&mut arr);
+    println(`snap.len={snap.len()} arr.len={arr.len()}`);
+}
+
+__DATA__
+{
+    "stdout": "snap.len=3 arr.len=4\n"
+}

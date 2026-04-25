@@ -352,7 +352,7 @@ fn "wado-compiler/tests/fixtures/opt_hfs_labeled_block_match.wado/run"() {
     let __sroa_result_case1_payload_0: ref null "core:prelude/string.wado//String";
     multivalue_bind [__sroa_result_discriminant, __sroa_result_case0_payload_0, __sroa_result_case1_payload_0] = "wado-compiler/tests/fixtures/opt_hfs_labeled_block_match.wado/parse_all"(p);
     if __sroa_result_discriminant == 1 {
-        e = __sroa_result_case1_payload_0;
+        e = ref.as_non_null(__sroa_result_case1_payload_0);
         "core:internal/panic"(e);
         unreachable;
     }

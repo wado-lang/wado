@@ -127,11 +127,13 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(49)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(50)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(51)
+type "functype//wado-compiler/tests/fixtures/generic_advanced.wado/$value_copy$T40" = fn(ref "wado-compiler/tests/fixtures/generic_advanced.wado//BTPoint") -> [i32, i32];  // TypeId(51)
 
-type "functype//wado-compiler/tests/fixtures/generic_advanced.wado/__Closure_2::__call" = fn(i32, i32) -> bool;  // TypeId(52)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(52)
 
-type "functype//wado-compiler/tests/fixtures/generic_advanced.wado/__Closure_3::__call" = fn(i32, i32) -> bool;  // TypeId(53)
+type "functype//wado-compiler/tests/fixtures/generic_advanced.wado/__Closure_2::__call" = fn(i32, i32) -> bool;  // TypeId(53)
+
+type "functype//wado-compiler/tests/fixtures/generic_advanced.wado/__Closure_3::__call" = fn(i32, i32) -> bool;  // TypeId(54)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -147,7 +149,6 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 fn "wado-compiler/tests/fixtures/generic_advanced.wado/__test_0_box_with_trait_method"() {
-    let p: ref "wado-compiler/tests/fixtures/generic_advanced.wado//BTPoint";
     let __v0_2: i32;
     let __cond_3: bool;
     let __v0_4: i32;
@@ -183,8 +184,10 @@ fn "wado-compiler/tests/fixtures/generic_advanced.wado/__test_0_box_with_trait_m
     let __sroa_pa_value: ref "wado-compiler/tests/fixtures/generic_advanced.wado//BTPoint";
     let __sroa_pb_value: ref "wado-compiler/tests/fixtures/generic_advanced.wado//BTPoint";
     __sroa_b_value = struct.new "wado-compiler/tests/fixtures/generic_advanced.wado//BTPoint" { x: 10, y: 20 };
-    p = __sroa_b_value;
-    __v0_2 = p.x;
+    let __sroa_p_x: i32;
+    let __sroa_p_y: i32;
+    multivalue_bind [__sroa_p_x, __sroa_p_y] = "wado-compiler/tests/fixtures/generic_advanced.wado/$value_copy$T40"(__sroa_b_value);
+    __v0_2 = __sroa_p_x;
     __cond_3 = __v0_2 == 10;
     if __cond_3 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -217,7 +220,7 @@ condition: p.x == 10
         });
         unreachable;
     }
-    __v0_4 = p.y;
+    __v0_4 = __sroa_p_y;
     __cond_5 = __v0_4 == 20;
     if __cond_5 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -252,7 +255,7 @@ condition: p.y == 20
     }
     v = struct.new "wado-compiler/tests/fixtures/generic_advanced.wado//BTPoint" { x: 99, y: 99 };
     __sroa_b_value = v;
-    __v0_6 = p.x;
+    __v0_6 = __sroa_p_x;
     __cond_7 = __v0_6 == 10;
     if __cond_7 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -932,6 +935,10 @@ fn "wado-compiler/tests/fixtures/generic_advanced.wado/quicksort$__Closure_3"(ar
         "wado-compiler/tests/fixtures/generic_advanced.wado/quicksort"(arr, low, pi - 1, struct.new "canonical//CanonicalClosure_0" { env: cmp, func: ref.as_non_null(ref.func "closure/wado-compiler/tests/fixtures/generic_advanced.wado/__closure_wrapper_1") });
         "wado-compiler/tests/fixtures/generic_advanced.wado/quicksort"(arr, pi + 1, high, struct.new "canonical//CanonicalClosure_0" { env: cmp, func: ref.as_non_null(ref.func "closure/wado-compiler/tests/fixtures/generic_advanced.wado/__closure_wrapper_1") });
     }
+}
+
+fn "wado-compiler/tests/fixtures/generic_advanced.wado/$value_copy$T40"(v) {
+    return v.x, v.y;
 }
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {

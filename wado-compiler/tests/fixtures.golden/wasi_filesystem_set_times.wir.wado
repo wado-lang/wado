@@ -478,13 +478,13 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_times.wado/__cm_binding__De
     builtin::store_i32(__params_buf, self);
     builtin::store_u8(__params_buf + 8, data_access_timestamp.discriminant);
     if ref.test "wasi:filesystem/types.wado//NewTimestamp::Timestamp"(data_access_timestamp) {
-        __struct_val_6 = value_copy "wasi:clocks/system_clock.wado//Instant"(ref.cast "wasi:filesystem/types.wado//NewTimestamp::Timestamp"(data_access_timestamp).payload_0);
+        __struct_val_6 = ref.cast "wasi:filesystem/types.wado//NewTimestamp::Timestamp"(data_access_timestamp).payload_0;
         builtin::store_i64((__params_buf + 8) + 8, __struct_val_6.seconds);
         builtin::store_i32(((__params_buf + 8) + 8) + 8, __struct_val_6.nanoseconds);
     }
     builtin::store_u8(__params_buf + 32, data_modification_timestamp.discriminant);
     if ref.test "wasi:filesystem/types.wado//NewTimestamp::Timestamp"(data_modification_timestamp) {
-        __struct_val_8 = value_copy "wasi:clocks/system_clock.wado//Instant"(ref.cast "wasi:filesystem/types.wado//NewTimestamp::Timestamp"(data_modification_timestamp).payload_0);
+        __struct_val_8 = ref.cast "wasi:filesystem/types.wado//NewTimestamp::Timestamp"(data_modification_timestamp).payload_0;
         builtin::store_i64((__params_buf + 32) + 8, __struct_val_8.seconds);
         builtin::store_i32(((__params_buf + 32) + 8) + 8, __struct_val_8.nanoseconds);
     }
@@ -516,13 +516,13 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_times.wado/__cm_binding__De
     builtin::store_i32(__params_buf + 12, builtin::i32_wrap_i64(__path_packed >> 32_i64));
     builtin::store_u8(__params_buf + 16, data_access_timestamp.discriminant);
     if ref.test "wasi:filesystem/types.wado//NewTimestamp::Timestamp"(data_access_timestamp) {
-        __struct_val_9 = value_copy "wasi:clocks/system_clock.wado//Instant"(ref.cast "wasi:filesystem/types.wado//NewTimestamp::Timestamp"(data_access_timestamp).payload_0);
+        __struct_val_9 = ref.cast "wasi:filesystem/types.wado//NewTimestamp::Timestamp"(data_access_timestamp).payload_0;
         builtin::store_i64((__params_buf + 16) + 8, __struct_val_9.seconds);
         builtin::store_i32(((__params_buf + 16) + 8) + 8, __struct_val_9.nanoseconds);
     }
     builtin::store_u8(__params_buf + 40, data_modification_timestamp.discriminant);
     if ref.test "wasi:filesystem/types.wado//NewTimestamp::Timestamp"(data_modification_timestamp) {
-        __struct_val_11 = value_copy "wasi:clocks/system_clock.wado//Instant"(ref.cast "wasi:filesystem/types.wado//NewTimestamp::Timestamp"(data_modification_timestamp).payload_0);
+        __struct_val_11 = ref.cast "wasi:filesystem/types.wado//NewTimestamp::Timestamp"(data_modification_timestamp).payload_0;
         builtin::store_i64((__params_buf + 40) + 8, __struct_val_11.seconds);
         builtin::store_i32(((__params_buf + 40) + 8) + 8, __struct_val_11.nanoseconds);
     }
@@ -852,7 +852,9 @@ fn "core:prelude/types.wado/AsyncCall<Result<DescriptorStat,ErrorCode>>::wait"(s
         "wasi/subtask-drop"(raw);
         "wasi/waitable-set-drop"(ws);
     }
-    result = value_copy "core:prelude/types.wado//Result<DescriptorStat,ErrorCode>"(__local_6 = builtin::load_u8(self.__cm_outptr); __local_7 = ref.null none; if __local_6 == 0 {
+    __local_6 = builtin::load_u8(self.__cm_outptr);
+    __local_7 = ref.null none;
+    if __local_6 == 0 {
         __local_8 = builtin::load_u8(self.__cm_outptr + 8);
         __local_9 = ref.null none;
         if __local_8 == 0 {
@@ -1003,7 +1005,8 @@ fn "core:prelude/types.wado/AsyncCall<Result<DescriptorStat,ErrorCode>>::wait"(s
             __local_31 = struct.new "wasi:filesystem/types.wado//ErrorCode::Other" { discriminant: 36, payload_0: __local_33 };
         }
         __local_7 = struct.new "core:prelude/types.wado//Result<DescriptorStat,ErrorCode>::Err" { discriminant: 1, payload_0: __local_31 };
-    }; __local_7);
+    }
+    result = __local_7;
     drop("mem/realloc"(self.__cm_outptr, self.__cm_size, self.__cm_align, 0));
     return result;
 }
@@ -1048,7 +1051,9 @@ fn "core:prelude/types.wado/AsyncCall<Result<unit,ErrorCode>>::wait"(self) {
         "wasi/subtask-drop"(raw);
         "wasi/waitable-set-drop"(ws);
     }
-    result = value_copy "core:prelude/types.wado//Result<unit,ErrorCode>"(__local_6 = builtin::load_u8(self.__cm_outptr); __local_7 = ref.null none; if __local_6 == 0 {
+    __local_6 = builtin::load_u8(self.__cm_outptr);
+    __local_7 = ref.null none;
+    if __local_6 == 0 {
         __local_7 = struct.new "core:prelude/types.wado//Result<unit,ErrorCode>" { 0 };
     } else {
         __local_8 = builtin::load_u8(self.__cm_outptr + 4);
@@ -1141,7 +1146,8 @@ fn "core:prelude/types.wado/AsyncCall<Result<unit,ErrorCode>>::wait"(self) {
             __local_9 = struct.new "wasi:filesystem/types.wado//ErrorCode::Other" { discriminant: 36, payload_0: __local_11 };
         }
         __local_7 = struct.new "core:prelude/types.wado//Result<unit,ErrorCode>::Err" { discriminant: 1, payload_0: __local_9 };
-    }; __local_7);
+    }
+    result = __local_7;
     drop("mem/realloc"(self.__cm_outptr, self.__cm_size, self.__cm_align, 0));
     return result;
 }
@@ -1186,7 +1192,9 @@ fn "core:prelude/types.wado/AsyncCall<Result<Descriptor,ErrorCode>>::wait"(self)
         "wasi/subtask-drop"(raw);
         "wasi/waitable-set-drop"(ws);
     }
-    result = value_copy "core:prelude/types.wado//Result<Descriptor,ErrorCode>"(__local_6 = builtin::load_u8(self.__cm_outptr); __local_7 = ref.null none; if __local_6 == 0 {
+    __local_6 = builtin::load_u8(self.__cm_outptr);
+    __local_7 = ref.null none;
+    if __local_6 == 0 {
         __local_7 = struct.new "core:prelude/types.wado//Result<Descriptor,ErrorCode>::Ok" { discriminant: 0, payload_0: builtin::load_i32(self.__cm_outptr + 4) };
     } else {
         __local_8 = builtin::load_u8(self.__cm_outptr + 4);
@@ -1279,7 +1287,8 @@ fn "core:prelude/types.wado/AsyncCall<Result<Descriptor,ErrorCode>>::wait"(self)
             __local_9 = struct.new "wasi:filesystem/types.wado//ErrorCode::Other" { discriminant: 36, payload_0: __local_11 };
         }
         __local_7 = struct.new "core:prelude/types.wado//Result<Descriptor,ErrorCode>::Err" { discriminant: 1, payload_0: __local_9 };
-    }; __local_7);
+    }
+    result = __local_7;
     drop("mem/realloc"(self.__cm_outptr, self.__cm_size, self.__cm_align, 0));
     return result;
 }

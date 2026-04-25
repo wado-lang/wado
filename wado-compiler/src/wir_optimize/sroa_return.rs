@@ -982,8 +982,6 @@ fn unwrap_to_candidate_call(instr: &WirInstr, candidate_ids: &IndexSet<u32>) -> 
         WirInstr::Call { func_id, .. } if candidate_ids.contains(&func_id.index()) => {
             Some(func_id.index())
         }
-        // ValueCopy wraps a struct reference — look through it
-        WirInstr::ValueCopy { expr, .. } => unwrap_to_candidate_call(expr, candidate_ids),
         // Trivial block from inlining: the block's result value is either:
         // 1. The last instruction in body (implicit value)
         // 2. A Seq([..., value, Br]) pattern (break-with-value)
@@ -1119,8 +1117,8 @@ fn check_invalid_call_uses(
     }
 }
 
-/// Scan prefix instructions in Block/ValueCopy wrappers for nested candidate calls.
-/// When a `LocalSet { value: ValueCopy { Block { body } } }` wraps a candidate call
+/// Scan prefix instructions in Block wrappers for nested candidate calls.
+/// When a `LocalSet { value: Block { body } }` wraps a candidate call
 /// as its result, the prefix instructions in the block body may also contain calls
 /// to candidates that the rewrite pass cannot reach.
 fn find_candidate_calls_in_block_prefix(
@@ -1128,34 +1126,27 @@ fn find_candidate_calls_in_block_prefix(
     candidate_ids: &IndexSet<u32>,
     invalid: &mut IndexSet<u32>,
 ) {
-    match instr {
-        WirInstr::ValueCopy { expr, .. } => {
-            find_candidate_calls_in_block_prefix(expr, candidate_ids, invalid);
-        }
-        WirInstr::Block { body, .. } => {
-            // All instructions except the last (which is the result value) are prefix.
-            // Skip trailing Unreachable — translate_stmts_as_value may append one after
-            // a break-with-value; it is dead code and must not be treated as the result.
-            let effective_body = if matches!(body.last(), Some(WirInstr::Unreachable)) {
-                &body[..body.len() - 1]
-            } else {
-                body.as_slice()
-            };
-            if let Some((_, prefix)) = effective_body.split_last() {
-                for prefix_instr in prefix {
-                    find_nested_candidate_calls(prefix_instr, candidate_ids, invalid);
-                }
+    if let WirInstr::Block { body, .. } = instr {
+        // All instructions except the last (which is the result value) are prefix.
+        // Skip trailing Unreachable — translate_stmts_as_value may append one after
+        // a break-with-value; it is dead code and must not be treated as the result.
+        let effective_body = if matches!(body.last(), Some(WirInstr::Unreachable)) {
+            &body[..body.len() - 1]
+        } else {
+            body.as_slice()
+        };
+        if let Some((_, prefix)) = effective_body.split_last() {
+            for prefix_instr in prefix {
+                find_nested_candidate_calls(prefix_instr, candidate_ids, invalid);
             }
         }
-        _ => {}
     }
 }
 
-/// Unwrap through ValueCopy/Block to find the inner Call instruction (for arg checking).
+/// Unwrap through Block to find the inner Call instruction (for arg checking).
 fn unwrap_to_inner_call(instr: &WirInstr) -> Option<&WirInstr> {
     match instr {
         WirInstr::Call { .. } => Some(instr),
-        WirInstr::ValueCopy { expr, .. } => unwrap_to_inner_call(expr),
         WirInstr::Block { body, .. } => {
             let last = body.last()?;
             match last {
@@ -1997,36 +1988,40 @@ fn rewrite_call_sites(
             }
 
             // Track which SROA locals hold ref types that need ref.as_non_null when read.
-            // Only non-nullable ref fields in the ORIGINAL case struct need this wrapping.
-            // Fields that are nullable in the case struct (e.g., nullable_ref-optimized
-            // Option<T> payloads) must NOT be wrapped, since the value may legitimately be null.
+            // The check must be against the ORIGINAL variant-case payload type from
+            // `WirVariantCase::payload`, not the case struct's field type: the latter
+            // is always declared nullable for the Option<&T> boxing optimisation,
+            // which loses the information that a `Some(non_null_ref)` payload is
+            // semantically non-null at the Wado source level.
             let mut ref_locals = crate::hashmap::IndexSet::default();
-            for (disc_val_2, case_type_opt_2) in vi.case_type_indices.iter().enumerate() {
-                if let Some(case_type_idx_2) = case_type_opt_2
-                    && let Some(WirTypeDef::Struct(st)) = types.get(*case_type_idx_2 as usize)
-                {
-                    for (field_pos, field) in st.fields.iter().enumerate() {
-                        if field_pos == 0 {
-                            continue; // skip discriminant
-                        }
-                        // Check if the original field type is a non-nullable ref
+            if let Some(WirTypeDef::Variant(wv)) = types.get(candidate.struct_type_idx as usize) {
+                for (disc_val_2, case_type_opt_2) in vi.case_type_indices.iter().enumerate() {
+                    if case_type_opt_2.is_none() {
+                        continue;
+                    }
+                    // Locate the corresponding variant case by discriminant value.
+                    let Some(wir_case) = wv.cases.iter().find(|c| c.index as usize == disc_val_2)
+                    else {
+                        continue;
+                    };
+                    for (payload_idx, payload_ty) in wir_case.payload.iter().enumerate() {
                         let is_non_nullable_ref = matches!(
-                            &field.ty,
+                            payload_ty,
                             WirType::Ref {
                                 nullable: false,
                                 ..
                             }
                         );
-                        if is_non_nullable_ref {
-                            let payload_idx = field_pos - 1;
-                            let payload_name = if vi.case_slot_offsets.is_some() {
-                                format!("case{disc_val_2}_payload_{payload_idx}")
-                            } else {
-                                format!("payload_{payload_idx}")
-                            };
-                            if let Some(sroa_local) = field_map.get(&payload_name) {
-                                ref_locals.insert(sroa_local.clone());
-                            }
+                        if !is_non_nullable_ref {
+                            continue;
+                        }
+                        let payload_name = if vi.case_slot_offsets.is_some() {
+                            format!("case{disc_val_2}_payload_{payload_idx}")
+                        } else {
+                            format!("payload_{payload_idx}")
+                        };
+                        if let Some(sroa_local) = field_map.get(&payload_name) {
+                            ref_locals.insert(sroa_local.clone());
                         }
                     }
                 }
@@ -2129,40 +2124,10 @@ fn recurse_rewrite_call_sites(
 
 /// Replace `StructGet { field_name, expr: LocalGet(temp) }` with `LocalGet(fresh_local)`
 /// for all known replacements. Uses `WirInstr::for_each_boxed_child_mut` for generic traversal.
-///
-/// Also handles `ValueCopy { expr: StructGet { field_name, expr: LocalGet(temp) } }` →
-/// `LocalGet(fresh_local)`, eliminating the unnecessary copy. After SROA, the fresh local
-/// already holds a reference to the value that was in the struct field; the `ValueCopy` was
-/// emitted to preserve value semantics when extracting from a shared struct, but since SROA
-/// has eliminated the struct, the copy is redundant.
 fn replace_struct_gets(
     instr: &mut WirInstr,
     replacements: &crate::hashmap::IndexMap<String, crate::hashmap::IndexMap<String, String>>,
 ) {
-    // Handle ValueCopy(StructGet(LocalGet(temp))) → LocalGet(sroa_fresh).
-    // This eliminates the unnecessary shallow copy that was emitted to preserve value
-    // semantics when extracting a field from a shared struct. After SROA the struct no
-    // longer exists, so the copy serves no purpose.
-    if let WirInstr::ValueCopy { expr, .. } = instr
-        && let WirInstr::StructGet {
-            field_name,
-            expr: inner_expr,
-            result_ty,
-            ..
-        } = expr.as_ref()
-        && let WirInstr::LocalGet {
-            name: temp_name, ..
-        } = inner_expr.as_ref()
-        && let Some(field_map) = replacements.get(temp_name.as_str())
-        && let Some(fresh_local) = field_map.get(field_name.as_str())
-    {
-        *instr = WirInstr::LocalGet {
-            name: fresh_local.clone(),
-            result_ty: result_ty.clone(),
-        };
-        return;
-    }
-
     // Check if THIS instruction is a StructGet that should be replaced
     if let WirInstr::StructGet {
         field_name,
@@ -2194,14 +2159,36 @@ fn sroa_local_get(
     ref_locals: &crate::hashmap::IndexSet<String>,
     result_ty: crate::wir::WirType,
 ) -> WirInstr {
-    let get = WirInstr::LocalGet {
-        name: local_name.to_string(),
-        result_ty,
-    };
     if ref_locals.contains(local_name) {
+        // Set the LocalGet's own result type to nullable so downstream
+        // cleanup passes don't strip the RefAsNonNull wrapper as
+        // redundant. The wrapper is what narrows to the non-null
+        // `result_ty` expected by the surrounding consumer (e.g., the
+        // callee's non-null `ref T` parameter), after the variant case
+        // test has already proved the payload is non-null at runtime.
+        let nullable_ty = match &result_ty {
+            crate::wir::WirType::Ref { type_id, .. } => crate::wir::WirType::Ref {
+                type_id: type_id.clone(),
+                nullable: true,
+            },
+            crate::wir::WirType::AbstractRef { heap_type, .. } => {
+                crate::wir::WirType::AbstractRef {
+                    heap_type: heap_type.clone(),
+                    nullable: true,
+                }
+            }
+            _ => result_ty.clone(),
+        };
+        let get = WirInstr::LocalGet {
+            name: local_name.to_string(),
+            result_ty: nullable_ty,
+        };
         WirInstr::RefAsNonNull(Box::new(get))
     } else {
-        get
+        WirInstr::LocalGet {
+            name: local_name.to_string(),
+            result_ty,
+        }
     }
 }
 
@@ -2257,22 +2244,24 @@ fn collect_refcast_aliases(
 /// Handles five patterns:
 /// 1. `RefTest { type_id, expr: LocalGet(temp) }` → `I32Eq(LocalGet(disc), I32Const(case_disc))`
 /// 2. `StructGet { field, expr: RefCast { type_id, expr: LocalGet(temp) } }` → `LocalGet(sroa_local)`
-/// 3. `ValueCopy { StructGet { field, expr: RefCast { type_id, expr: LocalGet(temp) } } }` → same
+/// 3. `RefAsNonNull(StructGet { field, expr: RefCast { type_id, expr: LocalGet(temp) } })` → same
 /// 4. `StructGet { field, expr: LocalGet(cast_alias) }` where `cast_alias` was a `RefCast` alias → same
-/// 5. `ValueCopy { StructGet { field, expr: LocalGet(cast_alias) } }` → same
 fn replace_variant_accesses(
     instr: &mut WirInstr,
     variant_replacements: &crate::hashmap::IndexMap<String, VariantReplacement>,
     refcast_aliases: &crate::hashmap::IndexMap<String, (String, u32)>,
 ) {
-    // Pattern 3: ValueCopy wrapping StructGet(RefCast(LocalGet(temp)))
-    if let WirInstr::ValueCopy { expr, .. } = instr
+    // Pattern 3: `RefAsNonNull(StructGet(RefCast(LocalGet(temp))))` — the
+    // variant-payload extraction form emitted by `wir_build::pattern_match`.
+    // Replaces with `sroa_local_get`, which applies a non-null narrowing when
+    // the original variant payload field was non-nullable.
+    if let WirInstr::RefAsNonNull(inner) = instr
         && let WirInstr::StructGet {
             field_name,
             expr: sg_expr,
             result_ty,
             ..
-        } = expr.as_ref()
+        } = inner.as_ref()
         && let WirInstr::RefCast {
             type_id: cast_type_id,
             expr: rc_expr,
@@ -2326,27 +2315,6 @@ fn replace_variant_accesses(
         && let Some(vr) = variant_replacements.get(temp_name.as_str())
     {
         let key = (cast_type_id.index(), field_name.clone());
-        if let Some(local_name) = vr.field_to_local.get(&key) {
-            *instr = sroa_local_get(local_name, &vr.ref_locals, result_ty.clone());
-            return;
-        }
-    }
-
-    // Pattern 5: ValueCopy { StructGet { field, LocalGet(cast_alias) } } via alias
-    if let WirInstr::ValueCopy { expr, .. } = instr
-        && let WirInstr::StructGet {
-            field_name,
-            expr: sg_expr,
-            result_ty,
-            ..
-        } = expr.as_ref()
-        && let WirInstr::LocalGet {
-            name: alias_name, ..
-        } = sg_expr.as_ref()
-        && let Some((temp_name, cast_type_idx)) = refcast_aliases.get(alias_name.as_str())
-        && let Some(vr) = variant_replacements.get(temp_name.as_str())
-    {
-        let key = (*cast_type_idx, field_name.clone());
         if let Some(local_name) = vr.field_to_local.get(&key) {
             *instr = sroa_local_get(local_name, &vr.ref_locals, result_ty.clone());
             return;
@@ -2422,7 +2390,7 @@ fn take_call_from_local_set(instr: &mut WirInstr) -> (Vec<WirInstr>, Box<WirInst
     (prefix, Box::new(call))
 }
 
-/// Recursively unwrap `ValueCopy` and `Block` wrappers to extract the `Call` instruction.
+/// Recursively unwrap `Block` wrappers to extract the `Call` instruction.
 /// Collects any non-result instructions from blocks into `prefix` so they can be
 /// emitted before the call.
 fn unwrap_and_take_call(instr: WirInstr, prefix: &mut Vec<WirInstr>) -> WirInstr {
@@ -2430,9 +2398,6 @@ fn unwrap_and_take_call(instr: WirInstr, prefix: &mut Vec<WirInstr>) -> WirInstr
     loop {
         match current {
             WirInstr::Call { .. } => return current,
-            WirInstr::ValueCopy { expr, .. } => {
-                current = *expr;
-            }
             WirInstr::Block { ref mut body, .. } => {
                 // Extract the call from the block's result position,
                 // and collect all preceding statements as prefix.

@@ -700,10 +700,12 @@ impl FunctionTranslator<'_, '_> {
                 local_index,
                 value,
                 is_mut,
-                skip_value_copy,
                 ..
             } => {
-                // Track immutable locals for value-copy elision on subsequent bindings.
+                // `immutable_locals` used to feed the WIR-level `is_source_immutable`
+                // shortcut; keep the tracking for the residual reader
+                // (`wir_build::value_copy::build_value_copy` no longer needs it but
+                // removing the field is follow-up cleanup).
                 if !is_mut {
                     self.immutable_locals.insert(*local_index);
                 }
@@ -720,16 +722,10 @@ impl FunctionTranslator<'_, '_> {
                     Some(value_instr)
                 } else {
                     let local_name = self.local_name(*local_index);
-                    // Skip deep value-copy when safe:
-                    // 1. LICM-hoisted variables (skip_value_copy flag set by optimizer)
-                    // 2. Immutable binding from an immutable source (no mutation possible)
-                    let can_skip_copy =
-                        *skip_value_copy || (!is_mut && self.is_source_immutable(value));
-                    let value_instr = if can_skip_copy {
-                        value_instr
-                    } else {
-                        self.maybe_value_copy(value, value_instr)
-                    };
+                    // Value-copy wrappers are materialized at the TIR level by
+                    // `lower::value_copy`; the translation here is a plain
+                    // LocalSet. `skip_value_copy` is still respected upstream
+                    // (the inserter leaves the value unwrapped).
                     Some(WirInstr::LocalSet {
                         name: local_name,
                         value: Box::new(value_instr),
@@ -1077,10 +1073,7 @@ impl FunctionTranslator<'_, '_> {
                 let translated_args: Vec<WirInstr> = args
                     .iter()
                     .filter(|a| a.expr.type_id != TypeTable::UNIT)
-                    .map(|a| {
-                        let translated = self.translate_expr(&a.expr);
-                        self.maybe_value_copy_if_mut(&a.expr, translated, a.is_mut)
-                    })
+                    .map(|a| self.translate_expr(&a.expr))
                     .collect();
 
                 if let Some(func_id) = self.resolve_function_ref(func) {
@@ -1116,9 +1109,7 @@ impl FunctionTranslator<'_, '_> {
                 // params[0] is self; args[i] corresponds to params[i+1]
                 for arg in args {
                     if arg.expr.type_id != TypeTable::UNIT {
-                        let translated = self.translate_expr(&arg.expr);
-                        translated_args
-                            .push(self.maybe_value_copy_if_mut(&arg.expr, translated, arg.is_mut));
+                        translated_args.push(self.translate_expr(&arg.expr));
                     }
                 }
 
@@ -1197,7 +1188,7 @@ impl FunctionTranslator<'_, '_> {
             TirExprKind::Assign { target, value } => {
                 let val = self.translate_expr(value);
                 match &target.kind {
-                    TirExprKind::Local { index, name } => {
+                    TirExprKind::Local { index, .. } => {
                         // Unit-type locals have no Wasm representation
                         if target.type_id == TypeTable::UNIT {
                             return val;
@@ -1215,16 +1206,8 @@ impl FunctionTranslator<'_, '_> {
                             },
                             other => other,
                         };
-                        // SROA rewrites struct-field writes (`s.field = v`) to local
-                        // writes (`__sroa_s_field = v`). The original StructSet stores
-                        // the GC reference as-is without a defensive copy, so the
-                        // rewritten local write must also skip value_copy to preserve
-                        // the same reference-sharing semantics.
-                        let val = if name.starts_with("__sroa_") {
-                            val
-                        } else {
-                            self.maybe_value_copy(value, val)
-                        };
+                        // Value-copy wrappers for Assign targets are inserted by the
+                        // TIR `lower::value_copy` pass; no WIR-level wrapping here.
                         WirInstr::LocalSet {
                             name: self.local_name(*index),
                             value: Box::new(val),

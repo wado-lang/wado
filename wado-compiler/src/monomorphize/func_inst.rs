@@ -7,9 +7,9 @@ use std::rc::Rc;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::{LocalMethodName, MethodName, ModuleSource, mangle_generic_name};
 use crate::tir::{
-    CallArg, FunctionRef, InstantiationKey, MonomorphInfo, ResolvedType, TirBinaryOp, TirBlock,
-    TirExpr, TirExprKind, TirFunction, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind,
-    TirTemplatePart, TirUnaryOp, TypeId, TypeTable,
+    CallArg, FunctionKind, FunctionRef, InstantiationKey, MonomorphInfo, ResolvedType, TirBinaryOp,
+    TirBlock, TirExpr, TirExprKind, TirFunction, TirModule, TirParam, TirPattern, TirStmt,
+    TirStmtKind, TirTemplatePart, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 
@@ -877,6 +877,7 @@ impl Monomorphizer {
             comp_features: generic.comp_features,
             export_name: generic.export_name.clone(),
             allocator_tag: generic.allocator_tag.clone(),
+            kind: FunctionKind::Regular,
         })
     }
 

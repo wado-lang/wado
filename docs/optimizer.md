@@ -221,7 +221,7 @@ Substitutes `StructGet(LocalGet(x), field)` with the inner value when `x` is def
 
 ### Phase 5: Peephole and Multi-Field Struct Elimination
 
-- Peephole — constant folding, copy elision (cross-scope fresh value tracing for unwrap patterns, `StructNew`/`ArrayNewFixed` field usage, `Return`/`Br` containing `StructNew`), multi-value struct elision at WIR level. E2E: [wir_optimize_unwrap_fresh_elision.wado](../wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision.wado), [wir_optimize_value_copy_if_fresh.wado](../wado-compiler/tests/fixtures/wir_optimize_value_copy_if_fresh.wado), [wir_optimize_negate_eqz.wado](../wado-compiler/tests/fixtures/wir_optimize_negate_eqz.wado), [wir_optimize_branchless_increment.wado](../wado-compiler/tests/fixtures/wir_optimize_branchless_increment.wado).
+- Peephole — constant folding, multi-value struct elision at WIR level. E2E: [wir_optimize_negate_eqz.wado](../wado-compiler/tests/fixtures/wir_optimize_negate_eqz.wado), [wir_optimize_branchless_increment.wado](../wado-compiler/tests/fixtures/wir_optimize_branchless_increment.wado).
 - Flatten seq assignments — exposes multi-field struct locals for elimination.
 - Multi-field struct local elimination — substitutes `StructGet(LocalGet(x), field_k)` with the corresponding field expression when all fields are accessed exactly once.
 - Labeled-block copy propagation — flattens trivial labeled blocks holding only a copy. E2E: [wir_optimize_labeled_block_copy_prop.wado](../wado-compiler/tests/fixtures/wir_optimize_labeled_block_copy_prop.wado), [wir_optimize_labeled_block_copy_prop_safety.wado](../wado-compiler/tests/fixtures/wir_optimize_labeled_block_copy_prop_safety.wado).

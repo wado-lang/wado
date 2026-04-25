@@ -6,9 +6,8 @@
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::wir::{
-    WirAbstractHeapType, WirArrayType, WirCopyType, WirExportDesc, WirFuncType, WirFunction,
-    WirImportDesc, WirInstr, WirPackage, WirStructType, WirType, WirTypeDef, WirTypeId,
-    WirVariantType,
+    WirAbstractHeapType, WirArrayType, WirExportDesc, WirFuncType, WirFunction, WirImportDesc,
+    WirInstr, WirPackage, WirStructType, WirType, WirTypeDef, WirVariantType,
 };
 
 use wasm_encoder::{
@@ -904,6 +903,23 @@ impl<'a> WirEmitter<'a> {
                 self.collect_declared_locals_instr(src_offset, locals);
                 self.collect_declared_locals_instr(len, locals);
             }
+            WirInstr::ArrayClone { type_id, src } => {
+                self.collect_declared_locals_instr(src, locals);
+                // Pre-declare the four temps the JIT-compiled clone loop uses.
+                let arr_wasm_idx = self.resolve_type_index(type_id.index());
+                let arr_ref = RefType {
+                    nullable: false,
+                    heap_type: HeapType::Concrete(arr_wasm_idx),
+                };
+                let src_name = format!("__copy_arr_src_{}", type_id.index());
+                let dst_name = format!("__copy_arr_dst_{}", type_id.index());
+                let len_name = format!("__copy_arr_len_{}", type_id.index());
+                let loop_idx_name = format!("__copy_arr_i_{}", type_id.index());
+                locals.push((src_name, ValType::Ref(arr_ref)));
+                locals.push((dst_name, ValType::Ref(arr_ref)));
+                locals.push((len_name, ValType::I32));
+                locals.push((loop_idx_name, ValType::I32));
+            }
             WirInstr::GlobalSet { value, .. } => {
                 self.collect_declared_locals_instr(value, locals);
             }
@@ -931,43 +947,6 @@ impl<'a> WirEmitter<'a> {
                 self.collect_declared_locals_instr(condition, locals);
                 self.collect_declared_locals_instr(if_true, locals);
                 self.collect_declared_locals_instr(if_false, locals);
-            }
-            // Value copy needs a temp local for the source struct ref
-            WirInstr::ValueCopy { type_id, expr, .. } => {
-                self.collect_declared_locals_instr(expr, locals);
-                // Declare temp local for the struct copy source as nullable.
-                // Using nullable allows the same local to be shared between nullable and
-                // non-nullable ValueCopy nodes for the same type within the same function.
-                // ref.as_non_null is emitted inline before each struct.get.
-                let wasm_type_idx = self.resolve_type_index(type_id.index());
-                let heap = HeapType::Concrete(wasm_type_idx);
-                locals.push((
-                    format!("__copy_source_{}", type_id.index()),
-                    ValType::Ref(RefType {
-                        nullable: true,
-                        heap_type: heap,
-                    }),
-                ));
-                // Declare temp locals for array field deep copies
-                if let Some(array_field_infos) = self.get_struct_array_field_infos(type_id.index())
-                {
-                    for (field_idx, arr_type_idx) in array_field_infos {
-                        let arr_wasm_idx = self.resolve_type_index(arr_type_idx);
-                        let arr_ref = RefType {
-                            nullable: false,
-                            heap_type: HeapType::Concrete(arr_wasm_idx),
-                        };
-                        let src_name = format!("__copy_arr_src_{}_{}", type_id.index(), field_idx);
-                        let dst_name = format!("__copy_arr_dst_{}_{}", type_id.index(), field_idx);
-                        let len_name = format!("__copy_arr_len_{}_{}", type_id.index(), field_idx);
-                        let loop_idx_name =
-                            format!("__copy_arr_i_{}_{}", type_id.index(), field_idx);
-                        locals.push((src_name, ValType::Ref(arr_ref)));
-                        locals.push((dst_name, ValType::Ref(arr_ref)));
-                        locals.push((len_name, ValType::I32));
-                        locals.push((loop_idx_name, ValType::I32));
-                    }
-                }
             }
             // For all other instructions, walk children generically
             other => {
@@ -2124,6 +2103,63 @@ impl<'a> WirEmitter<'a> {
                 let wasm_idx = self.resolve_type_index(type_id.index());
                 f.instruction(&Instruction::ArrayFill(wasm_idx));
             }
+            WirInstr::ArrayClone { type_id, src } => {
+                // Allocate a fresh array the same length as `src` and copy
+                // every element with a JIT-compiled loop. This was the
+                // per-array-field code path inside the former
+                // `emit_value_copy` for raw `builtin::array<T>` fields and is
+                // now reachable only via the synthesized `$value_copy$`
+                // helpers' explicit `builtin::array_clone::<T>(...)` calls.
+                let arr_wasm_idx = self.resolve_type_index(type_id.index());
+                let src_name = format!("__copy_arr_src_{}", type_id.index());
+                let dst_name = format!("__copy_arr_dst_{}", type_id.index());
+                let len_name = format!("__copy_arr_len_{}", type_id.index());
+                let loop_idx_name = format!("__copy_arr_i_{}", type_id.index());
+                let src_local = self.resolve_local(&src_name);
+                let dst_local = self.resolve_local(&dst_name);
+                let len_local = self.resolve_local(&len_name);
+                let loop_idx_local = self.resolve_local(&loop_idx_name);
+                self.emit_instr(f, src);
+                f.instruction(&Instruction::LocalSet(src_local));
+                f.instruction(&Instruction::LocalGet(src_local));
+                f.instruction(&Instruction::ArrayLen);
+                f.instruction(&Instruction::LocalSet(len_local));
+                f.instruction(&Instruction::LocalGet(len_local));
+                f.instruction(&Instruction::ArrayNewDefault(arr_wasm_idx));
+                f.instruction(&Instruction::LocalSet(dst_local));
+                f.instruction(&Instruction::I32Const(0));
+                f.instruction(&Instruction::LocalSet(loop_idx_local));
+                f.instruction(&Instruction::Block(BlockType::Empty));
+                f.instruction(&Instruction::Loop(BlockType::Empty));
+                f.instruction(&Instruction::LocalGet(loop_idx_local));
+                f.instruction(&Instruction::LocalGet(len_local));
+                f.instruction(&Instruction::I32GeS);
+                f.instruction(&Instruction::BrIf(1));
+                f.instruction(&Instruction::LocalGet(dst_local));
+                f.instruction(&Instruction::LocalGet(loop_idx_local));
+                f.instruction(&Instruction::LocalGet(src_local));
+                f.instruction(&Instruction::LocalGet(loop_idx_local));
+                match self.is_array_packed(type_id.index()) {
+                    Some(true) => {
+                        f.instruction(&Instruction::ArrayGetS(arr_wasm_idx));
+                    }
+                    Some(false) => {
+                        f.instruction(&Instruction::ArrayGetU(arr_wasm_idx));
+                    }
+                    None => {
+                        f.instruction(&Instruction::ArrayGet(arr_wasm_idx));
+                    }
+                }
+                f.instruction(&Instruction::ArraySet(arr_wasm_idx));
+                f.instruction(&Instruction::LocalGet(loop_idx_local));
+                f.instruction(&Instruction::I32Const(1));
+                f.instruction(&Instruction::I32Add);
+                f.instruction(&Instruction::LocalSet(loop_idx_local));
+                f.instruction(&Instruction::Br(0));
+                f.instruction(&Instruction::End);
+                f.instruction(&Instruction::End);
+                f.instruction(&Instruction::LocalGet(dst_local));
+            }
 
             // GC: Reference (casts, i31, extern)
             WirInstr::RefCast {
@@ -2228,16 +2264,6 @@ impl<'a> WirEmitter<'a> {
                 }
             }
 
-            // Value copy — struct shallow copy (field-by-field)
-            WirInstr::ValueCopy {
-                type_id,
-                source_type,
-                expr,
-                nullable,
-            } => {
-                self.emit_value_copy(f, type_id, source_type, expr, *nullable);
-            }
-
             // Everything else - emit unreachable for unimplemented instructions
             other => {
                 eprintln!("[WIR-EMIT] unhandled instruction: {other:?}");
@@ -2307,228 +2333,6 @@ impl<'a> WirEmitter<'a> {
         f.instruction(&op);
     }
 
-    /// Emit a value copy instruction (struct shallow copy).
-    fn emit_value_copy(
-        &mut self,
-        f: &mut Function,
-        type_id: &WirTypeId,
-        source_type: &WirCopyType,
-        expr: &WirInstr,
-        nullable: bool,
-    ) {
-        match source_type {
-            WirCopyType::Struct { fields } => {
-                let wasm_type_idx = self.resolve_type_index(type_id.index());
-                // Collect array field info for deep copy
-                let array_fields = self.get_struct_array_field_infos(type_id.index());
-                // Emit source expression
-                self.emit_instr(f, expr);
-                // The temp local is always declared as nullable (ref null $type) to avoid
-                // conflicts when the same type appears with both nullable and non-nullable
-                // ValueCopy nodes in the same function. ref.as_non_null is emitted inline
-                // before each struct.get call.
-                let temp_name = format!("__copy_source_{}", type_id.index());
-                let temp_idx = self.resolve_local(&temp_name);
-                // Store source to temp
-                f.instruction(&Instruction::LocalSet(temp_idx));
-                let heap = HeapType::Concrete(wasm_type_idx);
-                // Null guard: if source may be null, wrap in if/else.
-                // When nullable=false, the source is guaranteed non-null — skip the guard.
-                if nullable {
-                    let val_type = ValType::Ref(RefType {
-                        nullable: true,
-                        heap_type: heap,
-                    });
-                    f.instruction(&Instruction::LocalGet(temp_idx));
-                    f.instruction(&Instruction::RefIsNull);
-                    f.instruction(&Instruction::If(BlockType::Result(val_type)));
-                    f.instruction(&Instruction::RefNull(heap));
-                    f.instruction(&Instruction::Else);
-                }
-                // For each field: load temp (nullable), cast to non-null inline, get field
-                for field in fields {
-                    // Check if this field needs array deep copy
-                    let arr_info = array_fields
-                        .as_ref()
-                        .and_then(|infos| infos.iter().find(|(fi, _)| *fi == field.index));
-                    if let Some(&(_, arr_wir_idx)) = arr_info {
-                        // Deep copy: create new array, copy elements
-                        let arr_wasm_idx = self.resolve_type_index(arr_wir_idx);
-                        let src_name =
-                            format!("__copy_arr_src_{}_{}", type_id.index(), field.index);
-                        let dst_name =
-                            format!("__copy_arr_dst_{}_{}", type_id.index(), field.index);
-                        let len_name =
-                            format!("__copy_arr_len_{}_{}", type_id.index(), field.index);
-                        let src_local = self.resolve_local(&src_name);
-                        let dst_local = self.resolve_local(&dst_name);
-                        let len_local = self.resolve_local(&len_name);
-                        // Get source array from struct field
-                        f.instruction(&Instruction::LocalGet(temp_idx));
-                        f.instruction(&Instruction::RefAsNonNull);
-                        f.instruction(&Instruction::StructGet {
-                            struct_type_index: wasm_type_idx,
-                            field_index: field.index,
-                        });
-                        f.instruction(&Instruction::LocalSet(src_local));
-                        // Get length
-                        f.instruction(&Instruction::LocalGet(src_local));
-                        f.instruction(&Instruction::ArrayLen);
-                        f.instruction(&Instruction::LocalSet(len_local));
-                        // Create new array with same length (default filled)
-                        f.instruction(&Instruction::LocalGet(len_local));
-                        f.instruction(&Instruction::ArrayNewDefault(arr_wasm_idx));
-                        f.instruction(&Instruction::LocalSet(dst_local));
-                        // Copy elements using a JIT-compiled loop instead of array.copy.
-                        // Wasm array.copy is implemented as a slow libcall in wasmtime
-                        // (~3μs/element), while a JIT-compiled loop runs at ~1ns/element.
-                        let loop_idx_name =
-                            format!("__copy_arr_i_{}_{}", type_id.index(), field.index);
-                        let loop_idx_local = self.resolve_local(&loop_idx_name);
-                        // i = 0
-                        f.instruction(&Instruction::I32Const(0));
-                        f.instruction(&Instruction::LocalSet(loop_idx_local));
-                        // block { loop {
-                        f.instruction(&Instruction::Block(BlockType::Empty));
-                        f.instruction(&Instruction::Loop(BlockType::Empty));
-                        // if i >= len: break
-                        f.instruction(&Instruction::LocalGet(loop_idx_local));
-                        f.instruction(&Instruction::LocalGet(len_local));
-                        f.instruction(&Instruction::I32GeS);
-                        f.instruction(&Instruction::BrIf(1)); // break out of block
-                        // dst[i] = src[i]
-                        f.instruction(&Instruction::LocalGet(dst_local));
-                        f.instruction(&Instruction::LocalGet(loop_idx_local));
-                        f.instruction(&Instruction::LocalGet(src_local));
-                        f.instruction(&Instruction::LocalGet(loop_idx_local));
-                        match self.is_array_packed(arr_wir_idx) {
-                            Some(true) => {
-                                f.instruction(&Instruction::ArrayGetS(arr_wasm_idx));
-                            }
-                            Some(false) => {
-                                f.instruction(&Instruction::ArrayGetU(arr_wasm_idx));
-                            }
-                            None => {
-                                f.instruction(&Instruction::ArrayGet(arr_wasm_idx));
-                            }
-                        }
-                        f.instruction(&Instruction::ArraySet(arr_wasm_idx));
-                        // i += 1
-                        f.instruction(&Instruction::LocalGet(loop_idx_local));
-                        f.instruction(&Instruction::I32Const(1));
-                        f.instruction(&Instruction::I32Add);
-                        f.instruction(&Instruction::LocalSet(loop_idx_local));
-                        // continue loop
-                        f.instruction(&Instruction::Br(0));
-                        // } }
-                        f.instruction(&Instruction::End); // end loop
-                        f.instruction(&Instruction::End); // end block
-                        // Push the new array on stack (for struct.new)
-                        f.instruction(&Instruction::LocalGet(dst_local));
-                    } else {
-                        f.instruction(&Instruction::LocalGet(temp_idx));
-                        f.instruction(&Instruction::RefAsNonNull);
-                        match self.is_field_packed_by_index(type_id.index(), field.index) {
-                            Some(true) => {
-                                f.instruction(&Instruction::StructGetS {
-                                    struct_type_index: wasm_type_idx,
-                                    field_index: field.index,
-                                });
-                            }
-                            Some(false) => {
-                                f.instruction(&Instruction::StructGetU {
-                                    struct_type_index: wasm_type_idx,
-                                    field_index: field.index,
-                                });
-                            }
-                            None => {
-                                f.instruction(&Instruction::StructGet {
-                                    struct_type_index: wasm_type_idx,
-                                    field_index: field.index,
-                                });
-                            }
-                        }
-                    }
-                }
-                // Create new struct with all field values
-                f.instruction(&Instruction::StructNew(wasm_type_idx));
-                if nullable {
-                    f.instruction(&Instruction::End); // end of if-else null guard
-                }
-            }
-            WirCopyType::Array { element_copy: _ } => {
-                // Array copy: pass through for now (shallow ref copy)
-                self.emit_instr(f, expr);
-            }
-            WirCopyType::Tuple { field_copies: _ } => {
-                // Tuple copy: same as struct copy (tuples are anonymous structs)
-                let wasm_type_idx = self.resolve_type_index(type_id.index());
-                self.emit_instr(f, expr);
-                let temp_name = format!("__copy_source_{}", type_id.index());
-                let temp_idx = self.resolve_local(&temp_name);
-                f.instruction(&Instruction::LocalSet(temp_idx));
-                let field_count = self.get_struct_field_count(type_id);
-                for i in 0..field_count {
-                    f.instruction(&Instruction::LocalGet(temp_idx));
-                    f.instruction(&Instruction::StructGet {
-                        struct_type_index: wasm_type_idx,
-                        field_index: i,
-                    });
-                }
-                f.instruction(&Instruction::StructNew(wasm_type_idx));
-            }
-            WirCopyType::Variant { .. } | WirCopyType::Option { .. } => {
-                // Variant and option copies are complex; pass through for now
-                self.emit_instr(f, expr);
-            }
-        }
-    }
-
-    /// Get struct fields that reference raw array types.
-    /// Returns Vec of (`field_index`, `array_wir_type_index`) for fields whose type
-    /// is a ref to a `WirTypeDef::Array`.
-    fn get_struct_array_field_infos(&self, struct_wir_idx: u32) -> Option<Vec<(u32, u32)>> {
-        let idx = struct_wir_idx as usize;
-        if idx >= self.wir.types.len() {
-            return None;
-        }
-        let WirTypeDef::Struct(ref st) = self.wir.types[idx] else {
-            return None;
-        };
-        let mut result = Vec::new();
-        for (i, field) in st.fields.iter().enumerate() {
-            if let WirType::Ref {
-                type_id: ref tid, ..
-            } = field.ty
-            {
-                let arr_idx = tid.index() as usize;
-                if arr_idx < self.wir.types.len()
-                    && matches!(self.wir.types[arr_idx], WirTypeDef::Array(_))
-                {
-                    result.push((u32::try_from(i).unwrap(), tid.index()));
-                }
-            }
-        }
-        if result.is_empty() {
-            None
-        } else {
-            Some(result)
-        }
-    }
-
-    /// Get the number of fields in a WIR struct type.
-    fn get_struct_field_count(&self, type_id: &WirTypeId) -> u32 {
-        let idx = type_id.index() as usize;
-        if idx < self.wir.types.len() {
-            match &self.wir.types[idx] {
-                WirTypeDef::Struct(s) => u32::try_from(s.fields.len()).unwrap(),
-                _ => 0,
-            }
-        } else {
-            0
-        }
-    }
-
     fn emit_const_expr(&self, instr: &WirInstr) -> ConstExpr {
         match instr {
             WirInstr::I32Const(v) => ConstExpr::i32_const(*v),
@@ -2587,22 +2391,6 @@ impl<'a> WirEmitter<'a> {
             && let WirTypeDef::Array(ref arr) = self.wir.types[idx]
         {
             return match &arr.element_type {
-                WirType::I8 | WirType::I16 => Some(true),
-                WirType::U8 | WirType::U16 | WirType::Bool => Some(false),
-                _ => None,
-            };
-        }
-        None
-    }
-
-    /// Check if a struct field (by index) has packed storage.
-    fn is_field_packed_by_index(&self, wir_type_idx: u32, field_index: u32) -> Option<bool> {
-        let idx = wir_type_idx as usize;
-        if idx < self.wir.types.len()
-            && let WirTypeDef::Struct(ref st) = self.wir.types[idx]
-            && let Some(field) = st.fields.get(field_index as usize)
-        {
-            return match &field.ty {
                 WirType::I8 | WirType::I16 => Some(true),
                 WirType::U8 | WirType::U16 | WirType::Bool => Some(false),
                 _ => None,

@@ -324,6 +324,21 @@ impl FunctionTranslator<'_, '_> {
                     None
                 }
             }
+            "builtin::array_clone" => {
+                let src_expr = &args[0].expr;
+                let src = self.translate_expr(src_expr);
+                let wir_type = self
+                    .ctx
+                    .type_id_to_wir_type(self.type_table, src_expr.type_id);
+                if let WirType::Ref { type_id, .. } = wir_type {
+                    Some(WirInstr::ArrayClone {
+                        type_id,
+                        src: Box::new(src),
+                    })
+                } else {
+                    None
+                }
+            }
             "builtin::array_fill" => {
                 let arr = self.translate_expr(&args[0].expr);
                 let offset = self.translate_expr(&args[1].expr);
@@ -1792,8 +1807,7 @@ impl FunctionTranslator<'_, '_> {
 
         let mut call_args = vec![env_arg];
         for arg in args {
-            let translated = self.translate_expr(arg);
-            call_args.push(self.maybe_value_copy(arg, translated));
+            call_args.push(self.translate_expr(arg));
         }
 
         // func_ref = struct.get $closure "func"

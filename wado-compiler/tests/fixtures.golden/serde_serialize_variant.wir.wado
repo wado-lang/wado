@@ -166,17 +166,19 @@ type "functype//core:prelude/fpfmt.wado/trim_zeros" = fn(u64, i32) -> [u64, i32]
 
 type "functype//core:prelude/fpfmt.wado/check_special" = fn(f64) -> [bool, bool, i32];  // TypeId(62)
 
-type "functype//core:prelude/primitive.wado/f64::fmt_into" = fn(f64, ref "core:prelude/format.wado//Formatter");  // TypeId(63)
+type "functype//wado-compiler/tests/fixtures/serde_serialize_variant.wado/$value_copy$T40" = fn(ref "wado-compiler/tests/fixtures/serde_serialize_variant.wado//JsonSerializer") -> ref "wado-compiler/tests/fixtures/serde_serialize_variant.wado//JsonVariantSerializer";  // TypeId(63)
 
-type "functype//core:prelude/primitive.wado/f64::fmt_fixed" = fn(f64, i32, ref "core:prelude/format.wado//Formatter");  // TypeId(64)
+type "functype//core:prelude/primitive.wado/f64::fmt_into" = fn(f64, ref "core:prelude/format.wado//Formatter");  // TypeId(64)
 
-type "functype//wado-compiler/tests/fixtures/serde_serialize_variant.wado/JsonSerializer^Serializer::serialize_f64" = fn(ref "core:prelude/string.wado//String", f64) -> ref null "wado-compiler/tests/fixtures/serde_serialize_variant.wado//SerializeError";  // TypeId(65)
+type "functype//core:prelude/primitive.wado/f64::fmt_fixed" = fn(f64, i32, ref "core:prelude/format.wado//Formatter");  // TypeId(65)
 
-type "functype//wado-compiler/tests/fixtures/serde_serialize_variant.wado/Shape^Serialize::serialize<JsonSerializer>" = fn(ref "wado-compiler/tests/fixtures/serde_serialize_variant.wado//Shape", ref "wado-compiler/tests/fixtures/serde_serialize_variant.wado//JsonSerializer") -> ref null "wado-compiler/tests/fixtures/serde_serialize_variant.wado//SerializeError";  // TypeId(66)
+type "functype//wado-compiler/tests/fixtures/serde_serialize_variant.wado/JsonSerializer^Serializer::serialize_f64" = fn(ref "core:prelude/string.wado//String", f64) -> ref null "wado-compiler/tests/fixtures/serde_serialize_variant.wado//SerializeError";  // TypeId(66)
 
-type "functype//wado-compiler/tests/fixtures/serde_serialize_variant.wado/JsonSerializer^Serializer::serialize_unit_variant" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref null "wado-compiler/tests/fixtures/serde_serialize_variant.wado//SerializeError";  // TypeId(67)
+type "functype//wado-compiler/tests/fixtures/serde_serialize_variant.wado/Shape^Serialize::serialize<JsonSerializer>" = fn(ref "wado-compiler/tests/fixtures/serde_serialize_variant.wado//Shape", ref "wado-compiler/tests/fixtures/serde_serialize_variant.wado//JsonSerializer") -> ref null "wado-compiler/tests/fixtures/serde_serialize_variant.wado//SerializeError";  // TypeId(67)
 
-type "functype//wado-compiler/tests/fixtures/serde_serialize_variant.wado/JsonSerializer^Serializer::begin_variant" = fn(ref "wado-compiler/tests/fixtures/serde_serialize_variant.wado//JsonSerializer", ref "core:prelude/string.wado//String") -> ref "core:prelude/types.wado//Result<JsonVariantSerializer,SerializeError>";  // TypeId(68)
+type "functype//wado-compiler/tests/fixtures/serde_serialize_variant.wado/JsonSerializer^Serializer::serialize_unit_variant" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref null "wado-compiler/tests/fixtures/serde_serialize_variant.wado//SerializeError";  // TypeId(68)
+
+type "functype//wado-compiler/tests/fixtures/serde_serialize_variant.wado/JsonSerializer^Serializer::begin_variant" = fn(ref "wado-compiler/tests/fixtures/serde_serialize_variant.wado//JsonSerializer", ref "core:prelude/string.wado//String") -> ref "core:prelude/types.wado//Result<JsonVariantSerializer,SerializeError>";  // TypeId(69)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -239,6 +241,10 @@ fn "wado-compiler/tests/fixtures/serde_serialize_variant.wado/__initialize_modul
         break __seq_lit: __local_0;
         unreachable;
     };
+}
+
+fn "wado-compiler/tests/fixtures/serde_serialize_variant.wado/$value_copy$T40"(v) {
+    return struct.new "wado-compiler/tests/fixtures/serde_serialize_variant.wado//JsonVariantSerializer" { ser: v };
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {
@@ -1621,7 +1627,7 @@ fn "wado-compiler/tests/fixtures/serde_serialize_variant.wado/Shape^Serialize::s
         __local_2 = struct.new "core:prelude/types.wado//Box<f64>" { value: __cast_1.payload_0 };
         __local_3 = "wado-compiler/tests/fixtures/serde_serialize_variant.wado/JsonSerializer^Serializer::begin_variant"(s, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Circle"), used: 6 });
         if ref.test "core:prelude/types.wado//Result<JsonVariantSerializer,SerializeError>::Ok"(__local_3) {
-            __local_4 = value_copy "wado-compiler/tests/fixtures/serde_serialize_variant.wado//JsonVariantSerializer"(ref.cast "core:prelude/types.wado//Result<JsonVariantSerializer,SerializeError>::Ok"(__local_3).payload_0);
+            __local_4 = "wado-compiler/tests/fixtures/serde_serialize_variant.wado/$value_copy$T40"(ref.cast "core:prelude/types.wado//Result<JsonVariantSerializer,SerializeError>::Ok"(__local_3).payload_0.ser);
             drop(__inline_f64_Serialize__serialize_JsonSerializer__1: block -> ref null "wado-compiler/tests/fixtures/serde_serialize_variant.wado//SerializeError" {
                 __local_9 = __local_4.ser;
                 break __inline_f64_Serialize__serialize_JsonSerializer__1: "wado-compiler/tests/fixtures/serde_serialize_variant.wado/JsonSerializer^Serializer::serialize_f64"(__local_9.buf, __local_2.value);

@@ -588,24 +588,6 @@ fn resolve_value_binding(
             };
         }
     }
-    // If the argument is a ValueCopy wrapping a LocalGet, resolve the inner LocalGet.
-    // This handles the case where call-site value copying wraps an element that was
-    // bound by a preceding LocalSet in the push sequence.
-    if let WirInstr::ValueCopy {
-        type_id,
-        source_type,
-        expr,
-        nullable,
-    } = instr
-    {
-        let resolved_inner = resolve_value_binding(expr, value_bindings, aliases);
-        return WirInstr::ValueCopy {
-            type_id: type_id.clone(),
-            source_type: source_type.clone(),
-            expr: Box::new(resolved_inner),
-            nullable: *nullable,
-        };
-    }
     instr.clone()
 }
 
