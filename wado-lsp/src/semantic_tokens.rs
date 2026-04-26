@@ -461,6 +461,13 @@ fn visit_expr(spans: &mut TypeSpans, expr: &Expr) {
             visit_expr(spans, &r.start);
             visit_expr(spans, &r.end);
         }
+        Expr::WithHandler(w) => {
+            for binding in &w.handlers {
+                visit_expr(spans, &binding.handler);
+            }
+            visit_block(spans, &w.body);
+        }
+        Expr::Resume(r) => visit_expr(spans, &r.value),
     }
 }
 

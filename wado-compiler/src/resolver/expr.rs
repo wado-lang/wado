@@ -115,6 +115,23 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
             Expr::TryOp(qm) => self.resolve_question_mark(qm, ctx),
             Expr::Range(range) => self.resolve_range(range, ctx),
+            Expr::WithHandler(w) => {
+                // Phase 1: front-end only. Effect handler installation is
+                // parsed and walked, but semantic resolution / codegen come
+                // in later phases (see docs/wep-2026-04-11-effect-handler.md).
+                let _ = self.logger.error(TypeError::NotYetImplemented {
+                    feature: "effect handler installation `with E = h do { ... }`".to_string(),
+                    span: w.span,
+                });
+                TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, w.span)
+            }
+            Expr::Resume(r) => {
+                let _ = self.logger.error(TypeError::NotYetImplemented {
+                    feature: "`resume` expression".to_string(),
+                    span: r.span,
+                });
+                TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, r.span)
+            }
         }
     }
 

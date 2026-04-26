@@ -52,7 +52,10 @@ pub enum TokenKind {
     Const,
     Matches,
     Stores,
-    // Note: "test" is handled as a contextual keyword in the parser, not as a TokenKind
+    // Note: "test", "do", "resume" are contextual keywords handled by the parser,
+    // not as TokenKinds. `do` is only treated as a keyword inside the trailing
+    // position of a `with ... do { ... }` clause; `resume` is only treated as a
+    // keyword in expression position inside an effect handler method body.
 
     // Literals
     Ident(String),
@@ -189,7 +192,7 @@ impl TokenKind {
             Self::Const => Some("const"),
             Self::Matches => Some("matches"),
             Self::Stores => Some("stores"),
-            // Note: "test" is a contextual keyword, not listed here
+            // Note: "test", "do", "resume" are contextual keywords, not listed here
             Self::True => Some("true"),
             Self::False => Some("false"),
             Self::Null => Some("null"),

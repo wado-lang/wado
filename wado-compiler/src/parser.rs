@@ -2917,6 +2917,12 @@ impl Parser {
 
         // Handle identifiers and contextual keywords (flags, type)
         if let Some(name) = self.peek_kind().as_ident_name() {
+            // Contextual keyword `resume` in expression position. Only matched
+            // here; outside of expressions (e.g. `let resume = ...`), `resume`
+            // remains an ordinary identifier.
+            if name == "resume" {
+                return self.parse_resume_expr();
+            }
             let name = name.to_string();
             self.advance();
             // Check for qualified name (Effect::function) or static method call
@@ -3213,6 +3219,7 @@ impl Parser {
             }
             TokenKind::If => self.parse_if_expr(),
             TokenKind::Match => self.parse_match_expr(),
+            TokenKind::With => self.parse_with_handler_expr(),
             TokenKind::Hash => {
                 self.advance(); // consume '#'
                 // Parse compile-time location literals: #file, #line, #function
@@ -3329,6 +3336,125 @@ impl Parser {
             condition,
             then_block,
             else_block,
+            span,
+        })))
+    }
+
+    /// Parse an effect handler installation expression:
+    /// `with E1 = h1, E2 = h2 do { body }` or `with &mut h do { body }` (bundled).
+    ///
+    /// Each binding is one of:
+    /// - `EffectName = expr` — install `expr` as the handler for `EffectName`.
+    /// - `expr` (no `=`) — bundled handler, used for every effect `expr` implements.
+    ///
+    /// See `docs/wep-2026-04-11-effect-handler.md`.
+    fn parse_with_handler_expr(&mut self) -> ParseResult<Expr> {
+        let start_span = self.peek().span;
+        self.expect(&TokenKind::With)?;
+        let id = self.alloc_ast_id();
+
+        let mut handlers = Vec::new();
+        loop {
+            handlers.push(self.parse_effect_handler_binding()?);
+            if !self.check(&TokenKind::Comma) {
+                break;
+            }
+            self.advance(); // consume `,`
+        }
+
+        // `do` is a contextual keyword: lex returns it as an Ident.
+        let is_do = matches!(
+            self.peek_kind(),
+            TokenKind::Ident(name) if name == "do"
+        );
+        if !is_do {
+            return Err(self.error_at_span(
+                self.peek().span,
+                &format!(
+                    "expected `do` after handler bindings, found {:?}",
+                    self.peek_kind()
+                ),
+            ));
+        }
+        self.advance();
+
+        let body = self.parse_block()?;
+        let span = start_span.merge(&body.span);
+
+        Ok(Expr::WithHandler(Box::new(crate::ast::WithHandlerExpr {
+            id,
+            handlers,
+            body,
+            span,
+        })))
+    }
+
+    /// Parse one binding inside a `with ... do` clause. Two shapes:
+    /// - `Effect = handler_expr` — explicit effect on the LHS. The effect is
+    ///   any type expression, so `Stdout = ...` and `Stream<u8> = ...` both
+    ///   parse here. Later compiler phases decide which forms they support.
+    /// - `handler_expr` (no `=`) — bundled handler.
+    fn parse_effect_handler_binding(&mut self) -> ParseResult<crate::ast::EffectHandlerBinding> {
+        let id = self.alloc_ast_id();
+        let start_span = self.peek().span;
+
+        // Speculatively try the explicit form. The LHS is a type, so we have
+        // to commit to type parsing only if a `=` follows; otherwise this is
+        // a bundled handler whose expression starts with an identifier.
+        if matches!(self.peek_kind(), TokenKind::Ident(_)) {
+            let checkpoint = self.pos;
+            let saved_pending_gt = self.pending_gt;
+            if let Ok(ty) = self.parse_type() {
+                if self.check(&TokenKind::Eq) {
+                    self.advance(); // consume `=`
+                    // Handler expressions are parsed as unary expressions so
+                    // we don't greedily consume the trailing `,` or `do`.
+                    // Trade-off: cast / `if` / `match` expressions can't sit
+                    // directly in handler position; wrap them in `()`.
+                    let handler = self.parse_unary_expr()?;
+                    let span = start_span.merge(&handler.span());
+                    return Ok(crate::ast::EffectHandlerBinding {
+                        id,
+                        effect: Some(ty),
+                        handler,
+                        span,
+                    });
+                }
+                // Looked like a type but no `=` followed — fall back to
+                // bundled-handler parsing of the whole expression.
+                self.pos = checkpoint;
+                self.pending_gt = saved_pending_gt;
+            } else {
+                // parse_type rejected the prefix; treat as a bundled handler.
+                self.pos = checkpoint;
+                self.pending_gt = saved_pending_gt;
+            }
+        }
+
+        // Bundled handler form: `with &mut value do { ... }`
+        let handler = self.parse_unary_expr()?;
+        let span = start_span.merge(&handler.span());
+        Ok(crate::ast::EffectHandlerBinding {
+            id,
+            effect: None,
+            handler,
+            span,
+        })
+    }
+
+    /// Parse a `resume value` expression. Valid only inside an effect handler
+    /// method body; the resolver (later phase) is responsible for that check.
+    /// `resume` is a contextual keyword: the lexer hands it to us as an Ident,
+    /// so we consume it by name rather than via a dedicated `TokenKind`.
+    fn parse_resume_expr(&mut self) -> ParseResult<Expr> {
+        let start_span = self.peek().span;
+        self.advance(); // consume `resume` ident
+        let id = self.alloc_ast_id();
+        let value = self.parse_expr()?;
+        let span = start_span.merge(&value.span());
+        Ok(Expr::Resume(Box::new(crate::ast::ResumeExpr {
+            id,
+            value,
             span,
         })))
     }
@@ -4251,6 +4377,7 @@ impl Parser {
                 constants: Vec::new(),
                 methods: Vec::new(),
                 is_synthesize_request: true,
+                has_rest: false,
                 span: start_span.merge(&end_span),
             });
         }
@@ -4260,7 +4387,26 @@ impl Parser {
         let mut associated_types = Vec::new();
         let mut constants = Vec::new();
         let mut methods = Vec::new();
+        let mut has_rest = false;
         while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
+            // Effect-handler rest pattern: `..` denotes "trap on any unimplemented
+            // operation of this effect". Must appear last in the impl block; an
+            // explicit semicolon after `..` is optional.
+            if self.check_dot_dot_or_ellipsis() {
+                let dot_span = self.consume_dot_dot()?;
+                if self.check(&TokenKind::Semicolon) {
+                    self.advance();
+                }
+                if !self.check(&TokenKind::RBrace) {
+                    return Err(self.error_at_span(
+                        dot_span,
+                        "`..` rest pattern must be the last item in the impl block",
+                    ));
+                }
+                has_rest = true;
+                break;
+            }
+
             let attrs = self.parse_attributes()?;
 
             // Check if this is an associated type binding: `type Name = Type;`
@@ -4321,6 +4467,7 @@ impl Parser {
             constants,
             methods,
             is_synthesize_request: false,
+            has_rest,
             span: start_span.merge(&end_span),
         })
     }
@@ -6010,6 +6157,122 @@ line 2
             panic!("expected let stmt");
         };
         assert_eq!(slice(source, &let_stmt.name_span), "foo");
+    }
+
+    fn binding_effect_name(b: &crate::ast::EffectHandlerBinding) -> Option<&str> {
+        match b.effect.as_ref()? {
+            Type::Named(t) => Some(t.name.as_str()),
+            Type::Generic(t) => Some(t.name.as_str()),
+            _ => None,
+        }
+    }
+
+    #[test]
+    fn parse_with_handler_explicit_effect() {
+        let expr = parse_expr_from("with Stdout = &mut mock do { println(\"hi\"); }");
+        let Expr::WithHandler(w) = expr else {
+            panic!("expected WithHandler, got {expr:?}");
+        };
+        assert_eq!(w.handlers.len(), 1);
+        let binding = &w.handlers[0];
+        assert_eq!(binding_effect_name(binding), Some("Stdout"));
+        // Handler must be a `&mut <expr>` unary expression.
+        assert!(matches!(binding.handler, Expr::Unary(_)));
+        // Body has one statement.
+        assert_eq!(w.body.stmts.len(), 1);
+    }
+
+    #[test]
+    fn parse_with_handler_multiple_handlers() {
+        let expr = parse_expr_from("with Stdout = &mut s, Stderr = &mut e do { f(); }");
+        let Expr::WithHandler(w) = expr else {
+            panic!("expected WithHandler");
+        };
+        assert_eq!(w.handlers.len(), 2);
+        assert_eq!(binding_effect_name(&w.handlers[0]), Some("Stdout"));
+        assert_eq!(binding_effect_name(&w.handlers[1]), Some("Stderr"));
+    }
+
+    #[test]
+    fn parse_with_handler_generic_effect() {
+        // Generic effect names (`Stream<u8>`) must parse cleanly; later
+        // compiler phases decide whether to support them.
+        let expr = parse_expr_from("with Stream<u8> = &mut cm do { f(); }");
+        let Expr::WithHandler(w) = expr else {
+            panic!("expected WithHandler");
+        };
+        assert_eq!(w.handlers.len(), 1);
+        let Some(Type::Generic(generic)) = w.handlers[0].effect.as_ref() else {
+            panic!("expected generic effect type");
+        };
+        assert_eq!(generic.name, "Stream");
+        assert_eq!(generic.args.len(), 1);
+    }
+
+    #[test]
+    fn parse_with_handler_bundled() {
+        let expr = parse_expr_from("with &mut bundle do { run(); }");
+        let Expr::WithHandler(w) = expr else {
+            panic!("expected WithHandler");
+        };
+        assert_eq!(w.handlers.len(), 1);
+        assert!(w.handlers[0].effect.is_none());
+    }
+
+    #[test]
+    fn parse_resume_expression() {
+        let expr = parse_expr_from("resume 42");
+        let Expr::Resume(r) = expr else {
+            panic!("expected Resume");
+        };
+        assert!(matches!(r.value, Expr::Literal(_)));
+    }
+
+    #[test]
+    fn parse_impl_block_rest_pattern() {
+        let source = r"
+            impl Foo for Bar {
+                fn op(&self) -> i32 { return 1; }
+                ..
+            }
+        ";
+        let module = parse(source).unwrap();
+        let Item::Impl(impl_block) = &module.items[0] else {
+            panic!("expected impl block");
+        };
+        assert!(impl_block.has_rest);
+        assert_eq!(impl_block.methods.len(), 1);
+    }
+
+    #[test]
+    fn parse_impl_block_no_rest() {
+        let source = r"
+            impl Foo for Bar {
+                fn op(&self) -> i32 { return 1; }
+            }
+        ";
+        let module = parse(source).unwrap();
+        let Item::Impl(impl_block) = &module.items[0] else {
+            panic!("expected impl block");
+        };
+        assert!(!impl_block.has_rest);
+    }
+
+    #[test]
+    fn parse_impl_block_rest_must_be_last() {
+        // `..` followed by another method is rejected.
+        let source = r"
+            impl Foo for Bar {
+                ..
+                fn op(&self) -> i32 { return 1; }
+            }
+        ";
+        let err = parse(source).unwrap_err();
+        assert!(
+            err.message.contains("must be the last item"),
+            "unexpected error message: {}",
+            err.message
+        );
     }
 
     #[test]

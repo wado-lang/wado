@@ -2,6 +2,21 @@
 
 Status: Draft
 
+## Implementation Status
+
+- [x] Front-end (lexer / AST / parser / unparser): `with E = h do { ... }`,
+      `resume value`, and `..` rest in `impl Effect for Type` blocks.
+      Resolver currently emits a "not yet implemented" compile error for
+      `with`-do blocks and `resume` expressions; downstream phases (effect
+      checker, TIR/WIR lowering, Wasm dispatch codegen) are pending.
+- [ ] Resolver / effect-check: track installed handlers in scope and skip
+      handled effects when checking caller requirements.
+- [ ] TIR/WIR lowering: dispatch records, global save/restore, handler
+      method as funcref vtable.
+- [ ] Wasm GC codegen: per-effect global, `$Dispatch_<Effect>` GC struct,
+      one dispatch function per operation.
+- [ ] `MockCM` and handler bundling helpers in `core:test`.
+
 ## Context
 
 [WEP: Effect System Design](./wep-2026-01-27-effect-system-design.md) defines how Wado tracks side effects. This WEP defines how effect handlers provide implementations for effects, enabling dependency injection, testing, and middleware patterns.
@@ -578,6 +593,41 @@ test "timing middleware records elapsed time" {
 Handler nesting: inner `TimingMiddleware` intercepts `Handler::handle`, delegates to the outer `MockHandler` via effect forwarding, and records timing in post-resume.
 
 ## Implementation Notes
+
+### Front-End Grammar Notes
+
+#### `do` and `resume` are contextual keywords
+
+The lexer never emits dedicated `Do` or `Resume` token kinds; both
+words are returned as ordinary identifiers and the parser only treats
+them as keywords in unambiguous positions:
+
+- `do` is recognised in the trailing position of a `with ... do { ... }`
+  clause, immediately after the handler binding list.
+- `resume` is recognised only in expression position. In statement /
+  pattern positions (e.g. `let resume = ...;`) it remains an ordinary
+  identifier.
+
+This keeps both words available as variable names and avoids breaking
+generated Wado source (e.g. ANTLR4 driver output that uses `let do = …`
+for a TypeScript token of that name).
+
+#### Handler expressions are restricted to unary expressions
+
+Inside `with E1 = handler do { ... }`, the `handler` slot is parsed
+with `parse_unary_expr`, which covers references (`&h`, `&mut h`),
+prefix-`*` deref, `!`/`~`/`-`, identifiers, calls, method calls, and
+field/index access. It deliberately stops short of:
+
+- `as` casts
+- `if` / `match` / `matches` / `do` expressions
+- assignment / compound assignment
+
+This keeps the grammar unambiguous: stopping at unary level prevents the
+handler expression from greedily eating the trailing `,` or `do` token
+that closes the binding list. Cases that need the excluded forms must
+wrap the handler in parentheses, e.g.
+`with E = (h as &mut MockE) do { ... }`.
 
 ### Dispatch Mechanism: funcref vtable + Wasm Global
 

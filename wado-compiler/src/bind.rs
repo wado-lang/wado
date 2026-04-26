@@ -256,6 +256,13 @@ fn expr_references_var(expr: &Expr, name: &str) -> bool {
         Expr::CompoundAssign(ca) => {
             expr_references_var(&ca.target, name) || expr_references_var(&ca.value, name)
         }
+        Expr::WithHandler(w) => {
+            w.handlers
+                .iter()
+                .any(|b| expr_references_var(&b.handler, name))
+                || w.body.stmts.iter().any(|s| stmt_references_var(s, name))
+        }
+        Expr::Resume(r) => expr_references_var(&r.value, name),
 
         Expr::Literal(_) => false,
     }
@@ -957,6 +964,17 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
             Expr::Range(range) => {
                 self.bind_expr(&range.start)?;
                 self.bind_expr(&range.end)?;
+            }
+
+            Expr::WithHandler(with_handler) => {
+                for binding in &with_handler.handlers {
+                    self.bind_expr(&binding.handler)?;
+                }
+                self.bind_block(&with_handler.body)?;
+            }
+
+            Expr::Resume(resume_expr) => {
+                self.bind_expr(&resume_expr.value)?;
             }
 
             // Literals don't reference variables

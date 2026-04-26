@@ -886,6 +886,16 @@ impl<'a> Unparser<'a> {
             self.last_source_line = method.span.end_line();
         }
 
+        // Effect-handler rest pattern: `..` opts the impl in to trapping on
+        // any operation of the trait/effect that is not implemented above.
+        if i.has_rest {
+            if !i.methods.is_empty() {
+                self.output.push('\n');
+            }
+            self.write_indent();
+            self.output.push_str("..\n");
+        }
+
         self.last_source_line = saved_line.max(i.span.end_line());
         self.indent_level -= 1;
 
@@ -1662,7 +1672,28 @@ impl<'a> Unparser<'a> {
                 }
                 self.unparse_expr(&range.end);
             }
+            Expr::WithHandler(w) => self.unparse_with_handler(w),
+            Expr::Resume(r) => {
+                self.output.push_str("resume ");
+                self.unparse_expr(&r.value);
+            }
         }
+    }
+
+    fn unparse_with_handler(&mut self, w: &crate::ast::WithHandlerExpr) {
+        self.output.push_str("with ");
+        for (i, binding) in w.handlers.iter().enumerate() {
+            if i > 0 {
+                self.output.push_str(", ");
+            }
+            if let Some(effect) = &binding.effect {
+                self.unparse_type(effect);
+                self.output.push_str(" = ");
+            }
+            self.unparse_expr(&binding.handler);
+        }
+        self.output.push_str(" do ");
+        self.unparse_block_expr(&w.body);
     }
 
     fn unparse_matches(&mut self, m: &crate::ast::MatchesExpr) {
@@ -3224,6 +3255,25 @@ fn unparse_expr_into(expr: &Expr, output: &mut String, _parens_for_binary: bool)
                 crate::ast::RangeKind::Inclusive => output.push_str("..="),
             }
             unparse_expr_into(&range.end, output, false);
+        }
+        Expr::WithHandler(w) => {
+            output.push_str("with ");
+            for (i, binding) in w.handlers.iter().enumerate() {
+                if i > 0 {
+                    output.push_str(", ");
+                }
+                if let Some(effect) = &binding.effect {
+                    unparse_type_into(effect, output);
+                    output.push_str(" = ");
+                }
+                unparse_expr_into(&binding.handler, output, false);
+            }
+            output.push_str(" do ");
+            unparse_block_expr_into(&w.body, output);
+        }
+        Expr::Resume(r) => {
+            output.push_str("resume ");
+            unparse_expr_into(&r.value, output, false);
         }
     }
 }
