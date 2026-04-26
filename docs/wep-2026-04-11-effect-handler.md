@@ -6,16 +6,142 @@ Status: Draft
 
 - [x] Front-end (lexer / AST / parser / unparser): `with E = h do { ... }`,
       `resume value`, and `..` rest in `impl Effect for Type` blocks.
-      Resolver currently emits a "not yet implemented" compile error for
-      `with`-do blocks and `resume` expressions; downstream phases (effect
-      checker, TIR/WIR lowering, Wasm dispatch codegen) are pending.
-- [ ] Resolver / effect-check: track installed handlers in scope and skip
+- [x] Resolver / effect-check: track installed handlers in scope and skip
       handled effects when checking caller requirements.
+      `TirExprKind::WithHandler { bindings, body, result_type }` and
+      `TirExprKind::Resume { value }` carry the structure through TIR.
+      `TirHandlerBinding` records `(effect, handler, handler_type)` so
+      later phases can pick the correct `impl E for T` methods.
+      Resolver validates that each binding's effect points at a real
+      effect declaration, that the handler value's underlying type
+      implements that effect, and that `resume` only appears inside a
+      handler method body.
+      Effect-check augments `current_effects` with the handled effects
+      while walking the body so the body's calls do not propagate as
+      caller requirements.
+- [ ] User-defined effect operation calls (e.g. `Counter::next()`) need
+      resolver/synthesis to emit a callable target. Current behaviour
+      panics at WIR build with `unresolved Call: name="next"`. Phase 3
+      will route these (and existing `__cm_binding__*` calls for WASI
+      effects) through synthesized dispatch wrappers.
 - [ ] TIR/WIR lowering: dispatch records, global save/restore, handler
-      method as funcref vtable.
+      method as funcref vtable. See "Phase 3 implementation plan" below.
 - [ ] Wasm GC codegen: per-effect global, `$Dispatch_<Effect>` GC struct,
       one dispatch function per operation.
 - [ ] `MockCM` and handler bundling helpers in `core:test`.
+
+## Phase 3 implementation plan
+
+Phase 3 is the codegen layer that makes `WithHandler` / `Resume` actually
+run. Its scope:
+
+1. Per-effect Wasm GC struct `$Dispatch_<Effect>` with fields:
+   - `outer: ref null $Dispatch_<Effect>` — chains to the previous handler
+   - `handler: ref null struct` — type-erased handler value (the same
+     trick canonical closures use for `env`)
+   - One funcref field per operation: `op_<n>: ref $sig_<n>` where
+     `$sig_<n> = (ref null struct, op_args...) -> ret`
+2. Per-effect `(mut (ref null $Dispatch_<Effect>))` global, initialised
+   to `ref.null none`.
+3. One dispatch wrapper Wasm function per operation. Body:
+   ```
+   let d = global.get $__effect_<E>
+   if (ref.is_null d): return <fallback>(args)
+   let outer = struct.get d.$outer
+   global.set $__effect_<E> outer        ;; handler body sees outer scope
+   let result = call_ref struct.get(d, $op_n) (struct.get d.$handler, args)
+   global.set $__effect_<E> d            ;; restore
+   return result
+   ```
+   `<fallback>` is the existing `__cm_binding__<E>_<op>` adapter for
+   WASI effects, or `unreachable` for user-defined effects (well-typed
+   programs reach the wrapper only when a handler is installed,
+   enforced by effect-check).
+4. One handler wrapper Wasm function per `(impl_type, effect, op)`
+   triple. Body:
+   ```
+   let h = ref.cast<$T> handler_param
+   return $T_<op>(h, args)   ;; original method body, with `resume` lowered to `Return`
+   ```
+5. `WithHandler { bindings, body, result_type }` lowers to:
+   - For each binding: register the dispatch struct type + global +
+     dispatch wrappers (lazy) and the handler wrappers for the chosen
+     `impl E for T`.
+   - Emit (per binding):
+     ```
+     let __save_<E> = global.get $__effect_<E>
+     let __dispatch_<E> = struct.new $Dispatch_<E>(
+         __save_<E>,
+         h_as_anystruct,
+         ref.func $__handler_<T>__<E>__<op_1>,
+         ref.func $__handler_<T>__<E>__<op_2>,
+         ...
+     )
+     global.set $__effect_<E> __dispatch_<E>
+     ```
+   - Emit body.
+   - Emit (per binding, in reverse install order):
+     ```
+     global.set $__effect_<E> __save_<E>
+     ```
+   Early `return` from inside `body` is a known limitation in the MVP:
+   the global is not restored on early return. Diagnose at resolver
+   level (forbid `return` inside `do { ... }`) or wrap with a labeled
+   block + `try_finally` once exception handling lands.
+6. `Resume { value }` lowers to `Return { value: Some(value) }`. No
+   post-resume / Stack Switching support in the MVP (per WEP).
+7. Call site rewriting: every call to an effect operation routes
+   through the dispatch wrapper, not directly to the CM binding adapter
+   or a non-existent user function. For WASI, this means rewriting
+   calls to `__cm_binding__<E>_<op>` to call `__effect_dispatch__<E>__<op>`
+   instead. For user-defined effects, the resolver currently lands on
+   an unresolved `Call { name: "<op>" }` (see Implementation Status);
+   Phase 3 must update either the resolver to emit
+   `Call { name: "__effect_dispatch__<E>__<op>" }` or have the
+   synthesis pass detect and rewrite the unresolved-but-effect-named
+   calls.
+
+### Where the new code lives
+
+- `wado-compiler/src/synthesis/effect_dispatch.rs` (new): TIR-level
+  synthesis pass that runs after `cm_binding::generate_adapters` and
+  after `effect-check`/`stores-check` (so it sees `WithHandler`).
+  Generates the per-effect / per-impl wrappers, replaces `WithHandler`
+  with desugared blocks, replaces `Resume` with `TirStmtKind::Return`,
+  and rewrites call sites.
+- Pipeline order in `wado-compiler/src/lib.rs`: insert the new pass
+  between `check_stores` and `link::link`. Existing `synthesis::synthesize`
+  stays as-is; the new pass is invoked separately so `WithHandler`
+  survives effect-check.
+- `wir_build` / `codegen` need no new variants — the desugared TIR uses
+  `StructLiteral` / `GlobalVarGet` / `GlobalVarSet` / `IndirectCall` /
+  `Block` / `Return` that already round-trip cleanly through WIR build
+  and codegen.
+
+### Wasm/Wado typing notes
+
+- `ref null struct` (the type-erased handler) does not have a Wado
+  surface form. Phase 3 introduces a synthetic TIR struct
+  `__AnyHandler` (or reuses `()`) with no fields and stores
+  `Option<&__AnyHandler>` in the dispatch struct's `handler` slot. The
+  handler wrapper does `ref.cast` to the concrete `&T` before calling
+  the user method.
+- Operation funcrefs use Wado-level `fn(&__AnyHandler, args...) -> ret`
+  function types, which lower to canonical closure func types in WIR.
+
+### Test plan
+
+- `effect_handler_with_do.wado` (existing fixture): drop `#![TODO]`,
+  expect `mark: 12345` in stdout.
+- `effect_handler_resume.wado` (existing fixture): drop `#![TODO]`,
+  expect `1+2=3, final=2` in stdout.
+- New negative fixtures (already covered by Phase 2 diagnostics, just
+  verify they reject):
+  - `resume` outside a handler method body
+  - `with E = h do` where `h: T` does not `impl E for T`
+  - `with NotAnEffect = h do` (e.g. `with i32 = 0 do`)
+  - bundled handler form (`with &mut h do` without `Effect =`), pending
+    full implementation
 
 ## Context
 
