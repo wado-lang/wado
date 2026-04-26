@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777205173651,
+  "lastUpdate": 1777214494135,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -16689,6 +16689,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/4ad34f930ae0a4c2589e74cbc4c0fb8829d06642"
         },
         "date": 1777205173370,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8982,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19110,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 614203,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "22de1c5e6bd8f21e5691df5be537ac8a4ce36b7e",
+          "message": "Merge pull request #934 from wado-lang/claude/effect-handlers-phase-2-HuGXU\n\nfeat(effect-handler): Phase 2 + 3 MVP — `with E = h do` and `resume`",
+          "timestamp": "2026-04-26T23:36:42+09:00",
+          "tree_id": "1b08270fd1e7757f4d854d716d0c0671dca0afc7",
+          "url": "https://github.com/wado-lang/wado/commit/22de1c5e6bd8f21e5691df5be537ac8a4ce36b7e"
+        },
+        "date": 1777214493843,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
