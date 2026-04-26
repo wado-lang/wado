@@ -743,7 +743,7 @@ fn render_md_doc(out: &mut String, doc: &str) {
     }
 }
 
-/// CommonMark fenced code block delimiter — three or more `` ` `` or `~`.
+/// `CommonMark` fenced code block delimiter — three or more `` ` `` or `~`.
 #[derive(Clone, Copy)]
 struct FenceMarker {
     /// Fence character (`` ` `` or `~`).
