@@ -886,6 +886,16 @@ impl<'a> Unparser<'a> {
             self.last_source_line = method.span.end_line();
         }
 
+        // Effect-handler rest pattern: `..` opts the impl in to trapping on
+        // any operation of the trait/effect that is not implemented above.
+        if i.has_rest {
+            if !i.methods.is_empty() {
+                self.output.push('\n');
+            }
+            self.write_indent();
+            self.output.push_str("..\n");
+        }
+
         self.last_source_line = saved_line.max(i.span.end_line());
         self.indent_level -= 1;
 
@@ -1683,7 +1693,7 @@ impl<'a> Unparser<'a> {
             self.unparse_expr(&binding.handler);
         }
         self.output.push_str(" do ");
-        self.unparse_block(&w.body);
+        self.unparse_block_expr(&w.body);
     }
 
     fn unparse_matches(&mut self, m: &crate::ast::MatchesExpr) {
