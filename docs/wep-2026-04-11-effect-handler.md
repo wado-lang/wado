@@ -31,15 +31,21 @@ Status: Draft
       (`__cm_binding__<E>_<op>`) and the user-effect namespaced shape
       (`<op>` in `Local{path: "<E>"}`) are recognised.
 - [x] `effect_handler_with_do.wado` runs end-to-end (`mark: 12345`).
-- [ ] `effect_handler_resume.wado` is parked behind `#![TODO]`. The
-      MVP synthesis routes `Counter::next()` to a `MethodCall` on
-      `&CounterHandler`, but the existing inliner blows up with
-      `unresolved local: __local_1` when it inlines an `&self` impl
-      method body into a context that does not have the inlined frame's
-      `__local_N` aliases set up. This is a pre-existing optimizer bug
-      surfaced (not caused) by the synthesis. Fixing the inliner — or
-      replacing the static devirtualisation with the dispatch-wrapper
-      path described below — is tracked as the next follow-up.
+- [x] `effect_handler_resume.wado` runs end-to-end (`1+2`). Required
+      teaching the resolver to look up user-defined effect operation
+      return types: `Counter::next()` was previously typed as `Unit`
+      because `lookup_function_return_type` only consulted the WASI
+      registry for `is_effect_like` callees, leaving downstream Lets
+      and template formatters in disagreement with the synthesised
+      `MethodCall`'s actual `i32` return.
+- [ ] `effect_handler_mut_self_alias.wado` (`#![TODO]`) is a pure
+      compiler-bug reproducer: `let cref = &mut local; cref.method();
+      local.field` trips the WIR validator with `(ref null $type)`
+      mismatch, even without any effect-handler synthesis. Surfaces
+      when the resume handler shape uses `&mut self` + struct-owned
+      counter state (the WEP example). Track and fix in the optimizer
+      track; the resume fixture can switch from `&self` + global mut
+      back to `&mut self` once it lands.
 - [ ] Cross-function-boundary dispatch. The MVP only rewrites direct
       `<E>::<op>` calls inside the do-block body. Calls that reach an
       effect operation through helper functions invoked from `body`

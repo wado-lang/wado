@@ -1,0 +1,34 @@
+#![TODO]
+// Pre-existing optimizer bug: take `&mut local`, call an `&mut self`
+// method through the alias, then read the local's field directly.
+//
+// Both forms below trip the WIR validator with
+// `type mismatch: expected (ref null $type), found (ref null $type)`,
+// even without any effect-handler synthesis. The bug surfaces in the
+// resume effect-handler fixture when the handler is `&mut self` over
+// struct-owned counter state. Once this is fixed the resume fixture
+// can switch from `&self` + global mut back to `&mut self` + struct
+// field, matching the WEP example more directly.
+
+use { println, Stdout } from "core:cli";
+
+struct Counter {
+    value: i32,
+}
+
+impl Counter {
+    fn bump(&mut self) -> i32 {
+        self.value += 1;
+        return self.value;
+    }
+}
+
+export fn run() with Stdout {
+    let mut c = Counter { value: 0 };
+    let cref = &mut c;
+    let a = cref.bump();
+    println(`a={a} final={c.value}`);
+}
+
+__DATA__
+{"stdout_contains": ["a=1 final=1"]}

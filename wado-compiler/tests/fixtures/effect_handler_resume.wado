@@ -1,12 +1,18 @@
-#![TODO]
-// `resume value` semantics inside an effect handler method.
+// `resume value` semantics inside a handler method body.
 //
-// Currently blocked by a pre-existing optimizer/inliner issue when a
-// `MethodCall` synthesised by the effect-dispatch lowering inlines an
-// `&self` impl method into a context that does not have the inlined
-// frame's `__local_N` aliases set up. Tracked as Phase 4 work in the
-// effect-handler WEP. When the inliner is fixed, drop `#![TODO]` and
-// the existing assertions will catch it.
+// Each call to `Counter::next()` increments a counter that lives in a
+// global mut and resumes with the new value. Verifies:
+// - resume with a non-unit value (`i32`)
+// - multiple resume sites in a single handler invocation chain
+// - user-defined effect operation calls land on the synthesised
+//   `MethodCall` that the dispatch lowering generates
+//
+// The handler is `&self` and the counter state lives in a global
+// rather than `&mut self` because of a pre-existing optimizer issue
+// (see `effect_handler_mut_self_alias.wado`) that affects calling
+// `&mut self` methods on a `&mut local` followed by direct field
+// access on the local. Once that lands, the fixture can switch to
+// `&mut self` + struct-owned state.
 
 use { println, Stdout } from "core:cli";
 
