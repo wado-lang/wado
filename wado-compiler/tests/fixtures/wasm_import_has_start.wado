@@ -1,0 +1,13 @@
+// Phase 1 forbids `start` sections in imported wasm assets — they would
+// run side-effecting code at instantiation time, which the wasm-import
+// model isn't ready for. The compiler rejects this asset with a
+// diagnostic that points users at the constraint.
+
+use _ from "./sub/wasm_import_has_start.wat" with { type: "wat" };
+
+export fn run() {}
+
+__DATA__
+{
+    "compile_error": "Phase 1 wasm import does not allow start sections"
+}

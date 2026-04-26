@@ -1,0 +1,12 @@
+// Phase 1 only routes `env.memory` through to imported wasm assets; any
+// other import (here `env.table`) is a compile error with a pointed
+// message listing the offending import.
+
+use _ from "./sub/wasm_import_bad_import.wat" with { type: "wat" };
+
+export fn run() {}
+
+__DATA__
+{
+    "compile_error": "only allows the `env.memory` import"
+}
