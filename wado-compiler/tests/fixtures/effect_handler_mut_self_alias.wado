@@ -1,14 +1,15 @@
-#![TODO]
-// Pre-existing optimizer bug: take `&mut local`, call an `&mut self`
-// method through the alias, then read the local's field directly.
+// Regression test for an `&mut local` aliasing miscompile that the
+// `lower/boxing` pass introduced. When `local` was an address-taken
+// primitive — boxing rewrites `local: i32` to `local: Box<i32>` and
+// reads to `FieldAccess(local, "value")` — taking a reference to that
+// access (`&local.value`) was collapsed back to the Box reference. The
+// shortcut keyed on the bare field name `value`, so any user struct
+// with a `value` field (e.g. `Counter` below) had its field access
+// silently dropped: `&c.value` for `c: Counter` became `&c`. WIR build
+// then tried to pass a Counter ref where an i32 was required.
 //
-// Both forms below trip the WIR validator with
-// `type mismatch: expected (ref null $type), found (ref null $type)`,
-// even without any effect-handler synthesis. The bug surfaces in the
-// resume effect-handler fixture when the handler is `&mut self` over
-// struct-owned counter state. Once this is fixed the resume fixture
-// can switch from `&self` + global mut back to `&mut self` + struct
-// field, matching the WEP example more directly.
+// The fix scopes the shortcut to locals whose post-boxing type is an
+// actual `Box<T>` struct (via `box_type_ids`); see `lower/boxing.rs`.
 
 use { println, Stdout } from "core:cli";
 

@@ -1,18 +1,16 @@
-// `resume value` semantics inside a handler method body.
+// `resume value` semantics inside a handler method body, in the WEP
+// example shape: `&mut self` over struct-owned counter state. Each
+// call to `Counter::next()` increments the handler's `value` field
+// and resumes with the new value. After the `do` block, the caller
+// reads `c.value` to confirm the mutation persisted.
 //
-// Each call to `Counter::next()` increments a counter that lives in a
-// global mut and resumes with the new value. Verifies:
+// Verifies:
 // - resume with a non-unit value (`i32`)
+// - mutable handler state via `&mut self`
 // - multiple resume sites in a single handler invocation chain
-// - user-defined effect operation calls land on the synthesised
-//   `MethodCall` that the dispatch lowering generates
-//
-// The handler is `&self` and the counter state lives in a global
-// rather than `&mut self` because of a pre-existing optimizer issue
-// (see `effect_handler_mut_self_alias.wado`) that affects calling
-// `&mut self` methods on a `&mut local` followed by direct field
-// access on the local. Once that lands, the fixture can switch to
-// `&mut self` + struct-owned state.
+// - field access on the handled local survives the `&mut` aliasing in
+//   the surrounding `with` clause (regression covered by
+//   `effect_handler_mut_self_alias.wado`)
 
 use { println, Stdout } from "core:cli";
 
@@ -20,25 +18,25 @@ effect Counter {
     fn next() -> i32;
 }
 
-global mut counter_state: i32 = 0;
+struct CounterState {
+    value: i32,
+}
 
-struct CounterHandler {}
-
-impl Counter for CounterHandler {
-    fn next(&self) -> i32 {
-        counter_state = counter_state + 1;
-        resume counter_state
+impl Counter for CounterState {
+    fn next(&mut self) -> i32 {
+        self.value += 1;
+        resume self.value
     }
 }
 
 export fn run() with Stdout {
-    let h = CounterHandler {};
-    with Counter = &h do {
+    let mut c = CounterState { value: 0 };
+    with Counter = &mut c do {
         let a = Counter::next();
         let b = Counter::next();
-        println(`{a}+{b}`);
+        println(`{a}+{b}={a + b}, final={c.value}`);
     }
 }
 
 __DATA__
-{"stdout_contains": ["1+2"]}
+{"stdout_contains": ["1+2=3, final=2"]}
