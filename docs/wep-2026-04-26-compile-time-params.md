@@ -59,7 +59,7 @@ The attribute is allowed on `global` declarations. The parameter name defaults t
 | `name`     | `String` | Parameter name used by `-D NAME=value`. Defaults to the global's identifier.                            |
 | `from_env` | `String` | Environment variable name to read at compile time. Optional. The env var name is independent of `name`. |
 
-The `name` value must be non-empty and match `[A-Za-z0-9_./-]+`. This allows common patterns such as `MY_APP_VERSION` (underscored), `build.id` (dotted), `myorg/build-id` (slashed), and rules out characters that conflict with the `-D` syntax (`=`) or shell quoting.
+The `name` value is an arbitrary non-empty string. Wado does not restrict its character set: any string suits the source declaration, and matching it from a CLI invocation or environment variable is the caller's responsibility (subject to the `-D NAME=value` parser splitting on the first `=` and the host shell's quoting rules).
 
 Multiple `#[param]` declarations may share the same name across packages; see [Flat Namespace](#flat-namespace).
 
@@ -196,14 +196,14 @@ Both traits live in `core:prelude` and are auto-imported.
 
 ### Errors
 
-| Condition                                              | Error                                                            |
-| ------------------------------------------------------ | ---------------------------------------------------------------- |
-| `#[param]` on `global mut`                             | `#[param] cannot be applied to a mutable global`                 |
-| `#[param]` argument other than `name` or `from_env`    | `unknown #[param] argument: <name>`                              |
-| `name = "..."` value does not match `[A-Za-z0-9_./-]+` | `invalid #[param] name: "<value>"`                               |
-| `-D NAME=value` for an undeclared parameter            | `unknown compile-time parameter: NAME`                           |
-| `FromParam::from_param` returns `Err`                  | `cannot parse "<value>" as <Type> for parameter <NAME>`          |
-| `from_env` value present but not parseable             | same as above, with the env var name mentioned in the diagnostic |
+| Condition                                           | Error                                                            |
+| --------------------------------------------------- | ---------------------------------------------------------------- |
+| `#[param]` on `global mut`                          | `#[param] cannot be applied to a mutable global`                 |
+| `#[param]` argument other than `name` or `from_env` | `unknown #[param] argument: <name>`                              |
+| `name = ""` (empty string)                          | `#[param] name must not be empty`                                |
+| `-D NAME=value` for an undeclared parameter         | `unknown compile-time parameter: NAME`                           |
+| `FromParam::from_param` returns `Err`               | `cannot parse "<value>" as <Type> for parameter <NAME>`          |
+| `from_env` value present but not parseable          | same as above, with the env var name mentioned in the diagnostic |
 
 ### Documentation
 
