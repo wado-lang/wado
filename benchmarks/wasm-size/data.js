@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777196033688,
+  "lastUpdate": 1777205173651,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -16645,6 +16645,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/5bcdce0f9b27b963eec607d0152d25db2c51a47b"
         },
         "date": 1777196033391,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8982,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19110,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 614203,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4ad34f930ae0a4c2589e74cbc4c0fb8829d06642",
+          "message": "Merge pull request #933 from wado-lang/claude/render-md-doc-fences\n\nfix(cli/doc): recognise fenced code blocks in render_md_doc",
+          "timestamp": "2026-04-26T21:01:18+09:00",
+          "tree_id": "6aca4598417ea486875ea77db0e3d25e445d0126",
+          "url": "https://github.com/wado-lang/wado/commit/4ad34f930ae0a4c2589e74cbc4c0fb8829d06642"
+        },
+        "date": 1777205173370,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
