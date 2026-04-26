@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777163069095,
+  "lastUpdate": 1777166533295,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -16381,6 +16381,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d4a590d42af5192d9d0501924c45f622f268e887"
         },
         "date": 1777163068789,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8982,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19110,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 614203,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2cbc791be60faa4df32bbfc471838ecce30afcd5",
+          "message": "Merge pull request #926 from wado-lang/claude/review-wedo-specs-WFjRh\n\nkiln: drop manifest-side invocation registry, require inline `with`",
+          "timestamp": "2026-04-26T10:14:46+09:00",
+          "tree_id": "945e43b09fdf7f67f4215f2d4a884e4f9715f2c6",
+          "url": "https://github.com/wado-lang/wado/commit/2cbc791be60faa4df32bbfc471838ecce30afcd5"
+        },
+        "date": 1777166533186,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
