@@ -762,7 +762,9 @@ impl BoxLowerer {
                 unreachable!("TemplateString should be expanded before this phase")
             }
             TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
-                unreachable!("WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase")
+                unreachable!(
+                    "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
+                )
             }
         }
 

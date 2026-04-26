@@ -658,7 +658,9 @@ fn collect_modified_vars_in_expr(
             unreachable!("TemplateString should be expanded before this phase")
         }
         TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
-            unreachable!("WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase")
+            unreachable!(
+                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
+            )
         }
     }
 }
@@ -924,7 +926,9 @@ fn collect_licm_ref_bindings_in_expr(
             unreachable!("TemplateString should be expanded before this phase")
         }
         TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
-            unreachable!("WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase")
+            unreachable!(
+                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
+            )
         }
     }
 }
@@ -1561,7 +1565,9 @@ fn find_hoist_candidates_in_expr(
             unreachable!("TemplateString should be expanded before this phase")
         }
         TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
-            unreachable!("WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase")
+            unreachable!(
+                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
+            )
         }
     }
 }
@@ -1824,7 +1830,9 @@ fn replace_hoisted_in_expr(
             unreachable!("TemplateString should be expanded before this phase")
         }
         TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
-            unreachable!("WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase")
+            unreachable!(
+                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
+            )
         }
     }
 }

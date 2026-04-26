@@ -724,7 +724,9 @@ fn collect_unsafe_in_expr(expr: &TirExpr, unsafe_locals: &mut IndexSet<u32>) {
             unreachable!("TemplateString should be expanded before this phase")
         }
         TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
-            unreachable!("WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase")
+            unreachable!(
+                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
+            )
         }
     }
 }
@@ -1107,7 +1109,9 @@ fn forward_in_expr(
             unreachable!("TemplateString should be expanded before this phase")
         }
         TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
-            unreachable!("WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase")
+            unreachable!(
+                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
+            )
         }
     }
 

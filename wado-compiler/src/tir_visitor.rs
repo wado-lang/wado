@@ -711,7 +711,9 @@ pub fn opt_walk_expr(visitor: &mut impl TirOptVisitor, expr: &mut TirExpr) -> bo
             unreachable!("TemplateString should be expanded before this phase")
         }
         TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
-            unreachable!("WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase")
+            unreachable!(
+                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
+            )
         }
     }
     changed

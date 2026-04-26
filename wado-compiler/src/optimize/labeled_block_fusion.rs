@@ -361,7 +361,9 @@ fn fuse_in_expr(expr: &mut TirExpr, local_count: &mut u32, local_types: &mut Vec
             unreachable!("TemplateString should be expanded before this phase")
         }
         TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
-            unreachable!("WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase")
+            unreachable!(
+                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
+            )
         }
     }
 }
@@ -846,7 +848,9 @@ fn count_local_uses_in_expr(expr: &TirExpr, local_idx: u32) -> usize {
             unreachable!("TemplateString should be expanded before this phase")
         }
         TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
-            unreachable!("WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase")
+            unreachable!(
+                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
+            )
         }
     }
 }
@@ -1036,7 +1040,9 @@ fn count_variant_payload_uses_in_expr(expr: &TirExpr, local_idx: u32, case_index
             unreachable!("TemplateString should be expanded before this phase")
         }
         TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
-            unreachable!("WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase")
+            unreachable!(
+                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
+            )
         }
     }
 }
@@ -1669,7 +1675,9 @@ fn transform_lb_in_expr(
         | TirExprKind::EnumConstruct { .. }
         | TirExprKind::TemplateString { .. } => {}
         TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
-            unreachable!("WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase")
+            unreachable!(
+                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
+            )
         }
     }
 }
@@ -1917,7 +1925,9 @@ fn subst_variant_payload_in_expr(
             unreachable!("TemplateString should be expanded before this phase")
         }
         TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
-            unreachable!("WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase")
+            unreachable!(
+                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
+            )
         }
     }
 }

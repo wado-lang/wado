@@ -82,21 +82,20 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Bundled-handler form is reserved for the multi-effect case
         // (`with &mut h do`) and requires enumerating effects from the
         // handler type. Defer to the dispatch-synthesis phase work.
-        let effect_ty = match &binding.effect {
-            Some(ty) => ty,
-            None => {
-                let _ = self
-                    .logger
-                    .error(TypeError::BundledHandlerNotSupported { span: binding.span });
-                let handler = self.resolve_expr(&binding.handler, ctx, None);
-                let handler_type = self.handler_underlying_type(handler.type_id);
-                return TirHandlerBinding {
-                    effect: None,
-                    handler,
-                    handler_type,
-                    span: binding.span,
-                };
-            }
+        let effect_ty = if let Some(ty) = &binding.effect {
+            ty
+        } else {
+            let _ = self
+                .logger
+                .error(TypeError::BundledHandlerNotSupported { span: binding.span });
+            let handler = self.resolve_expr(&binding.handler, ctx, None);
+            let handler_type = self.handler_underlying_type(handler.type_id);
+            return TirHandlerBinding {
+                effect: None,
+                handler,
+                handler_type,
+                span: binding.span,
+            };
         };
 
         // Resolve the effect name. Use `resolve_effects` so that LSP
@@ -107,7 +106,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .id()
             .map(|id| vec![(id, effect_ty.span())])
             .unwrap_or_default();
-        let mut resolved_effects = self.resolve_effects(&[effect_name.clone()], &effect_ids);
+        let mut resolved_effects = self.resolve_effects(&[effect_name], &effect_ids);
         let effect = resolved_effects.pop();
 
         // The name must point at an actual effect declaration, not a

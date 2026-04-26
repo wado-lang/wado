@@ -80,13 +80,11 @@ fn build_handler_impl_index(project: &Package) -> IndexMap<HandlerImplKey, Handl
                 continue;
             };
             let key = (method_info.struct_name.clone(), trait_name.clone());
-            let entry = out
-                .entry(key)
-                .or_insert_with(|| HandlerImplInfo {
-                    impl_module: module_source.clone(),
-                    methods: IndexMap::default(),
-                    handler_type_name: method_info.struct_name.clone(),
-                });
+            let entry = out.entry(key).or_insert_with(|| HandlerImplInfo {
+                impl_module: module_source.clone(),
+                methods: IndexMap::default(),
+                handler_type_name: method_info.struct_name.clone(),
+            });
             entry
                 .methods
                 .insert(method_info.method_name.clone(), func.return_type);
@@ -94,7 +92,6 @@ fn build_handler_impl_index(project: &Package) -> IndexMap<HandlerImplKey, Handl
     }
     out
 }
-
 
 /// Walk every TIR function body in every module and replace each
 /// `TirExprKind::WithHandler` with a desugared `Block` whose body has
@@ -179,7 +176,7 @@ fn lower_with_in_stmt(
             }
         }
         TirStmtKind::LetDestructure { value, .. } => {
-            lower_with_in_expr(value, impl_index, type_table)
+            lower_with_in_expr(value, impl_index, type_table);
         }
         TirStmtKind::VariadicForOf { iterable, body, .. } => {
             lower_with_in_expr(iterable, impl_index, type_table);
@@ -209,20 +206,14 @@ fn lower_with_in_expr(
             else {
                 continue;
             };
-            let handler_type_name = type_table.borrow().type_name(deref_type(
-                &type_table.borrow(),
-                binding.handler.type_id,
-            ));
+            let handler_type_name = type_table
+                .borrow()
+                .type_name(deref_type(&type_table.borrow(), binding.handler.type_id));
             let key = (handler_type_name, effect_name.clone());
             let Some(info) = impl_index.get(&key) else {
                 continue;
             };
-            rewrite_effect_calls_in_block(
-                body,
-                effect_name,
-                &binding.handler,
-                info,
-            );
+            rewrite_effect_calls_in_block(body, effect_name, &binding.handler, info);
         }
         // Replace the WithHandler expression with the rewritten body so
         // the rest of the pipeline sees a plain block.
@@ -348,7 +339,7 @@ fn walk_children(
             }
         }
         TirExprKind::Resume { value } => {
-            lower_with_in_expr(value, impl_index, type_table)
+            lower_with_in_expr(value, impl_index, type_table);
         }
         TirExprKind::WithHandler { bindings, body, .. } => {
             for binding in bindings {
@@ -389,7 +380,6 @@ fn deref_type(tt: &TypeTable, type_id: TypeId) -> TypeId {
         _ => type_id,
     }
 }
-
 
 /// Walk every direct `<Effect>::<op>(args)` call inside the do-block
 /// body and rewrite it to a `MethodCall { receiver: handler, ... }` on
@@ -471,42 +461,45 @@ fn rewrite_effect_calls_in_expr(
     // effect-op calls.
     rewrite_children_for_effect_calls(expr, effect_name, handler_expr, info);
 
-    if let TirExprKind::Call { func, args, type_args } = &expr.kind {
-        if let Some(op_name) = match_effect_op_call(&func.name, &func.module_source, effect_name) {
-            if let Some(&method_return_type) = info.methods.get(&op_name) {
-                // The original `Counter::next()` `Call` arrives here
-                // with `expr.type_id == Unit` for user-defined effects
-                // because the resolver does not look up the operation's
-                // declared return type when it routes the call through
-                // `CalleeRef::local_namespace`. Patch up to the impl
-                // method's actual return type so the synthesised
-                // `MethodCall` carries the right shape into WIR build.
-                let receiver = handler_expr.clone();
-                let mangled = crate::name::MethodName::format_local(
-                    &info.handler_type_name,
-                    Some(effect_name),
-                    &op_name,
-                );
-                let new_func = crate::tir::FunctionRef {
-                    module_source: info.impl_module.clone(),
-                    name: mangled,
-                    monomorph_info: None,
-                    method_info: Some(crate::name::LocalMethodName::new(
-                        info.handler_type_name.clone(),
-                        Some(effect_name.to_string()),
-                        op_name.clone(),
-                    )),
-                };
-                let new_kind = TirExprKind::method_call(
-                    Box::new(receiver),
-                    new_func,
-                    type_args.clone(),
-                    args.clone(),
-                );
-                let new_span = expr.span;
-                *expr = TirExpr::new(new_kind, method_return_type, new_span);
-            }
-        }
+    if let TirExprKind::Call {
+        func,
+        args,
+        type_args,
+    } = &expr.kind
+        && let Some(op_name) = match_effect_op_call(&func.name, &func.module_source, effect_name)
+        && let Some(&method_return_type) = info.methods.get(&op_name)
+    {
+        // The original `Counter::next()` `Call` arrives here
+        // with `expr.type_id == Unit` for user-defined effects
+        // because the resolver does not look up the operation's
+        // declared return type when it routes the call through
+        // `CalleeRef::local_namespace`. Patch up to the impl
+        // method's actual return type so the synthesised
+        // `MethodCall` carries the right shape into WIR build.
+        let receiver = handler_expr.clone();
+        let mangled = crate::name::MethodName::format_local(
+            &info.handler_type_name,
+            Some(effect_name),
+            &op_name,
+        );
+        let new_func = crate::tir::FunctionRef {
+            module_source: info.impl_module.clone(),
+            name: mangled,
+            monomorph_info: None,
+            method_info: Some(crate::name::LocalMethodName::new(
+                info.handler_type_name.clone(),
+                Some(effect_name.to_string()),
+                op_name.clone(),
+            )),
+        };
+        let new_kind = TirExprKind::method_call(
+            Box::new(receiver),
+            new_func,
+            type_args.clone(),
+            args.clone(),
+        );
+        let new_span = expr.span;
+        *expr = TirExpr::new(new_kind, method_return_type, new_span);
     }
 }
 
@@ -520,10 +513,10 @@ fn match_effect_op_call(name: &str, module: &ModuleSource, effect_name: &str) ->
     if let Some(op) = name.strip_prefix(&cm_prefix) {
         return Some(op.to_string());
     }
-    if let ModuleSource::Local { path } = module {
-        if path == effect_name {
-            return Some(name.to_string());
-        }
+    if let ModuleSource::Local { path } = module
+        && path == effect_name
+    {
+        return Some(name.to_string());
     }
     None
 }
@@ -722,7 +715,6 @@ fn rewrite_resume_in_block(block: &mut TirBlock) {
         rewrite_resume_in_stmt(stmt);
     }
 }
-
 
 fn rewrite_resume_in_stmt(stmt: &mut TirStmt) {
     // Statement-position `resume value;` is parsed as

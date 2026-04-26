@@ -19,42 +19,43 @@ Status: Draft
       Effect-check augments `current_effects` with the handled effects
       while walking the body so the body's calls do not propagate as
       caller requirements.
-- [x] Effect-dispatch synthesis pass (Phase 3 MVP). Discovers every
-      effect referenced by a `with E = h do` binding, registers the
-      per-effect `__Dispatch_<E>` struct + `__effect_<E>` mut global
-      (kept under `#[allow(dead_code)]` until cross-function-boundary
-      dispatch lands), lowers `Resume` to `Return` in handler method
-      bodies, and replaces every `WithHandler` block with a `Block`
-      whose body has each direct `<E>::<op>(args)` call statically
-      devirtualised to a `MethodCall { receiver: handler, ... }` on the
-      bound handler. Both the WASI-binding-rewritten name shape
+- [x] Effect-dispatch synthesis pass (Phase 3 MVP). Lowers `Resume` to
+      `Return` in handler method bodies and replaces every `WithHandler`
+      block with a `Block` whose body has each direct `<E>::<op>(args)`
+      call statically devirtualised to a
+      `MethodCall { receiver: handler, ... }` on the bound handler.
+      Recognises both the WASI-binding-rewritten name shape
       (`__cm_binding__<E>_<op>`) and the user-effect namespaced shape
-      (`<op>` in `Local{path: "<E>"}`) are recognised.
+      (`<op>` in `Local{path: "<E>"}`). Per-effect `__Dispatch_<E>`
+      structs and `__effect_<E>` mut globals — the foundation for the
+      cross-function-boundary dispatch follow-up — are not emitted
+      yet; Phase 4 will introduce them once the wrapper-emission
+      lowering is ready to consume them.
 - [x] `effect_handler_with_do.wado` runs end-to-end (`mark: 12345`).
 - [x] `effect_handler_resume.wado` runs end-to-end in the WEP example
       shape (`&mut self` + struct-owned `value`). Required two compiler
       fixes:
       1. Resolver: `lookup_function_return_type` now consults user-
-         defined effect declarations via `TraitEnv::effect_decl_index`
-         for `is_effect_like` callees the WASI registry doesn't know
-         about. Before, `Counter::next()` was typed as `Unit` and
-         downstream Lets / template formatters disagreed with the
-         synthesised `MethodCall`'s actual `i32` return.
+      defined effect declarations via `TraitEnv::effect_decl_index`
+      for `is_effect_like` callees the WASI registry doesn't know
+      about. Before, `Counter::next()` was typed as `Unit` and
+      downstream Lets / template formatters disagreed with the
+      synthesised `MethodCall`'s actual `i32` return.
       2. Lowering: `lower/boxing.rs` had a "Box deref shortcut" that
-         collapsed `&local.value` to `local` keyed only on the bare
-         field name `value`, so any user struct with a `value` field
-         (`Counter` here) had its field access silently dropped.
-         Scoped the shortcut to locals whose post-boxing type is an
-         actual `Box<T>` struct (`box_type_ids.contains(...)`).
-         Regression covered by `effect_handler_mut_self_alias.wado`.
+      collapsed `&local.value` to `local` keyed only on the bare
+      field name `value`, so any user struct with a `value` field
+      (`Counter` here) had its field access silently dropped.
+      Scoped the shortcut to locals whose post-boxing type is an
+      actual `Box<T>` struct (`box_type_ids.contains(...)`).
+      Regression covered by `effect_handler_mut_self_alias.wado`.
 - [ ] Cross-function-boundary dispatch. The MVP only rewrites direct
       `<E>::<op>` calls inside the do-block body. Calls that reach an
       effect operation through helper functions invoked from `body`
       stay routed through the existing CM binding (for WASI) or fail
-      to resolve (for user effects). The `__Dispatch_<E>` struct + mut
-      global registered by the synthesis pass are the foundation for
-      the proper dispatch wrappers; the lowering simply does not emit
-      the wrapper bodies yet.
+      to resolve (for user effects). Phase 4 will introduce the
+      per-effect `__Dispatch_<E>` GC struct, `__effect_<E>` mut
+      global, and `__effect_dispatch__<E>__<op>` wrapper functions
+      described under "Phase 3 implementation plan" below.
 - [ ] Bundled handlers (`with &mut h do`). The resolver already
       diagnoses this with `BundledHandlerNotSupported`; lowering is
       deferred until the dispatch-wrapper path lands.
