@@ -25,16 +25,34 @@ use {
     parse_text,
 } from "core:prelude/fpfmt.wado";
 
+// Deterministic math functions imported directly from the bundled
+// `core:libm.wat` asset (compiled from the Rust `libm` crate). The
+// loader synthesises Wado bindings from the wat module's exports — see
+// `docs/wep-2026-01-10-wasm-import.md`. Names are remapped onto the
+// Wado-side identifiers used by the impl blocks below
+// (`libm_log` → `f64_ln`, etc.).
 use {
-    f64_sin, f64_cos, f64_tan, f64_asin, f64_acos, f64_atan, f64_atan2,
-    f64_sinh, f64_cosh, f64_tanh, f64_asinh, f64_acosh, f64_atanh,
-    f64_exp, f64_exp2, f64_expm1, f64_ln, f64_log2, f64_log10, f64_ln1p,
-    f64_pow, f64_cbrt, f64_hypot, f64_fmod,
-    f32_sin, f32_cos, f32_tan, f32_asin, f32_acos, f32_atan, f32_atan2,
-    f32_sinh, f32_cosh, f32_tanh, f32_asinh, f32_acosh, f32_atanh,
-    f32_exp, f32_exp2, f32_expm1, f32_ln, f32_log2, f32_log10, f32_ln1p,
-    f32_pow, f32_cbrt, f32_hypot, f32_fmod
-} from "core:libm";
+    libm_sin as f64_sin, libm_cos as f64_cos, libm_tan as f64_tan,
+    libm_asin as f64_asin, libm_acos as f64_acos, libm_atan as f64_atan,
+    libm_atan2 as f64_atan2,
+    libm_sinh as f64_sinh, libm_cosh as f64_cosh, libm_tanh as f64_tanh,
+    libm_asinh as f64_asinh, libm_acosh as f64_acosh, libm_atanh as f64_atanh,
+    libm_exp as f64_exp, libm_exp2 as f64_exp2, libm_expm1 as f64_expm1,
+    libm_log as f64_ln, libm_log2 as f64_log2, libm_log10 as f64_log10,
+    libm_log1p as f64_ln1p,
+    libm_pow as f64_pow, libm_cbrt as f64_cbrt,
+    libm_hypot as f64_hypot, libm_fmod as f64_fmod,
+    libm_sinf as f32_sin, libm_cosf as f32_cos, libm_tanf as f32_tan,
+    libm_asinf as f32_asin, libm_acosf as f32_acos, libm_atanf as f32_atan,
+    libm_atan2f as f32_atan2,
+    libm_sinhf as f32_sinh, libm_coshf as f32_cosh, libm_tanhf as f32_tanh,
+    libm_asinhf as f32_asinh, libm_acoshf as f32_acosh, libm_atanhf as f32_atanh,
+    libm_expf as f32_exp, libm_exp2f as f32_exp2, libm_expm1f as f32_expm1,
+    libm_logf as f32_ln, libm_log2f as f32_log2, libm_log10f as f32_log10,
+    libm_log1pf as f32_ln1p,
+    libm_powf as f32_pow, libm_cbrtf as f32_cbrt,
+    libm_hypotf as f32_hypot, libm_fmodf as f32_fmod
+} from "../libm.wat" with { type: "wat" };
 
 use {
     IntErrorKind,

@@ -348,22 +348,15 @@ pub fn resolve_wasm_asset_path(
             path: import_source.to_string(),
         });
     }
-    let stripped = import_source.strip_prefix("./").unwrap_or(import_source);
     match from {
-        ModuleSource::Core { name } => {
-            let parent_with_slash = match name.rfind('/') {
-                Some(pos) => format!("core:{}/", &name[..pos]),
-                None => "core:".to_string(),
-            };
-            Ok(format!("{parent_with_slash}{stripped}"))
-        }
-        ModuleSource::Wasi { interface } => {
-            let parent_with_slash = match interface.rfind('/') {
-                Some(pos) => format!("wasi:{}/", &interface[..pos]),
-                None => "wasi:".to_string(),
-            };
-            Ok(format!("{parent_with_slash}{stripped}"))
-        }
+        ModuleSource::Core { name } => Ok(format!(
+            "core:{}",
+            join_namespace_relative_path(name, import_source)
+        )),
+        ModuleSource::Wasi { interface } => Ok(format!(
+            "wasi:{}",
+            join_namespace_relative_path(interface, import_source)
+        )),
         ModuleSource::Local { path } => Ok(resolve_module_path(path, import_source)),
         ModuleSource::Remote { url } => Ok(resolve_module_path(url, import_source)),
         ModuleSource::EntryPoint { .. } => Ok(normalize_module_path(import_source)),
@@ -372,6 +365,40 @@ pub fn resolve_wasm_asset_path(
             path: import_source.to_string(),
         }),
     }
+}
+
+/// Join `relative` (which may use `./` or `../` segments) onto the
+/// directory of `base` (a slash-separated sub-namespace path like
+/// `prelude/primitive.wado` or `cli/types.wado`) and collapse `..`
+/// segments. The result has no leading namespace prefix and no leading
+/// `./`.
+///
+/// Examples:
+/// - `("builtin",                 "./libm.wat")`        → `"libm.wat"`
+/// - `("prelude/primitive.wado",  "../libm.wat")`       → `"libm.wat"`
+/// - `("prelude/primitive.wado",  "./other.wat")`       → `"prelude/other.wat"`
+/// - `("a/b/c.wado",              "../../d/e.wat")`     → `"d/e.wat"`
+fn join_namespace_relative_path(base: &str, relative: &str) -> String {
+    // Start from the base's directory: drop the last `/`-segment.
+    let base_dir = match base.rfind('/') {
+        Some(pos) => &base[..pos],
+        None => "",
+    };
+    let mut segments: Vec<&str> = if base_dir.is_empty() {
+        Vec::new()
+    } else {
+        base_dir.split('/').collect()
+    };
+    for seg in relative.split('/') {
+        match seg {
+            "" | "." => {}
+            ".." => {
+                segments.pop();
+            }
+            other => segments.push(other),
+        }
+    }
+    segments.join("/")
 }
 
 /// Map a [`WasmCoreValType`] to its Wado primitive name.
@@ -761,7 +788,6 @@ fn cached_stdlib() -> &'static IndexMap<ModuleSource, Module> {
             ("json_nsd", stdlib::CORE_JSON_NSD),
             ("json_value", stdlib::CORE_JSON_VALUE),
             ("simd", stdlib::CORE_SIMD),
-            ("libm", stdlib::CORE_LIBM),
         ];
 
         let total_count = core_modules.len() + stdlib::ALL_WASI_MODULES.len();
