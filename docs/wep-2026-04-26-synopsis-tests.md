@@ -1,4 +1,4 @@
-# WEP: Synopsis Tests and Universal Test Discovery
+# WEP: Synopsis Tests
 
 ## Context
 

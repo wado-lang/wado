@@ -101,4 +101,4 @@ It may include TODOs on WIP.
 - [Kiln — Keyed IDL Lowering Notation](./wep-2026-04-12-kiln.md)
 - [LSP Architecture](./wep-2026-04-18-lsp-architecture.md)
 - [Generic `Subtask<T>` for CM async imports](./wep-2026-04-22-subtask-generic.md)
-- [Synopsis Tests and Universal Test Discovery](./wep-2026-04-26-synopsis-tests.md)
+- [Synopsis Tests](./wep-2026-04-26-synopsis-tests.md)
