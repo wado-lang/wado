@@ -104,6 +104,11 @@ fn count_expr(expr: &TirExpr) -> usize {
         | TirExprKind::VariantTest { expr, .. }
         | TirExprKind::VariantPayload { expr, .. } => count_expr(expr),
         TirExprKind::LabeledBlock { block, .. } => count_block_exprs(block),
+        TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+            unreachable!(
+                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
+            )
+        }
     }
 }
 
@@ -336,6 +341,11 @@ fn collect_inner_labels_from_expr(expr: &TirExpr, labels: &mut IndexSet<String>)
         | TirExprKind::EnumConstruct { .. } => {}
         TirExprKind::TemplateString { .. } => {
             unreachable!("TemplateString should be expanded before this phase")
+        }
+        TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+            unreachable!(
+                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
+            )
         }
     }
 }
@@ -669,6 +679,11 @@ fn collect_callees_from_expr(expr: &TirExpr, callees: &mut IndexSet<String>) {
         | TirExprKind::EnumConstruct { .. } => {}
         TirExprKind::TemplateString { .. } => {
             unreachable!("TemplateString should be expanded before this phase")
+        }
+        TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+            unreachable!(
+                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
+            )
         }
     }
 }
@@ -1977,6 +1992,11 @@ fn remap_expr_inner(
         TirExprKind::TemplateString { .. } => {
             unreachable!("TemplateString should be expanded before this phase")
         }
+        TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+            unreachable!(
+                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
+            )
+        }
     };
 
     TirExpr::new(kind, expr.type_id, expr.span)
@@ -2655,6 +2675,11 @@ fn inline_calls_in_expr(
         | TirExprKind::EnumConstruct { .. } => {}
         TirExprKind::TemplateString { .. } => {
             unreachable!("TemplateString should be expanded before this phase")
+        }
+        TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+            unreachable!(
+                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
+            )
         }
     }
 }

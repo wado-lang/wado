@@ -761,6 +761,11 @@ impl BoxLowerer {
             TirExprKind::TemplateString { .. } => {
                 unreachable!("TemplateString should be expanded before this phase")
             }
+            TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+                unreachable!(
+                    "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
+                )
+            }
         }
 
         // Now handle the boxing-specific transformations (top-down after sub-expressions)
@@ -774,25 +779,34 @@ impl BoxLowerer {
 
                 match op {
                     TirUnaryOp::Ref | TirUnaryOp::MutRef => {
-                        // Case 1: &local / &mut local where local is address-taken
-                        // → just the local (the Box IS the reference)
+                        // Case 1: &local.value / &mut local.value where
+                        // `local` is an address-taken primitive that has
+                        // been rewritten into a `Box<T>` (so reads went
+                        // from `local` to `FieldAccess(Local, .value)`
+                        // earlier in this pass). Taking a ref to that
+                        // FieldAccess just yields the Box itself (the
+                        // Local), because the Box reference IS the
+                        // primitive's address.
+                        //
+                        // The local's type *must* be a Box struct here:
+                        // the same `value` field name appears on
+                        // user-defined structs (e.g. `struct Counter {
+                        // value: i32 }`) and stripping the FieldAccess
+                        // for those would silently drop the field
+                        // selection and produce ill-typed Wasm.
                         if let TirExprKind::FieldAccess {
                             expr: box_local,
                             field_name,
                             ..
                         } = &inner.kind
+                            && field_name == "value"
+                            && let TirExprKind::Local { index, .. } = &box_local.kind
+                            && address_taken.contains(index)
+                            && self.box_type_ids.contains(&box_local.type_id)
                         {
-                            // After address-taken local transformation, reads become
-                            // FieldAccess(Local, .value). Taking a ref to that should
-                            // just return the Box (the Local).
-                            if field_name == "value"
-                                && let TirExprKind::Local { index, .. } = &box_local.kind
-                                && address_taken.contains(index)
-                            {
-                                let local_expr = (**box_local).clone();
-                                *expr = local_expr;
-                                return;
-                            }
+                            let local_expr = (**box_local).clone();
+                            *expr = local_expr;
+                            return;
                         }
 
                         // Case 2: &primitive_expr / &mut primitive_expr

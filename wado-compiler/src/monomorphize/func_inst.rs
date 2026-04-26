@@ -2043,6 +2043,11 @@ impl Monomorphizer {
                     }
                 }
             }
+            TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+                unreachable!(
+                    "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
+                )
+            }
         }
     }
 

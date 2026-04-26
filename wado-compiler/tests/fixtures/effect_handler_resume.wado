@@ -1,24 +1,16 @@
-#![TODO]
-// TODO: `resume value` semantics inside an effect handler method.
+// `resume value` semantics inside a handler method body, in the WEP
+// example shape: `&mut self` over struct-owned counter state. Each
+// call to `Counter::next()` increments the handler's `value` field
+// and resumes with the new value. After the `do` block, the caller
+// reads `c.value` to confirm the mutation persisted.
 //
-// Goal state: a value-returning custom effect with mutable handler
-// state. Each call to `Counter::next()` increments the handler's
-// internal counter and resumes with the new value. After the `do`
-// block, the caller observes the final count both through the
-// returned values and through the surviving struct field.
-//
-// This fixture exercises the minimal `resume` lowering only:
-// - resume with a non-unit value (`i32` here)
+// Verifies:
+// - resume with a non-unit value (`i32`)
 // - mutable handler state via `&mut self`
 // - multiple resume sites in a single handler invocation chain
-//
-// Like the `with_do` fixture, it deliberately keeps the handler body
-// free of I/O so `MockCM` (buffered CM handlers) is not required.
-// `println` is in the body of the `do` block, where dispatch for
-// `Stdout` falls through the null-fast-path to wasmtime.
-//
-// When Phase 2 + 3 land, this fixture will print "1+2=3, final=2"
-// and the runner will flag that `#![TODO]` must be removed.
+// - field access on the handled local survives the `&mut` aliasing in
+//   the surrounding `with` clause (regression covered by
+//   `effect_handler_mut_self_alias.wado`)
 
 use { println, Stdout } from "core:cli";
 
@@ -27,7 +19,7 @@ effect Counter {
 }
 
 struct CounterState {
-    mut value: i32,
+    value: i32,
 }
 
 impl Counter for CounterState {

@@ -115,23 +115,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
             Expr::TryOp(qm) => self.resolve_question_mark(qm, ctx),
             Expr::Range(range) => self.resolve_range(range, ctx),
-            Expr::WithHandler(w) => {
-                // Phase 1: front-end only. Effect handler installation is
-                // parsed and walked, but semantic resolution / codegen come
-                // in later phases (see docs/wep-2026-04-11-effect-handler.md).
-                let _ = self.logger.error(TypeError::NotYetImplemented {
-                    feature: "effect handler installation `with E = h do { ... }`".to_string(),
-                    span: w.span,
-                });
-                TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, w.span)
-            }
-            Expr::Resume(r) => {
-                let _ = self.logger.error(TypeError::NotYetImplemented {
-                    feature: "`resume` expression".to_string(),
-                    span: r.span,
-                });
-                TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, r.span)
-            }
+            Expr::WithHandler(w) => self.resolve_with_handler(w, ctx),
+            Expr::Resume(r) => self.resolve_resume(r, ctx),
         }
     }
 
@@ -2208,6 +2193,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 None
             }
             TirExprKind::Block(block) => Self::find_return_type_in_block(block),
+            // `resume value` is the handler-method analogue of `return value`:
+            // it transfers control out of the current method and yields
+            // `value` to the enclosing computation. The MVP lowers it to
+            // `Return { value }` (no post-resume continuation), so a method
+            // whose body terminates with `resume` satisfies the
+            // missing-return check just like a method that ends with
+            // `return`.
+            TirExprKind::Resume { value } => Some(value.type_id),
             _ => None,
         }
     }

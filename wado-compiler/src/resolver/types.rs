@@ -279,6 +279,29 @@ pub enum TypeError {
         param: String,
         span: Span,
     },
+
+    /// `resume` expression appeared outside an effect handler method body.
+    /// `resume value` is only valid inside the body of a method belonging
+    /// to an `impl Effect for Type` block (see WEP 2026-04-11).
+    ResumeOutsideHandler { span: Span },
+
+    /// `with E = h do { ... }` clause where the handler value's type
+    /// does not implement effect `E`.
+    HandlerEffectNotImplemented {
+        type_name: String,
+        effect_name: String,
+        span: Span,
+    },
+
+    /// Bundled-handler form `with h do { ... }` (no effect on LHS) — not yet
+    /// implemented. The full form requires enumerating every effect the
+    /// handler's type implements; the MVP only supports the explicit
+    /// `with E = h` form.
+    BundledHandlerNotSupported { span: Span },
+
+    /// `with E = h do` clause where `E` is not a known effect declaration
+    /// (it might be a regular trait, an unrelated type, or an unknown name).
+    NotAnEffect { name: String, span: Span },
 }
 
 impl std::fmt::Display for TypeError {
@@ -517,6 +540,38 @@ impl std::fmt::Display for TypeError {
                     span.line, span.column, param, function
                 )
             }
+            TypeError::ResumeOutsideHandler { span } => {
+                write!(
+                    f,
+                    "{}:{}: `resume` is only valid inside an effect handler method body",
+                    span.line, span.column
+                )
+            }
+            TypeError::HandlerEffectNotImplemented {
+                type_name,
+                effect_name,
+                span,
+            } => {
+                write!(
+                    f,
+                    "{}:{}: handler value of type '{}' does not implement effect '{}'",
+                    span.line, span.column, type_name, effect_name
+                )
+            }
+            TypeError::BundledHandlerNotSupported { span } => {
+                write!(
+                    f,
+                    "{}:{}: bundled effect handlers (`with h do`) are not yet implemented; use `with E = h do` instead",
+                    span.line, span.column
+                )
+            }
+            TypeError::NotAnEffect { name, span } => {
+                write!(
+                    f,
+                    "{}:{}: '{}' is not an effect; only effect names are valid in `with E = h do` clauses",
+                    span.line, span.column, name
+                )
+            }
         }
     }
 }
@@ -722,6 +777,34 @@ impl From<TypeError> for crate::compiler_host::Diagnostic {
                 ),
                 *span,
             ),
+            TypeError::ResumeOutsideHandler { span } => (
+                Code::UnsupportedFeature,
+                "`resume` is only valid inside an effect handler method body".to_string(),
+                *span,
+            ),
+            TypeError::HandlerEffectNotImplemented {
+                type_name,
+                effect_name,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!(
+                    "handler value of type '{type_name}' does not implement effect '{effect_name}'"
+                ),
+                *span,
+            ),
+            TypeError::BundledHandlerNotSupported { span } => (
+                Code::UnsupportedFeature,
+                "bundled effect handlers (`with h do`) are not yet implemented; use `with E = h do` instead".to_string(),
+                *span,
+            ),
+            TypeError::NotAnEffect { name, span } => (
+                Code::UnknownType,
+                format!(
+                    "'{name}' is not an effect; only effect names are valid in `with E = h do` clauses"
+                ),
+                *span,
+            ),
         };
         crate::compiler_host::Diagnostic {
             severity: Severity::Error,
@@ -836,6 +919,10 @@ pub(super) struct FunctionContext {
     /// Per-local closure parameter defaults for `let f = |...| ...` bindings.
     /// Keyed by local variable name; stores `(param_name, default_expr)` in declaration order.
     pub(super) closure_defaults: IndexMap<String, Vec<(String, Option<crate::ast::Expr>)>>,
+    /// True when this context represents the body of a method inside an
+    /// `impl Effect for Type` block, i.e. an effect handler operation.
+    /// `resume value` is only valid in such contexts.
+    pub(super) in_handler_method: bool,
 }
 
 impl FunctionContext {
@@ -856,6 +943,7 @@ impl FunctionContext {
             deref_overrides: IndexMap::default(),
             outer_box_types: IndexMap::default(),
             closure_defaults: IndexMap::default(),
+            in_handler_method: false,
         }
     }
 
@@ -906,6 +994,10 @@ impl FunctionContext {
             deref_overrides: IndexMap::default(),
             outer_box_types,
             closure_defaults: IndexMap::default(),
+            // Closures inside a handler method body are NOT themselves
+            // handler methods — `resume` returns from the enclosing
+            // operation, not from the closure.
+            in_handler_method: false,
         }
     }
 

@@ -1005,6 +1005,21 @@ impl<H: CompilerHost> Resolver<'_, H> {
             return return_type;
         }
 
+        // Handle user-defined effect operations (e.g., `Counter::next` where
+        // `effect Counter { fn next() -> i32; }` is declared in the project).
+        // The resolver routes these through `CalleeRef::local_namespace`,
+        // which produces `ModuleSource::Local { path: "Counter" }` — also
+        // matched by `is_effect_like()`. Without this lookup the call would
+        // fall through to the default `Unit` return type and the dispatch
+        // synthesis would have to patch up every Let / template that depends
+        // on the value.
+        if callee_module.is_effect_like()
+            && let Some(effect_name) = callee_module.effect_name()
+            && let Some(return_type) = self.get_user_effect_return_type(&effect_name, func_name)
+        {
+            return return_type;
+        }
+
         // First, try local functions (entry point module)
         if callee_module.is_entry_point()
             && let Some(&return_type) = self.function_return_types.get(func_name)
@@ -1123,6 +1138,31 @@ impl<H: CompilerHost> Resolver<'_, H> {
     /// The registry stores the CM-ABI return type (with any `AsyncCall<T>`
     /// wrapper stripped at registration). For async imports the Wado
     /// surface type is `AsyncCall<T>`, so re-wrap before returning.
+    /// Look up the declared return type of a user-defined effect's
+    /// operation, e.g. `Counter::next` for `effect Counter { fn next()
+    /// -> i32; }`. The effect must be a project-declared effect (in
+    /// `trait_env.effect_decl_index`); WASI effects flow through
+    /// `get_wasi_effect_return_type` instead.
+    pub(super) fn get_user_effect_return_type(
+        &mut self,
+        effect: &str,
+        operation: &str,
+    ) -> Option<TypeId> {
+        let (module_source, item_idx) = self.trait_env.effect_decl_index.get(effect)?.clone();
+        let module = self.loaded_modules.get(&module_source)?;
+        let crate::ast::Item::Effect(decl) = module.items.get(item_idx)? else {
+            return None;
+        };
+        let method = decl.methods.iter().find(|m| m.name == operation)?;
+        let return_ast = method.return_type.as_ref()?;
+        // Resolve in the effect's defining module so any types it
+        // references are looked up in the right scope.
+        let saved = std::mem::replace(&mut self.current_module_source, module_source);
+        let return_type = self.resolve_type(return_ast);
+        self.current_module_source = saved;
+        Some(return_type)
+    }
+
     pub(super) fn get_wasi_effect_return_type(
         &mut self,
         effect: &str,

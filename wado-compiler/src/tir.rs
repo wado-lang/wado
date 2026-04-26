@@ -2508,6 +2508,42 @@ pub enum TirExprKind {
     TemplateString {
         parts: Vec<TirTemplatePart>,
     },
+
+    /// Effect handler installation: `with E1 = h1, ... do { body }`.
+    /// See `docs/wep-2026-04-11-effect-handler.md`.
+    ///
+    /// Each binding installs a handler for one effect for the duration of `body`.
+    /// The block evaluates to `body`'s value; in MVP `result_type` is always Unit
+    /// because do-block bodies are statement blocks, not expression blocks.
+    WithHandler {
+        bindings: Vec<TirHandlerBinding>,
+        body: TirBlock,
+        result_type: TypeId,
+    },
+
+    /// `resume value` — control-flow expression valid only inside an effect
+    /// handler method body.
+    ///
+    /// In the MVP (no post-resume code), `resume` lowers to `Return { value }`.
+    /// The expression itself is typed as `Unit` because it does not produce a
+    /// value to its enclosing expression — it transfers control out.
+    Resume {
+        value: Box<TirExpr>,
+    },
+}
+
+/// One `Effect = handler` binding inside a `with ... do` block.
+#[derive(Debug, Clone)]
+pub struct TirHandlerBinding {
+    /// The effect being handled. `None` is reserved for bundled handlers
+    /// (`with &mut h do`); not yet implemented in resolver.
+    pub effect: Option<EffectRef>,
+    /// Handler value expression (e.g., `&mut mock`).
+    pub handler: TirExpr,
+    /// The concrete struct type (after deref) implementing the effect.
+    /// Used by codegen to pick the correct `impl E for T` methods.
+    pub handler_type: TypeId,
+    pub span: Span,
 }
 
 /// A part of a resolved template string.

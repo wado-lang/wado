@@ -317,6 +317,17 @@ fn expand_expr(
             expand_block(default, tt, alloc, cs);
             return;
         }
+        TirExprKind::WithHandler { bindings, body, .. } => {
+            for binding in bindings {
+                expand_expr(&mut binding.handler, tt, alloc, cs);
+            }
+            expand_block(body, tt, alloc, cs);
+            return;
+        }
+        TirExprKind::Resume { value } => {
+            expand_expr(value, tt, alloc, cs);
+            return;
+        }
         _ => return,
     }
 

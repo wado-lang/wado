@@ -23,6 +23,12 @@ pub(super) type TraitImplIndex = IndexMap<String, Vec<(ModuleSource, usize)>>;
 /// Pre-built index: trait name → (`ModuleSource`, item index) for trait declarations.
 pub(super) type TraitDeclIndex = IndexMap<String, (ModuleSource, usize)>;
 
+/// Pre-built index: effect name → (`ModuleSource`, item index) for effect declarations.
+/// Effects are first-class citizens distinct from traits and have their own
+/// impl form (`impl Effect for Type`) interpreted as installable handlers,
+/// so the resolver and dispatch synthesis need to distinguish them quickly.
+pub(super) type EffectDeclIndex = IndexMap<String, (ModuleSource, usize)>;
+
 /// Pre-built list of blanket trait impls: `impl<T: Trait> OtherTrait for T`.
 /// These are impl blocks where the impl type is a free type parameter with trait bounds.
 /// Stored separately because they can't be indexed by concrete type name.
@@ -48,6 +54,8 @@ pub(crate) struct TraitEnv {
     pub(super) impl_index: TraitImplIndex,
     /// Trait name → trait declaration location.
     pub(super) decl_index: TraitDeclIndex,
+    /// Effect name → effect declaration location.
+    pub(super) effect_decl_index: EffectDeclIndex,
     /// Blanket impls (`impl<T: Bound> Trait for T`), checked as fallback.
     pub(super) blanket_impl_index: BlanketTraitImplIndex,
     /// `type_name` → `[(method_name, ModuleSource, item_idx, method_idx)]` for static methods.
@@ -65,6 +73,7 @@ impl TraitEnv {
     pub(super) fn build(modules: &IndexMap<ModuleSource, Module>) -> (Arc<Self>, Vec<TypeError>) {
         let mut impl_index: TraitImplIndex = IndexMap::default();
         let mut decl_index: TraitDeclIndex = IndexMap::default();
+        let mut effect_decl_index: EffectDeclIndex = IndexMap::default();
         let mut blanket_impl_index: BlanketTraitImplIndex = Vec::new();
         // type name → module source, for orphan rule "is this type local?" checks
         let mut type_decl_index: IndexMap<String, ModuleSource> = IndexMap::default();
@@ -114,6 +123,11 @@ impl TraitEnv {
                     Item::Trait(trait_decl) => {
                         decl_index
                             .entry(trait_decl.name.clone())
+                            .or_insert((module_source.clone(), item_idx));
+                    }
+                    Item::Effect(effect_decl) => {
+                        effect_decl_index
+                            .entry(effect_decl.name.clone())
                             .or_insert((module_source.clone(), item_idx));
                     }
                     Item::Resource(resource) => {
@@ -206,6 +220,7 @@ impl TraitEnv {
             Arc::new(Self {
                 impl_index,
                 decl_index,
+                effect_decl_index,
                 blanket_impl_index,
                 static_method_index,
                 resource_static_method_index,

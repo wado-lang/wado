@@ -923,6 +923,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Display name for #function: StructName::method_name
         let display_name = MethodName::format_local(struct_name, None, &func.name);
         let mut ctx = FunctionContext::new(return_type, display_name);
+        // Mark this context as a handler method body when the surrounding
+        // impl block targets an effect declaration. `resume` is only valid
+        // inside such bodies (see WEP 2026-04-11).
+        if let Some(name) = trait_name
+            && scope.trait_env.effect_decl_index.contains_key(name)
+        {
+            ctx.in_handler_method = true;
+        }
 
         // Resolve parameters (including &self). Defaults are resolved in the
         // method's lexical scope with earlier parameters already bound.

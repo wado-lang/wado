@@ -13,6 +13,7 @@ mod callee;
 mod closure;
 mod coercion;
 mod expr;
+mod handlers;
 mod infer;
 mod item;
 mod method_call;

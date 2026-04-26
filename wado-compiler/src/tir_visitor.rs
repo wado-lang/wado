@@ -257,6 +257,15 @@ pub trait TirMutVisitor {
                     }
                 }
             }
+            TirExprKind::WithHandler { bindings, body, .. } => {
+                for binding in bindings {
+                    self.visit_expr(&mut binding.handler);
+                }
+                self.visit_block(body);
+            }
+            TirExprKind::Resume { value } => {
+                self.visit_expr(value);
+            }
         }
     }
 }
@@ -470,6 +479,15 @@ pub trait TirRefVisitor {
                         self.visit_expr(inner);
                     }
                 }
+            }
+            TirExprKind::WithHandler { bindings, body, .. } => {
+                for binding in bindings {
+                    self.visit_expr(&binding.handler);
+                }
+                self.visit_block(body);
+            }
+            TirExprKind::Resume { value } => {
+                self.visit_expr(value);
             }
         }
     }
@@ -692,6 +710,11 @@ pub fn opt_walk_expr(visitor: &mut impl TirOptVisitor, expr: &mut TirExpr) -> bo
         TirExprKind::TemplateString { .. } => {
             unreachable!("TemplateString should be expanded before this phase")
         }
+        TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+            unreachable!(
+                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
+            )
+        }
     }
     changed
 }
@@ -841,6 +864,8 @@ pub fn expr_has_break_to(label: &str, expr: &TirExpr) -> bool {
         | TirExprKind::Unit
         | TirExprKind::EnumConstruct { .. } => false,
         TirExprKind::TemplateString { .. } => false,
+        TirExprKind::WithHandler { body, .. } => block_has_break_to(label, body),
+        TirExprKind::Resume { value } => expr_has_break_to(label, value),
     }
 }
 
