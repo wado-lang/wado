@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777193723016,
+  "lastUpdate": 1777194126723,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -16557,6 +16557,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/9371bf1ceae632c6839040ec52e9014e8b5f87d8"
         },
         "date": 1777193722724,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8982,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19110,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 614203,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c22db936879b51d6eeb9ef30eba2ebba6e10ff25",
+          "message": "Merge pull request #930 from wado-lang/claude/wasm-import-support-rVlUV\n\nfeat(wasm-import): Phase 1 — `use { name } from \"<path>\" with { type: \"wat\"|\"wasm\" }`",
+          "timestamp": "2026-04-26T17:57:00+09:00",
+          "tree_id": "51a66d5a5daf8e09d53bb143fcc9f53499295457",
+          "url": "https://github.com/wado-lang/wado/commit/c22db936879b51d6eeb9ef30eba2ebba6e10ff25"
+        },
+        "date": 1777194126437,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
