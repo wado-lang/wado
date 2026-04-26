@@ -52,12 +52,10 @@ pub enum TokenKind {
     Const,
     Matches,
     Stores,
-    /// `do` keyword — opens the body of an effect handler `with ... do { ... }` block.
-    Do,
-    /// `resume` keyword — control-flow expression used inside effect handler methods
-    /// to deliver a value to the suspended computation.
-    Resume,
-    // Note: "test" is handled as a contextual keyword in the parser, not as a TokenKind
+    // Note: "test", "do", "resume" are contextual keywords handled by the parser,
+    // not as TokenKinds. `do` is only treated as a keyword inside the trailing
+    // position of a `with ... do { ... }` clause; `resume` is only treated as a
+    // keyword in expression position inside an effect handler method body.
 
     // Literals
     Ident(String),
@@ -194,9 +192,7 @@ impl TokenKind {
             Self::Const => Some("const"),
             Self::Matches => Some("matches"),
             Self::Stores => Some("stores"),
-            Self::Do => Some("do"),
-            Self::Resume => Some("resume"),
-            // Note: "test" is a contextual keyword, not listed here
+            // Note: "test", "do", "resume" are contextual keywords, not listed here
             Self::True => Some("true"),
             Self::False => Some("false"),
             Self::Null => Some("null"),

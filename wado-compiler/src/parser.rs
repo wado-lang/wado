@@ -2917,6 +2917,12 @@ impl Parser {
 
         // Handle identifiers and contextual keywords (flags, type)
         if let Some(name) = self.peek_kind().as_ident_name() {
+            // Contextual keyword `resume` in expression position. Only matched
+            // here; outside of expressions (e.g. `let resume = ...`), `resume`
+            // remains an ordinary identifier.
+            if name == "resume" {
+                return self.parse_resume_expr();
+            }
             let name = name.to_string();
             self.advance();
             // Check for qualified name (Effect::function) or static method call
@@ -3214,7 +3220,6 @@ impl Parser {
             TokenKind::If => self.parse_if_expr(),
             TokenKind::Match => self.parse_match_expr(),
             TokenKind::With => self.parse_with_handler_expr(),
-            TokenKind::Resume => self.parse_resume_expr(),
             TokenKind::Hash => {
                 self.advance(); // consume '#'
                 // Parse compile-time location literals: #file, #line, #function
@@ -3357,7 +3362,22 @@ impl Parser {
             self.advance(); // consume `,`
         }
 
-        self.expect(&TokenKind::Do)?;
+        // `do` is a contextual keyword: lex returns it as an Ident.
+        let is_do = matches!(
+            self.peek_kind(),
+            TokenKind::Ident(name) if name == "do"
+        );
+        if !is_do {
+            return Err(ParseError {
+                message: format!(
+                    "expected `do` after handler bindings, found {:?}",
+                    self.peek_kind()
+                ),
+                span: self.peek().span,
+            });
+        }
+        self.advance();
+
         let body = self.parse_block()?;
         let span = start_span.merge(&body.span);
 
@@ -3412,9 +3432,11 @@ impl Parser {
 
     /// Parse a `resume value` expression. Valid only inside an effect handler
     /// method body; the resolver (later phase) is responsible for that check.
+    /// `resume` is a contextual keyword: the lexer hands it to us as an Ident,
+    /// so we consume it by name rather than via a dedicated TokenKind.
     fn parse_resume_expr(&mut self) -> ParseResult<Expr> {
         let start_span = self.peek().span;
-        self.expect(&TokenKind::Resume)?;
+        self.advance(); // consume `resume` ident
         let id = self.alloc_ast_id();
         let value = self.parse_expr()?;
         let span = start_span.merge(&value.span());
