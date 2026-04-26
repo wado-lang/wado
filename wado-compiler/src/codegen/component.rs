@@ -13,7 +13,6 @@
 use super::component_context::ComponentModelContext;
 use super::postprocess;
 use crate::ast::Type;
-use crate::bundled::wado_bundled_libm_wasm;
 use crate::component_model::{CmInstanceTypeGen, CmVariantCase, WasiFunctionInfo};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -54,18 +53,30 @@ pub fn build_component(
         emit_kiln_world_types(&mut builder, &mut ctx);
     }
 
-    // Bundled modules (FTS and libm) — computed from post-DCE imports
+    // Imported wasm modules (e.g. libm.wat) — bytes are loaded by the
+    // module loader and stored on the project, keyed by canonical
+    // namespace string ("wasm:<path>"). Group post-DCE imports by their
+    // namespace so each wasm module is embedded exactly once with the
+    // union of exports actually referenced.
     let component_plan = &project.component_plan;
-    let bundled_functions: Vec<String> = project
-        .imports
-        .iter()
-        .filter(|i| i.namespace == "bundled")
-        .map(|i| i.canonical_name.clone())
-        .collect();
+    let mut imported_wasm_module_uses: IndexMap<String, IndexSet<String>> = IndexMap::default();
+    for imp in &project.imports {
+        if imp.namespace.starts_with("wasm:") {
+            imported_wasm_module_uses
+                .entry(imp.namespace.clone())
+                .or_default()
+                .insert(imp.canonical_name.clone());
+        }
+    }
 
     // Core memory module
     let mem_info = wasm_modules.get("mem");
-    let mem_module = build_memory_module(project.strip_names, mem_info, &bundled_functions);
+    let mem_module = build_memory_module(
+        project.strip_names,
+        mem_info,
+        &imported_wasm_module_uses,
+        &project.wasm_assets,
+    );
     ctx.register_core_module("mem-mod");
     builder.core_module_raw(Some("mem-mod"), &mem_module);
 
@@ -91,7 +102,12 @@ pub fn build_component(
         ExportKind::Func,
     );
 
-    embed_bundled_modules(&mut builder, &mut ctx, &bundled_functions);
+    embed_imported_wasm_modules(
+        &mut builder,
+        &mut ctx,
+        &imported_wasm_module_uses,
+        &project.wasm_assets,
+    );
 
     // Canonical intrinsics are discovered lazily during WIR translation via ensure_canonical().
     // They are stored in wir_package.needed_canonicals — the single source of truth.
@@ -298,30 +314,39 @@ pub fn build_component(
     let mem_instance = builder.core_instantiate_exports(Some("mem-instance"), mem_exports);
     ctx.register_core_instance("mem-inst");
 
-    // Build bundled instance
-    let bundled_exports: Vec<(String, ExportKind, u32)> = bundled_functions
-        .iter()
-        .map(|func_name| {
-            (
-                func_name.clone(),
-                ExportKind::Func,
-                ctx.core_func_idx(func_name),
-            )
-        })
-        .collect();
-
-    let bundled_instance = if bundled_exports.is_empty() {
-        None
-    } else {
-        let bundled_exports_refs: Vec<_> = bundled_exports
+    // Build per-namespace instances for each imported wasm module.
+    // The main module's `(import "<namespace>" "<export>" ...)` directives
+    // use the canonical namespace string (e.g. `wasm:core:libm.wat`), so
+    // each instance is keyed by the same string. Each
+    // `core_instantiate_exports` call bumps the builder's instance
+    // counter, so we must call `ctx.register_core_instance` in lockstep.
+    let mut wasm_namespace_instances: Vec<(String, u32)> = Vec::new();
+    for (namespace, used_exports) in &imported_wasm_module_uses {
+        let instance_label = format!(
+            "wasm-args-{}-instance",
+            sanitise_wasm_namespace_for_label(namespace)
+        );
+        let exports: Vec<(String, ExportKind, u32)> = used_exports
+            .iter()
+            .map(|func_name| {
+                (
+                    func_name.clone(),
+                    ExportKind::Func,
+                    ctx.core_func_idx(func_name),
+                )
+            })
+            .collect();
+        if exports.is_empty() {
+            continue;
+        }
+        let exports_refs: Vec<_> = exports
             .iter()
             .map(|(name, kind, idx)| (name.as_str(), *kind, *idx))
             .collect();
-        let instance =
-            builder.core_instantiate_exports(Some("bundled-instance"), bundled_exports_refs);
-        ctx.register_core_instance("bundled");
-        Some(instance)
-    };
+        let instance = builder.core_instantiate_exports(Some(&instance_label), exports_refs);
+        ctx.register_core_instance(&instance_label);
+        wasm_namespace_instances.push((namespace.clone(), instance));
+    }
 
     // Instantiate core module
     ctx.register_core_instance("main");
@@ -329,8 +354,8 @@ pub fn build_component(
         ("wasi", ModuleArg::Instance(wasi_instance)),
         ("mem", ModuleArg::Instance(mem_instance)),
     ];
-    if let Some(bundled_inst) = bundled_instance {
-        main_args.push(("bundled", ModuleArg::Instance(bundled_inst)));
+    for (namespace, instance) in &wasm_namespace_instances {
+        main_args.push((namespace.as_str(), ModuleArg::Instance(*instance)));
     }
     builder.core_instantiate(Some("main"), ctx.core_module_idx("main-mod"), main_args);
 
@@ -760,16 +785,23 @@ fn wado_type_to_cm_val_type(
 fn build_memory_module(
     strip_names: bool,
     wasm_mod: Option<&crate::wir::WasmModuleInfo>,
-    bundled_functions: &[String],
+    imported_wasm_uses: &IndexMap<String, IndexSet<String>>,
+    wasm_assets: &IndexMap<String, crate::loader::WasmAsset>,
 ) -> Vec<u8> {
     let wasm_mod = wasm_mod.expect("core:allocator with #![wasm_module(\"mem\")] is required");
 
-    // Determine minimum pages: at least 1, but must satisfy bundled module requirements.
-    // libm requires its data section to fit in memory at instantiation time.
+    // Determine minimum pages: at least 1, but must satisfy any imported
+    // wasm module's data-section requirements (e.g. libm's 17 pages).
     let mut min_pages: u32 = 1;
-    if !bundled_functions.is_empty() {
-        let libm_pages = postprocess::extract_memory_min_pages(wado_bundled_libm_wasm());
-        min_pages = min_pages.max(u32::try_from(libm_pages).unwrap_or(u32::MAX));
+    for namespace in imported_wasm_uses.keys() {
+        let asset = wasm_assets.get(namespace).unwrap_or_else(|| {
+            panic!(
+                "wasm asset for namespace {namespace:?} is referenced via #[canonical(...)] but \
+                 was not registered via `use ... from \"<path>\" with {{ type: \"wat\"|\"wasm\" }}`",
+            )
+        });
+        let pages = postprocess::extract_memory_min_pages(&asset.bytes);
+        min_pages = min_pages.max(u32::try_from(pages).unwrap_or(u32::MAX));
     }
 
     let memory = crate::wir::WirMemory {
@@ -781,45 +813,91 @@ fn build_memory_module(
     super::emit::emit_core_module(&wir, strip_names)
 }
 
-fn embed_bundled_modules(
+/// Sanitise a wasm namespace string (e.g. `"wasm:core:libm.wat"`) into a
+/// component-builder-safe instance/module name. Component names allow
+/// only `[A-Za-z0-9_-]`, so colons and slashes are replaced with `_`.
+fn sanitise_wasm_namespace_for_label(namespace: &str) -> String {
+    namespace
+        .strip_prefix("wasm:")
+        .unwrap_or(namespace)
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
+
+/// Embed each imported wasm module referenced by post-DCE TIR imports
+/// (`namespace` prefixed with `"wasm:"`).
+///
+/// For each module: rewrite its memory definition into an import of
+/// `env.memory`, prune to the union of actually-used exports, register
+/// it in the component as a core module + instance, and alias each used
+/// export so canonical-import lowerings can target it.
+fn embed_imported_wasm_modules(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
-    bundled_functions: &[String],
+    imported_wasm_uses: &IndexMap<String, IndexSet<String>>,
+    wasm_assets: &IndexMap<String, crate::loader::WasmAsset>,
 ) {
-    if bundled_functions.is_empty() {
+    if imported_wasm_uses.is_empty() {
         return;
     }
+    let mut seen_aliased_funcs: IndexSet<String> = IndexSet::default();
+    for (namespace, used_exports) in imported_wasm_uses {
+        let asset = wasm_assets.get(namespace).unwrap_or_else(|| {
+            panic!(
+                "wasm asset for namespace {namespace:?} is referenced via #[canonical(...)] but \
+                 was not registered via `use ... from \"<path>\" with {{ type: \"wat\"|\"wasm\" }}`",
+            )
+        });
+        let stem = sanitise_wasm_namespace_for_label(namespace);
+        let module_label = format!("wasm-mod-{stem}");
+        let env_instance_label = format!("wasm-env-{stem}-instance");
+        let instance_label = format!("wasm-{stem}");
 
-    let libm_module =
-        postprocess::convert_memory_to_import(wado_bundled_libm_wasm(), "env", "memory")
-            .expect("Failed to process wado-bundled-libm module");
+        let imported = postprocess::convert_memory_to_import(&asset.bytes, "env", "memory")
+            .unwrap_or_else(|e| panic!("failed to process wasm asset {namespace:?}: {e}"));
+        let kept = postprocess::eliminate_dead_code(&imported, used_exports);
 
-    let keep_exports: IndexSet<_> = bundled_functions.iter().cloned().collect();
-    let final_module = postprocess::eliminate_dead_code(&libm_module, &keep_exports);
+        ctx.register_core_module(&module_label);
+        builder.core_module_raw(Some(&module_label), &kept);
 
-    ctx.register_core_module("libm-mod");
-    builder.core_module_raw(Some("libm-mod"), &final_module);
+        // Order matters: builder.core_instantiate{,_exports}() each create a
+        // new core instance and bump the builder's instance counter. We
+        // call `ctx.register_core_instance` immediately after each so the
+        // `ctx`-side counter stays in lockstep with the builder's.
+        let env_exports = [("memory", ExportKind::Memory, ctx.memory_idx())];
+        let env_instance = builder.core_instantiate_exports(Some(&env_instance_label), env_exports);
+        ctx.register_core_instance(&env_instance_label);
 
-    ctx.register_core_instance("libm-env");
-    let libm_env_exports = [("memory", ExportKind::Memory, ctx.memory_idx())];
-    let libm_env_instance =
-        builder.core_instantiate_exports(Some("libm-env-instance"), libm_env_exports);
-
-    ctx.register_core_instance("libm");
-    builder.core_instantiate(
-        Some("libm"),
-        ctx.core_module_idx("libm-mod"),
-        [("env", ModuleArg::Instance(libm_env_instance))],
-    );
-
-    for func_name in bundled_functions {
-        ctx.register_core_func(func_name);
-        builder.core_alias_export(
-            Some(func_name),
-            ctx.core_instance_idx("libm"),
-            func_name,
-            ExportKind::Func,
+        builder.core_instantiate(
+            Some(&instance_label),
+            ctx.core_module_idx(&module_label),
+            [("env", ModuleArg::Instance(env_instance))],
         );
+        ctx.register_core_instance(&instance_label);
+
+        for func_name in used_exports {
+            // Two distinct namespaces could in theory export the same name.
+            // The component builder keys core funcs by name, so use a
+            // namespace-qualified label internally and alias under the
+            // export name as well so canonical lowerings can locate it.
+            if !seen_aliased_funcs.insert(func_name.clone()) {
+                continue;
+            }
+            ctx.register_core_func(func_name);
+            builder.core_alias_export(
+                Some(func_name),
+                ctx.core_instance_idx(&instance_label),
+                func_name,
+                ExportKind::Func,
+            );
+        }
     }
 }
 

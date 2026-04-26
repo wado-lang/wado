@@ -1,0 +1,14 @@
+// Importing a `.wasm` whose body fails `wasmparser` validation must
+// surface as a compile error rather than a panic in codegen. The
+// companion `sub/wasm_import_invalid.wasm` has the right magic bytes
+// but trailing garbage; the loader reports the parser error with the
+// canonical wasm-import diagnostic prefix.
+
+use _ from "./sub/wasm_import_invalid.wasm" with { type: "wasm" };
+
+export fn run() {}
+
+__DATA__
+{
+    "compile_error": "failed to parse wasm"
+}

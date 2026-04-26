@@ -568,7 +568,17 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         };
         let builtin_registry = {
             let _span = logger.span("resolve/builtin_registry");
-            BuiltinRegistry::build_from_stdlib(&type_table)
+            let mut registry = BuiltinRegistry::build_from_stdlib(&type_table);
+            // Fold in `#[canonical(...)]` no-body declarations from
+            // loader-synthesised wasm-asset modules so calls into a
+            // wat/wasm asset's exports lower through the same TirImport
+            // path as `core:builtin` declarations.
+            for (ms, module) in modules {
+                if matches!(ms, ModuleSource::Wasm { .. }) {
+                    registry.register_wasm_module(module, &type_table);
+                }
+            }
+            registry
         };
 
         // Build trait lookup indices once for all modules.

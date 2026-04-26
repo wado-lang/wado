@@ -1,0 +1,17 @@
+// Verify that a user-supplied **`.wasm`** binary can be name-imported the
+// same way as a `.wat` text module — the loader skips the `wat::parse_bytes`
+// step but otherwise follows the same TIR-synthesis path. The companion
+// `sub/wasm_import_user.wasm` is generated from `sub/wasm_import_user.wat`
+// (same exports), so this fixture also doubles as a check that both
+// formats produce identical Wado-side bindings.
+
+use { println, Stdout } from "core:cli";
+use { add_one, twice } from "./sub/wasm_import_user.wasm" with { type: "wasm" };
+
+export fn run() with Stdout {
+    println(`add_one(41) = {add_one(41)}`);
+    println(`twice(1.5) = {twice(1.5)}`);
+}
+
+__DATA__
+{"stdout": "add_one(41) = 42\ntwice(1.5) = 3\n"}

@@ -34,6 +34,32 @@ use fluent_uri::UriRef;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 
+/// Format of a wasm asset imported via `use ... with { type: "..." }`.
+///
+/// Phase 1 supports only core wasm (no Component Model) — see
+/// `docs/wep-2026-01-10-wasm-import.md`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum WasmAssetKind {
+    /// `.wat` text format. Parsed via `wat::parse_bytes` before further
+    /// processing. Used by `lib/core/libm.wat` and by user code that
+    /// writes `with { type: "wat" }`.
+    Wat,
+    /// Raw `.wasm` binary. Used by user code that writes
+    /// `with { type: "wasm" }`.
+    Wasm,
+}
+
+impl WasmAssetKind {
+    /// Format string used in `with { type: "..." }` attributes.
+    #[must_use]
+    pub fn type_attr(&self) -> &'static str {
+        match self {
+            Self::Wat => "wat",
+            Self::Wasm => "wasm",
+        }
+    }
+}
+
 /// Source location of a module.
 ///
 /// This enum provides a structured representation of module paths,
@@ -99,6 +125,26 @@ pub enum ModuleSource {
         /// Absolute URI (typically `file:///abs/path/to/file.wado`).
         uri: String,
     },
+    /// Wasm asset imported via `use ... from "<path>" with { type: "wat"|"wasm" }`.
+    ///
+    /// `path` is the canonical identifier for the asset, computed by
+    /// [`crate::loader::ModuleLoader::resolve_import`]:
+    /// - `core:libm.wat` for stdlib-bundled wat next to a core module.
+    /// - `./geometry.wat` (or normalized form) for entry-relative imports.
+    /// - The full `wasi:` / `core:` path with `.wat`/`.wasm` extension when
+    ///   the importing module is a core/wasi module.
+    ///
+    /// The asset is loaded as raw bytes and parsed by the wasm-import
+    /// loader path; the resulting Wado module exposes one extern fn per
+    /// requested export. See `docs/wep-2026-01-10-wasm-import.md`.
+    Wasm {
+        /// Canonical path identifier (used as the unique module key and
+        /// as the namespace component of the synthesized
+        /// `#[canonical("wasm:<path>", "<export>")]` attributes).
+        path: String,
+        /// `wat` or `wasm` source format.
+        kind: WasmAssetKind,
+    },
 }
 
 impl PartialEq for ModuleSource {
@@ -109,6 +155,16 @@ impl PartialEq for ModuleSource {
             (Self::Local { path: a }, Self::Local { path: b }) => a == b,
             (Self::Remote { url: a }, Self::Remote { url: b }) => a == b,
             (Self::Redirected { uri: a }, Self::Redirected { uri: b }) => a == b,
+            (
+                Self::Wasm {
+                    path: a,
+                    kind: kind_a,
+                },
+                Self::Wasm {
+                    path: b,
+                    kind: kind_b,
+                },
+            ) => a == b && kind_a == kind_b,
             // Entry points are equal regardless of filename
             (Self::EntryPoint { .. }, Self::EntryPoint { .. }) => true,
             _ => false,
@@ -128,6 +184,10 @@ impl std::hash::Hash for ModuleSource {
             Self::Local { path } => path.hash(state),
             Self::Remote { url } => url.hash(state),
             Self::Redirected { uri } => uri.hash(state),
+            Self::Wasm { path, kind } => {
+                path.hash(state);
+                kind.hash(state);
+            }
             // Entry points hash the same regardless of filename
             Self::EntryPoint { .. } => {}
         }
@@ -289,6 +349,33 @@ impl ModuleSource {
             Self::Remote { url } => vec![url.clone()],
             Self::EntryPoint { filename } => vec![filename.clone()],
             Self::Redirected { uri } => vec![uri.clone()],
+            Self::Wasm { path, .. } => vec![path.clone()],
+        }
+    }
+
+    /// Construct a wasm-asset module source.
+    #[must_use]
+    pub fn wasm(path: impl Into<String>, kind: WasmAssetKind) -> Self {
+        Self::Wasm {
+            path: path.into(),
+            kind,
+        }
+    }
+
+    /// Check if this is a wasm-asset module (`.wat`/`.wasm` import).
+    #[must_use]
+    pub fn is_wasm_asset(&self) -> bool {
+        matches!(self, Self::Wasm { .. })
+    }
+
+    /// Namespace key used by `#[canonical("wasm:<path>", ...)]` attributes
+    /// synthesized for this wasm asset. Returns `None` for non-wasm
+    /// module sources.
+    #[must_use]
+    pub fn wasm_canonical_namespace(&self) -> Option<String> {
+        match self {
+            Self::Wasm { path, .. } => Some(format!("wasm:{path}")),
+            _ => None,
         }
     }
 
@@ -426,6 +513,7 @@ impl fmt::Display for ModuleSource {
                 write!(f, "{filename}")
             }
             Self::Redirected { uri } => write!(f, "{uri}"),
+            Self::Wasm { path, .. } => write!(f, "{path}"),
         }
     }
 }
@@ -532,6 +620,7 @@ impl fmt::Display for FreeFunctionName {
             ModuleSource::Local { path } => write!(f, "{}/{}", path, self.name),
             ModuleSource::Remote { url } => write!(f, "{}/{}", url, self.name),
             ModuleSource::Redirected { uri } => write!(f, "{}/{}", uri, self.name),
+            ModuleSource::Wasm { path, .. } => write!(f, "{}/{}", path, self.name),
         }
     }
 }

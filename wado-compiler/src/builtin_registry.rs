@@ -78,6 +78,26 @@ impl BuiltinRegistry {
         registry
     }
 
+    /// Register every `#[canonical(...)]` no-body function declared in
+    /// `module` with the registry. Used to fold in functions from
+    /// loader-synthesized wasm-asset modules
+    /// (`ModuleSource::Wasm`) so calls into a wasm asset's exports go
+    /// through the same `TirImport` path as `core:builtin` declarations.
+    pub fn register_wasm_module(
+        &mut self,
+        module: &crate::ast::Module,
+        type_table: &RefCell<TypeTable>,
+    ) {
+        for item in &module.items {
+            if let crate::ast::Item::Function(func) = item
+                && func.body.is_none()
+                && func.attrs.iter().any(|a| a.name == "canonical")
+            {
+                self.register(func, type_table);
+            }
+        }
+    }
+
     /// Register a builtin function from a parsed function declaration
     fn register(&mut self, func: &Function, type_table: &RefCell<TypeTable>) {
         let type_params: Vec<String> = func.type_params.iter().map(|p| p.name.clone()).collect();

@@ -55,6 +55,16 @@ pub struct Package {
     /// Populated by `synthesis::cm_binding` when an export returns a Result type.
     /// Used by `optimize_dce` to override the builtin registry's single-`i32` signature.
     pub task_return_flat_params: Option<Vec<TypeId>>,
+
+    /// Wasm assets loaded by the loader from
+    /// `use ... from "<path>" with { type: "wat"|"wasm" }` declarations.
+    ///
+    /// Keyed by canonical namespace string (matches `namespace` in
+    /// `#[canonical("wasm:<path>", "<export>")]` attributes). Consumed by
+    /// the codegen `embed_imported_wasm_modules` pass and (in a follow-up)
+    /// by the resolver, which synthesises Wado declarations from each
+    /// asset's exports.
+    pub wasm_assets: IndexMap<String, crate::loader::WasmAsset>,
 }
 
 impl Package {
@@ -87,6 +97,8 @@ impl Package {
             // CM export adapter mapping
             export_binding_names: IndexMap::default(),
             task_return_flat_params: None,
+            // Wasm assets loaded from `use _ from "<path>" with { type: ... }`
+            wasm_assets: IndexMap::default(),
         }
     }
 
