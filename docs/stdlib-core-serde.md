@@ -9,35 +9,64 @@ Provides format-agnostic `Serialize` and `Deserialize` traits with a 17-method
 data model optimized for JSON and CBOR. Format implementations (e.g., `core:json`)
 implement `Serializer` and `Deserializer` to support specific wire formats.
 
-Usage:
-
 ```wado
 use { Serialize, Deserialize, SerializeError, DeserializeError } from "core:serde";
 ```
 
-Field attributes:
+## Field naming on the wire
 
-- `#[serde(default)]` on a struct field — when the field is absent during
-  deserialization, fall back to a default value instead of returning
-  `MissingField`. The fallback is the field's declared default expression
-  (`f: T = expr`) if present, otherwise the type's zero-value (`0`, `""`,
-  `false`, `[]`, `null`, ...). A field that declares `= expr` is implicitly
-  `#[serde(default)]`, so the attribute is only needed on fields without a
-  declared default.
-- `#[serde(rename = "...")]` on a struct field — override the wire-form
-  key for that field.
-- `#[serde(rename_all = "...")]` on a struct — rename every field by a
-  convention (`"camelCase"`, `"snake_case"`, `"kebab-case"`, ...).
+Wado fields are `snake_case` by convention, but the default wire-form key
+is `camelCase`. Override per struct with `#[serde(rename_all = "...")]`,
+or per field with `#[serde(rename = "...")]` (which takes precedence).
 
-Example — a field with a declared default is implicitly tolerated when
-missing, so deserializing `{"host":"localhost"}` yields `timeout = 30`:
+`rename_all` strategies: `"camelCase"` (default), `"snake_case"`,
+`"PascalCase"`, `"SCREAMING_SNAKE_CASE"`, `"kebab-case"`,
+`"SCREAMING-KEBAB-CASE"`.
+
+```wado
+// Default — wire keys are camelCase
+struct User {
+    user_name: String,        // wire key: "userName"
+    account_id: i64,          // wire key: "accountId"
+}
+
+// Per-struct convention
+#[serde(rename_all = "snake_case")]
+struct Event {
+    created_at: String,       // wire key: "created_at"
+    event_type: String,       // wire key: "event_type"
+}
+
+// Per-field override (wins over rename_all)
+#[serde(rename_all = "kebab-case")]
+struct Header {
+    content_type: String,     // wire key: "content-type"
+    #[serde(rename = "X-Trace-Id")]
+    trace_id: String,         // wire key: "X-Trace-Id"
+}
+```
+
+## Missing fields on deserialization
+
+By default, a missing required field produces `DeserializeError` with kind
+`MissingField`. To tolerate omission, mark the field with
+`#[serde(default)]` (uses the type's zero-value: `0`, `""`, `false`, `[]`,
+`null`, ...) or declare a default expression with `f: T = expr` (uses that
+expression). A field that declares `= expr` is implicitly
+`#[serde(default)]`, so the attribute is only needed on fields without a
+declared default.
 
 ```wado
 struct Config {
-    host: String,
-    timeout: i32 = 30,
+    host: String,             // required - error if missing
+    #[serde(default)]
+    port: i32,                // missing -> 0  (zero-value)
+    timeout: i32 = 30,        // missing -> 30 (declared default)
 }
 impl Deserialize for Config;
+
+// {"host":"localhost"}
+//   -> Config { host: "localhost", port: 0, timeout: 30 }
 ```
 
 ## Traits
