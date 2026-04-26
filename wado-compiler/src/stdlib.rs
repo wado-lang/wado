@@ -22,6 +22,10 @@
 //! ```
 
 pub const CORE_PRELUDE: &str = include_str!("../lib/core/prelude.wado");
+
+// Wasm assets bundled with the compiler. Loaded as raw bytes (UTF-8 for
+// `.wat`, binary for `.wasm`) and dispatched through `get_stdlib_wasm_asset`.
+pub const CORE_LIBM_WAT: &[u8] = include_bytes!("../lib/core/libm.wat");
 pub const CORE_CLI: &str = include_str!("../lib/core/cli.wado");
 pub const CORE_INTERNAL: &str = include_str!("../lib/core/internal.wado");
 pub const CORE_ALLOCATOR: &str = include_str!("../lib/core/allocator.wado");
@@ -161,6 +165,19 @@ pub const ALL_WASI_MODULES: &[(&str, &str)] = &[
     ("wasi:tls/client.wado", WASI_TLS_CLIENT),
     ("wasi:tls/worlds.wado", WASI_TLS_WORLDS),
 ];
+
+/// Get embedded wasm asset bytes by canonical path.
+///
+/// Used by the wasm-import loader path to resolve stdlib-bundled
+/// `.wat`/`.wasm` files (e.g., `core:libm.wat`). User-supplied paths
+/// (`./foo.wat`) are loaded through `CompilerHost::load_source` instead.
+#[must_use]
+pub fn get_stdlib_wasm_asset(import_path: &str) -> Option<&'static [u8]> {
+    match import_path {
+        "core:libm.wat" => Some(CORE_LIBM_WAT),
+        _ => None,
+    }
+}
 
 /// Get embedded module source by import path.
 ///

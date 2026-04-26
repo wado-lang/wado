@@ -47,6 +47,12 @@ pub(crate) fn module_uri(
         // Kiln-redirected modules already carry a fully-qualified URI;
         // hand it to the LSP client unchanged.
         ModuleSource::Redirected { uri } => Some(uri.clone()),
+        // Wasm assets (`.wat`/`.wasm` imported via `with { type: ... }`)
+        // expose their canonical path; opening these in the editor isn't
+        // useful (binary `.wasm`) and stdlib `.wat` paths can't be served
+        // until `workspace/textDocumentContent` lands. Emit the path so
+        // CLI consumers can still see the reference site.
+        ModuleSource::Wasm { path, .. } => Some(path.clone()),
     }
 }
 

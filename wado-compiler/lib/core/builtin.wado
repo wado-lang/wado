@@ -10,6 +10,13 @@
 // Functions with #[canonical("namespace", "name")] are imported as CM canonical built-ins.
 // Functions without #[canonical(...)] compile to Wasm instructions directly.
 
+// Register libm.wat as a wasm asset for codegen. The libm functions below
+// carry #[canonical("wasm:core:libm.wat", "<export>")] attributes that
+// reference this asset's exports. Phase 1 of the wasm-import support
+// (see docs/wep-2026-01-10-wasm-import.md) requires this `use _`
+// declaration so the loader knows to embed libm.wat into the component.
+use _ from "./libm.wat" with { type: "wat" };
+
 /// Signals task completion with a result value.
 /// Used internally by the compiler to complete async exports.
 #[canonical("wasi", "task-return")]
@@ -121,195 +128,195 @@ fn memory_size() -> i32;
 /// Maps to Wasm memory.fill instruction.
 fn memory_fill(dst: i32, value: u8, len: i32);
 /// Sine of x (in radians)
-#[canonical("bundled", "libm_sin")]
+#[canonical("wasm:core:libm.wat", "libm_sin")]
 fn f64_sin(x: f64) -> f64;
 
 /// Cosine of x (in radians)
-#[canonical("bundled", "libm_cos")]
+#[canonical("wasm:core:libm.wat", "libm_cos")]
 fn f64_cos(x: f64) -> f64;
 
 /// Tangent of x (in radians)
-#[canonical("bundled", "libm_tan")]
+#[canonical("wasm:core:libm.wat", "libm_tan")]
 fn f64_tan(x: f64) -> f64;
 
 /// Arc sine of x (returns radians)
-#[canonical("bundled", "libm_asin")]
+#[canonical("wasm:core:libm.wat", "libm_asin")]
 fn f64_asin(x: f64) -> f64;
 
 /// Arc cosine of x (returns radians)
-#[canonical("bundled", "libm_acos")]
+#[canonical("wasm:core:libm.wat", "libm_acos")]
 fn f64_acos(x: f64) -> f64;
 
 /// Arc tangent of x (returns radians)
-#[canonical("bundled", "libm_atan")]
+#[canonical("wasm:core:libm.wat", "libm_atan")]
 fn f64_atan(x: f64) -> f64;
 
 /// Arc tangent of y/x, using signs to determine quadrant (returns radians)
-#[canonical("bundled", "libm_atan2")]
+#[canonical("wasm:core:libm.wat", "libm_atan2")]
 fn f64_atan2(y: f64, x: f64) -> f64;
 
 /// Hyperbolic sine of x
-#[canonical("bundled", "libm_sinh")]
+#[canonical("wasm:core:libm.wat", "libm_sinh")]
 fn f64_sinh(x: f64) -> f64;
 
 /// Hyperbolic cosine of x
-#[canonical("bundled", "libm_cosh")]
+#[canonical("wasm:core:libm.wat", "libm_cosh")]
 fn f64_cosh(x: f64) -> f64;
 
 /// Hyperbolic tangent of x
-#[canonical("bundled", "libm_tanh")]
+#[canonical("wasm:core:libm.wat", "libm_tanh")]
 fn f64_tanh(x: f64) -> f64;
 
 /// Inverse hyperbolic sine of x
-#[canonical("bundled", "libm_asinh")]
+#[canonical("wasm:core:libm.wat", "libm_asinh")]
 fn f64_asinh(x: f64) -> f64;
 
 /// Inverse hyperbolic cosine of x
-#[canonical("bundled", "libm_acosh")]
+#[canonical("wasm:core:libm.wat", "libm_acosh")]
 fn f64_acosh(x: f64) -> f64;
 
 /// Inverse hyperbolic tangent of x
-#[canonical("bundled", "libm_atanh")]
+#[canonical("wasm:core:libm.wat", "libm_atanh")]
 fn f64_atanh(x: f64) -> f64;
 
 /// e raised to the power x
-#[canonical("bundled", "libm_exp")]
+#[canonical("wasm:core:libm.wat", "libm_exp")]
 fn f64_exp(x: f64) -> f64;
 
 /// 2 raised to the power x
-#[canonical("bundled", "libm_exp2")]
+#[canonical("wasm:core:libm.wat", "libm_exp2")]
 fn f64_exp2(x: f64) -> f64;
 
 /// e^x - 1 (more accurate for small x)
-#[canonical("bundled", "libm_expm1")]
+#[canonical("wasm:core:libm.wat", "libm_expm1")]
 fn f64_expm1(x: f64) -> f64;
 
 /// Natural logarithm (base e)
-#[canonical("bundled", "libm_log")]
+#[canonical("wasm:core:libm.wat", "libm_log")]
 fn f64_ln(x: f64) -> f64;
 
 /// Logarithm base 2
-#[canonical("bundled", "libm_log2")]
+#[canonical("wasm:core:libm.wat", "libm_log2")]
 fn f64_log2(x: f64) -> f64;
 
 /// Logarithm base 10
-#[canonical("bundled", "libm_log10")]
+#[canonical("wasm:core:libm.wat", "libm_log10")]
 fn f64_log10(x: f64) -> f64;
 
 /// ln(1 + x) (more accurate for small x)
-#[canonical("bundled", "libm_log1p")]
+#[canonical("wasm:core:libm.wat", "libm_log1p")]
 fn f64_ln1p(x: f64) -> f64;
 
 /// x raised to the power y
-#[canonical("bundled", "libm_pow")]
+#[canonical("wasm:core:libm.wat", "libm_pow")]
 fn f64_pow(x: f64, y: f64) -> f64;
 
 /// Cube root of x
-#[canonical("bundled", "libm_cbrt")]
+#[canonical("wasm:core:libm.wat", "libm_cbrt")]
 fn f64_cbrt(x: f64) -> f64;
 
 /// Euclidean distance: sqrt(x^2 + y^2)
-#[canonical("bundled", "libm_hypot")]
+#[canonical("wasm:core:libm.wat", "libm_hypot")]
 fn f64_hypot(x: f64, y: f64) -> f64;
 
 /// Floating-point remainder of x/y
-#[canonical("bundled", "libm_fmod")]
+#[canonical("wasm:core:libm.wat", "libm_fmod")]
 fn f64_fmod(x: f64, y: f64) -> f64;
 
 /// Sine of x (in radians)
-#[canonical("bundled", "libm_sinf")]
+#[canonical("wasm:core:libm.wat", "libm_sinf")]
 fn f32_sin(x: f32) -> f32;
 
 /// Cosine of x (in radians)
-#[canonical("bundled", "libm_cosf")]
+#[canonical("wasm:core:libm.wat", "libm_cosf")]
 fn f32_cos(x: f32) -> f32;
 
 /// Tangent of x (in radians)
-#[canonical("bundled", "libm_tanf")]
+#[canonical("wasm:core:libm.wat", "libm_tanf")]
 fn f32_tan(x: f32) -> f32;
 
 /// Arc sine of x (returns radians)
-#[canonical("bundled", "libm_asinf")]
+#[canonical("wasm:core:libm.wat", "libm_asinf")]
 fn f32_asin(x: f32) -> f32;
 
 /// Arc cosine of x (returns radians)
-#[canonical("bundled", "libm_acosf")]
+#[canonical("wasm:core:libm.wat", "libm_acosf")]
 fn f32_acos(x: f32) -> f32;
 
 /// Arc tangent of x (returns radians)
-#[canonical("bundled", "libm_atanf")]
+#[canonical("wasm:core:libm.wat", "libm_atanf")]
 fn f32_atan(x: f32) -> f32;
 
 /// Arc tangent of y/x, using signs to determine quadrant (returns radians)
-#[canonical("bundled", "libm_atan2f")]
+#[canonical("wasm:core:libm.wat", "libm_atan2f")]
 fn f32_atan2(y: f32, x: f32) -> f32;
 
 /// Hyperbolic sine of x
-#[canonical("bundled", "libm_sinhf")]
+#[canonical("wasm:core:libm.wat", "libm_sinhf")]
 fn f32_sinh(x: f32) -> f32;
 
 /// Hyperbolic cosine of x
-#[canonical("bundled", "libm_coshf")]
+#[canonical("wasm:core:libm.wat", "libm_coshf")]
 fn f32_cosh(x: f32) -> f32;
 
 /// Hyperbolic tangent of x
-#[canonical("bundled", "libm_tanhf")]
+#[canonical("wasm:core:libm.wat", "libm_tanhf")]
 fn f32_tanh(x: f32) -> f32;
 
 /// Inverse hyperbolic sine of x
-#[canonical("bundled", "libm_asinhf")]
+#[canonical("wasm:core:libm.wat", "libm_asinhf")]
 fn f32_asinh(x: f32) -> f32;
 
 /// Inverse hyperbolic cosine of x
-#[canonical("bundled", "libm_acoshf")]
+#[canonical("wasm:core:libm.wat", "libm_acoshf")]
 fn f32_acosh(x: f32) -> f32;
 
 /// Inverse hyperbolic tangent of x
-#[canonical("bundled", "libm_atanhf")]
+#[canonical("wasm:core:libm.wat", "libm_atanhf")]
 fn f32_atanh(x: f32) -> f32;
 
 /// e raised to the power x
-#[canonical("bundled", "libm_expf")]
+#[canonical("wasm:core:libm.wat", "libm_expf")]
 fn f32_exp(x: f32) -> f32;
 
 /// 2 raised to the power x
-#[canonical("bundled", "libm_exp2f")]
+#[canonical("wasm:core:libm.wat", "libm_exp2f")]
 fn f32_exp2(x: f32) -> f32;
 
 /// e^x - 1 (more accurate for small x)
-#[canonical("bundled", "libm_expm1f")]
+#[canonical("wasm:core:libm.wat", "libm_expm1f")]
 fn f32_expm1(x: f32) -> f32;
 
 /// Natural logarithm (base e)
-#[canonical("bundled", "libm_logf")]
+#[canonical("wasm:core:libm.wat", "libm_logf")]
 fn f32_ln(x: f32) -> f32;
 
 /// Logarithm base 2
-#[canonical("bundled", "libm_log2f")]
+#[canonical("wasm:core:libm.wat", "libm_log2f")]
 fn f32_log2(x: f32) -> f32;
 
 /// Logarithm base 10
-#[canonical("bundled", "libm_log10f")]
+#[canonical("wasm:core:libm.wat", "libm_log10f")]
 fn f32_log10(x: f32) -> f32;
 
 /// ln(1 + x) (more accurate for small x)
-#[canonical("bundled", "libm_log1pf")]
+#[canonical("wasm:core:libm.wat", "libm_log1pf")]
 fn f32_ln1p(x: f32) -> f32;
 
 /// x raised to the power y
-#[canonical("bundled", "libm_powf")]
+#[canonical("wasm:core:libm.wat", "libm_powf")]
 fn f32_pow(x: f32, y: f32) -> f32;
 
 /// Cube root of x
-#[canonical("bundled", "libm_cbrtf")]
+#[canonical("wasm:core:libm.wat", "libm_cbrtf")]
 fn f32_cbrt(x: f32) -> f32;
 
 /// Euclidean distance: sqrt(x^2 + y^2)
-#[canonical("bundled", "libm_hypotf")]
+#[canonical("wasm:core:libm.wat", "libm_hypotf")]
 fn f32_hypot(x: f32, y: f32) -> f32;
 
 /// Floating-point remainder of x/y
-#[canonical("bundled", "libm_fmodf")]
+#[canonical("wasm:core:libm.wat", "libm_fmodf")]
 fn f32_fmod(x: f32, y: f32) -> f32;
 /// Performs 128-bit addition: (a_lo, a_hi) + (b_lo, b_hi) = (result_lo, result_hi).
 /// Maps to Wasm i64.add128 instruction.

@@ -231,11 +231,20 @@ fn get_section_range(payload: &Payload) -> Option<std::ops::Range<usize>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::bundled::wado_bundled_libm_wasm;
+    use crate::stdlib;
+
+    /// Parse the bundled `core:libm.wat` into core wasm bytes once per
+    /// process so postprocess tests can reuse a non-trivial module.
+    fn libm_core_wasm() -> Vec<u8> {
+        wat::parse_bytes(stdlib::CORE_LIBM_WAT)
+            .expect("core:libm.wat must parse as valid WAT")
+            .into_owned()
+    }
 
     #[test]
     fn test_convert_memory_to_import() {
-        let result = convert_memory_to_import(wado_bundled_libm_wasm(), "env", "memory");
+        let bytes = libm_core_wasm();
+        let result = convert_memory_to_import(&bytes, "env", "memory");
         assert!(result.is_ok(), "Failed to convert: {result:?}");
 
         let converted = result.unwrap();

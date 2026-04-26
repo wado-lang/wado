@@ -91,6 +91,12 @@ pub struct FlatPackage {
     pub builtin_registry: BuiltinRegistry,
     /// Flat params for task-return type (used by DCE for async exports)
     pub task_return_flat_params: Option<Vec<TypeId>>,
+
+    /// Wasm asset bytes loaded by the loader. Keyed by canonical
+    /// namespace string (matches `namespace` in
+    /// `#[canonical("wasm:<path>", "<export>")]` attributes). Consumed
+    /// by `codegen::component::embed_imported_wasm_modules`.
+    pub wasm_assets: IndexMap<String, Vec<u8>>,
 }
 
 impl FlatPackage {

@@ -12,14 +12,62 @@ This capability is essential for:
 
 ### Current State
 
-Wado currently supports imports only from:
+Wado supports imports from:
 
 - `.wado` modules (local files, integrated at IR level during compilation)
 - `core:*` namespace (core library, written in Wado)
 - `wasi:*` namespace (WASI interfaces, mapped to WIT)
 - `https:` URLs (remote modules)
 
-There is no support for importing external compiled `.wasm` files (Component Model format).
+Phase 1 of this proposal adds **core-wasm asset imports** via `use _ from "<path>" with { type: "wat" | "wasm" };`. Component Model imports are deferred to a later phase.
+
+## Phase 1 (delivered)
+
+Phase 1 covers core wasm imports — the minimum needed to migrate `lib/core/libm.wat` from a special-cased "bundled" path to a regular asset import. It does not yet introduce Wado-level bindings synthesised from a wasm module's exports.
+
+### Syntax
+
+```wado
+// Register a core-wasm asset for codegen. Wildcard form only in Phase 1:
+// the imported names are made available indirectly through
+// `#[canonical("wasm:<canonical-path>", "<export>")]` declarations.
+use _ from "./libm.wat" with { type: "wat" };
+use _ from "./helpers.wasm" with { type: "wasm" };
+```
+
+`with { type: "wat" }` and `with { type: "wasm" }` are the only forms recognised as wasm-asset imports. Without the `with` clause, `.wat` / `.wasm` paths fall through to the regular import resolution (which rejects non-`.wado` schemas via the existing Kiln-missing-with diagnostic).
+
+### Semantics
+
+1. The loader fetches the asset bytes (stdlib lookup for `core:*.wat`, `host.load_source` for user paths), runs `wat::parse_bytes` if `kind == Wat`, and validates the result.
+2. The bytes are cached in `LoadResult::wasm_assets` keyed by the canonical namespace string `wasm:<canonical-path>` (e.g. `wasm:core:libm.wat`).
+3. Codegen looks up each asset by namespace, transforms the module to import its memory from `env.memory`, prunes to the union of exports actually referenced (via `#[canonical("wasm:<path>", "<export>")]`), and embeds it in the resulting component.
+4. The user-visible function whose body invokes the wasm export is declared in `core:builtin` (or any module the resolver dispatches as a builtin) with the matching `#[canonical(...)]` attribute.
+
+### Phase 1 limitations (enforced)
+
+- **Wildcard only.** Named imports (`use { sin } from "./libm.wat" with { type: "wat" }`) are rejected by the loader: synthesising Wado bindings from the wasm export signatures requires more work and is deferred. The existing canonical-attribute mechanism is the supported way to call exports.
+- **Imports.** A wasm asset may import only `env.memory`. Any other import (`env.foo`, multiple memories, non-memory imports) is a compile-time error.
+- **Start sections.** Wasm assets may not contain a `start` section. (Side-effecting init at instantiation time is not supported in Phase 1.)
+- **Single memory.** At most one memory definition.
+- **Origin detection (`@custom "wado-compiler"` marker).** Not used in Phase 1; all assets go through the core-linking path.
+- **WIT type extraction.** Not used in Phase 1; types come from `#[canonical(...)]` declarations on Wado-side functions, not from the wasm module itself.
+
+### Migration of `lib/core/libm.wat`
+
+The bundled libm path was the motivating use case. Phase 1 retires the previous special "bundled" namespace:
+
+- `lib/builtins/wado-bundled-libm.wat` → `lib/core/libm.wat`
+- `wado-compiler/src/bundled.rs` → folded into `stdlib.rs` (`get_stdlib_wasm_asset` returns the bytes by canonical path)
+- `core:builtin` opens with `use _ from "./libm.wat" with { type: "wat" };` so the loader picks the asset up implicitly
+- libm function declarations in `core:builtin` use `#[canonical("wasm:core:libm.wat", "libm_<fn>")]` instead of the old `#[canonical("bundled", ...)]`
+- `embed_bundled_modules` in `codegen/component.rs` is generalised into `embed_imported_wasm_modules`, driven by post-DCE imports grouped by namespace
+
+There is no behaviour change at the user level — `f64::sin(x)` still runs through the same libm export. The wasm-import path is now the only mechanism the codegen uses for both stdlib and (future) user wasm assets.
+
+## Phase 2 and beyond
+
+The remainder of this document is the design space for follow-on phases. Phase 2 will lift the Phase 1 limitations: synthesise Wado bindings from wasm exports so named imports work, and add Component Model boundary handling for external `.wasm` files.
 
 ## Decision
 

@@ -5,10 +5,21 @@
 //! 2. Import validation
 //! 3. Name resolution (binding identifiers to their definitions)
 
-use crate::ast::{Item, Module, UseItem};
+use crate::ast::{Item, Module, UseDecl, UseItem};
 use crate::compiler_host::CompilerHost;
 use crate::logger::{Bail, Logger};
 use crate::name::{ModuleSource, validate_module_path};
+
+/// `true` when this `use` declares a wasm asset import
+/// (`with { type: "wat" | "wasm" }`). Such imports are processed by the
+/// loader and have no Wado-level symbols to register.
+fn is_wasm_asset_use_decl(use_decl: &UseDecl) -> bool {
+    use_decl
+        .attributes
+        .as_ref()
+        .and_then(crate::ast::ImportAttributes::type_hint)
+        .is_some_and(|t| t == "wat" || t == "wasm")
+}
 use crate::symbol::{
     EffectSymbol, EnumSymbol, FlagsSymbol, FunctionSymbol, GlobalSymbol, NewtypeSymbol,
     ResourceSymbol, StructSymbol, Symbol, SymbolKey, SymbolKind, SymbolTable, TraitSymbol,
@@ -595,6 +606,13 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                 if !use_decl.is_pub {
                     continue;
                 }
+                // Wasm-asset imports (`with { type: "wat" | "wasm" }`)
+                // are wildcard-only in Phase 1; the loader records the
+                // asset bytes for codegen and there are no Wado symbols
+                // to re-export.
+                if is_wasm_asset_use_decl(use_decl) {
+                    continue;
+                }
 
                 // Validate the import source
                 if validate_module_path(&use_decl.source).is_err() {
@@ -661,6 +679,12 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
     ) -> Result<(), Bail> {
         for item in &module.items {
             if let Item::Use(use_decl) = item {
+                // Wasm-asset imports are validated by the loader; their
+                // exports aren't Wado symbols, so analyze has nothing to
+                // do with them.
+                if is_wasm_asset_use_decl(use_decl) {
+                    continue;
+                }
                 // Validate the import source
                 if let Err(message) = validate_module_path(&use_decl.source) {
                     self.logger.error(AnalyzeError::InvalidModulePath {

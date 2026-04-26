@@ -131,5 +131,6 @@ pub fn link(package: Package) -> FlatPackage {
         component_plan,
         builtin_registry: package.builtin_registry,
         task_return_flat_params: package.task_return_flat_params,
+        wasm_assets: package.wasm_assets,
     }
 }

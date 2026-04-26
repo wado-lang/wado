@@ -16,7 +16,7 @@ use crate::compiler_host::{CompilerHost, SourceError};
 use crate::desugar::desugar_module;
 use crate::lexer::Lexer;
 use crate::logger::Logger;
-use crate::name::{ModuleSource, normalize_module_path, resolve_module_path};
+use crate::name::{ModuleSource, WasmAssetKind, normalize_module_path, resolve_module_path};
 use crate::parser::Parser;
 use crate::stdlib;
 
@@ -50,6 +50,11 @@ pub enum LoadError {
     UnknownNamespace { namespace: String },
     /// Invalid module path format (e.g., "foo.wado" without "./" prefix)
     InvalidModulePath { path: String },
+    /// Wasm-asset import (`with { type: "wat"|"wasm" }`) failed validation.
+    WasmImport {
+        module_source: ModuleSource,
+        message: String,
+    },
 }
 
 impl std::fmt::Display for LoadError {
@@ -100,6 +105,12 @@ impl std::fmt::Display for LoadError {
                     f,
                     "invalid module path '{path}'; use './' for local modules or 'namespace:' for library modules"
                 )
+            }
+            LoadError::WasmImport {
+                module_source,
+                message,
+            } => {
+                write!(f, "wasm import error in {module_source}: {message}")
             }
         }
     }
@@ -154,6 +165,15 @@ impl From<LoadError> for crate::compiler_host::Diagnostic {
                 message: format!("bind error in {module_source}: {message}"),
                 span: None,
             },
+            LoadError::WasmImport {
+                ref module_source,
+                ref message,
+            } => Self {
+                severity: Severity::Error,
+                code: Code::InvalidSyntax,
+                message: format!("wasm import error in {module_source}: {message}"),
+                span: None,
+            },
             ref other => Self {
                 severity: Severity::Error,
                 code: Code::ModuleNotFound,
@@ -189,6 +209,13 @@ pub struct LoadResult {
     /// Included file contents from `#include_str` and `#include_bytes`.
     /// Key is `(module_source_display, raw_path)`, value is raw bytes.
     pub included_files: IndexMap<[String; 2], Vec<u8>>,
+    /// Wasm asset bytes loaded via `use _ from "<path>" with { type: "wat"|"wasm" }`.
+    ///
+    /// Keyed by the canonical namespace string (`wasm:<canonical_path>`,
+    /// matching the namespace component of `#[canonical("wasm:<path>", ...)]`
+    /// attributes). Values are the post-`wat::parse_bytes` core wasm bytes
+    /// (i.e. `.wat` is normalised to its binary form here).
+    pub wasm_assets: IndexMap<String, Vec<u8>>,
     /// Kiln invocation redirects propagated from the loader so later phases
     /// (analyze, resolver) can also rewrite `use ... from "<schema>"`
     /// clauses consistently.
@@ -235,6 +262,133 @@ fn is_non_wado_schema(path: &str) -> bool {
         }
         _ => false,
     }
+}
+
+/// Extract the wasm-asset kind from a use declaration's `with { ... }`
+/// attributes. Returns `Some(kind)` for `with { type: "wat" | "wasm" }`,
+/// `None` otherwise (including for unrelated `with { ... }` attributes
+/// such as `with { version: "1.0" }`).
+fn wasm_asset_kind_from_attrs(
+    attrs: Option<&crate::ast::ImportAttributes>,
+) -> Option<WasmAssetKind> {
+    let type_hint = crate::ast::ImportAttributes::type_hint(attrs?)?;
+    match type_hint.as_str() {
+        "wat" => Some(WasmAssetKind::Wat),
+        "wasm" => Some(WasmAssetKind::Wasm),
+        _ => None,
+    }
+}
+
+/// Resolve a wasm asset import source against the importing module.
+///
+/// `./libm.wat` from `core:builtin`        → `core:libm.wat`
+/// `./libm.wat` from `core:prelude/x.wado` → `core:prelude/libm.wat`
+/// `./foo.wat`  from `./entry.wado`        → `./foo.wat`
+/// `./foo.wat`  from `./sub/entry.wado`    → `./sub/foo.wat`
+///
+/// Phase 1 only accepts relative paths (`./` or `../`). Absolute
+/// namespace-qualified targets like `core:libm.wat` are not supported
+/// from user code (and aren't needed by the stdlib because the prelude
+/// imports its own siblings via `./`).
+fn resolve_wasm_asset_path(from: &ModuleSource, import_source: &str) -> Result<String, LoadError> {
+    if !import_source.starts_with("./") && !import_source.starts_with("../") {
+        return Err(LoadError::InvalidModulePath {
+            path: import_source.to_string(),
+        });
+    }
+    let stripped = import_source.strip_prefix("./").unwrap_or(import_source);
+    match from {
+        ModuleSource::Core { name } => {
+            let parent_with_slash = match name.rfind('/') {
+                Some(pos) => format!("core:{}/", &name[..pos]),
+                None => "core:".to_string(),
+            };
+            Ok(format!("{parent_with_slash}{stripped}"))
+        }
+        ModuleSource::Wasi { interface } => {
+            let parent_with_slash = match interface.rfind('/') {
+                Some(pos) => format!("wasi:{}/", &interface[..pos]),
+                None => "wasi:".to_string(),
+            };
+            Ok(format!("{parent_with_slash}{stripped}"))
+        }
+        ModuleSource::Local { path } => Ok(resolve_module_path(path, import_source)),
+        ModuleSource::Remote { url } => Ok(resolve_module_path(url, import_source)),
+        ModuleSource::EntryPoint { .. } => Ok(normalize_module_path(import_source)),
+        ModuleSource::Redirected { uri } => Ok(resolve_module_path(uri, import_source)),
+        ModuleSource::Wasm { .. } => Err(LoadError::InvalidModulePath {
+            path: import_source.to_string(),
+        }),
+    }
+}
+
+/// Phase 1 validation for an imported core wasm module.
+///
+/// Verifies the module parses as core wasm and rejects features that the
+/// embed path does not yet support: import sections (other than
+/// `env.memory`), start sections, and multiple memories. The intent is a
+/// pointed compile-time error rather than a downstream codegen failure.
+fn validate_phase1_wasm_module(source: &ModuleSource, bytes: &[u8]) -> Result<(), LoadError> {
+    use wasmparser::{Parser, Payload};
+    let mut had_start = false;
+    let mut memory_count: u32 = 0;
+    let mut disallowed_imports: Vec<String> = Vec::new();
+    for payload in Parser::new(0).parse_all(bytes) {
+        let payload = payload.map_err(|e| LoadError::WasmImport {
+            module_source: source.clone(),
+            message: format!("failed to parse wasm: {e}"),
+        })?;
+        match payload {
+            Payload::ImportSection(reader) => {
+                for import in reader.into_imports() {
+                    let import = import.map_err(|e| LoadError::WasmImport {
+                        module_source: source.clone(),
+                        message: format!("failed to read imports: {e}"),
+                    })?;
+                    let allowed = matches!(
+                        (import.module, import.name, &import.ty),
+                        ("env", "memory", wasmparser::TypeRef::Memory(_))
+                    );
+                    if !allowed {
+                        disallowed_imports.push(format!("{}.{}", import.module, import.name));
+                    }
+                }
+            }
+            Payload::StartSection { .. } => had_start = true,
+            Payload::MemorySection(reader) => {
+                for mem in reader {
+                    let _ = mem.map_err(|e| LoadError::WasmImport {
+                        module_source: source.clone(),
+                        message: format!("failed to read memories: {e}"),
+                    })?;
+                    memory_count += 1;
+                }
+            }
+            _ => {}
+        }
+    }
+    if had_start {
+        return Err(LoadError::WasmImport {
+            module_source: source.clone(),
+            message: "Phase 1 wasm import does not allow start sections".to_string(),
+        });
+    }
+    if memory_count > 1 {
+        return Err(LoadError::WasmImport {
+            module_source: source.clone(),
+            message: format!("Phase 1 wasm import allows at most one memory, found {memory_count}"),
+        });
+    }
+    if !disallowed_imports.is_empty() {
+        return Err(LoadError::WasmImport {
+            module_source: source.clone(),
+            message: format!(
+                "Phase 1 wasm import only allows the `env.memory` import; found: {}",
+                disallowed_imports.join(", ")
+            ),
+        });
+    }
+    Ok(())
 }
 
 /// Module loader
@@ -415,6 +569,16 @@ pub struct ModuleLoader<'a, H: CompilerHost> {
     loading: IndexSet<ModuleSource>,
     /// Modules that were implicitly loaded
     implicit_modules: IndexSet<ModuleSource>,
+    /// Wasm asset bytes loaded via `use _ from "<path>" with { type: ... }`.
+    /// Keyed by canonical namespace string (`wasm:<path>`).
+    wasm_assets: IndexMap<String, Vec<u8>>,
+    /// Set of wasm asset namespace keys whose bytes are already in
+    /// `wasm_assets` (used for dedup across multiple imports of the same
+    /// asset).
+    loaded_wasm_namespaces: IndexSet<String>,
+    /// Wasm asset imports queued by `load_implicit_modules` (sync method);
+    /// drained by `load_all` after that runs so the async fetch can happen.
+    pending_implicit_wasm_imports: Vec<(ModuleSource, WasmAssetKind, crate::ast::UseDecl)>,
     /// The entry module source (for dedup when sub-modules import back to entry)
     entry_module_source: Option<ModuleSource>,
     /// Canonical name of the entry module (e.g., "./`cross_module_type_identity.wado`")
@@ -435,6 +599,9 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             loaded: IndexMap::default(),
             loading: IndexSet::default(),
             implicit_modules: IndexSet::default(),
+            wasm_assets: IndexMap::default(),
+            loaded_wasm_namespaces: IndexSet::default(),
+            pending_implicit_wasm_imports: Vec::new(),
             entry_module_source: None,
             entry_canonical_name: None,
             invocations: crate::kiln::InvocationIndex::new(),
@@ -483,7 +650,13 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
 
         // Collect imports from entry module (before bind/desugar)
         let mut pending: VecDeque<(ModuleSource, ModuleSource)> = VecDeque::new();
-        self.collect_imports(&entry_ast, &entry_module_source, &mut pending)?;
+        let mut wasm_imports: Vec<(ModuleSource, WasmAssetKind, crate::ast::UseDecl)> = Vec::new();
+        self.collect_imports(
+            &entry_ast,
+            &entry_module_source,
+            &mut pending,
+            &mut wasm_imports,
+        )?;
 
         // Bind and desugar, then store (keep original AST for tooling)
         {
@@ -520,7 +693,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             // Use cached desugared module for core stdlib
             if let Some(cached) = core_cache.get(&module_source) {
                 let _span = self.logger.span(&format!("load {mod_name} (cached)"));
-                self.collect_imports(cached, &module_source, &mut pending)?;
+                self.collect_imports(cached, &module_source, &mut pending, &mut wasm_imports)?;
                 self.loaded.insert(module_source, cached.clone());
                 continue;
             }
@@ -538,7 +711,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             };
 
             // Collect its imports (before bind/desugar)
-            self.collect_imports(&ast, &module_source, &mut pending)?;
+            self.collect_imports(&ast, &module_source, &mut pending, &mut wasm_imports)?;
 
             // Bind, desugar, and store
             {
@@ -555,8 +728,22 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             self.logger.span_end(&format!("load {mod_name}"));
         }
 
+        // Load wasm asset bytes (`use _ from "<path>" with { type: "wat"|"wasm" }`).
+        // Done after the main module loop so `wasm_imports` includes
+        // assets discovered transitively through stdlib modules.
+        for (from_ms, kind, use_decl) in wasm_imports {
+            self.handle_wasm_import(&from_ms, kind, &use_decl).await?;
+        }
+
         // Load implicit modules (for compiler-generated code)
         self.load_implicit_modules()?;
+
+        // Drain any wasm asset imports surfaced by implicit modules (e.g.
+        // `core:builtin` declaring `use _ from "./libm.wat" with { type: "wat" };`).
+        let queued = std::mem::take(&mut self.pending_implicit_wasm_imports);
+        for (from_ms, kind, use_decl) in queued {
+            self.handle_wasm_import(&from_ms, kind, &use_decl).await?;
+        }
 
         // Collect and load files referenced by #include_str / #include_bytes
         let included_files = self.load_included_files().await?;
@@ -567,19 +754,30 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             entry_ast: entry_ast_original,
             implicit_modules: self.implicit_modules,
             included_files,
+            wasm_assets: self.wasm_assets,
             invocations: self.invocations,
         })
     }
 
-    /// Collect import paths from a module's use declarations
+    /// Collect import paths from a module's use declarations.
+    ///
+    /// `pending` is populated with regular Wado imports for the main
+    /// load loop. Wasm-asset imports (`with { type: "wat"|"wasm" }`) are
+    /// accumulated into a side-channel `wasm_imports_out` so the caller
+    /// can run their async loading after this synchronous walk.
     fn collect_imports(
         &self,
         module: &Module,
         from_module_source: &ModuleSource,
         pending: &mut VecDeque<(ModuleSource, ModuleSource)>,
+        wasm_imports_out: &mut Vec<(ModuleSource, WasmAssetKind, crate::ast::UseDecl)>,
     ) -> Result<(), LoadError> {
         for item in &module.items {
             if let Item::Use(use_decl) = item {
+                if let Some(kind) = wasm_asset_kind_from_attrs(use_decl.attributes.as_ref()) {
+                    wasm_imports_out.push((from_module_source.clone(), kind, use_decl.clone()));
+                    continue;
+                }
                 let resolved = self.resolve_import(from_module_source, &use_decl.source)?;
                 if matches!(&resolved, ModuleSource::Local { path } if is_non_wado_schema(path))
                     && use_decl
@@ -594,6 +792,85 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             }
         }
         Ok(())
+    }
+
+    /// Handle a `use ... from "<path>" with { type: "wat"|"wasm" }`
+    /// declaration: validate Phase 1 constraints, resolve the asset path
+    /// to a `ModuleSource::Wasm`, and load + record the bytes.
+    ///
+    /// Phase 1 only supports the wildcard form (`use _ from "..."`); named
+    /// imports are rejected with a pointed diagnostic so users get a clear
+    /// message instead of a downstream resolver failure.
+    async fn handle_wasm_import(
+        &mut self,
+        from_module_source: &ModuleSource,
+        kind: WasmAssetKind,
+        use_decl: &crate::ast::UseDecl,
+    ) -> Result<(), LoadError> {
+        let source = ModuleSource::wasm(
+            resolve_wasm_asset_path(from_module_source, &use_decl.source)?,
+            kind,
+        );
+
+        // Phase 1: only `use _ from "..."` (wildcard) is supported.
+        // Named imports require synthesising Wado bindings from the wasm's
+        // exports, which is deferred to a later phase.
+        let is_wildcard =
+            use_decl.items.len() == 1 && matches!(use_decl.items[0], crate::ast::UseItem::Wildcard);
+        if !is_wildcard {
+            return Err(LoadError::WasmImport {
+                module_source: source,
+                message: "named imports from .wat/.wasm assets are not supported in Phase 1; \
+                          use `use _ from \"…\" with { type: \"…\" };` to register the asset \
+                          for codegen and reference its exports through `#[canonical(\"wasm:<path>\", \"<export>\")]`"
+                    .to_string(),
+            });
+        }
+
+        let namespace = source
+            .wasm_canonical_namespace()
+            .expect("ModuleSource::Wasm always yields a namespace");
+        if self.loaded_wasm_namespaces.contains(&namespace) {
+            return Ok(());
+        }
+
+        let path = match &source {
+            ModuleSource::Wasm { path, .. } => path.clone(),
+            _ => unreachable!(),
+        };
+        let raw_bytes = self.fetch_wasm_asset_bytes(&source, &path).await?;
+        let core_wasm_bytes = match kind {
+            WasmAssetKind::Wat => wat::parse_bytes(&raw_bytes)
+                .map_err(|e| LoadError::WasmImport {
+                    module_source: source.clone(),
+                    message: format!("failed to parse .wat: {e}"),
+                })?
+                .into_owned(),
+            WasmAssetKind::Wasm => raw_bytes,
+        };
+        validate_phase1_wasm_module(&source, &core_wasm_bytes)?;
+
+        self.loaded_wasm_namespaces.insert(namespace.clone());
+        self.wasm_assets.insert(namespace, core_wasm_bytes);
+        Ok(())
+    }
+
+    /// Fetch the raw bytes of a wasm asset by canonical path. Stdlib paths
+    /// (`core:libm.wat`, etc.) hit `stdlib::get_stdlib_wasm_asset`; user
+    /// paths (`./foo.wat`) hit `host.load_source`.
+    async fn fetch_wasm_asset_bytes(
+        &self,
+        source: &ModuleSource,
+        path: &str,
+    ) -> Result<Vec<u8>, LoadError> {
+        if path.starts_with("core:") || path.starts_with("wasi:") {
+            return stdlib::get_stdlib_wasm_asset(path)
+                .map(<[u8]>::to_vec)
+                .ok_or_else(|| LoadError::ModuleNotFound {
+                    module_source: source.clone(),
+                });
+        }
+        self.host.load_source(path).await.map_err(LoadError::from)
     }
 
     /// Load implicit modules required by the compiler
@@ -616,8 +893,9 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             if let Some(cached) = cache.get(&module_source) {
                 // Load transitive dependencies from cache
                 let mut pending = VecDeque::new();
+                let mut wasm_imports = Vec::new();
                 if self
-                    .collect_imports(cached, &module_source, &mut pending)
+                    .collect_imports(cached, &module_source, &mut pending, &mut wasm_imports)
                     .is_err()
                 {
                     continue;
@@ -628,13 +906,28 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                         continue;
                     }
                     if let Some(dep_cached) = cache.get(&dep_ms) {
-                        let _ = self.collect_imports(dep_cached, &dep_ms, &mut pending);
+                        let _ = self.collect_imports(
+                            dep_cached,
+                            &dep_ms,
+                            &mut pending,
+                            &mut wasm_imports,
+                        );
                         self.loaded.insert(dep_ms, dep_cached.clone());
                     }
                 }
 
                 self.loaded.insert(module_source.clone(), cached.clone());
                 self.implicit_modules.insert(module_source);
+
+                // Capture wasm asset imports surfaced by these implicit
+                // modules. We can't `await` here (this method is sync), but
+                // we don't need to — the implicit modules' wasm imports are
+                // for stdlib bundles only, and at this point in `load_all`
+                // we've already finished the async load loop. Store them so
+                // the caller can drain them once.
+                for entry in wasm_imports {
+                    self.pending_implicit_wasm_imports.push(entry);
+                }
             }
         }
 
@@ -810,6 +1103,15 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             }
             ModuleSource::EntryPoint { .. } => {
                 // Entry point source is provided directly, not loaded from host
+                Err(LoadError::ModuleNotFound {
+                    module_source: module_source.clone(),
+                })
+            }
+            ModuleSource::Wasm { .. } => {
+                // Wasm-asset modules go through `load_wasm_module_source` instead of
+                // returning Wado source text here. `get_source` is only used by the
+                // Wado parsing path; reaching this branch means a Wasm asset was
+                // accidentally routed through the Wado loader.
                 Err(LoadError::ModuleNotFound {
                     module_source: module_source.clone(),
                 })

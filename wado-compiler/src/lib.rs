@@ -3,7 +3,6 @@ pub mod annotate;
 pub mod ast;
 pub mod bind;
 pub mod builtin_registry;
-pub mod bundled;
 pub mod cm_abi;
 pub mod codegen;
 pub mod comment;
@@ -321,6 +320,10 @@ fn compile_after_load<H: CompilerHost>(
         &mut load_result.modules,
     );
 
+    // Save wasm asset bytes before `annotate_loaded` consumes the
+    // `LoadResult`. They flow through the package to codegen below.
+    let wasm_assets = load_result.wasm_assets.clone();
+
     // === Phases 2 + 6a + 6b: Analyze + Annotate + Lower TIR ===
     // `annotate` performs analyze, type resolution, and body-level TIR
     // lowering. The resulting `Annotated` carries the `TirModule`s the batch
@@ -374,6 +377,7 @@ fn compile_after_load<H: CompilerHost>(
         package.target_world = world;
     }
     package.skip_validation = options.skip_validation;
+    package.wasm_assets = wasm_assets;
 
     // Select allocator: find the function tagged with #[allocator("...")] matching the
     // chosen mode, set its export_name to "realloc", and clear export_name from all others.
@@ -712,6 +716,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             if let Some(world) = target_world {
                 package.target_world = world.to_string();
             }
+            package.wasm_assets.clone_from(&load_result.wasm_assets);
 
             // Validate target world (test world is synthetic, not in registry)
             if !package.is_test_world()
