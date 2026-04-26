@@ -23,8 +23,8 @@ Generator authors call this at the top of their `generate` entry:
 
 ```wado
 export fn generate(raw: RawRequest) -> Result<Response, Error> {
-let req = bind_request::<Options>(raw)?;
-// ... read req.primary.content, honor req.options, emit files ...
+    let req = bind_request::<Options>(raw)?;
+    // ... read req.primary.content, honor req.options, emit files ...
 }
 ```
 

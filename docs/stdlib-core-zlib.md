@@ -30,19 +30,19 @@ Compression:
 
 ```wado
 let input: Array<u8> = [...];
-let compressed = zlib_compress(&input); // zlib, default level/strategy
-let fast = zlib_compress(&input, Z_BEST_SPEED); // override level only
-let best = zlib_compress(&input, Z_BEST_COMPRESSION);
-let gz = gzip_compress(&input); // gzip wrapper
-let raw = deflate_raw(&input); // raw DEFLATE, no header/trailer
+let compressed = zlib_compress(&input);                            // zlib, default level/strategy
+let fast       = zlib_compress(&input, Z_BEST_SPEED);              // override level only
+let best       = zlib_compress(&input, Z_BEST_COMPRESSION);
+let gz         = gzip_compress(&input);                            // gzip wrapper
+let raw        = deflate_raw(&input);                              // raw DEFLATE, no header/trailer
 ```
 
 Decompression:
 
 ```wado
-let z = inflate_zlib(&compressed)?; // RFC 1950
-let gz = inflate_gzip(&gzipped)?; // RFC 1952
-let any = uncompress(&data)?; // auto-detect zlib/gzip
+let z   = inflate_zlib(&compressed)?;                              // RFC 1950
+let gz  = inflate_gzip(&gzipped)?;                                 // RFC 1952
+let any = uncompress(&data)?;                                      // auto-detect zlib/gzip
 ```
 
 Streaming (chunked input):

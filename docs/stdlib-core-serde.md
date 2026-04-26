@@ -34,8 +34,8 @@ missing, so deserializing `{"host":"localhost"}` yields `timeout = 30`:
 
 ```wado
 struct Config {
-host: String,
-timeout: i32 = 30,
+    host: String,
+    timeout: i32 = 30,
 }
 impl Deserialize for Config;
 ```
