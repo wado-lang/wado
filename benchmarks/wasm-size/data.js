@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777214494135,
+  "lastUpdate": 1777247036366,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -16733,6 +16733,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/22de1c5e6bd8f21e5691df5be537ac8a4ce36b7e"
         },
         "date": 1777214493843,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8982,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19110,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 614203,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "cfe3f2fc514f836ab091d21049007f9e8d975348",
+          "message": "Merge pull request #936 from wado-lang/claude/compile-time-parameters-WZoyl\n\nWEP: Compile-Time Parameters",
+          "timestamp": "2026-04-27T08:38:51+09:00",
+          "tree_id": "edd4e0177676a2a59f7cf7ccec4c62f62d233857",
+          "url": "https://github.com/wado-lang/wado/commit/cfe3f2fc514f836ab091d21049007f9e8d975348"
+        },
+        "date": 1777247036221,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
