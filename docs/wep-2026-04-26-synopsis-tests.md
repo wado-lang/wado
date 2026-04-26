@@ -122,6 +122,20 @@ This change is necessary to make `#[synopsis]` useful: a synopsis must live
 next to the code it documents (the implementation file), and that file must be
 visited by `wado test` for the synopsis to be verified.
 
+### Consumers of `#[synopsis]`
+
+`wado test` treats a synopsis test as an ordinary test: it executes,
+participates in the regular pass/fail total, and is filterable by the
+existing `--filter` mechanism. No separate axis or summary line is added.
+The attribute is purely a tag.
+
+The attribute's special meaning is interpreted by other tools:
+
+- `wado doc` renders the body as part of the module's `## Synopsis` section
+  (specified below).
+- `wado-lsp` may, in the future, surface synopsis bodies in hover
+  documentation for the enclosing module. Out of scope for this WEP.
+
 ### Doc rendering
 
 `wado doc` adds a `## Synopsis` section per module, immediately after the
@@ -149,20 +163,6 @@ single `## Synopsis` heading, in source order.
 unconditionally. Freshness is the responsibility of `wado test`, and CI is
 expected to gate on `wado test` so that no broken synopsis reaches a published
 build.
-
-### Consumers of `#[synopsis]`
-
-`wado test` treats a synopsis test as an ordinary test: it executes,
-participates in the regular pass/fail total, and is filterable by the
-existing `--filter` mechanism. No separate axis or summary line is added.
-The attribute is purely a tag.
-
-The attribute's special meaning is interpreted by other tools:
-
-- `wado doc` renders the body as part of the module's `## Synopsis` section
-  (specified above).
-- `wado-lsp` may, in the future, surface synopsis bodies in hover
-  documentation for the enclosing module. Out of scope for this WEP.
 
 ## Why this design
 
