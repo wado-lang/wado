@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777160940228,
+  "lastUpdate": 1777163069095,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -16337,6 +16337,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/16ae26769ec626859b7caccdb76ee484afd3ffad"
         },
         "date": 1777160940142,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8982,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19110,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 614203,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d4a590d42af5192d9d0501924c45f622f268e887",
+          "message": "Merge pull request #927 from wado-lang/claude/update-zlib-docs-gYr5u\n\ncore:zlib: refresh module + API doc comments",
+          "timestamp": "2026-04-26T09:19:36+09:00",
+          "tree_id": "1cf4c77d8821cb4f39167ba3717d5ed650fb0ed6",
+          "url": "https://github.com/wado-lang/wado/commit/d4a590d42af5192d9d0501924c45f622f268e887"
+        },
+        "date": 1777163068789,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
