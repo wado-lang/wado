@@ -82,10 +82,165 @@ pub fn synthesize(mut project: Package) -> Result<Package, String> {
     let usage = discover(&project);
     let effects = lookup_effect_decls(&project, &usage);
     let _infra = generate_infrastructure(&mut project, &effects);
-    // TODO(phase-3): generate dispatch wrapper functions, lower WithHandler /
-    // Resume, and rewrite call sites. Infrastructure is now in place; the
-    // remaining commits use it.
+    lower_resume_in_handler_methods(&mut project);
+    // TODO(phase-3): generate dispatch wrapper functions, lower WithHandler,
+    // and rewrite call sites. `Resume` is now lowered to `Return` so handler
+    // method bodies survive the WIR build.
     Ok(project)
+}
+
+/// Walk every method in every `impl Effect for T` block (where `Effect` is
+/// an actual effect declaration) and rewrite `Resume { value }` to
+/// `Return { value }`. Per the WEP MVP, `resume` has no post-resume
+/// continuation, so it is semantically identical to `return`.
+fn lower_resume_in_handler_methods(project: &mut Package) {
+    // Build the set of (module, name) for every effect declaration so we
+    // can recognise an `impl <Effect> for <Type>` block.
+    let mut effect_decls: IndexSet<(ModuleSource, String)> = IndexSet::default();
+    for (module_source, module) in &project.tir_modules {
+        for effect in &module.effects {
+            effect_decls.insert((module_source.clone(), effect.name.clone()));
+        }
+    }
+    // The trait_name in an impl block is just the effect's identifier, so
+    // collecting the bare names is enough to recognise candidate impl
+    // blocks. Module disambiguation is not needed because a name collision
+    // between an effect and a regular trait would already be an error.
+    let effect_names: IndexSet<String> = effect_decls.iter().map(|(_, n)| n.clone()).collect();
+
+    for module in project.tir_modules.values_mut() {
+        for impl_block in &mut module.impls {
+            let Some(trait_name) = &impl_block.trait_name else {
+                continue;
+            };
+            if !effect_names.contains(trait_name) {
+                continue;
+            }
+            for method in &mut impl_block.methods {
+                if let Some(body) = &mut method.body {
+                    rewrite_resume_in_block(body);
+                }
+            }
+        }
+    }
+}
+
+/// Rewrite every `Resume { value }` in the block to a `Return { value }`
+/// statement. The resume expression itself yields `Unit` at the source
+/// level — when it sits at statement position it becomes a real return;
+/// when it appears as a sub-expression we leave it as-is and rely on
+/// `Return` short-circuiting the enclosing computation. The MVP fixtures
+/// only place `resume` at statement position, so the simple statement-
+/// level rewrite is sufficient.
+fn rewrite_resume_in_block(block: &mut TirBlock) {
+    for stmt in &mut block.stmts {
+        rewrite_resume_in_stmt(stmt);
+    }
+}
+
+fn rewrite_resume_in_stmt(stmt: &mut TirStmt) {
+    // Statement-position `resume value;` is parsed as
+    // `TirStmtKind::Expr(TirExpr { kind: Resume { value }, .. })`.
+    // Replace it with `TirStmtKind::Return { value }`.
+    if let TirStmtKind::Expr(expr) = &mut stmt.kind
+        && let TirExprKind::Resume { value } = &mut expr.kind
+    {
+        let placeholder = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, expr.span);
+        let value = std::mem::replace(value.as_mut(), placeholder);
+        stmt.kind = TirStmtKind::Return { value: Some(value) };
+        return;
+    }
+    // Recurse into sub-statements; expression-position resumes inside
+    // composite expressions are still walked but currently left as-is
+    // (the e2e MVP has no such uses; if they appear, the `unreachable!`
+    // stub in the lower phase will catch them).
+    match &mut stmt.kind {
+        TirStmtKind::Let { value, .. }
+        | TirStmtKind::Expr(value)
+        | TirStmtKind::TaskReturn { value } => rewrite_resume_in_expr(value),
+        TirStmtKind::Return { value } | TirStmtKind::Break { value, .. } => {
+            if let Some(v) = value {
+                rewrite_resume_in_expr(v);
+            }
+        }
+        TirStmtKind::Continue => {}
+        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+            rewrite_resume_in_block(body);
+        }
+        TirStmtKind::If {
+            condition,
+            then_block,
+            else_block,
+        } => {
+            rewrite_resume_in_expr(condition);
+            rewrite_resume_in_block(then_block);
+            if let Some(eb) = else_block {
+                rewrite_resume_in_block(eb);
+            }
+        }
+        TirStmtKind::IfLet {
+            scrutinee,
+            then_block,
+            else_block,
+            ..
+        } => {
+            rewrite_resume_in_expr(scrutinee);
+            rewrite_resume_in_block(then_block);
+            if let Some(eb) = else_block {
+                rewrite_resume_in_block(eb);
+            }
+        }
+        TirStmtKind::LetDestructure { value, .. } => rewrite_resume_in_expr(value),
+        TirStmtKind::VariadicForOf { iterable, body, .. } => {
+            rewrite_resume_in_expr(iterable);
+            rewrite_resume_in_block(body);
+        }
+    }
+}
+
+fn rewrite_resume_in_expr(expr: &mut TirExpr) {
+    // Walk into all sub-expressions so nested handler methods (closures,
+    // labelled blocks, etc.) get their statement-level `resume` rewritten
+    // too. Expression-level rewriting is not needed for the MVP.
+    match &mut expr.kind {
+        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+            rewrite_resume_in_block(block);
+        }
+        TirExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            rewrite_resume_in_expr(condition);
+            rewrite_resume_in_block(then_branch);
+            if let Some(eb) = else_branch {
+                rewrite_resume_in_block(eb);
+            }
+        }
+        TirExprKind::Match { expr, arms } => {
+            rewrite_resume_in_expr(expr);
+            for arm in arms {
+                if let Some(g) = &mut arm.guard {
+                    rewrite_resume_in_expr(g);
+                }
+                rewrite_resume_in_expr(&mut arm.body);
+            }
+        }
+        TirExprKind::Switch {
+            scrutinee,
+            arms,
+            default,
+            ..
+        } => {
+            rewrite_resume_in_expr(scrutinee);
+            for arm in arms {
+                rewrite_resume_in_block(arm);
+            }
+            rewrite_resume_in_block(default);
+        }
+        TirExprKind::Closure { body, .. } => rewrite_resume_in_expr(body),
+        _ => {}
+    }
 }
 
 /// Register a `__Dispatch_<E>` struct and `__effect_<E>` mut global for
