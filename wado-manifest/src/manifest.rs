@@ -122,11 +122,6 @@ pub enum ManifestError {
     },
     /// Registry dependency without a default registry defined.
     NoDefaultRegistry { dep_name: String },
-    /// `wado.toml` carries a legacy `[build.generators]` section that the
-    /// inline-only Kiln rewrite removed. Surfaces as a hard error so users
-    /// migrating from the manifest form get a pointed migration message
-    /// rather than silently-ignored config.
-    BuildGeneratorsRemoved,
 }
 
 impl fmt::Display for ManifestError {
@@ -167,13 +162,6 @@ impl fmt::Display for ManifestError {
                     "dependency {dep_name:?}: registry dependency requires [registries].default"
                 )
             }
-            ManifestError::BuildGeneratorsRemoved => write!(
-                f,
-                "[build.generators] is no longer supported — declare each Kiln \
-                 generator invocation inline at its `use` site via \
-                 `with {{ generator: {{ module: \"...\", options: {{ ... }} }} }}` \
-                 (see WEP 2026-04-12 §\"Use site syntax\")"
-            ),
         }
     }
 }
@@ -192,11 +180,6 @@ struct RawManifest {
     #[serde(rename = "build-dependencies")]
     build_dependencies: Option<IndexMap<String, RawDependency>>,
     workspace: Option<RawWorkspace>,
-    /// `[build]` survived the inline-only rewrite only as a tombstone:
-    /// any presence (typically `[build.generators.*]` from pre-rewrite
-    /// manifests) is rejected with `BuildGeneratorsRemoved` so the
-    /// failure mode is visible, not silent.
-    build: Option<toml::Value>,
 }
 
 #[derive(Deserialize)]
@@ -231,9 +214,6 @@ struct RawDependency {
 }
 
 fn convert_raw(raw: RawManifest) -> Result<Manifest, ManifestError> {
-    if raw.build.is_some() {
-        return Err(ManifestError::BuildGeneratorsRemoved);
-    }
     let package = raw.package.map(convert_package).transpose()?;
     let registries = raw.registries.unwrap_or_default();
     let dependencies = convert_deps(raw.dependencies.unwrap_or_default())?;
@@ -558,37 +538,4 @@ json = { workspace = true }
         ));
     }
 
-    #[test]
-    fn legacy_build_generators_rejected() {
-        // Pre-rewrite manifests carried `[build.generators.<name>]`. After
-        // the inline-only Kiln cutover, presence of any `[build.*]` key is
-        // a hard error so the failure mode is visible instead of silently
-        // ignored by serde.
-        let toml = r#"
-[package]
-name = "app"
-version = "0.1.0"
-command = "main.wado"
-
-[build.generators.parser]
-module = { path = "../tools/gen" }
-from = "schemas/thing.idl"
-"#;
-        let err = toml.parse::<Manifest>().unwrap_err();
-        assert!(matches!(err, ManifestError::BuildGeneratorsRemoved));
-    }
-
-    #[test]
-    fn legacy_bare_build_section_rejected() {
-        let toml = r#"
-[package]
-name = "app"
-version = "0.1.0"
-command = "main.wado"
-
-[build]
-"#;
-        let err = toml.parse::<Manifest>().unwrap_err();
-        assert!(matches!(err, ManifestError::BuildGeneratorsRemoved));
-    }
 }
