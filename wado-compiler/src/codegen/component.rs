@@ -786,7 +786,7 @@ fn build_memory_module(
     strip_names: bool,
     wasm_mod: Option<&crate::wir::WasmModuleInfo>,
     imported_wasm_uses: &IndexMap<String, IndexSet<String>>,
-    wasm_assets: &IndexMap<String, Vec<u8>>,
+    wasm_assets: &IndexMap<String, crate::loader::WasmAsset>,
 ) -> Vec<u8> {
     let wasm_mod = wasm_mod.expect("core:allocator with #![wasm_module(\"mem\")] is required");
 
@@ -794,13 +794,13 @@ fn build_memory_module(
     // wasm module's data-section requirements (e.g. libm's 17 pages).
     let mut min_pages: u32 = 1;
     for namespace in imported_wasm_uses.keys() {
-        let bytes = wasm_assets.get(namespace).unwrap_or_else(|| {
+        let asset = wasm_assets.get(namespace).unwrap_or_else(|| {
             panic!(
                 "wasm asset for namespace {namespace:?} is referenced via #[canonical(...)] but \
-                 was not registered via `use _ from \"<path>\" with {{ type: \"wat\"|\"wasm\" }}`",
+                 was not registered via `use ... from \"<path>\" with {{ type: \"wat\"|\"wasm\" }}`",
             )
         });
-        let pages = postprocess::extract_memory_min_pages(bytes);
+        let pages = postprocess::extract_memory_min_pages(&asset.bytes);
         min_pages = min_pages.max(u32::try_from(pages).unwrap_or(u32::MAX));
     }
 
@@ -842,17 +842,17 @@ fn embed_imported_wasm_modules(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
     imported_wasm_uses: &IndexMap<String, IndexSet<String>>,
-    wasm_assets: &IndexMap<String, Vec<u8>>,
+    wasm_assets: &IndexMap<String, crate::loader::WasmAsset>,
 ) {
     if imported_wasm_uses.is_empty() {
         return;
     }
     let mut seen_aliased_funcs: IndexSet<String> = IndexSet::default();
     for (namespace, used_exports) in imported_wasm_uses {
-        let bytes = wasm_assets.get(namespace).unwrap_or_else(|| {
+        let asset = wasm_assets.get(namespace).unwrap_or_else(|| {
             panic!(
                 "wasm asset for namespace {namespace:?} is referenced via #[canonical(...)] but \
-                 was not registered via `use _ from \"<path>\" with {{ type: \"wat\"|\"wasm\" }}`",
+                 was not registered via `use ... from \"<path>\" with {{ type: \"wat\"|\"wasm\" }}`",
             )
         });
         let stem = sanitise_wasm_namespace_for_label(namespace);
@@ -860,7 +860,7 @@ fn embed_imported_wasm_modules(
         let env_instance_label = format!("wasm-env-{stem}-instance");
         let instance_label = format!("wasm-{stem}");
 
-        let imported = postprocess::convert_memory_to_import(bytes, "env", "memory")
+        let imported = postprocess::convert_memory_to_import(&asset.bytes, "env", "memory")
             .unwrap_or_else(|e| panic!("failed to process wasm asset {namespace:?}: {e}"));
         let kept = postprocess::eliminate_dead_code(&imported, used_exports);
 

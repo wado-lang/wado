@@ -196,6 +196,54 @@ impl From<SourceError> for LoadError {
     }
 }
 
+/// A core wasm value type, in the subset Phase 1 supports.
+///
+/// Maps 1:1 to a Wado primitive at TIR synthesis time. Other core
+/// types (reference types, etc.) are not yet permitted in imported
+/// wasm assets.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum WasmCoreValType {
+    I32,
+    I64,
+    F32,
+    F64,
+    V128,
+}
+
+impl WasmCoreValType {
+    fn from_wasmparser(ty: wasmparser::ValType) -> Option<Self> {
+        match ty {
+            wasmparser::ValType::I32 => Some(Self::I32),
+            wasmparser::ValType::I64 => Some(Self::I64),
+            wasmparser::ValType::F32 => Some(Self::F32),
+            wasmparser::ValType::F64 => Some(Self::F64),
+            wasmparser::ValType::V128 => Some(Self::V128),
+            wasmparser::ValType::Ref(_) => None,
+        }
+    }
+}
+
+/// Function signature of an export from an imported wasm asset.
+#[derive(Debug, Clone)]
+pub struct WasmExportSig {
+    /// Export name.
+    pub name: String,
+    /// Parameter types.
+    pub params: Vec<WasmCoreValType>,
+    /// Result types. Phase 1 accepts 0 or 1 results; multi-return is rejected.
+    pub results: Vec<WasmCoreValType>,
+}
+
+/// Loaded wasm asset: post-`wat::parse_bytes` core wasm bytes plus the
+/// extracted export signatures used by TIR synthesis.
+#[derive(Debug, Clone)]
+pub struct WasmAsset {
+    /// Core wasm bytes (always binary; `.wat` is parsed at load time).
+    pub bytes: Vec<u8>,
+    /// Function exports (kind = func) ordered by their wasm order.
+    pub function_exports: Vec<WasmExportSig>,
+}
+
 /// Result of loading all modules
 pub struct LoadResult {
     /// All loaded modules (module source -> desugared AST)
@@ -209,13 +257,14 @@ pub struct LoadResult {
     /// Included file contents from `#include_str` and `#include_bytes`.
     /// Key is `(module_source_display, raw_path)`, value is raw bytes.
     pub included_files: IndexMap<[String; 2], Vec<u8>>,
-    /// Wasm asset bytes loaded via `use _ from "<path>" with { type: "wat"|"wasm" }`.
+    /// Wasm assets loaded via `use ... from "<path>" with { type: "wat"|"wasm" }`.
     ///
     /// Keyed by the canonical namespace string (`wasm:<canonical_path>`,
     /// matching the namespace component of `#[canonical("wasm:<path>", ...)]`
-    /// attributes). Values are the post-`wat::parse_bytes` core wasm bytes
-    /// (i.e. `.wat` is normalised to its binary form here).
-    pub wasm_assets: IndexMap<String, Vec<u8>>,
+    /// attributes). Each value holds the post-`wat::parse_bytes` core wasm
+    /// bytes plus the extracted function-export signatures used by TIR
+    /// synthesis.
+    pub wasm_assets: IndexMap<String, WasmAsset>,
     /// Kiln invocation redirects propagated from the loader so later phases
     /// (analyze, resolver) can also rewrite `use ... from "<schema>"`
     /// clauses consistently.
@@ -268,7 +317,7 @@ fn is_non_wado_schema(path: &str) -> bool {
 /// attributes. Returns `Some(kind)` for `with { type: "wat" | "wasm" }`,
 /// `None` otherwise (including for unrelated `with { ... }` attributes
 /// such as `with { version: "1.0" }`).
-fn wasm_asset_kind_from_attrs(
+pub fn wasm_asset_kind_from_attrs(
     attrs: Option<&crate::ast::ImportAttributes>,
 ) -> Option<WasmAssetKind> {
     let type_hint = crate::ast::ImportAttributes::type_hint(attrs?)?;
@@ -290,7 +339,10 @@ fn wasm_asset_kind_from_attrs(
 /// namespace-qualified targets like `core:libm.wat` are not supported
 /// from user code (and aren't needed by the stdlib because the prelude
 /// imports its own siblings via `./`).
-fn resolve_wasm_asset_path(from: &ModuleSource, import_source: &str) -> Result<String, LoadError> {
+pub fn resolve_wasm_asset_path(
+    from: &ModuleSource,
+    import_source: &str,
+) -> Result<String, LoadError> {
     if !import_source.starts_with("./") && !import_source.starts_with("../") {
         return Err(LoadError::InvalidModulePath {
             path: import_source.to_string(),
@@ -322,23 +374,111 @@ fn resolve_wasm_asset_path(from: &ModuleSource, import_source: &str) -> Result<S
     }
 }
 
-/// Phase 1 validation for an imported core wasm module.
+/// Map a [`WasmCoreValType`] to its Wado primitive name.
+fn wasm_core_val_type_name(ty: WasmCoreValType) -> &'static str {
+    match ty {
+        WasmCoreValType::I32 => "i32",
+        WasmCoreValType::I64 => "i64",
+        WasmCoreValType::F32 => "f32",
+        WasmCoreValType::F64 => "f64",
+        WasmCoreValType::V128 => "v128",
+    }
+}
+
+/// Synthesize a Wado source string that declares one extern `pub fn` per
+/// export of a wasm asset, each annotated with
+/// `#[canonical("<namespace>", "<export>")]` so the existing
+/// builtin/import lowering machinery picks the call up.
 ///
-/// Verifies the module parses as core wasm and rejects features that the
-/// embed path does not yet support: import sections (other than
-/// `env.memory`), start sections, and multiple memories. The intent is a
-/// pointed compile-time error rather than a downstream codegen failure.
-fn validate_phase1_wasm_module(source: &ModuleSource, bytes: &[u8]) -> Result<(), LoadError> {
+/// The synthesized module is fed back through the regular
+/// parse/bind/desugar pipeline. Doing it as text (rather than building
+/// an `ast::Module` programmatically) keeps `AstId` allocation,
+/// span/source-map invariants, and the LSP "AST is the source of
+/// truth" rule honoured without special cases — see
+/// `wado-compiler/CLAUDE.md`.
+///
+/// The generated identifiers are the wat-export names verbatim, so a
+/// stdlib re-exporter such as `core:libm` can write
+/// `pub use { libm_sin, libm_cos, ... } from "./libm.wat" with { type: "wat" };`
+/// and the names line up with the wat module's actual exports.
+fn synthesize_wasm_bindings_source(namespace: &str, exports: &[WasmExportSig]) -> String {
+    use std::fmt::Write;
+    let mut out = String::with_capacity(64 * exports.len().saturating_add(8));
+    let _ = writeln!(out, "//! AUTO-GENERATED bindings for {namespace}");
+    let _ = writeln!(out, "#![no_prelude]");
+    out.push('\n');
+    for sig in exports {
+        // `#[canonical("<namespace>", "<export>")]` — note that we
+        // quote both the namespace string (which contains colons /
+        // dots / slashes) and the export name with `{:?}` so any
+        // embedded special characters are correctly Rust-style escaped
+        // by `Debug`. The Wado parser accepts the same string-literal
+        // syntax.
+        let _ = writeln!(out, "#[canonical({namespace:?}, {:?})]", sig.name);
+        let mut params = String::new();
+        for (i, ty) in sig.params.iter().enumerate() {
+            if i > 0 {
+                params.push_str(", ");
+            }
+            let _ = write!(params, "arg{i}: {}", wasm_core_val_type_name(*ty));
+        }
+        match sig.results.first() {
+            Some(ret) => {
+                let _ = writeln!(
+                    out,
+                    "pub fn {}({params}) -> {};",
+                    sig.name,
+                    wasm_core_val_type_name(*ret),
+                );
+            }
+            None => {
+                let _ = writeln!(out, "pub fn {}({params});", sig.name);
+            }
+        }
+    }
+    out
+}
+
+/// Walk a core wasm module: validate Phase 1 constraints (no `start`,
+/// ≤1 memory, only `env.memory` may be imported) and extract the
+/// signatures of every function export so the resolver can synthesise
+/// Wado declarations from them.
+///
+/// Returns the list of function-export signatures in declaration order.
+/// Rejects unsupported export shapes (reference-typed parameters,
+/// multi-return) with a pointed message.
+fn parse_wasm_module_exports(
+    source: &ModuleSource,
+    bytes: &[u8],
+) -> Result<Vec<WasmExportSig>, LoadError> {
     use wasmparser::{Parser, Payload};
+
     let mut had_start = false;
     let mut memory_count: u32 = 0;
     let mut disallowed_imports: Vec<String> = Vec::new();
+
+    // Track types and func -> type-index mappings so we can look up each
+    // export's signature when we hit the export section.
+    let mut func_types: Vec<wasmparser::FuncType> = Vec::new();
+    let mut func_type_idx: Vec<u32> = Vec::new();
+    let mut imported_func_count: u32 = 0;
+    let mut exports: Vec<(String, u32)> = Vec::new();
+
     for payload in Parser::new(0).parse_all(bytes) {
         let payload = payload.map_err(|e| LoadError::WasmImport {
             module_source: source.clone(),
             message: format!("failed to parse wasm: {e}"),
         })?;
         match payload {
+            Payload::TypeSection(reader) => {
+                for ty in reader.into_iter_err_on_gc_types() {
+                    let func_ty = ty.map_err(|e| LoadError::WasmImport {
+                        module_source: source.clone(),
+                        message: format!("failed to read function type: {e}"),
+                    })?;
+                    func_types.push(func_ty);
+                }
+            }
             Payload::ImportSection(reader) => {
                 for import in reader.into_imports() {
                     let import = import.map_err(|e| LoadError::WasmImport {
@@ -351,6 +491,29 @@ fn validate_phase1_wasm_module(source: &ModuleSource, bytes: &[u8]) -> Result<()
                     );
                     if !allowed {
                         disallowed_imports.push(format!("{}.{}", import.module, import.name));
+                    }
+                    if let wasmparser::TypeRef::Func(_) = import.ty {
+                        imported_func_count += 1;
+                    }
+                }
+            }
+            Payload::FunctionSection(reader) => {
+                for type_idx in reader {
+                    let type_idx = type_idx.map_err(|e| LoadError::WasmImport {
+                        module_source: source.clone(),
+                        message: format!("failed to read function section: {e}"),
+                    })?;
+                    func_type_idx.push(type_idx);
+                }
+            }
+            Payload::ExportSection(reader) => {
+                for export in reader {
+                    let export = export.map_err(|e| LoadError::WasmImport {
+                        module_source: source.clone(),
+                        message: format!("failed to read exports: {e}"),
+                    })?;
+                    if let wasmparser::ExternalKind::Func = export.kind {
+                        exports.push((export.name.to_string(), export.index));
                     }
                 }
             }
@@ -367,6 +530,7 @@ fn validate_phase1_wasm_module(source: &ModuleSource, bytes: &[u8]) -> Result<()
             _ => {}
         }
     }
+
     if had_start {
         return Err(LoadError::WasmImport {
             module_source: source.clone(),
@@ -388,7 +552,78 @@ fn validate_phase1_wasm_module(source: &ModuleSource, bytes: &[u8]) -> Result<()
             ),
         });
     }
-    Ok(())
+
+    // Build the export signature list. `export.index` indexes into the
+    // module's combined function space (imported funcs first, then
+    // module-defined funcs). Module-defined funcs index into
+    // `func_type_idx`, which then resolves through `func_types`.
+    let mut function_exports = Vec::with_capacity(exports.len());
+    for (name, func_index) in exports {
+        if func_index < imported_func_count {
+            return Err(LoadError::WasmImport {
+                module_source: source.clone(),
+                message: format!(
+                    "export {name:?} re-exports an imported function, which is not supported"
+                ),
+            });
+        }
+        let local_idx = (func_index - imported_func_count) as usize;
+        let type_idx = *func_type_idx
+            .get(local_idx)
+            .ok_or_else(|| LoadError::WasmImport {
+                module_source: source.clone(),
+                message: format!("export {name:?} references missing function index"),
+            })?;
+        let func_ty = func_types
+            .get(type_idx as usize)
+            .ok_or_else(|| LoadError::WasmImport {
+                module_source: source.clone(),
+                message: format!("export {name:?} references missing type index"),
+            })?
+            .clone();
+
+        let mut params = Vec::with_capacity(func_ty.params().len());
+        for ty in func_ty.params() {
+            params.push(WasmCoreValType::from_wasmparser(*ty).ok_or_else(|| {
+                LoadError::WasmImport {
+                    module_source: source.clone(),
+                    message: format!(
+                        "export {name:?} has an unsupported parameter type ({ty:?}); \
+                         Phase 1 only supports i32/i64/f32/f64/v128"
+                    ),
+                }
+            })?);
+        }
+        let mut results = Vec::with_capacity(func_ty.results().len());
+        for ty in func_ty.results() {
+            results.push(WasmCoreValType::from_wasmparser(*ty).ok_or_else(|| {
+                LoadError::WasmImport {
+                    module_source: source.clone(),
+                    message: format!(
+                        "export {name:?} has an unsupported result type ({ty:?}); \
+                         Phase 1 only supports i32/i64/f32/f64/v128"
+                    ),
+                }
+            })?);
+        }
+        if results.len() > 1 {
+            return Err(LoadError::WasmImport {
+                module_source: source.clone(),
+                message: format!(
+                    "export {name:?} has {} results; Phase 1 only supports 0 or 1 results",
+                    results.len()
+                ),
+            });
+        }
+
+        function_exports.push(WasmExportSig {
+            name,
+            params,
+            results,
+        });
+    }
+
+    Ok(function_exports)
 }
 
 /// Module loader
@@ -526,6 +761,7 @@ fn cached_stdlib() -> &'static IndexMap<ModuleSource, Module> {
             ("json_nsd", stdlib::CORE_JSON_NSD),
             ("json_value", stdlib::CORE_JSON_VALUE),
             ("simd", stdlib::CORE_SIMD),
+            ("libm", stdlib::CORE_LIBM),
         ];
 
         let total_count = core_modules.len() + stdlib::ALL_WASI_MODULES.len();
@@ -569,9 +805,9 @@ pub struct ModuleLoader<'a, H: CompilerHost> {
     loading: IndexSet<ModuleSource>,
     /// Modules that were implicitly loaded
     implicit_modules: IndexSet<ModuleSource>,
-    /// Wasm asset bytes loaded via `use _ from "<path>" with { type: ... }`.
+    /// Wasm assets loaded via `use ... from "<path>" with { type: ... }`.
     /// Keyed by canonical namespace string (`wasm:<path>`).
-    wasm_assets: IndexMap<String, Vec<u8>>,
+    wasm_assets: IndexMap<String, WasmAsset>,
     /// Set of wasm asset namespace keys whose bytes are already in
     /// `wasm_assets` (used for dedup across multiple imports of the same
     /// asset).
@@ -812,20 +1048,9 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             kind,
         );
 
-        // Phase 1: only `use _ from "..."` (wildcard) is supported.
-        // Named imports require synthesising Wado bindings from the wasm's
-        // exports, which is deferred to a later phase.
-        let is_wildcard =
-            use_decl.items.len() == 1 && matches!(use_decl.items[0], crate::ast::UseItem::Wildcard);
-        if !is_wildcard {
-            return Err(LoadError::WasmImport {
-                module_source: source,
-                message: "named imports from .wat/.wasm assets are not supported in Phase 1; \
-                          use `use _ from \"…\" with { type: \"…\" };` to register the asset \
-                          for codegen and reference its exports through `#[canonical(\"wasm:<path>\", \"<export>\")]`"
-                    .to_string(),
-            });
-        }
+        let _ = use_decl; // accepted for both wildcard and named forms; the
+        // named form's items are resolved against the synthesized Wado
+        // module produced below.
 
         let namespace = source
             .wasm_canonical_namespace()
@@ -848,10 +1073,38 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                 .into_owned(),
             WasmAssetKind::Wasm => raw_bytes,
         };
-        validate_phase1_wasm_module(&source, &core_wasm_bytes)?;
+        let function_exports = parse_wasm_module_exports(&source, &core_wasm_bytes)?;
+
+        // Synthesize a Wado AST module from the asset's exports and run
+        // it through the regular parse/bind/desugar pipeline so that
+        // named imports (`use { libm_sin } from "./libm.wat" ...`)
+        // resolve through the same path as imports of any other Wado
+        // module. The synthesized declarations carry
+        // `#[canonical("wasm:<path>", "<export>")]` so the existing
+        // builtin/import lowering machinery can pick them up.
+        let synthesized_source = synthesize_wasm_bindings_source(&namespace, &function_exports);
+        let span = format!("synthesize {namespace}");
+        self.logger.span_start(&span);
+        let ast = self
+            .parse_source(&synthesized_source, &source)
+            .inspect_err(|_e| {
+                self.logger.span_end(&span);
+            })?;
+        self.bind_module(&ast, &source).inspect_err(|_e| {
+            self.logger.span_end(&span);
+        })?;
+        let desugared = desugar_module(&ast);
+        self.logger.span_end(&span);
+        self.loaded.insert(source.clone(), desugared);
 
         self.loaded_wasm_namespaces.insert(namespace.clone());
-        self.wasm_assets.insert(namespace, core_wasm_bytes);
+        self.wasm_assets.insert(
+            namespace,
+            WasmAsset {
+                bytes: core_wasm_bytes,
+                function_exports,
+            },
+        );
         Ok(())
     }
 

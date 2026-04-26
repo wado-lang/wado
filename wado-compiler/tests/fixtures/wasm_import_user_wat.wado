@@ -1,0 +1,15 @@
+// Verify that a user-supplied `.wat` asset's exports can be named-imported
+// and called as ordinary Wado functions. The loader synthesises Wado
+// declarations from the wasm exports at load time, and calls lower
+// through the regular TirImport path. See WEP-2026-01-10-wasm-import.md.
+
+use { println, Stdout } from "core:cli";
+use { add_one, twice } from "./sub/wasm_import_user.wat" with { type: "wat" };
+
+export fn run() with Stdout {
+    println(`add_one(41) = {add_one(41)}`);
+    println(`twice(1.5) = {twice(1.5)}`);
+}
+
+__DATA__
+{"stdout": "add_one(41) = 42\ntwice(1.5) = 3\n"}

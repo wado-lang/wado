@@ -697,8 +697,17 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
                 component_model::WasiRegistry::build_from_stdlib();
 
             let temp_type_table = std::cell::RefCell::new(tir::TypeTable::new());
-            let builtin_registry =
+            let mut builtin_registry =
                 builtin_registry::BuiltinRegistry::build_from_stdlib(&temp_type_table);
+            // Fold in `#[canonical(...)]` declarations from
+            // loader-synthesized wasm-asset modules so calls into a
+            // wat/wasm asset's exports lower through the same TirImport
+            // path as `core:builtin` declarations.
+            for (ms, module) in &load_result.modules {
+                if matches!(ms, ModuleSource::Wasm { .. }) {
+                    builtin_registry.register_wasm_module(module, &temp_type_table);
+                }
+            }
 
             let package = Package::new(
                 load_result.entry_module_source.clone(),

@@ -7,18 +7,41 @@
 
 use crate::ast::{Item, Module, UseDecl, UseItem};
 use crate::compiler_host::CompilerHost;
+use crate::loader::{resolve_wasm_asset_path, wasm_asset_kind_from_attrs};
 use crate::logger::{Bail, Logger};
 use crate::name::{ModuleSource, validate_module_path};
 
+/// Resolve `use_decl.source` against `from`, recognising
+/// `with { type: "wat" | "wasm" }` attributes and routing them to the
+/// loader-synthesised wasm-asset module (`ModuleSource::Wasm`) instead
+/// of the regular Wado module-source resolution.
+///
+/// Returns `None` when the wasm asset path itself is malformed (e.g.
+/// `core:libm.wat` with no leading `./`); the caller emits the
+/// downstream `InvalidModulePath` diagnostic.
+fn resolve_use_decl_module_source(
+    from: &ModuleSource,
+    use_decl: &UseDecl,
+    entry: Option<&ModuleSource>,
+    invocations: &crate::kiln::InvocationIndex,
+) -> Option<ModuleSource> {
+    if let Some(kind) = wasm_asset_kind_from_attrs(use_decl.attributes.as_ref()) {
+        return resolve_wasm_asset_path(from, &use_decl.source)
+            .ok()
+            .map(|path| ModuleSource::Wasm { path, kind });
+    }
+    Some(crate::name::resolve_import_with_invocations(
+        from,
+        &use_decl.source,
+        entry,
+        invocations,
+    ))
+}
+
 /// `true` when this `use` declares a wasm asset import
-/// (`with { type: "wat" | "wasm" }`). Such imports are processed by the
-/// loader and have no Wado-level symbols to register.
+/// (`with { type: "wat" | "wasm" }`).
 fn is_wasm_asset_use_decl(use_decl: &UseDecl) -> bool {
-    use_decl
-        .attributes
-        .as_ref()
-        .and_then(crate::ast::ImportAttributes::type_hint)
-        .is_some_and(|t| t == "wat" || t == "wasm")
+    wasm_asset_kind_from_attrs(use_decl.attributes.as_ref()).is_some()
 }
 use crate::symbol::{
     EffectSymbol, EnumSymbol, FlagsSymbol, FunctionSymbol, GlobalSymbol, NewtypeSymbol,
@@ -606,27 +629,26 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                 if !use_decl.is_pub {
                     continue;
                 }
-                // Wasm-asset imports (`with { type: "wat" | "wasm" }`)
-                // are wildcard-only in Phase 1; the loader records the
-                // asset bytes for codegen and there are no Wado symbols
-                // to re-export.
-                if is_wasm_asset_use_decl(use_decl) {
-                    continue;
-                }
 
-                // Validate the import source
-                if validate_module_path(&use_decl.source).is_err() {
+                // Validate the import source. Wasm-asset imports skip
+                // `validate_module_path` because their `./*.wat` /
+                // `./*.wasm` paths are not normal Wado module paths.
+                if !is_wasm_asset_use_decl(use_decl)
+                    && validate_module_path(&use_decl.source).is_err()
+                {
                     continue; // Error already collected in validate_imports
                 }
 
-                // Resolve the source path to ModuleSource, honoring any
-                // Kiln invocation redirects before the plain name lookup.
-                let source_module = crate::name::resolve_import_with_invocations(
+                // Resolve the source path to ModuleSource, honoring
+                // wasm-asset attributes and Kiln invocation redirects.
+                let Some(source_module) = resolve_use_decl_module_source(
                     module_source,
-                    &use_decl.source,
+                    use_decl,
                     Some(&self.entry_module_source),
                     &self.invocations,
-                );
+                ) else {
+                    continue; // Bad wasm asset path; analyze emits the diagnostic.
+                };
 
                 // Check the module exists
                 if !all_modules.contains_key(&source_module) {
@@ -679,14 +701,12 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
     ) -> Result<(), Bail> {
         for item in &module.items {
             if let Item::Use(use_decl) = item {
-                // Wasm-asset imports are validated by the loader; their
-                // exports aren't Wado symbols, so analyze has nothing to
-                // do with them.
-                if is_wasm_asset_use_decl(use_decl) {
-                    continue;
-                }
-                // Validate the import source
-                if let Err(message) = validate_module_path(&use_decl.source) {
+                // Wasm-asset imports skip the regular module-path
+                // validator because their `./*.wat` / `./*.wasm`
+                // paths are not normal Wado module paths.
+                if !is_wasm_asset_use_decl(use_decl)
+                    && let Err(message) = validate_module_path(&use_decl.source)
+                {
                     self.logger.error(AnalyzeError::InvalidModulePath {
                         path: use_decl.source.clone(),
                         message,
@@ -695,14 +715,23 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                     continue;
                 }
 
-                // Resolve the import path to ModuleSource, honoring any
-                // Kiln invocation redirects before the plain name lookup.
-                let module_source = crate::name::resolve_import_with_invocations(
+                // Resolve the import path to ModuleSource, honoring
+                // wasm-asset attributes and Kiln invocation redirects.
+                let Some(module_source) = resolve_use_decl_module_source(
                     from_module_source,
-                    &use_decl.source,
+                    use_decl,
                     Some(&self.entry_module_source),
                     &self.invocations,
-                );
+                ) else {
+                    self.logger.error(AnalyzeError::InvalidModulePath {
+                        path: use_decl.source.clone(),
+                        message: "wasm asset paths must be relative (`./` or `../`); \
+                             absolute namespace-qualified paths are not supported here"
+                            .to_string(),
+                        span: use_decl.span,
+                    })?;
+                    continue;
+                };
 
                 // Check the module exists in pre-loaded modules
                 if !all_modules.contains_key(&module_source) {

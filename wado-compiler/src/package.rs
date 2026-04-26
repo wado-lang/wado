@@ -56,13 +56,15 @@ pub struct Package {
     /// Used by `optimize_dce` to override the builtin registry's single-`i32` signature.
     pub task_return_flat_params: Option<Vec<TypeId>>,
 
-    /// Wasm asset bytes loaded by the loader from
-    /// `use _ from "<path>" with { type: "wat"|"wasm" }` declarations.
+    /// Wasm assets loaded by the loader from
+    /// `use ... from "<path>" with { type: "wat"|"wasm" }` declarations.
     ///
     /// Keyed by canonical namespace string (matches `namespace` in
     /// `#[canonical("wasm:<path>", "<export>")]` attributes). Consumed by
-    /// the codegen `embed_imported_wasm_modules` pass.
-    pub wasm_assets: IndexMap<String, Vec<u8>>,
+    /// the codegen `embed_imported_wasm_modules` pass and (in a follow-up)
+    /// by the resolver, which synthesises Wado declarations from each
+    /// asset's exports.
+    pub wasm_assets: IndexMap<String, crate::loader::WasmAsset>,
 }
 
 impl Package {

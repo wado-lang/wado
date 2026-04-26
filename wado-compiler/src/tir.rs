@@ -2113,8 +2113,17 @@ impl FunctionRef {
 
     /// Get the builtin function name if this is a builtin call.
     /// Returns the qualified name (e.g., "`builtin::array_len`").
+    ///
+    /// Functions declared in `core:builtin` and functions synthesised
+    /// from wasm-asset exports (`ModuleSource::Wasm`) both go through
+    /// the import-style builtin lowering — they share `#[canonical(...)]`
+    /// metadata in `BuiltinRegistry` and resolve to the same wasm
+    /// import call shape.
     pub fn builtin_name(&self) -> Option<String> {
-        if self.module_source.is_core_builtin() && self.monomorph_info.is_none() {
+        if self.monomorph_info.is_some() {
+            return None;
+        }
+        if self.module_source.is_core_builtin() || self.module_source.is_wasm_asset() {
             Some(format!("builtin::{}", &self.name))
         } else {
             None

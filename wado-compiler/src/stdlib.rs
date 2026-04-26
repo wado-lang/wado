@@ -50,6 +50,7 @@ pub const CORE_JSON_NSD: &str = include_str!("../lib/core/json_nsd.wado");
 pub const CORE_JSON_VALUE: &str = include_str!("../lib/core/json_value.wado");
 pub const CORE_SIMD: &str = include_str!("../lib/core/simd.wado");
 pub const CORE_KILN: &str = include_str!("../lib/core/kiln.wado");
+pub const CORE_LIBM: &str = include_str!("../lib/core/libm.wado");
 pub const CORE_KILN_KILN_HOST: &str = include_str!("../lib/core/kiln/kiln_host.wado");
 pub const CORE_KILN_TYPES: &str = include_str!("../lib/core/kiln/types.wado");
 pub const CORE_KILN_WORLDS: &str = include_str!("../lib/core/kiln/worlds.wado");
@@ -215,6 +216,7 @@ pub fn get_stdlib_module(import_path: &str) -> Option<&'static str> {
         "core:simd" => Some(CORE_SIMD),
         "core:url" => Some(CORE_URL),
         "core:kiln" => Some(CORE_KILN),
+        "core:libm" => Some(CORE_LIBM),
         "core:kiln/kiln_host.wado" => Some(CORE_KILN_KILN_HOST),
         "core:kiln/types.wado" => Some(CORE_KILN_TYPES),
         "core:kiln/worlds.wado" => Some(CORE_KILN_WORLDS),

@@ -105,8 +105,11 @@ fn resolve_imports(
         }
     }
 
-    let is_builtin_func =
-        |f: &FreeFunctionName| f.module_source.is_core_builtin() || f.name.starts_with("builtin::");
+    let is_builtin_func = |f: &FreeFunctionName| {
+        f.module_source.is_core_builtin()
+            || f.module_source.is_wasm_asset()
+            || f.name.starts_with("builtin::")
+    };
 
     // Also mark WASI functions as used if indirect calls are present
     // (for ambient logging). The kiln generator world forbids every
