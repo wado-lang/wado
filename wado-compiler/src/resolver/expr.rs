@@ -115,6 +115,27 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
             Expr::TryOp(qm) => self.resolve_question_mark(qm, ctx),
             Expr::Range(range) => self.resolve_range(range, ctx),
+            Expr::WithHandler(w) => {
+                // Phase 1 (parser only): semantic resolution for effect handler
+                // installation is not yet implemented. Report a clean compile
+                // error rather than silently dropping the expression.
+                let _ = self.logger.error(TypeError::InvalidLiteral {
+                    message: "effect handler installation `with E = h do { ... }` is not yet \
+                              implemented (front-end parsed, semantic analysis pending)"
+                        .to_string(),
+                    span: w.span,
+                });
+                TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, w.span)
+            }
+            Expr::Resume(r) => {
+                let _ = self.logger.error(TypeError::InvalidLiteral {
+                    message: "`resume` expression is not yet implemented (front-end parsed, \
+                              semantic analysis pending)"
+                        .to_string(),
+                    span: r.span,
+                });
+                TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, r.span)
+            }
         }
     }
 

@@ -258,6 +258,7 @@ fn desugar_impl(impl_block: &ImplBlock, ctx: &mut DesugarContext) -> ImplBlock {
             .map(|m| desugar_function(m, ctx))
             .collect(),
         is_synthesize_request: impl_block.is_synthesize_request,
+        has_rest: impl_block.has_rest,
         span: impl_block.span,
     }
 }
@@ -726,6 +727,42 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
             end: desugar_expr(&range.end),
             kind: range.kind,
             span: range.span,
+        })),
+        Expr::WithHandler(w) => {
+            let handlers = w
+                .handlers
+                .iter()
+                .map(|b| crate::ast::EffectHandlerBinding {
+                    id: b.id,
+                    effect_name: b.effect_name.clone(),
+                    effect_name_span: b.effect_name_span,
+                    handler: desugar_expr(&b.handler),
+                    span: b.span,
+                })
+                .collect();
+            let body = if let Some(ctx) = ctx {
+                desugar_block(&w.body, ctx)
+            } else {
+                let mut ctx = DesugarContext {
+                    assert_counter: 0,
+                    loop_counter: 0,
+                    for_loop_labels: Vec::new(),
+                    namespace_names: Vec::new(),
+                    current_parent_id: Some(w.id),
+                };
+                desugar_block(&w.body, &mut ctx)
+            };
+            Expr::WithHandler(Box::new(crate::ast::WithHandlerExpr {
+                id: w.id,
+                handlers,
+                body,
+                span: w.span,
+            }))
+        }
+        Expr::Resume(r) => Expr::Resume(Box::new(crate::ast::ResumeExpr {
+            id: r.id,
+            value: desugar_expr(&r.value),
+            span: r.span,
         })),
     }
 }
@@ -1864,6 +1901,22 @@ fn strip_ns_from_expr(expr: Expr, ctx: &DesugarContext) -> Expr {
             range.start = strip_ns_from_expr(range.start, ctx);
             range.end = strip_ns_from_expr(range.end, ctx);
             Expr::Range(range)
+        }
+        Expr::WithHandler(mut w) => {
+            w.handlers = w
+                .handlers
+                .into_iter()
+                .map(|mut b| {
+                    b.handler = strip_ns_from_expr(b.handler, ctx);
+                    b
+                })
+                .collect();
+            w.body = strip_ns_from_block(w.body, ctx);
+            Expr::WithHandler(w)
+        }
+        Expr::Resume(mut r) => {
+            r.value = strip_ns_from_expr(r.value, ctx);
+            Expr::Resume(r)
         }
         Expr::Literal(_) | Expr::CompoundAssign(_) | Expr::ComparisonChain(_) => expr,
     }

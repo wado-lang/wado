@@ -2192,6 +2192,35 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     logger,
                 )?;
             }
+            ast::Expr::WithHandler(with_handler) => {
+                for binding in &with_handler.handlers {
+                    Self::validate_expr_type_names(
+                        &binding.handler,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+                for stmt in &with_handler.body.stmts {
+                    Self::validate_stmt_type_names(
+                        stmt,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+            }
+            ast::Expr::Resume(resume) => {
+                Self::validate_expr_type_names(
+                    &resume.value,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
             ast::Expr::Ident(_) | ast::Expr::Literal(_) => {}
         }
         Ok(())

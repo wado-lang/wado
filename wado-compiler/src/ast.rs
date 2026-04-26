@@ -716,6 +716,14 @@ pub fn walk_expr<V: AstVisitor>(v: &mut V, expr: &Expr) {
             v.visit_expr(&r.start);
             v.visit_expr(&r.end);
         }
+        Expr::WithHandler(w) => {
+            for binding in &w.handlers {
+                v.visit_id(binding.id, binding.effect_name_span);
+                v.visit_expr(&binding.handler);
+            }
+            v.visit_block(&w.body);
+        }
+        Expr::Resume(r) => v.visit_expr(&r.value),
     }
 }
 
@@ -1577,6 +1585,49 @@ pub enum Expr {
     Spread(Box<Expr>, Span),
     /// Range expression: `a..<b` (exclusive) or `a..=b` (inclusive)
     Range(Box<RangeExpr>),
+    /// Effect handler installation block: `with E1 = h1, E2 = h2 do { body }`.
+    /// See `docs/wep-2026-04-11-effect-handler.md`.
+    WithHandler(Box<WithHandlerExpr>),
+    /// `resume value` — control-flow expression valid only inside an effect
+    /// handler method. Delivers `value` to the suspended computation; in the
+    /// MVP (no post-resume code) it lowers to `return value`.
+    Resume(Box<ResumeExpr>),
+}
+
+/// `with E1 = h1, E2 = h2 do { body }` — installs effect handlers for the
+/// duration of `body`. The block's value is the value of `body`.
+#[derive(Debug, Clone)]
+pub struct WithHandlerExpr {
+    pub id: AstId,
+    pub handlers: Vec<EffectHandlerBinding>,
+    pub body: Block,
+    pub span: Span,
+}
+
+/// A single `Effect = handler` binding inside `with ... do`.
+///
+/// `effect_name` is `None` for handler bundling: `with &mut value do { ... }`
+/// installs the value as a handler for every effect it implements.
+#[derive(Debug, Clone)]
+pub struct EffectHandlerBinding {
+    pub id: AstId,
+    /// Effect identifier (e.g., `Stdout`, `Stream<u8>`). `None` for bundled
+    /// handlers (`with &mut value do { ... }`).
+    pub effect_name: Option<String>,
+    /// Span covering the effect identifier (or the handler expression for
+    /// bundled handlers).
+    pub effect_name_span: Span,
+    /// Handler expression, e.g., `&mut mock`.
+    pub handler: Expr,
+    pub span: Span,
+}
+
+/// `resume value` — see `WithHandlerExpr` and the WEP for semantics.
+#[derive(Debug, Clone)]
+pub struct ResumeExpr {
+    pub id: AstId,
+    pub value: Expr,
+    pub span: Span,
 }
 
 /// Labeled block expression: `label: { ... }` that produces a value
@@ -1646,6 +1697,8 @@ impl Expr {
             Expr::TryOp(e) => e.id,
             Expr::Spread(inner, _) => inner.id(),
             Expr::Range(e) => e.id,
+            Expr::WithHandler(e) => e.id,
+            Expr::Resume(e) => e.id,
         }
     }
 
@@ -1677,6 +1730,8 @@ impl Expr {
             Expr::TryOp(e) => e.span,
             Expr::Spread(_, span) => *span,
             Expr::Range(e) => e.span,
+            Expr::WithHandler(e) => e.span,
+            Expr::Resume(e) => e.span,
         }
     }
 
@@ -1781,6 +1836,14 @@ impl Expr {
                 e.span = new_span;
                 Expr::Range(e)
             }
+            Expr::WithHandler(mut e) => {
+                e.span = new_span;
+                Expr::WithHandler(e)
+            }
+            Expr::Resume(mut e) => {
+                e.span = new_span;
+                Expr::Resume(e)
+            }
         }
     }
 
@@ -1877,7 +1940,9 @@ impl Expr {
             | Expr::Match(_)
             | Expr::Matches(_)
             | Expr::Closure(_)
-            | Expr::LabeledBlock(_) => {
+            | Expr::LabeledBlock(_)
+            | Expr::WithHandler(_)
+            | Expr::Resume(_) => {
                 // Not expected inside pure default expressions; leave as-is.
             }
         }
@@ -2699,6 +2764,11 @@ pub struct ImplBlock {
     pub methods: Vec<Function>,
     /// `impl Trait for Type;` — synthesis request (compiler generates the body)
     pub is_synthesize_request: bool,
+    /// `..` rest pattern at the end of an effect handler `impl` block.
+    /// Indicates that any operation of the trait (effect) not implemented in
+    /// `methods` should trap when dispatched. Only meaningful for effect
+    /// handler impls; ignored for ordinary trait impls.
+    pub has_rest: bool,
     pub span: Span,
 }
 

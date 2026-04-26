@@ -113,6 +113,7 @@ pub fn inject_deserialize_impl(
         constants: Vec::new(),
         methods: Vec::new(),
         is_synthesize_request: true,
+        has_rest: false,
         span,
     };
 

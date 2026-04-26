@@ -2,6 +2,21 @@
 
 Status: Draft
 
+## Implementation Status
+
+- [x] Front-end (lexer / AST / parser / unparser): `with E = h do { ... }`,
+      `resume value`, and `..` rest in `impl Effect for Type` blocks.
+      Resolver currently emits a "not yet implemented" compile error for
+      `with`-do blocks and `resume` expressions; downstream phases (effect
+      checker, TIR/WIR lowering, Wasm dispatch codegen) are pending.
+- [ ] Resolver / effect-check: track installed handlers in scope and skip
+      handled effects when checking caller requirements.
+- [ ] TIR/WIR lowering: dispatch records, global save/restore, handler
+      method as funcref vtable.
+- [ ] Wasm GC codegen: per-effect global, `$Dispatch_<Effect>` GC struct,
+      one dispatch function per operation.
+- [ ] `MockCM` and handler bundling helpers in `core:test`.
+
 ## Context
 
 [WEP: Effect System Design](./wep-2026-01-27-effect-system-design.md) defines how Wado tracks side effects. This WEP defines how effect handlers provide implementations for effects, enabling dependency injection, testing, and middleware patterns.

@@ -466,6 +466,18 @@ fn name_span_of_binding_in_item(item: &Item, target: AstId) -> Option<Span> {
             Expr::TryOp(t) => scan_expr(&t.expr, target),
             Expr::Spread(inner, _) => scan_expr(inner, target),
             Expr::Range(r) => scan_expr(&r.start, target).or_else(|| scan_expr(&r.end, target)),
+            Expr::WithHandler(w) => {
+                for binding in &w.handlers {
+                    if binding.id == target {
+                        return Some(binding.effect_name_span);
+                    }
+                    if let Some(span) = scan_expr(&binding.handler, target) {
+                        return Some(span);
+                    }
+                }
+                scan_block(&w.body, target)
+            }
+            Expr::Resume(r) => scan_expr(&r.value, target),
         }
     }
 

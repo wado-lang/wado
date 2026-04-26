@@ -324,6 +324,13 @@ fn visit_expr(expr: &Expr, writes: &mut Vec<AstId>) {
             visit_expr(&r.start, writes);
             visit_expr(&r.end, writes);
         }
+        Expr::WithHandler(w) => {
+            for binding in &w.handlers {
+                visit_expr(&binding.handler, writes);
+            }
+            visit_block(&w.body, writes);
+        }
+        Expr::Resume(r) => visit_expr(&r.value, writes),
     }
 }
 
