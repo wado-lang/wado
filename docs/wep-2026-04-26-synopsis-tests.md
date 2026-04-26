@@ -63,7 +63,7 @@ A `test` block may carry `#[synopsis]`. Such a test:
 //! Geometric primitives.
 
 #[synopsis]
-test "computing the distance between two points" {
+test {
     let p = Point { x: 0, y: 0 };
     let q = Point { x: 3, y: 4 };
     assert p.distance(&q) == 5.0;
@@ -86,8 +86,11 @@ Rules:
   reader-facing entry point at the top of the module.
 - Multiple `#[synopsis]` tests per module are allowed and rendered in source
   order.
-- The optional `test` name string becomes the synopsis subsection title. An
-  unnamed `#[synopsis] test { ... }` renders as an unlabelled code block.
+- A `#[synopsis]` test is conventionally unnamed (`test { ... }`). The
+  description-string form `test "..." { ... }` is reserved for ordinary tests
+  where the string distinguishes one assertion case from another; a synopsis is
+  the example, not a case among many, so the string adds noise. The unnamed
+  form already exists in the grammar and finds its primary use here.
 - `#[synopsis]` may be combined with `#[expect_trap]`, `#[TODO]`, and
   `#[timeout_ms]`. `#[expect_trap]` is the natural way to show an intended
   panic; `#[TODO]` lets a draft synopsis live in the source without breaking
@@ -127,8 +130,6 @@ module's `//!` doc and before per-item documentation:
 ````markdown
 ## Synopsis
 
-### computing the distance between two points
-
 ```wado
 let p = Point { x: 0, y: 0 };
 let q = Point { x: 3, y: 4 };
@@ -140,8 +141,9 @@ The code is taken verbatim from the test body, using the source span between
 the outermost `{` and `}` of the test block. Indentation is normalised so the
 inner code starts at column 0.
 
-A module without any `#[synopsis]` test produces no Synopsis section. A module
-with only a single unnamed synopsis omits the per-block subheading.
+A module without any `#[synopsis]` test produces no Synopsis section. Multiple
+`#[synopsis]` tests in one module render as successive code blocks under the
+single `## Synopsis` heading, in source order.
 
 If a `#[synopsis]` test would fail under `wado test`, `wado doc` still renders
 it (so authors can iterate) but emits a warning to stderr. CI is expected to
@@ -241,7 +243,7 @@ synopsis. The body the reader sees is the whole synopsis.
 - [ ] Change `wado test` file discovery to `**/*.wado`.
 - [ ] Add a synopsis tally line to the `wado test` summary output.
 - [ ] Render `## Synopsis` sections in `wado doc` (markdown, simple, json).
-- [ ] Add fixtures: named, unnamed, multiple, with `#[expect_trap]`, with
-      `#[TODO]`.
+- [ ] Add fixtures: single synopsis, multiple synopses, synopsis with
+      `#[expect_trap]`, synopsis with `#[TODO]`.
 - [ ] Update `docs/cheatsheet.md` with the `#[synopsis]` form.
 - [ ] Update the CLI subcommands doc to describe the discovery change.
