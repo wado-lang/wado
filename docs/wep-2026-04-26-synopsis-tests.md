@@ -149,20 +149,19 @@ If a `#[synopsis]` test would fail under `wado test`, `wado doc` still renders
 it (so authors can iterate) but emits a warning to stderr. CI is expected to
 gate on `wado test` rather than on `wado doc`.
 
-### CLI reporting
+### Consumers of `#[synopsis]`
 
-The `wado test` summary line gains a synopsis axis, reported separately from
-ordinary tests:
+`wado test` treats a synopsis test as an ordinary test: it executes,
+participates in the regular pass/fail total, and is filterable by the
+existing `--filter` mechanism. No separate axis or summary line is added.
+The attribute is purely a tag.
 
-```
-tests: 42 ok
-synopses: 8 ok
-```
+The attribute's special meaning is interpreted by other tools:
 
-A failing synopsis is counted on the synopses line, not on the tests line.
-This separation matches the spirit of the existing `#[TODO]` axis: different
-documentation-vs-verification kinds shouldn't be mixed into a single pass/fail
-total.
+- `wado doc` renders the body as part of the module's `## Synopsis` section
+  (specified above).
+- `wado-lsp` may, in the future, surface synopsis bodies in hover
+  documentation for the enclosing module. Out of scope for this WEP.
 
 ## Why this design
 
@@ -212,16 +211,16 @@ synopsis. The body the reader sees is the whole synopsis.
 
 - `wado-compiler/src/parser.rs`: register `synopsis` as a recognised test
   attribute.
-- `wado-compiler/src/resolver/item.rs`, `wado-compiler/src/tir.rs`: add an
-  `is_synopsis: bool` field to `TirTest`. Test name generation may prepend a
-  `__test_synopsis_` prefix to keep filter behaviour predictable.
+- `wado-compiler/src/resolver/item.rs`, `wado-compiler/src/tir.rs`: record the
+  attribute on `TirTest` (e.g. `is_synopsis: bool`) so `wado doc` can locate
+  synopsis bodies. The test runner itself does not branch on this flag.
 - `wado-cli/src/test.rs`: change discovery glob to `**/*.wado`; honour the
-  existing ignore rules. Add a synopsis tally to the summary output.
+  existing ignore rules. No summary-output change.
 - `wado-cli/src/doc.rs` (or the `wado doc` renderer): add a Synopsis section
   emitter that reads test bodies from source spans and normalises indentation.
-- `wado-compiler/tests/fixtures/`: add fixtures covering a module with a named
-  synopsis, an unnamed synopsis, multiple synopses, and `#[synopsis]` combined
-  with `#[expect_trap]` / `#[TODO]`.
+- `wado-compiler/tests/fixtures/`: add fixtures covering a module with a
+  single synopsis, multiple synopses, and `#[synopsis]` combined with
+  `#[expect_trap]` / `#[TODO]`.
 
 ### Trade-offs
 
@@ -239,9 +238,9 @@ synopsis. The body the reader sees is the whole synopsis.
 ## TODOs
 
 - [ ] Add `synopsis` to the recognised test-attribute set in the parser.
-- [ ] Add `is_synopsis` to `TirTest` and propagate from resolver to runner.
+- [ ] Record `is_synopsis` on `TirTest` (resolver + TIR), accessible to
+      `wado doc`.
 - [ ] Change `wado test` file discovery to `**/*.wado`.
-- [ ] Add a synopsis tally line to the `wado test` summary output.
 - [ ] Render `## Synopsis` sections in `wado doc` (markdown, simple, json).
 - [ ] Add fixtures: single synopsis, multiple synopses, synopsis with
       `#[expect_trap]`, synopsis with `#[TODO]`.
