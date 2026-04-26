@@ -1895,6 +1895,41 @@ inc();
 println(`{get()}`);  // 2
 ```
 
+### Default Arguments
+
+See [WEP: Default Arguments](./wep-2026-04-11-default-arguments.md).
+
+Trailing function parameters may declare default values with `= expr`. Calls that omit defaulted arguments are expanded at the call site, with no runtime cost:
+
+```wado
+fn connect(host: String, port: i32 = 8080, timeout: i32 = 30) { ... }
+
+connect("localhost");           // → connect("localhost", 8080, 30)
+connect("localhost", 3000);     // → connect("localhost", 3000, 30)
+connect("localhost", 3000, 60);
+```
+
+**Rules:**
+
+- All defaulted parameters must come after all non-defaulted parameters.
+- Default expressions must be effect-free (validated by the effect system).
+- Default expressions may reference earlier parameters in the same function:
+
+```wado
+fn make_rect(width: f64, height: f64 = width) -> Rect { ... }
+make_rect(10.0);  // → make_rect(10.0, 10.0)
+```
+
+**Restrictions:**
+
+- `self` cannot have a default.
+- Function types do not carry default information; assigning a function with defaults to a `fn(...)` type erases them, and every call site of that variable must supply every argument.
+- Closures cannot declare defaults: a closure value's arity must match its `fn(...)` type. The parser accepts `= expr` on closure parameters for recovery only and the resolver rejects it.
+- `export fn` cannot declare defaults — exported functions appear in the component's WIT signature where every parameter is required by the CM ABI. Split into a private helper plus a thin `export fn` wrapper if defaults are needed.
+- Trait methods may declare defaults only in the trait definition; implementations receive every parameter and cannot add, remove, or change defaults. Direct `impl Type { ... }` methods (not part of any trait) may declare defaults freely.
+
+The same `= expr` syntax applies to struct fields; see [Struct Field Defaults](#struct-field-defaults).
+
 ### Tagged Template Literals
 
 Tagged template literals enable compile-time function execution on string literals, allowing zero-overhead binary encoding, DSL validation, and custom compile-time transformations.
@@ -2174,6 +2209,33 @@ Structs auto-derive `Eq` (field-wise equality) and `Ord` (lexicographic comparis
 For generic structs, the auto-derived impls have trait bounds on the type parameters: `impl<T: Eq> Eq for Foo<T>`, `impl<T: Ord> Ord for Foo<T>`.
 
 Variants auto-derive `Eq` when all payload types implement `Eq`. The generated `eq` method checks that both values are the same case and, for cases with payloads, compares the payloads. A user-provided `impl Eq` takes precedence over the auto-derived implementation. For generic variants, the auto-derived impls have trait bounds on the type parameters: `impl<T: Eq> Eq for Maybe<T>`.
+
+#### Struct Field Defaults
+
+See [WEP: Default Arguments](./wep-2026-04-11-default-arguments.md).
+
+Struct fields may declare a default expression with `= expr`. Fields with defaults may be omitted at construction sites; fields without defaults are required:
+
+```wado
+struct ServerConfig {
+    host: String,            // required
+    port: i32 = 8080,        // optional
+    timeout: i32 = 30,       // optional
+    debug: bool = false,     // optional
+}
+
+let c = ServerConfig { host: "localhost" };
+// Desugars to: ServerConfig { host: "localhost", port: 8080, timeout: 30, debug: false }
+
+let c = ServerConfig { host: "localhost", port: 3000 };
+// Desugars to: ServerConfig { host: "localhost", port: 3000, timeout: 30, debug: false }
+
+ServerConfig { port: 3000 };  // compile error: missing required field 'host'
+```
+
+Default expressions are evaluated at the construction site. They must be effect-free (validated by the effect system) and cannot reference other fields. Field shorthand (`{ host }`) and destructuring are unaffected — destructuring sees every field regardless of defaults.
+
+A non-generic struct whose every field has a default auto-derives `Default`; see [Default Trait](#default-trait).
 
 ### Generic Type Inference
 
@@ -2679,6 +2741,68 @@ let b = "banana";
 if a < b { ... }  // true
 ```
 
+### Default Trait
+
+See [WEP: Default Trait](./wep-2026-03-04-default-trait.md).
+
+The prelude defines a `Default` trait providing a uniform "zero value" / "empty value" interface:
+
+```wado
+pub trait Default {
+    fn default() -> Self;
+}
+```
+
+**Standard Library Implementations:**
+
+| Type                                                                 | `default()` |
+| -------------------------------------------------------------------- | ----------- |
+| `i8`, `i16`, `i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `i128`, `u128` | `0`         |
+| `f32`, `f64`                                                         | `0.0`       |
+| `bool`                                                               | `false`     |
+| `char`                                                               | `'\0'`      |
+| `String`                                                             | `""`        |
+| `Array<T>`                                                           | `[]`        |
+| `Option<T>`                                                          | `null`      |
+| `TreeMap<K, V>`                                                      | `{}`        |
+
+`Result<T, E>` does **not** implement `Default` — there is no obvious choice between `Ok` and `Err`.
+
+**Usage:**
+
+```wado
+let n = i32::default();           // 0
+let s = String::default();        // ""
+
+fn make_default<T: Default>() -> T { return T::default(); }
+
+let x = make_default::<i32>();              // 0
+let arr = make_default::<Array<String>>();  // []
+```
+
+**Auto-Derivation:**
+
+`Default` is auto-derived for a non-generic struct when every field has a declared default expression (`f: T = expr`). See [Struct Field Defaults](#struct-field-defaults). A user-written `impl Default for S` overrides the auto-derived one. Generic structs require an explicit impl.
+
+```wado
+struct Config {
+    host: String = "localhost",
+    port: i32 = 8080,
+}
+
+let c = Config::default();  // Config { host: "localhost", port: 8080 }
+```
+
+For other types, the user writes the impl manually:
+
+```wado
+struct Point { x: i32, y: i32 }
+
+impl Default for Point {
+    fn default() -> Point { return Point { x: 0, y: 0 }; }
+}
+```
+
 ### Indexing Traits
 
 The prelude defines traits for index-based access:
@@ -3120,6 +3244,70 @@ use {foo} from "./external.wasm" with {
 | Package dependencies | Optional         | Type inferred from package     |
 
 **Rationale**: Explicit type annotations prevent ambiguity and make dependencies clear, aligning with Wado's design philosophy of explicit imports.
+
+### Schema Imports (Kiln)
+
+See [WEP: Kiln](./wep-2026-04-12-kiln.md) and [WEP: Gale](./wep-2026-03-02-gale.md).
+
+A `use` clause whose source is a non-`.wado`, non-`.wasm`, non-`.json` schema file (e.g. `.g4`, `.proto`, `.graphql`, `.wit`) is processed by **Kiln** — a schema-driven code-generation pipeline that lowers the schema to ordinary Wado source which the compiler then handles like any user-authored module. The `with { generator: { ... } }` clause specifies which generator to invoke:
+
+```wado
+// Gale generates a parser from an ANTLR4 grammar
+use { Parser } from "./Calc.g4" with {
+    generator: {
+        module: "wado:gale@0.1",
+        options: { highlight: false },
+    },
+};
+
+// With supplementary input files (paths relative to the source file)
+use { RustParser } from "./Rust.g4" with {
+    generator: {
+        module: "wado:gale@0.1",
+        inputs: ["./RustLexer.g4"],
+    },
+};
+```
+
+**`with { generator: { ... } }` fields:**
+
+| Field        | Required | Meaning                                                                                                                                  |
+| ------------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `module`     | yes      | Generator module — either a `<namespace>:<name>[@<version>]` reference resolved against `[build-dependencies]`, or a relative `./` path. |
+| `options`    | no       | Record literal whose shape matches the generator's exported `pub struct Options`. Omit when every field has a default.                   |
+| `inputs`     | no       | Supplementary schema paths the generator cannot discover from the primary alone (e.g. a sibling lexer grammar).                          |
+| `output_dir` | no       | Override for the per-invocation generated-source directory (default `build/kiln/<synthesized-id>/`).                                     |
+
+**Manifest:**
+
+Generators are declared in `[build-dependencies]` of `wado.toml` (a build-only graph that does not enter the consuming project's runtime dependency graph):
+
+```toml
+[build-dependencies]
+gale = { registry = "wado", package = "gale", version = "0.1" }
+```
+
+A bare `use { ... } from "./schema.g4"` against a non-`.wado` schema with no `with` clause is a hard error (`Code::KilnMissingWith`). Two `use` clauses for the same `from` in the same file collapse to a single invocation if their `(module, inputs, options, output_dir)` match; mismatched clauses are a duplicate-generator error.
+
+**Authoring a generator:**
+
+A generator is a normal Wado package whose `wado.toml` declares a `[package].generator` entry pointing at a module that exports the `core:kiln/generator` world:
+
+```wado
+use { Request, Response, Error } from "core:kiln";
+
+pub struct Options {
+    namespace: String,
+}
+
+export fn generate(req: Request<Options>) -> Result<Response, Error> {
+    // ... parse req.primary.content, emit Wado source ...
+}
+```
+
+The compiler extracts the `Options` shape from the generator's IR and type-checks every call site against it. Generators run in a deterministic sandbox (no clocks, randomness, network, environment, or ambient filesystem); transitive schema files are picked up via a host-provided `read-file` import that the compiler logs as part of the cache key. Outputs are persisted under `build/kiln/<synthesized-id>/` and stamped with a `#![generated(by = "...", sources = [...])]` header. Subsequent compiles skip the generator when its content-addressed cache key matches `wado.lock`.
+
+In hosts that cannot execute generators (today's wasm32-bundled LSP / browser playground), Kiln falls back to **consume-only mode**: the compiler reads cached generated `.wado` files from disk and emits a stale-cache warning if hashes do not match. Projects that want a full LSP experience in such hosts commit `build/kiln/` and `wado.lock` to their repository.
 
 ### Namespace Import
 
