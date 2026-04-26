@@ -12,6 +12,7 @@
 
 pub mod cm_binding;
 pub mod common;
+pub mod effect_dispatch;
 pub mod from_synth;
 pub mod kiln_synth;
 pub mod serde_synth;

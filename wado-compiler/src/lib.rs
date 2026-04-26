@@ -475,7 +475,25 @@ fn compile_after_load<H: CompilerHost>(
         check_stores(&package.tir_modules, logger)?;
     }
 
-    // === Phase 8b: Link (Package → FlatPackage) ===
+    // === Phase 8c: Effect Dispatch Synthesis ===
+    // Lowers `WithHandler` / `Resume` and generates per-effect dispatch
+    // infrastructure (struct, mut global, dispatch wrappers). Runs after
+    // effect-check so that handler-skip semantics are validated against
+    // the original `WithHandler` shape.
+    let package = {
+        let _span = logger.span("effect-dispatch");
+        synthesis::effect_dispatch::synthesize(package).map_err(|message| {
+            let _ = logger.error(compiler_host::Diagnostic {
+                severity: compiler_host::Severity::Error,
+                code: compiler_host::Code::UnsupportedFeature,
+                message,
+                span: None,
+            });
+            Bail
+        })?
+    };
+
+    // === Phase 8d: Link (Package → FlatPackage) ===
     let mut flat = {
         let _span = logger.span("link");
         link::link(package)
@@ -744,6 +762,21 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             let package = {
                 let _span = logger.span("synthesis");
                 synthesis::synthesize(package).map_err(|message| {
+                    let _ = logger.error(compiler_host::Diagnostic {
+                        severity: compiler_host::Severity::Error,
+                        code: compiler_host::Code::UnsupportedFeature,
+                        message,
+                        span: None,
+                    });
+                    Bail
+                })?
+            };
+
+            // Effect dispatch synthesis (lowers WithHandler / Resume).
+            // Dump path mirrors the main compile pipeline (Phase 8c).
+            let package = {
+                let _span = logger.span("effect-dispatch");
+                synthesis::effect_dispatch::synthesize(package).map_err(|message| {
                     let _ = logger.error(compiler_host::Diagnostic {
                         severity: compiler_host::Severity::Error,
                         code: compiler_host::Code::UnsupportedFeature,
