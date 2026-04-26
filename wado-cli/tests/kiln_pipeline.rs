@@ -2,21 +2,19 @@
 //!
 //! Exercises `wado_cli::kiln_driver::run_pipeline` through the crate's
 //! public API, using a static in-memory generator provider and a mock
-//! `CompilerHost`. This complements the unit tests inside the module
-//! by proving the orchestrator is usable from outside the crate.
+//! `CompilerHost`. All invocations originate inline; the manifest carries
+//! only `[build-dependencies]`.
 
 use std::path::Path;
 use std::sync::Mutex;
 
 use indexmap::IndexMap;
-use wado_cli::kiln_driver::{
-    GeneratorProvider, PipelineOutcome, ProviderError, run_pipeline, run_pipeline_with_inline,
-};
+use wado_cli::kiln_driver::{GeneratorProvider, PipelineOutcome, ProviderError, run_pipeline};
 use wado_compiler::compiler_host::{
     CompilerHost, Diagnostic, GeneratorOutputFile, GeneratorReadRecord, GeneratorRequest,
     GeneratorResponse, GeneratorRunnerError, SourceError,
 };
-use wado_compiler::kiln::GeneratorModule;
+use wado_compiler::kiln::{DeclSite, GeneratorModule, Invocation, InvocationPath};
 use wado_manifest::{LockFile, Manifest};
 
 struct StubProvider {
@@ -104,39 +102,43 @@ fn runtime() -> tokio::runtime::Runtime {
         .unwrap()
 }
 
+fn empty_manifest() -> Manifest {
+    "[package]\nname = \"host\"\nversion = \"0.1.0\""
+        .parse()
+        .unwrap()
+}
+
 fn run(
     manifest: &Manifest,
     root: &Path,
     host: &StubHost,
     provider: &StubProvider,
+    inline: Vec<Invocation>,
 ) -> PipelineOutcome {
     runtime()
-        .block_on(async { run_pipeline(manifest, root, host, provider).await })
+        .block_on(async { run_pipeline(manifest, root, host, provider, inline).await })
         .unwrap()
 }
 
-fn manifest_with_two_disjoint_generators() -> Manifest {
-    let toml_str = r#"
-[package]
-name = "host"
-version = "0.1.0"
-
-[registries]
-default = "https://wa.dev"
-
-[build-dependencies]
-proto = { package = "ns:proto", version = "^1.0.0" }
-graphql = { package = "ns:graphql", version = "^1.0.0" }
-
-[build.generators.alpha]
-module = "ns:proto@1.0.0"
-from = "./alpha.proto"
-
-[build.generators.beta]
-module = "ns:graphql@1.0.0"
-from = "./beta.graphql"
-"#;
-    toml_str.parse().unwrap()
+fn invocation(
+    decl_file: &str,
+    synthetic_id: &str,
+    module: GeneratorModule,
+    from: &str,
+    output_dir: &str,
+) -> Invocation {
+    Invocation {
+        decl_site: DeclSite {
+            module: decl_file.to_string(),
+            synthetic_id: synthetic_id.to_string(),
+        },
+        module,
+        from: InvocationPath::normalize(from),
+        inputs: vec![],
+        output_dir: InvocationPath::normalize(output_dir),
+        options_canonical: Vec::new(),
+        raw_options: None,
+    }
 }
 
 fn simple_response(path: &str) -> GeneratorResponse {
@@ -150,10 +152,31 @@ fn simple_response(path: &str) -> GeneratorResponse {
     }
 }
 
+fn alpha_inv() -> Invocation {
+    invocation(
+        "entry.wado",
+        "kiln-alpha",
+        GeneratorModule::Spec("ns:proto@1.0.0".to_string()),
+        "./alpha.proto",
+        "build/kiln/kiln-alpha",
+    )
+}
+
+fn beta_inv() -> Invocation {
+    invocation(
+        "entry.wado",
+        "kiln-beta",
+        GeneratorModule::Spec("ns:graphql@1.0.0".to_string()),
+        "./beta.graphql",
+        "build/kiln/kiln-beta",
+    )
+}
+
 #[test]
 fn end_to_end_two_generators_execute_cache_and_reuse() {
     let tmp = tempfile::tempdir().unwrap();
-    let m = manifest_with_two_disjoint_generators();
+    let m = empty_manifest();
+    let invs = vec![alpha_inv(), beta_inv()];
 
     let host1 = StubHost::new(
         &[
@@ -167,14 +190,14 @@ fn end_to_end_two_generators_execute_cache_and_reuse() {
     );
     let provider1 = StubProvider::new(b"component-bytes".to_vec());
 
-    let outcome = run(&m, tmp.path(), &host1, &provider1);
+    let outcome = run(&m, tmp.path(), &host1, &provider1, invs.clone());
     assert_eq!(outcome.executed.len(), 2);
-    assert!(outcome.executed.contains(&"alpha".to_string()));
-    assert!(outcome.executed.contains(&"beta".to_string()));
+    assert!(outcome.executed.contains(&"kiln-alpha".to_string()));
+    assert!(outcome.executed.contains(&"kiln-beta".to_string()));
     assert!(outcome.cached.is_empty());
 
-    assert!(tmp.path().join("build/kiln/alpha/alpha.wado").exists());
-    assert!(tmp.path().join("build/kiln/beta/beta.wado").exists());
+    assert!(tmp.path().join("build/kiln/kiln-alpha/alpha.wado").exists());
+    assert!(tmp.path().join("build/kiln/kiln-beta/beta.wado").exists());
 
     let lock_text = std::fs::read_to_string(tmp.path().join("wado.lock")).unwrap();
     let lock: LockFile = lock_text.parse().unwrap();
@@ -184,7 +207,7 @@ fn end_to_end_two_generators_execute_cache_and_reuse() {
         .iter()
         .map(|e| e.invocation.as_str())
         .collect();
-    assert_eq!(names, vec!["alpha", "beta"]);
+    assert_eq!(names, vec!["kiln-alpha", "kiln-beta"]);
 
     let host2 = StubHost::new(
         &[
@@ -195,41 +218,38 @@ fn end_to_end_two_generators_execute_cache_and_reuse() {
     );
     let provider2 = StubProvider::new(b"component-bytes".to_vec());
 
-    let outcome2 = run(&m, tmp.path(), &host2, &provider2);
+    let outcome2 = run(&m, tmp.path(), &host2, &provider2, invs);
     assert_eq!(outcome2.cached.len(), 2);
     assert!(outcome2.executed.is_empty());
     assert_eq!(*provider2.calls.lock().unwrap(), 0);
 }
 
 #[test]
-fn lockfile_entries_follow_manifest_declaration_order() {
+fn lockfile_entries_follow_invocation_declaration_order() {
     let tmp = tempfile::tempdir().unwrap();
-    let toml_str = r#"
-[package]
-name = "host"
-version = "0.1.0"
+    let m = empty_manifest();
 
-[registries]
-default = "https://wa.dev"
-
-[build-dependencies]
-zebra = { package = "ns:zebra", version = "^1.0.0" }
-alpha = { package = "ns:alpha", version = "^1.0.0" }
-mango = { package = "ns:mango", version = "^1.0.0" }
-
-[build.generators.zebra]
-module = "ns:zebra@1.0.0"
-from = "./z.schema"
-
-[build.generators.alpha]
-module = "ns:alpha@1.0.0"
-from = "./a.schema"
-
-[build.generators.mango]
-module = "ns:mango@1.0.0"
-from = "./m.schema"
-"#;
-    let m: Manifest = toml_str.parse().unwrap();
+    let z_inv = invocation(
+        "entry.wado",
+        "kiln-zebra",
+        GeneratorModule::Spec("ns:zebra@1.0.0".to_string()),
+        "./z.schema",
+        "build/kiln/kiln-zebra",
+    );
+    let a_inv = invocation(
+        "entry.wado",
+        "kiln-alpha",
+        GeneratorModule::Spec("ns:alpha@1.0.0".to_string()),
+        "./a.schema",
+        "build/kiln/kiln-alpha",
+    );
+    let m_inv = invocation(
+        "entry.wado",
+        "kiln-mango",
+        GeneratorModule::Spec("ns:mango@1.0.0".to_string()),
+        "./m.schema",
+        "build/kiln/kiln-mango",
+    );
 
     let host = StubHost::new(
         &[
@@ -244,7 +264,7 @@ from = "./m.schema"
         ],
     );
     let provider = StubProvider::new(b"component-bytes".to_vec());
-    run(&m, tmp.path(), &host, &provider);
+    run(&m, tmp.path(), &host, &provider, vec![z_inv, a_inv, m_inv]);
 
     let lock_text = std::fs::read_to_string(tmp.path().join("wado.lock")).unwrap();
     let lock: LockFile = lock_text.parse().unwrap();
@@ -255,19 +275,20 @@ from = "./m.schema"
         .collect();
     assert_eq!(
         names,
-        vec!["zebra", "alpha", "mango"],
-        "lockfile must follow manifest declaration order, not alphabetical"
+        vec!["kiln-zebra", "kiln-alpha", "kiln-mango"],
+        "lockfile must follow invocation declaration order, not alphabetical"
     );
-    let z_pos = lock_text.find("invocation = \"zebra\"").unwrap();
-    let a_pos = lock_text.find("invocation = \"alpha\"").unwrap();
-    let m_pos = lock_text.find("invocation = \"mango\"").unwrap();
+    let z_pos = lock_text.find("invocation = \"kiln-zebra\"").unwrap();
+    let a_pos = lock_text.find("invocation = \"kiln-alpha\"").unwrap();
+    let m_pos = lock_text.find("invocation = \"kiln-mango\"").unwrap();
     assert!(z_pos < a_pos && a_pos < m_pos);
 }
 
 #[test]
 fn end_to_end_input_change_invalidates_exactly_that_invocation() {
     let tmp = tempfile::tempdir().unwrap();
-    let m = manifest_with_two_disjoint_generators();
+    let m = empty_manifest();
+    let invs = vec![alpha_inv(), beta_inv()];
 
     let host1 = StubHost::new(
         &[
@@ -280,7 +301,7 @@ fn end_to_end_input_change_invalidates_exactly_that_invocation() {
         ],
     );
     let provider1 = StubProvider::new(b"component-bytes".to_vec());
-    run(&m, tmp.path(), &host1, &provider1);
+    run(&m, tmp.path(), &host1, &provider1, invs.clone());
 
     let host2 = StubHost::new(
         &[
@@ -291,16 +312,17 @@ fn end_to_end_input_change_invalidates_exactly_that_invocation() {
     );
     let provider2 = StubProvider::new(b"component-bytes".to_vec());
 
-    let outcome = run(&m, tmp.path(), &host2, &provider2);
-    assert_eq!(outcome.executed, vec!["alpha".to_string()]);
-    assert_eq!(outcome.cached, vec!["beta".to_string()]);
+    let outcome = run(&m, tmp.path(), &host2, &provider2, invs);
+    assert_eq!(outcome.executed, vec!["kiln-alpha".to_string()]);
+    assert_eq!(outcome.cached, vec!["kiln-beta".to_string()]);
     assert_eq!(*provider2.calls.lock().unwrap(), 1);
 }
 
 #[test]
 fn cache_miss_on_output_io_error_emits_warning() {
     let tmp = tempfile::tempdir().unwrap();
-    let m = manifest_with_two_disjoint_generators();
+    let m = empty_manifest();
+    let invs = vec![alpha_inv(), beta_inv()];
 
     let host1 = StubHost::new(
         &[
@@ -313,9 +335,9 @@ fn cache_miss_on_output_io_error_emits_warning() {
         ],
     );
     let provider1 = StubProvider::new(b"component-bytes".to_vec());
-    run(&m, tmp.path(), &host1, &provider1);
+    run(&m, tmp.path(), &host1, &provider1, invs.clone());
 
-    let cached_output = tmp.path().join("build/kiln/alpha/alpha.wado");
+    let cached_output = tmp.path().join("build/kiln/kiln-alpha/alpha.wado");
     assert!(cached_output.exists());
     std::fs::remove_file(&cached_output).unwrap();
 
@@ -328,8 +350,8 @@ fn cache_miss_on_output_io_error_emits_warning() {
     );
     let provider2 = StubProvider::new(b"component-bytes".to_vec());
 
-    let outcome = run(&m, tmp.path(), &host2, &provider2);
-    assert!(outcome.executed.contains(&"alpha".to_string()));
+    let outcome = run(&m, tmp.path(), &host2, &provider2, invs);
+    assert!(outcome.executed.contains(&"kiln-alpha".to_string()));
 
     let diags = host2.take_diagnostics();
     let saw_warning = diags.iter().any(|d| {
@@ -343,18 +365,12 @@ fn cache_miss_on_output_io_error_emits_warning() {
 #[test]
 fn pipeline_invocations_feed_compiler_options_for_use_redirect() {
     use wado_compiler::CompilerOptions;
-    use wado_compiler::kiln::{DeclSite, GeneratorModule, Invocation, InvocationPath};
 
     let tmp = tempfile::tempdir().unwrap();
-    let toml_str = r#"
-[package]
-name = "redirect-test"
-version = "0.1.0"
-"#;
-    let m: Manifest = toml_str.parse().unwrap();
+    let m = empty_manifest();
 
     let inline_inv = Invocation {
-        decl_site: DeclSite::Inline {
+        decl_site: DeclSite {
             module: "entry.wado".to_string(),
             synthetic_id: "kiln-abc12345".to_string(),
         },
@@ -384,9 +400,7 @@ version = "0.1.0"
     let provider = StubProvider::new(b"component-bytes".to_vec());
 
     let outcome = runtime()
-        .block_on(async {
-            run_pipeline_with_inline(&m, tmp.path(), &host, &provider, vec![inline_inv]).await
-        })
+        .block_on(async { run_pipeline(&m, tmp.path(), &host, &provider, vec![inline_inv]).await })
         .unwrap();
 
     assert!(!outcome.invocations.is_empty());
@@ -412,18 +426,11 @@ version = "0.1.0"
 
 #[test]
 fn inline_invocation_populates_invocation_index_for_redirect() {
-    use wado_compiler::kiln::{DeclSite, GeneratorModule, Invocation, InvocationPath};
-
     let tmp = tempfile::tempdir().unwrap();
-    let toml_str = r#"
-[package]
-name = "inline-consumer"
-version = "0.1.0"
-"#;
-    let m: Manifest = toml_str.parse().unwrap();
+    let m = empty_manifest();
 
     let inline_inv = Invocation {
-        decl_site: DeclSite::Inline {
+        decl_site: DeclSite {
             module: "entry.wado".to_string(),
             synthetic_id: "kiln-deadbeef".to_string(),
         },
@@ -442,9 +449,7 @@ version = "0.1.0"
     let provider = StubProvider::new(b"component-bytes".to_vec());
 
     let outcome = runtime()
-        .block_on(async {
-            run_pipeline_with_inline(&m, tmp.path(), &host, &provider, vec![inline_inv]).await
-        })
+        .block_on(async { run_pipeline(&m, tmp.path(), &host, &provider, vec![inline_inv]).await })
         .unwrap();
 
     assert_eq!(outcome.executed.len(), 1, "inline should have executed");

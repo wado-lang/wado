@@ -1,7 +1,4 @@
-use crate::manifest::{
-    BuildSection, DependencySource, GeneratorInvocation, GeneratorModuleRef, Manifest,
-    ManifestError,
-};
+use crate::manifest::{DependencySource, Manifest, ManifestError};
 use crate::version::{Version, VersionSpecifier};
 
 /// Validate a parsed manifest for semantic consistency.
@@ -13,9 +10,6 @@ pub fn validate(manifest: &Manifest) -> Result<(), ManifestError> {
         validate_package(pkg)?;
     }
     validate_dependencies(manifest)?;
-    if let Some(build) = &manifest.build {
-        validate_build(manifest, build)?;
-    }
     Ok(())
 }
 
@@ -75,102 +69,6 @@ fn validate_dependencies(manifest: &Manifest) -> Result<(), ManifestError> {
         validate_dep_key(name)?;
         validate_dep_source(name, &dep.source, manifest, false)?;
     }
-    Ok(())
-}
-
-fn validate_build(manifest: &Manifest, build: &BuildSection) -> Result<(), ManifestError> {
-    let mut seen_from: Vec<(&str, &str)> = Vec::new();
-    for (name, invocation) in &build.generators {
-        validate_name("build.generators key", name)?;
-        validate_generator_invocation(name, invocation, manifest)?;
-        for (prior_name, prior_from) in &seen_from {
-            if *prior_from == invocation.from.as_str() {
-                return Err(ManifestError::DuplicateGeneratorFrom {
-                    first: (*prior_name).to_string(),
-                    second: name.clone(),
-                    from: invocation.from.clone(),
-                });
-            }
-        }
-        seen_from.push((name.as_str(), invocation.from.as_str()));
-    }
-    Ok(())
-}
-
-fn validate_generator_invocation(
-    name: &str,
-    invocation: &GeneratorInvocation,
-    manifest: &Manifest,
-) -> Result<(), ManifestError> {
-    if invocation.from.trim().is_empty() {
-        return Err(ManifestError::InvalidGeneratorFrom {
-            invocation: name.to_string(),
-            reason: "must not be empty".to_string(),
-        });
-    }
-    match &invocation.module {
-        GeneratorModuleRef::Spec(spec) => validate_module_spec(name, spec, manifest)?,
-        GeneratorModuleRef::Inline(dep) => {
-            validate_dep_source(name, &dep.source, manifest, false)?;
-        }
-    }
-    Ok(())
-}
-
-/// Validate a `module = "ns:name@ver[/submodule]"` spec string and check
-/// that the `ns:name@ver` prefix matches an entry in `[build-dependencies]`.
-fn validate_module_spec(
-    invocation: &str,
-    spec: &str,
-    manifest: &Manifest,
-) -> Result<(), ManifestError> {
-    // Split off optional submodule path.
-    let (ident, _submodule) = match spec.split_once('/') {
-        Some((ident, rest)) => (ident, Some(rest)),
-        None => (spec, None),
-    };
-
-    // `ident` must be `namespace:name@version`.
-    let (ns_name, version) =
-        ident
-            .split_once('@')
-            .ok_or_else(|| ManifestError::InvalidGeneratorModule {
-                invocation: invocation.to_string(),
-                value: spec.to_string(),
-                reason: "expected `namespace:name@version`".to_string(),
-            })?;
-    let (namespace, name) =
-        ns_name
-            .split_once(':')
-            .ok_or_else(|| ManifestError::InvalidGeneratorModule {
-                invocation: invocation.to_string(),
-                value: spec.to_string(),
-                reason: "expected `namespace:name@version`".to_string(),
-            })?;
-    if namespace.is_empty() || name.is_empty() || version.is_empty() {
-        return Err(ManifestError::InvalidGeneratorModule {
-            invocation: invocation.to_string(),
-            value: spec.to_string(),
-            reason: "namespace, name, and version must be non-empty".to_string(),
-        });
-    }
-
-    // Look for a matching [build-dependencies] entry. Match on registry-style
-    // `namespace:name` package identity; git/path inline refs aren't resolved
-    // by spec, only by the inline-module syntax.
-    let found = manifest.build_dependencies.values().any(|dep| {
-        matches!(
-            &dep.source,
-            DependencySource::Registry { package, .. } if package == ns_name
-        )
-    });
-    if !found {
-        return Err(ManifestError::UnknownGeneratorModule {
-            invocation: invocation.to_string(),
-            spec: spec.to_string(),
-        });
-    }
-
     Ok(())
 }
 

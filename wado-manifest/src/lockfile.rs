@@ -22,8 +22,11 @@ pub struct LockFile {
 /// generator invocation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GeneratorCacheEntry {
-    /// Invocation id (either the `[build.generators.<name>]` key or a
-    /// synthesized `"kiln-<12-hex>"` id for inline invocations).
+    /// Synthesized invocation id, currently a `kiln-<16-hex>` form whose
+    /// hash covers the generator module identity, the `from` schema path,
+    /// declared `inputs`, and the canonical generator options. `decl_file`
+    /// is intentionally not part of the hash, so identical inline
+    /// invocations emitted from different files share a single cache entry.
     pub invocation: String,
     /// Generator identity as resolved: `"ns:name@version"` plus any module path.
     pub generator: String,

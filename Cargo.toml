@@ -53,6 +53,17 @@ libc = { version = "0.2" }
 sha2 = { version = "0.10", default-features = false }
 
 
+[profile.dev]
+# `line-tables-only` keeps file:line in backtraces (and `RUST_BACKTRACE`
+# stack frames) but drops local-variable DWARF, which is the bulk of
+# `target/debug/deps/*.rlib` size. With `split-debuginfo = "unpacked"`
+# the remaining debuginfo is emitted as sibling `.dwo`/`.o` files
+# instead of being baked into the rlib. Together they shrink
+# `target/debug` from ~21 GB to roughly ~8 GB, which avoids the
+# disk-full link failures the CI runners have been hitting on rebuild.
+debug = "line-tables-only"
+split-debuginfo = "unpacked"
+
 [profile.dev.package.wado-compiler]
 opt-level = 1
 

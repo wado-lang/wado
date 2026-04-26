@@ -9,7 +9,7 @@ use std::sync::Mutex;
 use indexmap::IndexMap;
 use wado_compiler::{
     CompilerHost, Diagnostic, ModuleSource, SourceError, annotate_with_invocations,
-    kiln::{DeclScope, InvocationIndex},
+    kiln::InvocationIndex,
 };
 
 struct MapHost {
@@ -69,7 +69,7 @@ pub fn greet() {}
 
     let mut idx = InvocationIndex::new();
     idx.insert(
-        DeclScope::LocalTo("entry.wado".to_string()),
+        "entry.wado",
         "./sample.proto",
         "build/kiln/test-invocation/sample.wado",
     );

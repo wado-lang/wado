@@ -1,9 +1,7 @@
 //! Canonical, compiler-internal representation of a Kiln generator invocation.
 //!
-//! The manifest layer ([`wado_manifest::GeneratorInvocation`]) and the inline
-//! `use ... with { generator: ... }` AST both lower into [`Invocation`], so the
-//! DAG, cache and pipeline logic in this module treat both sources
-//! identically. See WEP 2026-04-12 §"Declaration sites".
+//! All invocations come from inline `use ... with { generator: ... }` clauses;
+//! the manifest no longer declares any. See WEP 2026-04-12 §"Use site syntax".
 
 use std::fmt;
 
@@ -54,39 +52,27 @@ impl fmt::Display for InvocationPath {
 ///
 /// Used for diagnostics; never part of the cache key.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum DeclSite {
-    /// Declared in the root `wado.toml` under `[build.generators.<name>]`.
-    Manifest { name: String },
-    /// Declared inline via `use ... from "<from>" with { generator: {...} }`.
-    Inline {
-        /// Relative path of the Wado file containing the clause.
-        module: String,
-        /// Synthesized id derived from the canonical invocation tuple.
-        synthetic_id: String,
-    },
+pub struct DeclSite {
+    /// Relative path of the Wado file containing the inline `with` clause.
+    pub module: String,
+    /// Synthesized id derived from the canonical invocation tuple.
+    pub synthetic_id: String,
 }
 
 impl fmt::Display for DeclSite {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            DeclSite::Manifest { name } => write!(f, "[build.generators.{name}]"),
-            DeclSite::Inline {
-                module,
-                synthetic_id,
-            } => write!(f, "{module} (inline: {synthetic_id})"),
-        }
+        write!(f, "{} (inline: {})", self.module, self.synthetic_id)
     }
 }
 
 /// A reference to the generator module source.
 ///
-/// Lowered from [`wado_manifest::GeneratorModuleRef`] so the compiler layer
-/// does not need to reason about dependency sources.
+/// Comes from the `module: "..."` string at the inline `with` clause.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum GeneratorModule {
     /// `"ns:name@version"`, with optional `/<submodule>` suffix.
     Spec(String),
-    /// Resolved local path, already joined against the manifest root.
+    /// Resolved local path, already joined against the consuming file's directory.
     LocalPath(InvocationPath),
 }
 
@@ -103,33 +89,29 @@ pub struct Invocation {
     pub from: InvocationPath,
     /// Supplementary schema files, preserving declaration order.
     pub inputs: Vec<InvocationPath>,
-    /// Resolved output directory (default: `build/kiln/<name>`).
+    /// Resolved output directory (default: `build/kiln/<synthesized-id>`).
     pub output_dir: InvocationPath,
     /// Canonical byte encoding of the `options` object.
     ///
-    /// M3 uses a provisional TOML canonicalization; M4 replaces this with the
-    /// Component-Model lifted encoding produced by
-    /// [`crate::kiln::options::encode_canonical`]. The boundary is isolated
-    /// to one function (`cache::encode_options_canonical_provisional`) so
-    /// cache keys never flip when M4 ships unless the user-facing options
-    /// actually change.
+    /// Produced by the inline-clause encoder via
+    /// [`crate::kiln::options::encode_canonical`] — the typed Component-Model
+    /// lifted encoding once the generator's `OptionsDescriptor` is known.
     pub options_canonical: Vec<u8>,
-    /// Raw `options` `AttrValue` recovered from the declaration site
-    /// (manifest TOML or inline `with { generator: { options: { ... } } }`).
-    /// Stashed so the driver's typed-encode pass can re-validate against
-    /// the generator's `OptionsDescriptor` once it becomes available
-    /// without re-reading or re-parsing the source. `None` when no
-    /// `options` clause was supplied. Excluded from
-    /// [`Invocation::identity_tuple`] — equivalence is decided by
-    /// `options_canonical` alone.
+    /// Raw `options` `AttrValue` recovered from the inline
+    /// `with { generator: { options: { ... } } }` clause. Stashed so the
+    /// driver's typed-encode pass can re-validate against the generator's
+    /// `OptionsDescriptor` once it becomes available without re-reading or
+    /// re-parsing the source. `None` when no `options` clause was supplied.
+    /// Excluded from [`Invocation::identity_tuple`] — equivalence is decided
+    /// by `options_canonical` alone.
     pub raw_options: Option<crate::ast::AttrValue>,
 }
 
 impl Invocation {
     /// The tuple used for dedup and cycle detection.
     ///
-    /// Does not include `decl_site`: two declarations with identical invocation
-    /// tuples but different sites must merge (per WEP line 371).
+    /// Does not include `decl_site`: two clauses in the same file with
+    /// identical invocation tuples merge into one invocation.
     #[must_use]
     pub fn identity_tuple(&self) -> (&GeneratorModule, &str, &[InvocationPath], &str, &[u8]) {
         (
@@ -170,18 +152,20 @@ mod tests {
     }
 
     #[test]
-    fn decl_site_display_manifest() {
-        let site = DeclSite::Manifest {
-            name: "proto".to_string(),
+    fn decl_site_display_inline() {
+        let site = DeclSite {
+            module: "main.wado".to_string(),
+            synthetic_id: "kiln-deadbeef".to_string(),
         };
-        assert_eq!(format!("{site}"), "[build.generators.proto]");
+        assert_eq!(format!("{site}"), "main.wado (inline: kiln-deadbeef)");
     }
 
     #[test]
     fn identity_tuple_ignores_decl_site() {
         let inv_a = Invocation {
-            decl_site: DeclSite::Manifest {
-                name: "a".to_string(),
+            decl_site: DeclSite {
+                module: "a.wado".to_string(),
+                synthetic_id: "kiln-aaaa".to_string(),
             },
             module: GeneratorModule::Spec("ns:x@1.0.0".to_string()),
             from: InvocationPath::normalize("s.proto"),
@@ -191,9 +175,9 @@ mod tests {
             raw_options: None,
         };
         let inv_b = Invocation {
-            decl_site: DeclSite::Inline {
-                module: "main.wado".to_string(),
-                synthetic_id: "kiln-deadbeef".to_string(),
+            decl_site: DeclSite {
+                module: "b.wado".to_string(),
+                synthetic_id: "kiln-bbbb".to_string(),
             },
             ..inv_a.clone()
         };

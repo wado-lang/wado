@@ -25,9 +25,7 @@ pub use cache::{
     gather_file_hashes, generator_identity, hash_options_canonical, hex_digest,
 };
 pub use header::{GeneratedHeader, has_generated_marker, parse_header};
-pub use inline::{
-    DeclScope, InvocationIndex, collect_inline_invocations, merge_manifest_and_inline,
-};
+pub use inline::{InvocationIndex, collect_inline_invocations};
 pub use invocation::{DeclSite, GeneratorModule, Invocation, InvocationPath};
 pub use options::{
     CanonicalValue, OptionsDescriptor, OptionsField, OptionsType, extract_options_descriptor,

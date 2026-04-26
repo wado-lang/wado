@@ -225,6 +225,18 @@ fn strip_kiln_scheme(uri: &str) -> Option<String> {
     Some(parsed.path().as_str().to_string())
 }
 
+/// `true` when `path` looks like a non-`.wado` schema source (i.e. has any
+/// extension other than `.wado`). Wado modules and bare paths with no
+/// extension fall through to normal resolution.
+fn is_non_wado_schema(path: &str) -> bool {
+    match path.rsplit_once('.') {
+        Some((_, ext)) if !ext.is_empty() && !ext.contains('/') => {
+            !ext.eq_ignore_ascii_case("wado")
+        }
+        _ => false,
+    }
+}
+
 /// Module loader
 ///
 /// Loads all modules upfront before analysis and codegen.
@@ -569,6 +581,15 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         for item in &module.items {
             if let Item::Use(use_decl) = item {
                 let resolved = self.resolve_import(from_module_source, &use_decl.source)?;
+                if matches!(&resolved, ModuleSource::Local { path } if is_non_wado_schema(path))
+                    && use_decl
+                        .attributes
+                        .as_ref()
+                        .and_then(crate::ast::ImportAttributes::generator)
+                        .is_none()
+                {
+                    self.emit_kiln_missing_with(from_module_source, use_decl);
+                }
                 pending.push_back((from_module_source.clone(), resolved));
             }
         }
@@ -618,6 +639,39 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         }
 
         Ok(())
+    }
+
+    /// Emit a `Code::KilnMissingWith` diagnostic for a bare `use ... from
+    /// "./schema.<ext>"` whose source is a non-`.wado` schema and that has
+    /// no inline `with { generator: { ... } }` clause registered for this
+    /// importing file. WEP 2026-04-12 §"Use site syntax" makes such
+    /// imports a hard error so the user gets a pointed message instead of
+    /// a downstream parse failure on the schema content.
+    fn emit_kiln_missing_with(
+        &self,
+        from_module_source: &ModuleSource,
+        use_decl: &crate::ast::UseDecl,
+    ) {
+        use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
+        let file = match from_module_source {
+            ModuleSource::Local { path } => path.clone(),
+            ModuleSource::EntryPoint { filename } => filename.clone(),
+            ModuleSource::Redirected { uri } => uri.clone(),
+            _ => String::new(),
+        };
+        self.host.emit_diagnostic(Diagnostic {
+            severity: Severity::Error,
+            code: Code::KilnMissingWith,
+            message: format!(
+                "kiln: `use ... from {:?}` requires `with {{ generator: {{ module: \"...\" }} }}` \
+                 — non-`.wado` schemas can only be loaded through an inline Kiln invocation",
+                use_decl.source,
+            ),
+            span: Some(DiagnosticSpan::from_span(
+                &use_decl.source_span,
+                Some(&file),
+            )),
+        });
     }
 
     /// Resolve an import source relative to the importing module

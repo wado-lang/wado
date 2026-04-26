@@ -1,16 +1,15 @@
 //! Inline-invocation collection for `use ... with { generator: { ... } }`.
 //!
-//! An inline clause declares a Kiln invocation directly at the import site
-//! instead of inside `wado.toml`. This module walks the parsed [`UseDecl`]s,
+//! Every Kiln invocation is declared at the import site; the manifest does
+//! not declare invocations. This module walks the parsed [`UseDecl`]s,
 //! extracts the `generator: {...}` object from
 //! [`crate::ast::ImportAttributes`], and builds matching
-//! [`crate::kiln::Invocation`]s. The result can be merged with manifest-lowered
-//! invocations before [`crate::kiln::plan::build_plan`] runs.
+//! [`crate::kiln::Invocation`]s before [`crate::kiln::plan::build_plan`] runs.
 //!
 //! Two clauses with identical `(module, from, inputs, output_dir,
-//! options_canonical)` tuples are merged into a single invocation; this is the
-//! same dedup contract as the manifest path. Two clauses that share `from` but
-//! disagree on any other field produce a diagnostic citing both spans.
+//! options_canonical)` tuples are merged into a single invocation. Two
+//! clauses that share `from` but disagree on any other field produce a
+//! diagnostic citing both spans.
 
 use sha2::{Digest, Sha256};
 
@@ -28,43 +27,25 @@ use super::options_check::{CanonicalOptions, validate};
 pub const DEFAULT_INLINE_OUTPUT_DIR_PREFIX: &str = "build/kiln";
 
 /// Resolver-side lookup table that redirects a `use ... from "<from>"` whose
-/// `<from>` path matches a Kiln invocation's primary source to the
+/// `<from>` path matches an inline Kiln invocation's primary source to the
 /// invocation's generated entry module.
 ///
-/// Built once per compilation unit from the merged manifest + inline
-/// invocation set, after the pipeline has populated `build/kiln/…` so the
-/// entry module's on-disk location is known. For consume-only mode (no
-/// pipeline run), the index is built from the last recorded lockfile entry's
-/// `output.entry = true` path — that path lives on disk already or the
-/// cache check failed.
+/// Built once per compilation unit from the inline invocation set, after the
+/// pipeline has populated `build/kiln/…` so the entry module's on-disk
+/// location is known. For consume-only mode (no pipeline run), the index is
+/// built from the last recorded lockfile entry's `output.entry = true` path
+/// — that path lives on disk already or the cache check failed.
 ///
 /// Lookups are keyed by `(declaring_file_normalized, from_path_normalized)`.
-/// Two clauses declared in different files can redirect to the same entry
-/// iff the manifest + inline merge keeps them under a single invocation.
-/// Scope at which an [`InvocationIndex`] entry takes effect.
-///
-/// Drop-in replacement for the former "empty-string `decl_file` means
-/// any importer" sentinel: manifest-declared invocations use
-/// [`DeclScope::Any`] (redirect any importer that imports the
-/// matching `from`), while inline-declared invocations use
-/// [`DeclScope::LocalTo`] with the declaring file path and only
-/// redirect that specific file's imports.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum DeclScope {
-    /// Match any importer. Used for manifest-declared invocations.
-    Any,
-    /// Match only the named importing file (normalized path). Used
-    /// for inline `use ... with { generator: { ... } }` clauses.
-    LocalTo(String),
-}
-
+/// A bare `use ... from "./schema.<ext>"` in any other file fails with
+/// `Code::KilnMissingWith`.
 #[derive(Debug, Default, Clone)]
 pub struct InvocationIndex {
-    /// Entries mapping `(scope, from_path)` → entry module URI. The URI
+    /// Entries mapping `(decl_file, from_path)` → entry module URI. The URI
     /// is an opaque resource identifier (typically a `file:` URI
     /// produced by the CLI pipeline) that the loader hands verbatim to
     /// `CompilerHost::load_source` — it is not normalized as a path.
-    entries: IndexMap<(DeclScope, String), String>,
+    entries: IndexMap<(String, String), String>,
 }
 
 impl InvocationIndex {
@@ -76,36 +57,27 @@ impl InvocationIndex {
         }
     }
 
-    /// Record that a `use ... from "<from>"` within `scope` redirects to
-    /// `entry_uri`. The `from` path is normalized for matching; the
-    /// `entry_uri` is stored opaquely.
+    /// Record that a `use ... from "<from>"` inside `decl_file` redirects to
+    /// `entry_uri`. Both keys are normalized for matching; `entry_uri` is
+    /// stored opaquely.
     ///
     /// Silently overwrites a prior entry with the same key. The caller is
-    /// responsible for ensuring the set of recorded invocations is
-    /// conflict-free (see [`merge_manifest_and_inline`]).
-    pub fn insert(&mut self, scope: DeclScope, from: &str, entry_uri: &str) {
+    /// responsible for keeping the set of recorded invocations conflict-free
+    /// (see [`collect_inline_invocations`]).
+    pub fn insert(&mut self, decl_file: &str, from: &str, entry_uri: &str) {
         let from = InvocationPath::normalize(from).as_str().to_string();
-        self.entries.insert((scope, from), entry_uri.to_string());
+        self.entries
+            .insert((decl_file.to_string(), from), entry_uri.to_string());
     }
 
     /// Look up the entry URI for a `(decl_file, from)` pair. Returns the
     /// opaque URI of the entry module, or `None` if no invocation
     /// matches.
-    ///
-    /// The `(LocalTo(decl_file), from)` key is tried first; on miss the
-    /// lookup falls back to `(Any, from)` so manifest-scoped invocations
-    /// redirect any importer.
     #[must_use]
     pub fn redirect(&self, decl_file: &str, from: &str) -> Option<&str> {
         let from = InvocationPath::normalize(from).as_str().to_string();
-        if let Some(entry) = self
-            .entries
-            .get(&(DeclScope::LocalTo(decl_file.to_string()), from.clone()))
-        {
-            return Some(entry.as_str());
-        }
         self.entries
-            .get(&(DeclScope::Any, from))
+            .get(&(decl_file.to_string(), from))
             .map(String::as_str)
     }
 
@@ -191,57 +163,6 @@ pub fn collect_inline_invocations(
     Ok(by_tuple.into_iter().map(|(_, v)| v).collect())
 }
 
-/// Merge manifest-declared invocations with inline-collected ones.
-///
-/// Cross-source `from` conflicts — a manifest invocation and an inline
-/// clause both targeting the same primary source with different
-/// `(module, inputs, output_dir, options_canonical)` — surface as error
-/// diagnostics. Identical tuples are deduplicated.
-///
-/// # Errors
-/// Every cross-source conflict is reported. Returns `Err` when any error
-/// diagnostic is emitted.
-pub fn merge_manifest_and_inline(
-    manifest: Vec<Invocation>,
-    inline: Vec<Invocation>,
-) -> Result<Vec<Invocation>, Vec<Diagnostic>> {
-    let mut diagnostics: Vec<Diagnostic> = Vec::new();
-    let mut out: Vec<Invocation> = Vec::with_capacity(manifest.len() + inline.len());
-    let mut by_tuple: IndexMap<String, usize> = IndexMap::default();
-    let mut by_from: IndexMap<String, usize> = IndexMap::default();
-
-    for inv in manifest.into_iter().chain(inline) {
-        let tuple_key = identity_key(&inv);
-        if by_tuple.contains_key(&tuple_key) {
-            continue;
-        }
-        let from_key = inv.from.as_str().to_string();
-        if let Some(&idx) = by_from.get(&from_key) {
-            let prior = &out[idx];
-            diagnostics.push(Diagnostic {
-                severity: Severity::Error,
-                code: Code::GeneratorOptionsInvalid,
-                message: format!(
-                    "kiln: generator invocations for `from = \"{}\"` disagree between {} and {}",
-                    inv.from.as_str(),
-                    prior.decl_site,
-                    inv.decl_site,
-                ),
-                span: None,
-            });
-            continue;
-        }
-        by_tuple.insert(tuple_key, out.len());
-        by_from.insert(from_key, out.len());
-        out.push(inv);
-    }
-
-    if diagnostics.iter().any(|d| d.severity == Severity::Error) {
-        return Err(diagnostics);
-    }
-    Ok(out)
-}
-
 fn use_decls_of(module: &Module) -> impl Iterator<Item = &UseDecl> {
     module.items.iter().filter_map(|it| match it {
         crate::ast::Item::Use(u) => Some(u),
@@ -263,12 +184,10 @@ fn lower_inline(
     //   - "./..." / "../..." → relative path resolved against the
     //     importing file (same as a regular `use`).
     //   - "<ns>:<name>[@<ver>]" → registry / stdlib namespace spec.
-    // Anything else is rejected. The TOML manifest's
-    // `[build.generators.<name>]` declaration keeps its own
-    // wado.toml-rooted shape (`module = { path = "..." }`); the inline
-    // form intentionally does *not* mirror it because the author is
-    // already writing path-relative imports a few characters earlier
-    // (`use ... from "./schema.g4"`).
+    // Anything else is rejected. The author is already writing
+    // path-relative imports a few characters earlier
+    // (`use ... from "./schema.g4"`), so the inline `module` field
+    // follows the same rule.
     let module = match cfg.get("module") {
         Some(AttrValue::String(s)) => {
             lower_module_specifier(module_path, use_decl, s, manifest_root, &mut errors)
@@ -347,6 +266,23 @@ fn lower_inline(
         Vec::new()
     };
 
+    let output_dir_override = match cfg.get("output_dir") {
+        None => None,
+        Some(AttrValue::String(s)) => Some(InvocationPath::normalize(s)),
+        Some(other) => {
+            errors.push(Diagnostic {
+                severity: Severity::Error,
+                code: Code::GeneratorOptionsInvalid,
+                message: format!(
+                    "kiln: `generator.output_dir` must be a string, got {}",
+                    attr_kind(other),
+                ),
+                span: Some(span_of(module_path, use_decl)),
+            });
+            None
+        }
+    };
+
     if !errors.is_empty() {
         return Err(errors);
     }
@@ -365,12 +301,14 @@ fn lower_inline(
         format!("kiln-{}", &hex_digest(&digest)[..16])
     };
 
-    let output_dir = InvocationPath::normalize(&format!(
-        "{DEFAULT_INLINE_OUTPUT_DIR_PREFIX}/{synthetic_id}"
-    ));
+    let output_dir = output_dir_override.unwrap_or_else(|| {
+        InvocationPath::normalize(&format!(
+            "{DEFAULT_INLINE_OUTPUT_DIR_PREFIX}/{synthetic_id}"
+        ))
+    });
 
     Ok(Invocation {
-        decl_site: DeclSite::Inline {
+        decl_site: DeclSite {
             module: module_path.to_string(),
             synthetic_id,
         },
@@ -409,9 +347,9 @@ fn lower_module_specifier(
     // author writing one consistent style of path inside a single `use`.
     //
     // The resolved path is then re-anchored to the manifest root so the
-    // resulting `LocalPath` matches the manifest TOML form's invariant
-    // ("path is relative to the manifest root"), which the provider relies
-    // on to find the file on disk and to build a stable cache key.
+    // resulting `LocalPath` is reliably reachable from the consuming
+    // project — the provider resolves it as `manifest_root.join(path)`
+    // when reading the file on disk and computing a stable cache key.
     if spec.starts_with("./") || spec.starts_with("../") {
         let resolved = crate::name::resolve_module_path(module_path, spec);
         let manifest_relative = strip_manifest_root_prefix(manifest_root, &resolved);
@@ -443,9 +381,8 @@ fn lower_module_specifier(
 }
 
 /// Re-anchor `resolved` (project-root-relative) to `manifest_root` so the
-/// result matches the manifest TOML form's invariant: paths in
-/// [`GeneratorModule::LocalPath`] are relative to the manifest root, and
-/// the provider resolves them as `manifest_root.join(path)`.
+/// resulting [`GeneratorModule::LocalPath`] is relative to the manifest
+/// root; the provider resolves it as `manifest_root.join(path)`.
 ///
 /// When `resolved` lies under `manifest_root` the shared prefix is stripped.
 /// When `resolved` lies above or beside `manifest_root` (e.g. an inline
@@ -585,9 +522,7 @@ mod tests {
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].from.as_str(), "schema.proto");
         assert!(matches!(&result[0].module, GeneratorModule::Spec(s) if s == "ns:gen@1.0.0"));
-        assert!(
-            matches!(&result[0].decl_site, DeclSite::Inline { module, .. } if module == "src/main.wado")
-        );
+        assert_eq!(result[0].decl_site.module, "src/main.wado");
     }
 
     #[test]
@@ -654,39 +589,42 @@ mod tests {
     }
 
     #[test]
-    fn merge_reports_cross_source_conflict() {
-        let manifest_inv = Invocation {
-            decl_site: DeclSite::Manifest {
-                name: "proto".to_string(),
-            },
-            module: GeneratorModule::Spec("ns:a@1.0.0".to_string()),
-            from: InvocationPath::normalize("./schema.proto"),
-            inputs: vec![],
-            output_dir: InvocationPath::normalize("build/kiln/proto"),
-            options_canonical: vec![],
-            raw_options: None,
-        };
-        let inline_inv = Invocation {
-            decl_site: DeclSite::Inline {
-                module: "src/main.wado".to_string(),
-                synthetic_id: "kiln-deadbeef".to_string(),
-            },
-            module: GeneratorModule::Spec("ns:b@1.0.0".to_string()),
-            from: InvocationPath::normalize("./schema.proto"),
-            inputs: vec![],
-            output_dir: InvocationPath::normalize("build/kiln/kiln-deadbeef"),
-            options_canonical: vec![],
-            raw_options: None,
-        };
-        let errs = merge_manifest_and_inline(vec![manifest_inv], vec![inline_inv]).unwrap_err();
-        assert!(errs.iter().any(|d| d.message.contains("disagree between")));
+    fn output_dir_override_is_respected() {
+        let attrs = attr_with_generator(&[
+            ("module", AttrValue::String("ns:gen@1.0.0".to_string())),
+            ("output_dir", AttrValue::String("src/generated".to_string())),
+        ]);
+        let module = module_with_use("./schema.proto", attrs);
+        let mut mods: IndexMap<String, Module> = IndexMap::default();
+        mods.insert("src/main.wado".to_string(), module);
+
+        let result = collect_inline_invocations(&mods, &IndexMap::default(), "").unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].output_dir.as_str(), "src/generated");
+    }
+
+    #[test]
+    fn output_dir_non_string_rejected() {
+        let attrs = attr_with_generator(&[
+            ("module", AttrValue::String("ns:gen@1.0.0".to_string())),
+            ("output_dir", AttrValue::Int(42)),
+        ]);
+        let module = module_with_use("./schema.proto", attrs);
+        let mut mods: IndexMap<String, Module> = IndexMap::default();
+        mods.insert("src/main.wado".to_string(), module);
+
+        let errs = collect_inline_invocations(&mods, &IndexMap::default(), "").unwrap_err();
+        assert!(errs.iter().any(|d| {
+            d.message
+                .contains("`generator.output_dir` must be a string")
+        }));
     }
 
     #[test]
     fn invocation_index_redirects_on_match() {
         let mut idx = InvocationIndex::new();
         idx.insert(
-            DeclScope::LocalTo("src/main.wado".to_string()),
+            "src/main.wado",
             "./grammar.g4",
             "file:///abs/build/kiln/proto/grammar.wado",
         );
@@ -701,7 +639,7 @@ mod tests {
     fn invocation_index_normalizes_from_path() {
         let mut idx = InvocationIndex::new();
         idx.insert(
-            DeclScope::LocalTo("src/main.wado".to_string()),
+            "src/main.wado",
             "./grammar.g4",
             "file:///abs/build/kiln/x/g.wado",
         );
@@ -712,36 +650,16 @@ mod tests {
     }
 
     #[test]
-    fn invocation_index_any_scope_matches_every_importer() {
+    fn invocation_index_does_not_leak_across_files() {
         let mut idx = InvocationIndex::new();
-        idx.insert(DeclScope::Any, "./grammar.g4", "file:///abs/g.wado");
-        assert_eq!(
-            idx.redirect("src/main.wado", "grammar.g4"),
-            Some("file:///abs/g.wado"),
-        );
-        assert_eq!(
-            idx.redirect("tests/other.wado", "./grammar.g4"),
-            Some("file:///abs/g.wado"),
-        );
-    }
-
-    #[test]
-    fn invocation_index_local_scope_takes_precedence_over_any() {
-        let mut idx = InvocationIndex::new();
-        idx.insert(DeclScope::Any, "./grammar.g4", "file:///abs/manifest.wado");
-        idx.insert(
-            DeclScope::LocalTo("src/main.wado".to_string()),
-            "./grammar.g4",
-            "file:///abs/local.wado",
-        );
+        idx.insert("src/main.wado", "./grammar.g4", "file:///abs/g.wado");
         assert_eq!(
             idx.redirect("src/main.wado", "./grammar.g4"),
-            Some("file:///abs/local.wado"),
+            Some("file:///abs/g.wado"),
         );
-        assert_eq!(
-            idx.redirect("tests/other.wado", "./grammar.g4"),
-            Some("file:///abs/manifest.wado"),
-        );
+        // A different file does not pick up the redirect — that file would
+        // need its own inline `with { ... }` clause.
+        assert_eq!(idx.redirect("tests/other.wado", "./grammar.g4"), None);
     }
 
     #[test]
@@ -769,22 +687,5 @@ mod tests {
     fn strip_manifest_root_prefix_empty_root_is_passthrough() {
         let p = strip_manifest_root_prefix("", "package/src/gen.wado");
         assert_eq!(p, "package/src/gen.wado");
-    }
-
-    #[test]
-    fn merge_dedups_identical_invocations() {
-        let a = Invocation {
-            decl_site: DeclSite::Manifest {
-                name: "proto".to_string(),
-            },
-            module: GeneratorModule::Spec("ns:a@1.0.0".to_string()),
-            from: InvocationPath::normalize("./schema.proto"),
-            inputs: vec![],
-            output_dir: InvocationPath::normalize("build/kiln/proto"),
-            options_canonical: vec![],
-            raw_options: None,
-        };
-        let merged = merge_manifest_and_inline(vec![a.clone()], vec![a]).unwrap();
-        assert_eq!(merged.len(), 1);
     }
 }
