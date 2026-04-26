@@ -1,33 +1,50 @@
 #![TODO]
 // TODO: `resume value` semantics inside an effect handler method.
-// Phase 1 (this fixture) only verifies that the parser accepts
-// `resume value` in expression position. Once Phase 2 wires up the
-// resolver / effect-check and Phase 3 lowers `resume` to the dispatch
-// `return` (see `docs/wep-2026-04-11-effect-handler.md`), this fixture
-// will start printing "got 42" and the runner will flag that
-// `#![TODO]` must be removed.
+//
+// Goal state: a value-returning custom effect with mutable handler
+// state. Each call to `Counter::next()` increments the handler's
+// internal counter and resumes with the new value. After the `do`
+// block, the caller observes the final count both through the
+// returned values and through the surviving struct field.
+//
+// This fixture exercises the minimal `resume` lowering only:
+// - resume with a non-unit value (`i32` here)
+// - mutable handler state via `&mut self`
+// - multiple resume sites in a single handler invocation chain
+//
+// Like the `with_do` fixture, it deliberately keeps the handler body
+// free of I/O so `MockCM` (buffered CM handlers) is not required.
+// `println` is in the body of the `do` block, where dispatch for
+// `Stdout` falls through the null-fast-path to wasmtime.
+//
+// When Phase 2 + 3 land, this fixture will print "1+2=3, final=2"
+// and the runner will flag that `#![TODO]` must be removed.
 
 use { println, Stdout } from "core:cli";
 
-effect Source {
+effect Counter {
     fn next() -> i32;
 }
 
-struct ConstSource {}
+struct CounterState {
+    mut value: i32,
+}
 
-impl Source for ConstSource {
-    fn next(&self) -> i32 {
-        resume 42
+impl Counter for CounterState {
+    fn next(&mut self) -> i32 {
+        self.value += 1;
+        resume self.value
     }
 }
 
 export fn run() with Stdout {
-    let s = ConstSource {};
-    with Source = &s do {
-        let n = Source::next();
-        println(`got {n}`);
+    let mut c = CounterState { value: 0 };
+    with Counter = &mut c do {
+        let a = Counter::next();
+        let b = Counter::next();
+        println(`{a}+{b}={a + b}, final={c.value}`);
     }
 }
 
 __DATA__
-{"stdout_contains": ["got 42"]}
+{"stdout_contains": ["1+2=3, final=2"]}
