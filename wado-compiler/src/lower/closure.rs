@@ -630,6 +630,9 @@ impl ClosureLowerer {
             TirExprKind::TemplateString { .. } => {
                 unreachable!("TemplateString should be expanded before this phase")
             }
+            TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+                unreachable!("WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase")
+            }
         }
     }
 
@@ -857,6 +860,9 @@ impl ClosureLowerer {
             TirExprKind::TemplateString { .. } => {
                 unreachable!("TemplateString should be expanded before this phase")
             }
+            TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+                unreachable!("WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase")
+            }
         }
     }
 
@@ -1082,6 +1088,9 @@ impl ClosureLowerer {
             | TirExprKind::EnumConstruct { .. } => {}
             TirExprKind::TemplateString { .. } => {
                 unreachable!("TemplateString should be expanded before this phase")
+            }
+            TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+                unreachable!("WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase")
             }
         }
     }
@@ -2365,6 +2374,9 @@ impl ClosureLowerer {
             TirExprKind::TemplateString { .. } => {
                 unreachable!("TemplateString should be expanded before this phase")
             }
+            TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+                unreachable!("WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase")
+            }
         }
     }
 
@@ -2631,6 +2643,9 @@ impl ClosureLowerer {
             | TirExprKind::EnumConstruct { .. } => {}
             TirExprKind::TemplateString { .. } => {
                 unreachable!("TemplateString should be expanded before this phase")
+            }
+            TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+                unreachable!("WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase")
             }
         }
     }
@@ -3645,6 +3660,9 @@ impl ClosureLowerer {
             TirExprKind::TemplateString { .. } => {
                 unreachable!("TemplateString should be expanded before this phase")
             }
+            TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+                unreachable!("WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase")
+            }
         }
     }
 
@@ -3970,6 +3988,9 @@ impl ClosureLowerer {
             | TirExprKind::EnumConstruct { .. } => {}
             TirExprKind::TemplateString { .. } => {
                 unreachable!("TemplateString should be expanded before this phase")
+            }
+            TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+                unreachable!("WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase")
             }
         }
     }
@@ -4340,6 +4361,9 @@ impl ClosureLowerer {
             | TirExprKind::VariantConstruct { payload: None, .. } => {}
             TirExprKind::TemplateString { .. } => {
                 unreachable!("TemplateString should be expanded before this phase")
+            }
+            TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+                unreachable!("WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase")
             }
         }
     }

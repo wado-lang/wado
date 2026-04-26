@@ -761,6 +761,9 @@ impl BoxLowerer {
             TirExprKind::TemplateString { .. } => {
                 unreachable!("TemplateString should be expanded before this phase")
             }
+            TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+                unreachable!("WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase")
+            }
         }
 
         // Now handle the boxing-specific transformations (top-down after sub-expressions)

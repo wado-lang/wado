@@ -1490,6 +1490,10 @@ impl FunctionTranslator<'_, '_> {
                 unreachable!("TemplateString should have been expanded before WIR build")
             }
 
+            TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+                unreachable!("WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase")
+            }
+
             TirExprKind::LabeledBlock { label, block, .. } => {
                 let has_result = expr.type_id != TypeTable::UNIT;
                 self.label_stack.push(LabelEntry {

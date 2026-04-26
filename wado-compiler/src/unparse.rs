@@ -5023,6 +5023,25 @@ impl<'a> TirUnparser<'a> {
                 }
                 self.output.push('`');
             }
+            TirExprKind::WithHandler { bindings, body, .. } => {
+                self.output.push_str("with ");
+                for (i, binding) in bindings.iter().enumerate() {
+                    if i > 0 {
+                        self.output.push_str(", ");
+                    }
+                    if let Some(eff) = &binding.effect {
+                        self.output.push_str(eff.name());
+                        self.output.push_str(" = ");
+                    }
+                    self.unparse_expr(&binding.handler);
+                }
+                self.output.push_str(" do ");
+                self.unparse_block(body);
+            }
+            TirExprKind::Resume { value } => {
+                self.output.push_str("resume ");
+                self.unparse_expr(value);
+            }
         }
     }
 

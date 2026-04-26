@@ -1863,5 +1863,8 @@ fn walk_expr_mut(expr: &mut TirExpr, ctx: &RewriteCtx) {
                 }
             }
         }
+        TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+            unreachable!("WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase")
+        }
     }
 }
