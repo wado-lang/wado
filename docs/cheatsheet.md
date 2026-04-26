@@ -35,6 +35,16 @@ use geo from "./geo.wado";
 let p = geo::Point::new(1, 2);  // access via namespace
 ```
 
+## Schema Imports (Kiln)
+
+Non-`.wado` schemas (`.g4`, `.proto`, ...) are imported via a generator declared in `[build-dependencies]` of `wado.toml`. See [WEP: Kiln](./wep-2026-04-12-kiln.md), [WEP: Gale](./wep-2026-03-02-gale.md).
+
+```wado
+use { Parser } from "./Calc.g4" with {                  // Gale parses ANTLR4 .g4
+    generator: { module: "wado:gale@0.1", options: { highlight: false } },
+};
+```
+
 ## Literals
 
 ```wado
@@ -265,6 +275,10 @@ pub struct Config {
     pub name: String,   // accessible from other modules
     secret: i32,        // private to this module
 }
+
+// Field defaults (omittable at construction) — see WEP: Default Arguments
+struct ServerConfig { host: String, port: i32 = 8080, debug: bool = false }
+let c = ServerConfig { host: "localhost" };  // port=8080, debug=false
 
 // Construction
 let p = Point { x: 10, y: 20 };
@@ -602,9 +616,13 @@ pub fn api_function() -> i32 {
 
 // Component export (public API at CM boundary)
 export fn run() { ... }
+
+// Default args, trailing only — see WEP: Default Arguments
+fn connect(host: String, port: i32 = 8080) { ... }
+connect("localhost");           // → connect("localhost", 8080)
 ```
 
-A function must have `return` if it returns a value.
+A function must have `return` if it returns a value. Default expressions must be effect-free; `export fn` and closures cannot have defaults.
 
 ### Methods
 
@@ -815,6 +833,8 @@ Traits use static dispatch. Use `Self::TypeName` to refer to associated types.
 
 ### Prelude Traits
 
+See [WEP: Default Trait](./wep-2026-03-04-default-trait.md) for `Default`.
+
 ```wado
 // For == and != operators
 trait Eq { fn eq(&self, other: &Self) -> bool; }
@@ -822,7 +842,8 @@ trait Eq { fn eq(&self, other: &Self) -> bool; }
 // For <, <=, >, >= operators
 trait Ord { fn cmp(&self, other: &Self) -> Ordering; }
 
-// For default value
+// For default value (auto-implemented for primitives, String, Array<T>,
+// Option<T>, TreeMap<K, V>; not Result)
 trait Default { fn default() -> Self; }
 
 // For [] operators
