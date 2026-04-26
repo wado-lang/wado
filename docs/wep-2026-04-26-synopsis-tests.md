@@ -145,9 +145,10 @@ A module without any `#[synopsis]` test produces no Synopsis section. Multiple
 `#[synopsis]` tests in one module render as successive code blocks under the
 single `## Synopsis` heading, in source order.
 
-If a `#[synopsis]` test would fail under `wado test`, `wado doc` still renders
-it (so authors can iterate) but emits a warning to stderr. CI is expected to
-gate on `wado test` rather than on `wado doc`.
+`wado doc` does not execute any code; it renders synopsis bodies
+unconditionally. Freshness is the responsibility of `wado test`, and CI is
+expected to gate on `wado test` so that no broken synopsis reaches a published
+build.
 
 ### Consumers of `#[synopsis]`
 
