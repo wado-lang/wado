@@ -49,12 +49,6 @@ We want both properties at once for Wado:
    effect. New syntax adds parser/formatter/LSP work for no semantic gain over
    reusing the test machinery.
 
-3. **Nested test blocks and `before`/`after` hooks.**
-   Discussed and rejected separately. Wado's value semantics and lack of shared
-   mutable state mean closure-based fixtures
-   (`with_tmpdir(|dir| { ... })`) cover the practical need. Hooks can be
-   revisited under a separate WEP if real demand emerges.
-
 ## Decision
 
 ### The `#[synopsis]` attribute
@@ -194,15 +188,11 @@ tests must live in implementation files, so the runner must visit those files.
 Compiling no-test files at the same time costs little and surfaces broken
 sources earlier — a positive side effect.
 
-### Why no setup/teardown hooks
+### Why no hidden setup
 
-Synopsis quality requires that the visible body be the entire example. Hidden
-setup actively harms readability. For ordinary tests, Wado's value semantics
-and effect-typed fixtures
-(`fn with_tmpdir<R>(f: fn(String) -> R with FileSystem) -> R with FileSystem`)
-already cover the use cases that hooks would address in stateful languages.
-Introducing hooks would also pressure us to introduce nested tests, which
-this WEP explicitly avoids.
+Synopsis quality requires that the visible body be the entire example. A
+synopsis whose visible code lies because of hidden preamble is worse than no
+synopsis. The body the reader sees is the whole synopsis.
 
 ## Consequences
 
