@@ -11,7 +11,7 @@ and is licensed under the zlib License (https://github.com/madler/zlib/blob/deve
 
 Implements DEFLATE (RFC 1951) and gzip (RFC 1952) fully.
 RFC 1950 (zlib format) is supported except for preset dictionaries (FDICT);
-streams with FDICT set will return `ZlibError::PresetDictionaryNotSupported`.
+streams with FDICT set return `ZlibError::PresetDictionaryNotSupported`.
 
 Features:
 
@@ -19,23 +19,39 @@ Features:
 - DEFLATE inflate (decompression) with dynamic/fixed Huffman and stored blocks
 - DEFLATE deflate (compression) with fixed and dynamic Huffman codes + LZ77
 - Compression levels 0-9 with strategy selection
-- zlib and gzip format support
-- Streaming deflate/inflate API
+- zlib, gzip, and raw DEFLATE wrappers
+- Streaming `DeflateStream` / `InflateStream` API
 
-Usage - Compression:
+All compression entry points share the same shape: the input buffer is
+required, and `level` and `strategy` default to `Z_DEFAULT_COMPRESSION` and
+`Z_DEFAULT_STRATEGY` respectively.
+
+Compression:
 
 ```wado
 let input: Array<u8> = [...];
-let compressed = zlib_compress(&input);
-let compressed_fast = compress2(&input, Z_BEST_SPEED);
-let compressed_best = compress2(&input, Z_BEST_COMPRESSION);
+let compressed = zlib_compress(&input); // zlib, default level/strategy
+let fast = zlib_compress(&input, Z_BEST_SPEED); // override level only
+let best = zlib_compress(&input, Z_BEST_COMPRESSION);
+let gz = gzip_compress(&input); // gzip wrapper
+let raw = deflate_raw(&input); // raw DEFLATE, no header/trailer
 ```
 
-Usage - Decompression:
+Decompression:
 
 ```wado
-let decompressed = inflate_zlib(&compressed);
-let decompressed_gz = inflate_gzip(&gzipped_data);
+let z = inflate_zlib(&compressed)?; // RFC 1950
+let gz = inflate_gzip(&gzipped)?; // RFC 1952
+let any = uncompress(&data)?; // auto-detect zlib/gzip
+```
+
+Streaming (chunked input):
+
+```wado
+let mut stream = DeflateStream::new(Z_DEFAULT_COMPRESSION);
+stream.update(&chunk1);
+stream.update(&chunk2);
+let compressed = stream.finish();
 ```
 
 ## Globals
@@ -106,6 +122,9 @@ let decompressed_gz = inflate_gzip(&gzipped_data);
 
 ### `pub global AUTO_FORMAT: i32`
 
+Format value that asks an `InflateStream` to auto-detect zlib or gzip
+framing from the magic bytes.
+
 ## Functions
 
 ### `pub fn zlib_version() -> String`
@@ -124,6 +143,9 @@ Returns the initial Adler-32 checksum value (1).
 
 Combines two Adler-32 checksums into one for concatenated data.
 
+`adler1` and `adler2` are the checksums of the first and second segments;
+`len2` is the length of the second segment.
+
 ### `pub fn crc32(crc: u32, buf: &Array<u8>, offset: i32, len: i32) -> u32`
 
 Computes a CRC-32 checksum over `buf[offset..offset+len]`, starting from `crc`.
@@ -136,9 +158,15 @@ Returns the initial CRC-32 checksum value (0).
 
 Combines two CRC-32 checksums into one for concatenated data.
 
+`crc1` and `crc2` are the checksums of the first and second segments;
+`len2` is the length of the second segment.
+
 ### `pub fn compress_bound(source_len: i32) -> i32`
 
 Returns the maximum compressed size for a given source length.
+
+Uses the larger of the stored-block worst case and the classic
+`compressBound` formula to match zlib-rs/zlib-ng behavior.
 
 ### `pub fn inflate_raw(input: &Array<u8>) -> Array<u8>`
 
@@ -146,11 +174,11 @@ Decompresses raw DEFLATE data (no header/checksum).
 
 ### `pub fn inflate_zlib(input: &Array<u8>) -> Result<Array<u8>, ZlibError>`
 
-Decompresses zlib-wrapped data (RFC 1950).
+Decompresses zlib-wrapped data (RFC 1950: 2-byte header + DEFLATE + 4-byte Adler-32).
 
 ### `pub fn deflate_stored(input: &Array<u8>) -> Array<u8>`
 
-Compresses data using DEFLATE stored blocks (no compression, raw).
+Compresses data into raw DEFLATE stored blocks (no actual compression).
 
 ### `pub fn zlib_compress_stored(input: &Array<u8>) -> Array<u8>`
 
@@ -158,178 +186,244 @@ Wraps data in zlib format using stored blocks (no actual compression).
 
 ### `pub fn deflate_huffman(input: &Array<u8>) -> Array<u8>`
 
-Compresses data using DEFLATE with Huffman-only encoding (no LZ77).
+Compresses data using DEFLATE with fixed Huffman codes and LZ77 matching.
 
 ### `pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array<u8>`
 
-Compresses data using DEFLATE with the specified compression level and strategy.
+Compresses data using DEFLATE with the given compression level and strategy.
+
+`level` is 0-9 (0 = stored, 1 = fastest, 9 = best compression).
+`strategy` is one of `Z_DEFAULT_STRATEGY`, `Z_FILTERED`, `Z_HUFFMAN_ONLY`,
+`Z_RLE`, or `Z_FIXED`.
 
 ### `pub fn zlib_compress(input: &Array<u8>, level: i32, strategy: i32) -> Array<u8>`
 
-Compresses data in zlib format with the specified compression level (defaults to Z_DEFAULT_COMPRESSION) and strategy (defaults to Z_DEFAULT_STRATEGY).
+Compresses data in zlib format (RFC 1950).
+
+`level` defaults to `Z_DEFAULT_COMPRESSION` and `strategy` defaults to
+`Z_DEFAULT_STRATEGY`.
 
 ### `pub fn inflate_gzip(input: &Array<u8>) -> Result<Array<u8>, ZlibError>`
 
 Decompresses gzip-wrapped data (RFC 1952).
 
+Supports multi-member gzip streams; member outputs are concatenated.
+
 ### `pub fn gzip_compress(input: &Array<u8>, level: i32, strategy: i32) -> Array<u8>`
 
-Compresses data in gzip format with the specified compression level and strategy.
+Compresses data in gzip format (RFC 1952) with a minimal header.
+
+`level` defaults to `Z_DEFAULT_COMPRESSION` and `strategy` defaults to
+`Z_DEFAULT_STRATEGY`. Use `gzip_compress_with_header` to set MTIME, file
+name, comment, and other gzip header fields.
 
 ### `pub fn uncompress(input: &Array<u8>, max_output: i32) -> Result<Array<u8>, ZlibError>`
 
-Auto-detect format and decompress (zlib or gzip) with the specified output size limit.
+Auto-detects the wrapper format (zlib or gzip) and decompresses.
+
+Returns `ZlibError::OutputExceedsMax` if the decompressed size exceeds
+`max_output` (default: `i32::MAX`).
 
 ### `pub fn deflate_raw(input: &Array<u8>, level: i32, strategy: i32) -> Array<u8>`
 
-Compresses data as raw DEFLATE (no zlib/gzip header or trailer) with the specified level and strategy.
+Compresses data as raw DEFLATE (RFC 1951) with no wrapper header or trailer.
+
+`level` defaults to `Z_DEFAULT_COMPRESSION` and `strategy` defaults to
+`Z_DEFAULT_STRATEGY`.
 
 ### `pub fn gzip_compress_with_header(input: &Array<u8>, level: i32, header: &GzipHeader) -> Array<u8>`
 
-Compresses data in gzip format with a custom header and compression level.
+Compresses data in gzip format using the given compression level and a
+caller-supplied header.
 
 ### `pub fn inflate_get_gzip_header(input: &Array<u8>) -> Result<GzipHeader, ZlibError>`
 
-Extracts the gzip header from compressed data without decompressing.
+Parses and returns the gzip header without decompressing the body.
 
 ### `pub fn inflate_sync_find(input: &Array<u8>, start: i32) -> i32`
 
-Finds the next sync point in a DEFLATE stream, starting from the given offset.
-Returns the offset or -1 if not found.
+Finds the next DEFLATE sync point (`00 00 FF FF`) at or after `start`.
+
+Returns the offset of the recovered block, or `-1` if no sync point is
+found. Useful for recovering from corruption in a DEFLATE stream after a
+sync flush.
 
 ## Structs
 
 ### `pub struct GzipHeader`
 
-Represents a gzip header for customization (deflateSetHeader / inflateGetHeader).
+A gzip header (RFC 1952) used by `gzip_compress_with_header` to set
+optional fields and by `inflate_get_gzip_header` to report them.
 
 _Fields are private._
 
 #### `pub fn new() -> GzipHeader`
 
-Creates a new GzipHeader with default values.
+Creates a header with all fields cleared (`os` set to `0xFF` = unknown).
 
 #### `pub fn set_text(&mut self, text: bool)`
 
+Sets the FTEXT flag, indicating the payload is probably ASCII text.
+
 #### `pub fn set_time(&mut self, time: u32)`
+
+Sets MTIME (modification time as a Unix timestamp; 0 = unset).
 
 #### `pub fn set_os(&mut self, os: i32)`
 
+Sets the OS byte (`0xFF` = unknown).
+
 #### `pub fn set_extra(&mut self, extra: &Array<u8>)`
+
+Sets the FEXTRA payload. An empty array clears the field.
 
 #### `pub fn set_name(&mut self, name: String)`
 
+Sets the FNAME (original file name). An empty string clears the field.
+
 #### `pub fn set_comment(&mut self, comment: String)`
+
+Sets the FCOMMENT. An empty string clears the field.
 
 #### `pub fn set_hcrc(&mut self, hcrc: bool)`
 
+Enables the FHCRC flag, which appends a 16-bit CRC of the header.
+
 ### `pub struct DeflateStream`
 
-Streaming deflate compressor. Supports chunked input via update()/finish().
+Streaming deflate compressor.
+
+Buffer chunks via `update`, then call `finish` once to emit the compressed
+output. `compress` is a single-shot variant that compresses one input
+without buffering. The output wrapper is selected by `format` (defaults to
+`ZLIB_FORMAT`).
 
 _Fields are private._
 
 #### `pub fn new(level: i32) -> DeflateStream`
 
-Creates a new DeflateStream with the specified compression level.
+Creates a stream that emits zlib format at the given compression level
+using `Z_DEFAULT_STRATEGY`.
 
 #### `pub fn new_with_strategy(level: i32, strategy: i32) -> DeflateStream`
 
-Creates a new DeflateStream with the specified level and strategy.
+Creates a zlib-format stream with an explicit strategy.
 
 #### `pub fn new_with_format(level: i32, format: i32) -> DeflateStream`
 
-Creates a new DeflateStream with format selection (ZLIB_FORMAT, RAW_FORMAT, GZIP_FORMAT).
+Creates a stream with the given output `format`
+(`ZLIB_FORMAT`, `RAW_FORMAT`, or `GZIP_FORMAT`).
 
 #### `pub fn new_full(level: i32, strategy: i32, format: i32) -> DeflateStream`
 
-Creates a new DeflateStream with all parameters specified.
+Creates a stream with explicit `level`, `strategy`, and `format`.
 
 #### `pub fn set_header(&mut self, header: &GzipHeader)`
 
-Sets a custom gzip header (only for GZIP_FORMAT).
+Attaches a custom gzip header. The header is only emitted when the
+stream's format is `GZIP_FORMAT`; it is ignored for the zlib and raw
+formats.
 
 #### `pub fn params(&mut self, level: i32, strategy: i32)`
 
-Changes the compression level and strategy mid-stream.
+Changes the compression level and strategy for subsequent input. The
+new values take effect when `finish` or `compress` is called.
 
 #### `pub fn bound(&self, source_len: i32) -> i32`
 
-Returns the upper bound on compressed size for the given source length.
+Returns an upper bound on the compressed size for `source_len` input
+bytes (delegates to `compress_bound`).
 
 #### `pub fn pending(&self) -> i32`
 
-Returns the number of pending output bytes.
+Returns the number of bytes currently buffered awaiting compression.
 
 #### `pub fn get_total_in(&self) -> i32`
 
-Returns the total input bytes processed.
+Returns the cumulative number of input bytes consumed across all
+`finish`/`compress` calls.
 
 #### `pub fn get_total_out(&self) -> i32`
 
-Returns the total output bytes produced.
+Returns the cumulative number of output bytes produced across all
+`finish`/`compress` calls.
 
 #### `pub fn reset(&mut self)`
 
-Resets the stream for reuse (same level/strategy).
+Discards buffered input and counters so the stream can be reused.
+`level`, `strategy`, `format`, and any custom gzip header are kept.
 
 #### `pub fn copy(&self) -> DeflateStream`
 
-Creates a copy of this stream.
+Returns an independent copy of this stream, including buffered input
+and any attached gzip header.
 
 #### `pub fn update(&mut self, chunk: &Array<u8>)`
 
-Adds input data to the stream buffer.
+Appends `chunk` to the input buffer. Panics if the stream has already
+been finished.
 
 #### `pub fn finish(&mut self) -> Array<u8>`
 
-Compresses all buffered input and returns the result.
+Compresses all buffered input and returns the wrapped output. Marks
+the stream as finished; further `update`/`finish`/`compress` calls
+panic until `reset` is invoked.
 
 #### `pub fn compress(&mut self, input: &Array<u8>) -> Array<u8>`
 
-Compresses input data in one shot and returns the result.
+Compresses `input` in one shot, bypassing the internal buffer. Marks
+the stream as finished.
 
 ### `pub struct InflateStream`
 
-Streaming inflate decompressor. Supports chunked input via update()/finish().
+Streaming inflate decompressor.
+
+Buffer compressed chunks via `update`, then call `finish` once to produce
+the decompressed output. `decompress` is a single-shot variant.
 
 _Fields are private._
 
 #### `pub fn new() -> InflateStream`
 
-Creates a new InflateStream with zlib format (default).
+Creates a stream that expects zlib-wrapped input.
 
 #### `pub fn new_with_format(format: i32) -> InflateStream`
 
-Creates a new InflateStream with the specified format.
+Creates a stream for the given input `format`
+(`ZLIB_FORMAT`, `RAW_FORMAT`, `GZIP_FORMAT`, or `AUTO_FORMAT`).
 
 #### `pub fn get_total_in(&self) -> i32`
 
-Returns the total input bytes processed.
+Returns the cumulative number of input bytes consumed across all
+`finish` calls.
 
 #### `pub fn get_total_out(&self) -> i32`
 
-Returns the total output bytes produced.
+Returns the cumulative number of output bytes produced across all
+`finish` calls.
 
 #### `pub fn reset(&mut self)`
 
-Resets the stream for reuse.
+Discards buffered input and counters so the stream can be reused.
+`format` is preserved.
 
 #### `pub fn copy(&self) -> InflateStream`
 
-Creates a copy of this stream.
+Returns an independent copy of this stream, including buffered input.
 
 #### `pub fn update(&mut self, chunk: &Array<u8>)`
 
-Adds a compressed data chunk to the stream buffer.
+Appends `chunk` to the buffered compressed input.
 
 #### `pub fn finish(&mut self) -> Result<Array<u8>, ZlibError>`
 
-Decompresses all buffered data and returns the result.
+Decompresses the buffered input and clears the buffer. The stream may
+be reused for further input.
 
 #### `pub fn decompress(&self, input: &Array<u8>) -> Result<Array<u8>, ZlibError>`
 
-Decompresses data in one shot and returns the result.
+Decompresses `input` in one shot using the stream's `format`. Does not
+touch the internal buffer.
 
 ## Enums
 
