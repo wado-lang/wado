@@ -1676,8 +1676,8 @@ impl<'a> Unparser<'a> {
             if i > 0 {
                 self.output.push_str(", ");
             }
-            if let Some(name) = &binding.effect_name {
-                self.output.push_str(name);
+            if let Some(effect) = &binding.effect {
+                self.unparse_type(effect);
                 self.output.push_str(" = ");
             }
             self.unparse_expr(&binding.handler);
@@ -3252,13 +3252,14 @@ fn unparse_expr_into(expr: &Expr, output: &mut String, _parens_for_binary: bool)
                 if i > 0 {
                     output.push_str(", ");
                 }
-                if let Some(name) = &binding.effect_name {
-                    output.push_str(name);
+                if let Some(effect) = &binding.effect {
+                    unparse_type_into(effect, output);
                     output.push_str(" = ");
                 }
                 unparse_expr_into(&binding.handler, output, false);
             }
-            output.push_str(" do <block>");
+            output.push_str(" do ");
+            unparse_block_expr_into(&w.body, output);
         }
         Expr::Resume(r) => {
             output.push_str("resume ");

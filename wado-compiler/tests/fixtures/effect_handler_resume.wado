@@ -1,0 +1,33 @@
+#![TODO]
+// TODO: `resume value` semantics inside an effect handler method.
+// Phase 1 (this fixture) only verifies that the parser accepts
+// `resume value` in expression position. Once Phase 2 wires up the
+// resolver / effect-check and Phase 3 lowers `resume` to the dispatch
+// `return` (see `docs/wep-2026-04-11-effect-handler.md`), this fixture
+// will start printing "got 42" and the runner will flag that
+// `#![TODO]` must be removed.
+
+use { println, Stdout } from "core:cli";
+
+effect Source {
+    fn next() -> i32;
+}
+
+struct ConstSource {}
+
+impl Source for ConstSource {
+    fn next(&self) -> i32 {
+        resume 42
+    }
+}
+
+export fn run() with Stdout {
+    let s = ConstSource {};
+    with Source = &s do {
+        let n = Source::next();
+        println(`got {n}`);
+    }
+}
+
+__DATA__
+{"stdout_contains": ["got 42"]}

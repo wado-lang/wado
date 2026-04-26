@@ -718,7 +718,10 @@ pub fn walk_expr<V: AstVisitor>(v: &mut V, expr: &Expr) {
         }
         Expr::WithHandler(w) => {
             for binding in &w.handlers {
-                v.visit_id(binding.id, binding.effect_name_span);
+                if let Some(effect) = &binding.effect {
+                    v.visit_id(binding.id, effect.span());
+                    v.visit_type(effect);
+                }
                 v.visit_expr(&binding.handler);
             }
             v.visit_block(&w.body);
@@ -1606,17 +1609,18 @@ pub struct WithHandlerExpr {
 
 /// A single `Effect = handler` binding inside `with ... do`.
 ///
-/// `effect_name` is `None` for handler bundling: `with &mut value do { ... }`
+/// `effect` is `None` for handler bundling: `with &mut value do { ... }`
 /// installs the value as a handler for every effect it implements.
+///
+/// The effect is stored as a full `Type`, which lets the parser accept
+/// generic effect names (e.g., `Stream<u8>`) without losing information;
+/// later compiler phases decide which forms they actually support.
 #[derive(Debug, Clone)]
 pub struct EffectHandlerBinding {
     pub id: AstId,
-    /// Effect identifier (e.g., `Stdout`, `Stream<u8>`). `None` for bundled
-    /// handlers (`with &mut value do { ... }`).
-    pub effect_name: Option<String>,
-    /// Span covering the effect identifier (or the handler expression for
-    /// bundled handlers).
-    pub effect_name_span: Span,
+    /// Effect type on the LHS of `=` (e.g., `Stdout`, `Stream<u8>`). `None`
+    /// for bundled handlers (`with &mut value do { ... }`).
+    pub effect: Option<Type>,
     /// Handler expression, e.g., `&mut mock`.
     pub handler: Expr,
     pub span: Span,
@@ -2394,6 +2398,27 @@ impl Type {
             | Type::Reference(_)
             | Type::MutReference(_)
             | Type::TypePackSpread(_, _) => None,
+        }
+    }
+
+    /// Returns the source [`Span`] covering this type expression.
+    ///
+    /// `Function` and empty `Tuple` types have no top-level span field;
+    /// they fall back to the span of their first child (or a default
+    /// span for empty tuples). Callers that need precise spans for these
+    /// shapes should walk the children themselves.
+    pub fn span(&self) -> Span {
+        match self {
+            Type::Named(t) => t.span,
+            Type::Generic(t) => t.span,
+            Type::NamespacedGeneric(t) => t.span,
+            Type::Function(t) => t
+                .params
+                .first()
+                .map_or_else(|| t.return_type.span(), Type::span),
+            Type::Tuple(elems) => elems.first().map(Type::span).unwrap_or_default(),
+            Type::Reference(inner) | Type::MutReference(inner) => inner.span(),
+            Type::TypePackSpread(_, span) => *span,
         }
     }
 }

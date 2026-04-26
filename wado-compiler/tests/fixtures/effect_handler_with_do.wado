@@ -1,0 +1,33 @@
+#![TODO]
+// TODO: effect handler installation `with E = h do { ... }`.
+// Phase 1 (this fixture) only verifies that the front-end accepts the
+// syntax and recurses through the new AST node. Once Phase 2 (resolver
+// + effect-check) and Phase 3 (Wasm GC dispatch codegen) of
+// `docs/wep-2026-04-11-effect-handler.md` land, this fixture will
+// start printing "from handler" via the installed handler and the
+// runner will flag that `#![TODO]` must be removed.
+
+use { println, Stdout } from "core:cli";
+
+effect Greet {
+    fn hello();
+}
+
+struct Greeter {}
+
+impl Greet for Greeter {
+    fn hello(&self) with Stdout {
+        println("from handler");
+        resume ()
+    }
+}
+
+export fn run() with Stdout {
+    let g = Greeter {};
+    with Greet = &g do {
+        Greet::hello();
+    }
+}
+
+__DATA__
+{"stdout_contains": ["from handler"]}

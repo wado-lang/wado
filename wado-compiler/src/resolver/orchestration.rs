@@ -2194,6 +2194,15 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             }
             ast::Expr::WithHandler(with_handler) => {
                 for binding in &with_handler.handlers {
+                    if let Some(effect) = &binding.effect {
+                        Self::validate_ast_type_names(
+                            effect,
+                            known_type_names,
+                            resource_type_names,
+                            type_params,
+                            logger,
+                        )?;
+                    }
                     Self::validate_expr_type_names(
                         &binding.handler,
                         known_type_names,

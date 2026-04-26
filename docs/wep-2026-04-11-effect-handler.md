@@ -594,6 +594,41 @@ Handler nesting: inner `TimingMiddleware` intercepts `Handler::handle`, delegate
 
 ## Implementation Notes
 
+### Front-End Grammar Notes
+
+#### `do` and `resume` are contextual keywords
+
+The lexer never emits dedicated `Do` or `Resume` token kinds; both
+words are returned as ordinary identifiers and the parser only treats
+them as keywords in unambiguous positions:
+
+- `do` is recognised in the trailing position of a `with ... do { ... }`
+  clause, immediately after the handler binding list.
+- `resume` is recognised only in expression position. In statement /
+  pattern positions (e.g. `let resume = ...;`) it remains an ordinary
+  identifier.
+
+This keeps both words available as variable names and avoids breaking
+generated Wado source (e.g. ANTLR4 driver output that uses `let do = …`
+for a TypeScript token of that name).
+
+#### Handler expressions are restricted to unary expressions
+
+Inside `with E1 = handler do { ... }`, the `handler` slot is parsed
+with `parse_unary_expr`, which covers references (`&h`, `&mut h`),
+prefix-`*` deref, `!`/`~`/`-`, identifiers, calls, method calls, and
+field/index access. It deliberately stops short of:
+
+- `as` casts
+- `if` / `match` / `matches` / `do` expressions
+- assignment / compound assignment
+
+This keeps the grammar unambiguous: stopping at unary level prevents the
+handler expression from greedily eating the trailing `,` or `do` token
+that closes the binding list. Cases that need the excluded forms must
+wrap the handler in parentheses, e.g.
+`with E = (h as &mut MockE) do { ... }`.
+
 ### Dispatch Mechanism: funcref vtable + Wasm Global
 
 Each effect gets a Wasm global holding a nullable reference to a dispatch record. The dispatch record is a Wasm GC struct containing a funcref per operation, a reference to the handler instance, and a reference to the outer (previous) dispatch record.

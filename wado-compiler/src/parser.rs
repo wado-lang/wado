@@ -3368,13 +3368,13 @@ impl Parser {
             TokenKind::Ident(name) if name == "do"
         );
         if !is_do {
-            return Err(ParseError {
-                message: format!(
+            return Err(self.error_at_span(
+                self.peek().span,
+                &format!(
                     "expected `do` after handler bindings, found {:?}",
                     self.peek_kind()
                 ),
-                span: self.peek().span,
-            });
+            ));
         }
         self.advance();
 
@@ -3389,33 +3389,46 @@ impl Parser {
         })))
     }
 
-    /// Parse one binding inside a `with ... do` clause. Three shapes:
-    /// - `EffectName = handler_expr` — explicit effect name on the LHS.
+    /// Parse one binding inside a `with ... do` clause. Two shapes:
+    /// - `Effect = handler_expr` — explicit effect on the LHS. The effect is
+    ///   any type expression, so `Stdout = ...` and `Stream<u8> = ...` both
+    ///   parse here. Later compiler phases decide which forms they support.
     /// - `handler_expr` (no `=`) — bundled handler.
     fn parse_effect_handler_binding(&mut self) -> ParseResult<crate::ast::EffectHandlerBinding> {
         let id = self.alloc_ast_id();
         let start_span = self.peek().span;
 
-        // Look ahead for `Ident =` to decide if this is the explicit form.
-        // We accept simple identifiers as effect names (e.g., `Stdout`). Generic
-        // effect names such as `Stream<u8>` are TODO; for now, only bare idents.
-        if let TokenKind::Ident(_) = self.peek_kind()
-            && self.peek_nth(1).kind == TokenKind::Eq
-        {
-            let (name, name_span) = self.consume_ident_with_span()?;
-            self.advance(); // consume `=`
-            // Disallow nested `with ... do` here so we have a clean grammar; the
-            // handler expression is parsed as a unary expression to avoid
-            // greedy consumption of trailing `,` or `do` tokens.
-            let handler = self.parse_unary_expr()?;
-            let span = start_span.merge(&handler.span());
-            return Ok(crate::ast::EffectHandlerBinding {
-                id,
-                effect_name: Some(name),
-                effect_name_span: name_span,
-                handler,
-                span,
-            });
+        // Speculatively try the explicit form. The LHS is a type, so we have
+        // to commit to type parsing only if a `=` follows; otherwise this is
+        // a bundled handler whose expression starts with an identifier.
+        if matches!(self.peek_kind(), TokenKind::Ident(_)) {
+            let checkpoint = self.pos;
+            let saved_pending_gt = self.pending_gt;
+            if let Ok(ty) = self.parse_type() {
+                if self.check(&TokenKind::Eq) {
+                    self.advance(); // consume `=`
+                    // Handler expressions are parsed as unary expressions so
+                    // we don't greedily consume the trailing `,` or `do`.
+                    // Trade-off: cast / `if` / `match` expressions can't sit
+                    // directly in handler position; wrap them in `()`.
+                    let handler = self.parse_unary_expr()?;
+                    let span = start_span.merge(&handler.span());
+                    return Ok(crate::ast::EffectHandlerBinding {
+                        id,
+                        effect: Some(ty),
+                        handler,
+                        span,
+                    });
+                }
+                // Looked like a type but no `=` followed — fall back to
+                // bundled-handler parsing of the whole expression.
+                self.pos = checkpoint;
+                self.pending_gt = saved_pending_gt;
+            } else {
+                // parse_type rejected the prefix; treat as a bundled handler.
+                self.pos = checkpoint;
+                self.pending_gt = saved_pending_gt;
+            }
         }
 
         // Bundled handler form: `with &mut value do { ... }`
@@ -3423,8 +3436,7 @@ impl Parser {
         let span = start_span.merge(&handler.span());
         Ok(crate::ast::EffectHandlerBinding {
             id,
-            effect_name: None,
-            effect_name_span: start_span,
+            effect: None,
             handler,
             span,
         })
@@ -6147,6 +6159,14 @@ line 2
         assert_eq!(slice(source, &let_stmt.name_span), "foo");
     }
 
+    fn binding_effect_name(b: &crate::ast::EffectHandlerBinding) -> Option<&str> {
+        match b.effect.as_ref()? {
+            Type::Named(t) => Some(t.name.as_str()),
+            Type::Generic(t) => Some(t.name.as_str()),
+            _ => None,
+        }
+    }
+
     #[test]
     fn parse_with_handler_explicit_effect() {
         let expr = parse_expr_from("with Stdout = &mut mock do { println(\"hi\"); }");
@@ -6155,7 +6175,7 @@ line 2
         };
         assert_eq!(w.handlers.len(), 1);
         let binding = &w.handlers[0];
-        assert_eq!(binding.effect_name.as_deref(), Some("Stdout"));
+        assert_eq!(binding_effect_name(binding), Some("Stdout"));
         // Handler must be a `&mut <expr>` unary expression.
         assert!(matches!(binding.handler, Expr::Unary(_)));
         // Body has one statement.
@@ -6169,8 +6189,24 @@ line 2
             panic!("expected WithHandler");
         };
         assert_eq!(w.handlers.len(), 2);
-        assert_eq!(w.handlers[0].effect_name.as_deref(), Some("Stdout"));
-        assert_eq!(w.handlers[1].effect_name.as_deref(), Some("Stderr"));
+        assert_eq!(binding_effect_name(&w.handlers[0]), Some("Stdout"));
+        assert_eq!(binding_effect_name(&w.handlers[1]), Some("Stderr"));
+    }
+
+    #[test]
+    fn parse_with_handler_generic_effect() {
+        // Generic effect names (`Stream<u8>`) must parse cleanly; later
+        // compiler phases decide whether to support them.
+        let expr = parse_expr_from("with Stream<u8> = &mut cm do { f(); }");
+        let Expr::WithHandler(w) = expr else {
+            panic!("expected WithHandler");
+        };
+        assert_eq!(w.handlers.len(), 1);
+        let Some(Type::Generic(generic)) = w.handlers[0].effect.as_ref() else {
+            panic!("expected generic effect type");
+        };
+        assert_eq!(generic.name, "Stream");
+        assert_eq!(generic.args.len(), 1);
     }
 
     #[test]
@@ -6180,7 +6216,7 @@ line 2
             panic!("expected WithHandler");
         };
         assert_eq!(w.handlers.len(), 1);
-        assert!(w.handlers[0].effect_name.is_none());
+        assert!(w.handlers[0].effect.is_none());
     }
 
     #[test]

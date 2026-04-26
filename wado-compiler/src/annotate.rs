@@ -468,8 +468,10 @@ fn name_span_of_binding_in_item(item: &Item, target: AstId) -> Option<Span> {
             Expr::Range(r) => scan_expr(&r.start, target).or_else(|| scan_expr(&r.end, target)),
             Expr::WithHandler(w) => {
                 for binding in &w.handlers {
-                    if binding.id == target {
-                        return Some(binding.effect_name_span);
+                    if binding.id == target
+                        && let Some(effect) = &binding.effect
+                    {
+                        return Some(effect.span());
                     }
                     if let Some(span) = scan_expr(&binding.handler, target) {
                         return Some(span);

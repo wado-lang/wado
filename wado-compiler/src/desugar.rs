@@ -734,8 +734,7 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
                 .iter()
                 .map(|b| crate::ast::EffectHandlerBinding {
                     id: b.id,
-                    effect_name: b.effect_name.clone(),
-                    effect_name_span: b.effect_name_span,
+                    effect: b.effect.clone(),
                     handler: desugar_expr(&b.handler),
                     span: b.span,
                 })
