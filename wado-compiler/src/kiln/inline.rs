@@ -266,6 +266,23 @@ fn lower_inline(
         Vec::new()
     };
 
+    let output_dir_override = match cfg.get("output_dir") {
+        None => None,
+        Some(AttrValue::String(s)) => Some(InvocationPath::normalize(s)),
+        Some(other) => {
+            errors.push(Diagnostic {
+                severity: Severity::Error,
+                code: Code::GeneratorOptionsInvalid,
+                message: format!(
+                    "kiln: `generator.output_dir` must be a string, got {}",
+                    attr_kind(other),
+                ),
+                span: Some(span_of(module_path, use_decl)),
+            });
+            None
+        }
+    };
+
     if !errors.is_empty() {
         return Err(errors);
     }
@@ -284,9 +301,11 @@ fn lower_inline(
         format!("kiln-{}", &hex_digest(&digest)[..16])
     };
 
-    let output_dir = InvocationPath::normalize(&format!(
-        "{DEFAULT_INLINE_OUTPUT_DIR_PREFIX}/{synthetic_id}"
-    ));
+    let output_dir = output_dir_override.unwrap_or_else(|| {
+        InvocationPath::normalize(&format!(
+            "{DEFAULT_INLINE_OUTPUT_DIR_PREFIX}/{synthetic_id}"
+        ))
+    });
 
     Ok(Invocation {
         decl_site: DeclSite {
@@ -567,6 +586,38 @@ mod tests {
             GeneratorModule::LocalPath(p) => assert_eq!(p.as_str(), "gen.wado"),
             other => panic!("expected LocalPath, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn output_dir_override_is_respected() {
+        let attrs = attr_with_generator(&[
+            ("module", AttrValue::String("ns:gen@1.0.0".to_string())),
+            ("output_dir", AttrValue::String("src/generated".to_string())),
+        ]);
+        let module = module_with_use("./schema.proto", attrs);
+        let mut mods: IndexMap<String, Module> = IndexMap::default();
+        mods.insert("src/main.wado".to_string(), module);
+
+        let result = collect_inline_invocations(&mods, &IndexMap::default(), "").unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].output_dir.as_str(), "src/generated");
+    }
+
+    #[test]
+    fn output_dir_non_string_rejected() {
+        let attrs = attr_with_generator(&[
+            ("module", AttrValue::String("ns:gen@1.0.0".to_string())),
+            ("output_dir", AttrValue::Int(42)),
+        ]);
+        let module = module_with_use("./schema.proto", attrs);
+        let mut mods: IndexMap<String, Module> = IndexMap::default();
+        mods.insert("src/main.wado".to_string(), module);
+
+        let errs = collect_inline_invocations(&mods, &IndexMap::default(), "").unwrap_err();
+        assert!(errs.iter().any(|d| {
+            d.message
+                .contains("`generator.output_dir` must be a string")
+        }));
     }
 
     #[test]
