@@ -38,7 +38,10 @@ fn find_wat_asset_module(component_bytes: &[u8]) -> Vec<u8> {
     let parser = Parser::new(0);
     for payload in parser.parse_all(component_bytes) {
         let payload = payload.expect("component should parse");
-        if let Payload::ModuleSection { unchecked_range, .. } = payload {
+        if let Payload::ModuleSection {
+            unchecked_range, ..
+        } = payload
+        {
             let range = unchecked_range;
             core_modules.push(component_bytes[range.start..range.end].to_vec());
         }
@@ -149,7 +152,10 @@ export fn run() with Stdout {
     let parser = Parser::new(0);
     let mut core_modules: Vec<Vec<u8>> = Vec::new();
     for payload in parser.parse_all(&result.wasm) {
-        if let Ok(Payload::ModuleSection { unchecked_range, .. }) = payload {
+        if let Ok(Payload::ModuleSection {
+            unchecked_range, ..
+        }) = payload
+        {
             core_modules.push(result.wasm[unchecked_range.start..unchecked_range.end].to_vec());
         }
     }
