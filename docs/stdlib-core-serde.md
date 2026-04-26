@@ -10,23 +10,35 @@ data model optimized for JSON and CBOR. Format implementations (e.g., `core:json
 implement `Serializer` and `Deserializer` to support specific wire formats.
 
 Usage:
+
+```wado
 use { Serialize, Deserialize, SerializeError, DeserializeError } from "core:serde";
+```
 
-# Field Attributes
+Field attributes:
 
-`#[serde(default)]` on a struct field: when the field is absent during
-deserialization, fall back to a default value instead of returning
-`MissingField`. The fallback is the field's declared default expression
-(`f: T = expr`) if present, otherwise the type's zero-value (`0`, `""`,
-`false`, `[]`, `null`, ...). A field that declares `= expr` is implicitly
-`#[serde(default)]`, so the attribute is only needed on fields without a
-declared default.
+- `#[serde(default)]` on a struct field — when the field is absent during
+  deserialization, fall back to a default value instead of returning
+  `MissingField`. The fallback is the field's declared default expression
+  (`f: T = expr`) if present, otherwise the type's zero-value (`0`, `""`,
+  `false`, `[]`, `null`, ...). A field that declares `= expr` is implicitly
+  `#[serde(default)]`, so the attribute is only needed on fields without a
+  declared default.
+- `#[serde(rename = "...")]` on a struct field — override the wire-form
+  key for that field.
+- `#[serde(rename_all = "...")]` on a struct — rename every field by a
+  convention (`"camelCase"`, `"snake_case"`, `"kebab-case"`, ...).
 
-`#[serde(rename = "...")]` on a struct field: override the wire-form key
-for that field.
+Example — a field with a declared default is implicitly tolerated when
+missing, so deserializing `{"host":"localhost"}` yields `timeout = 30`:
 
-`#[serde(rename_all = "...")]` on a struct: rename every field by a
-convention (`"camelCase"`, `"snake_case"`, `"kebab-case"`, ...).
+```wado
+struct Config {
+host: String,
+timeout: i32 = 30,
+}
+impl Deserialize for Config;
+```
 
 ## Traits
 
