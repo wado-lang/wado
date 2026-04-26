@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777166533295,
+  "lastUpdate": 1777167035853,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -16425,6 +16425,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/2cbc791be60faa4df32bbfc471838ecce30afcd5"
         },
         "date": 1777166533186,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8982,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19110,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 614203,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "aaa938fcc0cceca381dddd0ff90bea755be1797a",
+          "message": "Merge pull request #928 from wado-lang/claude/nested-test-blocks-r5ZuC\n\ndocs(wep): synopsis tests",
+          "timestamp": "2026-04-26T10:26:25+09:00",
+          "tree_id": "40657036eec75b30a0257761cc8876e2144eb051",
+          "url": "https://github.com/wado-lang/wado/commit/aaa938fcc0cceca381dddd0ff90bea755be1797a"
+        },
+        "date": 1777167035620,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
