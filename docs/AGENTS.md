@@ -102,3 +102,4 @@ It may include TODOs on WIP.
 - [LSP Architecture](./wep-2026-04-18-lsp-architecture.md)
 - [Generic `Subtask<T>` for CM async imports](./wep-2026-04-22-subtask-generic.md)
 - [Synopsis Tests](./wep-2026-04-26-synopsis-tests.md)
+- [Compile-Time Parameters](./wep-2026-04-26-compile-time-params.md)
