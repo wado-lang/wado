@@ -3445,7 +3445,7 @@ impl Parser {
     /// Parse a `resume value` expression. Valid only inside an effect handler
     /// method body; the resolver (later phase) is responsible for that check.
     /// `resume` is a contextual keyword: the lexer hands it to us as an Ident,
-    /// so we consume it by name rather than via a dedicated TokenKind.
+    /// so we consume it by name rather than via a dedicated `TokenKind`.
     fn parse_resume_expr(&mut self) -> ParseResult<Expr> {
         let start_span = self.peek().span;
         self.advance(); // consume `resume` ident
