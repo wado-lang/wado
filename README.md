@@ -10,6 +10,32 @@ Existing solutions bundle their own memory management runtime into every `.wasm`
 
 The timing matters too. With Wasm Component Model and WASI P3 maturing in 2026, Wado is designed from the ground up for this new era — no legacy baggage, no retrofitting.
 
+## Installing
+
+### Pre-built binary (recommended)
+
+Download the latest release for your platform from
+[GitHub Releases](https://github.com/wado-lang/wado/releases/latest).
+Pre-built binaries are published for:
+
+- Linux (`x86_64`, `aarch64`) — `tar.gz`
+- macOS (Apple Silicon) — `tar.gz`
+- Windows (`x86_64`, `aarch64`) — `zip`
+
+Each archive contains the `wado` binary plus `LICENSE` and `README.md`.
+Verify the download against `SHA256SUMS.txt` attached to the same release.
+
+### From source — latest `main` (for early adopters)
+
+If you have a Rust toolchain installed and want to track the bleeding edge:
+
+```sh
+cargo install --git https://github.com/wado-lang/wado wado-cli
+```
+
+This builds the current `main` branch from source. Re-run the same command
+to update.
+
 ## Examples
 
 ### Hello World

@@ -1,0 +1,24 @@
+# tagpr config — see https://github.com/Songmu/tagpr
+#
+# How it works:
+#   1. tagpr.yml runs on every push to main.
+#   2. tagpr maintains an open "Release v<next>" PR that bumps the version
+#      and updates CHANGELOG.md based on PRs merged since the previous tag.
+#   3. Merging that PR triggers tagpr to push tag `v<next>`.
+#   4. release.yml runs on the tag push and publishes the release.
+#
+# Default bump is patch. Override per-PR with labels:
+#   tagpr:patch | tagpr:minor | tagpr:major
+
+# tagpr has no native Cargo.toml handler but its generic version-file
+# regex matches `version = "X.Y.Z"`. Our root Cargo.toml has exactly one
+# such line — the [workspace.package].version — because every member
+# crate uses `version.workspace = true`, so the regex bump is unambiguous.
+versionFile = Cargo.toml
+
+# After tagpr writes the new version, sync Cargo.lock so the release PR
+# is in a buildable state. --offline avoids network on a pure version bump.
+command = cargo update --workspace --offline
+
+# Default bump kind when no `tagpr:major`/`tagpr:minor` label is present.
+release = patch

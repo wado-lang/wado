@@ -1,0 +1,19 @@
+name: tagpr
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write       # push the release branch and tag
+  pull-requests: write  # open / update the Release PR
+
+jobs:
+  tagpr:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # tagpr needs the full history to compute the changelog.
+          fetch-depth: 0
+      - uses: Songmu/tagpr@v1
