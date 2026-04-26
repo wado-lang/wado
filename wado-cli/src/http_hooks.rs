@@ -35,6 +35,7 @@ pub struct WadoHttpHooks {
 
 impl WadoHttpHooks {
     pub fn new() -> Self {
+        install_default_crypto_provider();
         let mut roots = RootCertStore {
             roots: webpki_roots::TLS_SERVER_ROOTS.into(),
         };
@@ -46,6 +47,13 @@ impl WadoHttpHooks {
             client_config: Arc::new(client_config),
         }
     }
+}
+
+fn install_default_crypto_provider() {
+    static INIT: std::sync::Once = std::sync::Once::new();
+    INIT.call_once(|| {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+    });
 }
 
 impl Default for WadoHttpHooks {
