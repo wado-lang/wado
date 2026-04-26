@@ -168,10 +168,10 @@ To initialize: `git submodule update --init --recommend-shallow`
 
 - Avoid ad-hoc workarounds. Write proper code based on a sound design.
 - Manage dependencies in the workspace `Cargo.toml`.
-- Use `panic!` macro for things that are not yet implemented or not supported.
-- Use `IndexMap` and `IndexSet` from the `indexmap` crate in order to ensure deterministic behaviors.
+- Use `panic!` macro instead of falling back to dummy results.
 - Do not use any comment sections to separate or organize code.
 - Perform red/green TDD.
+- Do not use `--release` profile for cargo even on benchmarking because it may cause ENOSPC; necessary crates has its own optimization level configurations for debug profile.
 
 ## Wado Evolution Proposals (WEP)
 
