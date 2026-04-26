@@ -2203,16 +2203,12 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 )?;
             }
             ast::Expr::WithHandler(with_handler) => {
+                // The LHS of `E = h` in a `with` clause is an effect
+                // name, not a type name. The real resolver validates it
+                // against the effect declaration index in
+                // `resolve_with_handler`; here we only walk the handler
+                // expression and the body for type-name references.
                 for binding in &with_handler.handlers {
-                    if let Some(effect) = &binding.effect {
-                        Self::validate_ast_type_names(
-                            effect,
-                            known_type_names,
-                            resource_type_names,
-                            type_params,
-                            logger,
-                        )?;
-                    }
                     Self::validate_expr_type_names(
                         &binding.handler,
                         known_type_names,

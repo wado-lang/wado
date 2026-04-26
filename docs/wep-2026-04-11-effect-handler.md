@@ -19,15 +19,38 @@ Status: Draft
       Effect-check augments `current_effects` with the handled effects
       while walking the body so the body's calls do not propagate as
       caller requirements.
-- [ ] User-defined effect operation calls (e.g. `Counter::next()`) need
-      resolver/synthesis to emit a callable target. Current behaviour
-      panics at WIR build with `unresolved Call: name="next"`. Phase 3
-      will route these (and existing `__cm_binding__*` calls for WASI
-      effects) through synthesized dispatch wrappers.
-- [ ] TIR/WIR lowering: dispatch records, global save/restore, handler
-      method as funcref vtable. See "Phase 3 implementation plan" below.
-- [ ] Wasm GC codegen: per-effect global, `$Dispatch_<Effect>` GC struct,
-      one dispatch function per operation.
+- [x] Effect-dispatch synthesis pass (Phase 3 MVP). Discovers every
+      effect referenced by a `with E = h do` binding, registers the
+      per-effect `__Dispatch_<E>` struct + `__effect_<E>` mut global
+      (kept under `#[allow(dead_code)]` until cross-function-boundary
+      dispatch lands), lowers `Resume` to `Return` in handler method
+      bodies, and replaces every `WithHandler` block with a `Block`
+      whose body has each direct `<E>::<op>(args)` call statically
+      devirtualised to a `MethodCall { receiver: handler, ... }` on the
+      bound handler. Both the WASI-binding-rewritten name shape
+      (`__cm_binding__<E>_<op>`) and the user-effect namespaced shape
+      (`<op>` in `Local{path: "<E>"}`) are recognised.
+- [x] `effect_handler_with_do.wado` runs end-to-end (`mark: 12345`).
+- [ ] `effect_handler_resume.wado` is parked behind `#![TODO]`. The
+      MVP synthesis routes `Counter::next()` to a `MethodCall` on
+      `&CounterHandler`, but the existing inliner blows up with
+      `unresolved local: __local_1` when it inlines an `&self` impl
+      method body into a context that does not have the inlined frame's
+      `__local_N` aliases set up. This is a pre-existing optimizer bug
+      surfaced (not caused) by the synthesis. Fixing the inliner — or
+      replacing the static devirtualisation with the dispatch-wrapper
+      path described below — is tracked as the next follow-up.
+- [ ] Cross-function-boundary dispatch. The MVP only rewrites direct
+      `<E>::<op>` calls inside the do-block body. Calls that reach an
+      effect operation through helper functions invoked from `body`
+      stay routed through the existing CM binding (for WASI) or fail
+      to resolve (for user effects). The `__Dispatch_<E>` struct + mut
+      global registered by the synthesis pass are the foundation for
+      the proper dispatch wrappers; the lowering simply does not emit
+      the wrapper bodies yet.
+- [ ] Bundled handlers (`with &mut h do`). The resolver already
+      diagnoses this with `BundledHandlerNotSupported`; lowering is
+      deferred until the dispatch-wrapper path lands.
 - [ ] `MockCM` and handler bundling helpers in `core:test`.
 
 ## Phase 3 implementation plan
