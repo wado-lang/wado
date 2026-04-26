@@ -12,6 +12,22 @@ implement `Serializer` and `Deserializer` to support specific wire formats.
 Usage:
 use { Serialize, Deserialize, SerializeError, DeserializeError } from "core:serde";
 
+# Field Attributes
+
+`#[serde(default)]` on a struct field: when the field is absent during
+deserialization, fall back to a default value instead of returning
+`MissingField`. The fallback is the field's declared default expression
+(`f: T = expr`) if present, otherwise the type's zero-value (`0`, `""`,
+`false`, `[]`, `null`, ...). A field that declares `= expr` is implicitly
+`#[serde(default)]`, so the attribute is only needed on fields without a
+declared default.
+
+`#[serde(rename = "...")]` on a struct field: override the wire-form key
+for that field.
+
+`#[serde(rename_all = "...")]` on a struct: rename every field by a
+convention (`"camelCase"`, `"snake_case"`, `"kebab-case"`, ...).
+
 ## Traits
 
 ### `pub trait SerializeSeq`
