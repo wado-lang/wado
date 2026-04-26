@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777194126723,
+  "lastUpdate": 1777196033688,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -16601,6 +16601,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c22db936879b51d6eeb9ef30eba2ebba6e10ff25"
         },
         "date": 1777194126437,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8982,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19110,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 614203,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5bcdce0f9b27b963eec607d0152d25db2c51a47b",
+          "message": "Merge pull request #932 from wado-lang/claude/implement-effect-handlers-Hn4Al\n\nfeat(parser): effect handler front-end (`with E = h do`, `resume`, `..` rest)",
+          "timestamp": "2026-04-26T18:28:52+09:00",
+          "tree_id": "a0df98834366b2e6767317d7dbfeb85b5d733e04",
+          "url": "https://github.com/wado-lang/wado/commit/5bcdce0f9b27b963eec607d0152d25db2c51a47b"
+        },
+        "date": 1777196033391,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
