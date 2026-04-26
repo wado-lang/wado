@@ -52,8 +52,7 @@ pub fn run(mut parser: lexopt::Parser) {
 
     if check {
         let current = read_workspace_version();
-        let expected = positional
-            .expect("usage: bump-version --check <X.Y.Z>");
+        let expected = positional.expect("usage: bump-version --check <X.Y.Z>");
         validate_semver(&expected);
         if current != expected {
             eprintln!(
@@ -71,13 +70,15 @@ pub fn run(mut parser: lexopt::Parser) {
         (Some(kind), None) => bump(&read_workspace_version(), &kind),
         (None, Some(v)) => v,
         (None, None) => {
-            panic!("usage: bump-version <X.Y.Z> | --bump <major|minor|patch> | --check <X.Y.Z> | --show");
+            panic!(
+                "usage: bump-version <X.Y.Z> | --bump <major|minor|patch> | --check <X.Y.Z> | --show"
+            );
         }
     };
     validate_semver(&new_version);
 
-    let original = std::fs::read_to_string(MANIFEST)
-        .unwrap_or_else(|e| panic!("read {MANIFEST}: {e}"));
+    let original =
+        std::fs::read_to_string(MANIFEST).unwrap_or_else(|e| panic!("read {MANIFEST}: {e}"));
     let updated = replace_workspace_version(&original, &new_version);
     if updated == original {
         let current = read_workspace_version_from(&original);
@@ -87,8 +88,7 @@ pub fn run(mut parser: lexopt::Parser) {
         }
         panic!("[workspace.package].version not found in {MANIFEST}");
     }
-    std::fs::write(MANIFEST, updated)
-        .unwrap_or_else(|e| panic!("write {MANIFEST}: {e}"));
+    std::fs::write(MANIFEST, updated).unwrap_or_else(|e| panic!("write {MANIFEST}: {e}"));
     eprintln!("bumped [workspace.package].version → {new_version}");
 }
 
@@ -118,9 +118,10 @@ fn read_workspace_version_from(src: &str) -> String {
                 .split('"')
                 .next()
                 .unwrap_or("");
-            if v.is_empty() {
-                panic!("[workspace.package].version is empty in {MANIFEST}");
-            }
+            assert!(
+                !v.is_empty(),
+                "[workspace.package].version is empty in {MANIFEST}"
+            );
             return v.to_string();
         }
     }
