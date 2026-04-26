@@ -25,9 +25,9 @@ Pre-built binaries are published for:
 Each archive contains the `wado` binary plus `LICENSE` and `README.md`.
 Verify the download against `SHA256SUMS.txt` attached to the same release.
 
-### From source — latest `main` (for early adopters)
+### From source
 
-If you have a Rust toolchain installed and want to track the bleeding edge:
+If you have a Rust toolchain installed:
 
 ```sh
 cargo install --git https://github.com/wado-lang/wado wado-cli
@@ -284,8 +284,6 @@ mise run bump-version 0.2.0           # explicit
 mise run bump-version --bump minor    # patch / minor / major
 mise run bump-version --check 0.2.0   # CI guard: fail unless versions match
 ```
-
-We deliberately do not ship nightly binaries — early adopters who want to track `main` use `cargo install --git` (see [Installing](#installing)).
 
 ## Benchmarks
 
