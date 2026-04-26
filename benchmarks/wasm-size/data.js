@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777169523266,
+  "lastUpdate": 1777193723016,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -16513,6 +16513,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/2c549201faa326321879034ecad19eb5d759fcfa"
         },
         "date": 1777169522975,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8982,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19110,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 614203,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9371bf1ceae632c6839040ec52e9014e8b5f87d8",
+          "message": "Merge pull request #931 from wado-lang/claude/update-docs-kiln-defaults-87YQa\n\ndocs: cover Kiln and default values in spec and cheatsheet",
+          "timestamp": "2026-04-26T17:50:40+09:00",
+          "tree_id": "3af767bb773040f5a2051b481ab81fed9b4b34f7",
+          "url": "https://github.com/wado-lang/wado/commit/9371bf1ceae632c6839040ec52e9014e8b5f87d8"
+        },
+        "date": 1777193722724,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
