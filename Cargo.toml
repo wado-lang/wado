@@ -76,6 +76,18 @@ opt-level = 1
 [profile.dev.package.cranelift-codegen]
 opt-level = 2
 
+# `release` is the profile for distributed `wado` binaries. `thin` LTO
+# captures most of fat LTO's size/perf benefit at a fraction of the
+# build cost. `codegen-units = 1` lets thin LTO see the whole crate
+# graph as one unit, and `strip = "symbols"` drops the symbol table
+# from the final binary. `panic = "unwind"` (the default) is kept
+# intentionally because wasmtime relies on Rust unwinding to surface
+# guest traps as catchable errors.
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
+
 [workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }
 disallowed_types = "warn"

@@ -62,6 +62,15 @@ cargo check -p wado-compiler --target wasm32-unknown-unknown
 cargo check -p wado-manifest --target wasm32-unknown-unknown
 """
 
+[tasks.release-build]
+description = "Build the wado CLI with the release profile (LTO, fully optimized)"
+run = """
+#!/usr/bin/env bash
+set -xe -o pipefail
+cargo build --release -p wado-cli
+ls -lh target/release/wado
+"""
+
 [tasks.bump-version]
 description = """\
 Bump [workspace.package].version in Cargo.toml. \
