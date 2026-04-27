@@ -1169,7 +1169,7 @@ impl crate::tir_visitor::TirRefVisitor for MaxLocalIndex {
         match &stmt.kind {
             TirStmtKind::Let { local_index, .. } => self.note(*local_index),
             TirStmtKind::IfLet { pattern, .. } | TirStmtKind::LetDestructure { pattern, .. } => {
-                self.walk_pattern(pattern)
+                self.walk_pattern(pattern);
             }
             TirStmtKind::VariadicForOf { binding_local, .. } => self.note(*binding_local),
             _ => {}
