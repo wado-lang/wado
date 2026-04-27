@@ -1,0 +1,57 @@
+// Bundled handler form: `with &mut h do { ... }` (no `Effect =>` prefix)
+// installs `h` as a handler for every effect that `h`'s underlying type
+// implements. The handler is shared across all installed effects — they
+// all dispatch into the same `&mut MultiMock` value.
+//
+// Verifies:
+// - Bundled enumeration finds every `impl Effect for MultiMock` and
+//   installs it as if the user had written each `Effect => &mut h`
+//   binding by hand.
+// - Multiple effects share the same handler value: mutating
+//   `MultiMock.last_*` from one operation is observable from the other.
+// - The `with` block exits cleanly and the per-effect dispatch globals
+//   restore to `null` (no handler installed) afterwards, so the rest of
+//   `run()` can use real `Stdout` from wasmtime.
+
+use { println, Stdout } from "core:cli";
+
+effect Greeting {
+    fn hello() -> String;
+}
+
+effect Counter {
+    fn tick() -> i32;
+}
+
+struct MultiMock {
+    name: String,
+    count: i32,
+}
+
+impl Greeting for MultiMock {
+    fn hello(&mut self) -> String {
+        self.count += 1;
+        resume `hello, {self.name}`
+    }
+}
+
+impl Counter for MultiMock {
+    fn tick(&mut self) -> i32 {
+        self.count += 1;
+        resume self.count
+    }
+}
+
+export fn run() with Stdout {
+    let mut h = MultiMock { name: "wado", count: 0 };
+    with &mut h do {
+        let g = Greeting::hello();   // count: 0 -> 1
+        let n1 = Counter::tick();    // count: 1 -> 2
+        let n2 = Counter::tick();    // count: 2 -> 3
+        println(`{g}, n1={n1}, n2={n2}`);
+    }
+    println(`final count={h.count}`);
+}
+
+__DATA__
+{"stdout_contains": ["hello, wado, n1=2, n2=3", "final count=3"]}

@@ -1,0 +1,23 @@
+// Negative test: bundled handler `with &mut h do` cannot enumerate
+// effects on a type parameter — the resolver indexes by type name,
+// and a generic parameter `T` has no fixed name to look up. Earlier
+// versions panicked here; the resolver now emits a proper
+// `BundledHandlerUnsupportedHandlerType` diagnostic so user code
+// (which can legitimately reach this case via generic functions) is
+// rejected with a helpful message.
+
+effect Greeting {
+    fn hello() -> i32;
+}
+
+fn run_with<T>(t: T) {
+    with t do {
+        let _ = Greeting::hello();
+    }
+}
+
+export fn run() {
+}
+
+__DATA__
+{"compile_error": "bundled effect handler `with h do` is not supported for handler type 'T' (type parameter)"}

@@ -1,0 +1,86 @@
+// Bundled and explicit handlers can be mixed on the same `with` line,
+// and the same effect may appear more than once. Source order decides
+// install order: the **later** binding wins (becomes the inner /
+// active handler), and an outer call from the inner handler delegates
+// up the dispatch chain to the previous installation.
+//
+// Setup: `MultiMock` implements both `Greeting` and `Counter`. The
+// `with` line is:
+//
+//     with &mut h, Counter => &mut alt do { ... }
+//
+// expansion:
+//
+//   1. bundled `&mut h`  -> Greeting => &mut h
+//   2. bundled `&mut h`  -> Counter  => &mut h         (outer for Counter)
+//   3. explicit          -> Counter  => &mut alt      (inner for Counter)
+//
+// So inside the body:
+//
+// - Greeting::hello()   dispatches to MultiMock          (bundled)
+// - Counter::tick()     dispatches to AltCounter         (later wins)
+//   AltCounter::tick    delegates to outer via Counter::tick(),
+//   which reaches MultiMock — proving the outer-chain link
+//   established by `&mut h` is reachable from the inner handler.
+//
+// After the `do` block, the dispatch globals restore to `null`.
+
+use { println, Stdout } from "core:cli";
+
+effect Greeting {
+    fn hello() -> String;
+}
+
+effect Counter {
+    fn tick() -> i32;
+}
+
+struct MultiMock {
+    name: String,
+    count: i32,
+}
+
+impl Greeting for MultiMock {
+    fn hello(&mut self) -> String {
+        self.count += 1;
+        resume `hello, {self.name}`
+    }
+}
+
+impl Counter for MultiMock {
+    fn tick(&mut self) -> i32 {
+        self.count += 1;
+        resume self.count
+    }
+}
+
+struct AltCounter {
+    bias: i32,
+}
+
+impl Counter for AltCounter {
+    fn tick(&mut self) -> i32 {
+        // Delegate to the outer Counter handler — should reach
+        // MultiMock thanks to source-order install + outer chain.
+        let outer = Counter::tick();
+        self.bias += 1;
+        resume outer + 100 * self.bias
+    }
+}
+
+export fn run() with Stdout {
+    let mut h = MultiMock { name: "wado", count: 0 };
+    let mut alt = AltCounter { bias: 0 };
+    with &mut h, Counter => &mut alt do {
+        // Greeting reaches MultiMock (only one Greeting handler installed).
+        let g = Greeting::hello();   // h.count: 0 -> 1
+        // Counter inner = AltCounter; delegates to outer (MultiMock).
+        let n1 = Counter::tick();    // outer h.count: 1 -> 2 ; alt.bias -> 1 ; result = 2 + 100 = 102
+        let n2 = Counter::tick();    // outer h.count: 2 -> 3 ; alt.bias -> 2 ; result = 3 + 200 = 203
+        println(`{g}, n1={n1}, n2={n2}`);
+    }
+    println(`h.count={h.count}, alt.bias={alt.bias}`);
+}
+
+__DATA__
+{"stdout_contains": ["hello, wado, n1=102, n2=203", "h.count=3, alt.bias=2"]}
