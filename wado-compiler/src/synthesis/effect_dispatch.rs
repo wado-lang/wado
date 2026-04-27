@@ -1273,15 +1273,24 @@ fn desugar_with_handler(expr: &mut TirExpr, ctx: &mut LowerCtx) {
             field_index: 0,
         });
         for op in &plan.operations {
-            let closure_expr = build_handler_op_closure(
-                op,
-                &effect_name,
-                &impl_info,
-                handler_type,
-                h_local,
-                &h_name,
-                &ctx.type_table,
-            );
+            // The `..` rest pattern in `impl Effect for T` lets a handler
+            // implement only some of the effect's operations; calls to
+            // un-implemented ops trap at runtime. Emit a normal forwarding
+            // closure for ops the impl actually defines and a trapping
+            // stub closure for the rest.
+            let closure_expr = if impl_info.methods.contains_key(&op.name) {
+                build_handler_op_closure(
+                    op,
+                    &effect_name,
+                    &impl_info,
+                    handler_type,
+                    h_local,
+                    &h_name,
+                    &ctx.type_table,
+                )
+            } else {
+                build_trap_closure(op, &ctx.type_table)
+            };
             let field_index = *plan.field_indices.get(&op.name).unwrap();
             let field_name = plan.field_names.get(&op.name).unwrap().clone();
             struct_fields.push(TirStructField {
@@ -1474,6 +1483,63 @@ fn build_handler_op_closure(
             params: closure_params,
             body: Box::new(method_call),
             captures,
+            functor_id: None,
+            source_text: None,
+        },
+        func_type,
+        span,
+    )
+}
+
+/// Build a trapping stub closure for an effect operation that the
+/// installed handler does not implement (i.e. the operation falls
+/// under the `..` wildcard in `impl Effect for T { ... .. }`).
+///
+/// Body shape:
+///
+/// ```text
+/// |<op_params>| { unreachable() }
+/// ```
+///
+/// `unreachable` returns `Never`, which subtypes any return type, so
+/// the closure is well-typed at `fn(<op_params>) -> <op_ret>`. The
+/// stub captures nothing, mirroring the WEP's "trap stub funcref" for
+/// wildcard-handled operations.
+#[allow(dead_code)]
+fn build_trap_closure(
+    op: &TirEffectOp,
+    type_table: &std::rc::Rc<std::cell::RefCell<TypeTable>>,
+) -> TirExpr {
+    let span = synth_span();
+    let closure_params: Vec<(String, TypeId)> = op
+        .params
+        .iter()
+        .map(|p| (p.name.clone(), p.type_id))
+        .collect();
+    let trap_call = TirExpr::new(
+        TirExprKind::Call {
+            func: FunctionRef {
+                module_source: ModuleSource::builtin(),
+                name: "unreachable".to_string(),
+                monomorph_info: None,
+                method_info: None,
+            },
+            type_args: vec![],
+            args: vec![],
+        },
+        op.return_type,
+        span,
+    );
+    let param_types: Vec<TypeId> = closure_params.iter().map(|(_, t)| *t).collect();
+    let func_type =
+        type_table
+            .borrow_mut()
+            .make_function(param_types, op.return_type, vec![], vec![]);
+    TirExpr::new(
+        TirExprKind::Closure {
+            params: closure_params,
+            body: Box::new(trap_call),
+            captures: Vec::new(),
             functor_id: None,
             source_text: None,
         },
@@ -1931,18 +1997,14 @@ pub fn synthesize(mut project: Package) -> Result<Package, String> {
     let impl_index = build_handler_impl_index(&project);
     let active_effects = identify_active_effects(&effect_index, &impl_index);
 
-    if !active_effects.is_empty() {
-        let _plans = synthesize_dispatch_infrastructure(
-            &mut project,
-            &effect_index,
-            &active_effects,
-        );
+    if active_effects.is_empty() {
+        return Ok(project);
     }
 
-    // TODO(phase4): switch to `lower_with_handler` (closure-based) +
-    // `rewrite_call_sites_to_wrappers` once those land. For now keep the
-    // Phase 3 static devirtualisation so existing fixtures still pass.
-    lower_with_handler_in_modules(&mut project, &impl_index);
+    let plans =
+        synthesize_dispatch_infrastructure(&mut project, &effect_index, &active_effects);
+    lower_with_handler_dispatch_in_modules(&mut project, &plans, &impl_index);
+    rewrite_call_sites_to_wrappers(&mut project, &plans);
     Ok(project)
 }
 
@@ -2039,283 +2101,6 @@ fn build_handler_impl_index(project: &Package) -> IndexMap<HandlerImplKey, Handl
     out
 }
 
-/// Walk every TIR function body in every module and replace each
-/// `TirExprKind::WithHandler` with a desugared `Block` whose body has
-/// any direct `<Effect>::<op>(args)` calls rewritten to `MethodCall`s
-/// on the bound handler.
-///
-/// The MVP statically devirtualises calls that appear directly inside
-/// the do-block body. Cross-function-boundary dispatch (calls reached
-/// through helper functions invoked from the body) is deferred to the
-/// per-effect global + dispatch wrapper follow-up tracked in the WEP.
-fn lower_with_handler_in_modules(
-    project: &mut Package,
-    impl_index: &IndexMap<HandlerImplKey, HandlerImplInfo>,
-) {
-    for module in project.tir_modules.values_mut() {
-        let type_table = module.type_table.clone();
-        for func_rc in &module.functions {
-            let mut func = func_rc.borrow_mut();
-            if let Some(body) = &mut func.body {
-                lower_with_in_block(body, impl_index, &type_table);
-            }
-        }
-        for impl_block in &mut module.impls {
-            for method in &mut impl_block.methods {
-                if let Some(body) = &mut method.body {
-                    lower_with_in_block(body, impl_index, &type_table);
-                }
-            }
-        }
-    }
-}
-
-fn lower_with_in_block(
-    block: &mut TirBlock,
-    impl_index: &IndexMap<HandlerImplKey, HandlerImplInfo>,
-    type_table: &std::cell::RefCell<TypeTable>,
-) {
-    for stmt in &mut block.stmts {
-        lower_with_in_stmt(stmt, impl_index, type_table);
-    }
-}
-
-fn lower_with_in_stmt(
-    stmt: &mut TirStmt,
-    impl_index: &IndexMap<HandlerImplKey, HandlerImplInfo>,
-    type_table: &std::cell::RefCell<TypeTable>,
-) {
-    match &mut stmt.kind {
-        TirStmtKind::Let { value, .. }
-        | TirStmtKind::Expr(value)
-        | TirStmtKind::TaskReturn { value } => lower_with_in_expr(value, impl_index, type_table),
-        TirStmtKind::Return { value } | TirStmtKind::Break { value, .. } => {
-            if let Some(v) = value {
-                lower_with_in_expr(v, impl_index, type_table);
-            }
-        }
-        TirStmtKind::Continue => {}
-        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-            lower_with_in_block(body, impl_index, type_table);
-        }
-        TirStmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            lower_with_in_expr(condition, impl_index, type_table);
-            lower_with_in_block(then_block, impl_index, type_table);
-            if let Some(eb) = else_block {
-                lower_with_in_block(eb, impl_index, type_table);
-            }
-        }
-        TirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            lower_with_in_expr(scrutinee, impl_index, type_table);
-            lower_with_in_block(then_block, impl_index, type_table);
-            if let Some(eb) = else_block {
-                lower_with_in_block(eb, impl_index, type_table);
-            }
-        }
-        TirStmtKind::LetDestructure { value, .. } => {
-            lower_with_in_expr(value, impl_index, type_table);
-        }
-        TirStmtKind::VariadicForOf { iterable, body, .. } => {
-            lower_with_in_expr(iterable, impl_index, type_table);
-            lower_with_in_block(body, impl_index, type_table);
-        }
-    }
-}
-
-fn lower_with_in_expr(
-    expr: &mut TirExpr,
-    impl_index: &IndexMap<HandlerImplKey, HandlerImplInfo>,
-    type_table: &std::cell::RefCell<TypeTable>,
-) {
-    // Recurse first so nested `with` blocks are lowered inner-out, which
-    // matches the runtime install order (innermost handler is the most
-    // specific match for an effect operation in the body).
-    walk_children(expr, impl_index, type_table);
-
-    if let TirExprKind::WithHandler { bindings, body, .. } = &mut expr.kind {
-        // For each binding, statically devirtualise direct calls inside
-        // the body. The handler expression itself was already recursed
-        // through in `walk_children`.
-        for binding in bindings {
-            let Some(EffectRef::Concrete {
-                name: effect_name, ..
-            }) = &binding.effect
-            else {
-                continue;
-            };
-            let handler_type_name = type_table
-                .borrow()
-                .type_name(deref_type(&type_table.borrow(), binding.handler.type_id));
-            let key = (handler_type_name, effect_name.clone());
-            let Some(info) = impl_index.get(&key) else {
-                continue;
-            };
-            rewrite_effect_calls_in_block(body, effect_name, &binding.handler, info);
-        }
-        // Replace the WithHandler expression with the rewritten body so
-        // the rest of the pipeline sees a plain block.
-        let span = expr.span;
-        let body_block = std::mem::replace(
-            body,
-            TirBlock {
-                stmts: Vec::new(),
-                span,
-            },
-        );
-        let result_type = expr.type_id;
-        *expr = TirExpr::new(TirExprKind::Block(body_block), result_type, span);
-    }
-}
-
-fn walk_children(
-    expr: &mut TirExpr,
-    impl_index: &IndexMap<HandlerImplKey, HandlerImplInfo>,
-    type_table: &std::cell::RefCell<TypeTable>,
-) {
-    match &mut expr.kind {
-        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
-            lower_with_in_block(block, impl_index, type_table);
-        }
-        TirExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            lower_with_in_expr(condition, impl_index, type_table);
-            lower_with_in_block(then_branch, impl_index, type_table);
-            if let Some(eb) = else_branch {
-                lower_with_in_block(eb, impl_index, type_table);
-            }
-        }
-        TirExprKind::Match { expr, arms } => {
-            lower_with_in_expr(expr, impl_index, type_table);
-            for arm in arms {
-                if let Some(g) = &mut arm.guard {
-                    lower_with_in_expr(g, impl_index, type_table);
-                }
-                lower_with_in_expr(&mut arm.body, impl_index, type_table);
-            }
-        }
-        TirExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            lower_with_in_expr(scrutinee, impl_index, type_table);
-            for arm in arms {
-                lower_with_in_block(arm, impl_index, type_table);
-            }
-            lower_with_in_block(default, impl_index, type_table);
-        }
-        TirExprKind::Call { args, .. } => {
-            for arg in args {
-                lower_with_in_expr(&mut arg.expr, impl_index, type_table);
-            }
-        }
-        TirExprKind::IndirectCall { callee, args } => {
-            lower_with_in_expr(callee, impl_index, type_table);
-            for arg in args {
-                lower_with_in_expr(arg, impl_index, type_table);
-            }
-        }
-        TirExprKind::CmRawCall { args, .. } => {
-            for arg in args {
-                lower_with_in_expr(arg, impl_index, type_table);
-            }
-        }
-        TirExprKind::MethodCall { receiver, args, .. } => {
-            lower_with_in_expr(receiver, impl_index, type_table);
-            for arg in args {
-                lower_with_in_expr(&mut arg.expr, impl_index, type_table);
-            }
-        }
-        TirExprKind::Binary { left, right, .. } => {
-            lower_with_in_expr(left, impl_index, type_table);
-            lower_with_in_expr(right, impl_index, type_table);
-        }
-        TirExprKind::Unary { expr, .. }
-        | TirExprKind::Cast { expr, .. }
-        | TirExprKind::FieldAccess { expr, .. }
-        | TirExprKind::TupleSpread { expr }
-        | TirExprKind::TupleZip { expr }
-        | TirExprKind::TypePackExpansion {
-            call_expr: expr, ..
-        }
-        | TirExprKind::VariantTag { expr }
-        | TirExprKind::VariantTest { expr, .. }
-        | TirExprKind::VariantPayload { expr, .. }
-        | TirExprKind::ClosureToCanonical { functor: expr, .. } => {
-            lower_with_in_expr(expr, impl_index, type_table);
-        }
-        TirExprKind::Assign { target, value } => {
-            lower_with_in_expr(target, impl_index, type_table);
-            lower_with_in_expr(value, impl_index, type_table);
-        }
-        TirExprKind::GlobalVarSet { value, .. } => {
-            lower_with_in_expr(value, impl_index, type_table);
-        }
-        TirExprKind::Index { expr, index } => {
-            lower_with_in_expr(expr, impl_index, type_table);
-            lower_with_in_expr(index, impl_index, type_table);
-        }
-        TirExprKind::StructLiteral { fields, .. } => {
-            for field in fields {
-                lower_with_in_expr(&mut field.value, impl_index, type_table);
-            }
-        }
-        TirExprKind::TupleLiteral { elements } => {
-            for elem in elements {
-                lower_with_in_expr(elem, impl_index, type_table);
-            }
-        }
-        TirExprKind::Closure { body, .. } => lower_with_in_expr(body, impl_index, type_table),
-        TirExprKind::VariantConstruct { payload, .. } => {
-            if let Some(p) = payload {
-                lower_with_in_expr(p, impl_index, type_table);
-            }
-        }
-        TirExprKind::Resume { value } => {
-            lower_with_in_expr(value, impl_index, type_table);
-        }
-        TirExprKind::WithHandler { bindings, body, .. } => {
-            for binding in bindings {
-                lower_with_in_expr(&mut binding.handler, impl_index, type_table);
-            }
-            lower_with_in_block(body, impl_index, type_table);
-        }
-        TirExprKind::TemplateString { parts } => {
-            for part in parts {
-                if let TirTemplatePart::Interpolation { expr, .. } = part {
-                    lower_with_in_expr(expr, impl_index, type_table);
-                }
-            }
-        }
-        // Leaf nodes: nothing to recurse into.
-        TirExprKind::IntLiteral { .. }
-        | TirExprKind::FloatLiteral { .. }
-        | TirExprKind::BoolLiteral(_)
-        | TirExprKind::CharLiteral(_)
-        | TirExprKind::StringLiteral(_)
-        | TirExprKind::BytesLiteral(_)
-        | TirExprKind::Null
-        | TirExprKind::Unit
-        | TirExprKind::Local { .. }
-        | TirExprKind::FuncRef { .. }
-        | TirExprKind::GlobalVarGet { .. }
-        | TirExprKind::Capture { .. }
-        | TirExprKind::EnumConstruct { .. } => {}
-    }
-}
 
 /// Strip a single leading `&` / `&mut` layer to find the underlying
 /// struct type that an `impl Effect for T` block targets.
@@ -2327,289 +2112,6 @@ fn deref_type(tt: &TypeTable, type_id: TypeId) -> TypeId {
     }
 }
 
-/// Walk every direct `<Effect>::<op>(args)` call inside the do-block
-/// body and rewrite it to a `MethodCall { receiver: handler, ... }` on
-/// the bound handler. Static devirtualisation only — calls reached
-/// through helper functions invoked from `body` are not rewritten.
-fn rewrite_effect_calls_in_block(
-    block: &mut TirBlock,
-    effect_name: &str,
-    handler_expr: &TirExpr,
-    info: &HandlerImplInfo,
-) {
-    for stmt in &mut block.stmts {
-        rewrite_effect_calls_in_stmt(stmt, effect_name, handler_expr, info);
-    }
-}
-
-fn rewrite_effect_calls_in_stmt(
-    stmt: &mut TirStmt,
-    effect_name: &str,
-    handler_expr: &TirExpr,
-    info: &HandlerImplInfo,
-) {
-    match &mut stmt.kind {
-        TirStmtKind::Let { value, .. }
-        | TirStmtKind::Expr(value)
-        | TirStmtKind::TaskReturn { value } => {
-            rewrite_effect_calls_in_expr(value, effect_name, handler_expr, info);
-        }
-        TirStmtKind::Return { value } | TirStmtKind::Break { value, .. } => {
-            if let Some(v) = value {
-                rewrite_effect_calls_in_expr(v, effect_name, handler_expr, info);
-            }
-        }
-        TirStmtKind::Continue => {}
-        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-            rewrite_effect_calls_in_block(body, effect_name, handler_expr, info);
-        }
-        TirStmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            rewrite_effect_calls_in_expr(condition, effect_name, handler_expr, info);
-            rewrite_effect_calls_in_block(then_block, effect_name, handler_expr, info);
-            if let Some(eb) = else_block {
-                rewrite_effect_calls_in_block(eb, effect_name, handler_expr, info);
-            }
-        }
-        TirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            rewrite_effect_calls_in_expr(scrutinee, effect_name, handler_expr, info);
-            rewrite_effect_calls_in_block(then_block, effect_name, handler_expr, info);
-            if let Some(eb) = else_block {
-                rewrite_effect_calls_in_block(eb, effect_name, handler_expr, info);
-            }
-        }
-        TirStmtKind::LetDestructure { value, .. } => {
-            rewrite_effect_calls_in_expr(value, effect_name, handler_expr, info);
-        }
-        TirStmtKind::VariadicForOf { iterable, body, .. } => {
-            rewrite_effect_calls_in_expr(iterable, effect_name, handler_expr, info);
-            rewrite_effect_calls_in_block(body, effect_name, handler_expr, info);
-        }
-    }
-}
-
-fn rewrite_effect_calls_in_expr(
-    expr: &mut TirExpr,
-    effect_name: &str,
-    handler_expr: &TirExpr,
-    info: &HandlerImplInfo,
-) {
-    // Recurse first so children get rewritten before we examine the
-    // current node — children inside Call args might themselves contain
-    // effect-op calls.
-    rewrite_children_for_effect_calls(expr, effect_name, handler_expr, info);
-
-    if let TirExprKind::Call {
-        func,
-        args,
-        type_args,
-    } = &expr.kind
-        && let Some(op_name) = match_effect_op_call(&func.name, &func.module_source, effect_name)
-        && let Some(&method_return_type) = info.methods.get(&op_name)
-    {
-        // The original `Counter::next()` `Call` arrives here
-        // with `expr.type_id == Unit` for user-defined effects
-        // because the resolver does not look up the operation's
-        // declared return type when it routes the call through
-        // `CalleeRef::local_namespace`. Patch up to the impl
-        // method's actual return type so the synthesised
-        // `MethodCall` carries the right shape into WIR build.
-        let receiver = handler_expr.clone();
-        let mangled = crate::name::MethodName::format_local(
-            &info.handler_type_name,
-            Some(effect_name),
-            &op_name,
-        );
-        let new_func = crate::tir::FunctionRef {
-            module_source: info.impl_module.clone(),
-            name: mangled,
-            monomorph_info: None,
-            method_info: Some(crate::name::LocalMethodName::new(
-                info.handler_type_name.clone(),
-                Some(effect_name.to_string()),
-                op_name.clone(),
-            )),
-        };
-        let new_kind = TirExprKind::method_call(
-            Box::new(receiver),
-            new_func,
-            type_args.clone(),
-            args.clone(),
-        );
-        let new_span = expr.span;
-        *expr = TirExpr::new(new_kind, method_return_type, new_span);
-    }
-}
-
-/// Return the operation name when `(module, name)` looks like an
-/// effect-operation call for `effect_name`. Recognises both shapes the
-/// resolver and CM-binding pass produce:
-/// - WASI rewriting: `name == "__cm_binding__<E>_<op>"` (any module)
-/// - User-defined effect: `module == ModuleSource::Local { path: "<E>" }`
-fn match_effect_op_call(name: &str, module: &ModuleSource, effect_name: &str) -> Option<String> {
-    let cm_prefix = format!("__cm_binding__{effect_name}_");
-    if let Some(op) = name.strip_prefix(&cm_prefix) {
-        return Some(op.to_string());
-    }
-    if let ModuleSource::Local { path } = module
-        && path == effect_name
-    {
-        return Some(name.to_string());
-    }
-    None
-}
-
-fn rewrite_children_for_effect_calls(
-    expr: &mut TirExpr,
-    effect_name: &str,
-    handler_expr: &TirExpr,
-    info: &HandlerImplInfo,
-) {
-    match &mut expr.kind {
-        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
-            rewrite_effect_calls_in_block(block, effect_name, handler_expr, info);
-        }
-        TirExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            rewrite_effect_calls_in_expr(condition, effect_name, handler_expr, info);
-            rewrite_effect_calls_in_block(then_branch, effect_name, handler_expr, info);
-            if let Some(eb) = else_branch {
-                rewrite_effect_calls_in_block(eb, effect_name, handler_expr, info);
-            }
-        }
-        TirExprKind::Match { expr, arms } => {
-            rewrite_effect_calls_in_expr(expr, effect_name, handler_expr, info);
-            for arm in arms {
-                if let Some(g) = &mut arm.guard {
-                    rewrite_effect_calls_in_expr(g, effect_name, handler_expr, info);
-                }
-                rewrite_effect_calls_in_expr(&mut arm.body, effect_name, handler_expr, info);
-            }
-        }
-        TirExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            rewrite_effect_calls_in_expr(scrutinee, effect_name, handler_expr, info);
-            for arm in arms {
-                rewrite_effect_calls_in_block(arm, effect_name, handler_expr, info);
-            }
-            rewrite_effect_calls_in_block(default, effect_name, handler_expr, info);
-        }
-        TirExprKind::Call { args, .. } => {
-            for arg in args {
-                rewrite_effect_calls_in_expr(&mut arg.expr, effect_name, handler_expr, info);
-            }
-        }
-        TirExprKind::IndirectCall { callee, args } => {
-            rewrite_effect_calls_in_expr(callee, effect_name, handler_expr, info);
-            for arg in args {
-                rewrite_effect_calls_in_expr(arg, effect_name, handler_expr, info);
-            }
-        }
-        TirExprKind::CmRawCall { args, .. } => {
-            for arg in args {
-                rewrite_effect_calls_in_expr(arg, effect_name, handler_expr, info);
-            }
-        }
-        TirExprKind::MethodCall { receiver, args, .. } => {
-            rewrite_effect_calls_in_expr(receiver, effect_name, handler_expr, info);
-            for arg in args {
-                rewrite_effect_calls_in_expr(&mut arg.expr, effect_name, handler_expr, info);
-            }
-        }
-        TirExprKind::Binary { left, right, .. } => {
-            rewrite_effect_calls_in_expr(left, effect_name, handler_expr, info);
-            rewrite_effect_calls_in_expr(right, effect_name, handler_expr, info);
-        }
-        TirExprKind::Unary { expr, .. }
-        | TirExprKind::Cast { expr, .. }
-        | TirExprKind::FieldAccess { expr, .. }
-        | TirExprKind::TupleSpread { expr }
-        | TirExprKind::TupleZip { expr }
-        | TirExprKind::TypePackExpansion {
-            call_expr: expr, ..
-        }
-        | TirExprKind::VariantTag { expr }
-        | TirExprKind::VariantTest { expr, .. }
-        | TirExprKind::VariantPayload { expr, .. }
-        | TirExprKind::ClosureToCanonical { functor: expr, .. } => {
-            rewrite_effect_calls_in_expr(expr, effect_name, handler_expr, info);
-        }
-        TirExprKind::Assign { target, value } => {
-            rewrite_effect_calls_in_expr(target, effect_name, handler_expr, info);
-            rewrite_effect_calls_in_expr(value, effect_name, handler_expr, info);
-        }
-        TirExprKind::GlobalVarSet { value, .. } => {
-            rewrite_effect_calls_in_expr(value, effect_name, handler_expr, info);
-        }
-        TirExprKind::Index { expr, index } => {
-            rewrite_effect_calls_in_expr(expr, effect_name, handler_expr, info);
-            rewrite_effect_calls_in_expr(index, effect_name, handler_expr, info);
-        }
-        TirExprKind::StructLiteral { fields, .. } => {
-            for field in fields {
-                rewrite_effect_calls_in_expr(&mut field.value, effect_name, handler_expr, info);
-            }
-        }
-        TirExprKind::TupleLiteral { elements } => {
-            for elem in elements {
-                rewrite_effect_calls_in_expr(elem, effect_name, handler_expr, info);
-            }
-        }
-        TirExprKind::Closure { body, .. } => {
-            rewrite_effect_calls_in_expr(body, effect_name, handler_expr, info);
-        }
-        TirExprKind::VariantConstruct { payload, .. } => {
-            if let Some(p) = payload {
-                rewrite_effect_calls_in_expr(p, effect_name, handler_expr, info);
-            }
-        }
-        TirExprKind::Resume { value } => {
-            rewrite_effect_calls_in_expr(value, effect_name, handler_expr, info);
-        }
-        TirExprKind::WithHandler { bindings, body, .. } => {
-            for binding in bindings {
-                rewrite_effect_calls_in_expr(&mut binding.handler, effect_name, handler_expr, info);
-            }
-            rewrite_effect_calls_in_block(body, effect_name, handler_expr, info);
-        }
-        TirExprKind::TemplateString { parts } => {
-            for part in parts {
-                if let TirTemplatePart::Interpolation { expr, .. } = part {
-                    rewrite_effect_calls_in_expr(expr, effect_name, handler_expr, info);
-                }
-            }
-        }
-        // Leaf nodes
-        TirExprKind::IntLiteral { .. }
-        | TirExprKind::FloatLiteral { .. }
-        | TirExprKind::BoolLiteral(_)
-        | TirExprKind::CharLiteral(_)
-        | TirExprKind::StringLiteral(_)
-        | TirExprKind::BytesLiteral(_)
-        | TirExprKind::Null
-        | TirExprKind::Unit
-        | TirExprKind::Local { .. }
-        | TirExprKind::FuncRef { .. }
-        | TirExprKind::GlobalVarGet { .. }
-        | TirExprKind::Capture { .. }
-        | TirExprKind::EnumConstruct { .. } => {}
-    }
-}
 
 /// Walk every method in every `impl Effect for T` block (where `Effect` is
 /// an actual effect declaration) and rewrite `Resume { value }` to

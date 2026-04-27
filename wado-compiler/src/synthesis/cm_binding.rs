@@ -9037,6 +9037,27 @@ fn rewrite_calls_in_expr(
         TirExprKind::GlobalVarSet { value, .. } => {
             rewrite_calls_in_expr(value, adapters, entry_source, wasi_registry, type_table);
         }
+        TirExprKind::WithHandler { bindings, body, .. } => {
+            // Walk the handler value and the do-block body so calls
+            // inside `with E = h do { ... }` get the same adapter-binding
+            // rewrite the rest of the function gets. The effect-dispatch
+            // synthesis pass that runs next consumes
+            // `__cm_binding__<E>_<op>` Calls and routes them through
+            // dispatch wrappers.
+            for binding in bindings {
+                rewrite_calls_in_expr(
+                    &mut binding.handler,
+                    adapters,
+                    entry_source,
+                    wasi_registry,
+                    type_table,
+                );
+            }
+            rewrite_calls_in_block(body, adapters, entry_source, wasi_registry, type_table);
+        }
+        TirExprKind::Resume { value } => {
+            rewrite_calls_in_expr(value, adapters, entry_source, wasi_registry, type_table);
+        }
         _ => {} // Leaf nodes: no sub-expressions
     }
 }
@@ -9244,6 +9265,20 @@ fn collect_effect_calls_in_expr(
             }
         }
         TirExprKind::GlobalVarSet { value, .. } => {
+            collect_effect_calls_in_expr(value, effects, wasi_registry);
+        }
+        TirExprKind::WithHandler { bindings, body, .. } => {
+            // Walk the handler value and the do-block body so effect calls
+            // reached only from inside `with E = h do { ... }` (which the
+            // effect-dispatch synthesis later routes through wrapper
+            // functions whose else-branch falls back to the CM-binding
+            // adapter) still trigger adapter generation here.
+            for binding in bindings {
+                collect_effect_calls_in_expr(&binding.handler, effects, wasi_registry);
+            }
+            collect_effect_calls_in_block(body, effects, wasi_registry);
+        }
+        TirExprKind::Resume { value } => {
             collect_effect_calls_in_expr(value, effects, wasi_registry);
         }
         TirExprKind::IntLiteral { .. }
