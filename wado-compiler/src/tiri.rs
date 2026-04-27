@@ -32,6 +32,11 @@
 //!   `true && X → X`, `X || false → X`, `X && true → X`)
 //! - Boolean equality: Eq, `NotEq`
 //! - Boolean unary: Not
+//! - Local variables (Stage 1): immutable `let` bindings whose RHS reduces
+//!   to a constant flow into the env and are read back as that constant
+//!   in their use sites. `let mut` and post-assign locals stay
+//!   `NonConst`. The driving visitor populates the env via
+//!   [`Interpreter::bind_local`] / [`Interpreter::invalidate_local`].
 //!
 //! Float arithmetic uses native Rust IEEE 754 ops (same as Wasm), following
 //! cranelift's approach: fold the result, but skip if it is NaN since NaN
@@ -45,9 +50,54 @@
 //! unrolling, pure function inlining, and a complementary wasm-CTFE
 //! backend).
 
+use crate::hashmap::IndexMap;
 use crate::tir::{
     PrimitiveType, ResolvedType, TirBinaryOp, TirExpr, TirExprKind, TirUnaryOp, TypeId, TypeTable,
 };
+
+/// Three-state lattice over compile-time evaluation results.
+///
+/// Ordering: `Unevaluated` ⊑ `Const(v)` ⊑ `NonConst`. Equivalent to the
+/// classical SCCP lattice (Wegman & Zadeck, 1991): `Unevaluated` ↔
+/// `Bottom`, `NonConst` ↔ `Top`. Names favour readability over the
+/// academic terms — readers familiar with the abstract-interpretation
+/// literature can mentally substitute Bottom/Top.
+///
+/// Why three states: `Option<Value>` (the previous design) collapsed
+/// "I haven't computed this yet" and "I know this isn't a constant"
+/// into the same `None`, which makes memoization unsound — a cached
+/// `None` can't say whether a re-attempt would succeed. The lattice
+/// fixes this at the type level.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Lattice {
+    /// No information yet. Default for un-bound locals and TIR kinds
+    /// the engine doesn't currently understand (e.g. `Call`, `Block`).
+    /// Stage 3+ may later refine an `Unevaluated` cell to `Const(_)`
+    /// once pure-call inlining lands.
+    Unevaluated,
+    /// Provably reduces to this value.
+    Const(Value),
+    /// Cannot be a reusable constant: a `let mut` binding, the result
+    /// of a runtime-only operation (e.g. `x = …`, division by zero),
+    /// or a fold whose operands are themselves `NonConst`.
+    NonConst,
+}
+
+impl Lattice {
+    /// Project to `Some(v)` only when the result is `Const`. The right
+    /// shorthand for callers whose only question is "do you have a
+    /// literal for me?" — the `Unevaluated` / `NonConst` distinction
+    /// is collapsed into `None`. When that distinction matters
+    /// (memoization, SCCP-style joins), pattern-match the variant
+    /// directly instead of going through this projection.
+    #[must_use]
+    pub fn as_const(&self) -> Option<Value> {
+        match self {
+            Self::Const(v) => Some(*v),
+            _ => None,
+        }
+    }
+}
 
 /// A typed compile-time value produced by the interpreter.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -107,17 +157,57 @@ impl Value {
 
 /// Partial evaluator over [`TirExpr`].
 ///
-/// Holds the type table needed to resolve operand widths. Future
-/// extensions (local-variable environment, step budget for loops,
-/// pure-call inlining via the `FlatPackage`) will live on this struct.
+/// Holds the type table needed to resolve operand widths and a
+/// per-function `env` mapping local indices to lattice values. Future
+/// extensions (step budget for loops, pure-call inlining via the
+/// `FlatPackage`) will live on this struct.
 pub struct Interpreter<'a> {
     type_table: &'a TypeTable,
+    /// Lattice values for `let`-bound locals in the *current function*.
+    /// Populated by the driving visitor via [`bind_local`] /
+    /// [`invalidate_local`]; cleared via [`enter_function`]. Reads of
+    /// `TirExprKind::Local` consult this map during folding.
+    ///
+    /// Locals not present in the map default to [`Lattice::Unevaluated`].
+    ///
+    /// [`bind_local`]: Self::bind_local
+    /// [`invalidate_local`]: Self::invalidate_local
+    /// [`enter_function`]: Self::enter_function
+    env: IndexMap<u32, Lattice>,
 }
 
 impl<'a> Interpreter<'a> {
     #[must_use]
     pub fn new(type_table: &'a TypeTable) -> Self {
-        Self { type_table }
+        Self {
+            type_table,
+            env: IndexMap::default(),
+        }
+    }
+
+    /// Reset the per-function environment. The driving visitor must call
+    /// this before walking each function body; otherwise a previous
+    /// function's bindings would leak into the next one (local indices
+    /// are unique per function, not project-wide).
+    pub fn enter_function(&mut self) {
+        self.env.clear();
+    }
+
+    /// Record a lattice value for a `let`-bound local. The driving
+    /// visitor calls this after walking a `Let` statement: pass
+    /// [`Lattice::Const`] for an immutable binding whose RHS reduced,
+    /// [`Lattice::NonConst`] for `let mut` or any RHS that could not be
+    /// reduced.
+    pub fn bind_local(&mut self, index: u32, lattice: Lattice) {
+        self.env.insert(index, lattice);
+    }
+
+    /// Mark a local as definitely non-constant from this point on. The
+    /// driving visitor calls this when it sees an `x = expr` assignment.
+    /// Conservative — we don't track flow-sensitive new values, just
+    /// invalidate the prior binding.
+    pub fn invalidate_local(&mut self, index: u32) {
+        self.env.insert(index, Lattice::NonConst);
     }
 
     /// Reduce `expr` as far as possible.
@@ -169,29 +259,66 @@ impl<'a> Interpreter<'a> {
     /// to slot tiri's local rewrites into each visited node. Today the
     /// rules are constant folding for Binary / Unary / Cast and the
     /// short-circuit identity simplifications for `&&` / `||`.
+    ///
+    /// `Local` nodes themselves are never rewritten in place: their env
+    /// values are read transparently when computing the parent
+    /// expression's fold (`x + 1` → fold by reading `x` from env, no
+    /// in-place mutation of the `Local` node). This keeps assignment
+    /// targets (`x = …`, `obj.f = …`, `arr[i] = …`) safely opaque.
     pub fn reduce_local(&mut self, expr: &mut TirExpr) -> bool {
-        if let Some(folded) = self.try_fold(expr) {
-            expr.kind = value_to_expr_kind(folded);
+        if let Lattice::Const(v) = self.try_fold(expr) {
+            expr.kind = value_to_expr_kind(v);
             return true;
         }
         rewrite_short_circuit(expr)
     }
 
-    /// Convenience: reduce `expr` and, if the result is a literal, return
-    /// its [`Value`]. Useful for unit-testing primitive-op semantics
-    /// without inspecting [`TirExprKind`].
-    pub fn reduce_to_value(&mut self, expr: &TirExpr) -> Option<Value> {
-        let reduced = self.reduce(expr);
-        self.literal_value(&reduced)
+    /// Reduce `expr` to a [`Lattice`] value without mutating the
+    /// caller's tree.
+    ///
+    /// This is the engine's canonical query API. Returns:
+    ///
+    /// - [`Lattice::Const(v)`] when `expr` evaluates to a known value
+    ///   (literal leaf, fully-reduced Binary/Unary/Cast, or a `Local`
+    ///   bound to `Const(_)` in env)
+    /// - [`Lattice::NonConst`] when `expr` is a `Local` known to be
+    ///   non-constant, has a `NonConst` operand, or is a fold that
+    ///   meets `Const` operands but evidently fails (e.g. div-by-zero,
+    ///   NaN-producing float op, `i32::MIN / -1`)
+    /// - [`Lattice::Unevaluated`] when the engine can't yet decide
+    ///   (un-bound `Local`, unsupported kind such as `Call` or `Block`)
+    pub fn reduce_to_lattice(&mut self, expr: &TirExpr) -> Lattice {
+        // First reduce children in place — a Const-Const fold inside a
+        // child is observable as a literal at the parent. This may turn
+        // a Binary into a literal (Const) or leave it as Binary if the
+        // fold failed.
+        let mut owned = expr.clone();
+        self.reduce_in_place(&mut owned);
+        // Compute the lattice of the (possibly partially-reduced)
+        // expression. `try_fold` handles Binary / Unary / Cast directly,
+        // so a Const/Const op whose runtime would trap reports
+        // `NonConst` rather than collapsing to `Unevaluated` because the
+        // node is structurally still a Binary. For every other kind
+        // `try_fold` returns `Unevaluated`; fall through to the literal
+        // / Local-env lookup.
+        match self.try_fold(&owned) {
+            Lattice::Unevaluated => self.expr_to_lattice(&owned),
+            other => other,
+        }
     }
 
-    /// Extract a [`Value`] from a leaf literal node, if `expr` is one.
-    fn literal_value(&self, expr: &TirExpr) -> Option<Value> {
+    /// Map a (possibly already-reduced) `TirExpr` to a `Lattice`. For
+    /// literal leaves this is straightforward; for a `Local` node the
+    /// env is consulted; for everything else the result is
+    /// `Unevaluated`.
+    fn expr_to_lattice(&self, expr: &TirExpr) -> Lattice {
         match &expr.kind {
-            TirExprKind::BoolLiteral(b) => Some(Value::Bool(*b)),
+            TirExprKind::BoolLiteral(b) => Lattice::Const(Value::Bool(*b)),
             TirExprKind::IntLiteral { value, .. } => {
-                let prim = int_primitive_of(expr.type_id, self.type_table)?;
-                Some(Value::Int {
+                let Some(prim) = int_primitive_of(expr.type_id, self.type_table) else {
+                    return Lattice::Unevaluated;
+                };
+                Lattice::Const(Value::Int {
                     value: *value,
                     prim,
                 })
@@ -202,40 +329,78 @@ impl<'a> Interpreter<'a> {
                 } else {
                     PrimitiveType::F64
                 };
-                Some(Value::Float {
+                Lattice::Const(Value::Float {
                     value: *value,
                     prim,
                 })
             }
-            _ => None,
+            TirExprKind::Local { index, .. } => {
+                self.env.get(index).copied().unwrap_or(Lattice::Unevaluated)
+            }
+            _ => Lattice::Unevaluated,
         }
     }
 
-    /// Try to fold a Binary / Unary / Cast node whose operands are all
-    /// already literals. Returns `None` for everything else (leaves,
-    /// unsupported kinds, runtime traps).
-    fn try_fold(&self, expr: &TirExpr) -> Option<Value> {
+    /// Try to fold a Binary / Unary / Cast node by looking up each
+    /// operand's lattice value (literal or env-resolved local). The
+    /// returned lattice mirrors operand state: any `Unevaluated` /
+    /// `NonConst` operand short-circuits the result, and an op-level
+    /// failure (div-by-zero, NaN, unsupported pair) is `NonConst`.
+    fn try_fold(&self, expr: &TirExpr) -> Lattice {
         match &expr.kind {
             TirExprKind::Binary { left, op, right } => {
-                let l = self.literal_value(left)?;
-                let r = self.literal_value(right)?;
-                eval_binary(l, *op, r)
+                let l = match self.expr_to_lattice(left) {
+                    Lattice::Const(v) => v,
+                    other => return other,
+                };
+                let r = match self.expr_to_lattice(right) {
+                    Lattice::Const(v) => v,
+                    other => return other,
+                };
+                option_to_lattice(eval_binary(l, *op, r))
             }
             TirExprKind::Unary { op, expr: inner } => {
-                let v = self.literal_value(inner)?;
-                eval_unary(*op, v)
+                let v = match self.expr_to_lattice(inner) {
+                    Lattice::Const(v) => v,
+                    other => return other,
+                };
+                option_to_lattice(eval_unary(*op, v))
             }
             TirExprKind::Cast { expr: inner, .. } => {
-                let target = int_primitive_of(expr.type_id, self.type_table)?;
+                let Some(target) = int_primitive_of(expr.type_id, self.type_table) else {
+                    return Lattice::Unevaluated;
+                };
+                // Resolve the cast input to its raw u64 bit pattern.
+                // Literal leaves carry the bits directly; for any other
+                // node (e.g. a Stage 1 env-resolved `Local`), recover
+                // the bits via the lattice — but only when the lattice
+                // value is itself an integer. Float / Bool / unresolved
+                // cases stay `Unevaluated` so the cast doesn't fabricate
+                // a bogus integer payload.
                 let raw = match &inner.kind {
                     TirExprKind::IntLiteral { value, .. } => *value,
                     TirExprKind::CharLiteral(c) => *c as u64,
-                    _ => return None,
+                    _ => match self.expr_to_lattice(inner) {
+                        Lattice::Const(Value::Int { value, .. }) => value,
+                        Lattice::Const(_) => return Lattice::Unevaluated,
+                        other => return other,
+                    },
                 };
-                Some(cast_int(raw, target))
+                Lattice::Const(cast_int(raw, target))
             }
-            _ => None,
+            _ => Lattice::Unevaluated,
         }
+    }
+}
+
+/// `Some(v)` ↦ `Const(v)`, `None` ↦ `NonConst`. Used at the boundary
+/// where a numeric-evaluation helper that still returns `Option<Value>`
+/// (because its failure modes are runtime traps, not "haven't tried")
+/// flows back into the lattice surface.
+fn option_to_lattice(opt: Option<Value>) -> Lattice {
+    match opt {
+        Some(v) => Lattice::Const(v),
+        None => Lattice::NonConst,
     }
 }
 
