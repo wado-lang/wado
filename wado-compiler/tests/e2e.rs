@@ -330,6 +330,7 @@ async fn run_http_request_async(
 
     let linker = common::linker(engine)?;
 
+    common::install_rustls_provider_for_tests();
     let state = common::WasiState {
         ctx: WasiCtxBuilder::new().build(),
         table: ResourceTable::new(),
@@ -337,6 +338,7 @@ async fn run_http_request_async(
         http_hooks: common::TestHttpCtx {
             mocks: outgoing_mocks,
         },
+        tls_ctx: wasmtime_wasi_tls::WasiTlsCtxBuilder::new().build(),
     };
     let mut store = Store::new(engine, state);
     // Set epoch deadline for timeout enforcement (HTTP tests use 5s default)

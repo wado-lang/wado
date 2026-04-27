@@ -1,0 +1,18 @@
+// Test: import types from wasi:tls and use Connector::new()
+//
+// Verifies that the wasi:tls bindings (lib/wasi/tls/) are reachable from user
+// code and that the component-model codegen can emit a function whose return
+// type is a bare WASI resource (Connector). Methods that return
+// `Future<Result<T, Error>>` are still blocked on the Result-error-type
+// codegen — see example/hello_tls.wado for context.
+use { Connector, Error } from "wasi:tls";
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout, Connector, Error {
+    let _conn = Connector::new();
+    println("wasi:tls types imported successfully");
+}
+
+__DATA__
+{"stdout": "wasi:tls types imported successfully\n"}

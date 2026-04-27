@@ -18,6 +18,18 @@ use wasmtime::{Config, Engine, Store};
 use wasmtime_wasi::{DirPerms, FilePerms, WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
 use wasmtime_wasi_http::WasiHttpCtx;
 use wasmtime_wasi_http::p3::{WasiHttpCtxView, WasiHttpHooks, WasiHttpView};
+use wasmtime_wasi_tls::{WasiTlsCtx, WasiTlsCtxBuilder, WasiTlsCtxView, WasiTlsView};
+
+/// Install the rustls process-level `CryptoProvider` exactly once. See the
+/// matching helper in `wado-cli/src/runtime.rs` for the rationale; the test
+/// harness needs the same setup so `WasiTlsCtxBuilder::new()` does not panic
+/// on the rustls auto-detect path.
+pub fn install_rustls_provider_for_tests() {
+    static INSTALLED: std::sync::Once = std::sync::Once::new();
+    INSTALLED.call_once(|| {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+    });
+}
 
 use wado_compiler::{
     CompileError, CompileFailure, CompilerHost, Diagnostic, OptLevel, SourceError,
@@ -391,6 +403,7 @@ pub struct WasiState {
     pub table: ResourceTable,
     pub http_ctx: WasiHttpCtx,
     pub http_hooks: TestHttpCtx,
+    pub tls_ctx: WasiTlsCtx,
 }
 
 impl WasiView for WasiState {
@@ -412,29 +425,42 @@ impl WasiHttpView for WasiState {
     }
 }
 
+impl WasiTlsView for WasiState {
+    fn tls(&mut self) -> WasiTlsCtxView<'_> {
+        WasiTlsCtxView {
+            ctx: &mut self.tls_ctx,
+            table: &mut self.table,
+        }
+    }
+}
+
 impl WasiState {
     /// Create a new state with captured stdout/stderr
     pub fn new_with_pipes(
         stdout: wasmtime_wasi::p2::pipe::MemoryOutputPipe,
         stderr: wasmtime_wasi::p2::pipe::MemoryOutputPipe,
     ) -> Self {
+        install_rustls_provider_for_tests();
         let ctx = WasiCtxBuilder::new().stdout(stdout).stderr(stderr).build();
         Self {
             ctx,
             table: ResourceTable::new(),
             http_ctx: WasiHttpCtx::new(),
             http_hooks: TestHttpCtx::new(),
+            tls_ctx: WasiTlsCtxBuilder::new().build(),
         }
     }
 
     /// Create a basic state (no I/O capture)
     pub fn new() -> Self {
+        install_rustls_provider_for_tests();
         let ctx = WasiCtxBuilder::new().build();
         Self {
             ctx,
             table: ResourceTable::new(),
             http_ctx: WasiHttpCtx::new(),
             http_hooks: TestHttpCtx::new(),
+            tls_ctx: WasiTlsCtxBuilder::new().build(),
         }
     }
 }
@@ -448,11 +474,12 @@ impl Default for WasiState {
 /// Backward-compat alias
 pub type CliWasiState = WasiState;
 
-/// Set up a linker for all test worlds (WASI + HTTP)
+/// Set up a linker for all test worlds (WASI + HTTP + TLS)
 pub fn linker(engine: &Engine) -> anyhow::Result<Linker<WasiState>> {
     let mut linker: Linker<WasiState> = Linker::new(engine);
     wasmtime_wasi::p3::add_to_linker(&mut linker)?;
     wasmtime_wasi_http::p3::add_to_linker(&mut linker)?;
+    wasmtime_wasi_tls::p3::add_to_linker(&mut linker)?;
     Ok(linker)
 }
 
@@ -674,6 +701,7 @@ pub fn run_wasm_with_full_options(
             builder.preopened_dir(host_path, guest_path, DirPerms::all(), FilePerms::all())?;
         }
         let ctx = builder.build();
+        install_rustls_provider_for_tests();
         let state = WasiState {
             ctx,
             table: ResourceTable::new(),
@@ -681,6 +709,7 @@ pub fn run_wasm_with_full_options(
             http_hooks: TestHttpCtx {
                 mocks: outgoing_mocks,
             },
+            tls_ctx: WasiTlsCtxBuilder::new().build(),
         };
         let mut store = Store::new(engine, state);
         // Set epoch deadline for timeout enforcement
