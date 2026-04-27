@@ -24,10 +24,11 @@
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::ModuleSource;
 use crate::package::Package;
-use crate::synthesis::common::synth_span;
+use crate::synthesis::common::{alloc_local, synth_span};
 use crate::tir::{
-    EffectRef, TirBlock, TirEffectOp, TirExpr, TirExprKind, TirField, TirGlobal, TirStmt,
-    TirStmtKind, TirStruct, TirTemplatePart, TypeId, TypeTable,
+    CallArg, EffectRef, FunctionKind, FunctionRef, InlineHint, TirBlock, TirEffectOp, TirExpr,
+    TirExprKind, TirField, TirFunction, TirGlobal, TirParam, TirPattern, TirStmt, TirStmtKind,
+    TirStruct, TirTemplatePart, TypeId, TypeTable,
 };
 
 /// Canonical identity of an effect: `(defining_module, name)`.
@@ -291,6 +292,377 @@ fn synthesize_dispatch_global(
         .get_mut(entry_source)
         .expect("entry module must exist");
     entry_module.globals.push(global);
+}
+
+/// Synthesise the per-(effect, op) `__effect_dispatch__<E>__<op>` wrapper
+/// function for one effect.
+///
+/// Each wrapper has the same signature as the operation itself
+/// (`<op_params> -> <op_ret>`) so call-site rewriting is a name swap.
+///
+/// Body shape:
+///
+/// ```text
+/// fn __effect_dispatch__<E>__<op>(<args>) -> <ret> {
+///     let __saved = global.get __effect_<E>;
+///     if let Some(d) = __saved {
+///         global.set __effect_<E> = d.outer;     // expose outer scope
+///         let __result = (d.op_<op>)(args);      // call the closure
+///         global.set __effect_<E> = __saved;     // restore
+///         return __result;
+///     }
+///     // Fallback path: no handler installed.
+///     // - WASI effect: call the existing CM-binding adapter.
+///     // - User effect: trap (effect-check should have ensured a handler).
+///     return __cm_binding__<E>_<op>(args);
+/// }
+/// ```
+///
+/// The outer-scope restore before the closure call implements algebraic
+/// effect forwarding: a handler method can call `<E>::<op>` again to
+/// delegate to the outer handler chain without infinite recursion.
+#[allow(dead_code)]
+fn synthesize_dispatch_wrappers(
+    project: &mut Package,
+    entry_source: &ModuleSource,
+    key: &EffectKey,
+    plan: &DispatchPlan,
+) {
+    let effect_module = key.0.clone();
+    let effect_name = key.1.clone();
+    let is_wasi = matches!(effect_module, ModuleSource::Wasi { .. });
+    let entry_module = project
+        .tir_modules
+        .get_mut(entry_source)
+        .expect("entry module must exist");
+    for op in &plan.operations {
+        let wrapper = build_dispatch_wrapper_function(
+            entry_source,
+            &effect_name,
+            op,
+            plan,
+            is_wasi,
+        );
+        entry_module.add_function(wrapper);
+    }
+}
+
+#[allow(dead_code)]
+fn build_dispatch_wrapper_function(
+    entry_source: &ModuleSource,
+    effect_name: &str,
+    op: &TirEffectOp,
+    plan: &DispatchPlan,
+    is_wasi: bool,
+) -> TirFunction {
+    let span = synth_span();
+    let op_name = &op.name;
+    let wrapper_name = plan
+        .wrapper_names
+        .get(op_name)
+        .expect("wrapper name registered")
+        .clone();
+    let return_type = op.return_type;
+    let global_name = plan.global_name.clone();
+    let nullable_ref_type_id = plan.nullable_ref_type_id;
+    let inner_ref_type_id = plan.inner_ref_type_id;
+
+    // Allocate locals: params, then __saved, __d (if-let binding), __result.
+    let mut params: Vec<TirParam> = Vec::with_capacity(op.params.len());
+    let mut local_types: Vec<TypeId> = Vec::new();
+    let mut next_local: u32 = 0;
+    for p in &op.params {
+        let local_index = alloc_local(&mut next_local, &mut local_types, p.type_id);
+        params.push(TirParam {
+            name: p.name.clone(),
+            type_id: p.type_id,
+            local_index,
+            is_mut: false,
+            default_expr: None,
+            span,
+        });
+    }
+    let saved_local = alloc_local(&mut next_local, &mut local_types, nullable_ref_type_id);
+    let d_local = alloc_local(&mut next_local, &mut local_types, inner_ref_type_id);
+    let result_local = if return_type == TypeTable::UNIT {
+        None
+    } else {
+        Some(alloc_local(&mut next_local, &mut local_types, return_type))
+    };
+
+    let arg_exprs: Vec<TirExpr> = params
+        .iter()
+        .map(|p| {
+            TirExpr::new(
+                TirExprKind::Local {
+                    index: p.local_index,
+                    name: p.name.clone(),
+                },
+                p.type_id,
+                span,
+            )
+        })
+        .collect();
+
+    let mut stmts: Vec<TirStmt> = Vec::new();
+
+    // let __saved = global.get __effect_<E>;
+    let global_get_expr = TirExpr::new(
+        TirExprKind::GlobalVarGet {
+            module_source: entry_source.clone(),
+            name: global_name.clone(),
+        },
+        nullable_ref_type_id,
+        span,
+    );
+    stmts.push(TirStmt::new(
+        TirStmtKind::Let {
+            name: "__saved".to_string(),
+            local_index: saved_local,
+            is_mut: false,
+            is_reactive: false,
+            type_id: nullable_ref_type_id,
+            value: global_get_expr,
+            skip_value_copy: true,
+        },
+        span,
+    ));
+
+    // Then-branch: handler installed.
+    let mut then_stmts: Vec<TirStmt> = Vec::new();
+    let d_local_expr = || {
+        TirExpr::new(
+            TirExprKind::Local {
+                index: d_local,
+                name: "__d".to_string(),
+            },
+            inner_ref_type_id,
+            span,
+        )
+    };
+
+    // global.set __effect_<E> = d.outer;
+    let outer_field_access = TirExpr::new(
+        TirExprKind::FieldAccess {
+            expr: Box::new(d_local_expr()),
+            field_index: 0,
+            field_name: "outer".to_string(),
+        },
+        nullable_ref_type_id,
+        span,
+    );
+    then_stmts.push(TirStmt::new(
+        TirStmtKind::Expr(TirExpr::new(
+            TirExprKind::GlobalVarSet {
+                module_source: entry_source.clone(),
+                name: global_name.clone(),
+                value: Box::new(outer_field_access),
+            },
+            TypeTable::UNIT,
+            span,
+        )),
+        span,
+    ));
+
+    // let __result = (d.op_<op>)(args);
+    let op_field_index = *plan.field_indices.get(op_name).expect("op field index");
+    let op_field_name = plan
+        .field_names
+        .get(op_name)
+        .expect("op field name")
+        .clone();
+    let op_field_type = *plan.field_types.get(op_name).expect("op field type");
+    let closure_field_access = TirExpr::new(
+        TirExprKind::FieldAccess {
+            expr: Box::new(d_local_expr()),
+            field_index: op_field_index,
+            field_name: op_field_name,
+        },
+        op_field_type,
+        span,
+    );
+    let indirect_call = TirExpr::new(
+        TirExprKind::IndirectCall {
+            callee: Box::new(closure_field_access),
+            args: arg_exprs.clone(),
+        },
+        return_type,
+        span,
+    );
+
+    if let Some(rl) = result_local {
+        then_stmts.push(TirStmt::new(
+            TirStmtKind::Let {
+                name: "__result".to_string(),
+                local_index: rl,
+                is_mut: false,
+                is_reactive: false,
+                type_id: return_type,
+                value: indirect_call,
+                skip_value_copy: false,
+            },
+            span,
+        ));
+    } else {
+        then_stmts.push(TirStmt::new(TirStmtKind::Expr(indirect_call), span));
+    }
+
+    // global.set __effect_<E> = __saved;
+    let saved_expr = TirExpr::new(
+        TirExprKind::Local {
+            index: saved_local,
+            name: "__saved".to_string(),
+        },
+        nullable_ref_type_id,
+        span,
+    );
+    then_stmts.push(TirStmt::new(
+        TirStmtKind::Expr(TirExpr::new(
+            TirExprKind::GlobalVarSet {
+                module_source: entry_source.clone(),
+                name: global_name.clone(),
+                value: Box::new(saved_expr),
+            },
+            TypeTable::UNIT,
+            span,
+        )),
+        span,
+    ));
+
+    // return __result;  /  return;
+    if let Some(rl) = result_local {
+        let result_expr = TirExpr::new(
+            TirExprKind::Local {
+                index: rl,
+                name: "__result".to_string(),
+            },
+            return_type,
+            span,
+        );
+        then_stmts.push(TirStmt::new(
+            TirStmtKind::Return {
+                value: Some(result_expr),
+            },
+            span,
+        ));
+    } else {
+        then_stmts.push(TirStmt::new(TirStmtKind::Return { value: None }, span));
+    }
+
+    let then_block = TirBlock::new(then_stmts, span);
+
+    // Else-branch: fallback.
+    let mut else_stmts: Vec<TirStmt> = Vec::new();
+    if is_wasi {
+        let cm_binding_name = format!("__cm_binding__{effect_name}_{op_name}");
+        let cm_call = TirExpr::new(
+            TirExprKind::Call {
+                func: FunctionRef {
+                    module_source: entry_source.clone(),
+                    name: cm_binding_name,
+                    monomorph_info: None,
+                    method_info: None,
+                },
+                type_args: vec![],
+                args: arg_exprs
+                    .iter()
+                    .cloned()
+                    .map(|e| CallArg::new(e, false))
+                    .collect(),
+            },
+            return_type,
+            span,
+        );
+        else_stmts.push(TirStmt::new(
+            TirStmtKind::Return {
+                value: Some(cm_call),
+            },
+            span,
+        ));
+    } else {
+        // User-defined effect: well-typed programs never reach the wrapper
+        // without a handler installed, since effect-check requires every
+        // call-site to have a `with E = h do { ... }` in scope. If we get
+        // here anyway, trap.
+        let trap_call = TirExpr::new(
+            TirExprKind::Call {
+                func: FunctionRef {
+                    module_source: ModuleSource::builtin(),
+                    name: "unreachable".to_string(),
+                    monomorph_info: None,
+                    method_info: None,
+                },
+                type_args: vec![],
+                args: vec![],
+            },
+            TypeTable::NEVER,
+            span,
+        );
+        else_stmts.push(TirStmt::new(TirStmtKind::Expr(trap_call), span));
+    }
+    let else_block = TirBlock::new(else_stmts, span);
+
+    // if let Some(d) = __saved { ... } else { fallback }.
+    let saved_pattern_scrutinee = TirExpr::new(
+        TirExprKind::Local {
+            index: saved_local,
+            name: "__saved".to_string(),
+        },
+        nullable_ref_type_id,
+        span,
+    );
+    let pattern = TirPattern::Variant {
+        enum_type: nullable_ref_type_id,
+        variant_name: "Some".to_string(),
+        bindings: vec![TirPattern::Binding {
+            name: "__d".to_string(),
+            local_index: d_local,
+            type_id: inner_ref_type_id,
+        }],
+        payload_type: inner_ref_type_id,
+    };
+    stmts.push(TirStmt::new(
+        TirStmtKind::IfLet {
+            scrutinee: saved_pattern_scrutinee,
+            pattern,
+            then_block,
+            else_block: Some(else_block),
+        },
+        span,
+    ));
+
+    let body = TirBlock::new(stmts, span);
+
+    TirFunction {
+        module_source: entry_source.clone(),
+        name: wrapper_name,
+        is_pub: false,
+        is_export: false,
+        is_async: false,
+        type_params: Vec::new(),
+        impl_type_params: Vec::new(),
+        monomorph_info: None,
+        method_info: None,
+        params,
+        return_type,
+        task_return_type: None,
+        effects: Vec::new(),
+        stores: vec![],
+        body: Some(body),
+        span,
+        local_count: next_local,
+        local_types,
+        address_taken_locals: IndexSet::default(),
+        stores_aliased_locals: IndexSet::default(),
+        is_cm_binding: false,
+        is_cm_export: false,
+        is_ambient: false,
+        inline_hint: InlineHint::Auto,
+        comp_features: 0,
+        export_name: None,
+        allocator_tag: None,
+        kind: FunctionKind::Regular,
+    }
 }
 
 /// Run the effect dispatch synthesis pass on the package.
