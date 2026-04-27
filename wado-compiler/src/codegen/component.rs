@@ -613,6 +613,15 @@ fn emit_cm_val_type(
             {
                 return ComponentValType::Type(idx);
             }
+            // Bare resource return types (e.g. `fn new() -> Connector`).
+            // The Result/Option/etc. branches above already short-circuit
+            // own resources by Wado-name; this path catches the case where
+            // the resource is returned directly without a wrapper.
+            if let Type::Named(named) = ty
+                && let Some(&idx) = own_resource_type_indices.get(&named.name)
+            {
+                return ComponentValType::Type(idx);
+            }
             // Complex types (e.g. WASI records like Instant) use shared type gen
             if let (Some(type_gen), Some(proj)) = (shared_type_gen, project) {
                 type_gen.set_next_idx(*local_type_idx);

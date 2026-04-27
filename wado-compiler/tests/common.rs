@@ -18,6 +18,7 @@ use wasmtime::{Config, Engine, Store};
 use wasmtime_wasi::{DirPerms, FilePerms, WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
 use wasmtime_wasi_http::WasiHttpCtx;
 use wasmtime_wasi_http::p3::{WasiHttpCtxView, WasiHttpHooks, WasiHttpView};
+use wasmtime_wasi_tls::{WasiTlsCtx, WasiTlsCtxBuilder, WasiTlsCtxView, WasiTlsView};
 
 use wado_compiler::{
     CompileError, CompileFailure, CompilerHost, Diagnostic, OptLevel, SourceError,
@@ -391,6 +392,7 @@ pub struct WasiState {
     pub table: ResourceTable,
     pub http_ctx: WasiHttpCtx,
     pub http_hooks: TestHttpCtx,
+    pub tls_ctx: WasiTlsCtx,
 }
 
 impl WasiView for WasiState {
@@ -412,6 +414,15 @@ impl WasiHttpView for WasiState {
     }
 }
 
+impl WasiTlsView for WasiState {
+    fn tls(&mut self) -> WasiTlsCtxView<'_> {
+        WasiTlsCtxView {
+            ctx: &mut self.tls_ctx,
+            table: &mut self.table,
+        }
+    }
+}
+
 impl WasiState {
     /// Create a new state with captured stdout/stderr
     pub fn new_with_pipes(
@@ -424,6 +435,7 @@ impl WasiState {
             table: ResourceTable::new(),
             http_ctx: WasiHttpCtx::new(),
             http_hooks: TestHttpCtx::new(),
+            tls_ctx: WasiTlsCtxBuilder::new().build(),
         }
     }
 
@@ -435,6 +447,7 @@ impl WasiState {
             table: ResourceTable::new(),
             http_ctx: WasiHttpCtx::new(),
             http_hooks: TestHttpCtx::new(),
+            tls_ctx: WasiTlsCtxBuilder::new().build(),
         }
     }
 }
@@ -448,11 +461,12 @@ impl Default for WasiState {
 /// Backward-compat alias
 pub type CliWasiState = WasiState;
 
-/// Set up a linker for all test worlds (WASI + HTTP)
+/// Set up a linker for all test worlds (WASI + HTTP + TLS)
 pub fn linker(engine: &Engine) -> anyhow::Result<Linker<WasiState>> {
     let mut linker: Linker<WasiState> = Linker::new(engine);
     wasmtime_wasi::p3::add_to_linker(&mut linker)?;
     wasmtime_wasi_http::p3::add_to_linker(&mut linker)?;
+    wasmtime_wasi_tls::p3::add_to_linker(&mut linker)?;
     Ok(linker)
 }
 
@@ -681,6 +695,7 @@ pub fn run_wasm_with_full_options(
             http_hooks: TestHttpCtx {
                 mocks: outgoing_mocks,
             },
+            tls_ctx: WasiTlsCtxBuilder::new().build(),
         };
         let mut store = Store::new(engine, state);
         // Set epoch deadline for timeout enforcement

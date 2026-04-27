@@ -4,6 +4,7 @@ use wasmtime::{Config, Engine, OptLevel, ProfilingStrategy, Store};
 use wasmtime_wasi::{DirPerms, FilePerms, WasiCtx, WasiCtxView, WasiView};
 use wasmtime_wasi_http::WasiHttpCtx;
 use wasmtime_wasi_http::p3::{WasiHttpCtxView, WasiHttpView};
+use wasmtime_wasi_tls::{WasiTlsCtx, WasiTlsCtxBuilder, WasiTlsCtxView, WasiTlsView};
 
 use crate::http_hooks::WadoHttpHooks;
 
@@ -12,6 +13,7 @@ pub struct WasiState {
     table: ResourceTable,
     http: WasiHttpCtx,
     http_hooks: WadoHttpHooks,
+    tls: WasiTlsCtx,
 }
 
 impl WasiState {
@@ -34,11 +36,13 @@ impl WasiState {
         let table = ResourceTable::new();
         let http = WasiHttpCtx::new();
         let http_hooks = WadoHttpHooks::new();
+        let tls = WasiTlsCtxBuilder::new().build();
         Ok(Self {
             ctx,
             table,
             http,
             http_hooks,
+            tls,
         })
     }
 }
@@ -58,6 +62,15 @@ impl WasiHttpView for WasiState {
             ctx: &mut self.http,
             table: &mut self.table,
             hooks: &mut self.http_hooks,
+        }
+    }
+}
+
+impl WasiTlsView for WasiState {
+    fn tls(&mut self) -> WasiTlsCtxView<'_> {
+        WasiTlsCtxView {
+            ctx: &mut self.tls,
+            table: &mut self.table,
         }
     }
 }
@@ -173,5 +186,6 @@ pub fn create_linker(engine: &Engine) -> Result<Linker<WasiState>> {
     let mut linker: Linker<WasiState> = Linker::new(engine);
     wasmtime_wasi::p3::add_to_linker(&mut linker)?;
     wasmtime_wasi_http::p3::add_to_linker(&mut linker)?;
+    wasmtime_wasi_tls::p3::add_to_linker(&mut linker)?;
     Ok(linker)
 }
