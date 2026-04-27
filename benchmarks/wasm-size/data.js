@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777327809056,
+  "lastUpdate": 1777333118180,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -17173,6 +17173,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/f4761822048c33d3af054200cbede8781213a1b9"
         },
         "date": 1777327808745,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8982,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19030,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 1524496,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e14fc87d59c4a0bcb213d4caa2c2c01daeb61b16",
+          "message": "Merge pull request #947 from wado-lang/claude/add-primitive-type-ops-gs4HE\n\nfeat(tiri): fold primitive casts and bool/char comparisons",
+          "timestamp": "2026-04-28T08:33:28+09:00",
+          "tree_id": "ad20c1ab84ba515a834ab7e9be67086f06777dd4",
+          "url": "https://github.com/wado-lang/wado/commit/e14fc87d59c4a0bcb213d4caa2c2c01daeb61b16"
+        },
+        "date": 1777333117892,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
