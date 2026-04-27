@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777327104630,
+  "lastUpdate": 1777327809056,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -17129,6 +17129,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/9fe50c76e231dae101f002cc181a22088c23ca29"
         },
         "date": 1777327104366,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8982,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19030,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 1524496,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f4761822048c33d3af054200cbede8781213a1b9",
+          "message": "Merge pull request #944 from wado-lang/claude/bundled-handlers-effect-resolver-ndYVB\n\nfeat(effect-handler): land bundled-handler form `with &mut h do`",
+          "timestamp": "2026-04-28T07:04:57+09:00",
+          "tree_id": "2d2fbcb37a0a07bdfd90e3760dec694114257922",
+          "url": "https://github.com/wado-lang/wado/commit/f4761822048c33d3af054200cbede8781213a1b9"
+        },
+        "date": 1777327808745,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
