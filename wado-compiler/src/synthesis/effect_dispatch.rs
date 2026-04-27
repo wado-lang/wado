@@ -63,6 +63,70 @@ fn build_effect_index(project: &Package) -> IndexMap<EffectKey, EffectMeta> {
     out
 }
 
+/// Identify which effects need dispatch infrastructure.
+///
+/// An effect is "active" iff at least one user-written `impl <Effect> for
+/// <Type>` block exists for it in the package. Effects without any impl
+/// don't need a dispatch struct / global / wrapper triple — they always
+/// route through the WASI CM binding (or, for user-defined effects with
+/// no impl, were already rejected by effect-check).
+///
+/// `impl_index` is keyed by bare effect name (resolver enforces no name
+/// collisions across modules). When the effect index has multiple
+/// entries with the same name (in distinct modules), all of them are
+/// flagged active so the dispatch infrastructure attaches to whichever
+/// `EffectKey` the impl-walking pass canonicalises against.
+#[allow(dead_code)]
+fn identify_active_effects(
+    effect_index: &IndexMap<EffectKey, EffectMeta>,
+    impl_index: &IndexMap<HandlerImplKey, HandlerImplInfo>,
+) -> IndexSet<EffectKey> {
+    let mut out: IndexSet<EffectKey> = IndexSet::default();
+    for (_, effect_name) in impl_index.keys() {
+        for (key, _) in effect_index {
+            if &key.1 == effect_name {
+                out.insert(key.clone());
+            }
+        }
+    }
+    out
+}
+
+/// All the bookkeeping needed to emit / refer to the dispatch
+/// infrastructure for a single effect.
+///
+/// A `DispatchPlan` is built once per active effect by
+/// `synthesize_dispatch_infrastructure` and consumed by the lowering
+/// (`lower_with_handler`) and call-site rewriting
+/// (`rewrite_call_sites_to_wrappers`) passes.
+#[allow(dead_code)]
+#[derive(Debug)]
+struct DispatchPlan {
+    /// `TypeId` of the synthesised `__Dispatch_<E>` struct.
+    struct_type_id: TypeId,
+    /// `TypeId` of `Option<&__Dispatch_<E>>` — the global's runtime type
+    /// and the type of `outer` / dispatch wrapper-saved values.
+    nullable_ref_type_id: TypeId,
+    /// `TypeId` of `&__Dispatch_<E>` — handed to `Option::Some` when
+    /// installing a fresh dispatch record.
+    inner_ref_type_id: TypeId,
+    /// Name of the synthesised `__effect_<E>` mutable global.
+    global_name: String,
+    /// Operation name → dispatch wrapper function name
+    /// (`__effect_dispatch__<E>__<op>`).
+    wrapper_names: IndexMap<String, String>,
+    /// Operation name → dispatch struct field name (`op_<op>`).
+    field_names: IndexMap<String, String>,
+    /// Operation name → field type (`fn(<op_params>) -> <op_ret>`).
+    field_types: IndexMap<String, TypeId>,
+    /// Operation name → 0-based field index in `__Dispatch_<E>`. The
+    /// `outer` field always sits at index 0; ops start at 1.
+    field_indices: IndexMap<String, u32>,
+    /// Cached operation declarations (cloned from `EffectMeta`) so the
+    /// wrapper / closure synth doesn't have to walk back to the index.
+    operations: Vec<TirEffectOp>,
+}
+
 /// Run the effect dispatch synthesis pass on the package.
 ///
 /// Returns a `Result` so a future implementation that rejects malformed
