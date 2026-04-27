@@ -1,25 +1,45 @@
-//! Effect handler dispatch synthesis (Phase 3 of WEP 2026-04-11).
+//! Effect handler dispatch synthesis (Phase 4 of WEP 2026-04-11).
 //!
 //! Runs after effect-check / stores-check, before link/monomorphize.
 //!
-//! MVP scope (cross-function-boundary dispatch is deferred to Phase 4):
-//! 1. Rewrite `Resume { value }` to `Return { value }` in every method
-//!    inside an `impl <Effect> for <Type>` block.
-//! 2. Replace each `WithHandler { bindings, body, .. }` node with a plain
-//!    `Block(body)` whose body has every direct `<E>::<op>(args)` call
-//!    statically devirtualised to a `MethodCall { receiver: handler, .. }`
-//!    on the bound handler. Recognises both shapes the resolver and CM
-//!    binding pass produce: the WASI rewriting `__cm_binding__<E>_<op>`
-//!    and the user-effect namespaced shape `<op>` in
-//!    `Local{path: "<E>"}` from `CalleeRef::local_namespace`.
+//! For every effect that has at least one user-written `impl E for T`
+//! block, the pass emits the dispatch infrastructure described in the
+//! WEP and rewrites the program to route every effect-operation call
+//! through it:
 //!
-//! See WEP 2026-04-11 for the full design (per-effect global +
-//! `__Dispatch_<E>` struct + dispatch wrapper functions). Static
-//! devirtualisation only handles direct calls inside the do-block body;
-//! calls reached through helper functions invoked from the body keep
-//! routing through the existing CM binding (for WASI) or fail to resolve
-//! (for user effects). The proper dispatch wrapper path is reserved for
-//! the cross-function-boundary follow-up.
+//! 1. A per-effect Wasm GC struct `__Dispatch_<E>` with a recursive
+//!    `outer: Option<&__Dispatch_<E>>` field plus one
+//!    `fn(<op_params>) -> <op_ret>` closure field per declared
+//!    operation.
+//! 2. A per-effect mutable global
+//!    `__effect_<E>: Option<&__Dispatch_<E>>` initialised to `null`.
+//! 3. One `__effect_dispatch__<E>__<op>` wrapper function per
+//!    operation. Body: read the global, restore `outer` (so handler
+//!    bodies see the outer scope and can self-delegate), call the
+//!    closure, re-install the saved value, and return the result. If
+//!    no handler is installed, fall back to the existing CM binding
+//!    adapter (WASI effects) or trap (user-defined effects).
+//! 4. `WithHandler { bindings, body }` lowers to a desugared block
+//!    that, for each binding (in source order), saves the global,
+//!    binds the handler value to a fresh local, builds closures
+//!    capturing that local and forwarding to the bound `impl E for T`
+//!    methods, populates a fresh `__Dispatch_<E>` struct, installs
+//!    the global, runs the body, and restores the saved value on
+//!    exit (in reverse install order).
+//! 5. Every `<E>::<op>` call site is rewritten to call the wrapper —
+//!    both the WASI-binding shape (`__cm_binding__<E>_<op>`) and the
+//!    user-effect namespaced shape (`<op>` in `Local{path: "<E>"}`).
+//!    Calls inside `__effect_dispatch__*` wrappers and
+//!    `__cm_binding__*` adapters are skipped to keep the WASI
+//!    fallback path reachable.
+//! 6. `Resume { value }` inside `impl E for T` method bodies is
+//!    lowered to `Return { value }` — the MVP has no post-resume
+//!    semantics.
+//!
+//! Operations the installed handler does not implement (the `..` rest
+//! pattern in `impl Effect for T`) get a trapping stub closure
+//! populated into the dispatch struct so the dispatch global is
+//! always fully populated.
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::LocalMethodName;
@@ -516,7 +536,7 @@ fn build_dispatch_wrapper_function(
         TirStmtKind::Expr(TirExpr::new(
             TirExprKind::GlobalVarSet {
                 module_source: entry_source.clone(),
-                name: global_name.clone(),
+                name: global_name,
                 value: Box::new(saved_expr),
             },
             TypeTable::UNIT,
@@ -696,7 +716,7 @@ struct LocalScope {
 }
 
 #[allow(dead_code)]
-impl<'a> LowerCtx<'a> {
+impl LowerCtx<'_> {
     fn alloc_local(&mut self, ty: TypeId) -> u32 {
         let scope = self.scopes.last_mut().expect("at least one scope");
         let idx = scope.next_local;
