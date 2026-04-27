@@ -32,10 +32,10 @@ impl Counter for Inner {
 export fn run() with Stdout {
     let outer = Outer {};
     let inner = Inner {};
-    with Counter = &outer do {
+    with Counter => &outer do {
         let mut a = 0;
         let mut b = 0;
-        with Counter = &inner do {
+        with Counter => &inner do {
             inside_label: {
                 a = Counter::next();
                 break inside_label;

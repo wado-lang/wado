@@ -2509,7 +2509,7 @@ pub enum TirExprKind {
         parts: Vec<TirTemplatePart>,
     },
 
-    /// Effect handler installation: `with E1 = h1, ... do { body }`.
+    /// Effect handler installation: `with E1 => h1, ... do { body }`.
     /// See `docs/wep-2026-04-11-effect-handler.md`.
     ///
     /// Each binding installs a handler for one effect for the duration of `body`.
@@ -2532,7 +2532,7 @@ pub enum TirExprKind {
     },
 }
 
-/// One `Effect = handler` binding inside a `with ... do` block.
+/// One `Effect => handler` binding inside a `with ... do` block.
 #[derive(Debug, Clone)]
 pub struct TirHandlerBinding {
     /// The effect being handled. `None` is reserved for bundled handlers

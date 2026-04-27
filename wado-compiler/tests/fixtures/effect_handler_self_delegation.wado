@@ -43,8 +43,8 @@ impl Counter for OffsetCounter {
 export fn run() with Stdout {
     let mut base = BaseCounter { value: 0 };
     let offset = OffsetCounter { offset: 1000 };
-    with Counter = &mut base do {
-        with Counter = &offset do {
+    with Counter => &mut base do {
+        with Counter => &offset do {
             let a = Counter::next();    // 1001 (base.value -> 1, +1000)
             let b = Counter::next();    // 1002 (base.value -> 2, +1000)
             println(`{a},{b}`);

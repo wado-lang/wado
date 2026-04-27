@@ -9042,7 +9042,7 @@ fn rewrite_calls_in_expr(
         }
         TirExprKind::WithHandler { bindings, body, .. } => {
             // Walk the handler value and the do-block body so calls
-            // inside `with E = h do { ... }` get the same adapter-binding
+            // inside `with E => h do { ... }` get the same adapter-binding
             // rewrite the rest of the function gets. The effect-dispatch
             // synthesis pass that runs next consumes
             // `__cm_binding__<E>_<op>` Calls and routes them through
@@ -9320,7 +9320,7 @@ fn collect_effect_calls_in_expr(
         }
         TirExprKind::WithHandler { bindings, body, .. } => {
             // Walk the handler value and the do-block body so effect calls
-            // reached only from inside `with E = h do { ... }` (which the
+            // reached only from inside `with E => h do { ... }` (which the
             // effect-dispatch synthesis later routes through wrapper
             // functions whose else-branch falls back to the CM-binding
             // adapter) still trigger adapter generation here.

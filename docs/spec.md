@@ -4024,7 +4024,15 @@ See `docs/wep-2026-01-12-value-semantics-and-stores.md` for detailed design rati
 
 ### Handlers
 
-See `docs/wep-2026-01-27-effect-system-design.md` for handler syntax, resource-as-effect, and effect propagation design.
+A handler is an `impl Effect for Type` whose methods may use `resume value` to deliver a value to the suspended caller. The `with E => h do { body }` block installs `h` as the handler for effect `E` for the duration of `body`. The `=>` arrow reads as a dispatch binding ("calls to `E` go to `h`"); it is not an assignment, since each `with` pushes onto a per-effect handler chain that is restored on exit.
+
+```wado
+with Stdin => &mut mock do { ... }
+with Stdin => &mut s, Stdout => &mut o do { ... }
+with &mut bundle do { ... }                       // bundled (omits effect name)
+```
+
+See `docs/wep-2026-01-27-effect-system-design.md` for resource-as-effect and effect propagation design, and `docs/wep-2026-04-11-effect-handler.md` for handler syntax, dispatch lowering, and `MockCM`.
 
 ## World System
 

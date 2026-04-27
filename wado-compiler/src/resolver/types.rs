@@ -285,7 +285,7 @@ pub enum TypeError {
     /// to an `impl Effect for Type` block (see WEP 2026-04-11).
     ResumeOutsideHandler { span: Span },
 
-    /// `with E = h do { ... }` clause where the handler value's type
+    /// `with E => h do { ... }` clause where the handler value's type
     /// does not implement effect `E`.
     HandlerEffectNotImplemented {
         type_name: String,
@@ -296,10 +296,10 @@ pub enum TypeError {
     /// Bundled-handler form `with h do { ... }` (no effect on LHS) — not yet
     /// implemented. The full form requires enumerating every effect the
     /// handler's type implements; the MVP only supports the explicit
-    /// `with E = h` form.
+    /// `with E => h` form.
     BundledHandlerNotSupported { span: Span },
 
-    /// `with E = h do` clause where `E` is not a known effect declaration
+    /// `with E => h do` clause where `E` is not a known effect declaration
     /// (it might be a regular trait, an unrelated type, or an unknown name).
     NotAnEffect { name: String, span: Span },
 }
@@ -561,14 +561,14 @@ impl std::fmt::Display for TypeError {
             TypeError::BundledHandlerNotSupported { span } => {
                 write!(
                     f,
-                    "{}:{}: bundled effect handlers (`with h do`) are not yet implemented; use `with E = h do` instead",
+                    "{}:{}: bundled effect handlers (`with h do`) are not yet implemented; use `with E => h do` instead",
                     span.line, span.column
                 )
             }
             TypeError::NotAnEffect { name, span } => {
                 write!(
                     f,
-                    "{}:{}: '{}' is not an effect; only effect names are valid in `with E = h do` clauses",
+                    "{}:{}: '{}' is not an effect; only effect names are valid in `with E => h do` clauses",
                     span.line, span.column, name
                 )
             }
@@ -795,13 +795,13 @@ impl From<TypeError> for crate::compiler_host::Diagnostic {
             ),
             TypeError::BundledHandlerNotSupported { span } => (
                 Code::UnsupportedFeature,
-                "bundled effect handlers (`with h do`) are not yet implemented; use `with E = h do` instead".to_string(),
+                "bundled effect handlers (`with h do`) are not yet implemented; use `with E => h do` instead".to_string(),
                 *span,
             ),
             TypeError::NotAnEffect { name, span } => (
                 Code::UnknownType,
                 format!(
-                    "'{name}' is not an effect; only effect names are valid in `with E = h do` clauses"
+                    "'{name}' is not an effect; only effect names are valid in `with E => h do` clauses"
                 ),
                 *span,
             ),

@@ -1688,7 +1688,7 @@ impl<'a> Unparser<'a> {
             }
             if let Some(effect) = &binding.effect {
                 self.unparse_type(effect);
-                self.output.push_str(" = ");
+                self.output.push_str(" => ");
             }
             self.unparse_expr(&binding.handler);
         }
@@ -3264,7 +3264,7 @@ fn unparse_expr_into(expr: &Expr, output: &mut String, _parens_for_binary: bool)
                 }
                 if let Some(effect) = &binding.effect {
                     unparse_type_into(effect, output);
-                    output.push_str(" = ");
+                    output.push_str(" => ");
                 }
                 unparse_expr_into(&binding.handler, output, false);
             }
@@ -5031,7 +5031,7 @@ impl<'a> TirUnparser<'a> {
                     }
                     if let Some(eff) = &binding.effect {
                         self.output.push_str(eff.name());
-                        self.output.push_str(" = ");
+                        self.output.push_str(" => ");
                     }
                     self.unparse_expr(&binding.handler);
                 }

@@ -4,7 +4,7 @@ Status: Draft
 
 ## Implementation Status
 
-- [x] Front-end (lexer / AST / parser / unparser): `with E = h do { ... }`,
+- [x] Front-end (lexer / AST / parser / unparser): `with E => h do { ... }`,
       `resume value`, and `..` rest in `impl Effect for Type` blocks.
 - [x] Resolver / effect-check: track installed handlers in scope and skip
       handled effects when checking caller requirements.
@@ -229,9 +229,9 @@ run. Its scope:
 - New negative fixtures (already covered by Phase 2 diagnostics, just
   verify they reject):
   - `resume` outside a handler method body
-  - `with E = h do` where `h: T` does not `impl E for T`
-  - `with NotAnEffect = h do` (e.g. `with i32 = 0 do`)
-  - bundled handler form (`with &mut h do` without `Effect =`), pending
+  - `with E => h do` where `h: T` does not `impl E for T`
+  - `with NotAnEffect => h do` (e.g. `with i32 => 0 do`)
+  - bundled handler form (`with &mut h do` without `Effect =>`), pending
     full implementation
 
 ## Context
@@ -278,12 +278,12 @@ Handler implementations add `&self` or `&mut self` to access the handler's state
 
 ### Using Handlers
 
-The `with Effect = value do { ... }` block installs a handler for the scope of the `do` block:
+The `with Effect => value do { ... }` block installs a handler for the scope of the `do` block. The `=>` arrow reads as a dispatch binding ("calls to `Effect` go to `value`"); it mirrors the match-arm arrow and is deliberately not `=`, since the operation pushes a handler onto a per-effect stack rather than performing assignment.
 
 ```wado
 fn test_input() {
     let mut mock = MockStdin { responses: ["hello", "world"], index: 0 };
-    with Stdin = &mut mock do {
+    with Stdin => &mut mock do {
         let a = Stdin::read_line();  // "hello"
         let b = Stdin::read_line();  // "world"
     }
@@ -294,7 +294,7 @@ fn test_input() {
 Multiple handlers:
 
 ```wado
-with Stdin = &mut mock_stdin, Stdout = &mut mock_stdout do {
+with Stdin => &mut mock_stdin, Stdout => &mut mock_stdout do {
     // ...
 }
 ```
@@ -323,7 +323,7 @@ impl Stdin for LoggingStdin {
 // Caller must have Stdout (handler method's effect), but not Stdin (handled)
 fn test_logging() with Stdout {
     let mock = LoggingStdin { response: "mocked" };
-    with Stdin = &mock do {
+    with Stdin => &mock do {
         let line = Stdin::read_line();
     }
 }
@@ -392,7 +392,7 @@ Handlers only handle the effects they declare. All other effects forward to the 
 
 ```wado
 let mock = MockClient;
-with Client = &mock do {
+with Client => &mock do {
     let headers = Fields::new();    // Fields is not handled → forwards to outer scope
     let req = Request::new(...);    // Request is not handled → forwards to outer scope
     let resp = Client::send(req);   // Client IS handled → goes to MockClient
@@ -424,7 +424,7 @@ impl Client for CachingClient {
 
 export fn run() with Stdout, Client {
     let mut cache = TreeMap::<String, Response>::new();
-    with Client = &mut CachingClient { cache: &mut cache } do {
+    with Client => &mut CachingClient { cache: &mut cache } do {
         app();
     }
 }
@@ -437,8 +437,8 @@ Handlers nest naturally. Inner handlers override specific effects; unhandled eff
 ```wado
 let mut mock_stdout = MockStdout { captured: [] };
 let mock_client = MockClient;
-with Stdout = &mut mock_stdout do {
-    with Client = &mock_client do {
+with Stdout => &mut mock_stdout do {
+    with Client => &mock_client do {
         println("sending...");   // Stdout → MockStdout (outer handler)
         Client::send(req);       // Client → MockClient (inner handler)
     }
@@ -605,8 +605,8 @@ When a type implements multiple effects, listing each one in `with` is verbose. 
 
 ```wado
 // Explicit: list each effect separately
-with Stream<u8> = &mut cm, StreamWritable<u8> = &mut cm,
-     Future<T> = &mut cm, FutureWritable<T> = &mut cm do { ... }
+with Stream<u8> => &mut cm, StreamWritable<u8> => &mut cm,
+     Future<T> => &mut cm, FutureWritable<T> => &mut cm do { ... }
 
 // Bundled: handle all effects MockCM implements
 with &mut cm do { ... }
@@ -615,7 +615,7 @@ with &mut cm do { ... }
 Multiple handlers compose naturally:
 
 ```wado
-with &mut cm, Stdout = &mut stdout, Client = &mut client do {
+with &mut cm, Stdout => &mut stdout, Client => &mut client do {
     run();
 }
 ```
@@ -664,7 +664,7 @@ impl MockStdout {
 test "println captures output" {
     let mut cm = MockCM::new();
     let mut stdout = MockStdout { streams: [] };
-    with &mut cm, Stdout = &mut stdout do {
+    with &mut cm, Stdout => &mut stdout do {
         println("hello");
         println("world");
         // drain() must be called inside MockCM scope (fake handles are only valid here)
@@ -731,7 +731,7 @@ test "http-get fetches and prints" {
         response_body: `{"origin": "127.0.0.1"}`,
         status: 200,
     };
-    with &mut cm, Stdout = &mut stdout, Client = &mut client do {
+    with &mut cm, Stdout => &mut stdout, Client => &mut client do {
         run();  // example/http-get.wado's export fn run()
         assert client.requests[0] == "/get";
         let output = stdout.drain();
@@ -794,8 +794,8 @@ test "timing middleware records elapsed time" {
     let downstream = MockHandler { status: 200, body: "ok" };
     let mut timing = TimingMiddleware { log: [] };
     with &mut cm do {
-        with Handler = &downstream do {
-            with Handler = &mut timing do {
+        with Handler => &downstream do {
+            with Handler => &mut timing do {
                 let req = create_test_request("/api");
                 let resp = Handler::handle(req);
                 assert resp matches { Ok(_) };
@@ -831,7 +831,7 @@ for a TypeScript token of that name).
 
 #### Handler expressions are restricted to unary expressions
 
-Inside `with E1 = handler do { ... }`, the `handler` slot is parsed
+Inside `with E1 => handler do { ... }`, the `handler` slot is parsed
 with `parse_unary_expr`, which covers references (`&h`, `&mut h`),
 prefix-`*` deref, `!`/`~`/`-`, identifiers, calls, method calls, and
 field/index access. It deliberately stops short of:
@@ -844,7 +844,7 @@ This keeps the grammar unambiguous: stopping at unary level prevents the
 handler expression from greedily eating the trailing `,` or `do` token
 that closes the binding list. Cases that need the excluded forms must
 wrap the handler in parentheses, e.g.
-`with E = (h as &mut MockE) do { ... }`.
+`with E => (h as &mut MockE) do { ... }`.
 
 ### Dispatch Mechanism: funcref vtable + Wasm Global
 
@@ -895,7 +895,7 @@ The outer-scope restoration before `call_ref` ensures that handler method bodies
 ### Compilation of `with ... do`
 
 ```wado
-with Stdout = &mut mock do { body }
+with Stdout => &mut mock do { body }
 ```
 
 Compiles to:

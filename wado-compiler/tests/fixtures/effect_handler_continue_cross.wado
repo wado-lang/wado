@@ -1,4 +1,4 @@
-// `continue` crossing a `with E = h do { ... }` body must restore the
+// `continue` crossing a `with E => h do { ... }` body must restore the
 // per-effect dispatch global. The `while` loop is declared *outside*
 // the `with`, so `continue` exits the do-block to retry the loop
 // header — without the fix, the inner handler's dispatch struct
@@ -38,7 +38,7 @@ fn helper() -> i32 {
     let mut iters = 0;
     while iters < 3 {
         iters += 1;
-        with Counter = &inner do {
+        with Counter => &inner do {
             if iters == 2 {
                 continue;
             }
@@ -51,7 +51,7 @@ fn helper() -> i32 {
 
 export fn run() with Stdout {
     let outer = Outer {};
-    with Counter = &outer do {
+    with Counter => &outer do {
         let r = helper();
         println(`r={r}`);
     }
