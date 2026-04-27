@@ -351,16 +351,22 @@ impl GenContext {
         return result;
     }
 
-    /// Returns true if the rule is safe AND cheap to scan as a predicate prefix.
+    /// Returns true if the rule is safe to scan as a predicate prefix.
     ///
     /// Left-recursive (LR) rules have faithful `scan_X_atom` / `scan_X_prec` /
-    /// `scan_X_lr_N` generated for them so they can be correctly consumed by
-    /// nested scans. However, at the top level a full LR-rule scan expands to
-    /// a deep traversal (precedence climbing over every suffix operator), which
-    /// is orders of magnitude more expensive than parsing the rule with
-    /// backtracking-based dispatch. Group-level dispatch (Stage C) therefore
-    /// treats LR rules — and any rule that transitively references an LR rule —
-    /// as *not* scannable, and falls back to `bt_try` for those alternations.
+    /// `scan_X_lr_N` generated for them so nested scans can recurse through
+    /// them correctly. The cost concern that previously forced a top-level
+    /// LR gate here — exhaustive longest-match tournaments running every
+    /// candidate's full LR scan even when an earlier alt already matched —
+    /// is addressed at the dispatch sites: `emit_scan_partition_body`,
+    /// `gen_group_scan_dispatch`, `gen_general_group_scan_dispatch`, and
+    /// `gen_rule_ref_group_scan_dispatch` use first-success-wins on
+    /// `sort_group_by_element_count` order, mirroring parse-side `bt_try`.
+    /// Sorting longest-first ensures the most specific candidate is tried
+    /// first, so commit-on-success is correctness-equivalent to longest-
+    /// match here. See `AGENTS.md` "Failed Approaches: Removing the LR
+    /// Gate ... 2026-04" for the historical context that ruled out a naive
+    /// gate removal.
     pub fn is_rule_scannable(&mut self, name: &String, visiting: &mut Array<String>) -> bool {
         let cached = self.scannable_cache.get(*name);
         if let Some(val) = cached {
@@ -378,29 +384,14 @@ impl GenContext {
         let mut result = false;
         let rule = self.find_rule(name);
         if let Some(rule) = rule {
-            let mut has_lr = false;
+            let mut all_ok = true;
             for let alt of &rule.alternatives {
-                if alt.elements.len() > 0 {
-                    if let RuleRef(r) = &alt.elements[0] {
-                        if r.name == *name {
-                            has_lr = true;
-                            break;
-                        }
-                    }
+                if !self.is_alt_scannable(&alt.elements, visiting) {
+                    all_ok = false;
+                    break;
                 }
             }
-            if has_lr {
-                result = false;
-            } else {
-                let mut all_ok = true;
-                for let alt of &rule.alternatives {
-                    if !self.is_alt_scannable(&alt.elements, visiting) {
-                        all_ok = false;
-                        break;
-                    }
-                }
-                result = all_ok;
-            }
+            result = all_ok;
         }
 
         remove_from_visiting(visiting, name);

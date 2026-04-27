@@ -1687,6 +1687,18 @@ fn gen_scan_multi_alt(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &mut G
         }
     }
 
+    // Sort each partition (and the unguarded alts) longest-first using the
+    // same sort that parse-side `bt_try` uses (`sort_group_by_element_count`).
+    // First-success-wins in `emit_scan_partition_body` relies on this order:
+    // the most specific (highest-priority, then most-elements) candidate is
+    // scanned first, so committing on first success is correctness-equivalent
+    // to a longest-match tournament when alts may share prefixes (e.g.
+    // `expr`'s `column_ref` IDENT vs `function_call` IDENT '(' ... ')' ).
+    for let mut g = 0; g < groups_alts.len(); g += 1 {
+        sort_group_by_element_count(&mut groups_alts[g], alts);
+    }
+    sort_group_by_element_count(&mut unguarded_idx, alts);
+
     w.line("let start = pos;");
     w.line("let mut pos = pos;");
     w.line("let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };");
@@ -1726,10 +1738,22 @@ fn gen_scan_multi_alt(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &mut G
     w.line("return pos;");
 }
 
-/// Emit the body of a single partition branch: a mini-tournament over
-/// `guarded_alts` ∪ `unguarded_alts`, falling back to `return -1` if
-/// every candidate fails. When only one candidate exists, commit to it
-/// directly and `break scan_alts` on success.
+/// Emit the body of a single partition branch: try `guarded_alts` then
+/// `unguarded_alts` in the order they were sorted (longest-first via
+/// `sort_group_by_element_count` in `gen_scan_multi_alt`), committing to
+/// the first alt whose scan succeeds via `break scan_alts`. On no match,
+/// `return -1` so the caller falls through to the next partition (or the
+/// rule-level fallback).
+///
+/// First-success-wins is correctness-equivalent to a longest-match
+/// tournament given the longest-first sort: the highest-priority and
+/// most-element candidate is tried first, so when two alts share a prefix
+/// (e.g. `expr`'s `column_ref` matches `IDENT` and `function_call` matches
+/// `IDENT '(' ... ')'`), the longer one is attempted first and only the
+/// strictly-shorter alternative is reached when the longer scan fails.
+/// Compared to the previous tournament, committing on first success skips
+/// running the remaining candidates' full scans — a meaningful saving when
+/// any alt's scan recurses through an LR rule.
 fn emit_scan_partition_body(w: &mut CodeWriter, guarded_alts: &Array<i32>, unguarded_alts: &Array<i32>, alts: &Array<Alternative>, ctx: &mut GenContext) {
     let total = guarded_alts.len() + unguarded_alts.len();
     if total == 1 {
@@ -1743,13 +1767,12 @@ fn emit_scan_partition_body(w: &mut CodeWriter, guarded_alts: &Array<i32>, ungua
         w.line("return -1;");
         return;
     }
-    w.line("let mut best_pos: i32 = -1;");
     for let i of guarded_alts {
         let label = `try_{*i}`;
         w.line("pos = start;");
         w.begin(`{label}:`);
         gen_scan_elements_in_block(w, &alts[*i].elements, 0, alts[*i].elements.len(), ctx, &label);
-        w.line("if pos > best_pos { best_pos = pos; }");
+        w.line("break scan_alts;");
         w.end();
     }
     for let i of unguarded_alts {
@@ -1757,10 +1780,9 @@ fn emit_scan_partition_body(w: &mut CodeWriter, guarded_alts: &Array<i32>, ungua
         w.line("pos = start;");
         w.begin(`{label}:`);
         gen_scan_elements_in_block(w, &alts[*i].elements, 0, alts[*i].elements.len(), ctx, &label);
-        w.line("if pos > best_pos { best_pos = pos; }");
+        w.line("break scan_alts;");
         w.end();
     }
-    w.line("if best_pos >= 0 { pos = best_pos; break scan_alts; }");
     w.line("return -1;");
 }
 
@@ -4309,49 +4331,49 @@ fn rule_ref_group_all_scannable(sorted_group: &Array<i32>, alts: &Array<Alternat
     return true;
 }
 
-/// Stage C scan dispatch for RuleRef-only group stores — scans each alt's
-/// rule, picks the longest match, parses only the winner.
+/// First-success-wins scan dispatch for RuleRef-only group stores — scans
+/// each alt's rule in `sort_group_by_element_count` (longest-first) order
+/// and commits on first success. The matching alt is parsed once. This is
+/// the dispatch that makes `parse_sql_stmt`'s WITH/SELECT/.../UPDATE
+/// partition affordable when its alts transitively reference the LR rule
+/// `expr` — committing on first success skips the remaining 8 deep LR
+/// scans that a longest-match tournament would have run.
 fn gen_rule_ref_group_scan_dispatch(w: &mut CodeWriter, sorted_group: &Array<i32>, alts: &Array<Alternative>, opt_var: &String, type_name: &String, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
-    let mut scan_pos_vars: Array<String> = [];
+    let winner_var = dedup_name(&"gd_winner", name_counts);
+    let dispatch_label = dedup_name(&"gd_dispatch", name_counts);
+    w.line(`let mut {winner_var}: i32 = -1;`);
+    w.begin(`{dispatch_label}:`);
+    let last = sorted_group.len() - 1;
     for let mut k = 0; k < sorted_group.len(); k += 1 {
+        if k == last {
+            break;
+        }
         let alt = &alts[sorted_group[k]];
-        let scan_pos_var = dedup_name(&"gd_scan_pos", name_counts);
         let scan_label = dedup_name(&"gd_scan", name_counts);
-        scan_pos_vars.push(scan_pos_var);
-        w.line(`let mut {scan_pos_var}: i32 = -1;`);
         w.begin(`{scan_label}:`);
         w.line("let tokens = &p.tokens;");
         w.line("let mut pos: i32 = p.pos;");
         gen_scan_elements_in_block(w, &alt.elements, 0, alt.elements.len(), ctx, &scan_label);
-        w.line(`{scan_pos_var} = pos;`);
+        w.line(`{winner_var} = {k};`);
+        w.line(`break {dispatch_label};`);
         w.end();
     }
-
-    let best_i_var = dedup_name(&"gd_best_i", name_counts);
-    let best_p_var = dedup_name(&"gd_best_p", name_counts);
-    w.line(`let mut {best_i_var}: i32 = -1;`);
-    w.line(`let mut {best_p_var}: i32 = -1;`);
-    for let mut k = 0; k < sorted_group.len(); k += 1 {
-        w.begin(`if {scan_pos_vars[k]} > {best_p_var}`);
-        w.line(`{best_p_var} = {scan_pos_vars[k]};`);
-        w.line(`{best_i_var} = {k};`);
-        w.end();
-    }
+    w.end();
 
     for let mut k = 0; k < sorted_group.len(); k += 1 {
         let alt_idx = sorted_group[k];
-        let is_last = k == sorted_group.len() - 1;
+        let is_last = k == last;
         if let RuleRef(r) = &alts[alt_idx].elements[0] {
             let fn_name = `parse_{to_snake_case(&r.name)}`;
             let case_name = group_case_name(&alts[alt_idx]);
             let local_var = to_snake_case(&r.name);
 
             if k == 0 && !is_last {
-                w.begin(`if {best_i_var} == {k}`);
+                w.begin(`if {winner_var} == {k}`);
             } else if is_last {
                 w.else_begin("else");
             } else {
-                w.else_begin(`else if {best_i_var} == {k}`);
+                w.else_begin(`else if {winner_var} == {k}`);
             }
             w.line(`let {local_var} = {fn_name}(p)?;`);
             w.line(`{*opt_var} = Option::<{type_name}>::Some({type_name}::{case_name}({local_var}));`);
@@ -4764,49 +4786,48 @@ fn gen_general_group_backtrack(w: &mut CodeWriter, alts: &Array<Alternative>, so
     }
 }
 
-/// Longest-match first-win scan dispatch for general groups (overlapping
-/// alts). All alts are known to be fully scannable; we scan each inline,
-/// pick the longest, parse only the winner and store into `inner_var`.
+/// First-success-wins scan dispatch for general groups (overlapping alts).
+/// `sorted_group` is already in `sort_group_by_element_count` (longest-
+/// first) order; we scan candidates in that order and commit to the first
+/// match, then parse only the winner and store into `inner_var`. Same
+/// rationale as `gen_group_scan_dispatch`: matches the longest-match
+/// tournament's pick on the longest-first sort while skipping the remaining
+/// scans, which matters when an alt's scan recurses through an LR rule.
 fn gen_general_group_scan_dispatch(w: &mut CodeWriter, alts: &Array<Alternative>, sorted_group: &Array<i32>, type_name: &String, inner_var: &String, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, group_index: i32) {
-    let mut scan_pos_vars: Array<String> = [];
+    let winner_var = dedup_name(&"gd_winner", name_counts);
+    let dispatch_label = dedup_name(&"gd_dispatch", name_counts);
+    w.line(`let mut {winner_var}: i32 = -1;`);
+    w.begin(`{dispatch_label}:`);
+    let last = sorted_group.len() - 1;
     for let mut k = 0; k < sorted_group.len(); k += 1 {
+        if k == last {
+            break;
+        }
         let alt = &alts[sorted_group[k]];
-        let scan_pos_var = dedup_name(&"gd_scan_pos", name_counts);
         let scan_label = dedup_name(&"gd_scan", name_counts);
-        scan_pos_vars.push(scan_pos_var);
-        w.line(`let mut {scan_pos_var}: i32 = -1;`);
         w.begin(`{scan_label}:`);
         w.line("let tokens = &p.tokens;");
         w.line("let mut pos: i32 = p.pos;");
         gen_scan_elements_in_block(w, &alt.elements, 0, alt.elements.len(), ctx, &scan_label);
-        w.line(`{scan_pos_var} = pos;`);
+        w.line(`{winner_var} = {k};`);
+        w.line(`break {dispatch_label};`);
         w.end();
     }
-
-    let best_i_var = dedup_name(&"gd_best_i", name_counts);
-    let best_p_var = dedup_name(&"gd_best_p", name_counts);
-    w.line(`let mut {best_i_var}: i32 = -1;`);
-    w.line(`let mut {best_p_var}: i32 = -1;`);
-    for let mut k = 0; k < sorted_group.len(); k += 1 {
-        w.begin(`if {scan_pos_vars[k]} > {best_p_var}`);
-        w.line(`{best_p_var} = {scan_pos_vars[k]};`);
-        w.line(`{best_i_var} = {k};`);
-        w.end();
-    }
+    w.end();
 
     let gc_entry = ctx.group_counter;
     for let mut k = 0; k < sorted_group.len(); k += 1 {
         let alt_idx = sorted_group[k];
         let alt = &alts[alt_idx];
-        let is_last = k == sorted_group.len() - 1;
+        let is_last = k == last;
         let struct_name = general_group_alt_struct_name(&ctx.current_rule_name, group_index, alt_idx);
 
         if k == 0 && !is_last {
-            w.begin(`if {best_i_var} == {k}`);
+            w.begin(`if {winner_var} == {k}`);
         } else if is_last {
             w.else_begin("else");
         } else {
-            w.else_begin(`else if {best_i_var} == {k}`);
+            w.else_begin(`else if {winner_var} == {k}`);
         }
 
         ctx.group_counter = gc_entry;
@@ -4952,42 +4973,52 @@ fn gen_group_prediction_code_skip(w: &mut CodeWriter, node: &PredictionNode, alt
 /// Each alt's remaining elements (from `skip`) are scanned inline. The alt
 /// whose scan advances furthest is parsed; ties go to the first in sorted
 /// order. If all scans fail, the last alt is parsed to surface a real error.
+/// First-success-wins scan dispatch for `gen_group_prediction_code`'s
+/// `Backtrack` node. The `sorted` parameter has already been ordered by
+/// `sort_group_by_element_count` (longest-first), so scanning candidates
+/// in that order and committing on first success matches what the
+/// longest-match tournament would have picked while skipping the remaining
+/// scans. Critical for performance when any alt's scan recurses through
+/// an LR rule (`AGENTS.md` "Failed Approaches: Removing the LR Gate
+/// ... 2026-04").
+///
+/// Each alt's remaining elements (from `skip`) are scanned inline. The
+/// matching alt index is recorded in `gd_winner` and the winner is parsed
+/// once via the trailing `if/else if/else` chain. The last alt is the
+/// unconditional fallback so a real parse error surfaces when no scan
+/// matched.
 fn gen_group_scan_dispatch(w: &mut CodeWriter, sorted: &Array<i32>, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, skip: i32) {
-    let mut scan_pos_vars: Array<String> = [];
+    let winner_var = dedup_name(&"gd_winner", name_counts);
+    let dispatch_label = dedup_name(&"gd_dispatch", name_counts);
+    w.line(`let mut {winner_var}: i32 = -1;`);
+    w.begin(`{dispatch_label}:`);
+    let last = sorted.len() - 1;
     for let mut k = 0; k < sorted.len(); k += 1 {
+        // The last alt is the unconditional parse fallback — no scan needed.
+        if k == last {
+            break;
+        }
         let alt = &alts[sorted[k]];
-        let scan_pos_var = dedup_name(&"gd_scan_pos", name_counts);
         let scan_label = dedup_name(&"gd_scan", name_counts);
-        scan_pos_vars.push(scan_pos_var);
-        w.line(`let mut {scan_pos_var}: i32 = -1;`);
         w.begin(`{scan_label}:`);
         w.line("let tokens = &p.tokens;");
         w.line("let mut pos: i32 = p.pos;");
         gen_scan_elements_in_block(w, &alt.elements, skip, alt.elements.len(), ctx, &scan_label);
-        w.line(`{scan_pos_var} = pos;`);
+        w.line(`{winner_var} = {k};`);
+        w.line(`break {dispatch_label};`);
         w.end();
     }
-
-    let best_i_var = dedup_name(&"gd_best_i", name_counts);
-    let best_p_var = dedup_name(&"gd_best_p", name_counts);
-    w.line(`let mut {best_i_var}: i32 = -1;`);
-    w.line(`let mut {best_p_var}: i32 = -1;`);
-    for let mut k = 0; k < sorted.len(); k += 1 {
-        w.begin(`if {scan_pos_vars[k]} > {best_p_var}`);
-        w.line(`{best_p_var} = {scan_pos_vars[k]};`);
-        w.line(`{best_i_var} = {k};`);
-        w.end();
-    }
+    w.end();
 
     for let mut k = 0; k < sorted.len(); k += 1 {
         let alt = &alts[sorted[k]];
-        let is_last = k == sorted.len() - 1;
+        let is_last = k == last;
         if k == 0 && !is_last {
-            w.begin(`if {best_i_var} == {k}`);
+            w.begin(`if {winner_var} == {k}`);
         } else if is_last {
             w.else_begin("else");
         } else {
-            w.else_begin(`else if {best_i_var} == {k}`);
+            w.else_begin(`else if {winner_var} == {k}`);
         }
         let mut nc: Array<[String, i32]> = [];
         for let mut i = skip; i < alt.elements.len(); i += 1 {
