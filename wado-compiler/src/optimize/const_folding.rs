@@ -9,8 +9,9 @@
 //! statements and assignments.
 
 use crate::flat_package::FlatPackage;
-use crate::tir::{TirExpr, TirExprKind, TirStmt, TirStmtKind};
-use crate::tir_visitor::{TirOptVisitor, opt_walk_expr, opt_walk_stmt};
+use crate::hashmap::IndexSet;
+use crate::tir::{TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind};
+use crate::tir_visitor::{TirOptVisitor, TirRefVisitor, opt_walk_expr, opt_walk_stmt};
 use crate::tiri::{Interpreter, Lattice};
 
 /// Apply constant folding to all functions in the project.
@@ -38,6 +39,19 @@ struct ConstFoldVisitor<'a> {
 
 impl TirOptVisitor for ConstFoldVisitor<'_> {
     fn visit_stmt(&mut self, stmt: &mut TirStmt) -> bool {
+        // Loops have a back-edge: a value assigned at the bottom of the
+        // body re-enters the top on the next iteration. The single-pass
+        // visitor walks each body just once, so an env entry that
+        // *predates* the loop would otherwise feed the body's first
+        // walk an iteration-1 value that no longer holds at the
+        // back-edge — the second iteration's `cond`, the third's, and
+        // so on. Pre-invalidate every local whose value the loop body
+        // can change so the body walks against the meet of all
+        // iteration entries (i.e. `NonConst` for any mutated cell).
+        if let TirStmtKind::Loop { body } = &stmt.kind {
+            self.invalidate_locals_assigned_in(body);
+        }
+
         // Bottom-up: walk children first so the RHS of `let x = …` is
         // already folded by the time we record `x` in env.
         let changed = opt_walk_stmt(self, stmt);
@@ -94,5 +108,39 @@ impl ConstFoldVisitor<'_> {
             TirStmtKind::LetDestructure { .. } => {}
             _ => {}
         }
+    }
+
+    /// Walk `block` (and every nested expression / statement) collecting
+    /// every `Local` index that appears as the target of an `Assign`,
+    /// then invalidate each in env. Conservative — any mutation inside
+    /// the loop body is treated as making the local non-constant for
+    /// the entire loop, which is the only sound choice without modelling
+    /// loop iteration.
+    fn invalidate_locals_assigned_in(&mut self, block: &TirBlock) {
+        let mut collector = AssignedLocalsCollector {
+            targets: IndexSet::default(),
+        };
+        collector.visit_block(block);
+        for idx in collector.targets {
+            self.interpreter.invalidate_local(idx);
+        }
+    }
+}
+
+/// Read-only walk that records every `Local` index assigned to inside
+/// the visited subtree. Drives the loop back-edge invalidation in
+/// [`ConstFoldVisitor::invalidate_locals_assigned_in`].
+struct AssignedLocalsCollector {
+    targets: IndexSet<u32>,
+}
+
+impl TirRefVisitor for AssignedLocalsCollector {
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        if let TirExprKind::Assign { target, .. } = &expr.kind
+            && let TirExprKind::Local { index, .. } = &target.kind
+        {
+            self.targets.insert(*index);
+        }
+        self.walk_expr(expr);
     }
 }
