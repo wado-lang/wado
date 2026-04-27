@@ -112,9 +112,31 @@ Status: Draft
       `while`), `effect_handler_inner_break.wado` (negative — break
       to an inner label must not splice). All pass under `-O0`,
       `-O1`, `-O2`, `-O3`, `-Os`.
-- [ ] Bundled handlers (`with &mut h do`). The resolver already
-      diagnoses this with `BundledHandlerNotSupported`; lowering is
-      deferred until the dispatch-wrapper path lands.
+- [x] Bundled handlers (`with &mut h do`). The resolver expands a
+      bundled binding into one `TirHandlerBinding` per effect that
+      the handler's underlying type implements (walking
+      `trait_env.impl_index` for the type, filtered by
+      `effect_decl_index`). The expanded bindings flow into the
+      Phase 4 dispatch synthesis unchanged. Bindings install in
+      source order, so a later binding wins when the same effect
+      appears more than once on a `with` line — e.g.
+      `with &mut h, Counter => &mut alt do { ... }` makes `alt` the
+      inner `Counter` handler with `h` as its outer (delegated to
+      via the dispatch global's `outer` chain). Diagnostics:
+      - `BundledHandlerImplementsNoEffect` if the handler type
+      implements zero effects (the user almost certainly meant
+      `with E => h do`).
+      - Compiler `panic!` for handler types that aren't nameable /
+      index-keyable (type parameters, associated-type
+      projections, function types, ...). Bundled enumeration is
+      index-keyed by type name; rather than silently emit zero
+      bindings for unsupported kinds we surface the case loudly.
+      End-to-end fixtures: `effect_handler_bundled.wado` (one
+      handler, two effects), `effect_handler_bundled_mixed.wado`
+      (bundled + explicit on the same `with` line, locking the
+      source-order install rule with a self-delegation chain),
+      `effect_handler_bundled_no_effect.wado` (negative — type
+      with no effect impls is rejected).
 - [ ] `MockCM` and handler bundling helpers in `core:test`.
 
 ## Phase 3 implementation plan
@@ -598,8 +620,6 @@ impl<T> FutureWritable<T> for MockCM {
 ```
 
 ### Handler Bundling
-
-- [ ] Not yet implemented.
 
 When a type implements multiple effects, listing each one in `with` is verbose. If the effect name is omitted, the `with` block handles all effects the type implements:
 

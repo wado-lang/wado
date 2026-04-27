@@ -1,0 +1,29 @@
+// Negative test: bundled handler form `with &mut h do` requires the
+// handler's underlying type to implement at least one effect. A type
+// that only implements regular traits (or no traits at all) has nothing
+// to install, so the resolver rejects it with
+// `BundledHandlerImplementsNoEffect`.
+
+trait Plain {
+    fn ping(&self) -> i32;
+}
+
+struct NotAHandler {
+    n: i32,
+}
+
+impl Plain for NotAHandler {
+    fn ping(&self) -> i32 {
+        return self.n;
+    }
+}
+
+export fn run() {
+    let h = NotAHandler { n: 1 };
+    with &h do {
+        let _ = h.ping();
+    }
+}
+
+__DATA__
+{"compile_error": "handler value of type 'NotAHandler' does not implement any effect"}

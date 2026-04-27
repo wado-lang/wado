@@ -293,11 +293,11 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// Bundled-handler form `with h do { ... }` (no effect on LHS) — not yet
-    /// implemented. The full form requires enumerating every effect the
-    /// handler's type implements; the MVP only supports the explicit
-    /// `with E => h` form.
-    BundledHandlerNotSupported { span: Span },
+    /// Bundled-handler form `with &mut h do { ... }` where the handler value's
+    /// underlying type does not implement any effect. There is nothing for
+    /// `with h do` to install in this case — the user almost certainly meant
+    /// to write `with E => h do` instead.
+    BundledHandlerImplementsNoEffect { type_name: String, span: Span },
 
     /// `with E => h do` clause where `E` is not a known effect declaration
     /// (it might be a regular trait, an unrelated type, or an unknown name).
@@ -558,11 +558,11 @@ impl std::fmt::Display for TypeError {
                     span.line, span.column, type_name, effect_name
                 )
             }
-            TypeError::BundledHandlerNotSupported { span } => {
+            TypeError::BundledHandlerImplementsNoEffect { type_name, span } => {
                 write!(
                     f,
-                    "{}:{}: bundled effect handlers (`with h do`) are not yet implemented; use `with E => h do` instead",
-                    span.line, span.column
+                    "{}:{}: handler value of type '{}' does not implement any effect; use `with E => h do` instead",
+                    span.line, span.column, type_name
                 )
             }
             TypeError::NotAnEffect { name, span } => {
@@ -793,9 +793,11 @@ impl From<TypeError> for crate::compiler_host::Diagnostic {
                 ),
                 *span,
             ),
-            TypeError::BundledHandlerNotSupported { span } => (
-                Code::UnsupportedFeature,
-                "bundled effect handlers (`with h do`) are not yet implemented; use `with E => h do` instead".to_string(),
+            TypeError::BundledHandlerImplementsNoEffect { type_name, span } => (
+                Code::TypeMismatch,
+                format!(
+                    "handler value of type '{type_name}' does not implement any effect; use `with E => h do` instead"
+                ),
                 *span,
             ),
             TypeError::NotAnEffect { name, span } => (

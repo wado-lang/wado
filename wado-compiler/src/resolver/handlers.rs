@@ -13,12 +13,18 @@
 //!   performed by the existing return-type checker (resume lowers to
 //!   `Return { value }` in the dispatch synthesis pass).
 //!
-//! Bundled handlers (`with &mut h do`) are diagnosed as not-yet-implemented;
-//! they require enumerating every effect the handler's type implements and
-//! are deferred until the dispatch synthesis can support that.
+//! Bundled handlers (`with &mut h do`) expand at this layer to one
+//! `TirHandlerBinding` per effect that the handler's underlying type
+//! implements. Each generated binding goes through the same downstream
+//! dispatch-synthesis path as an explicit `Effect => h` form, and bindings
+//! are emitted in **source order** — both within a single bundled handler
+//! (sorted by impl-block discovery order) and across bundled / explicit
+//! entries on the same `with` line — so a later binding installs as the
+//! inner (active) handler when the same effect appears more than once.
 
 use crate::ast;
 use crate::compiler_host::CompilerHost;
+use crate::name::ModuleSource;
 use crate::tir::{
     EffectRef, ResolvedType, TirExpr, TirExprKind, TirHandlerBinding, TypeId, TypeTable,
 };
@@ -33,11 +39,16 @@ impl<H: CompilerHost> Resolver<'_, H> {
         with_expr: &ast::WithHandlerExpr,
         ctx: &mut FunctionContext,
     ) -> TirExpr {
-        let mut bindings = Vec::with_capacity(with_expr.handlers.len());
+        let mut bindings: Vec<TirHandlerBinding> = Vec::with_capacity(with_expr.handlers.len());
 
         for binding in &with_expr.handlers {
             let resolved = self.resolve_handler_binding(binding, ctx);
-            bindings.push(resolved);
+            // A bundled binding may expand to multiple `TirHandlerBinding`s
+            // (one per effect the handler type implements). They are
+            // appended in the order the resolver enumerated them, which
+            // means they install in that order — earlier ones become the
+            // outer handlers and later ones become inner.
+            bindings.extend(resolved);
         }
 
         // Body is resolved in the same function context (locals introduced
@@ -66,38 +77,30 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
     /// Resolve a single binding inside a `with ... do` clause.
     ///
-    /// Validation order:
-    /// 1. Reject the bundled (`effect: None`) form — not yet implemented.
-    /// 2. Resolve the effect name to an `EffectRef::Concrete` and verify it
-    ///    actually points at an `effect` declaration (not a trait or unknown
-    ///    name).
-    /// 3. Resolve the handler expression and strip a leading reference layer
-    ///    so we can locate the underlying struct type for `impl E for T`.
-    /// 4. Verify that struct type has an `impl Effect for Type` block.
+    /// Returns one `TirHandlerBinding` for the explicit form
+    /// (`Effect => handler_expr`), or one binding per effect the handler's
+    /// underlying type implements for the bundled form (`handler_expr`,
+    /// no `=>`). Bindings are returned in install order.
     fn resolve_handler_binding(
         &mut self,
         binding: &ast::EffectHandlerBinding,
         ctx: &mut FunctionContext,
-    ) -> TirHandlerBinding {
-        // Bundled-handler form is reserved for the multi-effect case
-        // (`with &mut h do`) and requires enumerating effects from the
-        // handler type. Defer to the dispatch-synthesis phase work.
-        let effect_ty = if let Some(ty) = &binding.effect {
-            ty
-        } else {
-            let _ = self
-                .logger
-                .error(TypeError::BundledHandlerNotSupported { span: binding.span });
-            let handler = self.resolve_expr(&binding.handler, ctx, None);
-            let handler_type = self.handler_underlying_type(handler.type_id);
-            return TirHandlerBinding {
-                effect: None,
-                handler,
-                handler_type,
-                span: binding.span,
-            };
-        };
+    ) -> Vec<TirHandlerBinding> {
+        match &binding.effect {
+            Some(effect_ty) => {
+                vec![self.resolve_explicit_handler_binding(binding, effect_ty, ctx)]
+            }
+            None => self.resolve_bundled_handler_binding(binding, ctx),
+        }
+    }
 
+    /// Resolve `Effect => handler_expr` — the explicit form.
+    fn resolve_explicit_handler_binding(
+        &mut self,
+        binding: &ast::EffectHandlerBinding,
+        effect_ty: &ast::Type,
+        ctx: &mut FunctionContext,
+    ) -> TirHandlerBinding {
         // Resolve the effect name. Use `resolve_effects` so that LSP
         // jump-to-def edges are recorded just like in `with E1, E2`
         // function signatures.
@@ -172,6 +175,145 @@ impl<H: CompilerHost> Resolver<'_, H> {
             handler_type,
             span: binding.span,
         }
+    }
+
+    /// Resolve `handler_expr` — the bundled form.
+    ///
+    /// Walks every `impl <Effect> for <T>` block where `T` is the handler
+    /// value's underlying type, and emits one binding per effect, in
+    /// impl-discovery order.
+    ///
+    /// Diagnostics:
+    /// - If the handler underlying type implements no effect, emit
+    ///   `BundledHandlerImplementsNoEffect`. The user almost certainly
+    ///   meant `with E => h do`.
+    /// - If the handler type is `Unknown`/`Error`, return no bindings
+    ///   silently — earlier diagnostics already reported the cause.
+    ///
+    /// Panics for handler types that don't have an addressable type name
+    /// (type parameters, associated-type projections, function types,
+    /// tuples, ...). Bundled enumeration is index-keyed by name and these
+    /// kinds cannot be looked up; rather than silently produce zero
+    /// bindings we surface the unsupported case loudly.
+    fn resolve_bundled_handler_binding(
+        &mut self,
+        binding: &ast::EffectHandlerBinding,
+        ctx: &mut FunctionContext,
+    ) -> Vec<TirHandlerBinding> {
+        let handler = self.resolve_expr(&binding.handler, ctx, None);
+        let handler_type = self.handler_underlying_type(handler.type_id);
+
+        let resolved = self.type_table.borrow().get(handler_type).clone();
+        match resolved {
+            // Already-diagnosed shapes: keep quiet so we don't pile a
+            // bundled-specific error on top.
+            ResolvedType::Unknown | ResolvedType::Error => return Vec::new(),
+            // Nameable, indexable types — proceed with enumeration.
+            ResolvedType::Struct { .. }
+            | ResolvedType::Enum { .. }
+            | ResolvedType::Variant { .. }
+            | ResolvedType::Newtype { .. }
+            | ResolvedType::Flags { .. }
+            | ResolvedType::Resource { .. }
+            | ResolvedType::GenericResource { .. }
+            | ResolvedType::GenericInstance { .. }
+            | ResolvedType::Primitive(_) => {}
+            // Anything else can't be the target of an `impl Effect for T`
+            // block, so bundled enumeration has nothing to do. Panic
+            // instead of producing zero bindings: a future use case can
+            // re-evaluate which kinds to enumerate, but silently
+            // accepting them today would let bugs ship.
+            ref other => {
+                let type_name = self.type_table.borrow().type_name(handler_type);
+                panic!(
+                    "bundled effect handler `with &h do` is not supported for handler \
+                     type `{type_name}` (resolved as {other:?}); use the explicit form \
+                     `with E => h do` instead, or file a bug if the type really should \
+                     be enumerable"
+                );
+            }
+        }
+
+        let type_name = self.type_table.borrow().type_name(handler_type);
+        let effects = self.collect_effect_impls_for_type(&type_name);
+
+        if effects.is_empty() {
+            let _ = self
+                .logger
+                .error(TypeError::BundledHandlerImplementsNoEffect {
+                    type_name,
+                    span: binding.span,
+                });
+            return Vec::new();
+        }
+
+        effects
+            .into_iter()
+            .map(|(effect_name, effect_module)| TirHandlerBinding {
+                effect: Some(EffectRef::Concrete {
+                    name: effect_name,
+                    module_source: effect_module,
+                }),
+                handler: handler.clone(),
+                handler_type,
+                span: binding.span,
+            })
+            .collect()
+    }
+
+    /// Walk every `impl Trait for <type_name>` block in scope and return
+    /// the `(effect_name, effect_defining_module)` pair for each impl
+    /// whose `trait_type` resolves to an effect declaration.
+    ///
+    /// Discovery order: `trait_env.impl_index` entries first (loaded
+    /// modules), then any extra impls in the current module's items
+    /// that aren't covered by the index. Within each source the order
+    /// matches the original module-walk order, which gives users a
+    /// stable, predictable install order for bundled handlers.
+    ///
+    /// Duplicates are filtered: an effect that appears more than once
+    /// (e.g. via re-export aliasing) is installed only once.
+    fn collect_effect_impls_for_type(&self, type_name: &str) -> Vec<(String, ModuleSource)> {
+        use crate::ast::Item;
+        let mut effects: Vec<(String, ModuleSource)> = Vec::new();
+        let mut seen: crate::hashmap::IndexSet<(ModuleSource, String)> =
+            crate::hashmap::IndexSet::default();
+
+        let mut try_record = |trait_name: String, effects: &mut Vec<(String, ModuleSource)>| {
+            if let Some((effect_module, _)) = self.trait_env.effect_decl_index.get(&trait_name)
+                && seen.insert((effect_module.clone(), trait_name.clone()))
+            {
+                effects.push((trait_name, effect_module.clone()));
+            }
+        };
+
+        if let Some(entries) = self.trait_env.impl_index.get(type_name) {
+            for (module_src, item_idx) in entries {
+                let module = &self.loaded_modules[module_src];
+                if let Item::Impl(impl_block) = &module.items[*item_idx]
+                    && let Some(trait_type) = &impl_block.trait_type
+                {
+                    let trait_name = self.get_type_name(trait_type);
+                    try_record(trait_name, &mut effects);
+                }
+            }
+        }
+
+        // Impls declared in the current module aren't always reachable via
+        // `impl_index` (the index is built before the current module is
+        // fully resolved in some pipelines), so walk them too. Mirrors
+        // `find_trait_impl_for_type`.
+        for item in self.current_module_items {
+            if let Item::Impl(impl_block) = item
+                && let Some(trait_type) = &impl_block.trait_type
+                && Self::get_type_name_static(&impl_block.ty) == type_name
+            {
+                let trait_name = self.get_type_name(trait_type);
+                try_record(trait_name, &mut effects);
+            }
+        }
+
+        effects
     }
 
     /// Strip a single leading `&` / `&mut` layer to reach the type that the
