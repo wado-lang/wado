@@ -276,12 +276,12 @@ fn synthesize_dispatch_struct(
 /// Synthesise the `__effect_<E>` mutable global for one effect.
 ///
 /// The slot stores `Option<&__Dispatch_<E>>` and starts at `null`
-/// (meaning: no handler installed). `lower::globals` recognises the
-/// `null` initializer and flags the slot `is_nullable: true` so the
-/// downstream Wasm validator accepts a `(mut (ref null $Dispatch))`
-/// global with a `ref.null` initializer. `lazy_init` stays `false` so
-/// codegen does not narrow `global.get` results with
-/// `ref.as_non_null` — `None` reads must round-trip cleanly.
+/// (meaning: no handler installed). `is_nullable: true` makes the
+/// Wasm validator accept the `ref.null` initializer for the `(mut
+/// (ref null $Dispatch))` slot; `lazy_init: false` keeps codegen from
+/// narrowing `global.get` results with `ref.as_non_null` since `None`
+/// reads must round-trip cleanly to express "no handler installed"
+/// at runtime.
 #[allow(dead_code)]
 fn synthesize_dispatch_global(
     project: &mut Package,
@@ -299,7 +299,7 @@ fn synthesize_dispatch_global(
         is_pub: false,
         module_source: entry_source.clone(),
         span,
-        is_nullable: false,
+        is_nullable: true,
         lazy_init: false,
         local_types: Vec::new(),
     };
