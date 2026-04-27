@@ -1009,9 +1009,8 @@ fn int_to_float(value: u64, prim: PrimitiveType, target: PrimitiveType) -> Value
 fn float_to_float(value: f64, prim: PrimitiveType, target: PrimitiveType) -> Value {
     let v = match (prim, target) {
         (PrimitiveType::F64, PrimitiveType::F32) => f64::from(value as f32),
-        (PrimitiveType::F32, PrimitiveType::F64)
-        | (PrimitiveType::F32, PrimitiveType::F32)
-        | (PrimitiveType::F64, PrimitiveType::F64) => value,
+        (PrimitiveType::F32 | PrimitiveType::F64, PrimitiveType::F64)
+        | (PrimitiveType::F32, PrimitiveType::F32) => value,
         _ => panic!("float_to_float: non-float prim ({prim:?} → {target:?})"),
     };
     Value::Float {
@@ -1068,11 +1067,12 @@ fn eval_bool_binary(l: bool, op: TirBinaryOp, r: bool) -> Option<Value> {
         TirBinaryOp::Or => Some(Value::Bool(l || r)),
         TirBinaryOp::Eq => Some(Value::Bool(l == r)),
         TirBinaryOp::NotEq => Some(Value::Bool(l != r)),
-        // bool implements Ord with `false < true` (Rust's PartialOrd
-        // for bool gives the same).
-        TirBinaryOp::Lt => Some(Value::Bool(l < r)),
+        // bool implements Ord with `false < true`. Spelled with `&&`
+        // rather than `<` to satisfy clippy's `bool_comparison` lint
+        // without tripping `needless_bitwise_bool`.
+        TirBinaryOp::Lt => Some(Value::Bool(!l && r)),
         TirBinaryOp::LtEq => Some(Value::Bool(l <= r)),
-        TirBinaryOp::Gt => Some(Value::Bool(l > r)),
+        TirBinaryOp::Gt => Some(Value::Bool(l && !r)),
         TirBinaryOp::GtEq => Some(Value::Bool(l >= r)),
         _ => None,
     }

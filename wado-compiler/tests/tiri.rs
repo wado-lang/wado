@@ -1562,11 +1562,11 @@ fn cast_i8_negative_to_f64_preserves_sign() {
 
 #[test]
 fn cast_f64_to_i32_truncates_toward_zero() {
-    let e = cast_expr(float_lit(3.14, TypeTable::F64, "3.14"), TypeTable::I32);
+    let e = cast_expr(float_lit(2.7, TypeTable::F64, "2.7"), TypeTable::I32);
     assert_eq!(
         eval(&e),
         Some(Value::Int {
-            value: 3,
+            value: 2,
             prim: PrimitiveType::I32
         })
     );
@@ -1650,17 +1650,20 @@ fn cast_f32_to_f64_promotes_exactly() {
 
 #[test]
 fn cast_f64_to_f32_rounds() {
-    // 3.14 (f64) rounds to its nearest f32 representation.
-    let e = cast_expr(float_lit(3.14, TypeTable::F64, "3.14"), TypeTable::F32);
+    // 0.1 (f64) is not exactly representable in f32, so the cast
+    // through f32 produces a different bit pattern than the original
+    // f64 — that's the rounding step we want to observe.
+    let e = cast_expr(float_lit(0.1, TypeTable::F64, "0.1"), TypeTable::F32);
     let v = eval(&e).expect("expected reduction");
     match v {
         Value::Float { value, prim } => {
             assert_eq!(prim, PrimitiveType::F32);
             assert_eq!(
                 value,
-                f64::from(3.14_f32),
-                "3.14 rounded to f32, then widened"
+                f64::from(0.1_f32),
+                "0.1 rounded to f32, then widened"
             );
+            assert_ne!(value, 0.1_f64, "rounding step must change the bits");
         }
         other => panic!("expected float, got {other:?}"),
     }
