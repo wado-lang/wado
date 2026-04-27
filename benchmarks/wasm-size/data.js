@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777323271219,
+  "lastUpdate": 1777327104630,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -17105,6 +17105,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 611451,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9fe50c76e231dae101f002cc181a22088c23ca29",
+          "message": "Merge pull request #946 from wado-lang/claude/investigate-wado-lock-Vghp2\n\nchore(kiln): regenerate stale wado.lock files for parser-gen output",
+          "timestamp": "2026-04-28T06:53:06+09:00",
+          "tree_id": "de6f033b39c6783cc50aca333e1eef0f14df2763",
+          "url": "https://github.com/wado-lang/wado/commit/9fe50c76e231dae101f002cc181a22088c23ca29"
+        },
+        "date": 1777327104366,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8982,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19030,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 1524496,
             "unit": "bytes"
           }
         ]
