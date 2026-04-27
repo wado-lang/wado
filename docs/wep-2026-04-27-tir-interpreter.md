@@ -40,16 +40,19 @@ fine-grained; wasm execution covers anything tiri would balk at.
 
 ## Stages
 
-### Stage 0 — split & rename (this commit)
+### Stage 0 — split & rename
 
-- `wado_compiler::tiri` exists with `Value`, `Interpreter`,
-  `reduce(&TirExpr) -> TirExpr`, `reduce_local(&mut TirExpr) -> bool`,
-  and `reduce_to_value(&TirExpr) -> Option<Value>`.
-- `const_folding.rs` is a 30-line visitor.
-- Identity simplification for `&&` / `||` lives in tiri, not the visitor.
-- Integration tests at `wado-compiler/tests/tiri.rs` cover the four
-  arithmetic ops on i32/i64/u8/u32/f32/f64 plus `reduce`-API contracts
-  (repr preservation, short-circuit, binary collapse).
+Status: done.
+
+- [x] `wado_compiler::tiri` exists with `Value`, `Interpreter`,
+      `reduce(&TirExpr) -> TirExpr`, `reduce_local(&mut TirExpr) -> bool`,
+      and `reduce_to_value(&TirExpr) -> Option<Value>`.
+- [x] `const_folding.rs` is a thin visitor.
+- [x] Identity simplification for `&&` / `||` lives in tiri, not the
+      visitor.
+- [x] Integration tests at `wado-compiler/tests/tiri.rs` cover the four
+      arithmetic ops on i32/i64/u8/u32/f32/f64 plus `reduce`-API
+      contracts (repr preservation, short-circuit, binary collapse).
 
 Out of scope at Stage 0 (matches the previous behaviour, deferred to
 later stages): float-to-int and int-to-float casts (only int-to-int
@@ -59,91 +62,139 @@ relocation + API reshape with zero behaviour change.
 
 ### Stage 1 — local environment + lattice
 
-- Replace `Option<Value>` with a 3-state lattice. `Option<Value>`
-  conflated four distinct meanings (unevaluated, const, non-const,
-  unsupported-op), which made memoization unsafe to add later — caching
-  `None` couldn't distinguish "we know it's non-const" from "we haven't
-  computed it yet". The lattice fixes this at the type level.
+Status: done.
 
-  ```rust
-  pub enum Lattice {
-      Unevaluated,    // = SCCP Bottom: not yet computed / unreachable
-      Const(Value),   // provably this value
-      NonConst,       // = SCCP Top: non-constant (or modelled-out op)
-  }
-  ```
+- [x] Replace `Option<Value>` with a 3-state lattice. `Option<Value>`
+      conflated four distinct meanings (unevaluated, const, non-const,
+      unsupported-op), which made memoization unsafe to add later —
+      caching `None` couldn't distinguish "we know it's non-const" from
+      "we haven't computed it yet". The lattice fixes this at the type
+      level:
 
-  Names favour readability over the academic `Bottom` / `Top`. Comments
-  in `tiri.rs` reference the SCCP lattice for readers familiar with the
-  abstract-interpretation literature.
+      ```rust
+      pub enum Lattice {
+          Unevaluated,    // = SCCP Bottom: not yet computed / unreachable
+          Const(Value),   // provably this value
+          NonConst,       // = SCCP Top: non-constant (or modelled-out op)
+      }
+      ```
 
-  `reduce_to_lattice(&TirExpr) -> Lattice` is the canonical engine API.
-  Callers that only need "is this a literal?" use
-  `Lattice::as_const() -> Option<Value>` — kept as a _projection_, not a
-  separate function, so the lattice is always the source of truth.
+      Names favour readability over the academic `Bottom` / `Top`.
+      Comments in `tiri.rs` reference the SCCP lattice for readers
+      familiar with the abstract-interpretation literature.
 
-- Add `env: HashMap<LocalId, Lattice>` to `Interpreter` for `let`-bound
-  constants. Immutable bindings are captured as `Const(v)` when the RHS
-  reduces; `let mut` and assignments invalidate to `NonConst`. Reads of
-  `TirExprKind::Local` consult `env`.
-- Subsumes part of `const_propagation` for in-function constants.
+- [x] `reduce_to_lattice(&TirExpr) -> Lattice` is the canonical engine
+      API. Callers that only need "is this a literal?" use
+      `Lattice::as_const() -> Option<Value>` — kept as a _projection_,
+      not a separate function, so the lattice is always the source of
+      truth.
+- [x] `env: IndexMap<LocalId, Lattice>` on `Interpreter` for `let`-bound
+      constants. Immutable bindings are captured as `Const(v)` when the
+      RHS reduces; `let mut` and assignments invalidate to `NonConst`.
+      Reads of `TirExprKind::Local` consult `env`.
+- [x] Subsumes part of `const_propagation` for in-function constants.
 
 ### Stage 1.5 — memoization (deferred)
 
-- The original WEP bundled `memo: HashMap<ExprKey, Lattice>` into Stage 1.
-  Deferred until Stage 3 (pure call inlining), where the same expression
-  can be evaluated from multiple parent contexts. In Stage 1's pure
-  bottom-up walk, every node is visited exactly once, so the memo carries
-  no payoff and risks invariant drift between passes.
-- When introduced, only `Const(v)` and structurally-final `NonConst`
-  results are cached. `Unevaluated` is the cache-miss sentinel by
-  construction. "Unsupported-op `NonConst`" is **not** memoized so model
-  extensions don't leave stale entries — `NonConst` is cheap to recompute
-  (one op-match), so the precision gain outweighs the cache hit.
+Status: deferred to Stage 3.
 
-### Stage 2 — `if` / `match` reduction
+- [ ] Add `memo: HashMap<ExprKey, Lattice>` once cross-context
+      re-evaluation actually exists (pure call inlining). In Stage 1's
+      pure bottom-up walk every node is visited exactly once, so the
+      memo carries no payoff and risks invariant drift.
+- [ ] When introduced, only `Const(v)` and structurally-final `NonConst`
+      results are cached. `Unevaluated` is the cache-miss sentinel by
+      construction. "Unsupported-op `NonConst`" is **not** memoized so
+      model extensions don't leave stale entries — `NonConst` is cheap
+      to recompute (one op-match), so the precision gain outweighs the
+      cache hit.
 
-- Track `block_executable: BitSet` and `feasible_edge` à la SCCP so
-  `if true { … } else { … }` collapses without a separate pass.
-- Reduce both arms when the condition is non-constant; if both arms
-  reduce to structurally-equal values, drop the branch.
-- Subsumes part of `const_branch_prune`.
+### Stage 2 — `if` reduction
+
+Status: done. `match` reduction is excluded from Stage 2; payload-aware
+variant matching is its own Stage (TBD), since the lattice work is more
+involved than scalar `if`.
+
+- [x] `Lattice::join` (SCCP join over the chain
+      `Unevaluated ⊑ Const(v) ⊑ NonConst`):
+
+      ```text
+      Unevaluated ⊔ x       = x        (infeasible-edge identity)
+      Const(v)    ⊔ Const(v) = Const(v) (arms agree)
+      Const(a)    ⊔ Const(b) = NonConst (a ≠ b)
+      NonConst    ⊔ _        = NonConst (Top is absorbing)
+      ```
+
+      Commutative, associative, idempotent. Tests verify each property.
+
+- [x] Constant-condition expr-form `if` (`if true { A } else { B }` →
+      `Block(A)`, `if false { A } else { B }` → `Block(B)`,
+      `if false { A }` no-else → `Unit`). The unreachable arm is treated
+      as an SCCP infeasible edge: its lattice value never enters the
+      join, so a trapping `else { panic(…) }` does not contaminate the
+      result.
+- [x] Constant-condition stmt-form `if` (block-level splice via new
+      `Interpreter::reduce_local_block`).
+- [x] Both-arms-equal collapse: when the condition is non-constant but
+      effect-free (`is_speculatable`) and both arms reduce to the same
+      `Const(v)`, the `if` is rewritten to that literal. The
+      "effect-free" gate is conservative — literals, locals, captures,
+      arithmetic / comparison / bitwise binary, non-trapping unary,
+      casts, and field accesses on the above. Calls / division / deref
+      / mutation are excluded.
+- [x] `expr_to_lattice(If { … })` returns the SCCP lattice value of the
+      `if`: chosen-arm value when the condition is constant, joined arm
+      values when not. Crucially, `Unevaluated` arms in the
+      non-constant-condition path are promoted to `NonConst` before the
+      join — under a non-constant condition the arm IS reachable, so
+      "we don't know its value" is SCCP-Top, not infeasible.
+- [x] Subsumes the constant-condition cases of `const_branch_prune`
+      (both expr-form and stmt-form). The legacy pass now only handles
+      trivial-block / labeled-block simplifications and keeps a doc
+      pointer at the top of `const_branch_prune.rs` redirecting future
+      `if`-related rewrites to tiri. Removing those branches and
+      observing every existing fixture still pass is the equivalence
+      proof.
+- [x] `wado-compiler/tests/tiri.rs` covers `Lattice::join`, the
+      feasible-edge constant-true / constant-false / no-else cases, the
+      both-arms-equal collapse, the structurally-unequal-arms negative
+      case, the Unevaluated-arm regression, and the stmt-form splice
+      (true / false-no-else / non-const-untouched).
 
 ### Stage 3 — pure call inlining (in-process)
 
-- When all args of a call reduce to constants and the callee is pure
-  (effect set ⊆ pure), recursively reduce the callee body in a child
-  interpreter with a fresh `env` and a `step_budget: u32`.
-- Bail to the original `Call` expression on out-of-budget.
-- Mirrors rustc's CTFE step counter (`LINT_TERMINATOR_LIMIT`).
+- [ ] When all args of a call reduce to constants and the callee is
+      pure (effect set ⊆ pure), recursively reduce the callee body in a
+      child interpreter with a fresh `env` and a `step_budget: u32`.
+- [ ] Bail to the original `Call` expression on out-of-budget. Mirrors
+      rustc's CTFE step counter (`LINT_TERMINATOR_LIMIT`).
 
 ### Stage 4 — bounded loop unrolling
 
-- For `while` / `loop` with a constant trip count, unroll within the
-  shared `step_budget`. Expressions that don't terminate within the
-  budget are left as residuals.
+- [ ] For `while` / `loop` with a constant trip count, unroll within the
+      shared `step_budget`. Expressions that don't terminate within the
+      budget are left as residuals.
 
 ### Stage 5 — wasm-CTFE backend (via `CompilerHost`)
 
-- `wado-compiler` itself must compile to `wasm32-unknown-unknown` (CI
-  enforces this), so it cannot link `wasmtime` directly. The CTFE
-  backend follows the existing Kiln pattern instead: extend
-  `CompilerHost` with a `run_compile_time_eval(component_wasm, args)`
-  hook (mirroring today's `run_generator`). Hosts that have a Wasm
-  runtime — `wado-cli` via `wasmtime` — implement it; LSP and
-  browser hosts return `Unsupported` and tiri stays in-process.
-- tiri compiles a pure callee to wasm using the existing pipeline,
-  caches the resulting component bytes per
-  `(FunctionKey, monomorph_args)`, and hands them to the host with
-  the constant args. The host runs the component (with fuel /
-  resource limits of its choice) and returns the result.
-- Triggered when in-process reduction exceeds `step_budget` but the
-  callee is still pure-by-effects.
-- Result is decoded back into a `Value` and used as if the in-process
-  evaluator had produced it.
-- Enables `compute_lookup_table(256)` and similar workloads at compile
-  time without re-implementing every TIR construct, and without
-  breaking wasm32 compatibility of `wado-compiler`.
+- [ ] `wado-compiler` itself must compile to `wasm32-unknown-unknown`
+      (CI enforces this), so it cannot link `wasmtime` directly. Extend
+      `CompilerHost` with `run_compile_time_eval(component_wasm, args)`
+      (mirroring today's `run_generator`). Hosts with a Wasm runtime —
+      `wado-cli` via `wasmtime` — implement it; LSP and browser hosts
+      return `Unsupported` and tiri stays in-process.
+- [ ] tiri compiles a pure callee to wasm using the existing pipeline,
+      caches the resulting component bytes per
+      `(FunctionKey, monomorph_args)`, and hands them to the host with
+      the constant args. The host runs the component (with fuel /
+      resource limits of its choice) and returns the result.
+- [ ] Triggered when in-process reduction exceeds `step_budget` but
+      the callee is still pure-by-effects. The result decoded back
+      into a `Value` is used as if the in-process evaluator had
+      produced it.
+- [ ] Enables `compute_lookup_table(256)` and similar workloads at
+      compile time without re-implementing every TIR construct, and
+      without breaking wasm32 compatibility of `wado-compiler`.
 
 ## Cost model
 
@@ -174,6 +225,17 @@ codegen.
 - `v128` / relaxed-SIMD has implementation-defined corner cases;
   defer SIMD CTFE to a later WEP.
 - Integer wrapping / signed `MIN / -1` semantics match Wasm.
+- Stage 2 caveat — float signed-zero folding: the both-arms-equal
+  `if`-collapse uses [`Lattice`]'s derived `PartialEq`, which delegates
+  to f64's IEEE 754 `==`. That treats `-0.0` and `+0.0` as equal, so
+  `if cond { -0.0 } else { 0.0 }` collapses to `-0.0` (the chosen
+  representative is the then-arm's bit pattern). Operations that
+  observe the sign of zero — `1.0 / x` (signed infinity) and explicit
+  `f64::is_sign_positive` — see the folded representative rather than
+  the cond-dependent value. This matches IEEE 754 equality semantics
+  and the golden fixtures encode the resulting WIR. If a future caller
+  needs bit-precise zero distinction here, add a per-op equality
+  predicate to `Value` rather than weakening the fold globally.
 
 ## Consequences
 
