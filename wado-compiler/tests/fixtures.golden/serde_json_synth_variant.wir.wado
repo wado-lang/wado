@@ -3010,11 +3010,9 @@ fn "core:json/JsonDeserializer::parse_f64_direct"(self) {
     let exp_neg: bool;
     let sb: i32;
     let b3: i32;
-    let v_14: f64;
     let extra_int_digits: i32;
     let eff_p: i32;
     let v_17: f64;
-    let v_18: f64;
     let v_19: f64;
     let __local_20: ref "core:prelude/string.wado//String";
     let __local_22: ref "core:prelude/string.wado//String";
@@ -3251,8 +3249,7 @@ fn "core:json/JsonDeserializer::parse_f64_direct"(self) {
         }
     }
     if d == 0_i64 {
-        v_14 = select f64(neg, -0, 0);
-        return 0, v_14, ref.null none;
+        return 0, -0, ref.null none;
     }
     extra_int_digits = (if (total_digits - frac) > 19 -> i32 {
         (total_digits - frac) - 19;
@@ -3265,8 +3262,7 @@ fn "core:json/JsonDeserializer::parse_f64_direct"(self) {
         return 0, v_17, ref.null none;
     }
     if eff_p < -351 {
-        v_18 = select f64(neg, -0, 0);
-        return 0, v_18, ref.null none;
+        return 0, -0, ref.null none;
     }
     v_19 = "core:prelude/fpfmt.wado/parse"(d, eff_p);
     if neg {

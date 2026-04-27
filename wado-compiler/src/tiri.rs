@@ -37,6 +37,16 @@
 //!   in their use sites. `let mut` and post-assign locals stay
 //!   `NonConst`. The driving visitor populates the env via
 //!   [`Interpreter::bind_local`] / [`Interpreter::invalidate_local`].
+//! - `if` expressions (Stage 2): a constant condition collapses the node
+//!   to the chosen arm; a non-constant condition with both arms reducing
+//!   to the same lattice constant (and an effect-free condition) folds
+//!   to that constant. The unreachable arm of a constant-condition `if`
+//!   is treated as an infeasible SCCP edge — its value never participates
+//!   in the join, so a trapping branch (`else { panic(…) }`) does not
+//!   contaminate the result.
+//! - `if` statements (Stage 2): a constant condition splices the chosen
+//!   branch's stmts into the parent block via
+//!   [`Interpreter::reduce_local_block`].
 //!
 //! Float arithmetic uses native Rust IEEE 754 ops (same as Wasm), following
 //! cranelift's approach: fold the result, but skip if it is NaN since NaN
@@ -52,7 +62,8 @@
 
 use crate::hashmap::IndexMap;
 use crate::tir::{
-    PrimitiveType, ResolvedType, TirBinaryOp, TirExpr, TirExprKind, TirUnaryOp, TypeId, TypeTable,
+    PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind,
+    TirUnaryOp, TypeId, TypeTable,
 };
 
 /// Three-state lattice over compile-time evaluation results.
@@ -95,6 +106,35 @@ impl Lattice {
         match self {
             Self::Const(v) => Some(*v),
             _ => None,
+        }
+    }
+
+    /// Join two lattice values. This is the SCCP join (least upper bound)
+    /// over the chain `Unevaluated ⊑ Const(v) ⊑ NonConst`:
+    ///
+    /// - `Unevaluated ⊔ x = x` — an `Unevaluated` arm is treated as
+    ///   contributing no information (e.g. an `if true { … }` whose
+    ///   `else` is unreachable / absent: the join with the executed arm
+    ///   carries the executed arm's value out).
+    /// - `Const(v) ⊔ Const(v) = Const(v)` — both arms agree, the
+    ///   surrounding expression has that value regardless of which arm
+    ///   ran. This is what lets `if cond { 5 } else { 5 }` collapse to
+    ///   `5` when the condition is effect-free.
+    /// - `Const(a) ⊔ Const(b) = NonConst` (when `a ≠ b`) — arms
+    ///   disagree, the merged value is non-constant.
+    /// - `NonConst ⊔ _ = NonConst` — top is absorbing.
+    ///
+    /// The operation is commutative, associative, and idempotent, as
+    /// required of a lattice join. Used by [`Interpreter::reduce_local`]
+    /// to merge the lattice of an `if` expression's two arms when the
+    /// condition is non-constant.
+    #[must_use]
+    pub fn join(self, other: Self) -> Self {
+        match (self, other) {
+            (Self::Unevaluated, x) | (x, Self::Unevaluated) => x,
+            (Self::NonConst, _) | (_, Self::NonConst) => Self::NonConst,
+            (Self::Const(a), Self::Const(b)) if a == b => Self::Const(a),
+            (Self::Const(_), Self::Const(_)) => Self::NonConst,
         }
     }
 }
@@ -222,8 +262,8 @@ impl<'a> Interpreter<'a> {
     }
 
     /// Recursively reduce `expr` in place over the subtree the engine
-    /// currently understands (Binary / Unary / Cast). Returns `true`
-    /// when anything changed.
+    /// currently understands (Binary / Unary / Cast / If). Returns
+    /// `true` when anything changed.
     ///
     /// Internal: the only public entry points are [`reduce`] and
     /// [`reduce_local`]. `reduce` clones into `reduce_in_place`; visitor
@@ -244,11 +284,78 @@ impl<'a> Interpreter<'a> {
             TirExprKind::Unary { expr: inner, .. } | TirExprKind::Cast { expr: inner, .. } => {
                 self.reduce_in_place(inner)
             }
+            TirExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                let mut c = self.reduce_in_place(condition);
+                c |= self.reduce_in_place_block(then_branch);
+                if let Some(eb) = else_branch {
+                    c |= self.reduce_in_place_block(eb);
+                }
+                c
+            }
             _ => false,
         };
 
         changed |= self.reduce_local(expr);
         changed
+    }
+
+    /// Recursively reduce every expression inside `block` in place.
+    /// Used by [`reduce_in_place`] to walk into `if` arms when the
+    /// engine is invoked through the owning [`reduce`] entry point
+    /// (the visitor-driven path walks blocks itself).
+    fn reduce_in_place_block(&mut self, block: &mut TirBlock) -> bool {
+        let mut changed = false;
+        for stmt in &mut block.stmts {
+            changed |= self.reduce_in_place_stmt(stmt);
+        }
+        changed |= self.reduce_local_block(block);
+        changed
+    }
+
+    fn reduce_in_place_stmt(&mut self, stmt: &mut TirStmt) -> bool {
+        match &mut stmt.kind {
+            TirStmtKind::Expr(e) => self.reduce_in_place(e),
+            TirStmtKind::Let { value, .. } | TirStmtKind::LetDestructure { value, .. } => {
+                self.reduce_in_place(value)
+            }
+            TirStmtKind::Return { value } | TirStmtKind::Break { value, .. } => {
+                value.as_mut().is_some_and(|v| self.reduce_in_place(v))
+            }
+            TirStmtKind::If {
+                condition,
+                then_block,
+                else_block,
+            } => {
+                let mut c = self.reduce_in_place(condition);
+                c |= self.reduce_in_place_block(then_block);
+                if let Some(eb) = else_block {
+                    c |= self.reduce_in_place_block(eb);
+                }
+                c
+            }
+            TirStmtKind::Loop { body } => self.reduce_in_place_block(body),
+            TirStmtKind::LabeledBlock { block, .. } => self.reduce_in_place_block(block),
+            TirStmtKind::IfLet {
+                scrutinee,
+                then_block,
+                else_block,
+                ..
+            } => {
+                let mut c = self.reduce_in_place(scrutinee);
+                c |= self.reduce_in_place_block(then_block);
+                if let Some(eb) = else_block {
+                    c |= self.reduce_in_place_block(eb);
+                }
+                c
+            }
+            TirStmtKind::Continue
+            | TirStmtKind::TaskReturn { .. }
+            | TirStmtKind::VariadicForOf { .. } => false,
+        }
     }
 
     /// Apply the engine's rewrite rules to `expr` only — without recursing
@@ -257,8 +364,12 @@ impl<'a> Interpreter<'a> {
     /// This is the right entry point when the caller is already driving a
     /// TIR walk (for example via `tir_visitor::opt_walk_expr`) and wants
     /// to slot tiri's local rewrites into each visited node. Today the
-    /// rules are constant folding for Binary / Unary / Cast and the
-    /// short-circuit identity simplifications for `&&` / `||`.
+    /// rules are constant folding for Binary / Unary / Cast, the
+    /// short-circuit identity simplifications for `&&` / `||`, and the
+    /// Stage-2 `if`-expression rewrites (constant condition collapses to
+    /// the chosen arm; non-constant condition with both arms producing
+    /// the same lattice constant collapses to that constant when the
+    /// condition is effect-free).
     ///
     /// `Local` nodes themselves are never rewritten in place: their env
     /// values are read transparently when computing the parent
@@ -270,7 +381,130 @@ impl<'a> Interpreter<'a> {
             expr.kind = value_to_expr_kind(v);
             return true;
         }
-        rewrite_short_circuit(expr)
+        if rewrite_short_circuit(expr) {
+            return true;
+        }
+        self.rewrite_if_expr(expr)
+    }
+
+    /// Apply stmt-level rewrites that may expand or contract the stmt
+    /// list of `block`. Today this is solely Stage-2 `if`-statement
+    /// folding: an `if true { … } else { … }` stmt with a constant
+    /// boolean condition is replaced by the chosen branch's stmts in the
+    /// parent block; an `if false { … }` with no else is dropped entirely.
+    ///
+    /// Returns `true` when the block was rewritten. The caller (driving
+    /// visitor) is expected to have walked into each stmt's children
+    /// before calling this so the conditions are already folded.
+    pub fn reduce_local_block(&mut self, block: &mut TirBlock) -> bool {
+        let has_constant_if = block.stmts.iter().any(|s| {
+            matches!(
+                &s.kind,
+                TirStmtKind::If { condition, .. }
+                    if matches!(condition.kind, TirExprKind::BoolLiteral(_))
+            )
+        });
+        if !has_constant_if {
+            return false;
+        }
+        let old_stmts = std::mem::take(&mut block.stmts);
+        for stmt in old_stmts {
+            if let TirStmtKind::If { ref condition, .. } = stmt.kind
+                && let TirExprKind::BoolLiteral(value) = condition.kind
+            {
+                let TirStmtKind::If {
+                    then_block,
+                    else_block,
+                    ..
+                } = stmt.kind
+                else {
+                    unreachable!();
+                };
+                if value {
+                    block.stmts.extend(then_block.stmts);
+                } else if let Some(eb) = else_block {
+                    block.stmts.extend(eb.stmts);
+                }
+                continue;
+            }
+            block.stmts.push(stmt);
+        }
+        true
+    }
+
+    /// Stage-2 rewrite for an `if` expression. See [`reduce_local`] for
+    /// the rule set; this helper is the implementation.
+    fn rewrite_if_expr(&mut self, expr: &mut TirExpr) -> bool {
+        let TirExprKind::If {
+            condition,
+            then_branch: _,
+            else_branch: _,
+        } = &expr.kind
+        else {
+            return false;
+        };
+        let cond_lat = self.expr_to_lattice(condition);
+
+        // Constant condition → splice the chosen arm. The unreachable arm
+        // is dropped without ever being asked for a lattice value, so a
+        // trapping `else { panic(…) }` does not contaminate the result —
+        // this is the SCCP "infeasible edge" treatment.
+        if let Lattice::Const(Value::Bool(b)) = cond_lat {
+            let TirExprKind::If {
+                then_branch,
+                else_branch,
+                ..
+            } = std::mem::replace(&mut expr.kind, TirExprKind::Unit)
+            else {
+                unreachable!();
+            };
+            if b {
+                expr.kind = TirExprKind::Block(then_branch);
+            } else if let Some(eb) = else_branch {
+                expr.kind = TirExprKind::Block(eb);
+            }
+            // false without else: TirExprKind::Unit is already in place.
+            return true;
+        }
+
+        // Non-constant condition: consider the both-arms-equal collapse.
+        // This is safe only when the condition is effect-free, since
+        // dropping the `if` drops its evaluation. See
+        // [`is_speculatable`] for what counts as effect-free.
+        //
+        // Require *both* arms to reduce to the same `Const(v)`. Using
+        // `Lattice::join` here would be tempting but unsound: join's
+        // `Unevaluated ⊔ Const(v) → Const(v)` rule encodes an SCCP
+        // infeasible-edge semantic that does not apply when both edges
+        // are feasible (an `Unevaluated` arm here means "reachable but
+        // value not known", not "unreachable"). Match `Const(_)` on
+        // both sides explicitly so an arm we couldn't analyze never
+        // erases the surrounding `if`.
+        let TirExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } = &expr.kind
+        else {
+            unreachable!();
+        };
+        if !is_speculatable(condition) {
+            return false;
+        }
+        let Lattice::Const(t) = self.block_lattice(then_branch) else {
+            return false;
+        };
+        let Some(eb) = else_branch else {
+            return false;
+        };
+        let Lattice::Const(e) = self.block_lattice(eb) else {
+            return false;
+        };
+        if t != e {
+            return false;
+        }
+        expr.kind = value_to_expr_kind(t);
+        true
     }
 
     /// Reduce `expr` to a [`Lattice`] value without mutating the
@@ -309,8 +543,12 @@ impl<'a> Interpreter<'a> {
 
     /// Map a (possibly already-reduced) `TirExpr` to a `Lattice`. For
     /// literal leaves this is straightforward; for a `Local` node the
-    /// env is consulted; for everything else the result is
-    /// `Unevaluated`.
+    /// env is consulted; for an `if` node the SCCP-style join over the
+    /// arm lattices is taken (with the unreachable arm of a
+    /// constant-condition `if` excluded — `feasible_edge`); for a `Block`
+    /// only the simple case of a single tail expression is modelled
+    /// (anything richer falls through to `Unevaluated`); for everything
+    /// else the result is `Unevaluated`.
     fn expr_to_lattice(&self, expr: &TirExpr) -> Lattice {
         match &expr.kind {
             TirExprKind::BoolLiteral(b) => Lattice::Const(Value::Bool(*b)),
@@ -337,6 +575,67 @@ impl<'a> Interpreter<'a> {
             TirExprKind::Local { index, .. } => {
                 self.env.get(index).copied().unwrap_or(Lattice::Unevaluated)
             }
+            TirExprKind::Block(b) => self.block_lattice(b),
+            TirExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                let cond = self.expr_to_lattice(condition);
+                match cond {
+                    // Feasible edge: only the chosen arm contributes.
+                    // The unchosen arm is unreachable and its value
+                    // (whatever it is) does not enter the join.
+                    Lattice::Const(Value::Bool(true)) => self.block_lattice(then_branch),
+                    Lattice::Const(Value::Bool(false)) => match else_branch {
+                        Some(eb) => self.block_lattice(eb),
+                        None => Lattice::Unevaluated,
+                    },
+                    // Non-constant / unevaluated / non-bool condition:
+                    // both edges are feasible, so the result is the join
+                    // of the arms' values. An arm whose `block_lattice`
+                    // came back as `Unevaluated` is *not* an infeasible
+                    // edge here — the arm IS reachable, we just couldn't
+                    // analyze it. Promote Unevaluated → NonConst before
+                    // joining so the absent information correctly pushes
+                    // the merged lattice up to Top.
+                    _ => {
+                        let then_lat =
+                            arm_lattice_for_feasible_join(self.block_lattice(then_branch));
+                        let else_lat = match else_branch {
+                            Some(eb) => arm_lattice_for_feasible_join(self.block_lattice(eb)),
+                            // No else arm: the if has type Unit, which
+                            // has no representable Const value but the
+                            // arm IS reachable.
+                            None => Lattice::NonConst,
+                        };
+                        then_lat.join(else_lat)
+                    }
+                }
+            }
+            _ => Lattice::Unevaluated,
+        }
+    }
+
+    /// Lattice value of a block: for Stage 2 we model only the simplest
+    /// useful case — a block whose sole stmt is a tail `Expr(e)`. Such
+    /// a block evaluates to whatever `e` evaluates to, so we recurse
+    /// through `expr_to_lattice`. Empty blocks evaluate to `()`, which
+    /// has no representable [`Value`], so they map to `Unevaluated`
+    /// (the join with any other arm carries the other arm's value out,
+    /// matching the desired SCCP feasible-edge behavior). Everything
+    /// else (intermediate `let` / `Assign` / `Loop` / function calls)
+    /// is conservatively `Unevaluated` rather than `NonConst` so that
+    /// the surrounding `if` stays foldable when the *other* arm is a
+    /// constant — an arm we couldn't evaluate is treated like an
+    /// infeasible edge, not a contradicting Const.
+    fn block_lattice(&self, block: &TirBlock) -> Lattice {
+        match block.stmts.as_slice() {
+            [] => Lattice::Unevaluated,
+            [single] => match &single.kind {
+                TirStmtKind::Expr(e) => self.expr_to_lattice(e),
+                _ => Lattice::Unevaluated,
+            },
             _ => Lattice::Unevaluated,
         }
     }
@@ -401,6 +700,68 @@ fn option_to_lattice(opt: Option<Value>) -> Lattice {
     match opt {
         Some(v) => Lattice::Const(v),
         None => Lattice::NonConst,
+    }
+}
+
+/// Adjust a block's raw lattice value before feeding it into an
+/// arm-feasible-join (the `if` non-constant-condition path).
+///
+/// `Lattice::Unevaluated` from `block_lattice` means "we couldn't
+/// analyze this block's value" — which is fine when the block is the
+/// chosen branch of a constant-condition `if` (the other arm is an
+/// infeasible edge, so the result really is "we don't know"), but
+/// becomes unsound under a non-constant condition: that arm is
+/// reachable, the absence of a known value means SCCP-Top
+/// (`NonConst`), not infeasibility. Promote here so that a subsequent
+/// `Lattice::join` cannot let an `Unevaluated` arm be silently
+/// absorbed by a `Const` peer (`join(Unevaluated, Const(v)) → Const(v)`
+/// is the infeasible-edge rule, valid only when the Unevaluated edge
+/// really is unreachable).
+fn arm_lattice_for_feasible_join(lat: Lattice) -> Lattice {
+    match lat {
+        Lattice::Unevaluated => Lattice::NonConst,
+        other => other,
+    }
+}
+
+/// Conservative effect-free check for an expression that we may want
+/// to drop entirely (specifically, the condition of an `if` whose two
+/// arms reduce to the same lattice constant). "Effect-free" here means
+/// "evaluating this neither traps, mutates, nor calls a function that
+/// might do either". The check is structural and only admits a small
+/// allow-list — when in doubt, stay conservative and refuse the rewrite.
+///
+/// Notes:
+///
+/// - `Binary { Div | Mod, … }` is excluded because integer
+///   division-by-zero traps; `Unary { Deref, … }` is excluded for the
+///   same reason (a null/invalid reference would trap).
+/// - `FieldAccess` over speculatable receivers is allowed: a non-null
+///   GC reference's field load cannot trap once we have the reference.
+/// - Calls of any flavor are rejected — even pure callees may return
+///   different values across invocations (e.g. `random.next()` is
+///   marked pure-by-effect in Wado but is not idempotent in the SCCP
+///   sense), and tiri does not yet inline pure calls.
+fn is_speculatable(expr: &TirExpr) -> bool {
+    match &expr.kind {
+        TirExprKind::IntLiteral { .. }
+        | TirExprKind::FloatLiteral { .. }
+        | TirExprKind::BoolLiteral(_)
+        | TirExprKind::CharLiteral(_)
+        | TirExprKind::Local { .. }
+        | TirExprKind::Capture { .. }
+        | TirExprKind::Unit => true,
+        TirExprKind::Binary { left, op, right } => {
+            !matches!(op, TirBinaryOp::Div | TirBinaryOp::Mod)
+                && is_speculatable(left)
+                && is_speculatable(right)
+        }
+        TirExprKind::Unary { op, expr: inner } => {
+            !matches!(op, TirUnaryOp::Deref) && is_speculatable(inner)
+        }
+        TirExprKind::Cast { expr: inner, .. } => is_speculatable(inner),
+        TirExprKind::FieldAccess { expr: inner, .. } => is_speculatable(inner),
+        _ => false,
     }
 }
 

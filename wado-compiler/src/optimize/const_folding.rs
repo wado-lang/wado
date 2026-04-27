@@ -11,7 +11,9 @@
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
 use crate::tir::{TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind};
-use crate::tir_visitor::{TirOptVisitor, TirRefVisitor, opt_walk_expr, opt_walk_stmt};
+use crate::tir_visitor::{
+    TirOptVisitor, TirRefVisitor, opt_walk_block, opt_walk_expr, opt_walk_stmt,
+};
 use crate::tiri::{Interpreter, Lattice};
 
 /// Apply constant folding to all functions in the project.
@@ -73,6 +75,15 @@ impl TirOptVisitor for ConstFoldVisitor<'_> {
             self.interpreter.invalidate_local(*index);
         }
         changed |= self.interpreter.reduce_local(expr);
+        changed
+    }
+
+    fn visit_block(&mut self, block: &mut TirBlock) -> bool {
+        // Bottom-up: walk children first so each If stmt's condition is
+        // already folded to a literal (when feasible) by the time we
+        // ask the interpreter to splice the chosen branch into this block.
+        let mut changed = opt_walk_block(self, block);
+        changed |= self.interpreter.reduce_local_block(block);
         changed
     }
 }

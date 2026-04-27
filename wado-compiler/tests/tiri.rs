@@ -10,7 +10,8 @@
 
 use wado_compiler::Span;
 use wado_compiler::tir::{
-    PrimitiveType, TirBinaryOp, TirExpr, TirExprKind, TirUnaryOp, TypeId, TypeTable,
+    PrimitiveType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind, TirUnaryOp,
+    TypeId, TypeTable,
 };
 use wado_compiler::tiri::{Interpreter, Lattice, Value};
 
@@ -944,4 +945,382 @@ fn cast_through_env_local_applies_target_prim() {
         interp.reduce_to_lattice(&cmp),
         Lattice::Const(Value::Bool(true)),
     );
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Stage 2 — `Lattice::join` and `if`-expression reduction
+// ──────────────────────────────────────────────────────────────────────────────
+
+fn block_with_tail_expr(e: TirExpr) -> TirBlock {
+    TirBlock::new(
+        vec![TirStmt::new(TirStmtKind::Expr(e), Span::default())],
+        Span::default(),
+    )
+}
+
+fn if_expr(
+    condition: TirExpr,
+    then_branch: TirBlock,
+    else_branch: Option<TirBlock>,
+    type_id: TypeId,
+) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::If {
+            condition: Box::new(condition),
+            then_branch,
+            else_branch,
+        },
+        type_id,
+        Span::default(),
+    )
+}
+
+#[test]
+fn lattice_join_idempotent_on_equal_consts() {
+    let v = Lattice::Const(Value::Int {
+        value: 7,
+        prim: PrimitiveType::I32,
+    });
+    assert_eq!(v.join(v), v);
+}
+
+#[test]
+fn lattice_join_unequal_consts_is_nonconst() {
+    let a = Lattice::Const(Value::Int {
+        value: 1,
+        prim: PrimitiveType::I32,
+    });
+    let b = Lattice::Const(Value::Int {
+        value: 2,
+        prim: PrimitiveType::I32,
+    });
+    assert_eq!(a.join(b), Lattice::NonConst);
+}
+
+#[test]
+fn lattice_join_unevaluated_is_identity() {
+    // Unevaluated is the SCCP infeasible-edge value: joining with it
+    // returns the other operand. The non-constant-condition path that
+    // wants Top semantics for unknown arms must promote Unevaluated →
+    // NonConst *before* invoking `join`; that promotion happens inside
+    // `expr_to_lattice` for `If`, not inside `join` itself.
+    let c = Lattice::Const(Value::Int {
+        value: 42,
+        prim: PrimitiveType::I64,
+    });
+    assert_eq!(Lattice::Unevaluated.join(c), c);
+    assert_eq!(c.join(Lattice::Unevaluated), c);
+    assert_eq!(
+        Lattice::Unevaluated.join(Lattice::Unevaluated),
+        Lattice::Unevaluated
+    );
+}
+
+#[test]
+fn lattice_join_nonconst_is_absorbing() {
+    let c = Lattice::Const(Value::Bool(true));
+    assert_eq!(Lattice::NonConst.join(c), Lattice::NonConst);
+    assert_eq!(c.join(Lattice::NonConst), Lattice::NonConst);
+    assert_eq!(
+        Lattice::NonConst.join(Lattice::Unevaluated),
+        Lattice::NonConst
+    );
+}
+
+#[test]
+fn lattice_join_is_commutative_and_associative() {
+    let a = Lattice::Const(Value::Int {
+        value: 3,
+        prim: PrimitiveType::I32,
+    });
+    let b = Lattice::Const(Value::Int {
+        value: 4,
+        prim: PrimitiveType::I32,
+    });
+    let c = Lattice::NonConst;
+    assert_eq!(a.join(b), b.join(a));
+    assert_eq!(a.join(b).join(c), a.join(b.join(c)));
+    assert_eq!(b.join(c).join(a), c.join(a).join(b));
+}
+
+#[test]
+fn if_const_true_picks_then_arm() {
+    let table = TypeTable::new();
+    let expr = if_expr(
+        bool_lit(true),
+        block_with_tail_expr(int_lit(10, TypeTable::I32, "10")),
+        Some(block_with_tail_expr(int_lit(20, TypeTable::I32, "20"))),
+        TypeTable::I32,
+    );
+    assert_eq!(
+        Interpreter::new(&table).reduce_to_lattice(&expr),
+        Lattice::Const(Value::Int {
+            value: 10,
+            prim: PrimitiveType::I32,
+        }),
+    );
+}
+
+#[test]
+fn if_const_false_picks_else_arm() {
+    let table = TypeTable::new();
+    let expr = if_expr(
+        bool_lit(false),
+        block_with_tail_expr(int_lit(10, TypeTable::I32, "10")),
+        Some(block_with_tail_expr(int_lit(20, TypeTable::I32, "20"))),
+        TypeTable::I32,
+    );
+    assert_eq!(
+        Interpreter::new(&table).reduce_to_lattice(&expr),
+        Lattice::Const(Value::Int {
+            value: 20,
+            prim: PrimitiveType::I32,
+        }),
+    );
+}
+
+#[test]
+fn if_const_false_no_else_yields_unit() {
+    // `if false { … }` (no else) has type Unit; tiri models Unit as
+    // having no representable Const — so the lattice is Unevaluated.
+    // Crucially, the Unevaluated *result* must not poison a surrounding
+    // join with a Const peer (covered by the non-const-condition
+    // expr_to_lattice promotion); here we only verify the bare lookup.
+    let table = TypeTable::new();
+    let expr = if_expr(
+        bool_lit(false),
+        block_with_tail_expr(int_lit(10, TypeTable::I32, "10")),
+        None,
+        TypeTable::UNIT,
+    );
+    assert_eq!(
+        Interpreter::new(&table).reduce_to_lattice(&expr),
+        Lattice::Unevaluated,
+    );
+}
+
+#[test]
+fn if_const_true_unreachable_else_does_not_contaminate() {
+    // SCCP "infeasible edge" treatment: when the condition is provably
+    // true, the else arm is not consulted at all. Even if its tail is
+    // a different lattice value (here `99`, which would otherwise
+    // disagree with `42` and force NonConst under a join), the chosen
+    // arm's value flows out unchanged.
+    let table = TypeTable::new();
+    let expr = if_expr(
+        bool_lit(true),
+        block_with_tail_expr(int_lit(42, TypeTable::I32, "42")),
+        Some(block_with_tail_expr(int_lit(99, TypeTable::I32, "99"))),
+        TypeTable::I32,
+    );
+    assert_eq!(
+        Interpreter::new(&table).reduce_to_lattice(&expr),
+        Lattice::Const(Value::Int {
+            value: 42,
+            prim: PrimitiveType::I32,
+        }),
+    );
+}
+
+#[test]
+fn if_nonconst_cond_with_equal_arm_consts_folds() {
+    // Both arms reduce to the same Const(5). With a speculatable
+    // condition (a Local), the if collapses to `5`.
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    // Local 0 is a bool, unbound in env → `Unevaluated`. is_speculatable
+    // accepts Local, so the both-arms-equal collapse is allowed to fire.
+    let expr = if_expr(
+        local_expr(0, TypeTable::BOOL),
+        block_with_tail_expr(int_lit(5, TypeTable::I32, "5")),
+        Some(block_with_tail_expr(int_lit(5, TypeTable::I32, "5"))),
+        TypeTable::I32,
+    );
+    assert_eq!(
+        interp.reduce_to_lattice(&expr),
+        Lattice::Const(Value::Int {
+            value: 5,
+            prim: PrimitiveType::I32,
+        }),
+    );
+}
+
+#[test]
+fn if_nonconst_cond_with_unequal_arm_consts_is_nonconst() {
+    // Different Const arms under a non-constant condition: the merged
+    // lattice is `NonConst`, and the `if` is not rewritten.
+    let table = TypeTable::new();
+    let expr = if_expr(
+        local_expr(0, TypeTable::BOOL),
+        block_with_tail_expr(int_lit(1, TypeTable::I32, "1")),
+        Some(block_with_tail_expr(int_lit(2, TypeTable::I32, "2"))),
+        TypeTable::I32,
+    );
+    assert_eq!(
+        Interpreter::new(&table).reduce_to_lattice(&expr),
+        Lattice::NonConst,
+    );
+}
+
+#[test]
+fn if_nonconst_cond_with_unevaluated_arm_does_not_fold() {
+    // Regression: under a non-constant condition, an arm whose tail is
+    // a non-literal (here `Local 1`, lattice = Unevaluated since not in
+    // env) MUST NOT let the surrounding `if` collapse to the *other*
+    // arm's Const value. The fix promotes Unevaluated → NonConst before
+    // joining, so the merged lattice is NonConst (not the else arm's
+    // Const(0)).
+    let table = TypeTable::new();
+    let expr = if_expr(
+        local_expr(0, TypeTable::BOOL),
+        block_with_tail_expr(local_expr(1, TypeTable::I32)),
+        Some(block_with_tail_expr(int_lit(0, TypeTable::I32, "0"))),
+        TypeTable::I32,
+    );
+    assert_eq!(
+        Interpreter::new(&table).reduce_to_lattice(&expr),
+        Lattice::NonConst,
+    );
+}
+
+#[test]
+fn reduce_local_rewrites_const_true_if_to_block() {
+    // The visitor-driven path: `reduce_local` rewrites the `If` in
+    // place to a `Block` of the chosen branch. This is the rewrite that
+    // subsumes the `if true` case from the legacy `const_branch_prune`.
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    let mut expr = if_expr(
+        bool_lit(true),
+        block_with_tail_expr(int_lit(10, TypeTable::I32, "10")),
+        Some(block_with_tail_expr(int_lit(20, TypeTable::I32, "20"))),
+        TypeTable::I32,
+    );
+    assert!(interp.reduce_local(&mut expr));
+    let TirExprKind::Block(b) = &expr.kind else {
+        panic!("expected Block, got {:?}", expr.kind);
+    };
+    assert_eq!(b.stmts.len(), 1);
+    let TirStmtKind::Expr(tail) = &b.stmts[0].kind else {
+        panic!("expected Expr stmt");
+    };
+    let TirExprKind::IntLiteral { value, .. } = tail.kind else {
+        panic!("expected IntLiteral tail");
+    };
+    assert_eq!(value, 10);
+}
+
+#[test]
+fn reduce_local_rewrites_const_false_if_no_else_to_unit() {
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    let mut expr = if_expr(
+        bool_lit(false),
+        block_with_tail_expr(int_lit(10, TypeTable::I32, "10")),
+        None,
+        TypeTable::UNIT,
+    );
+    assert!(interp.reduce_local(&mut expr));
+    assert!(matches!(expr.kind, TirExprKind::Unit));
+}
+
+#[test]
+fn reduce_local_collapses_equal_arm_if_to_literal() {
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    let mut expr = if_expr(
+        local_expr(0, TypeTable::BOOL),
+        block_with_tail_expr(int_lit(7, TypeTable::I32, "7")),
+        Some(block_with_tail_expr(int_lit(7, TypeTable::I32, "7"))),
+        TypeTable::I32,
+    );
+    assert!(interp.reduce_local(&mut expr));
+    let TirExprKind::IntLiteral { value, .. } = expr.kind else {
+        panic!("expected IntLiteral, got {:?}", expr.kind);
+    };
+    assert_eq!(value, 7);
+}
+
+#[test]
+fn reduce_local_block_splices_const_true_if_stmt() {
+    // Stmt-form `if true { stmts… }` → splice stmts into the parent.
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    let inner_stmt = TirStmt::new(
+        TirStmtKind::Expr(int_lit(99, TypeTable::I32, "99")),
+        Span::default(),
+    );
+    let if_stmt = TirStmt::new(
+        TirStmtKind::If {
+            condition: bool_lit(true),
+            then_block: TirBlock::new(vec![inner_stmt], Span::default()),
+            else_block: Some(TirBlock::new(
+                vec![TirStmt::new(
+                    TirStmtKind::Expr(int_lit(0, TypeTable::I32, "0")),
+                    Span::default(),
+                )],
+                Span::default(),
+            )),
+        },
+        Span::default(),
+    );
+    let mut block = TirBlock::new(vec![if_stmt], Span::default());
+    assert!(interp.reduce_local_block(&mut block));
+    assert_eq!(block.stmts.len(), 1);
+    let TirStmtKind::Expr(e) = &block.stmts[0].kind else {
+        panic!("expected Expr stmt");
+    };
+    let TirExprKind::IntLiteral { value, .. } = e.kind else {
+        panic!("expected IntLiteral");
+    };
+    assert_eq!(value, 99);
+}
+
+#[test]
+fn reduce_local_block_drops_const_false_if_stmt_without_else() {
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    let if_stmt = TirStmt::new(
+        TirStmtKind::If {
+            condition: bool_lit(false),
+            then_block: TirBlock::new(
+                vec![TirStmt::new(
+                    TirStmtKind::Expr(int_lit(99, TypeTable::I32, "99")),
+                    Span::default(),
+                )],
+                Span::default(),
+            ),
+            else_block: None,
+        },
+        Span::default(),
+    );
+    let mut block = TirBlock::new(vec![if_stmt], Span::default());
+    assert!(interp.reduce_local_block(&mut block));
+    assert!(block.stmts.is_empty());
+}
+
+#[test]
+fn reduce_local_block_leaves_nonconst_if_alone() {
+    // Stmt-form `if cond { … }` with a non-literal condition is left
+    // structurally intact — `reduce_local_block` must not touch it.
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    let if_stmt = TirStmt::new(
+        TirStmtKind::If {
+            condition: local_expr(0, TypeTable::BOOL),
+            then_block: TirBlock::new(
+                vec![TirStmt::new(
+                    TirStmtKind::Expr(int_lit(99, TypeTable::I32, "99")),
+                    Span::default(),
+                )],
+                Span::default(),
+            ),
+            else_block: None,
+        },
+        Span::default(),
+    );
+    let mut block = TirBlock::new(vec![if_stmt], Span::default());
+    assert!(!interp.reduce_local_block(&mut block));
+    assert_eq!(block.stmts.len(), 1);
+    assert!(matches!(block.stmts[0].kind, TirStmtKind::If { .. }));
 }
