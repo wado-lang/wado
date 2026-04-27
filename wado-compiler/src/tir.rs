@@ -2855,8 +2855,27 @@ pub struct TirGlobal {
     pub module_source: ModuleSource,
     pub span: Span,
     /// True if this global's Wasm type should be nullable.
-    /// Set by lower phase for lazy-initialized reference type globals.
+    /// Set by the lower phase for two distinct cases:
+    /// 1. Lazy-initialized reference globals — the slot starts `null`
+    ///    until `__initialize_module` runs, so the storage must accept
+    ///    `ref.null`. (`lazy_init` is also set in this case.)
+    /// 2. Constant-initialized reference globals whose user-facing
+    ///    initializer is `null` (e.g. `global mut x: Option<&T> = null`)
+    ///    — the slot needs to accept `ref.null` because that IS the
+    ///    intended runtime value. (`lazy_init` stays false.)
     pub is_nullable: bool,
+    /// True when this global is lazy-initialized: the Wasm slot starts
+    /// `null`, and `__initialize_module` runs the original (non-constant)
+    /// initializer to assign the real value before any non-init use.
+    /// Codegen narrows `global.get` results with `ref.as_non_null` for
+    /// these globals, since the read result is guaranteed non-null after
+    /// init.
+    ///
+    /// `false` for constant-initialized globals (including
+    /// `Option<&T> = null` whose `null` is itself the runtime value) —
+    /// codegen leaves the read result nullable so a `None` value reads
+    /// back as `ref.null` instead of trapping in `ref.as_non_null`.
+    pub lazy_init: bool,
     /// Local variable types used by the initializer expression.
     /// Populated when the initializer is non-trivial (e.g., `SequenceLiteralBuilder` coercion).
     pub local_types: Vec<TypeId>,

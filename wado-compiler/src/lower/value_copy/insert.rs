@@ -85,9 +85,25 @@ struct ValueCopyInserter {
 impl ValueCopyInserter {
     /// True when a value of `type_id` must be deep-copied on assignment or
     /// parameter passing. Mirrors the former `wir_build::value_copy`
-    /// `needs_value_copy` predicate.
+    /// `needs_value_copy` predicate, and — critically — agrees with
+    /// `synthesize::build_copy_body` about which types actually warrant a
+    /// non-identity copy body. The two passes have to agree: when this
+    /// returns `true`, `synthesize` emits a `$value_copy$T_<id>` function
+    /// whose param/return types are derived from `type_id`. If the body
+    /// turns out to be identity (`return v;`), the function still ends up
+    /// typed at WIR level as taking a non-null ref, and any call site
+    /// passing a nullable source (e.g. a `None`-initialised
+    /// `Option<&T>` global, which lowers to `ref.null`) hits a `(ref X) /
+    /// nullref` mismatch — an invalid Wasm module at compile time and a
+    /// runtime trap on the wasmtime side. Returning `false` here for
+    /// types that would have an identity body keeps the wrap from being
+    /// inserted at all.
     fn needs_value_copy(&self, type_id: TypeId) -> bool {
-        match self.type_table.borrow().get(type_id) {
+        let tt = self.type_table.borrow();
+        match tt.get(type_id) {
+            // Concrete structs need a field-by-field deep copy, except for
+            // the `Box<T>` shortcut whose semantics intentionally share
+            // the underlying cell.
             ResolvedType::Struct { base_name, .. } => base_name.as_deref() != Some("Box"),
             ResolvedType::GenericInstance {
                 name,
@@ -97,12 +113,27 @@ impl ValueCopyInserter {
                 if name == "Box" {
                     return false;
                 }
-                if TypeTable::is_tuple_type(name, module_source) && type_args.is_empty() {
-                    return false;
+                if TypeTable::is_tuple_type(name, module_source) {
+                    // Empty tuples are unit-shaped; non-empty tuples need
+                    // element-wise deep copy.
+                    return !type_args.is_empty();
                 }
-                true
+                if name == "Array" {
+                    return true;
+                }
+                // Other generic instances: only generic-struct templates
+                // need deep copy. Generic-variant templates (`Option`,
+                // `Result`, ...) and generic-resource templates fall
+                // through to identity in `synthesize::build_copy_body`,
+                // so wrapping them is wasted and triggers the
+                // nullable-source mismatch described above.
+                tt.find_struct_type(name, module_source).is_some()
             }
-            ResolvedType::Variant { .. } => true,
+            // Variants and resources are reference-shaped at WIR level;
+            // their copy body is identity (`return v;`).
+            ResolvedType::Variant { .. }
+            | ResolvedType::Resource { .. }
+            | ResolvedType::GenericResource { .. } => false,
             _ => false,
         }
     }

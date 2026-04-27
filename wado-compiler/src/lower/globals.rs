@@ -33,6 +33,18 @@ fn is_constant_initializer(expr: &TirExpr) -> bool {
     }
 }
 
+/// Check if an expression is a `null` initializer (possibly inside casts).
+/// Used to mark reference-typed globals nullable when their constant
+/// initializer is `ref.null`, since a non-null Wasm global slot can't
+/// accept a `ref.null` initializer.
+fn is_null_initializer(expr: &TirExpr) -> bool {
+    match &expr.kind {
+        TirExprKind::Null => true,
+        TirExprKind::Cast { expr: inner, .. } => is_null_initializer(inner),
+        _ => false,
+    }
+}
+
 /// Create a default value expression for a type (used for lazy-initialized globals)
 fn default_value_for_type(type_id: TypeId, type_table: &TypeTable, span: Span) -> TirExpr {
     match type_table.get(type_id) {
@@ -142,10 +154,29 @@ pub(super) fn lower_global_initializers(module: &mut TirModule) {
             global.initializer = default_value_for_type(global.ty, &type_table, global.span);
             // Lazy-init globals must be Wasm-mutable (even if Wado-immutable)
             global.mutable = true;
-            // Reference types need nullable Wasm type for lazy init
+            // Reference types need nullable Wasm type for lazy init,
+            // and codegen narrows reads (`global.get` followed by
+            // `ref.as_non_null`) since the slot is guaranteed non-null
+            // after `__initialize_module` runs.
             if is_reference_type(global.ty, &type_table) {
                 global.is_nullable = true;
+                global.lazy_init = true;
             }
+        } else if is_null_initializer(&global.initializer)
+            && is_reference_type(global.ty, &type_table)
+        {
+            // Constant `null` initializer for a reference-typed global.
+            // The Wasm initializer is `ref.null`, which only validates
+            // against a nullable global slot. Without this, the global's
+            // WIR type stays `(ref X)` non-null and the linker rejects
+            // the module with `expected (ref X), found nullref`.
+            //
+            // Codegen does NOT narrow reads of these globals: `null` is
+            // a legitimate runtime value (e.g. `Option<&T>::None`), so
+            // wrapping `global.get` in `ref.as_non_null` would trap
+            // every time we read a `None` value back. `lazy_init` stays
+            // false so the codegen narrowing path is skipped.
+            global.is_nullable = true;
         }
     }
 
@@ -638,6 +669,7 @@ pub(super) fn generate_initialize_modules_flat(flat: &mut FlatPackage) {
         module_source: entry_source.clone(),
         span,
         is_nullable: false,
+        lazy_init: false,
         local_types: Vec::new(),
     };
     flat.globals.push(init_flag_global);

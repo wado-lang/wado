@@ -190,7 +190,6 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_open_at.wado/run"() with Stdout
     let open_result: ref "core:prelude/types.wado//Result<Descriptor,ErrorCode>";
     let missing_result: ref "core:prelude/types.wado//Result<Descriptor,ErrorCode>";
     let __local_7: ref "core:prelude/string.wado//String";
-    let __local_17: ref "wasi:filesystem/types.wado//ErrorCode";
     dirs = "wado-compiler/tests/fixtures/wasi_filesystem_open_at.wado/__cm_binding__Preopens_get_directories"();
     if dirs.used == 0 {
         "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("open_at: no preopened directories available"), used: 43 });
@@ -229,11 +228,6 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_open_at.wado/run"() with Stdout
     }
     missing_result = "core:prelude/types.wado/AsyncCall<Result<Descriptor,ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_open_at.wado/__cm_binding__Descriptor_open_at"(dir, 0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("does_not_exist.txt"), used: 18 }, 0, 1));
     if ref.test "core:prelude/types.wado//Result<Descriptor,ErrorCode>::Err"(missing_result) {
-        drop(__inline__value_copy_T51_6: block -> ref "wasi:filesystem/types.wado//ErrorCode" {
-            __local_17 = ref.cast "core:prelude/types.wado//Result<Descriptor,ErrorCode>::Err"(missing_result).payload_0;
-            break __inline__value_copy_T51_6: __local_17;
-            unreachable;
-        });
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("open_at: nonexistent file returns error (correct)"), used: 49 });
     } else {
         "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("open_at: nonexistent file should have returned an error"), used: 55 });

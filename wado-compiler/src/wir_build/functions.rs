@@ -534,6 +534,7 @@ fn register_globals(ctx: &mut WirContext<'_>) {
             ty: wir_type,
             mutable: global.mutable,
             init,
+            lazy_init: global.lazy_init,
             meta: WirMeta {
                 module_source: Some(module_source.clone()),
                 ..WirMeta::default()

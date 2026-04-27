@@ -226,7 +226,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
             is_pub: global_decl.is_pub,
             module_source: self.current_module_source.clone(),
             span: global_decl.span,
-            is_nullable: false, // Set by lower phase for lazy-init reference types
+            // Both flags are set by the lower phase: `is_nullable` for
+            // any global whose Wasm slot needs to accept `ref.null`, and
+            // `lazy_init` for globals whose initializer runs in
+            // `__initialize_module` (i.e. codegen narrows reads after
+            // init). Constant `null` initializers set only `is_nullable`.
+            is_nullable: false,
+            lazy_init: false,
             local_types: ctx.local_types.clone(),
         })
     }

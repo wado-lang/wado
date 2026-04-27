@@ -634,12 +634,20 @@ impl<'a> WirEmitter<'a> {
         })
     }
 
-    fn is_nullable_global(&self, name: &str) -> bool {
+    /// True for nullable globals whose values are guaranteed non-null
+    /// at every legitimate read (lazy-init globals — see `WirGlobal::lazy_init`).
+    /// Codegen wraps `global.get` in `ref.as_non_null` for these so the
+    /// downstream non-null `result_ty` is satisfied.
+    ///
+    /// Genuinely-nullable globals (e.g. `Option<&T> = null`) return false
+    /// here: their `null` value is a legitimate runtime value and
+    /// narrowing it would trap.
+    fn is_lazy_init_global(&self, name: &str) -> bool {
         self.wir
             .globals
             .iter()
             .find(|g| g.name.fq == name)
-            .is_some_and(|g| matches!(g.ty, WirType::Ref { nullable: true, .. }))
+            .is_some_and(|g| g.lazy_init)
     }
 
     // === Global Section ===
@@ -990,9 +998,16 @@ impl<'a> WirEmitter<'a> {
             WirInstr::GlobalGet { name, .. } => {
                 let idx = self.resolve_global(&name.fq);
                 f.instruction(&Instruction::GlobalGet(idx));
-                // Nullable globals (lazy-init) produce (ref null $T) from global.get.
-                // Narrow to (ref $T) since Wado values are non-null after initialization.
-                if self.is_nullable_global(&name.fq) {
+                // Lazy-init globals produce `(ref null $T)` from `global.get`
+                // but are guaranteed non-null after `__initialize_module`
+                // runs. Narrow to `(ref $T)` so the downstream non-null
+                // `result_ty` is satisfied.
+                //
+                // Genuinely-nullable globals (e.g. `Option<&T> = null`)
+                // skip this narrowing — `null` is a legitimate runtime
+                // value for them and `ref.as_non_null` would trap on
+                // every `None` read.
+                if self.is_lazy_init_global(&name.fq) {
                     f.instruction(&Instruction::RefAsNonNull);
                 }
             }
