@@ -120,9 +120,23 @@ E2E: [opt_const.wado](../wado-compiler/tests/fixtures/opt_const.wado).
 
 ### Constant Folding (`const_folding.rs`)
 
-Evaluates compile-time-known expressions: integer/float arithmetic and comparison, boolean logic, bitwise ops, integer casts. Guards against division by zero and signed `MIN / -1` traps. Also folds boolean identities (`false || x → x`, `true && x → x`, etc.).
+A thin TIR visitor that walks each function body via `opt_walk_expr` and asks the [TIR Interpreter (`tiri`)](#tir-interpreter-tiri) to apply its local rewrite rules at every node. All reduction logic — literal folding, integer cast collapsing, and the `&&` / `||` short-circuit identity rules — lives in `tiri`; this pass owns no rewrite logic of its own.
 
 E2E: [const_fold.wado](../wado-compiler/tests/fixtures/const_fold.wado), [opt_const_fold_div_zero.wado](../wado-compiler/tests/fixtures/opt_const_fold_div_zero.wado).
+
+### TIR Interpreter (`tiri`)
+
+`tiri` (`src/tiri.rs`) is the partial evaluator that backs constant folding. The canonical entry point is
+
+```rust
+Interpreter::new(type_table).reduce(&expr) -> TirExpr
+```
+
+`reduce` is idempotent and monotone: it always returns a (possibly identical) `TirExpr`, leaving literal leaves with their original lexical repr (`0xFF` is not rewritten to `255`). Visitor drivers that already walk every TIR kind via `tir_visitor::opt_walk_expr` use `reduce_local(&mut TirExpr) -> bool` instead, which performs only the single-node rewrite at `expr`. Unit tests can use `reduce_to_value(&TirExpr) -> Option<Value>` to extract a `Value` directly.
+
+Today the engine reduces literal-only Binary / Unary / integer Cast expressions plus the short-circuit identity rules `false || X → X` and `true && X → X` (and their right-hand variants). Future work — local-variable environment, `if` / `match` reduction, bounded loop unrolling, pure function inlining, and a complementary wasm-CTFE backend — is described in [WEP: TIR Interpreter Evolution Plan](./wep-2026-04-27-tir-interpreter.md).
+
+Unit tests: [`wado-compiler/tests/tiri.rs`](../wado-compiler/tests/tiri.rs).
 
 ### Constant Global Promotion (`const_global_promotion.rs`)
 

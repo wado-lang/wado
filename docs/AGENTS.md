@@ -103,3 +103,4 @@ It may include TODOs on WIP.
 - [Generic `Subtask<T>` for CM async imports](./wep-2026-04-22-subtask-generic.md)
 - [Synopsis Tests](./wep-2026-04-26-synopsis-tests.md)
 - [Compile-Time Parameters](./wep-2026-04-26-compile-time-params.md)
+- [TIR Interpreter (`tiri`) Evolution Plan](./wep-2026-04-27-tir-interpreter.md)

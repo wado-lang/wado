@@ -31,6 +31,7 @@ pub mod syntax;
 pub mod synthesis;
 pub mod tir;
 pub mod tir_visitor;
+pub mod tiri;
 pub mod token;
 pub mod unparse;
 pub mod wir;
