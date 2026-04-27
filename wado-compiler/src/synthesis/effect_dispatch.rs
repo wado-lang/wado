@@ -24,11 +24,12 @@
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::ModuleSource;
 use crate::package::Package;
-use crate::synthesis::common::{alloc_local, synth_span};
+use crate::name::LocalMethodName;
+use crate::synthesis::common::{alloc_local, option_some, ref_expr, synth_span};
 use crate::tir::{
-    CallArg, EffectRef, FunctionKind, FunctionRef, InlineHint, TirBlock, TirEffectOp, TirExpr,
-    TirExprKind, TirField, TirFunction, TirGlobal, TirParam, TirPattern, TirStmt, TirStmtKind,
-    TirStruct, TirTemplatePart, TypeId, TypeTable,
+    CallArg, EffectRef, FunctionKind, FunctionRef, InlineHint, TirBlock, TirCapture, TirEffectOp,
+    TirExpr, TirExprKind, TirField, TirFunction, TirGlobal, TirParam, TirPattern, TirStmt,
+    TirStmtKind, TirStruct, TirStructField, TirTemplatePart, TypeId, TypeTable,
 };
 
 /// Canonical identity of an effect: `(defining_module, name)`.
@@ -665,6 +666,886 @@ fn build_dispatch_wrapper_function(
     }
 }
 
+/// Mutable context threaded through the dispatch-aware lowering walker.
+///
+/// Tracks the containing function's local table so the desugarer can
+/// allocate fresh locals for `__h_<E>` / `__save_<E>` / `__d_<E>`
+/// triples, plus read-only references to the per-effect [`DispatchPlan`]
+/// map and the impl-block index.
+///
+/// When the walker descends into a `TirExprKind::Closure` body, it
+/// pushes a fresh closure-local scope (`closure_depth > 0`) so any
+/// nested `WithHandler` is desugared into the closure's local-index
+/// space rather than the outer function's. Closure-scope `local_types`
+/// is dropped on pop because the lower phase rebuilds each closure's
+/// local table from `Let` statements anyway.
+#[allow(dead_code)]
+struct LowerCtx<'a> {
+    plans: &'a IndexMap<EffectKey, DispatchPlan>,
+    impl_index: &'a IndexMap<HandlerImplKey, HandlerImplInfo>,
+    type_table: std::rc::Rc<std::cell::RefCell<TypeTable>>,
+    entry_source: ModuleSource,
+    /// Stack of local-allocation scopes — one entry per active function
+    /// or closure body. Top of stack is the innermost scope.
+    scopes: Vec<LocalScope>,
+}
+
+#[allow(dead_code)]
+struct LocalScope {
+    /// Next free local index in this scope.
+    next_local: u32,
+    /// `Some(types)` for the outermost function scope (writes back to
+    /// `func.local_types` on exit); `None` for closure scopes (the lower
+    /// phase rebuilds them).
+    local_types: Option<Vec<TypeId>>,
+}
+
+#[allow(dead_code)]
+impl<'a> LowerCtx<'a> {
+    fn alloc_local(&mut self, ty: TypeId) -> u32 {
+        let scope = self.scopes.last_mut().expect("at least one scope");
+        let idx = scope.next_local;
+        scope.next_local += 1;
+        if let Some(types) = &mut scope.local_types {
+            types.push(ty);
+        }
+        idx
+    }
+}
+
+/// Walk every TIR function body / impl method body and replace each
+/// `TirExprKind::WithHandler` with the desugared dispatch-protocol
+/// block (save → build closures + dispatch struct → install global →
+/// body → restore global). See [`desugar_with_handler`] for the shape
+/// of the produced block.
+#[allow(dead_code)]
+fn lower_with_handler_dispatch_in_modules(
+    project: &mut Package,
+    plans: &IndexMap<EffectKey, DispatchPlan>,
+    impl_index: &IndexMap<HandlerImplKey, HandlerImplInfo>,
+) {
+    let entry_source = project.entry_module_source.clone();
+    for module in project.tir_modules.values_mut() {
+        let type_table = module.type_table.clone();
+        for func_rc in &module.functions {
+            let mut func = func_rc.borrow_mut();
+            lower_with_handler_dispatch_in_func(
+                &mut func,
+                plans,
+                impl_index,
+                type_table.clone(),
+                entry_source.clone(),
+            );
+        }
+        for impl_block in &mut module.impls {
+            for method in &mut impl_block.methods {
+                lower_with_handler_dispatch_in_func(
+                    method,
+                    plans,
+                    impl_index,
+                    type_table.clone(),
+                    entry_source.clone(),
+                );
+            }
+        }
+    }
+}
+
+#[allow(dead_code)]
+fn lower_with_handler_dispatch_in_func(
+    func: &mut TirFunction,
+    plans: &IndexMap<EffectKey, DispatchPlan>,
+    impl_index: &IndexMap<HandlerImplKey, HandlerImplInfo>,
+    type_table: std::rc::Rc<std::cell::RefCell<TypeTable>>,
+    entry_source: ModuleSource,
+) {
+    if let Some(body) = &mut func.body {
+        let local_types = std::mem::take(&mut func.local_types);
+        let mut ctx = LowerCtx {
+            plans,
+            impl_index,
+            type_table,
+            entry_source,
+            scopes: vec![LocalScope {
+                next_local: func.local_count,
+                local_types: Some(local_types),
+            }],
+        };
+        lower_dispatch_in_block(body, &mut ctx);
+        let scope = ctx.scopes.pop().expect("function scope");
+        func.local_count = scope.next_local;
+        func.local_types = scope.local_types.expect("function scope has local_types");
+    }
+}
+
+#[allow(dead_code)]
+fn lower_dispatch_in_block(block: &mut TirBlock, ctx: &mut LowerCtx) {
+    for stmt in &mut block.stmts {
+        lower_dispatch_in_stmt(stmt, ctx);
+    }
+}
+
+#[allow(dead_code)]
+fn lower_dispatch_in_stmt(stmt: &mut TirStmt, ctx: &mut LowerCtx) {
+    match &mut stmt.kind {
+        TirStmtKind::Let { value, .. }
+        | TirStmtKind::Expr(value)
+        | TirStmtKind::TaskReturn { value } => lower_dispatch_in_expr(value, ctx),
+        TirStmtKind::Return { value } | TirStmtKind::Break { value, .. } => {
+            if let Some(v) = value {
+                lower_dispatch_in_expr(v, ctx);
+            }
+        }
+        TirStmtKind::Continue => {}
+        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+            lower_dispatch_in_block(body, ctx);
+        }
+        TirStmtKind::If {
+            condition,
+            then_block,
+            else_block,
+        } => {
+            lower_dispatch_in_expr(condition, ctx);
+            lower_dispatch_in_block(then_block, ctx);
+            if let Some(eb) = else_block {
+                lower_dispatch_in_block(eb, ctx);
+            }
+        }
+        TirStmtKind::IfLet {
+            scrutinee,
+            then_block,
+            else_block,
+            ..
+        } => {
+            lower_dispatch_in_expr(scrutinee, ctx);
+            lower_dispatch_in_block(then_block, ctx);
+            if let Some(eb) = else_block {
+                lower_dispatch_in_block(eb, ctx);
+            }
+        }
+        TirStmtKind::LetDestructure { value, .. } => {
+            lower_dispatch_in_expr(value, ctx);
+        }
+        TirStmtKind::VariadicForOf { iterable, body, .. } => {
+            lower_dispatch_in_expr(iterable, ctx);
+            lower_dispatch_in_block(body, ctx);
+        }
+    }
+}
+
+#[allow(dead_code)]
+fn lower_dispatch_in_expr(expr: &mut TirExpr, ctx: &mut LowerCtx) {
+    // Recurse into children first so inner `WithHandler`s are desugared
+    // before the outer one (matches the runtime install order).
+    walk_dispatch_children(expr, ctx);
+
+    if let TirExprKind::WithHandler { .. } = &expr.kind {
+        desugar_with_handler(expr, ctx);
+    }
+}
+
+#[allow(dead_code)]
+fn walk_dispatch_children(expr: &mut TirExpr, ctx: &mut LowerCtx) {
+    match &mut expr.kind {
+        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+            lower_dispatch_in_block(block, ctx);
+        }
+        TirExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            lower_dispatch_in_expr(condition, ctx);
+            lower_dispatch_in_block(then_branch, ctx);
+            if let Some(eb) = else_branch {
+                lower_dispatch_in_block(eb, ctx);
+            }
+        }
+        TirExprKind::Match { expr, arms } => {
+            lower_dispatch_in_expr(expr, ctx);
+            for arm in arms {
+                if let Some(g) = &mut arm.guard {
+                    lower_dispatch_in_expr(g, ctx);
+                }
+                lower_dispatch_in_expr(&mut arm.body, ctx);
+            }
+        }
+        TirExprKind::Switch {
+            scrutinee,
+            arms,
+            default,
+            ..
+        } => {
+            lower_dispatch_in_expr(scrutinee, ctx);
+            for arm in arms {
+                lower_dispatch_in_block(arm, ctx);
+            }
+            lower_dispatch_in_block(default, ctx);
+        }
+        TirExprKind::Call { args, .. } => {
+            for arg in args {
+                lower_dispatch_in_expr(&mut arg.expr, ctx);
+            }
+        }
+        TirExprKind::IndirectCall { callee, args } => {
+            lower_dispatch_in_expr(callee, ctx);
+            for arg in args {
+                lower_dispatch_in_expr(arg, ctx);
+            }
+        }
+        TirExprKind::CmRawCall { args, .. } => {
+            for arg in args {
+                lower_dispatch_in_expr(arg, ctx);
+            }
+        }
+        TirExprKind::MethodCall { receiver, args, .. } => {
+            lower_dispatch_in_expr(receiver, ctx);
+            for arg in args {
+                lower_dispatch_in_expr(&mut arg.expr, ctx);
+            }
+        }
+        TirExprKind::Binary { left, right, .. } => {
+            lower_dispatch_in_expr(left, ctx);
+            lower_dispatch_in_expr(right, ctx);
+        }
+        TirExprKind::Unary { expr, .. }
+        | TirExprKind::Cast { expr, .. }
+        | TirExprKind::FieldAccess { expr, .. }
+        | TirExprKind::TupleSpread { expr }
+        | TirExprKind::TupleZip { expr }
+        | TirExprKind::TypePackExpansion {
+            call_expr: expr, ..
+        }
+        | TirExprKind::VariantTag { expr }
+        | TirExprKind::VariantTest { expr, .. }
+        | TirExprKind::VariantPayload { expr, .. }
+        | TirExprKind::ClosureToCanonical { functor: expr, .. } => {
+            lower_dispatch_in_expr(expr, ctx);
+        }
+        TirExprKind::Assign { target, value } => {
+            lower_dispatch_in_expr(target, ctx);
+            lower_dispatch_in_expr(value, ctx);
+        }
+        TirExprKind::GlobalVarSet { value, .. } => {
+            lower_dispatch_in_expr(value, ctx);
+        }
+        TirExprKind::Index { expr, index } => {
+            lower_dispatch_in_expr(expr, ctx);
+            lower_dispatch_in_expr(index, ctx);
+        }
+        TirExprKind::StructLiteral { fields, .. } => {
+            for field in fields {
+                lower_dispatch_in_expr(&mut field.value, ctx);
+            }
+        }
+        TirExprKind::TupleLiteral { elements } => {
+            for elem in elements {
+                lower_dispatch_in_expr(elem, ctx);
+            }
+        }
+        TirExprKind::Closure { params, body, .. } => {
+            // Push a closure-local scope. The closure body's lets and
+            // any nested `WithHandler` desugaring allocate locals in
+            // this scope. `next_local` starts past the closure's own
+            // params plus any pre-existing body lets we discover.
+            let body_max = max_local_index_in_expr(body);
+            let start = (params.len() as u32).max(body_max + 1);
+            ctx.scopes.push(LocalScope {
+                next_local: start,
+                local_types: None,
+            });
+            lower_dispatch_in_expr(body, ctx);
+            ctx.scopes.pop();
+        }
+        TirExprKind::VariantConstruct { payload, .. } => {
+            if let Some(p) = payload {
+                lower_dispatch_in_expr(p, ctx);
+            }
+        }
+        TirExprKind::Resume { value } => {
+            lower_dispatch_in_expr(value, ctx);
+        }
+        TirExprKind::WithHandler { bindings, body, .. } => {
+            for binding in bindings {
+                lower_dispatch_in_expr(&mut binding.handler, ctx);
+            }
+            lower_dispatch_in_block(body, ctx);
+        }
+        TirExprKind::TemplateString { parts } => {
+            for part in parts {
+                if let TirTemplatePart::Interpolation { expr, .. } = part {
+                    lower_dispatch_in_expr(expr, ctx);
+                }
+            }
+        }
+        TirExprKind::IntLiteral { .. }
+        | TirExprKind::FloatLiteral { .. }
+        | TirExprKind::BoolLiteral(_)
+        | TirExprKind::CharLiteral(_)
+        | TirExprKind::StringLiteral(_)
+        | TirExprKind::BytesLiteral(_)
+        | TirExprKind::Null
+        | TirExprKind::Unit
+        | TirExprKind::Local { .. }
+        | TirExprKind::FuncRef { .. }
+        | TirExprKind::GlobalVarGet { .. }
+        | TirExprKind::Capture { .. }
+        | TirExprKind::EnumConstruct { .. } => {}
+    }
+}
+
+/// Return the maximum `Local { index }` referenced anywhere inside
+/// `expr` (-1 sentinel = `0` if no locals are referenced).
+///
+/// Used to seed a closure body's local counter at synthesis time —
+/// the lower phase will rebuild each closure's local table later, but
+/// we must not collide with indices the body already uses.
+#[allow(dead_code)]
+fn max_local_index_in_expr(expr: &TirExpr) -> u32 {
+    let mut max: u32 = 0;
+    walk_locals(expr, &mut |idx| {
+        if idx > max {
+            max = idx;
+        }
+    });
+    max
+}
+
+#[allow(dead_code)]
+fn walk_locals(expr: &TirExpr, f: &mut dyn FnMut(u32)) {
+    match &expr.kind {
+        TirExprKind::Local { index, .. } => f(*index),
+        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+            for stmt in &block.stmts {
+                walk_locals_in_stmt(stmt, f);
+            }
+        }
+        TirExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            walk_locals(condition, f);
+            for stmt in &then_branch.stmts {
+                walk_locals_in_stmt(stmt, f);
+            }
+            if let Some(eb) = else_branch {
+                for stmt in &eb.stmts {
+                    walk_locals_in_stmt(stmt, f);
+                }
+            }
+        }
+        TirExprKind::Match { expr, arms } => {
+            walk_locals(expr, f);
+            for arm in arms {
+                if let Some(g) = &arm.guard {
+                    walk_locals(g, f);
+                }
+                walk_locals(&arm.body, f);
+            }
+        }
+        TirExprKind::Switch {
+            scrutinee,
+            arms,
+            default,
+            ..
+        } => {
+            walk_locals(scrutinee, f);
+            for arm in arms {
+                for stmt in &arm.stmts {
+                    walk_locals_in_stmt(stmt, f);
+                }
+            }
+            for stmt in &default.stmts {
+                walk_locals_in_stmt(stmt, f);
+            }
+        }
+        TirExprKind::Call { args, .. } => {
+            for arg in args {
+                walk_locals(&arg.expr, f);
+            }
+        }
+        TirExprKind::IndirectCall { callee, args } => {
+            walk_locals(callee, f);
+            for arg in args {
+                walk_locals(arg, f);
+            }
+        }
+        TirExprKind::CmRawCall { args, .. } => {
+            for arg in args {
+                walk_locals(arg, f);
+            }
+        }
+        TirExprKind::MethodCall { receiver, args, .. } => {
+            walk_locals(receiver, f);
+            for arg in args {
+                walk_locals(&arg.expr, f);
+            }
+        }
+        TirExprKind::Binary { left, right, .. } => {
+            walk_locals(left, f);
+            walk_locals(right, f);
+        }
+        TirExprKind::Unary { expr, .. }
+        | TirExprKind::Cast { expr, .. }
+        | TirExprKind::FieldAccess { expr, .. }
+        | TirExprKind::TupleSpread { expr }
+        | TirExprKind::TupleZip { expr }
+        | TirExprKind::TypePackExpansion {
+            call_expr: expr, ..
+        }
+        | TirExprKind::VariantTag { expr }
+        | TirExprKind::VariantTest { expr, .. }
+        | TirExprKind::VariantPayload { expr, .. }
+        | TirExprKind::ClosureToCanonical { functor: expr, .. } => walk_locals(expr, f),
+        TirExprKind::Assign { target, value } => {
+            walk_locals(target, f);
+            walk_locals(value, f);
+        }
+        TirExprKind::GlobalVarSet { value, .. } => walk_locals(value, f),
+        TirExprKind::Index { expr, index } => {
+            walk_locals(expr, f);
+            walk_locals(index, f);
+        }
+        TirExprKind::StructLiteral { fields, .. } => {
+            for field in fields {
+                walk_locals(&field.value, f);
+            }
+        }
+        TirExprKind::TupleLiteral { elements } => {
+            for elem in elements {
+                walk_locals(elem, f);
+            }
+        }
+        TirExprKind::Closure { body, .. } => {
+            // Don't descend into nested closures — their locals are in
+            // a different scope.
+            let _ = body;
+        }
+        TirExprKind::VariantConstruct { payload, .. } => {
+            if let Some(p) = payload {
+                walk_locals(p, f);
+            }
+        }
+        TirExprKind::Resume { value } => walk_locals(value, f),
+        TirExprKind::WithHandler { bindings, body, .. } => {
+            for binding in bindings {
+                walk_locals(&binding.handler, f);
+            }
+            for stmt in &body.stmts {
+                walk_locals_in_stmt(stmt, f);
+            }
+        }
+        TirExprKind::TemplateString { parts } => {
+            for part in parts {
+                if let TirTemplatePart::Interpolation { expr, .. } = part {
+                    walk_locals(expr, f);
+                }
+            }
+        }
+        TirExprKind::IntLiteral { .. }
+        | TirExprKind::FloatLiteral { .. }
+        | TirExprKind::BoolLiteral(_)
+        | TirExprKind::CharLiteral(_)
+        | TirExprKind::StringLiteral(_)
+        | TirExprKind::BytesLiteral(_)
+        | TirExprKind::Null
+        | TirExprKind::Unit
+        | TirExprKind::FuncRef { .. }
+        | TirExprKind::GlobalVarGet { .. }
+        | TirExprKind::Capture { .. }
+        | TirExprKind::EnumConstruct { .. } => {}
+    }
+}
+
+/// Replace a `WithHandler { bindings, body }` expression in place
+/// with the desugared dispatch-protocol block.
+///
+/// Per binding (in source order, all run before the body executes):
+///
+/// ```text
+/// let __h_<E>    = handler_expr;
+/// let __save_<E> = global.get __effect_<E>;
+/// let __d_<E>    = __Dispatch_<E> {
+///     outer:       __save_<E>,
+///     op_<n>:      |args| __h_<E>.<E>::<op_n>(args),
+///     ...
+/// };
+/// global.set __effect_<E> = Some(&__d_<E>);
+/// ```
+///
+/// After the body, in reverse install order:
+///
+/// ```text
+/// global.set __effect_<E> = __save_<E>;
+/// ```
+///
+/// Bindings whose effect is unresolved (`EffectRef::Param`) or whose
+/// handler type doesn't match any synthesised plan are skipped (a
+/// no-op for that binding) — the resolver / effect-check should have
+/// caught such cases earlier.
+#[allow(dead_code)]
+fn desugar_with_handler(expr: &mut TirExpr, ctx: &mut LowerCtx) {
+    let span = expr.span;
+    let result_type = expr.type_id;
+
+    let TirExprKind::WithHandler { bindings, body, .. } =
+        std::mem::replace(&mut expr.kind, TirExprKind::Unit)
+    else {
+        return;
+    };
+
+    let mut prelude: Vec<TirStmt> = Vec::new();
+    let mut restore: Vec<TirStmt> = Vec::new();
+
+    for binding in bindings {
+        let Some(EffectRef::Concrete {
+            name: effect_name,
+            module_source: effect_module,
+        }) = binding.effect.clone()
+        else {
+            continue;
+        };
+        let key: EffectKey = (effect_module, effect_name.clone());
+        let Some(plan) = ctx.plans.get(&key).cloned() else {
+            continue;
+        };
+        let handler_type = binding.handler.type_id;
+        let handler_underlying = deref_type(&ctx.type_table.borrow(), handler_type);
+        let handler_type_name = ctx.type_table.borrow().type_name(handler_underlying);
+        let impl_key: HandlerImplKey = (handler_type_name, effect_name.clone());
+        let Some(impl_info) = ctx.impl_index.get(&impl_key).cloned() else {
+            continue;
+        };
+
+        // 1. let __h_<E> = handler_expr;
+        let h_local = ctx.alloc_local(handler_type);
+        let h_name = format!("__h_{effect_name}");
+        prelude.push(TirStmt::new(
+            TirStmtKind::Let {
+                name: h_name.clone(),
+                local_index: h_local,
+                is_mut: false,
+                is_reactive: false,
+                type_id: handler_type,
+                value: binding.handler.clone(),
+                skip_value_copy: true,
+            },
+            span,
+        ));
+
+        // 2. let __save_<E> = global.get __effect_<E>;
+        let save_local = ctx.alloc_local(plan.nullable_ref_type_id);
+        let save_name = format!("__save_{effect_name}");
+        let global_get = TirExpr::new(
+            TirExprKind::GlobalVarGet {
+                module_source: ctx.entry_source.clone(),
+                name: plan.global_name.clone(),
+            },
+            plan.nullable_ref_type_id,
+            span,
+        );
+        prelude.push(TirStmt::new(
+            TirStmtKind::Let {
+                name: save_name.clone(),
+                local_index: save_local,
+                is_mut: false,
+                is_reactive: false,
+                type_id: plan.nullable_ref_type_id,
+                value: global_get,
+                skip_value_copy: true,
+            },
+            span,
+        ));
+
+        // 3. let __d_<E> = __Dispatch_<E> { outer: __save_<E>, op_n: ..., ... };
+        let mut struct_fields: Vec<TirStructField> = Vec::new();
+        struct_fields.push(TirStructField {
+            name: "outer".to_string(),
+            value: TirExpr::new(
+                TirExprKind::Local {
+                    index: save_local,
+                    name: save_name.clone(),
+                },
+                plan.nullable_ref_type_id,
+                span,
+            ),
+            field_index: 0,
+        });
+        for op in &plan.operations {
+            let closure_expr = build_handler_op_closure(
+                op,
+                &effect_name,
+                &impl_info,
+                handler_type,
+                h_local,
+                &h_name,
+                &ctx.type_table,
+            );
+            let field_index = *plan.field_indices.get(&op.name).unwrap();
+            let field_name = plan.field_names.get(&op.name).unwrap().clone();
+            struct_fields.push(TirStructField {
+                name: field_name,
+                value: closure_expr,
+                field_index,
+            });
+        }
+        let d_local = ctx.alloc_local(plan.struct_type_id);
+        let d_name = format!("__d_{effect_name}");
+        let struct_lit = TirExpr::new(
+            TirExprKind::StructLiteral {
+                struct_type: plan.struct_type_id,
+                struct_name: format!("__Dispatch_{effect_name}"),
+                fields: struct_fields,
+            },
+            plan.struct_type_id,
+            span,
+        );
+        prelude.push(TirStmt::new(
+            TirStmtKind::Let {
+                name: d_name.clone(),
+                local_index: d_local,
+                is_mut: false,
+                is_reactive: false,
+                type_id: plan.struct_type_id,
+                value: struct_lit,
+                skip_value_copy: true,
+            },
+            span,
+        ));
+
+        // 4. global.set __effect_<E> = Some(&__d_<E>);
+        let d_local_expr = TirExpr::new(
+            TirExprKind::Local {
+                index: d_local,
+                name: d_name,
+            },
+            plan.struct_type_id,
+            span,
+        );
+        let d_ref = ref_expr(d_local_expr, plan.inner_ref_type_id, span);
+        let some_d_ref = option_some(d_ref, plan.nullable_ref_type_id);
+        prelude.push(TirStmt::new(
+            TirStmtKind::Expr(TirExpr::new(
+                TirExprKind::GlobalVarSet {
+                    module_source: ctx.entry_source.clone(),
+                    name: plan.global_name.clone(),
+                    value: Box::new(some_d_ref),
+                },
+                TypeTable::UNIT,
+                span,
+            )),
+            span,
+        ));
+
+        // Queue restore (will be applied in reverse install order).
+        let saved_expr = TirExpr::new(
+            TirExprKind::Local {
+                index: save_local,
+                name: save_name,
+            },
+            plan.nullable_ref_type_id,
+            span,
+        );
+        restore.push(TirStmt::new(
+            TirStmtKind::Expr(TirExpr::new(
+                TirExprKind::GlobalVarSet {
+                    module_source: ctx.entry_source.clone(),
+                    name: plan.global_name.clone(),
+                    value: Box::new(saved_expr),
+                },
+                TypeTable::UNIT,
+                span,
+            )),
+            span,
+        ));
+    }
+
+    // Compose the desugared block: prelude + body.stmts + reversed restore.
+    let mut stmts: Vec<TirStmt> = Vec::with_capacity(
+        prelude.len() + body.stmts.len() + restore.len(),
+    );
+    stmts.extend(prelude);
+    stmts.extend(body.stmts);
+    stmts.extend(restore.into_iter().rev());
+
+    expr.kind = TirExprKind::Block(TirBlock::new(stmts, span));
+    expr.type_id = result_type;
+}
+
+/// Build the `op_<n>` closure for a single (effect, op, handler-impl)
+/// triple.
+///
+/// Shape:
+///
+/// ```text
+/// |<op_params>| __h_<E>.<E>::<op>(<op_params>)
+/// ```
+///
+/// The handler value is captured by reference / value (whatever
+/// `__h_<E>` holds — typically `&T` or `&mut T`); the closure body's
+/// receiver is a `TirExprKind::Capture { index: 0 }` that the
+/// lower-phase closure pass converts into a field access on the
+/// generated functor struct.
+#[allow(dead_code)]
+fn build_handler_op_closure(
+    op: &TirEffectOp,
+    effect_name: &str,
+    impl_info: &HandlerImplInfo,
+    handler_type: TypeId,
+    h_local_index: u32,
+    h_name: &str,
+    type_table: &std::rc::Rc<std::cell::RefCell<TypeTable>>,
+) -> TirExpr {
+    let span = synth_span();
+
+    // Closure params (mirror the op's params; closure-local indices
+    // start fresh at 0).
+    let closure_params: Vec<(String, TypeId)> = op
+        .params
+        .iter()
+        .map(|p| (p.name.clone(), p.type_id))
+        .collect();
+    let arg_call_args: Vec<CallArg> = op
+        .params
+        .iter()
+        .enumerate()
+        .map(|(i, p)| {
+            CallArg::new(
+                TirExpr::new(
+                    TirExprKind::Local {
+                        index: i as u32,
+                        name: p.name.clone(),
+                    },
+                    p.type_id,
+                    span,
+                ),
+                false,
+            )
+        })
+        .collect();
+
+    // Body: __h.<E>::<op>(<args>)
+    let receiver = TirExpr::new(
+        TirExprKind::Capture {
+            index: 0,
+            name: h_name.to_string(),
+        },
+        handler_type,
+        span,
+    );
+    let mangled = LocalMethodName::new(
+        impl_info.handler_type_name.clone(),
+        Some(effect_name.to_string()),
+        op.name.clone(),
+    );
+    let mangled_name = mangled.to_mangled_name();
+    let method_call = TirExpr::new(
+        TirExprKind::method_call(
+            Box::new(receiver),
+            FunctionRef {
+                module_source: impl_info.impl_module.clone(),
+                name: mangled_name,
+                monomorph_info: None,
+                method_info: Some(mangled),
+            },
+            vec![],
+            arg_call_args,
+        ),
+        op.return_type,
+        span,
+    );
+
+    let captures = vec![TirCapture {
+        name: h_name.to_string(),
+        outer_index: h_local_index,
+        type_id: handler_type,
+        is_mut: false,
+    }];
+
+    let param_types: Vec<TypeId> = closure_params.iter().map(|(_, t)| *t).collect();
+    let func_type =
+        type_table
+            .borrow_mut()
+            .make_function(param_types, op.return_type, vec![], vec![]);
+
+    TirExpr::new(
+        TirExprKind::Closure {
+            params: closure_params,
+            body: Box::new(method_call),
+            captures,
+            functor_id: None,
+            source_text: None,
+        },
+        func_type,
+        span,
+    )
+}
+
+#[allow(dead_code)]
+fn walk_locals_in_stmt(stmt: &TirStmt, f: &mut dyn FnMut(u32)) {
+    match &stmt.kind {
+        TirStmtKind::Let {
+            value, local_index, ..
+        } => {
+            f(*local_index);
+            walk_locals(value, f);
+        }
+        TirStmtKind::Expr(value) | TirStmtKind::TaskReturn { value } => walk_locals(value, f),
+        TirStmtKind::Return { value } | TirStmtKind::Break { value, .. } => {
+            if let Some(v) = value {
+                walk_locals(v, f);
+            }
+        }
+        TirStmtKind::Continue => {}
+        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+            for stmt in &body.stmts {
+                walk_locals_in_stmt(stmt, f);
+            }
+        }
+        TirStmtKind::If {
+            condition,
+            then_block,
+            else_block,
+        } => {
+            walk_locals(condition, f);
+            for stmt in &then_block.stmts {
+                walk_locals_in_stmt(stmt, f);
+            }
+            if let Some(eb) = else_block {
+                for stmt in &eb.stmts {
+                    walk_locals_in_stmt(stmt, f);
+                }
+            }
+        }
+        TirStmtKind::IfLet {
+            scrutinee,
+            then_block,
+            else_block,
+            ..
+        } => {
+            walk_locals(scrutinee, f);
+            for stmt in &then_block.stmts {
+                walk_locals_in_stmt(stmt, f);
+            }
+            if let Some(eb) = else_block {
+                for stmt in &eb.stmts {
+                    walk_locals_in_stmt(stmt, f);
+                }
+            }
+        }
+        TirStmtKind::LetDestructure { value, .. } => walk_locals(value, f),
+        TirStmtKind::VariadicForOf {
+            iterable, body, ..
+        } => {
+            walk_locals(iterable, f);
+            for stmt in &body.stmts {
+                walk_locals_in_stmt(stmt, f);
+            }
+        }
+    }
+}
+
 /// Run the effect dispatch synthesis pass on the package.
 ///
 /// Returns a `Result` so a future implementation that rejects malformed
@@ -738,7 +1619,7 @@ fn synthesize_dispatch_infrastructure(
 /// `with E = h do` body to a direct method call on `h`.
 type HandlerImplKey = (String, String); // (handler_type_name, effect_name)
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct HandlerImplInfo {
     /// Module that owns the impl block — used to build the
     /// `FunctionRef::module_source` of the generated `MethodCall`.
