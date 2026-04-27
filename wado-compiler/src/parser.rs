@@ -1391,6 +1391,7 @@ impl Parser {
             TokenKind::Continue => self.parse_continue_stmt(),
             TokenKind::Assert => self.parse_assert_stmt(),
             TokenKind::Match => self.parse_match_stmt(),
+            TokenKind::With => self.parse_with_handler_stmt(),
             _ => self.parse_expr_stmt_in_block(),
         }
     }
@@ -1406,6 +1407,24 @@ impl Parser {
             unreachable!("parse_match_expr must return Expr::Match");
         };
         Ok(Stmt::Match(m))
+    }
+
+    /// Parse a `with E = h do { ... }` statement.
+    ///
+    /// The trailing `}` of the do-block makes the statement boundary
+    /// unambiguous, so the trailing semicolon is optional — same as
+    /// `if`, `while`, `for`, `loop`, and `match` in statement position.
+    /// The expression is wrapped in a `Stmt::Expr` so the rest of the
+    /// pipeline (effect-check, TIR lowering, dispatch synthesis)
+    /// continues to see a single `Expr::WithHandler`.
+    fn parse_with_handler_stmt(&mut self) -> ParseResult<Stmt> {
+        let expr = self.parse_with_handler_expr()?;
+        if self.check(&TokenKind::Semicolon) {
+            self.advance();
+        }
+        let span = expr.span();
+        let id = self.alloc_ast_id();
+        Ok(Stmt::Expr(crate::ast::ExprStmt { id, expr, span }))
     }
 
     /// Parse an expression statement in a block, with optional trailing semicolon
