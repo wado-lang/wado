@@ -131,15 +131,18 @@ impl<'a> Interpreter<'a> {
         owned
     }
 
-    /// Reduce `expr` in place. Returns `true` when anything changed.
+    /// Recursively reduce `expr` in place over the subtree the engine
+    /// currently understands (Binary / Unary / Cast). Returns `true`
+    /// when anything changed.
     ///
-    /// Recurses into the children that the engine currently understands
-    /// (Binary / Unary / Cast). For richer driver integration — where the
-    /// caller already walks every TIR kind — see [`reduce_local`], which
-    /// performs only the single-node rewrite at `expr`.
+    /// Internal: the only public entry points are [`reduce`] and
+    /// [`reduce_local`]. `reduce` clones into `reduce_in_place`; visitor
+    /// drivers that already walk every TIR kind via
+    /// `tir_visitor::opt_walk_expr` should call `reduce_local` directly.
     ///
+    /// [`reduce`]: Self::reduce
     /// [`reduce_local`]: Self::reduce_local
-    pub fn reduce_in_place(&mut self, expr: &mut TirExpr) -> bool {
+    fn reduce_in_place(&mut self, expr: &mut TirExpr) -> bool {
         // Bottom-up: recurse into children first so the local rewrite
         // step at this node sees fully-reduced operands.
         let mut changed = match &mut expr.kind {
@@ -170,11 +173,7 @@ impl<'a> Interpreter<'a> {
             expr.kind = value_to_expr_kind(folded);
             return true;
         }
-        if let Some(picked) = take_short_circuit_subtree(expr) {
-            *expr = picked;
-            return true;
-        }
-        false
+        rewrite_short_circuit(expr)
     }
 
     /// Convenience: reduce `expr` and, if the result is a literal, return
@@ -259,7 +258,8 @@ fn value_to_expr_kind(v: Value) -> TirExprKind {
 
 /// Identity simplifications for short-circuit operators that *preserve*
 /// every subexpression. `false || X → X`, `true && X → X`, and the RHS
-/// counterparts (`X || false → X`, `X && true → X`).
+/// counterparts (`X || false → X`, `X && true → X`). Returns `true`
+/// when `expr` was rewritten.
 ///
 /// The reverse direction (`true || X → true`, `false && X → false`)
 /// would drop `X`. Even though Wado's `||`/`&&` short-circuit at runtime
@@ -267,26 +267,34 @@ fn value_to_expr_kind(v: Value) -> TirExprKind {
 /// semantically defensible — this engine stays conservative and leaves
 /// those rewrites to a future side-effect-aware pass. Mirrors the
 /// previous in-visitor behaviour.
-fn take_short_circuit_subtree(expr: &mut TirExpr) -> Option<TirExpr> {
-    let TirExprKind::Binary { left, op, right } = &mut expr.kind else {
-        return None;
-    };
-    let dummy = TirExpr {
-        kind: TirExprKind::Unit,
-        type_id: expr.type_id,
-        span: expr.span,
-    };
-    match (&left.kind, *op, &right.kind) {
-        (TirExprKind::BoolLiteral(false), TirBinaryOp::Or, _)
-        | (TirExprKind::BoolLiteral(true), TirBinaryOp::And, _) => {
-            Some(std::mem::replace(right.as_mut(), dummy))
-        }
-        (_, TirBinaryOp::Or, TirExprKind::BoolLiteral(false))
-        | (_, TirBinaryOp::And, TirExprKind::BoolLiteral(true)) => {
-            Some(std::mem::replace(left.as_mut(), dummy))
-        }
-        _ => None,
+fn rewrite_short_circuit(expr: &mut TirExpr) -> bool {
+    enum Pick {
+        Left,
+        Right,
     }
+    let pick = match &expr.kind {
+        TirExprKind::Binary { left, op, right } => match (&left.kind, *op, &right.kind) {
+            (TirExprKind::BoolLiteral(false), TirBinaryOp::Or, _)
+            | (TirExprKind::BoolLiteral(true), TirBinaryOp::And, _) => Pick::Right,
+            (_, TirBinaryOp::Or, TirExprKind::BoolLiteral(false))
+            | (_, TirBinaryOp::And, TirExprKind::BoolLiteral(true)) => Pick::Left,
+            _ => return false,
+        },
+        _ => return false,
+    };
+    // Take ownership of the Binary by swapping its `kind` out. The
+    // placeholder is local to this function and overwritten before we
+    // return, so no caller observes a partially-updated `expr`.
+    let TirExprKind::Binary { left, right, .. } =
+        std::mem::replace(&mut expr.kind, TirExprKind::Unit)
+    else {
+        unreachable!("matched Binary above");
+    };
+    *expr = match pick {
+        Pick::Left => *left,
+        Pick::Right => *right,
+    };
+    true
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -641,7 +649,7 @@ fn int_primitive_of(type_id: TypeId, type_table: &TypeTable) -> Option<Primitive
 
 /// Truncate / sign-extend an integer bit pattern to fit the target prim.
 #[must_use]
-pub fn truncate_int(value: u64, prim: PrimitiveType) -> u64 {
+pub(crate) fn truncate_int(value: u64, prim: PrimitiveType) -> u64 {
     match prim {
         PrimitiveType::U8 => value & 0xFF,
         PrimitiveType::U16 => value & 0xFFFF,
@@ -658,7 +666,7 @@ pub fn truncate_int(value: u64, prim: PrimitiveType) -> u64 {
 /// Render an integer bit pattern as decimal text, signed when the prim
 /// is signed.
 #[must_use]
-pub fn format_int_repr(value: u64, prim: PrimitiveType) -> String {
+pub(crate) fn format_int_repr(value: u64, prim: PrimitiveType) -> String {
     if is_signed_int(prim) {
         (value as i64).to_string()
     } else {
@@ -670,7 +678,7 @@ pub fn format_int_repr(value: u64, prim: PrimitiveType) -> String {
 /// `Infinity`, `-Infinity`, …). Trailing `.0` is appended to integral
 /// values so the result parses back as a float literal.
 #[must_use]
-pub fn format_float_repr(value: f64) -> String {
+pub(crate) fn format_float_repr(value: f64) -> String {
     if value.is_infinite() {
         return if value.is_sign_positive() {
             "Infinity".to_string()

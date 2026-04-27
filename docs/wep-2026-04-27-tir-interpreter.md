@@ -43,13 +43,19 @@ fine-grained; wasm execution covers anything tiri would balk at.
 ### Stage 0 — split & rename (this commit)
 
 - `wado_compiler::tiri` exists with `Value`, `Interpreter`,
-  `reduce(&TirExpr) -> TirExpr`, `reduce_in_place(&mut TirExpr) -> bool`,
-  `reduce_local(&mut TirExpr) -> bool`, and `reduce_to_value(&TirExpr) -> Option<Value>`.
+  `reduce(&TirExpr) -> TirExpr`, `reduce_local(&mut TirExpr) -> bool`,
+  and `reduce_to_value(&TirExpr) -> Option<Value>`.
 - `const_folding.rs` is a 30-line visitor.
 - Identity simplification for `&&` / `||` lives in tiri, not the visitor.
 - Integration tests at `wado-compiler/tests/tiri.rs` cover the four
   arithmetic ops on i32/i64/u8/u32/f32/f64 plus `reduce`-API contracts
   (repr preservation, short-circuit, binary collapse).
+
+Out of scope at Stage 0 (matches the previous behaviour, deferred to
+later stages): float-to-int and int-to-float casts (only int-to-int
+casts fold), heap-allocated `Value` payloads, and any cross-function
+reasoning. Stage 1 and onward extend the engine; Stage 0 is purely a
+relocation + API reshape with zero behaviour change.
 
 ### Stage 1 — local environment + memoization
 
