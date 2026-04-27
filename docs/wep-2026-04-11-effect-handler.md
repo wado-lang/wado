@@ -48,14 +48,35 @@ Status: Draft
       Scoped the shortcut to locals whose post-boxing type is an
       actual `Box<T>` struct (`box_type_ids.contains(...)`).
       Regression covered by `effect_handler_mut_self_alias.wado`.
-- [ ] Cross-function-boundary dispatch. The MVP only rewrites direct
-      `<E>::<op>` calls inside the do-block body. Calls that reach an
-      effect operation through helper functions invoked from `body`
-      stay routed through the existing CM binding (for WASI) or fail
-      to resolve (for user effects). Phase 4 will introduce the
-      per-effect `__Dispatch_<E>` GC struct, `__effect_<E>` mut
-      global, and `__effect_dispatch__<E>__<op>` wrapper functions
-      described under "Phase 3 implementation plan" below.
+- [ ] Cross-function-boundary dispatch (Phase 4). The MVP only
+      rewrites direct `<E>::<op>` calls inside the do-block body.
+      Calls that reach an effect operation through helper functions
+      invoked from `body` stay routed through the existing CM binding
+      (for WASI) or fail to resolve (for user effects). Phase 4 will
+      introduce the per-effect `__Dispatch_<E>` GC struct,
+      `__effect_<E>` mut global, and `__effect_dispatch__<E>__<op>`
+      wrapper functions described under "Phase 3 implementation
+      plan" below. Foundations landed in this branch:
+      - `value_copy::insert::needs_value_copy` no longer wraps
+        variant-templated generic instances (`Option<&T>`,
+        `Result<T,E>`, ...) — the wrap was identity at the
+        `synthesize` side and produced a trapping `(ref X) / nullref`
+        signature mismatch when the source was a nullable global.
+      - `lower::globals` marks `null`-initialised reference globals
+        as `is_nullable` (so the Wasm slot accepts the `ref.null`
+        initializer) but leaves a new `lazy_init` flag false, which
+        codegen consults to decide whether `global.get` results
+        should be narrowed with `ref.as_non_null`. Together these
+        let `global mut x: Option<&T> = null` round-trip through the
+        full pipeline.
+      - The WIR `nullable_ref` representation pass (`Option<&T>` →
+        `(ref null T)`) now runs at every opt level, since it picks
+        a representation that the storage and the consumers must
+        agree on for correctness — not just for `-O1+` perf.
+
+      Phase 4 itself (Dispatch struct + global + wrapper functions
+      synthesis, `with` install/restore lowering, helper-call
+      rewriting) is unblocked but still to be implemented.
 - [ ] Bundled handlers (`with &mut h do`). The resolver already
       diagnoses this with `BundledHandlerNotSupported`; lowering is
       deferred until the dispatch-wrapper path lands.
