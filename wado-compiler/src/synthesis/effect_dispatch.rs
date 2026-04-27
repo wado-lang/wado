@@ -681,25 +681,36 @@ fn build_dispatch_wrapper_function(
     }
 }
 
-/// Mutable context threaded through the dispatch-aware lowering walker.
+/// Read-only references the dispatch lowering walker needs at every
+/// node: the per-effect [`DispatchPlan`] map, the impl-block index,
+/// the shared `TypeTable` (for type queries during closure synthesis),
+/// and the entry module source (for `Call`/`GlobalVarGet`/`GlobalVarSet`
+/// on synthesized infrastructure).
 ///
-/// Tracks the containing function's local table so the desugarer can
-/// allocate fresh locals for `__h_<E>` / `__save_<E>` / `__d_<E>`
-/// triples, plus read-only references to the per-effect [`DispatchPlan`]
-/// map and the impl-block index.
-///
-/// When the walker descends into a `TirExprKind::Closure` body, it
-/// pushes a fresh closure-local scope (`closure_depth > 0`) so any
-/// nested `WithHandler` is desugared into the closure's local-index
-/// space rather than the outer function's. Closure-scope `local_types`
-/// is dropped on pop because the lower phase rebuilds each closure's
-/// local table from `Let` statements anyway.
-#[allow(dead_code)]
-struct LowerCtx<'a> {
+/// Held by reference throughout the walk so `desugar_with_handler` can
+/// look up plans without competing with the mutable borrow `LowerCtx`
+/// (the local-allocation state) requires for `alloc_local`.
+struct DispatchEnv<'a> {
     plans: &'a IndexMap<EffectKey, DispatchPlan>,
     impl_index: &'a IndexMap<HandlerImplKey, HandlerImplInfo>,
     type_table: std::rc::Rc<std::cell::RefCell<TypeTable>>,
     entry_source: ModuleSource,
+}
+
+/// Mutable context threaded through the dispatch-aware lowering walker.
+///
+/// Tracks the containing function's local table so the desugarer can
+/// allocate fresh locals for `__h_<E>` / `__save_<E>` / `__d_<E>`
+/// triples.
+///
+/// When the walker descends into a `TirExprKind::Closure` body, it
+/// pushes a fresh closure-local scope so any nested `WithHandler` is
+/// desugared into the closure's local-index space rather than the
+/// outer function's. Closure-scope `local_types` is dropped on pop
+/// because the lower phase rebuilds each closure's local table from
+/// `Let` statements anyway.
+#[allow(dead_code)]
+struct LowerCtx {
     /// Stack of local-allocation scopes — one entry per active function
     /// or closure body. Top of stack is the innermost scope.
     scopes: Vec<LocalScope>,
@@ -728,7 +739,7 @@ enum LocalScope {
 }
 
 #[allow(dead_code)]
-impl LowerCtx<'_> {
+impl LowerCtx {
     fn alloc_local(&mut self, ty: TypeId) -> u32 {
         let scope = self.scopes.last_mut().expect("at least one scope");
         match scope {
@@ -764,52 +775,35 @@ fn lower_with_handler_dispatch_in_modules(
 ) {
     let entry_source = project.entry_module_source.clone();
     for module in project.tir_modules.values_mut() {
-        let type_table = module.type_table.clone();
+        let env = DispatchEnv {
+            plans,
+            impl_index,
+            type_table: module.type_table.clone(),
+            entry_source: entry_source.clone(),
+        };
         for func_rc in &module.functions {
             let mut func = func_rc.borrow_mut();
-            lower_with_handler_dispatch_in_func(
-                &mut func,
-                plans,
-                impl_index,
-                type_table.clone(),
-                entry_source.clone(),
-            );
+            lower_with_handler_dispatch_in_func(&mut func, &env);
         }
         for impl_block in &mut module.impls {
             for method in &mut impl_block.methods {
-                lower_with_handler_dispatch_in_func(
-                    method,
-                    plans,
-                    impl_index,
-                    type_table.clone(),
-                    entry_source.clone(),
-                );
+                lower_with_handler_dispatch_in_func(method, &env);
             }
         }
     }
 }
 
 #[allow(dead_code)]
-fn lower_with_handler_dispatch_in_func(
-    func: &mut TirFunction,
-    plans: &IndexMap<EffectKey, DispatchPlan>,
-    impl_index: &IndexMap<HandlerImplKey, HandlerImplInfo>,
-    type_table: std::rc::Rc<std::cell::RefCell<TypeTable>>,
-    entry_source: ModuleSource,
-) {
+fn lower_with_handler_dispatch_in_func(func: &mut TirFunction, env: &DispatchEnv) {
     if let Some(body) = &mut func.body {
         let local_types = std::mem::take(&mut func.local_types);
         let mut ctx = LowerCtx {
-            plans,
-            impl_index,
-            type_table,
-            entry_source,
             scopes: vec![LocalScope::Function {
                 next_local: func.local_count,
                 local_types,
             }],
         };
-        lower_dispatch_in_block(body, &mut ctx);
+        lower_dispatch_in_block(body, env, &mut ctx);
         match ctx.scopes.pop().expect("function scope") {
             LocalScope::Function {
                 next_local,
@@ -826,36 +820,36 @@ fn lower_with_handler_dispatch_in_func(
 }
 
 #[allow(dead_code)]
-fn lower_dispatch_in_block(block: &mut TirBlock, ctx: &mut LowerCtx) {
+fn lower_dispatch_in_block(block: &mut TirBlock, env: &DispatchEnv, ctx: &mut LowerCtx) {
     for stmt in &mut block.stmts {
-        lower_dispatch_in_stmt(stmt, ctx);
+        lower_dispatch_in_stmt(stmt, env, ctx);
     }
 }
 
 #[allow(dead_code)]
-fn lower_dispatch_in_stmt(stmt: &mut TirStmt, ctx: &mut LowerCtx) {
+fn lower_dispatch_in_stmt(stmt: &mut TirStmt, env: &DispatchEnv, ctx: &mut LowerCtx) {
     match &mut stmt.kind {
         TirStmtKind::Let { value, .. }
         | TirStmtKind::Expr(value)
-        | TirStmtKind::TaskReturn { value } => lower_dispatch_in_expr(value, ctx),
+        | TirStmtKind::TaskReturn { value } => lower_dispatch_in_expr(value, env, ctx),
         TirStmtKind::Return { value } | TirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
-                lower_dispatch_in_expr(v, ctx);
+                lower_dispatch_in_expr(v, env, ctx);
             }
         }
         TirStmtKind::Continue => {}
         TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-            lower_dispatch_in_block(body, ctx);
+            lower_dispatch_in_block(body, env, ctx);
         }
         TirStmtKind::If {
             condition,
             then_block,
             else_block,
         } => {
-            lower_dispatch_in_expr(condition, ctx);
-            lower_dispatch_in_block(then_block, ctx);
+            lower_dispatch_in_expr(condition, env, ctx);
+            lower_dispatch_in_block(then_block, env, ctx);
             if let Some(eb) = else_block {
-                lower_dispatch_in_block(eb, ctx);
+                lower_dispatch_in_block(eb, env, ctx);
             }
         }
         TirStmtKind::IfLet {
@@ -864,24 +858,24 @@ fn lower_dispatch_in_stmt(stmt: &mut TirStmt, ctx: &mut LowerCtx) {
             else_block,
             ..
         } => {
-            lower_dispatch_in_expr(scrutinee, ctx);
-            lower_dispatch_in_block(then_block, ctx);
+            lower_dispatch_in_expr(scrutinee, env, ctx);
+            lower_dispatch_in_block(then_block, env, ctx);
             if let Some(eb) = else_block {
-                lower_dispatch_in_block(eb, ctx);
+                lower_dispatch_in_block(eb, env, ctx);
             }
         }
         TirStmtKind::LetDestructure { value, .. } => {
-            lower_dispatch_in_expr(value, ctx);
+            lower_dispatch_in_expr(value, env, ctx);
         }
         TirStmtKind::VariadicForOf { iterable, body, .. } => {
-            lower_dispatch_in_expr(iterable, ctx);
-            lower_dispatch_in_block(body, ctx);
+            lower_dispatch_in_expr(iterable, env, ctx);
+            lower_dispatch_in_block(body, env, ctx);
         }
     }
 }
 
 #[allow(dead_code)]
-fn lower_dispatch_in_expr(expr: &mut TirExpr, ctx: &mut LowerCtx) {
+fn lower_dispatch_in_expr(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCtx) {
     // `WithHandler` requires custom recursion: its handler-binding
     // expressions and body must be desugared before this node so any
     // inner `WithHandler` becomes a plain `Block` first; the outer
@@ -890,39 +884,39 @@ fn lower_dispatch_in_expr(expr: &mut TirExpr, ctx: &mut LowerCtx) {
     // children walk.
     if let TirExprKind::WithHandler { bindings, body, .. } = &mut expr.kind {
         for binding in bindings {
-            lower_dispatch_in_expr(&mut binding.handler, ctx);
+            lower_dispatch_in_expr(&mut binding.handler, env, ctx);
         }
-        lower_dispatch_in_block(body, ctx);
-        desugar_with_handler(expr, ctx);
+        lower_dispatch_in_block(body, env, ctx);
+        desugar_with_handler(expr, env, ctx);
         return;
     }
-    walk_dispatch_children(expr, ctx);
+    walk_dispatch_children(expr, env, ctx);
 }
 
 #[allow(dead_code)]
-fn walk_dispatch_children(expr: &mut TirExpr, ctx: &mut LowerCtx) {
+fn walk_dispatch_children(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCtx) {
     match &mut expr.kind {
         TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
-            lower_dispatch_in_block(block, ctx);
+            lower_dispatch_in_block(block, env, ctx);
         }
         TirExprKind::If {
             condition,
             then_branch,
             else_branch,
         } => {
-            lower_dispatch_in_expr(condition, ctx);
-            lower_dispatch_in_block(then_branch, ctx);
+            lower_dispatch_in_expr(condition, env, ctx);
+            lower_dispatch_in_block(then_branch, env, ctx);
             if let Some(eb) = else_branch {
-                lower_dispatch_in_block(eb, ctx);
+                lower_dispatch_in_block(eb, env, ctx);
             }
         }
         TirExprKind::Match { expr, arms } => {
-            lower_dispatch_in_expr(expr, ctx);
+            lower_dispatch_in_expr(expr, env, ctx);
             for arm in arms {
                 if let Some(g) = &mut arm.guard {
-                    lower_dispatch_in_expr(g, ctx);
+                    lower_dispatch_in_expr(g, env, ctx);
                 }
-                lower_dispatch_in_expr(&mut arm.body, ctx);
+                lower_dispatch_in_expr(&mut arm.body, env, ctx);
             }
         }
         TirExprKind::Switch {
@@ -931,37 +925,37 @@ fn walk_dispatch_children(expr: &mut TirExpr, ctx: &mut LowerCtx) {
             default,
             ..
         } => {
-            lower_dispatch_in_expr(scrutinee, ctx);
+            lower_dispatch_in_expr(scrutinee, env, ctx);
             for arm in arms {
-                lower_dispatch_in_block(arm, ctx);
+                lower_dispatch_in_block(arm, env, ctx);
             }
-            lower_dispatch_in_block(default, ctx);
+            lower_dispatch_in_block(default, env, ctx);
         }
         TirExprKind::Call { args, .. } => {
             for arg in args {
-                lower_dispatch_in_expr(&mut arg.expr, ctx);
+                lower_dispatch_in_expr(&mut arg.expr, env, ctx);
             }
         }
         TirExprKind::IndirectCall { callee, args } => {
-            lower_dispatch_in_expr(callee, ctx);
+            lower_dispatch_in_expr(callee, env, ctx);
             for arg in args {
-                lower_dispatch_in_expr(arg, ctx);
+                lower_dispatch_in_expr(arg, env, ctx);
             }
         }
         TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
-                lower_dispatch_in_expr(arg, ctx);
+                lower_dispatch_in_expr(arg, env, ctx);
             }
         }
         TirExprKind::MethodCall { receiver, args, .. } => {
-            lower_dispatch_in_expr(receiver, ctx);
+            lower_dispatch_in_expr(receiver, env, ctx);
             for arg in args {
-                lower_dispatch_in_expr(&mut arg.expr, ctx);
+                lower_dispatch_in_expr(&mut arg.expr, env, ctx);
             }
         }
         TirExprKind::Binary { left, right, .. } => {
-            lower_dispatch_in_expr(left, ctx);
-            lower_dispatch_in_expr(right, ctx);
+            lower_dispatch_in_expr(left, env, ctx);
+            lower_dispatch_in_expr(right, env, ctx);
         }
         TirExprKind::Unary { expr, .. }
         | TirExprKind::Cast { expr, .. }
@@ -975,27 +969,27 @@ fn walk_dispatch_children(expr: &mut TirExpr, ctx: &mut LowerCtx) {
         | TirExprKind::VariantTest { expr, .. }
         | TirExprKind::VariantPayload { expr, .. }
         | TirExprKind::ClosureToCanonical { functor: expr, .. } => {
-            lower_dispatch_in_expr(expr, ctx);
+            lower_dispatch_in_expr(expr, env, ctx);
         }
         TirExprKind::Assign { target, value } => {
-            lower_dispatch_in_expr(target, ctx);
-            lower_dispatch_in_expr(value, ctx);
+            lower_dispatch_in_expr(target, env, ctx);
+            lower_dispatch_in_expr(value, env, ctx);
         }
         TirExprKind::GlobalVarSet { value, .. } => {
-            lower_dispatch_in_expr(value, ctx);
+            lower_dispatch_in_expr(value, env, ctx);
         }
         TirExprKind::Index { expr, index } => {
-            lower_dispatch_in_expr(expr, ctx);
-            lower_dispatch_in_expr(index, ctx);
+            lower_dispatch_in_expr(expr, env, ctx);
+            lower_dispatch_in_expr(index, env, ctx);
         }
         TirExprKind::StructLiteral { fields, .. } => {
             for field in fields {
-                lower_dispatch_in_expr(&mut field.value, ctx);
+                lower_dispatch_in_expr(&mut field.value, env, ctx);
             }
         }
         TirExprKind::TupleLiteral { elements } => {
             for elem in elements {
-                lower_dispatch_in_expr(elem, ctx);
+                lower_dispatch_in_expr(elem, env, ctx);
             }
         }
         TirExprKind::Closure { params, body, .. } => {
@@ -1006,16 +1000,16 @@ fn walk_dispatch_children(expr: &mut TirExpr, ctx: &mut LowerCtx) {
             let body_max = max_local_index_in_expr(body);
             let start = (params.len() as u32).max(body_max + 1);
             ctx.scopes.push(LocalScope::Closure { next_local: start });
-            lower_dispatch_in_expr(body, ctx);
+            lower_dispatch_in_expr(body, env, ctx);
             ctx.scopes.pop();
         }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {
-                lower_dispatch_in_expr(p, ctx);
+                lower_dispatch_in_expr(p, env, ctx);
             }
         }
         TirExprKind::Resume { value } => {
-            lower_dispatch_in_expr(value, ctx);
+            lower_dispatch_in_expr(value, env, ctx);
         }
         TirExprKind::WithHandler { .. } => {
             unreachable!(
@@ -1027,7 +1021,7 @@ fn walk_dispatch_children(expr: &mut TirExpr, ctx: &mut LowerCtx) {
         TirExprKind::TemplateString { parts } => {
             for part in parts {
                 if let TirTemplatePart::Interpolation { expr, .. } = part {
-                    lower_dispatch_in_expr(expr, ctx);
+                    lower_dispatch_in_expr(expr, env, ctx);
                 }
             }
         }
@@ -1238,7 +1232,7 @@ fn walk_locals(expr: &TirExpr, f: &mut dyn FnMut(u32)) {
 /// no-op for that binding) — the resolver / effect-check should have
 /// caught such cases earlier.
 #[allow(dead_code)]
-fn desugar_with_handler(expr: &mut TirExpr, ctx: &mut LowerCtx) {
+fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCtx) {
     let span = expr.span;
     let result_type = expr.type_id;
 
@@ -1260,14 +1254,14 @@ fn desugar_with_handler(expr: &mut TirExpr, ctx: &mut LowerCtx) {
             continue;
         };
         let key: EffectKey = (effect_module, effect_name.clone());
-        let Some(plan) = ctx.plans.get(&key).cloned() else {
+        let Some(plan) = env.plans.get(&key) else {
             continue;
         };
         let handler_type = binding.handler.type_id;
-        let handler_underlying = deref_type(&ctx.type_table.borrow(), handler_type);
-        let handler_type_name = ctx.type_table.borrow().type_name(handler_underlying);
+        let handler_underlying = deref_type(&env.type_table.borrow(), handler_type);
+        let handler_type_name = env.type_table.borrow().type_name(handler_underlying);
         let impl_key: HandlerImplKey = (handler_type_name, effect_name.clone());
-        let Some(impl_info) = ctx.impl_index.get(&impl_key).cloned() else {
+        let Some(impl_info) = env.impl_index.get(&impl_key) else {
             continue;
         };
 
@@ -1292,7 +1286,7 @@ fn desugar_with_handler(expr: &mut TirExpr, ctx: &mut LowerCtx) {
         let save_name = format!("__save_{effect_name}");
         let global_get = TirExpr::new(
             TirExprKind::GlobalVarGet {
-                module_source: ctx.entry_source.clone(),
+                module_source: env.entry_source.clone(),
                 name: plan.global_name.clone(),
             },
             plan.nullable_ref_type_id,
@@ -1339,10 +1333,10 @@ fn desugar_with_handler(expr: &mut TirExpr, ctx: &mut LowerCtx) {
                     handler_type,
                     h_local,
                     &h_name,
-                    &ctx.type_table,
+                    &env.type_table,
                 )
             } else {
-                build_trap_closure(op, &ctx.type_table)
+                build_trap_closure(op, &env.type_table)
             };
             let field_index = *plan.field_indices.get(&op.name).unwrap();
             let field_name = plan.field_names.get(&op.name).unwrap().clone();
@@ -1390,7 +1384,7 @@ fn desugar_with_handler(expr: &mut TirExpr, ctx: &mut LowerCtx) {
         prelude.push(TirStmt::new(
             TirStmtKind::Expr(TirExpr::new(
                 TirExprKind::GlobalVarSet {
-                    module_source: ctx.entry_source.clone(),
+                    module_source: env.entry_source.clone(),
                     name: plan.global_name.clone(),
                     value: Box::new(some_d_ref),
                 },
@@ -1412,7 +1406,7 @@ fn desugar_with_handler(expr: &mut TirExpr, ctx: &mut LowerCtx) {
         restore.push(TirStmt::new(
             TirStmtKind::Expr(TirExpr::new(
                 TirExprKind::GlobalVarSet {
-                    module_source: ctx.entry_source.clone(),
+                    module_source: env.entry_source.clone(),
                     name: plan.global_name.clone(),
                     value: Box::new(saved_expr),
                 },
@@ -2091,10 +2085,8 @@ fn synthesize_dispatch_infrastructure(
     for plan in plans.values() {
         synthesize_dispatch_global(project, &entry_source, plan);
     }
-    let active_keys: Vec<EffectKey> = plans.keys().cloned().collect();
-    for key in &active_keys {
-        let plan = plans.get(key).unwrap().clone();
-        synthesize_dispatch_wrappers(project, &entry_source, key, &plan);
+    for (key, plan) in &plans {
+        synthesize_dispatch_wrappers(project, &entry_source, key, plan);
     }
     plans
 }
