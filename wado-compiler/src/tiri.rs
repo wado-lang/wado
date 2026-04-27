@@ -19,18 +19,18 @@
 //! Today the engine handles:
 //!
 //! - Integer arithmetic: Add, Sub, Mul, Div, Mod
-//! - Integer comparison: Eq, NotEq, Lt, LtEq, Gt, GtEq
-//! - Integer bitwise: BitAnd, BitOr, BitXor, Shl, Shr
-//! - Integer unary: Neg, BitNot
+//! - Integer comparison: Eq, `NotEq`, Lt, `LtEq`, Gt, `GtEq`
+//! - Integer bitwise: `BitAnd`, `BitOr`, `BitXor`, Shl, Shr
+//! - Integer unary: Neg, `BitNot`
 //! - Integer types: i8, i16, i32, i64, u8, u16, u32, u64
 //! - Integer cast: truncation/extension between integer types
 //! - Float arithmetic: Add, Sub, Mul, Div (skipped when result is NaN)
-//! - Float comparison: Eq, NotEq, Lt, LtEq, Gt, GtEq
+//! - Float comparison: Eq, `NotEq`, Lt, `LtEq`, Gt, `GtEq`
 //! - Float unary: Neg (via sign-bit flip, safe for all values including NaN)
 //! - Float types: f32, f64
 //! - Boolean logical: And, Or (including identity rules `false || X → X`,
 //!   `true && X → X`, `X || false → X`, `X && true → X`)
-//! - Boolean equality: Eq, NotEq
+//! - Boolean equality: Eq, `NotEq`
 //! - Boolean unary: Not
 //!
 //! Float arithmetic uses native Rust IEEE 754 ops (same as Wasm), following
@@ -109,7 +109,7 @@ impl Value {
 ///
 /// Holds the type table needed to resolve operand widths. Future
 /// extensions (local-variable environment, step budget for loops,
-/// pure-call inlining via the FlatPackage) will live on this struct.
+/// pure-call inlining via the `FlatPackage`) will live on this struct.
 pub struct Interpreter<'a> {
     type_table: &'a TypeTable,
 }
@@ -151,8 +151,9 @@ impl<'a> Interpreter<'a> {
                 let r = self.reduce_in_place(right);
                 l || r
             }
-            TirExprKind::Unary { expr: inner, .. }
-            | TirExprKind::Cast { expr: inner, .. } => self.reduce_in_place(inner),
+            TirExprKind::Unary { expr: inner, .. } | TirExprKind::Cast { expr: inner, .. } => {
+                self.reduce_in_place(inner)
+            }
             _ => false,
         };
 
@@ -305,9 +306,7 @@ fn rewrite_short_circuit(expr: &mut TirExpr) -> bool {
 fn eval_binary(left: Value, op: TirBinaryOp, right: Value) -> Option<Value> {
     match (left, right) {
         (Value::Bool(l), Value::Bool(r)) => eval_bool_binary(l, op, r),
-        (Value::Float { value: l, prim: lp }, Value::Float { value: r, prim: rp })
-            if lp == rp =>
-        {
+        (Value::Float { value: l, prim: lp }, Value::Float { value: r, prim: rp }) if lp == rp => {
             eval_float_binary(l, op, r, lp)
         }
         (Value::Int { value: l, prim: lp }, Value::Int { value: r, prim: rp }) if lp == rp => {

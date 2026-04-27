@@ -28,12 +28,12 @@ type-checked purity gate.
 
 ### Why two backends
 
-| | tiri (in-process) | wasm execution |
-|---|---|---|
-| Sweet spot | `2+3 → 5`, identity simplification, branch pruning | `fib(20)`, lookup-table generation, full pure-call CTFE |
-| Cost / call | µs, memoizable | ms (codegen + instantiate), amortized via module cache |
-| Partial eval | Yes (residuals) | No (whole-call) |
-| Coverage | Whatever we hand-write | All of Wado, for free |
+|              | tiri (in-process)                                  | wasm execution                                          |
+| ------------ | -------------------------------------------------- | ------------------------------------------------------- |
+| Sweet spot   | `2+3 → 5`, identity simplification, branch pruning | `fib(20)`, lookup-table generation, full pure-call CTFE |
+| Cost / call  | µs, memoizable                                     | ms (codegen + instantiate), amortized via module cache  |
+| Partial eval | Yes (residuals)                                    | No (whole-call)                                         |
+| Coverage     | Whatever we hand-write                             | All of Wado, for free                                   |
 
 These are complementary, not alternatives. tiri stays sub-quadratic and
 fine-grained; wasm execution covers anything tiri would balk at.
