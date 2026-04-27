@@ -20,6 +20,17 @@ use wasmtime_wasi_http::WasiHttpCtx;
 use wasmtime_wasi_http::p3::{WasiHttpCtxView, WasiHttpHooks, WasiHttpView};
 use wasmtime_wasi_tls::{WasiTlsCtx, WasiTlsCtxBuilder, WasiTlsCtxView, WasiTlsView};
 
+/// Install the rustls process-level `CryptoProvider` exactly once. See the
+/// matching helper in `wado-cli/src/runtime.rs` for the rationale; the test
+/// harness needs the same setup so `WasiTlsCtxBuilder::new()` does not panic
+/// on the rustls auto-detect path.
+pub fn install_rustls_provider_for_tests() {
+    static INSTALLED: std::sync::Once = std::sync::Once::new();
+    INSTALLED.call_once(|| {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+    });
+}
+
 use wado_compiler::{
     CompileError, CompileFailure, CompilerHost, Diagnostic, OptLevel, SourceError,
 };
@@ -429,6 +440,7 @@ impl WasiState {
         stdout: wasmtime_wasi::p2::pipe::MemoryOutputPipe,
         stderr: wasmtime_wasi::p2::pipe::MemoryOutputPipe,
     ) -> Self {
+        install_rustls_provider_for_tests();
         let ctx = WasiCtxBuilder::new().stdout(stdout).stderr(stderr).build();
         Self {
             ctx,
@@ -441,6 +453,7 @@ impl WasiState {
 
     /// Create a basic state (no I/O capture)
     pub fn new() -> Self {
+        install_rustls_provider_for_tests();
         let ctx = WasiCtxBuilder::new().build();
         Self {
             ctx,
@@ -688,6 +701,7 @@ pub fn run_wasm_with_full_options(
             builder.preopened_dir(host_path, guest_path, DirPerms::all(), FilePerms::all())?;
         }
         let ctx = builder.build();
+        install_rustls_provider_for_tests();
         let state = WasiState {
             ctx,
             table: ResourceTable::new(),

@@ -62,6 +62,7 @@ fn run_component(component: &Component, stdin: &[u8]) -> String {
             .stdout(stdout_pipe)
             .stderr(stderr_pipe)
             .build();
+        common::install_rustls_provider_for_tests();
         let state = common::WasiState {
             ctx,
             table: wasmtime::component::ResourceTable::new(),

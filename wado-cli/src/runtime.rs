@@ -8,6 +8,20 @@ use wasmtime_wasi_tls::{WasiTlsCtx, WasiTlsCtxBuilder, WasiTlsCtxView, WasiTlsVi
 
 use crate::http_hooks::WadoHttpHooks;
 
+/// Install the rustls process-level `CryptoProvider` exactly once. The
+/// workspace pulls in multiple rustls feature combinations through wasmtime's
+/// dependency graph, so the auto-detect path used by `WasiTlsCtxBuilder::new`
+/// would otherwise panic with "could not automatically determine the
+/// process-level `CryptoProvider`".
+fn install_rustls_provider() {
+    static INSTALLED: std::sync::Once = std::sync::Once::new();
+    INSTALLED.call_once(|| {
+        // Ignore the result: another caller may have raced us, in which case
+        // a provider is already in place and that is fine.
+        let _ = rustls::crypto::ring::default_provider().install_default();
+    });
+}
+
 pub struct WasiState {
     ctx: WasiCtx,
     table: ResourceTable,
@@ -36,6 +50,7 @@ impl WasiState {
         let table = ResourceTable::new();
         let http = WasiHttpCtx::new();
         let http_hooks = WadoHttpHooks::new();
+        install_rustls_provider();
         let tls = WasiTlsCtxBuilder::new().build();
         Ok(Self {
             ctx,
