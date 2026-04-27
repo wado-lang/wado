@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777247036366,
+  "lastUpdate": 1777286220531,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -16777,6 +16777,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/cfe3f2fc514f836ab091d21049007f9e8d975348"
         },
         "date": 1777247036221,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8982,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19110,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 614203,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1d90a0ef9989bc9572bc4464f50c40833a593ac8",
+          "message": "Merge pull request #937 from wado-lang/claude/tir-interpreter-refactor-LraZq\n\nrefactor(tiri): introduce `reduce(&TirExpr) -> TirExpr` partial-evaluator API",
+          "timestamp": "2026-04-27T19:32:03+09:00",
+          "tree_id": "fe3f8bd6cfd26a19b5b97bfa38baef0b80e1806e",
+          "url": "https://github.com/wado-lang/wado/commit/1d90a0ef9989bc9572bc4464f50c40833a593ac8"
+        },
+        "date": 1777286220297,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
