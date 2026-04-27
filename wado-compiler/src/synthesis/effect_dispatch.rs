@@ -22,9 +22,9 @@
 //! the cross-function-boundary follow-up.
 
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::name::LocalMethodName;
 use crate::name::ModuleSource;
 use crate::package::Package;
-use crate::name::LocalMethodName;
 use crate::synthesis::common::{alloc_local, option_some, ref_expr, synth_span};
 use crate::tir::{
     CallArg, EffectRef, FunctionKind, FunctionRef, InlineHint, TirBlock, TirCapture, TirEffectOp,
@@ -337,13 +337,8 @@ fn synthesize_dispatch_wrappers(
         .get_mut(entry_source)
         .expect("entry module must exist");
     for op in &plan.operations {
-        let wrapper = build_dispatch_wrapper_function(
-            entry_source,
-            &effect_name,
-            op,
-            plan,
-            is_wasi,
-        );
+        let wrapper =
+            build_dispatch_wrapper_function(entry_source, &effect_name, op, plan, is_wasi);
         entry_module.add_function(wrapper);
     }
 }
@@ -1371,9 +1366,8 @@ fn desugar_with_handler(expr: &mut TirExpr, ctx: &mut LowerCtx) {
     }
 
     // Compose the desugared block: prelude + body.stmts + reversed restore.
-    let mut stmts: Vec<TirStmt> = Vec::with_capacity(
-        prelude.len() + body.stmts.len() + restore.len(),
-    );
+    let mut stmts: Vec<TirStmt> =
+        Vec::with_capacity(prelude.len() + body.stmts.len() + restore.len());
     stmts.extend(prelude);
     stmts.extend(body.stmts);
     stmts.extend(restore.into_iter().rev());
@@ -1601,9 +1595,7 @@ fn walk_locals_in_stmt(stmt: &TirStmt, f: &mut dyn FnMut(u32)) {
             }
         }
         TirStmtKind::LetDestructure { value, .. } => walk_locals(value, f),
-        TirStmtKind::VariadicForOf {
-            iterable, body, ..
-        } => {
+        TirStmtKind::VariadicForOf { iterable, body, .. } => {
             walk_locals(iterable, f);
             for stmt in &body.stmts {
                 walk_locals_in_stmt(stmt, f);
@@ -1649,10 +1641,7 @@ fn rewrite_call_sites_to_wrappers(
                 format!("__cm_binding__{effect_name}_{op_name}"),
                 wrapper_name.clone(),
             );
-            user_to_wrapper.insert(
-                (effect_name.clone(), op_name.clone()),
-                wrapper_name.clone(),
-            );
+            user_to_wrapper.insert((effect_name.clone(), op_name.clone()), wrapper_name.clone());
         }
     }
 
@@ -1663,12 +1652,7 @@ fn rewrite_call_sites_to_wrappers(
                 continue;
             }
             if let Some(body) = &mut func.body {
-                rewrite_calls_in_block(
-                    body,
-                    &binding_to_wrapper,
-                    &user_to_wrapper,
-                    &entry_source,
-                );
+                rewrite_calls_in_block(body, &binding_to_wrapper, &user_to_wrapper, &entry_source);
             }
         }
         for impl_block in &mut module.impls {
@@ -1734,7 +1718,12 @@ fn rewrite_calls_in_stmt(
             else_block,
         } => {
             rewrite_calls_in_expr(condition, binding_to_wrapper, user_to_wrapper, entry_source);
-            rewrite_calls_in_block(then_block, binding_to_wrapper, user_to_wrapper, entry_source);
+            rewrite_calls_in_block(
+                then_block,
+                binding_to_wrapper,
+                user_to_wrapper,
+                entry_source,
+            );
             if let Some(eb) = else_block {
                 rewrite_calls_in_block(eb, binding_to_wrapper, user_to_wrapper, entry_source);
             }
@@ -1746,7 +1735,12 @@ fn rewrite_calls_in_stmt(
             ..
         } => {
             rewrite_calls_in_expr(scrutinee, binding_to_wrapper, user_to_wrapper, entry_source);
-            rewrite_calls_in_block(then_block, binding_to_wrapper, user_to_wrapper, entry_source);
+            rewrite_calls_in_block(
+                then_block,
+                binding_to_wrapper,
+                user_to_wrapper,
+                entry_source,
+            );
             if let Some(eb) = else_block {
                 rewrite_calls_in_block(eb, binding_to_wrapper, user_to_wrapper, entry_source);
             }
@@ -1829,7 +1823,12 @@ fn rewrite_call_children(
             else_branch,
         } => {
             rewrite_calls_in_expr(condition, binding_to_wrapper, user_to_wrapper, entry_source);
-            rewrite_calls_in_block(then_branch, binding_to_wrapper, user_to_wrapper, entry_source);
+            rewrite_calls_in_block(
+                then_branch,
+                binding_to_wrapper,
+                user_to_wrapper,
+                entry_source,
+            );
             if let Some(eb) = else_branch {
                 rewrite_calls_in_block(eb, binding_to_wrapper, user_to_wrapper, entry_source);
             }
@@ -1961,12 +1960,7 @@ fn rewrite_call_children(
         TirExprKind::TemplateString { parts } => {
             for part in parts {
                 if let TirTemplatePart::Interpolation { expr, .. } = part {
-                    rewrite_calls_in_expr(
-                        expr,
-                        binding_to_wrapper,
-                        user_to_wrapper,
-                        entry_source,
-                    );
+                    rewrite_calls_in_expr(expr, binding_to_wrapper, user_to_wrapper, entry_source);
                 }
             }
         }
@@ -2001,8 +1995,7 @@ pub fn synthesize(mut project: Package) -> Result<Package, String> {
         return Ok(project);
     }
 
-    let plans =
-        synthesize_dispatch_infrastructure(&mut project, &effect_index, &active_effects);
+    let plans = synthesize_dispatch_infrastructure(&mut project, &effect_index, &active_effects);
     lower_with_handler_dispatch_in_modules(&mut project, &plans, &impl_index);
     rewrite_call_sites_to_wrappers(&mut project, &plans);
     Ok(project)
@@ -2101,7 +2094,6 @@ fn build_handler_impl_index(project: &Package) -> IndexMap<HandlerImplKey, Handl
     out
 }
 
-
 /// Strip a single leading `&` / `&mut` layer to find the underlying
 /// struct type that an `impl Effect for T` block targets.
 fn deref_type(tt: &TypeTable, type_id: TypeId) -> TypeId {
@@ -2111,7 +2103,6 @@ fn deref_type(tt: &TypeTable, type_id: TypeId) -> TypeId {
         _ => type_id,
     }
 }
-
 
 /// Walk every method in every `impl Effect for T` block (where `Effect` is
 /// an actual effect declaration) and rewrite `Resume { value }` to
