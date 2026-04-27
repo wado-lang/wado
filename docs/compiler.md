@@ -74,7 +74,8 @@ Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve �
 | FlatPackage     | `flat_package.rs`                    | FlatPackage: flat compilation context (link → codegen)                                       |
 | Link            | `link.rs`                            | Merges per-module Package into flat FlatPackage                                              |
 | Optimize        | `optimize.rs`                        | Optimization coordinator (`optimize/`)                                                       |
-| ConstFolding    | `optimize/const_folding.rs`          | Constant folding for integer/float arithmetic                                                |
+| ConstFolding    | `optimize/const_folding.rs`          | Constant folding for integer/float arithmetic (delegates to `tiri`)                          |
+| Tiri            | `tiri.rs`                            | TIR interpreter — reduces literal expressions to typed values for const folding              |
 | ConstProp       | `optimize/const_propagation.rs`      | Constant propagation for immutable globals                                                   |
 | ConstGlobal     | `optimize/const_global_promotion.rs` | Promote runtime globals to compile-time constants                                            |
 | ConstBranch     | `optimize/const_branch_prune.rs`     | Dead branch elimination for known-false conditions                                           |
