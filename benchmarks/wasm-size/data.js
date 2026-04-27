@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777297727178,
+  "lastUpdate": 1777302407250,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -16997,6 +16997,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/05377cfc9391310b040e1d4b51a5bfa05373a74e"
         },
         "date": 1777297726878,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8982,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19030,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 611451,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5c604c0ab30dfb689daaead2ccf74691bbe63c2d",
+          "message": "Merge pull request #943 from wado-lang/claude/setup-tls-e2e-tests-lehrT\n\nfeat(wasi-tls): wire wasi:tls into runtime + close two CM codegen gaps",
+          "timestamp": "2026-04-28T00:01:52+09:00",
+          "tree_id": "b3e1a2e5f284bf68c61a465eb7f9b64c883ac527",
+          "url": "https://github.com/wado-lang/wado/commit/5c604c0ab30dfb689daaead2ccf74691bbe63c2d"
+        },
+        "date": 1777302406978,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
