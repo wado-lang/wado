@@ -94,25 +94,20 @@ fn build_effect_index(project: &Package) -> IndexMap<EffectKey, EffectMeta> {
 /// route through the WASI CM binding (or, for user-defined effects with
 /// no impl, were already rejected by effect-check).
 ///
-/// `impl_index` is keyed by bare effect name (resolver enforces no name
-/// collisions across modules). When the effect index has multiple
-/// entries with the same name (in distinct modules), all of them are
-/// flagged active so the dispatch infrastructure attaches to whichever
-/// `EffectKey` the impl-walking pass canonicalises against.
+/// Reads the canonical `(effect_module, effect_name)` pair off each
+/// `HandlerImplKey` directly — no name-only matching against
+/// `effect_index` — so two effects sharing a name across modules cannot
+/// be conflated.
 #[allow(dead_code)]
 fn identify_active_effects(
-    effect_index: &IndexMap<EffectKey, EffectMeta>,
     impl_index: &IndexMap<HandlerImplKey, HandlerImplInfo>,
 ) -> IndexSet<EffectKey> {
-    let mut out: IndexSet<EffectKey> = IndexSet::default();
-    for (_, effect_name) in impl_index.keys() {
-        for (key, _) in effect_index {
-            if &key.1 == effect_name {
-                out.insert(key.clone());
-            }
-        }
-    }
-    out
+    impl_index
+        .keys()
+        .map(|(_struct, effect_module, effect_name)| {
+            (effect_module.clone(), effect_name.clone())
+        })
+        .collect()
 }
 
 /// All the bookkeeping needed to emit / refer to the dispatch
@@ -1183,14 +1178,15 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
         else {
             continue;
         };
-        let key: EffectKey = (effect_module, effect_name.clone());
+        let key: EffectKey = (effect_module.clone(), effect_name.clone());
         let Some(plan) = env.plans.get(&key) else {
             continue;
         };
         let handler_type = binding.handler.type_id;
         let handler_underlying = deref_type(&env.type_table.borrow(), handler_type);
         let handler_type_name = env.type_table.borrow().type_name(handler_underlying);
-        let impl_key: HandlerImplKey = (handler_type_name, effect_name.clone());
+        let impl_key: HandlerImplKey =
+            (handler_type_name, effect_module, effect_name.clone());
         let Some(impl_info) = env.impl_index.get(&impl_key) else {
             continue;
         };
@@ -1909,8 +1905,8 @@ pub fn synthesize(mut project: Package) -> Result<Package, String> {
     lower_resume_in_handler_methods(&mut project);
 
     let effect_index = build_effect_index(&project);
-    let impl_index = build_handler_impl_index(&project);
-    let active_effects = identify_active_effects(&effect_index, &impl_index);
+    let impl_index = build_handler_impl_index(&project, &effect_index);
+    let active_effects = identify_active_effects(&impl_index);
 
     if active_effects.is_empty() {
         return Ok(project);
@@ -1960,12 +1956,15 @@ fn synthesize_dispatch_infrastructure(
     plans
 }
 
-/// Index of `impl Effect for Type` blocks: maps
-/// `(handler_type_name, effect_name)` to the impl block's owning module
-/// and the bare names of methods declared inside it. The dispatch
-/// lowering uses this to resolve `<Effect>::<op>(args)` calls inside a
-/// `with E = h do` body to a direct method call on `h`.
-type HandlerImplKey = (String, String); // (handler_type_name, effect_name)
+/// Canonical identity of an `impl <Effect> for <Type>` block:
+/// `(handler_type_name, effect_defining_module, effect_name)`.
+///
+/// The effect-defining module is resolved from the bare `trait_name`
+/// recorded in `LocalMethodName` against the project's effect-index;
+/// keying by that triple (rather than `(struct_name, effect_name)`
+/// alone) prevents collisions when two modules declare an effect with
+/// the same name.
+type HandlerImplKey = (String, ModuleSource, String);
 
 #[derive(Debug, Clone)]
 struct HandlerImplInfo {
@@ -1983,12 +1982,35 @@ struct HandlerImplInfo {
     handler_type_name: String,
 }
 
-fn build_handler_impl_index(project: &Package) -> IndexMap<HandlerImplKey, HandlerImplInfo> {
-    // Impl-block methods are flattened into `TirModule.functions` by the
-    // resolver and tagged via `method_info: LocalMethodName { struct_name,
-    // trait_name, method_name }`. The companion `TirImpl` list is empty
-    // for trait impls in the current pipeline, so we recover the
-    // (struct, trait) → methods map directly from the function tags.
+/// Walk every TIR function tagged with `method_info.trait_name` and
+/// build a canonical `HandlerImplKey -> HandlerImplInfo` map.
+///
+/// `effect_index` provides the canonical `(module, name)` of every
+/// effect declaration; each impl's `trait_name` is resolved by name
+/// against that index. Impl methods whose `trait_name` does not match
+/// any effect declaration belong to a regular (non-effect) trait and
+/// are skipped.
+fn build_handler_impl_index(
+    project: &Package,
+    effect_index: &IndexMap<EffectKey, EffectMeta>,
+) -> IndexMap<HandlerImplKey, HandlerImplInfo> {
+    // Build a name -> defining module lookup so trait_name can be
+    // canonicalised in a single pass. If two effect declarations share
+    // a name across modules, refuse to build the index — the resolver
+    // should already have rejected that case, and silently picking
+    // either canonical entry would be incorrect.
+    let mut effect_module_for_name: IndexMap<String, ModuleSource> = IndexMap::default();
+    for (module_source, name) in effect_index.keys() {
+        if let Some(prev) = effect_module_for_name.insert(name.clone(), module_source.clone())
+            && &prev != module_source
+        {
+            panic!(
+                "duplicate effect name `{name}` across modules {prev:?} and {module_source:?}; \
+                 dispatch synthesis cannot canonicalise impl blocks unambiguously"
+            );
+        }
+    }
+
     let mut out: IndexMap<HandlerImplKey, HandlerImplInfo> = IndexMap::default();
     for (module_source, module) in &project.tir_modules {
         for func_rc in &module.functions {
@@ -1999,7 +2021,16 @@ fn build_handler_impl_index(project: &Package) -> IndexMap<HandlerImplKey, Handl
             let Some(trait_name) = &method_info.trait_name else {
                 continue;
             };
-            let key = (method_info.struct_name.clone(), trait_name.clone());
+            let Some(effect_module) = effect_module_for_name.get(trait_name) else {
+                // Not an effect — skip (the trait_name is from a regular
+                // user trait or auto-derived prelude trait).
+                continue;
+            };
+            let key: HandlerImplKey = (
+                method_info.struct_name.clone(),
+                effect_module.clone(),
+                trait_name.clone(),
+            );
             let entry = out.entry(key).or_insert_with(|| HandlerImplInfo {
                 impl_module: module_source.clone(),
                 methods: IndexMap::default(),
