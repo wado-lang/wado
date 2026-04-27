@@ -26,7 +26,7 @@ impl Counter for CounterState {
     }
 }
 
-// Helper function — the `with Counter = ... do` block does not
+// Helper function — the `with Counter => ... do` block does not
 // contain `Counter::next()` directly; it delegates to this helper.
 fn pull_three() -> i32 with Counter {
     let a = Counter::next();
@@ -37,7 +37,7 @@ fn pull_three() -> i32 with Counter {
 
 export fn run() with Stdout {
     let mut c = CounterState { value: 0 };
-    with Counter = &mut c do {
+    with Counter => &mut c do {
         let total = pull_three();
         println(`total={total}, final={c.value}`);
     }

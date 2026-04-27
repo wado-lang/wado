@@ -1,4 +1,4 @@
-//! Resolver lowering for effect handler installation (`with E = h do { ... }`)
+//! Resolver lowering for effect handler installation (`with E => h do { ... }`)
 //! and the `resume` control-flow expression.
 //!
 //! See WEP 2026-04-11 (Effect Handler) for the language semantics.
@@ -27,7 +27,7 @@ use super::Resolver;
 use super::types::{FunctionContext, TypeError};
 
 impl<H: CompilerHost> Resolver<'_, H> {
-    /// Resolve `with E1 = h1, ... do { body }`.
+    /// Resolve `with E1 => h1, ... do { body }`.
     pub(super) fn resolve_with_handler(
         &mut self,
         with_expr: &ast::WithHandlerExpr,

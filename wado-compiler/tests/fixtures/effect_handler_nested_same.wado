@@ -37,9 +37,9 @@ impl Counter for AddTen {
 export fn run() with Stdout {
     let mut outer = AddOne { base: 0 };
     let mut inner = AddTen { base: 100 };
-    with Counter = &mut outer do {
+    with Counter => &mut outer do {
         let o1 = Counter::next();           // 1 (outer)
-        with Counter = &mut inner do {
+        with Counter => &mut inner do {
             let i1 = Counter::next();       // 110 (inner)
             let i2 = Counter::next();       // 120 (inner)
             println(`outer1={o1}, inner1={i1}, inner2={i2}`);

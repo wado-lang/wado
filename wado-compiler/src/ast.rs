@@ -1588,7 +1588,7 @@ pub enum Expr {
     Spread(Box<Expr>, Span),
     /// Range expression: `a..<b` (exclusive) or `a..=b` (inclusive)
     Range(Box<RangeExpr>),
-    /// Effect handler installation block: `with E1 = h1, E2 = h2 do { body }`.
+    /// Effect handler installation block: `with E1 => h1, E2 => h2 do { body }`.
     /// See `docs/wep-2026-04-11-effect-handler.md`.
     WithHandler(Box<WithHandlerExpr>),
     /// `resume value` — control-flow expression valid only inside an effect
@@ -1597,7 +1597,7 @@ pub enum Expr {
     Resume(Box<ResumeExpr>),
 }
 
-/// `with E1 = h1, E2 = h2 do { body }` — installs effect handlers for the
+/// `with E1 => h1, E2 => h2 do { body }` — installs effect handlers for the
 /// duration of `body`. The block's value is the value of `body`.
 #[derive(Debug, Clone)]
 pub struct WithHandlerExpr {
@@ -1607,7 +1607,7 @@ pub struct WithHandlerExpr {
     pub span: Span,
 }
 
-/// A single `Effect = handler` binding inside `with ... do`.
+/// A single `Effect => handler` binding inside `with ... do`.
 ///
 /// `effect` is `None` for handler bundling: `with &mut value do { ... }`
 /// installs the value as a handler for every effect it implements.
@@ -1618,7 +1618,7 @@ pub struct WithHandlerExpr {
 #[derive(Debug, Clone)]
 pub struct EffectHandlerBinding {
     pub id: AstId,
-    /// Effect type on the LHS of `=` (e.g., `Stdout`, `Stream<u8>`). `None`
+    /// Effect type on the LHS of `=>` (e.g., `Stdout`, `Stream<u8>`). `None`
     /// for bundled handlers (`with &mut value do { ... }`).
     pub effect: Option<Type>,
     /// Handler expression, e.g., `&mut mock`.

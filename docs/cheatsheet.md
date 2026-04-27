@@ -1026,6 +1026,39 @@ run_both(
 );  // E = Stdout + Stderr
 ```
 
+### Effect Handlers
+
+See [WEP: Effect Handler](./wep-2026-04-11-effect-handler.md).
+
+An effect handler is an `impl Effect for Type` where the methods may call `resume value` to continue the suspended computation. The `with` block installs handlers for the duration of its `do` body. The `=>` arrow reads as "calls to E dispatch to h"; it is not an assignment.
+
+```wado
+effect Counter {
+    fn next() -> i32;
+}
+
+struct Mock { value: i32 }
+
+impl Counter for Mock {
+    fn next(&mut self) -> i32 {
+        self.value += 1;
+        resume self.value
+    }
+}
+
+fn main() {
+    let mut m = Mock { value: 0 };
+    with Counter => &mut m do {
+        let a = Counter::next();   // 1
+        let b = Counter::next();   // 2
+    }
+    // Multiple handlers — comma-separated
+    // with Stdin => &mut s, Stdout => &mut o do { ... }
+}
+```
+
+`resume value` (only valid inside a handler method) hands `value` back to the caller of the operation. Without post-resume code it lowers to `return value`.
+
 ## Entrypoints
 
 The entrypoint is defined in a World, which requires `export` keyword.

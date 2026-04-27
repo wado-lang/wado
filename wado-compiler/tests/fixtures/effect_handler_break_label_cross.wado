@@ -1,4 +1,4 @@
-// `break label` crossing a `with E = h do { ... }` body must restore
+// `break label` crossing a `with E => h do { ... }` body must restore
 // the per-effect dispatch global so the rest of the function observes
 // the outer scope's handler. The break target is a labeled block
 // declared *outside* the `with`, so the jump exits the do-block and
@@ -36,7 +36,7 @@ fn helper(early: bool) -> i32 {
     let inner = Inner {};
     let mut inside = 0;
     outer_label: {
-        with Counter = &inner do {
+        with Counter => &inner do {
             inside = Counter::next();
             if early {
                 break outer_label;
@@ -49,7 +49,7 @@ fn helper(early: bool) -> i32 {
 
 export fn run() with Stdout {
     let outer = Outer {};
-    with Counter = &outer do {
+    with Counter => &outer do {
         let early = helper(true);
         let normal = helper(false);
         println(`early={early}, normal={normal}`);

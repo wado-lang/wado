@@ -601,7 +601,7 @@ fn build_dispatch_wrapper_function(
     } else {
         // User-defined effect: well-typed programs never reach the wrapper
         // without a handler installed, since effect-check requires every
-        // call-site to have a `with E = h do { ... }` in scope. If we get
+        // call-site to have a `with E => h do { ... }` in scope. If we get
         // here anyway, panic with a diagnostic identifying the operation
         // — useful when a future refactor introduces a path that bypasses
         // effect-check.

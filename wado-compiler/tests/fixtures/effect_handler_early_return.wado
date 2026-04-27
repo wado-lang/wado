@@ -1,4 +1,4 @@
-// Early `return` from inside `with E = h do { ... }` must restore the
+// Early `return` from inside `with E => h do { ... }` must restore the
 // per-effect dispatch global so the caller sees the outer scope's
 // handler, not the do-block's. Verifies the case described in WEP
 // 2026-04-11 (lines 150–153) by stacking two handlers for the same
@@ -35,7 +35,7 @@ impl Counter for Inner {
 
 fn helper() -> i32 {
     let inner = Inner {};
-    with Counter = &inner do {
+    with Counter => &inner do {
         return Counter::next();
     }
     return 999;
@@ -43,7 +43,7 @@ fn helper() -> i32 {
 
 export fn run() with Stdout {
     let outer = Outer {};
-    with Counter = &outer do {
+    with Counter => &outer do {
         let h = helper();
         let after = Counter::next();
         println(`helper={h}, after={after}`);

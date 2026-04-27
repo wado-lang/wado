@@ -1409,7 +1409,7 @@ impl Parser {
         Ok(Stmt::Match(m))
     }
 
-    /// Parse a `with E = h do { ... }` statement.
+    /// Parse a `with E => h do { ... }` statement.
     ///
     /// The trailing `}` of the do-block makes the statement boundary
     /// unambiguous, so the trailing semicolon is optional — same as
@@ -3360,11 +3360,13 @@ impl Parser {
     }
 
     /// Parse an effect handler installation expression:
-    /// `with E1 = h1, E2 = h2 do { body }` or `with &mut h do { body }` (bundled).
+    /// `with E1 => h1, E2 => h2 do { body }` or `with &mut h do { body }` (bundled).
     ///
     /// Each binding is one of:
-    /// - `EffectName = expr` — install `expr` as the handler for `EffectName`.
-    /// - `expr` (no `=`) — bundled handler, used for every effect `expr` implements.
+    /// - `EffectName => expr` — install `expr` as the handler for `EffectName`.
+    ///   The `=>` reads as "case E is dispatched to expr", mirroring match arms;
+    ///   this is not an assignment.
+    /// - `expr` (no `=>`) — bundled handler, used for every effect `expr` implements.
     ///
     /// See `docs/wep-2026-04-11-effect-handler.md`.
     fn parse_with_handler_expr(&mut self) -> ParseResult<Expr> {
@@ -3409,23 +3411,23 @@ impl Parser {
     }
 
     /// Parse one binding inside a `with ... do` clause. Two shapes:
-    /// - `Effect = handler_expr` — explicit effect on the LHS. The effect is
-    ///   any type expression, so `Stdout = ...` and `Stream<u8> = ...` both
+    /// - `Effect => handler_expr` — explicit effect on the LHS. The effect is
+    ///   any type expression, so `Stdout => ...` and `Stream<u8> => ...` both
     ///   parse here. Later compiler phases decide which forms they support.
-    /// - `handler_expr` (no `=`) — bundled handler.
+    /// - `handler_expr` (no `=>`) — bundled handler.
     fn parse_effect_handler_binding(&mut self) -> ParseResult<crate::ast::EffectHandlerBinding> {
         let id = self.alloc_ast_id();
         let start_span = self.peek().span;
 
         // Speculatively try the explicit form. The LHS is a type, so we have
-        // to commit to type parsing only if a `=` follows; otherwise this is
+        // to commit to type parsing only if a `=>` follows; otherwise this is
         // a bundled handler whose expression starts with an identifier.
         if matches!(self.peek_kind(), TokenKind::Ident(_)) {
             let checkpoint = self.pos;
             let saved_pending_gt = self.pending_gt;
             if let Ok(ty) = self.parse_type() {
-                if self.check(&TokenKind::Eq) {
-                    self.advance(); // consume `=`
+                if self.check(&TokenKind::FatArrow) {
+                    self.advance(); // consume `=>`
                     // Handler expressions are parsed as unary expressions so
                     // we don't greedily consume the trailing `,` or `do`.
                     // Trade-off: cast / `if` / `match` expressions can't sit
@@ -6188,7 +6190,7 @@ line 2
 
     #[test]
     fn parse_with_handler_explicit_effect() {
-        let expr = parse_expr_from("with Stdout = &mut mock do { println(\"hi\"); }");
+        let expr = parse_expr_from("with Stdout => &mut mock do { println(\"hi\"); }");
         let Expr::WithHandler(w) = expr else {
             panic!("expected WithHandler, got {expr:?}");
         };
@@ -6203,7 +6205,7 @@ line 2
 
     #[test]
     fn parse_with_handler_multiple_handlers() {
-        let expr = parse_expr_from("with Stdout = &mut s, Stderr = &mut e do { f(); }");
+        let expr = parse_expr_from("with Stdout => &mut s, Stderr => &mut e do { f(); }");
         let Expr::WithHandler(w) = expr else {
             panic!("expected WithHandler");
         };
@@ -6216,7 +6218,7 @@ line 2
     fn parse_with_handler_generic_effect() {
         // Generic effect names (`Stream<u8>`) must parse cleanly; later
         // compiler phases decide whether to support them.
-        let expr = parse_expr_from("with Stream<u8> = &mut cm do { f(); }");
+        let expr = parse_expr_from("with Stream<u8> => &mut cm do { f(); }");
         let Expr::WithHandler(w) = expr else {
             panic!("expected WithHandler");
         };
