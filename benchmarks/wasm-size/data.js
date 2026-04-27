@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777296071204,
+  "lastUpdate": 1777297727178,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -16953,6 +16953,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/5cec5d1eb28875375ba3779969d2b829269d5418"
         },
         "date": 1777296070960,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8982,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19030,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 611451,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "05377cfc9391310b040e1d4b51a5bfa05373a74e",
+          "message": "Merge pull request #942 from wado-lang/claude/review-effect-handler-syntax-YIZdc\n\nfeat(effect-handler): use `=>` instead of `=` in `with E => h do` syntax",
+          "timestamp": "2026-04-27T22:43:34+09:00",
+          "tree_id": "58365a36d54d81c21e461798d9f33f44704b5495",
+          "url": "https://github.com/wado-lang/wado/commit/05377cfc9391310b040e1d4b51a5bfa05373a74e"
+        },
+        "date": 1777297726878,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
