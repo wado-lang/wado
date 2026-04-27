@@ -9090,13 +9090,7 @@ fn rewrite_calls_in_expr(
         TirExprKind::TemplateString { parts } => {
             for part in parts {
                 if let TirTemplatePart::Interpolation { expr: inner, .. } = part {
-                    rewrite_calls_in_expr(
-                        inner,
-                        adapters,
-                        entry_source,
-                        wasi_registry,
-                        type_table,
-                    );
+                    rewrite_calls_in_expr(inner, adapters, entry_source, wasi_registry, type_table);
                 }
             }
         }

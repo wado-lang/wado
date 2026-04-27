@@ -104,9 +104,7 @@ fn identify_active_effects(
 ) -> IndexSet<EffectKey> {
     impl_index
         .keys()
-        .map(|(_struct, effect_module, effect_name)| {
-            (effect_module.clone(), effect_name.clone())
-        })
+        .map(|(_struct, effect_module, effect_name)| (effect_module.clone(), effect_name.clone()))
         .collect()
 }
 
@@ -1170,8 +1168,9 @@ impl crate::tir_visitor::TirRefVisitor for MaxLocalIndex {
     fn visit_stmt(&mut self, stmt: &TirStmt) {
         match &stmt.kind {
             TirStmtKind::Let { local_index, .. } => self.note(*local_index),
-            TirStmtKind::IfLet { pattern, .. }
-            | TirStmtKind::LetDestructure { pattern, .. } => self.walk_pattern(pattern),
+            TirStmtKind::IfLet { pattern, .. } | TirStmtKind::LetDestructure { pattern, .. } => {
+                self.walk_pattern(pattern)
+            }
             TirStmtKind::VariadicForOf { binding_local, .. } => self.note(*binding_local),
             _ => {}
         }
@@ -1249,8 +1248,11 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
         let handler_type = binding.handler.type_id;
         let handler_underlying = deref_type(&env.type_table.borrow(), handler_type);
         let handler_type_name = env.type_table.borrow().type_name(handler_underlying);
-        let impl_key: HandlerImplKey =
-            (handler_type_name.clone(), effect_module.clone(), effect_name.clone());
+        let impl_key: HandlerImplKey = (
+            handler_type_name.clone(),
+            effect_module.clone(),
+            effect_name.clone(),
+        );
         let impl_info = env.impl_index.get(&impl_key).unwrap_or_else(|| {
             panic!(
                 "effect-dispatch synthesis: no `impl {effect_name} for \
@@ -1325,7 +1327,7 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
                 build_handler_op_closure(
                     op,
                     &effect_name,
-                    &impl_info,
+                    impl_info,
                     handler_type,
                     h_local,
                     &h_name,
@@ -1589,7 +1591,6 @@ fn build_trap_closure(
         span,
     )
 }
-
 
 /// Rewrite every effect-operation call site so it routes through a
 /// dispatch wrapper.
