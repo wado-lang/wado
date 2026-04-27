@@ -102,7 +102,7 @@ fn identify_active_effects(
 /// (`lower_with_handler`) and call-site rewriting
 /// (`rewrite_call_sites_to_wrappers`) passes.
 #[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct DispatchPlan {
     /// `TypeId` of the synthesised `__Dispatch_<E>` struct.
     struct_type_id: TypeId,
@@ -671,9 +671,64 @@ fn build_dispatch_wrapper_function(
 /// input has a place to report errors. The MVP currently never fails.
 pub fn synthesize(mut project: Package) -> Result<Package, String> {
     lower_resume_in_handler_methods(&mut project);
+
+    let effect_index = build_effect_index(&project);
     let impl_index = build_handler_impl_index(&project);
+    let active_effects = identify_active_effects(&effect_index, &impl_index);
+
+    if !active_effects.is_empty() {
+        let _plans = synthesize_dispatch_infrastructure(
+            &mut project,
+            &effect_index,
+            &active_effects,
+        );
+    }
+
+    // TODO(phase4): switch to `lower_with_handler` (closure-based) +
+    // `rewrite_call_sites_to_wrappers` once those land. For now keep the
+    // Phase 3 static devirtualisation so existing fixtures still pass.
     lower_with_handler_in_modules(&mut project, &impl_index);
     Ok(project)
+}
+
+/// Orchestrates per-effect dispatch infrastructure synthesis.
+///
+/// Three phases per active effect:
+///
+/// 1. [`synthesize_dispatch_struct`] — interns the recursive
+///    `__Dispatch_<E>` Wasm GC struct type and adds the `TirStruct` decl
+///    to the entry module.
+/// 2. [`synthesize_dispatch_global`] — appends the `__effect_<E>`
+///    mutable global initialised to `null`.
+/// 3. [`synthesize_dispatch_wrappers`] — emits one
+///    `__effect_dispatch__<E>__<op>` wrapper function per declared
+///    operation.
+///
+/// Returns the per-effect [`DispatchPlan`] map the lowering /
+/// call-site-rewriting passes consume.
+fn synthesize_dispatch_infrastructure(
+    project: &mut Package,
+    effect_index: &IndexMap<EffectKey, EffectMeta>,
+    active_effects: &IndexSet<EffectKey>,
+) -> IndexMap<EffectKey, DispatchPlan> {
+    let entry_source = project.entry_module_source.clone();
+    let mut plans: IndexMap<EffectKey, DispatchPlan> = IndexMap::default();
+    for key in active_effects {
+        let meta = effect_index
+            .get(key)
+            .expect("active effect must have an entry in the effect index");
+        let plan = synthesize_dispatch_struct(project, &entry_source, key, meta);
+        plans.insert(key.clone(), plan);
+    }
+    for plan in plans.values() {
+        synthesize_dispatch_global(project, &entry_source, plan);
+    }
+    let active_keys: Vec<EffectKey> = plans.keys().cloned().collect();
+    for key in &active_keys {
+        let plan = plans.get(key).unwrap().clone();
+        synthesize_dispatch_wrappers(project, &entry_source, key, &plan);
+    }
+    plans
 }
 
 /// Index of `impl Effect for Type` blocks: maps
