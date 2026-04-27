@@ -705,26 +705,49 @@ struct LowerCtx<'a> {
     scopes: Vec<LocalScope>,
 }
 
+/// One frame on `LowerCtx.scopes`.
+///
+/// The outermost frame is always a `Function` scope and owns the
+/// caller's `local_types` vector — fresh locals are appended there and
+/// the vector is moved back into `TirFunction.local_types` on exit.
+///
+/// Each `Closure` frame, pushed when the walker descends into a
+/// `TirExprKind::Closure` body, owns a closure-local `next_local`
+/// counter only — the lower phase rebuilds each closure functor's
+/// local table from the body's `Let` statements, so we don't need to
+/// track types here.
 #[allow(dead_code)]
-struct LocalScope {
-    /// Next free local index in this scope.
-    next_local: u32,
-    /// `Some(types)` for the outermost function scope (writes back to
-    /// `func.local_types` on exit); `None` for closure scopes (the lower
-    /// phase rebuilds them).
-    local_types: Option<Vec<TypeId>>,
+enum LocalScope {
+    Function {
+        next_local: u32,
+        local_types: Vec<TypeId>,
+    },
+    Closure {
+        next_local: u32,
+    },
 }
 
 #[allow(dead_code)]
 impl LowerCtx<'_> {
     fn alloc_local(&mut self, ty: TypeId) -> u32 {
         let scope = self.scopes.last_mut().expect("at least one scope");
-        let idx = scope.next_local;
-        scope.next_local += 1;
-        if let Some(types) = &mut scope.local_types {
-            types.push(ty);
+        match scope {
+            LocalScope::Function {
+                next_local,
+                local_types,
+            } => {
+                let idx = *next_local;
+                *next_local += 1;
+                local_types.push(ty);
+                idx
+            }
+            LocalScope::Closure { next_local } => {
+                let idx = *next_local;
+                *next_local += 1;
+                let _ = ty; // closure-local types are rebuilt later
+                idx
+            }
         }
-        idx
     }
 }
 
@@ -781,15 +804,24 @@ fn lower_with_handler_dispatch_in_func(
             impl_index,
             type_table,
             entry_source,
-            scopes: vec![LocalScope {
+            scopes: vec![LocalScope::Function {
                 next_local: func.local_count,
-                local_types: Some(local_types),
+                local_types,
             }],
         };
         lower_dispatch_in_block(body, &mut ctx);
-        let scope = ctx.scopes.pop().expect("function scope");
-        func.local_count = scope.next_local;
-        func.local_types = scope.local_types.expect("function scope has local_types");
+        match ctx.scopes.pop().expect("function scope") {
+            LocalScope::Function {
+                next_local,
+                local_types,
+            } => {
+                func.local_count = next_local;
+                func.local_types = local_types;
+            }
+            LocalScope::Closure { .. } => {
+                unreachable!("outermost scope must be a function frame")
+            }
+        }
     }
 }
 
@@ -850,13 +882,21 @@ fn lower_dispatch_in_stmt(stmt: &mut TirStmt, ctx: &mut LowerCtx) {
 
 #[allow(dead_code)]
 fn lower_dispatch_in_expr(expr: &mut TirExpr, ctx: &mut LowerCtx) {
-    // Recurse into children first so inner `WithHandler`s are desugared
-    // before the outer one (matches the runtime install order).
-    walk_dispatch_children(expr, ctx);
-
-    if let TirExprKind::WithHandler { .. } = &expr.kind {
+    // `WithHandler` requires custom recursion: its handler-binding
+    // expressions and body must be desugared before this node so any
+    // inner `WithHandler` becomes a plain `Block` first; the outer
+    // `desugar_with_handler` then consumes the (now inner-free)
+    // bindings + body. Other expression kinds delegate to the generic
+    // children walk.
+    if let TirExprKind::WithHandler { bindings, body, .. } = &mut expr.kind {
+        for binding in bindings {
+            lower_dispatch_in_expr(&mut binding.handler, ctx);
+        }
+        lower_dispatch_in_block(body, ctx);
         desugar_with_handler(expr, ctx);
+        return;
     }
+    walk_dispatch_children(expr, ctx);
 }
 
 #[allow(dead_code)]
@@ -965,10 +1005,7 @@ fn walk_dispatch_children(expr: &mut TirExpr, ctx: &mut LowerCtx) {
             // params plus any pre-existing body lets we discover.
             let body_max = max_local_index_in_expr(body);
             let start = (params.len() as u32).max(body_max + 1);
-            ctx.scopes.push(LocalScope {
-                next_local: start,
-                local_types: None,
-            });
+            ctx.scopes.push(LocalScope::Closure { next_local: start });
             lower_dispatch_in_expr(body, ctx);
             ctx.scopes.pop();
         }
@@ -980,11 +1017,12 @@ fn walk_dispatch_children(expr: &mut TirExpr, ctx: &mut LowerCtx) {
         TirExprKind::Resume { value } => {
             lower_dispatch_in_expr(value, ctx);
         }
-        TirExprKind::WithHandler { bindings, body, .. } => {
-            for binding in bindings {
-                lower_dispatch_in_expr(&mut binding.handler, ctx);
-            }
-            lower_dispatch_in_block(body, ctx);
+        TirExprKind::WithHandler { .. } => {
+            unreachable!(
+                "WithHandler is recursed and desugared inside \
+                 lower_dispatch_in_expr; walk_dispatch_children should \
+                 never see it"
+            );
         }
         TirExprKind::TemplateString { parts } => {
             for part in parts {
