@@ -666,6 +666,7 @@ fn build_dispatch_wrapper_function(
         address_taken_locals: IndexSet::default(),
         stores_aliased_locals: IndexSet::default(),
         is_cm_binding: false,
+        is_dispatch_wrapper: true,
         is_cm_export: false,
         is_ambient: false,
         inline_hint: InlineHint::Auto,
@@ -1565,7 +1566,7 @@ fn rewrite_call_sites_to_wrappers(
     for module in project.tir_modules.values_mut() {
         for func_rc in &module.functions {
             let mut func = func_rc.borrow_mut();
-            if is_synthesized_effect_infra(&func.name) {
+            if func.is_dispatch_wrapper || func.is_cm_binding {
                 continue;
             }
             if let Some(body) = &mut func.body {
@@ -1574,7 +1575,7 @@ fn rewrite_call_sites_to_wrappers(
         }
         for impl_block in &mut module.impls {
             for method in &mut impl_block.methods {
-                if is_synthesized_effect_infra(&method.name) {
+                if method.is_dispatch_wrapper || method.is_cm_binding {
                     continue;
                 }
                 if let Some(body) = &mut method.body {
@@ -1588,11 +1589,6 @@ fn rewrite_call_sites_to_wrappers(
             }
         }
     }
-}
-
-#[allow(dead_code)]
-fn is_synthesized_effect_infra(name: &str) -> bool {
-    name.starts_with("__effect_dispatch__") || name.starts_with("__cm_binding__")
 }
 
 #[allow(dead_code)]
