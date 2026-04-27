@@ -70,11 +70,31 @@ fn const_fold_int_types() with Stdout {
     println(`f={f}`);
 }
 
+// Stage 1 of tiri: env-aware constant folding.
+// `let x = 5; let y = x + 3;` folds to `y = 8` in a single pass,
+// because the interpreter's per-function env binds `x → Const(5)` and
+// the surrounding Binary reads `x` through the env. Multi-use locals
+// (read_count > 1) are handled too — copy_prop is conservative there,
+// but the env lookup is non-destructive so it fires at every use site.
+fn const_fold_local_env() with Stdout {
+    let x = 5;
+    let y = x + 3;
+    let z = x * 4;
+    let w = x + y + z;
+
+    assert y == 8;
+    assert z == 20;
+    assert w == 33;
+
+    println(`y={y} z={z} w={w}`);
+}
+
 export fn run() with Stdout {
     const_fold_f32_comparison();
     const_fold_int_basic();
     const_fold_int_types();
+    const_fold_local_env();
 }
 
 __DATA__
-{"stdout": "ok\na=42\nb=123\nc=42\nd=42\ne=1\nf=9\ng=25\na=1000000000000\nb=300\nc=33\nd=0\ne=0\nf=2\n"}
+{"stdout": "ok\na=42\nb=123\nc=42\nd=42\ne=1\nf=9\ng=25\na=1000000000000\nb=300\nc=33\nd=0\ne=0\nf=2\ny=8 z=20 w=33\n"}

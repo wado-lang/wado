@@ -57,15 +57,49 @@ casts fold), heap-allocated `Value` payloads, and any cross-function
 reasoning. Stage 1 and onward extend the engine; Stage 0 is purely a
 relocation + API reshape with zero behaviour change.
 
-### Stage 1 — local environment + memoization
+### Stage 1 — local environment + lattice
 
-- Add `env: HashMap<LocalId, Value>` to `Interpreter` for `let`-bound
-  constants.
-- Add `memo: HashMap<ExprKey, Option<Value>>` so each TIR node is
-  evaluated at most once per reduce call. Mirrors rustc's `dataflow_const_prop`
-  (`PLACE_LIMIT = 100`) and LLVM's `ValueTracking` per-call recursion
-  cap (`MaxAnalysisRecursionDepth = 6`).
+- Replace `Option<Value>` with a 3-state lattice. `Option<Value>`
+  conflated four distinct meanings (unevaluated, const, non-const,
+  unsupported-op), which made memoization unsafe to add later — caching
+  `None` couldn't distinguish "we know it's non-const" from "we haven't
+  computed it yet". The lattice fixes this at the type level.
+
+  ```rust
+  pub enum Lattice {
+      Unevaluated,    // = SCCP Bottom: not yet computed / unreachable
+      Const(Value),   // provably this value
+      NonConst,       // = SCCP Top: non-constant (or modelled-out op)
+  }
+  ```
+
+  Names favour readability over the academic `Bottom` / `Top`. Comments
+  in `tiri.rs` reference the SCCP lattice for readers familiar with the
+  abstract-interpretation literature.
+
+  `reduce_to_lattice(&TirExpr) -> Lattice` is the canonical engine API.
+  Callers that only need "is this a literal?" use
+  `Lattice::as_const() -> Option<Value>` — kept as a _projection_, not a
+  separate function, so the lattice is always the source of truth.
+
+- Add `env: HashMap<LocalId, Lattice>` to `Interpreter` for `let`-bound
+  constants. Immutable bindings are captured as `Const(v)` when the RHS
+  reduces; `let mut` and assignments invalidate to `NonConst`. Reads of
+  `TirExprKind::Local` consult `env`.
 - Subsumes part of `const_propagation` for in-function constants.
+
+### Stage 1.5 — memoization (deferred)
+
+- The original WEP bundled `memo: HashMap<ExprKey, Lattice>` into Stage 1.
+  Deferred until Stage 3 (pure call inlining), where the same expression
+  can be evaluated from multiple parent contexts. In Stage 1's pure
+  bottom-up walk, every node is visited exactly once, so the memo carries
+  no payoff and risks invariant drift between passes.
+- When introduced, only `Const(v)` and structurally-final `NonConst`
+  results are cached. `Unevaluated` is the cache-miss sentinel by
+  construction. "Unsupported-op `NonConst`" is **not** memoized so model
+  extensions don't leave stale entries — `NonConst` is cheap to recompute
+  (one op-match), so the precision gain outweighs the cache hit.
 
 ### Stage 2 — `if` / `match` reduction
 
@@ -167,9 +201,17 @@ codegen.
 
 ## Open questions
 
-- Should `tiri` own the lattice value type (`Bottom`/`Const`/`Top`) or
-  keep returning `Option<Value>` and let callers track lattice state?
-  The Stage 1 prototype will inform this.
 - Where does the wasm CTFE module cache live — per `compile` invocation
   or per process? Per-invocation is simpler; per-process speeds up
   watch-mode workflows but needs eviction.
+
+## Resolved questions
+
+### Lattice ownership vs. `Option<Value>`
+
+Resolved as part of Stage 1: tiri owns
+`Lattice { Unevaluated, Const(Value), NonConst }`. `Option<Value>` is
+dropped — it conflated four meanings, making memoization unsafe to add
+later. Lattice is exposed via `reduce_to_lattice`; the
+`Lattice::as_const()` projection covers the simple "is this a literal?"
+case without re-introducing the ambiguity at the API surface.

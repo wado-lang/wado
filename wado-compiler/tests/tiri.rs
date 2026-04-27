@@ -2,17 +2,17 @@
 //! that powers constant folding (and, eventually, branch / loop reduction).
 //!
 //! Each test builds a tiny TIR expression, runs it through
-//! [`Interpreter::reduce_to_value`], and checks the resulting [`Value`].
-//! The focus here is the four arithmetic ops across a handful of
-//! representative integer / float types — the goal being to give the
-//! interpreter a stable contract to refactor against, not to enumerate
-//! every operator.
+//! [`Interpreter::reduce_to_lattice`], and checks the resulting
+//! [`Lattice`]. The focus here is the four arithmetic ops across a
+//! handful of representative integer / float types — the goal being to
+//! give the interpreter a stable contract to refactor against, not to
+//! enumerate every operator.
 
 use wado_compiler::Span;
 use wado_compiler::tir::{
     PrimitiveType, TirBinaryOp, TirExpr, TirExprKind, TirUnaryOp, TypeId, TypeTable,
 };
-use wado_compiler::tiri::{Interpreter, Value};
+use wado_compiler::tiri::{Interpreter, Lattice, Value};
 
 fn int_lit(value: u64, type_id: TypeId, repr: &str) -> TirExpr {
     TirExpr::new(
@@ -67,9 +67,25 @@ fn unary(op: TirUnaryOp, expr: TirExpr, result_ty: TypeId) -> TirExpr {
     )
 }
 
+fn local_expr(index: u32, type_id: TypeId) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::Local {
+            index,
+            name: format!("l{index}"),
+        },
+        type_id,
+        Span::default(),
+    )
+}
+
+/// Convenience wrapper used by the legacy "is this a Const?" tests: run
+/// `reduce_to_lattice` and project to `Option<Value>` via
+/// [`Lattice::as_const`]. Unevaluated and `NonConst` both collapse to
+/// `None` here — when a test cares about the distinction it pattern
+/// matches on [`Lattice`] directly.
 fn eval(expr: &TirExpr) -> Option<Value> {
     let table = TypeTable::new();
-    Interpreter::new(&table).reduce_to_value(expr)
+    Interpreter::new(&table).reduce_to_lattice(expr).as_const()
 }
 
 fn expect_int(expr: &TirExpr, expected_value: u64, expected_prim: PrimitiveType) {
@@ -419,13 +435,16 @@ fn comparison_yields_bool() {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// Non-foldable input — reduce_to_value returns None
+// Non-foldable input — reduce_to_lattice returns Unevaluated/NonConst
 // ──────────────────────────────────────────────────────────────────────────────
 
 #[test]
 fn non_literal_operand_is_unreducible() {
     // A `Unit` expression as the operand stands in for any non-literal —
-    // the interpreter has no Value to produce, so it returns None.
+    // the interpreter has no Value to produce, so the result is not
+    // `Const`. (`Unit` is structurally outside the engine's model, so
+    // it lattice-resolves to Unevaluated, which propagates through the
+    // surrounding Binary.)
     let e = binary(
         TirBinaryOp::Add,
         int_lit(1, TypeTable::I32, "1"),
@@ -484,5 +503,228 @@ fn reduce_short_circuits_or_false() {
         matches!(reduced.kind, TirExprKind::Unit),
         "false || X should reduce to X, got {:?}",
         reduced.kind
+    );
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Lattice API — three states are observable, projection collapses two
+// ──────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn lattice_const_for_literal() {
+    let table = TypeTable::new();
+    let lit = int_lit(42, TypeTable::I32, "42");
+    let lat = Interpreter::new(&table).reduce_to_lattice(&lit);
+    assert!(matches!(
+        lat,
+        Lattice::Const(Value::Int {
+            value: 42,
+            prim: PrimitiveType::I32,
+        }),
+    ));
+}
+
+#[test]
+fn lattice_unevaluated_for_unsupported_kind() {
+    // A bare `Unit` is outside the engine's model — distinct from
+    // `NonConst`, which is reserved for things provably non-constant.
+    let table = TypeTable::new();
+    let e = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, Span::default());
+    assert_eq!(
+        Interpreter::new(&table).reduce_to_lattice(&e),
+        Lattice::Unevaluated,
+    );
+}
+
+#[test]
+fn lattice_unevaluated_for_unbound_local() {
+    // No bind_local call → reading the local is "I don't know yet",
+    // not "I know it isn't const".
+    let table = TypeTable::new();
+    let local = local_expr(0, TypeTable::I32);
+    assert_eq!(
+        Interpreter::new(&table).reduce_to_lattice(&local),
+        Lattice::Unevaluated,
+    );
+}
+
+#[test]
+fn lattice_nonconst_for_div_by_zero() {
+    // Both operands are Const, but the op evidently fails — that's
+    // NonConst, distinct from Unevaluated.
+    let table = TypeTable::new();
+    let e = binary(
+        TirBinaryOp::Div,
+        int_lit(1, TypeTable::I32, "1"),
+        int_lit(0, TypeTable::I32, "0"),
+        TypeTable::I32,
+    );
+    assert_eq!(
+        Interpreter::new(&table).reduce_to_lattice(&e),
+        Lattice::NonConst,
+    );
+}
+
+#[test]
+fn lattice_as_const_collapses_unevaluated_and_nonconst() {
+    // The `as_const` projection is a one-way door into Option<Value>:
+    // both Unevaluated and NonConst become None, exactly the loss of
+    // information that callers of `as_const` opt in to.
+    assert!(Lattice::Unevaluated.as_const().is_none());
+    assert!(Lattice::NonConst.as_const().is_none());
+    assert_eq!(
+        Lattice::Const(Value::Bool(true)).as_const(),
+        Some(Value::Bool(true)),
+    );
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Stage 1 — local-variable env: bind_local, invalidate_local, function reset
+// ──────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn bound_local_folds_in_arithmetic() {
+    // env: x = Const(5).
+    // Then `x + 3` reduces to Const(8), even though `x` syntactically
+    // is a Local node.
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    interp.bind_local(
+        0,
+        Lattice::Const(Value::Int {
+            value: 5,
+            prim: PrimitiveType::I32,
+        }),
+    );
+    let e = binary(
+        TirBinaryOp::Add,
+        local_expr(0, TypeTable::I32),
+        int_lit(3, TypeTable::I32, "3"),
+        TypeTable::I32,
+    );
+    assert_eq!(
+        interp.reduce_to_lattice(&e),
+        Lattice::Const(Value::Int {
+            value: 8,
+            prim: PrimitiveType::I32,
+        }),
+    );
+}
+
+#[test]
+fn nonconst_local_blocks_fold() {
+    // env: x = NonConst (e.g. `let mut x = …` or post-assign).
+    // `x + 3` cannot be folded; the result is NonConst.
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    interp.bind_local(0, Lattice::NonConst);
+    let e = binary(
+        TirBinaryOp::Add,
+        local_expr(0, TypeTable::I32),
+        int_lit(3, TypeTable::I32, "3"),
+        TypeTable::I32,
+    );
+    assert_eq!(interp.reduce_to_lattice(&e), Lattice::NonConst);
+}
+
+#[test]
+fn invalidate_local_overrides_prior_const() {
+    // x first bound to Const(5), then invalidated by an assignment.
+    // Subsequent reads should see NonConst, never the stale Const.
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    interp.bind_local(
+        7,
+        Lattice::Const(Value::Int {
+            value: 5,
+            prim: PrimitiveType::I32,
+        }),
+    );
+    interp.invalidate_local(7);
+    let e = local_expr(7, TypeTable::I32);
+    assert_eq!(interp.reduce_to_lattice(&e), Lattice::NonConst);
+}
+
+#[test]
+fn enter_function_clears_env() {
+    // Simulates the visitor moving from one function body to the
+    // next — local indices are unique per function, so prior bindings
+    // must not leak.
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    interp.bind_local(
+        3,
+        Lattice::Const(Value::Int {
+            value: 99,
+            prim: PrimitiveType::I32,
+        }),
+    );
+    interp.enter_function();
+    let e = local_expr(3, TypeTable::I32);
+    assert_eq!(interp.reduce_to_lattice(&e), Lattice::Unevaluated);
+}
+
+#[test]
+fn local_node_itself_is_not_rewritten_in_place() {
+    // A Local with env = Const should be readable via reduce_to_lattice
+    // but NOT mutated when seen on its own. This protects assignment
+    // LHS targets from being rewritten into literals (which would
+    // produce malformed TIR).
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    interp.bind_local(
+        0,
+        Lattice::Const(Value::Int {
+            value: 5,
+            prim: PrimitiveType::I32,
+        }),
+    );
+    let local = local_expr(0, TypeTable::I32);
+    let reduced = interp.reduce(&local);
+    assert!(
+        matches!(reduced.kind, TirExprKind::Local { index: 0, .. }),
+        "Local must stay structurally a Local; env lookup happens at parents only, got {:?}",
+        reduced.kind,
+    );
+}
+
+#[test]
+fn nested_const_locals_chain() {
+    // env: x = Const(5), y = Const(3).
+    // (x + y) * 2 reduces to Const(16).
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    interp.bind_local(
+        0,
+        Lattice::Const(Value::Int {
+            value: 5,
+            prim: PrimitiveType::I32,
+        }),
+    );
+    interp.bind_local(
+        1,
+        Lattice::Const(Value::Int {
+            value: 3,
+            prim: PrimitiveType::I32,
+        }),
+    );
+    let sum = binary(
+        TirBinaryOp::Add,
+        local_expr(0, TypeTable::I32),
+        local_expr(1, TypeTable::I32),
+        TypeTable::I32,
+    );
+    let e = binary(
+        TirBinaryOp::Mul,
+        sum,
+        int_lit(2, TypeTable::I32, "2"),
+        TypeTable::I32,
+    );
+    assert_eq!(
+        interp.reduce_to_lattice(&e),
+        Lattice::Const(Value::Int {
+            value: 16,
+            prim: PrimitiveType::I32,
+        }),
     );
 }
