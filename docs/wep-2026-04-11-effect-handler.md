@@ -122,22 +122,64 @@ Status: Draft
       appears more than once on a `with` line — e.g.
       `with &mut h, Counter => &mut alt do { ... }` makes `alt` the
       inner `Counter` handler with `h` as its outer (delegated to
-      via the dispatch global's `outer` chain). Diagnostics:
+      via the dispatch global's `outer` chain).
+
+      All bindings expanded from one bundled clause share a
+      synthesised `__h_<bundle>` local in the dispatch desugaring
+      (`TirHandlerBinding.bundle_group`). The synthesis emits the
+      handler-binding `Let` once per bundle and reuses that local
+      across every per-effect closure, so the handler expression
+      is evaluated exactly once and mutations through any
+      installed effect are observed by the rest. This is what
+      makes value-form `with h do { ... }` work: without sharing,
+      each effect would capture an independent value-copy.
+
+      Diagnostics:
+
       - `BundledHandlerImplementsNoEffect` if the handler type
-      implements zero effects (the user almost certainly meant
-      `with E => h do`).
-      - Compiler `panic!` for handler types that aren't nameable /
-      index-keyable (type parameters, associated-type
-      projections, function types, ...). Bundled enumeration is
-      index-keyed by type name; rather than silently emit zero
-      bindings for unsupported kinds we surface the case loudly.
-      End-to-end fixtures: `effect_handler_bundled.wado` (one
-      handler, two effects), `effect_handler_bundled_mixed.wado`
-      (bundled + explicit on the same `with` line, locking the
-      source-order install rule with a self-delegation chain),
-      `effect_handler_bundled_no_effect.wado` (negative — type
-      with no effect impls is rejected).
-- [ ] `MockCM` and handler bundling helpers in `core:test`.
+        implements zero effects (the user almost certainly meant
+        `with E => h do`).
+      - `BundledHandlerUnsupportedHandlerType` if the handler
+        type cannot be indexed by name — type parameters,
+        associated-type projections, function types, nested
+        references, reactive / builtin-array / type-pack /
+        unit / never. Reachable from user code (e.g. a generic
+        function `fn f<T>(t: T) { with t do { ... } }`), so the
+        resolver emits a proper diagnostic instead of panicking;
+        the explicit `with E => h do` form is the documented
+        workaround.
+
+      End-to-end fixtures:
+
+      - `effect_handler_bundled.wado` — one handler, two effects.
+      - `effect_handler_bundled_value.wado` — value-form
+        `with h do`, locking the once-evaluation +
+        cross-effect-mutation contract via a side-effect counter
+        and a shared `count` field.
+      - `effect_handler_bundled_mixed.wado` — bundled + explicit
+        on the same `with` line, locking source-order install
+        with a self-delegation chain (later binding wins, outer
+        chain reaches the earlier one).
+      - `effect_handler_bundled_no_effect.wado` — negative; type
+        with no effect impls is rejected.
+      - `effect_handler_bundled_type_param_rejected.wado` —
+        negative; bundled on a generic type parameter is rejected
+        with the new diagnostic.
+- [ ] `MockCM` and handler bundling helpers in `core:test`. Today
+      the dispatch synthesis only routes user-declared `effect E`
+      decls; resources (`resource Stream<T>`) live on a separate
+      track (CM binding adapters, instance-method dispatch). The
+      WEP's `MockCM` example — `impl Stream<u8> for MockCM` —
+      requires extending `build_effect_index` /
+      `build_handler_impl_index` to walk resources too, plus
+      teaching the call-site rewriter to intercept resource
+      method calls (`stream.read(max)`) the way it currently
+      intercepts effect-op calls (`Effect::op(args)`). That
+      cross-cutting work is tracked here as a follow-up; the
+      bundled-handler front-end in this commit already produces
+      correct `TirHandlerBinding`s for any decl reachable via
+      `effect_decl_index`, so once resources participate in that
+      index the bundled path picks them up unchanged.
 
 ## Phase 3 implementation plan
 

@@ -1218,6 +1218,12 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
 
     let mut prelude: Vec<TirStmt> = Vec::new();
     let mut restore: Vec<TirStmt> = Vec::new();
+    // bundle_group id -> (h_local, h_name). Bindings expanded from one
+    // bundled `with &mut h do` clause share a single `__h_<bundle>` local
+    // so the handler expression is evaluated exactly once and mutations
+    // through any installed effect are observed by every other effect's
+    // dispatch closure (closures all capture the same local).
+    let mut bundle_locals: IndexMap<u32, (u32, String)> = IndexMap::default();
 
     for binding in bindings {
         let (effect_name, effect_module) = match binding.effect.clone() {
@@ -1265,20 +1271,51 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
         });
 
         // 1. let __h_<E> = handler_expr;
-        let h_local = ctx.alloc_local(handler_type);
-        let h_name = format!("__h_{effect_name}");
-        prelude.push(TirStmt::new(
-            TirStmtKind::Let {
-                name: h_name.clone(),
-                local_index: h_local,
-                is_mut: false,
-                is_reactive: false,
-                type_id: handler_type,
-                value: binding.handler.clone(),
-                skip_value_copy: true,
-            },
-            span,
-        ));
+        //
+        // Bundled bindings share one `__h_<bundle>` local: the first
+        // binding in the group emits the `Let`, subsequent bindings
+        // reuse the local without re-evaluating the handler expression.
+        // Explicit `Effect => handler` bindings always get their own
+        // per-effect local, which is what users writing the explicit
+        // form expect — distinct expressions installed independently.
+        let (h_local, h_name) = if let Some(group_id) = binding.bundle_group {
+            if let Some((existing_local, existing_name)) = bundle_locals.get(&group_id) {
+                (*existing_local, existing_name.clone())
+            } else {
+                let local = ctx.alloc_local(handler_type);
+                let name = format!("__h_bundle_{group_id}");
+                prelude.push(TirStmt::new(
+                    TirStmtKind::Let {
+                        name: name.clone(),
+                        local_index: local,
+                        is_mut: false,
+                        is_reactive: false,
+                        type_id: handler_type,
+                        value: binding.handler.clone(),
+                        skip_value_copy: true,
+                    },
+                    span,
+                ));
+                bundle_locals.insert(group_id, (local, name.clone()));
+                (local, name)
+            }
+        } else {
+            let local = ctx.alloc_local(handler_type);
+            let name = format!("__h_{effect_name}");
+            prelude.push(TirStmt::new(
+                TirStmtKind::Let {
+                    name: name.clone(),
+                    local_index: local,
+                    is_mut: false,
+                    is_reactive: false,
+                    type_id: handler_type,
+                    value: binding.handler.clone(),
+                    skip_value_copy: true,
+                },
+                span,
+            ));
+            (local, name)
+        };
 
         // 2. let __save_<E> = global.get __effect_<E>;
         let save_local = ctx.alloc_local(plan.nullable_ref_type_id);

@@ -40,9 +40,16 @@ impl<H: CompilerHost> Resolver<'_, H> {
         ctx: &mut FunctionContext,
     ) -> TirExpr {
         let mut bindings: Vec<TirHandlerBinding> = Vec::with_capacity(with_expr.handlers.len());
+        // Counter feeding `TirHandlerBinding.bundle_group`. A bundled
+        // clause may expand into multiple effect bindings that must all
+        // share one synthesised `__h_<bundle>` local (so a value-form
+        // handler is evaluated exactly once and mutations propagate
+        // across effects). Allocating ids per `with` block keeps them
+        // unique within one synthesis-pass invocation.
+        let mut next_bundle_group: u32 = 0;
 
         for binding in &with_expr.handlers {
-            let resolved = self.resolve_handler_binding(binding, ctx);
+            let resolved = self.resolve_handler_binding(binding, ctx, &mut next_bundle_group);
             // A bundled binding may expand to multiple `TirHandlerBinding`s
             // (one per effect the handler type implements). They are
             // appended in the order the resolver enumerated them, which
@@ -80,17 +87,20 @@ impl<H: CompilerHost> Resolver<'_, H> {
     /// Returns one `TirHandlerBinding` for the explicit form
     /// (`Effect => handler_expr`), or one binding per effect the handler's
     /// underlying type implements for the bundled form (`handler_expr`,
-    /// no `=>`). Bindings are returned in install order.
+    /// no `=>`). Bindings are returned in install order. `next_bundle_group`
+    /// is consumed (post-incremented) only when the binding expands as
+    /// bundled.
     fn resolve_handler_binding(
         &mut self,
         binding: &ast::EffectHandlerBinding,
         ctx: &mut FunctionContext,
+        next_bundle_group: &mut u32,
     ) -> Vec<TirHandlerBinding> {
         match &binding.effect {
             Some(effect_ty) => {
                 vec![self.resolve_explicit_handler_binding(binding, effect_ty, ctx)]
             }
-            None => self.resolve_bundled_handler_binding(binding, ctx),
+            None => self.resolve_bundled_handler_binding(binding, ctx, next_bundle_group),
         }
     }
 
@@ -174,6 +184,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             handler,
             handler_type,
             span: binding.span,
+            bundle_group: None,
         }
     }
 
@@ -190,15 +201,18 @@ impl<H: CompilerHost> Resolver<'_, H> {
     /// - If the handler type is `Unknown`/`Error`, return no bindings
     ///   silently — earlier diagnostics already reported the cause.
     ///
-    /// Panics for handler types that don't have an addressable type name
-    /// (type parameters, associated-type projections, function types,
-    /// tuples, ...). Bundled enumeration is index-keyed by name and these
-    /// kinds cannot be looked up; rather than silently produce zero
-    /// bindings we surface the unsupported case loudly.
+    /// Emits `BundledHandlerUnsupportedHandlerType` for handler types
+    /// that can't be index-keyed by name (type parameters, associated-
+    /// type projections, function types, tuples, ...). User code can
+    /// reach those cases — e.g. `fn f<T: SomeEffect>(t: &mut T) { with
+    /// &mut t do { ... } }` — so a diagnostic is the right shape, not a
+    /// `panic!`. The explicit `with E => h do` form remains available
+    /// as the workaround.
     fn resolve_bundled_handler_binding(
         &mut self,
         binding: &ast::EffectHandlerBinding,
         ctx: &mut FunctionContext,
+        next_bundle_group: &mut u32,
     ) -> Vec<TirHandlerBinding> {
         let handler = self.resolve_expr(&binding.handler, ctx, None);
         let handler_type = self.handler_underlying_type(handler.type_id);
@@ -219,18 +233,22 @@ impl<H: CompilerHost> Resolver<'_, H> {
             | ResolvedType::GenericInstance { .. }
             | ResolvedType::Primitive(_) => {}
             // Anything else can't be the target of an `impl Effect for T`
-            // block, so bundled enumeration has nothing to do. Panic
-            // instead of producing zero bindings: a future use case can
-            // re-evaluate which kinds to enumerate, but silently
-            // accepting them today would let bugs ship.
+            // block. These cases are reachable from user code — the most
+            // common is a `&T` where `T` is a generic parameter — so we
+            // emit a proper diagnostic instead of panicking. Returning an
+            // empty bindings list lets the rest of the `with` body
+            // continue resolving (the user gets one error, not a chain).
             ref other => {
                 let type_name = self.type_table.borrow().type_name(handler_type);
-                panic!(
-                    "bundled effect handler `with &h do` is not supported for handler \
-                     type `{type_name}` (resolved as {other:?}); use the explicit form \
-                     `with E => h do` instead, or file a bug if the type really should \
-                     be enumerable"
-                );
+                let type_kind = describe_resolved_type_kind(other);
+                let _ = self
+                    .logger
+                    .error(TypeError::BundledHandlerUnsupportedHandlerType {
+                        type_name,
+                        type_kind,
+                        span: binding.span,
+                    });
+                return Vec::new();
             }
         }
 
@@ -247,6 +265,18 @@ impl<H: CompilerHost> Resolver<'_, H> {
             return Vec::new();
         }
 
+        // All bindings expanded from this single bundled clause share one
+        // `bundle_group` id, so the dispatch synthesis allocates a single
+        // shared `__h_<bundle>` local. This is what makes value-form
+        // `with h do { ... }` work correctly: the handler value is
+        // evaluated once and every per-effect closure captures the same
+        // local, so mutations from any installed effect are observed by
+        // the rest. Without grouping, each binding would clone the
+        // handler expression and value-form handlers would have
+        // independent copies per effect.
+        let bundle_group = *next_bundle_group;
+        *next_bundle_group += 1;
+
         effects
             .into_iter()
             .map(|(effect_name, effect_module)| TirHandlerBinding {
@@ -257,6 +287,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 handler: handler.clone(),
                 handler_type,
                 span: binding.span,
+                bundle_group: Some(bundle_group),
             })
             .collect()
     }
@@ -365,5 +396,28 @@ impl<H: CompilerHost> Resolver<'_, H> {
             TypeTable::UNIT,
             resume.span,
         )
+    }
+}
+
+/// Short label for a [`ResolvedType`] variant, used in diagnostic
+/// messages emitted by the bundled-handler resolver. Only covers the
+/// shapes the resolver rejects; the supported shapes return their own
+/// canonical names via `TypeTable::type_name`.
+fn describe_resolved_type_kind(ty: &ResolvedType) -> String {
+    match ty {
+        ResolvedType::TypeParam { .. } => "type parameter".to_string(),
+        ResolvedType::AssocTypeProjection { .. } => "associated type projection".to_string(),
+        ResolvedType::Function { .. } => "function type".to_string(),
+        ResolvedType::Ref(_) | ResolvedType::MutRef(_) => "nested reference type".to_string(),
+        ResolvedType::Reactive(_) => "reactive type".to_string(),
+        ResolvedType::BuiltinArray(_) => "builtin array".to_string(),
+        ResolvedType::TypePack { .. } => "type pack".to_string(),
+        ResolvedType::Unit => "unit".to_string(),
+        ResolvedType::Never => "never".to_string(),
+        // Caller already filtered out the supported variants and the
+        // already-diagnosed Unknown/Error pair — anything else here is a
+        // ResolvedType variant added after this function was written, so
+        // surface it as "unrecognised" rather than silently mislabelling.
+        _ => "unrecognised type".to_string(),
     }
 }

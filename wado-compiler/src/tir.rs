@@ -2535,8 +2535,11 @@ pub enum TirExprKind {
 /// One `Effect => handler` binding inside a `with ... do` block.
 #[derive(Debug, Clone)]
 pub struct TirHandlerBinding {
-    /// The effect being handled. `None` is reserved for bundled handlers
-    /// (`with &mut h do`); not yet implemented in resolver.
+    /// The effect being handled. The resolver always fills this in with a
+    /// concrete effect reference — the bundled `with &mut h do` form is
+    /// expanded to one binding per implemented effect, each carrying a
+    /// concrete `EffectRef`. `None` only appears transiently when an
+    /// upstream diagnostic prevented resolution.
     pub effect: Option<EffectRef>,
     /// Handler value expression (e.g., `&mut mock`).
     pub handler: TirExpr,
@@ -2544,6 +2547,18 @@ pub struct TirHandlerBinding {
     /// Used by codegen to pick the correct `impl E for T` methods.
     pub handler_type: TypeId,
     pub span: Span,
+    /// If `Some(id)`, this binding came from a bundled `with &mut h do`
+    /// expansion. All bindings produced from one bundled clause share the
+    /// same `id`. The dispatch synthesis uses this to allocate a single
+    /// `__h_<bundle>` local that every per-effect closure captures, so the
+    /// handler value is evaluated once and mutations from any installed
+    /// effect are observed by the rest. `None` for explicit
+    /// `Effect => handler` bindings (each gets its own `__h_<E>` local).
+    ///
+    /// IDs are unique within a single `WithHandler` expression but are not
+    /// reused across separate `with` blocks; the synthesis pass starts
+    /// fresh for each `WithHandler` it visits.
+    pub bundle_group: Option<u32>,
 }
 
 /// A part of a resolved template string.
