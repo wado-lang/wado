@@ -472,7 +472,6 @@ fn "wado-compiler/tests/fixtures/serde_json_synth_variant.wado/__test_2_variant_
     let json: ref "core:prelude/string.wado//String";
     let parsed: ref "wado-compiler/tests/fixtures/serde_json_synth_variant.wado//Shape";
     let __local_8: ref "core:prelude/string.wado//String";
-    let __local_9: ref "wado-compiler/tests/fixtures/serde_json_synth_variant.wado//Shape";
     s = struct.new "core:prelude/types.wado//Box<Shape>" { value: struct.new "wado-compiler/tests/fixtures/serde_json_synth_variant.wado//Shape" { 1 } };
     let __sroa_json_r_discriminant: i32;
     let __sroa_json_r_case0_payload_0: ref null "core:prelude/string.wado//String";
@@ -489,11 +488,7 @@ fn "wado-compiler/tests/fixtures/serde_json_synth_variant.wado/__test_2_variant_
         let __sroa_parsed_r_case1_payload_0: ref null "core:serde//DeserializeError";
         multivalue_bind [__sroa_parsed_r_discriminant, __sroa_parsed_r_case0_payload_0, __sroa_parsed_r_case1_payload_0] = "core:json/core/json/from_string<Shape>"(json);
         if __sroa_parsed_r_discriminant == 0 {
-            parsed = __inline__value_copy_T42_1: block -> ref "wado-compiler/tests/fixtures/serde_json_synth_variant.wado//Shape" {
-                __local_9 = ref.as_non_null(__sroa_parsed_r_case0_payload_0);
-                break __inline__value_copy_T42_1: __local_9;
-                unreachable;
-            };
+            parsed = ref.as_non_null(__sroa_parsed_r_case0_payload_0);
             if parsed.discriminant == 1 {
             } else {
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected Point"), used: 14 });
@@ -518,9 +513,8 @@ fn "wado-compiler/tests/fixtures/serde_json_synth_variant.wado/__test_3_variant_
     let __local_8: ref "core:prelude/string.wado//String";
     let __local_9: ref "core:prelude/format.wado//Formatter";
     let __local_13: ref "core:prelude/string.wado//String";
-    let __local_14: ref "wado-compiler/tests/fixtures/serde_json_synth_variant.wado//Shape";
-    let __local_18: ref "core:prelude/format.wado//Formatter";
-    let __local_23: ref "core:prelude/format.wado//Formatter";
+    let __local_17: ref "core:prelude/format.wado//Formatter";
+    let __local_22: ref "core:prelude/format.wado//Formatter";
     s = struct.new "core:prelude/types.wado//Box<Shape>" { value: struct.new "wado-compiler/tests/fixtures/serde_json_synth_variant.wado//Shape::Circle" { discriminant: 0, payload_0: 3.14 } };
     let __sroa_json_r_discriminant: i32;
     let __sroa_json_r_case0_payload_0: ref null "core:prelude/string.wado//String";
@@ -537,11 +531,7 @@ fn "wado-compiler/tests/fixtures/serde_json_synth_variant.wado/__test_3_variant_
         let __sroa_parsed_r_case1_payload_0: ref null "core:serde//DeserializeError";
         multivalue_bind [__sroa_parsed_r_discriminant, __sroa_parsed_r_case0_payload_0, __sroa_parsed_r_case1_payload_0] = "core:json/core/json/from_string<Shape>"(json);
         if __sroa_parsed_r_discriminant == 0 {
-            parsed = __inline__value_copy_T42_1: block -> ref "wado-compiler/tests/fixtures/serde_json_synth_variant.wado//Shape" {
-                __local_14 = ref.as_non_null(__sroa_parsed_r_case0_payload_0);
-                break __inline__value_copy_T42_1: __local_14;
-                unreachable;
-            };
+            parsed = ref.as_non_null(__sroa_parsed_r_case0_payload_0);
             if ref.test "wado-compiler/tests/fixtures/serde_json_synth_variant.wado//Shape::Circle"(parsed) {
                 r = ref.cast "wado-compiler/tests/fixtures/serde_json_synth_variant.wado//Shape::Circle"(parsed).payload_0;
                 __cond = r == 3.14;
@@ -557,8 +547,8 @@ fn "wado-compiler/tests/fixtures/serde_json_synth_variant.wado/__test_3_variant_
                         "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_synth_variant.wado"), used: 58 });
                         "core:prelude/string.wado/String::push"(__local_8, 58);
                         __local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_8 };
-                        __local_18 = __local_9;
-                        "core:prelude/primitive.wado/i32::fmt_decimal"(58, __local_18);
+                        __local_17 = __local_9;
+                        "core:prelude/primitive.wado/i32::fmt_decimal"(58, __local_17);
                         "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: r == 3.14
 "), used: 22 });
@@ -566,8 +556,8 @@ condition: r == 3.14
                         "core:prelude/string.wado/String::push"(__local_8, 58);
                         "core:prelude/string.wado/String::push"(__local_8, 32);
                         __local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_8 };
-                        __local_23 = __local_9;
-                        "core:prelude/primitive.wado/f64::inspect_into"(r, __local_23);
+                        __local_22 = __local_9;
+                        "core:prelude/primitive.wado/f64::inspect_into"(r, __local_22);
                         "core:prelude/string.wado/String::push"(__local_8, 10);
                         break __tmpl: __local_8;
                         unreachable;
@@ -3741,18 +3731,18 @@ fn "wado-compiler/tests/fixtures/serde_json_synth_variant.wado/Shape^Deserialize
     let __name: ref "core:prelude/string.wado//String";
     let __payload_7: f64;
     let __payload_9: f64;
-    let __local_17: ref "core:json//JsonVariantAccess";
-    let __local_21: ref "core:json//JsonDeserializer";
-    let __local_27: ref "core:prelude/string.wado//String";
-    let __local_29: ref "core:json//JsonDeserializer";
+    let __local_16: ref "core:json//JsonVariantAccess";
+    let __local_19: ref "core:json//JsonDeserializer";
+    let __local_23: ref "core:prelude/string.wado//String";
+    let __local_25: ref "core:json//JsonDeserializer";
     let __sroa___va_r_discriminant: i32;
     let __sroa___va_r_case0_payload_0: ref null "core:json//JsonVariantAccess";
     let __sroa___va_r_case1_payload_0: ref null "core:serde//DeserializeError";
     multivalue_bind [__sroa___va_r_discriminant, __sroa___va_r_case0_payload_0, __sroa___va_r_case1_payload_0] = "core:json/JsonDeserializer^Deserializer::begin_variant"(d);
     if __sroa___va_r_discriminant == 0 {
-        va = __inline__value_copy_T58_1: block -> ref "core:json//JsonVariantAccess" {
-            __local_17 = ref.as_non_null(__sroa___va_r_case0_payload_0);
-            break __inline__value_copy_T58_1: struct.new "core:json//JsonVariantAccess" { de: __local_17.de, variant: __local_17.variant, is_object: __local_17.is_object };
+        va = __inline__value_copy_T58_0: block -> ref "core:json//JsonVariantAccess" {
+            __local_16 = ref.as_non_null(__sroa___va_r_case0_payload_0);
+            break __inline__value_copy_T58_0: struct.new "core:json//JsonVariantAccess" { de: __local_16.de, variant: __local_16.variant, is_object: __local_16.is_object };
             unreachable;
         };
         __disc_r = struct.new "core:prelude/types.wado//Result<i32,DeserializeError>::Err" { discriminant: 1, payload_0: struct.new "core:serde//DeserializeError" { kind: 9, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("JSON does not encode discriminants"), used: 34 }, offset: -1_i64 } };
@@ -3762,15 +3752,15 @@ fn "wado-compiler/tests/fixtures/serde_json_synth_variant.wado/Shape^Deserialize
                 let __sroa___p_r_8_discriminant: i32;
                 let __sroa___p_r_8_case0_payload_0: f64;
                 let __sroa___p_r_8_case1_payload_0: ref null "core:serde//DeserializeError";
-                __local_21 = va.de;
-                multivalue_bind [__sroa___p_r_8_discriminant, __sroa___p_r_8_case0_payload_0, __sroa___p_r_8_case1_payload_0] = "core:json/JsonDeserializer::parse_f64_direct"(__local_21);
+                __local_19 = va.de;
+                multivalue_bind [__sroa___p_r_8_discriminant, __sroa___p_r_8_case0_payload_0, __sroa___p_r_8_case1_payload_0] = "core:json/JsonDeserializer::parse_f64_direct"(__local_19);
                 if __sroa___p_r_8_discriminant == 0 {
                     __payload_7 = __sroa___p_r_8_case0_payload_0;
-                    drop(__inline_JsonVariantAccess_DeserializeVariant__end_7: block -> ref null "core:serde//DeserializeError" {
+                    drop(__inline_JsonVariantAccess_DeserializeVariant__end_4: block -> ref null "core:serde//DeserializeError" {
                         if va.is_object {
-                            break __inline_JsonVariantAccess_DeserializeVariant__end_7: "core:json/JsonDeserializer::expect_char"(va.de, 125);
+                            break __inline_JsonVariantAccess_DeserializeVariant__end_4: "core:json/JsonDeserializer::expect_char"(va.de, 125);
                         }
-                        break __inline_JsonVariantAccess_DeserializeVariant__end_7: ref.null none;
+                        break __inline_JsonVariantAccess_DeserializeVariant__end_4: ref.null none;
                         unreachable;
                     });
                     return struct.new "core:prelude/types.wado//Result<Shape,DeserializeError>::Ok" { discriminant: 0, payload_0: struct.new "wado-compiler/tests/fixtures/serde_json_synth_variant.wado//Shape::Circle" { discriminant: 0, payload_0: __payload_7 } };
@@ -3779,11 +3769,11 @@ fn "wado-compiler/tests/fixtures/serde_json_synth_variant.wado/Shape^Deserialize
                 }
             }
             if __disc == 1 {
-                drop(__inline_JsonVariantAccess_DeserializeVariant__end_8: block -> ref null "core:serde//DeserializeError" {
+                drop(__inline_JsonVariantAccess_DeserializeVariant__end_5: block -> ref null "core:serde//DeserializeError" {
                     if va.is_object {
-                        break __inline_JsonVariantAccess_DeserializeVariant__end_8: "core:json/JsonDeserializer::expect_char"(va.de, 125);
+                        break __inline_JsonVariantAccess_DeserializeVariant__end_5: "core:json/JsonDeserializer::expect_char"(va.de, 125);
                     }
-                    break __inline_JsonVariantAccess_DeserializeVariant__end_8: ref.null none;
+                    break __inline_JsonVariantAccess_DeserializeVariant__end_5: ref.null none;
                     unreachable;
                 });
                 return struct.new "core:prelude/types.wado//Result<Shape,DeserializeError>::Ok" { discriminant: 0, payload_0: struct.new "wado-compiler/tests/fixtures/serde_json_synth_variant.wado//Shape" { 1 } };
@@ -3792,24 +3782,24 @@ fn "wado-compiler/tests/fixtures/serde_json_synth_variant.wado/Shape^Deserialize
         } else {
             __name_r = struct.new "core:prelude/types.wado//Result<String,DeserializeError>::Ok" { discriminant: 0, payload_0: va.variant };
             if ref.test "core:prelude/types.wado//Result<String,DeserializeError>::Ok"(__name_r) {
-                __name = __inline__value_copy_T20_11: block -> ref "core:prelude/string.wado//String" {
-                    __local_27 = ref.cast "core:prelude/types.wado//Result<String,DeserializeError>::Ok"(__name_r).payload_0;
-                    break __inline__value_copy_T20_11: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(__local_27.repr)), used: __local_27.used };
+                __name = __inline__value_copy_T20_7: block -> ref "core:prelude/string.wado//String" {
+                    __local_23 = ref.cast "core:prelude/types.wado//Result<String,DeserializeError>::Ok"(__name_r).payload_0;
+                    break __inline__value_copy_T20_7: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(__local_23.repr)), used: __local_23.used };
                     unreachable;
                 };
                 if "core:prelude/string.wado/String^Eq::eq"(__name, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Circle"), used: 6 }) {
                     let __sroa___p_r_10_discriminant: i32;
                     let __sroa___p_r_10_case0_payload_0: f64;
                     let __sroa___p_r_10_case1_payload_0: ref null "core:serde//DeserializeError";
-                    __local_29 = va.de;
-                    multivalue_bind [__sroa___p_r_10_discriminant, __sroa___p_r_10_case0_payload_0, __sroa___p_r_10_case1_payload_0] = "core:json/JsonDeserializer::parse_f64_direct"(__local_29);
+                    __local_25 = va.de;
+                    multivalue_bind [__sroa___p_r_10_discriminant, __sroa___p_r_10_case0_payload_0, __sroa___p_r_10_case1_payload_0] = "core:json/JsonDeserializer::parse_f64_direct"(__local_25);
                     if __sroa___p_r_10_discriminant == 0 {
                         __payload_9 = __sroa___p_r_10_case0_payload_0;
-                        drop(__inline_JsonVariantAccess_DeserializeVariant__end_15: block -> ref null "core:serde//DeserializeError" {
+                        drop(__inline_JsonVariantAccess_DeserializeVariant__end_10: block -> ref null "core:serde//DeserializeError" {
                             if va.is_object {
-                                break __inline_JsonVariantAccess_DeserializeVariant__end_15: "core:json/JsonDeserializer::expect_char"(va.de, 125);
+                                break __inline_JsonVariantAccess_DeserializeVariant__end_10: "core:json/JsonDeserializer::expect_char"(va.de, 125);
                             }
-                            break __inline_JsonVariantAccess_DeserializeVariant__end_15: ref.null none;
+                            break __inline_JsonVariantAccess_DeserializeVariant__end_10: ref.null none;
                             unreachable;
                         });
                         return struct.new "core:prelude/types.wado//Result<Shape,DeserializeError>::Ok" { discriminant: 0, payload_0: struct.new "wado-compiler/tests/fixtures/serde_json_synth_variant.wado//Shape::Circle" { discriminant: 0, payload_0: __payload_9 } };
@@ -3818,11 +3808,11 @@ fn "wado-compiler/tests/fixtures/serde_json_synth_variant.wado/Shape^Deserialize
                     }
                 }
                 if "core:prelude/string.wado/String^Eq::eq"(__name, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Point"), used: 5 }) {
-                    drop(__inline_JsonVariantAccess_DeserializeVariant__end_16: block -> ref null "core:serde//DeserializeError" {
+                    drop(__inline_JsonVariantAccess_DeserializeVariant__end_11: block -> ref null "core:serde//DeserializeError" {
                         if va.is_object {
-                            break __inline_JsonVariantAccess_DeserializeVariant__end_16: "core:json/JsonDeserializer::expect_char"(va.de, 125);
+                            break __inline_JsonVariantAccess_DeserializeVariant__end_11: "core:json/JsonDeserializer::expect_char"(va.de, 125);
                         }
-                        break __inline_JsonVariantAccess_DeserializeVariant__end_16: ref.null none;
+                        break __inline_JsonVariantAccess_DeserializeVariant__end_11: ref.null none;
                         unreachable;
                     });
                     return struct.new "core:prelude/types.wado//Result<Shape,DeserializeError>::Ok" { discriminant: 0, payload_0: struct.new "wado-compiler/tests/fixtures/serde_json_synth_variant.wado//Shape" { 1 } };
@@ -3840,9 +3830,9 @@ fn "wado-compiler/tests/fixtures/serde_json_synth_variant.wado/Shape^Deserialize
 fn "wado-compiler/tests/fixtures/serde_json_synth_variant.wado/Shape^Serialize::serialize<JsonSerializer>"(self, s) {
     let __local_2: f64;
     let __local_4: ref "core:json//JsonVariantSerializer";
-    let __local_7: ref "core:json//JsonVariantSerializer";
+    let __local_6: ref "core:json//JsonVariantSerializer";
+    let __local_9: ref "core:prelude/string.wado//String";
     let __local_10: ref "core:prelude/string.wado//String";
-    let __local_11: ref "core:prelude/string.wado//String";
     let __match_scrut_0: ref "wado-compiler/tests/fixtures/serde_json_synth_variant.wado//Shape";
     __match_scrut_0 = self;
     if ref.test "wado-compiler/tests/fixtures/serde_json_synth_variant.wado//Shape::Circle"(__match_scrut_0) {
@@ -3854,15 +3844,15 @@ fn "wado-compiler/tests/fixtures/serde_json_synth_variant.wado/Shape^Serialize::
         let __sroa___local_3_case1_payload_0: ref null "core:serde//SerializeError";
         multivalue_bind [__sroa___local_3_discriminant, __sroa___local_3_case0_payload_0, __sroa___local_3_case1_payload_0] = "core:json/JsonSerializer^Serializer::begin_variant"(s, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Circle"), used: 6 });
         if __sroa___local_3_discriminant == 0 {
-            __local_4 = __inline__value_copy_T48_1: block -> ref "core:json//JsonVariantSerializer" {
-                __local_7 = ref.as_non_null(__sroa___local_3_case0_payload_0);
-                break __inline__value_copy_T48_1: struct.new "core:json//JsonVariantSerializer" { buf: __local_7.buf };
+            __local_4 = __inline__value_copy_T48_0: block -> ref "core:json//JsonVariantSerializer" {
+                __local_6 = ref.as_non_null(__sroa___local_3_case0_payload_0);
+                break __inline__value_copy_T48_0: struct.new "core:json//JsonVariantSerializer" { buf: __local_6.buf };
                 unreachable;
             };
             drop("core:json/JsonVariantSerializer^SerializeVariant::payload<f64>"(__local_4, __local_2));
-            return __inline_JsonVariantSerializer_SerializeVariant__end_2: block -> ref null "core:serde//SerializeError" {
+            return __inline_JsonVariantSerializer_SerializeVariant__end_1: block -> ref null "core:serde//SerializeError" {
                 "core:prelude/string.wado/String::push"(__local_4.buf, 125);
-                break __inline_JsonVariantSerializer_SerializeVariant__end_2: ref.null none;
+                break __inline_JsonVariantSerializer_SerializeVariant__end_1: ref.null none;
                 unreachable;
             };
         } else {
@@ -3870,11 +3860,11 @@ fn "wado-compiler/tests/fixtures/serde_json_synth_variant.wado/Shape^Serialize::
         }
         unreachable;
     } else {
-        return __inline_JsonSerializer_Serializer__serialize_unit_variant_3: block -> ref null "core:serde//SerializeError" {
-            __local_10 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Shape"), used: 5 };
-            __local_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Point"), used: 5 };
-            "core:json/write_escaped_string"(s, __local_11);
-            break __inline_JsonSerializer_Serializer__serialize_unit_variant_3: ref.null none;
+        return __inline_JsonSerializer_Serializer__serialize_unit_variant_2: block -> ref null "core:serde//SerializeError" {
+            __local_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Shape"), used: 5 };
+            __local_10 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Point"), used: 5 };
+            "core:json/write_escaped_string"(s, __local_10);
+            break __inline_JsonSerializer_Serializer__serialize_unit_variant_2: ref.null none;
             unreachable;
         };
         unreachable;

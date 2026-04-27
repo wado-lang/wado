@@ -2992,6 +2992,13 @@ pub struct WirGlobal {
     pub mutable: bool,
     /// Initial value expression.
     pub init: WirInstr,
+    /// True for lazy-initialized globals: the Wasm slot starts `null`,
+    /// `__initialize_module` runs the original initializer to write the
+    /// real value, and codegen narrows subsequent `global.get` results
+    /// with `ref.as_non_null` since the value is guaranteed non-null
+    /// after init. Genuine-nullable globals (e.g. `Option<&T> = null`)
+    /// leave this `false` and codegen skips the narrowing.
+    pub lazy_init: bool,
     /// Metadata.
     pub meta: WirMeta,
 }

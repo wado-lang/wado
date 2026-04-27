@@ -23,7 +23,8 @@ use crate::name::ModuleSource;
 use crate::package::Package;
 use crate::tir::{
     CallArg, EffectRef, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, TirBinaryOp,
-    TirBlock, TirExpr, TirExprKind, TirFunction, TirParam, TirStmt, TirStmtKind, TypeId, TypeTable,
+    TirBlock, TirExpr, TirExprKind, TirFunction, TirParam, TirStmt, TirStmtKind, TirTemplatePart,
+    TypeId, TypeTable,
 };
 
 use super::common::{
@@ -2480,6 +2481,7 @@ fn make_binding_function(
         address_taken_locals: IndexSet::default(),
         stores_aliased_locals: IndexSet::default(),
         is_cm_binding: true,
+        is_dispatch_wrapper: false,
         is_cm_export: false,
         is_ambient: false,
         inline_hint: InlineHint::Auto,
@@ -7223,6 +7225,7 @@ fn synthesize_stream_read_func(
         address_taken_locals: IndexSet::default(),
         stores_aliased_locals: IndexSet::default(),
         is_cm_binding: true,
+        is_dispatch_wrapper: false,
         is_cm_export: false,
         is_ambient: false,
         inline_hint: InlineHint::Auto,
@@ -9037,7 +9040,76 @@ fn rewrite_calls_in_expr(
         TirExprKind::GlobalVarSet { value, .. } => {
             rewrite_calls_in_expr(value, adapters, entry_source, wasi_registry, type_table);
         }
-        _ => {} // Leaf nodes: no sub-expressions
+        TirExprKind::WithHandler { bindings, body, .. } => {
+            // Walk the handler value and the do-block body so calls
+            // inside `with E = h do { ... }` get the same adapter-binding
+            // rewrite the rest of the function gets. The effect-dispatch
+            // synthesis pass that runs next consumes
+            // `__cm_binding__<E>_<op>` Calls and routes them through
+            // dispatch wrappers.
+            for binding in bindings {
+                rewrite_calls_in_expr(
+                    &mut binding.handler,
+                    adapters,
+                    entry_source,
+                    wasi_registry,
+                    type_table,
+                );
+            }
+            rewrite_calls_in_block(body, adapters, entry_source, wasi_registry, type_table);
+        }
+        TirExprKind::Resume { value } => {
+            rewrite_calls_in_expr(value, adapters, entry_source, wasi_registry, type_table);
+        }
+        TirExprKind::TupleLiteral { elements } => {
+            for elem in elements {
+                rewrite_calls_in_expr(elem, adapters, entry_source, wasi_registry, type_table);
+            }
+        }
+        TirExprKind::TupleSpread { expr: inner }
+        | TirExprKind::TupleZip { expr: inner }
+        | TirExprKind::TypePackExpansion {
+            call_expr: inner, ..
+        }
+        | TirExprKind::VariantTag { expr: inner }
+        | TirExprKind::VariantTest { expr: inner, .. }
+        | TirExprKind::VariantPayload { expr: inner, .. } => {
+            rewrite_calls_in_expr(inner, adapters, entry_source, wasi_registry, type_table);
+        }
+        TirExprKind::VariantConstruct { payload, .. } => {
+            if let Some(payload_expr) = payload {
+                rewrite_calls_in_expr(
+                    payload_expr,
+                    adapters,
+                    entry_source,
+                    wasi_registry,
+                    type_table,
+                );
+            }
+        }
+        TirExprKind::TemplateString { parts } => {
+            for part in parts {
+                if let TirTemplatePart::Interpolation { expr: inner, .. } = part {
+                    rewrite_calls_in_expr(inner, adapters, entry_source, wasi_registry, type_table);
+                }
+            }
+        }
+        // Leaf nodes — no sub-expressions. Enumerated explicitly so a new
+        // `TirExprKind` variant added in tir.rs forces this match to be
+        // updated rather than silently no-op'd by a catch-all.
+        TirExprKind::IntLiteral { .. }
+        | TirExprKind::FloatLiteral { .. }
+        | TirExprKind::BoolLiteral(_)
+        | TirExprKind::CharLiteral(_)
+        | TirExprKind::StringLiteral(_)
+        | TirExprKind::BytesLiteral(_)
+        | TirExprKind::Local { .. }
+        | TirExprKind::Null
+        | TirExprKind::Unit
+        | TirExprKind::Capture { .. }
+        | TirExprKind::GlobalVarGet { .. }
+        | TirExprKind::FuncRef { .. }
+        | TirExprKind::EnumConstruct { .. } => {}
     }
 }
 
@@ -9246,6 +9318,50 @@ fn collect_effect_calls_in_expr(
         TirExprKind::GlobalVarSet { value, .. } => {
             collect_effect_calls_in_expr(value, effects, wasi_registry);
         }
+        TirExprKind::WithHandler { bindings, body, .. } => {
+            // Walk the handler value and the do-block body so effect calls
+            // reached only from inside `with E = h do { ... }` (which the
+            // effect-dispatch synthesis later routes through wrapper
+            // functions whose else-branch falls back to the CM-binding
+            // adapter) still trigger adapter generation here.
+            for binding in bindings {
+                collect_effect_calls_in_expr(&binding.handler, effects, wasi_registry);
+            }
+            collect_effect_calls_in_block(body, effects, wasi_registry);
+        }
+        TirExprKind::Resume { value } => {
+            collect_effect_calls_in_expr(value, effects, wasi_registry);
+        }
+        TirExprKind::TupleLiteral { elements } => {
+            for elem in elements {
+                collect_effect_calls_in_expr(elem, effects, wasi_registry);
+            }
+        }
+        TirExprKind::TupleSpread { expr: inner }
+        | TirExprKind::TupleZip { expr: inner }
+        | TirExprKind::TypePackExpansion {
+            call_expr: inner, ..
+        }
+        | TirExprKind::VariantTag { expr: inner }
+        | TirExprKind::VariantTest { expr: inner, .. }
+        | TirExprKind::VariantPayload { expr: inner, .. } => {
+            collect_effect_calls_in_expr(inner, effects, wasi_registry);
+        }
+        TirExprKind::VariantConstruct { payload, .. } => {
+            if let Some(payload_expr) = payload {
+                collect_effect_calls_in_expr(payload_expr, effects, wasi_registry);
+            }
+        }
+        TirExprKind::TemplateString { parts } => {
+            for part in parts {
+                if let TirTemplatePart::Interpolation { expr: inner, .. } = part {
+                    collect_effect_calls_in_expr(inner, effects, wasi_registry);
+                }
+            }
+        }
+        // Leaf nodes — no sub-expressions. Enumerated explicitly so a new
+        // `TirExprKind` variant added in tir.rs forces this match to be
+        // updated rather than silently no-op'd by a catch-all.
         TirExprKind::IntLiteral { .. }
         | TirExprKind::FloatLiteral { .. }
         | TirExprKind::BoolLiteral(_)
@@ -9259,8 +9375,6 @@ fn collect_effect_calls_in_expr(
         | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::FuncRef { .. }
         | TirExprKind::EnumConstruct { .. } => {}
-        // Catch-all for any remaining leaf or rare variants
-        _ => {}
     }
 }
 

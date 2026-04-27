@@ -1,0 +1,54 @@
+// Regression test for genuinely-nullable globals.
+//
+// Before the fix, a `global mut x: Option<&mut T> = null` declaration
+// produced an invalid Wasm module. The codegen pipeline conflated two
+// distinct uses of nullable global storage:
+//
+// 1. **Lazy-init nullable**: a non-Option ref-typed global whose
+//    initializer is non-constant. The slot starts `null`, then
+//    `__initialize_module` writes the real value before any read, and
+//    codegen narrows `global.get` results with `ref.as_non_null` to
+//    satisfy the downstream non-null type.
+//
+// 2. **Genuine-nullable**: an `Option<&T>` (or other nullable variant)
+//    whose `null` IS the intended runtime value (`None`).
+//
+// The narrowing was applied to BOTH, so a `None` read trapped on the
+// `ref.as_non_null`. The fix splits the two concepts into `is_nullable`
+// (storage is nullable) and `lazy_init` (codegen narrows reads after
+// init), set together for case 1 and only `is_nullable` for case 2.
+//
+// This fixture exercises:
+// - declaring a `null`-initialised `Option<&mut T>` global,
+// - reading it into a local while it's `None`,
+// - writing a `Some(&mut t)` value into it,
+// - reading the value back as `Some` and pattern-matching,
+// - restoring it to `None`.
+
+use { println, Stdout } from "core:cli";
+
+struct Counter {
+    value: i32,
+}
+
+global mut current_counter: Option<&mut Counter> = null;
+
+fn read_counter() -> i32 {
+    if let Some(c) = current_counter {
+        return c.value;
+    }
+    return -1;
+}
+
+export fn run() with Stdout {
+    let v0 = read_counter();
+    let mut c = Counter { value: 7 };
+    current_counter = Option::Some(&mut c);
+    let v1 = read_counter();
+    current_counter = null;
+    let v2 = read_counter();
+    println(`{v0},{v1},{v2}`);
+}
+
+__DATA__
+{"stdout_contains": ["-1,7,-1"]}

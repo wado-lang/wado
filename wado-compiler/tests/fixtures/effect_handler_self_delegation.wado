@@ -1,0 +1,57 @@
+// Phase 4 self-delegation: a handler method calls its own effect's
+// operation, which must reach the OUTER handler rather than recursing
+// through itself.
+//
+// The dispatch wrapper restores `outer` into the per-effect global
+// BEFORE invoking the closure, so the handler-method body executes
+// with the outer dispatch chain visible. A nested `Counter::next()`
+// call from the inner handler therefore routes to the outer handler.
+
+use { println, Stdout } from "core:cli";
+
+effect Counter {
+    fn next() -> i32;
+}
+
+struct BaseCounter {
+    value: i32,
+}
+
+impl Counter for BaseCounter {
+    fn next(&mut self) -> i32 {
+        self.value += 1;
+        resume self.value
+    }
+}
+
+// Wraps an outer handler and adds 1000 to whatever `Counter::next()`
+// returns from the outer scope. The `Counter::next()` call inside
+// `next` here is self-delegation: Phase 4's dispatch wrapper restores
+// the outer chain before invoking this closure, so the recursive call
+// sees BaseCounter, not OffsetCounter.
+struct OffsetCounter {
+    offset: i32,
+}
+
+impl Counter for OffsetCounter {
+    fn next(&self) -> i32 {
+        let outer = Counter::next();   // -> BaseCounter
+        resume outer + self.offset
+    }
+}
+
+export fn run() with Stdout {
+    let mut base = BaseCounter { value: 0 };
+    let offset = OffsetCounter { offset: 1000 };
+    with Counter = &mut base do {
+        with Counter = &offset do {
+            let a = Counter::next();    // 1001 (base.value -> 1, +1000)
+            let b = Counter::next();    // 1002 (base.value -> 2, +1000)
+            println(`{a},{b}`);
+        }
+    }
+    println(`final={base.value}`);
+}
+
+__DATA__
+{"stdout_contains": ["1001,1002", "final=2"]}

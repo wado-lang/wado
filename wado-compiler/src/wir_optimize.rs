@@ -77,7 +77,21 @@ fn wir_pass(
 ///
 /// Optimization passes are skipped at `-O0`, but dead-item compaction always runs
 /// so the emitter receives a clean module with no dead_*_indices to filter.
+///
+/// `optimize_nullable_refs` is the exception: it runs unconditionally (even at
+/// `-O0`) because it picks a *representation* for eligible variants (e.g.
+/// `Option<&T>` → `(ref null T)`), and that representation has to be
+/// consistent between the storage (the Wasm initializer can only encode
+/// `None` as `ref.null` for these variants) and the consumers (pattern
+/// match emits `ref.test`/`ref.cast` against the chosen repr). Skipping
+/// it at `-O0` produces a module where a `null`-initialised
+/// `Option<&T>` global stores `ref.null` but `if let Some(_) = ...`
+/// expects a `struct.new`-shaped subtype-hierarchy value, trapping in
+/// `ref.as_non_null` on the first read.
 pub fn optimize_wir(module: &mut WirPackage, opt_level: OptLevel, profiler: &dyn SpanEmitter) {
+    // Always run NullableRef before anything else — see comment above.
+    optimize_nullable_refs(module);
+
     if opt_level == OptLevel::O0 {
         dce::compact_dead_items(module);
         return;
@@ -87,7 +101,6 @@ pub fn optimize_wir(module: &mut WirPackage, opt_level: OptLevel, profiler: &dyn
     //
     // Rewrite type-level representations before any value-level passes see them.
     profiler.span_start("wir/phase1_type_repr");
-    optimize_nullable_refs(module);
     // Pre-SROA copy propagation: inline trivial copies like `alias = source`
     // so that SROA can see direct variant access patterns (RefTest/RefCast on source).
     peephole::propagate_trivial_copies(module);

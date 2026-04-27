@@ -19,18 +19,11 @@ Status: Draft
       Effect-check augments `current_effects` with the handled effects
       while walking the body so the body's calls do not propagate as
       caller requirements.
-- [x] Effect-dispatch synthesis pass (Phase 3 MVP). Lowers `Resume` to
-      `Return` in handler method bodies and replaces every `WithHandler`
-      block with a `Block` whose body has each direct `<E>::<op>(args)`
-      call statically devirtualised to a
-      `MethodCall { receiver: handler, ... }` on the bound handler.
-      Recognises both the WASI-binding-rewritten name shape
-      (`__cm_binding__<E>_<op>`) and the user-effect namespaced shape
-      (`<op>` in `Local{path: "<E>"}`). Per-effect `__Dispatch_<E>`
-      structs and `__effect_<E>` mut globals — the foundation for the
-      cross-function-boundary dispatch follow-up — are not emitted
-      yet; Phase 4 will introduce them once the wrapper-emission
-      lowering is ready to consume them.
+- [x] Effect-dispatch synthesis pass. Phase 3 began as static
+      devirtualisation of direct `<E>::<op>` calls inside the
+      do-block body and has been replaced by Phase 4's full dispatch
+      protocol — see the cross-function-boundary entry below for the
+      shape that ships today.
 - [x] `effect_handler_with_do.wado` runs end-to-end (`mark: 12345`).
 - [x] `effect_handler_resume.wado` runs end-to-end in the WEP example
       shape (`&mut self` + struct-owned `value`). Required two compiler
@@ -48,14 +41,53 @@ Status: Draft
       Scoped the shortcut to locals whose post-boxing type is an
       actual `Box<T>` struct (`box_type_ids.contains(...)`).
       Regression covered by `effect_handler_mut_self_alias.wado`.
-- [ ] Cross-function-boundary dispatch. The MVP only rewrites direct
-      `<E>::<op>` calls inside the do-block body. Calls that reach an
-      effect operation through helper functions invoked from `body`
-      stay routed through the existing CM binding (for WASI) or fail
-      to resolve (for user effects). Phase 4 will introduce the
-      per-effect `__Dispatch_<E>` GC struct, `__effect_<E>` mut
-      global, and `__effect_dispatch__<E>__<op>` wrapper functions
-      described under "Phase 3 implementation plan" below.
+- [x] Cross-function-boundary dispatch (Phase 4). The dispatch
+      synthesis pass now emits a per-effect `__Dispatch_<E>` Wasm GC
+      struct (recursive `outer: Option<&Self>` + one
+      `fn(args) -> ret` closure field per declared operation), a
+      `__effect_<E>: Option<&__Dispatch_<E>>` mut global initialised
+      to `null`, and a `__effect_dispatch__<E>__<op>` wrapper per
+      operation. `WithHandler` lowers to a desugared block that saves
+      the global, builds closures capturing the handler, populates the
+      dispatch struct, installs the global, runs the body, and
+      restores the global on exit. Every `<E>::<op>` call site in the
+      package is rewritten to call the wrapper, including calls in
+      helper functions invoked from inside the `with` body — so the
+      installed handler is observed regardless of call-stack depth.
+      The wrapper restores `outer` before invoking the closure, so
+      handler methods can self-delegate (`Counter::next()` from inside
+      `impl Counter::next`) without recursing through themselves; the
+      recursive call reaches the outer handler chain. Operations the
+      installed handler does not implement (the `..` rest pattern) get
+      a trapping stub closure populated into the dispatch struct.
+      Foundations landed alongside the wrapper synthesis:
+      - `value_copy::insert::needs_value_copy` no longer wraps
+      variant-templated generic instances (`Option<&T>`,
+      `Result<T,E>`, ...) — the wrap was identity at the
+      `synthesize` side and produced a trapping `(ref X) / nullref`
+      signature mismatch when the source was a nullable global.
+      - `lower::globals` marks `null`-initialised reference globals
+      as `is_nullable` (so the Wasm slot accepts the `ref.null`
+      initializer) but leaves a new `lazy_init` flag false, which
+      codegen consults to decide whether `global.get` results
+      should be narrowed with `ref.as_non_null`. Together these
+      let `global mut x: Option<&T> = null` round-trip through the
+      full pipeline.
+      - The WIR `nullable_ref` representation pass (`Option<&T>` →
+      `(ref null T)`) now runs at every opt level, since it picks
+      a representation that the storage and the consumers must
+      agree on for correctness — not just for `-O1+` perf.
+      - `cm_binding::generate_adapters` now walks into `WithHandler`
+      bodies in both its effect-call collector and its call-site
+      rewriter, so the WASI fallback path of the dispatch wrapper
+      always finds an adapter to call.
+
+      End-to-end fixtures: `effect_handler_cross_function.wado` (call
+      via helper function), `effect_handler_nested_same.wado` (two
+      handlers for the same effect with proper outer chaining +
+      restore), `effect_handler_self_delegation.wado` (handler method
+      delegates to outer chain via recursive `<E>::<op>` call). All
+      pass under `-O0`, `-O1`, `-O2`, `-O3`, `-Os`.
 - [ ] Bundled handlers (`with &mut h do`). The resolver already
       diagnoses this with `BundledHandlerNotSupported`; lowering is
       deferred until the dispatch-wrapper path lands.

@@ -226,7 +226,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
             is_pub: global_decl.is_pub,
             module_source: self.current_module_source.clone(),
             span: global_decl.span,
-            is_nullable: false, // Set by lower phase for lazy-init reference types
+            // Both flags are set by the lower phase: `is_nullable` for
+            // any global whose Wasm slot needs to accept `ref.null`, and
+            // `lazy_init` for globals whose initializer runs in
+            // `__initialize_module` (i.e. codegen narrows reads after
+            // init). Constant `null` initializers set only `is_nullable`.
+            is_nullable: false,
+            lazy_init: false,
             local_types: ctx.local_types.clone(),
         })
     }
@@ -600,6 +606,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             stores_aliased_locals: IndexSet::default(),
             // Scratch local fields - computed by lower phase
             is_cm_binding: false,
+            is_dispatch_wrapper: false,
             is_cm_export: false,
             is_ambient: Self::extract_is_ambient(&func.attrs),
             inline_hint: Self::extract_inline_hint(&func.attrs),
@@ -683,6 +690,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             address_taken_locals: ctx.address_taken_locals,
             stores_aliased_locals: IndexSet::default(),
             is_cm_binding: false,
+            is_dispatch_wrapper: false,
             is_cm_export: false,
             is_ambient: false,
             inline_hint: crate::tir::InlineHint::Auto,
@@ -1077,6 +1085,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             address_taken_locals: ctx.address_taken_locals,
             stores_aliased_locals: IndexSet::default(),
             is_cm_binding: false,
+            is_dispatch_wrapper: false,
             is_cm_export: false,
             is_ambient: Self::extract_is_ambient(&func.attrs),
             inline_hint: Self::extract_inline_hint(&func.attrs),

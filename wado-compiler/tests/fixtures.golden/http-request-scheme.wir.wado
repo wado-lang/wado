@@ -470,31 +470,15 @@ fn "wado-compiler/tests/fixtures/http-request-scheme.wado/handle"(request) {
     let __packed_159: i64;
     let __ptr_160: i32;
     let __len_161: i32;
-    let __local_166: ref "wasi:http/types.wado//Scheme";
-    let __local_173: ref "wasi:http/types.wado//ErrorCode";
-    let __local_174: ref "wasi:http/types.wado//DnsErrorPayload";
-    let __local_175: ref "wasi:http/types.wado//TlsAlertReceivedPayload";
-    let __local_176: ref "core:prelude/types.wado//Option<u64>";
-    let __local_177: ref "core:prelude/types.wado//Option<u32>";
-    let __local_178: ref null "wasi:http/types.wado//FieldSizePayload";
-    let __local_179: ref "wasi:http/types.wado//FieldSizePayload";
-    let __local_180: ref "core:prelude/types.wado//Option<u32>";
-    let __local_181: ref "wasi:http/types.wado//FieldSizePayload";
-    let __local_182: ref "core:prelude/types.wado//Option<u32>";
-    let __local_183: ref "wasi:http/types.wado//FieldSizePayload";
-    let __local_184: ref "core:prelude/types.wado//Option<u64>";
-    let __local_185: ref "core:prelude/types.wado//Option<u32>";
-    let __local_186: ref "wasi:http/types.wado//FieldSizePayload";
-    let __local_187: ref null "core:prelude/string.wado//String";
-    let __local_188: ref null "core:prelude/string.wado//String";
-    let __local_189: ref null "core:prelude/string.wado//String";
+    let __local_172: ref "wasi:http/types.wado//DnsErrorPayload";
+    let __local_173: ref "wasi:http/types.wado//TlsAlertReceivedPayload";
+    let __local_174: ref "wasi:http/types.wado//FieldSizePayload";
+    let __local_175: ref "wasi:http/types.wado//FieldSizePayload";
+    let __local_176: ref "wasi:http/types.wado//FieldSizePayload";
+    let __local_177: ref "wasi:http/types.wado//FieldSizePayload";
     scheme = "wado-compiler/tests/fixtures/http-request-scheme.wado/__cm_binding__Request_get_scheme"(request);
     if ref.is_null(scheme) == 0 {
-        s = __inline__value_copy_T56_2: block -> ref "wasi:http/types.wado//Scheme" {
-            __local_166 = ref.as_non_null(scheme);
-            break __inline__value_copy_T56_2: __local_166;
-            unreachable;
-        };
+        s = ref.as_non_null(scheme);
         let __match_scrut_0: ref "wasi:http/types.wado//Scheme";
         __match_scrut_0 = s;
         __cond = (if __match_scrut_0.discriminant == 0 -> bool {
@@ -551,16 +535,12 @@ condition: s matches { Http }
         __tv_1 = __ok_val;
         "wasi/task-return"(0, __tv_1, 0, 0_i64, 0, 0, 0, 0);
     } else {
-        __err_val = __inline__value_copy_T57_7: block -> ref "wasi:http/types.wado//ErrorCode" {
-            __local_173 = ref.cast "core:prelude/types.wado//Result<Response,ErrorCode>::Err"(__task_ret).payload_0;
-            break __inline__value_copy_T57_7: __local_173;
-            unreachable;
-        };
+        __err_val = ref.cast "core:prelude/types.wado//Result<Response,ErrorCode>::Err"(__task_ret).payload_0;
         __tv_1 = __err_val.discriminant;
         if ref.test "wasi:http/types.wado//ErrorCode::DnsError"(__err_val) {
-            __case_payload_23 = __inline__value_copy_T24_8: block -> ref "wasi:http/types.wado//DnsErrorPayload" {
-                __local_174 = ref.cast "wasi:http/types.wado//ErrorCode::DnsError"(__err_val).payload_0;
-                break __inline__value_copy_T24_8: struct.new "wasi:http/types.wado//DnsErrorPayload" { rcode: __local_174.rcode, info_code: __local_174.info_code };
+            __case_payload_23 = __inline__value_copy_T24_6: block -> ref "wasi:http/types.wado//DnsErrorPayload" {
+                __local_172 = ref.cast "wasi:http/types.wado//ErrorCode::DnsError"(__err_val).payload_0;
+                break __inline__value_copy_T24_6: struct.new "wasi:http/types.wado//DnsErrorPayload" { rcode: __local_172.rcode, info_code: __local_172.info_code };
                 unreachable;
             };
             __opt_val_25 = __case_payload_23.rcode;
@@ -588,9 +568,9 @@ condition: s matches { Http }
             __tv_6 = __opt_inner_0_34;
         }
         if ref.test "wasi:http/types.wado//ErrorCode::TlsAlertReceived"(__err_val) {
-            __case_payload_36 = __inline__value_copy_T25_9: block -> ref "wasi:http/types.wado//TlsAlertReceivedPayload" {
-                __local_175 = ref.cast "wasi:http/types.wado//ErrorCode::TlsAlertReceived"(__err_val).payload_0;
-                break __inline__value_copy_T25_9: struct.new "wasi:http/types.wado//TlsAlertReceivedPayload" { alert_id: __local_175.alert_id, alert_message: __local_175.alert_message };
+            __case_payload_36 = __inline__value_copy_T25_7: block -> ref "wasi:http/types.wado//TlsAlertReceivedPayload" {
+                __local_173 = ref.cast "wasi:http/types.wado//ErrorCode::TlsAlertReceived"(__err_val).payload_0;
+                break __inline__value_copy_T25_7: struct.new "wasi:http/types.wado//TlsAlertReceivedPayload" { alert_id: __local_173.alert_id, alert_message: __local_173.alert_message };
                 unreachable;
             };
             __opt_val_38 = __case_payload_36.alert_id;
@@ -618,11 +598,7 @@ condition: s matches { Http }
             __tv_6 = __opt_inner_1_45;
         }
         if ref.test "wasi:http/types.wado//ErrorCode::HttpRequestBodySize"(__err_val) {
-            __case_payload_49 = __inline__value_copy_T26_10: block -> ref "core:prelude/types.wado//Option<u64>" {
-                __local_176 = ref.cast "wasi:http/types.wado//ErrorCode::HttpRequestBodySize"(__err_val).payload_0;
-                break __inline__value_copy_T26_10: __local_176;
-                unreachable;
-            };
+            __case_payload_49 = ref.cast "wasi:http/types.wado//ErrorCode::HttpRequestBodySize"(__err_val).payload_0;
             __opt_disc_51 = ref.test "core:prelude/types.wado//Option<u64>::Some"(__case_payload_49);
             __opt_inner_0_52 = 0_i64;
             if __opt_disc_51 != 0 {
@@ -633,11 +609,7 @@ condition: s matches { Http }
             __tv_3 = __opt_inner_0_52;
         }
         if ref.test "wasi:http/types.wado//ErrorCode::HttpRequestHeaderSectionSize"(__err_val) {
-            __case_payload_54 = __inline__value_copy_T23_11: block -> ref "core:prelude/types.wado//Option<u32>" {
-                __local_177 = ref.cast "wasi:http/types.wado//ErrorCode::HttpRequestHeaderSectionSize"(__err_val).payload_0;
-                break __inline__value_copy_T23_11: __local_177;
-                unreachable;
-            };
+            __case_payload_54 = ref.cast "wasi:http/types.wado//ErrorCode::HttpRequestHeaderSectionSize"(__err_val).payload_0;
             __opt_disc_56 = ref.test "core:prelude/types.wado//Option<u32>::Some"(__case_payload_54);
             __opt_inner_0_57 = 0;
             if __opt_disc_56 != 0 {
@@ -648,11 +620,7 @@ condition: s matches { Http }
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_57);
         }
         if ref.test "wasi:http/types.wado//ErrorCode::HttpRequestHeaderSize"(__err_val) {
-            __case_payload_59 = __inline__value_copy_T28_12: block -> ref null "wasi:http/types.wado//FieldSizePayload" {
-                __local_178 = ref.cast "wasi:http/types.wado//ErrorCode::HttpRequestHeaderSize"(__err_val).payload_0;
-                break __inline__value_copy_T28_12: __local_178;
-                unreachable;
-            };
+            __case_payload_59 = ref.cast "wasi:http/types.wado//ErrorCode::HttpRequestHeaderSize"(__err_val).payload_0;
             __opt_disc_61 = ref.is_null(__case_payload_59) == 0;
             __opt_inner_0_62 = 0;
             __opt_inner_1_63 = 0;
@@ -660,9 +628,9 @@ condition: s matches { Http }
             __opt_inner_3 = 0;
             __opt_inner_4 = 0;
             if __opt_disc_61 != 0 {
-                __struct_val = __inline__value_copy_T27_13: block -> ref "wasi:http/types.wado//FieldSizePayload" {
-                    __local_179 = ref.as_non_null(__case_payload_59);
-                    break __inline__value_copy_T27_13: struct.new "wasi:http/types.wado//FieldSizePayload" { field_name: __local_179.field_name, field_size: __local_179.field_size };
+                __struct_val = __inline__value_copy_T27_8: block -> ref "wasi:http/types.wado//FieldSizePayload" {
+                    __local_174 = ref.as_non_null(__case_payload_59);
+                    break __inline__value_copy_T27_8: struct.new "wasi:http/types.wado//FieldSizePayload" { field_name: __local_174.field_name, field_size: __local_174.field_size };
                     unreachable;
                 };
                 __opt_val_68 = __struct_val.field_name;
@@ -697,11 +665,7 @@ condition: s matches { Http }
             __tv_7 = __opt_inner_4;
         }
         if ref.test "wasi:http/types.wado//ErrorCode::HttpRequestTrailerSectionSize"(__err_val) {
-            __case_payload_79 = __inline__value_copy_T23_14: block -> ref "core:prelude/types.wado//Option<u32>" {
-                __local_180 = ref.cast "wasi:http/types.wado//ErrorCode::HttpRequestTrailerSectionSize"(__err_val).payload_0;
-                break __inline__value_copy_T23_14: __local_180;
-                unreachable;
-            };
+            __case_payload_79 = ref.cast "wasi:http/types.wado//ErrorCode::HttpRequestTrailerSectionSize"(__err_val).payload_0;
             __opt_disc_81 = ref.test "core:prelude/types.wado//Option<u32>::Some"(__case_payload_79);
             __opt_inner_0_82 = 0;
             if __opt_disc_81 != 0 {
@@ -712,9 +676,9 @@ condition: s matches { Http }
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_82);
         }
         if ref.test "wasi:http/types.wado//ErrorCode::HttpRequestTrailerSize"(__err_val) {
-            __case_payload_84 = __inline__value_copy_T27_15: block -> ref "wasi:http/types.wado//FieldSizePayload" {
-                __local_181 = ref.cast "wasi:http/types.wado//ErrorCode::HttpRequestTrailerSize"(__err_val).payload_0;
-                break __inline__value_copy_T27_15: struct.new "wasi:http/types.wado//FieldSizePayload" { field_name: __local_181.field_name, field_size: __local_181.field_size };
+            __case_payload_84 = __inline__value_copy_T27_9: block -> ref "wasi:http/types.wado//FieldSizePayload" {
+                __local_175 = ref.cast "wasi:http/types.wado//ErrorCode::HttpRequestTrailerSize"(__err_val).payload_0;
+                break __inline__value_copy_T27_9: struct.new "wasi:http/types.wado//FieldSizePayload" { field_name: __local_175.field_name, field_size: __local_175.field_size };
                 unreachable;
             };
             __opt_val_86 = __case_payload_84.field_name;
@@ -742,11 +706,7 @@ condition: s matches { Http }
             __tv_6 = __opt_inner_0_95;
         }
         if ref.test "wasi:http/types.wado//ErrorCode::HttpResponseHeaderSectionSize"(__err_val) {
-            __case_payload_97 = __inline__value_copy_T23_16: block -> ref "core:prelude/types.wado//Option<u32>" {
-                __local_182 = ref.cast "wasi:http/types.wado//ErrorCode::HttpResponseHeaderSectionSize"(__err_val).payload_0;
-                break __inline__value_copy_T23_16: __local_182;
-                unreachable;
-            };
+            __case_payload_97 = ref.cast "wasi:http/types.wado//ErrorCode::HttpResponseHeaderSectionSize"(__err_val).payload_0;
             __opt_disc_99 = ref.test "core:prelude/types.wado//Option<u32>::Some"(__case_payload_97);
             __opt_inner_0_100 = 0;
             if __opt_disc_99 != 0 {
@@ -757,9 +717,9 @@ condition: s matches { Http }
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_100);
         }
         if ref.test "wasi:http/types.wado//ErrorCode::HttpResponseHeaderSize"(__err_val) {
-            __case_payload_102 = __inline__value_copy_T27_17: block -> ref "wasi:http/types.wado//FieldSizePayload" {
-                __local_183 = ref.cast "wasi:http/types.wado//ErrorCode::HttpResponseHeaderSize"(__err_val).payload_0;
-                break __inline__value_copy_T27_17: struct.new "wasi:http/types.wado//FieldSizePayload" { field_name: __local_183.field_name, field_size: __local_183.field_size };
+            __case_payload_102 = __inline__value_copy_T27_10: block -> ref "wasi:http/types.wado//FieldSizePayload" {
+                __local_176 = ref.cast "wasi:http/types.wado//ErrorCode::HttpResponseHeaderSize"(__err_val).payload_0;
+                break __inline__value_copy_T27_10: struct.new "wasi:http/types.wado//FieldSizePayload" { field_name: __local_176.field_name, field_size: __local_176.field_size };
                 unreachable;
             };
             __opt_val_104 = __case_payload_102.field_name;
@@ -787,11 +747,7 @@ condition: s matches { Http }
             __tv_6 = __opt_inner_0_113;
         }
         if ref.test "wasi:http/types.wado//ErrorCode::HttpResponseBodySize"(__err_val) {
-            __case_payload_115 = __inline__value_copy_T26_18: block -> ref "core:prelude/types.wado//Option<u64>" {
-                __local_184 = ref.cast "wasi:http/types.wado//ErrorCode::HttpResponseBodySize"(__err_val).payload_0;
-                break __inline__value_copy_T26_18: __local_184;
-                unreachable;
-            };
+            __case_payload_115 = ref.cast "wasi:http/types.wado//ErrorCode::HttpResponseBodySize"(__err_val).payload_0;
             __opt_disc_117 = ref.test "core:prelude/types.wado//Option<u64>::Some"(__case_payload_115);
             __opt_inner_0_118 = 0_i64;
             if __opt_disc_117 != 0 {
@@ -802,11 +758,7 @@ condition: s matches { Http }
             __tv_3 = __opt_inner_0_118;
         }
         if ref.test "wasi:http/types.wado//ErrorCode::HttpResponseTrailerSectionSize"(__err_val) {
-            __case_payload_120 = __inline__value_copy_T23_19: block -> ref "core:prelude/types.wado//Option<u32>" {
-                __local_185 = ref.cast "wasi:http/types.wado//ErrorCode::HttpResponseTrailerSectionSize"(__err_val).payload_0;
-                break __inline__value_copy_T23_19: __local_185;
-                unreachable;
-            };
+            __case_payload_120 = ref.cast "wasi:http/types.wado//ErrorCode::HttpResponseTrailerSectionSize"(__err_val).payload_0;
             __opt_disc_122 = ref.test "core:prelude/types.wado//Option<u32>::Some"(__case_payload_120);
             __opt_inner_0_123 = 0;
             if __opt_disc_122 != 0 {
@@ -817,9 +769,9 @@ condition: s matches { Http }
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_123);
         }
         if ref.test "wasi:http/types.wado//ErrorCode::HttpResponseTrailerSize"(__err_val) {
-            __case_payload_125 = __inline__value_copy_T27_20: block -> ref "wasi:http/types.wado//FieldSizePayload" {
-                __local_186 = ref.cast "wasi:http/types.wado//ErrorCode::HttpResponseTrailerSize"(__err_val).payload_0;
-                break __inline__value_copy_T27_20: struct.new "wasi:http/types.wado//FieldSizePayload" { field_name: __local_186.field_name, field_size: __local_186.field_size };
+            __case_payload_125 = __inline__value_copy_T27_11: block -> ref "wasi:http/types.wado//FieldSizePayload" {
+                __local_177 = ref.cast "wasi:http/types.wado//ErrorCode::HttpResponseTrailerSize"(__err_val).payload_0;
+                break __inline__value_copy_T27_11: struct.new "wasi:http/types.wado//FieldSizePayload" { field_name: __local_177.field_name, field_size: __local_177.field_size };
                 unreachable;
             };
             __opt_val_127 = __case_payload_125.field_name;
@@ -847,11 +799,7 @@ condition: s matches { Http }
             __tv_6 = __opt_inner_0_136;
         }
         if ref.test "wasi:http/types.wado//ErrorCode::HttpResponseTransferCoding"(__err_val) {
-            __case_payload_138 = __inline__value_copy_T20_21: block -> ref null "core:prelude/string.wado//String" {
-                __local_187 = ref.cast "wasi:http/types.wado//ErrorCode::HttpResponseTransferCoding"(__err_val).payload_0;
-                break __inline__value_copy_T20_21: __local_187;
-                unreachable;
-            };
+            __case_payload_138 = ref.cast "wasi:http/types.wado//ErrorCode::HttpResponseTransferCoding"(__err_val).payload_0;
             __opt_disc_140 = ref.is_null(__case_payload_138) == 0;
             __opt_inner_0_141 = 0;
             __opt_inner_1_142 = 0;
@@ -867,11 +815,7 @@ condition: s matches { Http }
             __tv_4 = __opt_inner_1_142;
         }
         if ref.test "wasi:http/types.wado//ErrorCode::HttpResponseContentCoding"(__err_val) {
-            __case_payload_146 = __inline__value_copy_T20_22: block -> ref null "core:prelude/string.wado//String" {
-                __local_188 = ref.cast "wasi:http/types.wado//ErrorCode::HttpResponseContentCoding"(__err_val).payload_0;
-                break __inline__value_copy_T20_22: __local_188;
-                unreachable;
-            };
+            __case_payload_146 = ref.cast "wasi:http/types.wado//ErrorCode::HttpResponseContentCoding"(__err_val).payload_0;
             __opt_disc_148 = ref.is_null(__case_payload_146) == 0;
             __opt_inner_0_149 = 0;
             __opt_inner_1_150 = 0;
@@ -887,11 +831,7 @@ condition: s matches { Http }
             __tv_4 = __opt_inner_1_150;
         }
         if ref.test "wasi:http/types.wado//ErrorCode::InternalError"(__err_val) {
-            __case_payload_154 = __inline__value_copy_T20_23: block -> ref null "core:prelude/string.wado//String" {
-                __local_189 = ref.cast "wasi:http/types.wado//ErrorCode::InternalError"(__err_val).payload_0;
-                break __inline__value_copy_T20_23: __local_189;
-                unreachable;
-            };
+            __case_payload_154 = ref.cast "wasi:http/types.wado//ErrorCode::InternalError"(__err_val).payload_0;
             __opt_disc_156 = ref.is_null(__case_payload_154) == 0;
             __opt_inner_0_157 = 0;
             __opt_inner_1_158 = 0;
