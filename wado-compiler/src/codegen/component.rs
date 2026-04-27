@@ -482,14 +482,26 @@ fn emit_cm_val_type(
             ComponentValType::Type(idx)
         }
         Type::Generic(g) if g.name == "Result" => {
-            let err_idx = resolve_error_code_idx(
-                instance_type,
-                local_type_idx,
-                error_code_idx,
-                has_local_error_code,
-                enum_export_indices,
-                ctx,
-            );
+            // E parameter: if it names a WASI resource that the enclosing
+            // interface already brought in (via own_resource_type_indices),
+            // use that own<R> handle directly. Otherwise fall back to the
+            // canonical wasi:cli/types#error-code (covers the common case
+            // where wasi WIT writes `result<_, error-code>`).
+            let err_idx = if g.args.len() >= 2
+                && let Type::Named(named_err) = &g.args[1]
+                && let Some(&idx) = own_resource_type_indices.get(&named_err.name)
+            {
+                idx
+            } else {
+                resolve_error_code_idx(
+                    instance_type,
+                    local_type_idx,
+                    error_code_idx,
+                    has_local_error_code,
+                    enum_export_indices,
+                    ctx,
+                )
+            };
             let ok_type = if g.args.is_empty() {
                 None
             } else {
@@ -2960,6 +2972,12 @@ fn import_resource_using_interfaces(
         // so we do it here at component scope before entering the instance-type builder.
         // We use package-qualified names (e.g., "filesystem-types") to avoid collisions
         // with other interfaces that share the same short interface name (e.g., "cli/types").
+        //
+        // EXCEPTION: when the resource's source path IS this interface, we do not
+        // pre-import it. The CM spec requires `[constructor]X` / `[method]X.foo`
+        // to live in the same instance that exports the resource type `X` — so
+        // such resources must be exported directly inside the per-interface
+        // instance type emitted below, not aliased through an outer scope.
         for resource_name in &needed_resources {
             if let Some(source) = project
                 .wasi_registry
@@ -2978,6 +2996,11 @@ fn import_resource_using_interfaces(
                 else {
                     continue;
                 };
+                if source_path == interface_info.path.as_str() {
+                    // Self-owned resource — declared inline in the main
+                    // instance type to satisfy the constructor/method spec.
+                    continue;
+                }
                 let Some(cm_import) = crate::ast::CmImport::parse(source_path) else {
                     continue;
                 };
@@ -3036,7 +3059,30 @@ fn import_resource_using_interfaces(
                         .get_resource_cm_name_by_source(source, resource_name)
                 {
                     let outer_resource_type_name = format!("resource:{cm_name}");
-                    if ctx.has_type(&outer_resource_type_name) {
+                    let source_is_self = project
+                        .wasi_registry
+                        .get_resource_source_interface(resource_name)
+                        .is_some_and(|src| src == interface_info.path.as_str());
+                    if source_is_self {
+                        // Declare the resource inline so [constructor]X /
+                        // [method]X.foo / [static]X.foo are valid in this
+                        // instance.
+                        instance_type.export(
+                            cm_name,
+                            wasm_encoder::ComponentTypeRef::Type(TypeBounds::SubResource),
+                        );
+                        resource_alias_indices.insert(resource_name.clone(), local_type_idx);
+                        local_type_idx += 1;
+
+                        let resource_local_idx = resource_alias_indices[resource_name];
+                        instance_type.ty().defined_type().own(resource_local_idx);
+                        own_resource_type_indices.insert(resource_name.clone(), local_type_idx);
+                        local_type_idx += 1;
+
+                        instance_type.ty().defined_type().borrow(resource_local_idx);
+                        borrow_resource_type_indices.insert(resource_name.clone(), local_type_idx);
+                        local_type_idx += 1;
+                    } else if ctx.has_type(&outer_resource_type_name) {
                         let outer_idx = ctx.type_idx(&outer_resource_type_name);
                         {
                             // Alias the resource from the outer component scope
@@ -3068,6 +3114,41 @@ fn import_resource_using_interfaces(
             let mut deferred_func_exports: Vec<(String, u32)> = Vec::new();
 
             for func in &supported_functions {
+                // Resolve params: for `self` borrow params use the borrow handle,
+                // for owned-resource params use the own handle, otherwise lower
+                // the type via emit_cm_val_type.
+                let params: Vec<(String, ComponentValType)> = func
+                    .params
+                    .iter()
+                    .map(|(_wado_name, cm_name, ty)| {
+                        let val = if let Type::Named(named) = ty
+                            && let Some(&idx) = borrow_resource_type_indices.get(&named.name)
+                            && cm_name == "self"
+                        {
+                            ComponentValType::Type(idx)
+                        } else if let Type::Named(named) = ty
+                            && let Some(&idx) = own_resource_type_indices.get(&named.name)
+                        {
+                            ComponentValType::Type(idx)
+                        } else {
+                            let resolved = project.wasi_registry.resolve_type(ty);
+                            emit_cm_val_type(
+                                &resolved,
+                                &mut instance_type,
+                                &mut local_type_idx,
+                                None,
+                                false,
+                                &IndexMap::default(),
+                                &own_resource_type_indices,
+                                None,
+                                None,
+                                ctx,
+                            )
+                        };
+                        (cm_name.clone(), val)
+                    })
+                    .collect();
+
                 let result_type = func.return_type.as_ref().map(|ty| {
                     let resolved_ty = project.wasi_registry.resolve_type(ty);
                     emit_cm_val_type(
@@ -3084,16 +3165,16 @@ fn import_resource_using_interfaces(
                     )
                 });
 
+                let param_refs: Vec<(&str, ComponentValType)> =
+                    params.iter().map(|(n, t)| (n.as_str(), *t)).collect();
                 let mut func_encoder = instance_type.ty().function();
                 if func.is_async {
                     func_encoder
                         .async_(true)
-                        .params::<[(&str, ComponentValType); 0], _>([])
+                        .params(param_refs)
                         .result(result_type);
                 } else {
-                    func_encoder
-                        .params::<[(&str, ComponentValType); 0], _>([])
-                        .result(result_type);
+                    func_encoder.params(param_refs).result(result_type);
                 }
                 let func_type_idx = local_type_idx;
                 local_type_idx += 1;
