@@ -1277,12 +1277,66 @@ fn gen_scan_function(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext
         let elems = &rule.alternatives[0].elements;
         gen_scan_elements(w, elems, 0, elems.len(), ctx);
         w.line("return pos;");
+    } else if all_alts_are_single_token(&rule.alternatives) {
+        // Compact form: every alt matches exactly one fixed token, so the
+        // entire scan reduces to "is the next token in this set?". A naive
+        // multi-alt expansion would emit one labelled partition per token
+        // (~7 lines × N tokens) — for `keyword` in SQLite that is 122 alts
+        // ≈ 1000 lines of source per scan invocation site. Collapsing to a
+        // single `matches` cuts the per-rule scan code 100×+, which removes
+        // most of the wasm bloat that LR-gate removal otherwise pays for
+        // by making scan_X functions reachable. Behaviourally identical to
+        // the longest-match tournament: every alt consumes exactly one
+        // token, so longest-match and first-success-wins both pick whatever
+        // alt's token equals `tokens[pos].kind`.
+        let mut firsts: Array<String> = [];
+        for let alt of &rule.alternatives {
+            let t = single_token_first(&alt.elements[0]);
+            if !first_contains(&firsts, &t) {
+                firsts.push(t);
+            }
+        }
+        let check = kind_check_str(&firsts, "tokens[pos].kind");
+        w.begin(`if pos < tokens.len() && {check}`);
+        w.line("return pos + 1;");
+        w.end();
+        w.line("return -1;");
     } else {
         gen_scan_multi_alt(w, &rule.alternatives, ctx);
     }
 
     w.end();
     w.blank();
+}
+
+/// Returns true if every alt in `alts` is a single TokenRef or Literal
+/// element. Such rules collapse to a one-token kind check at scan time.
+fn all_alts_are_single_token(alts: &Array<Alternative>) -> bool {
+    for let alt of alts {
+        if alt.elements.len() != 1 {
+            return false;
+        }
+        let elem = &alt.elements[0];
+        let is_token = match elem {
+            TokenRef(_) | Literal(_) => true,
+            _ => false,
+        };
+        if !is_token {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// Return the matched token-kind constant for a single TokenRef/Literal
+/// element. Caller is expected to have screened the element via
+/// `all_alts_are_single_token`.
+fn single_token_first(elem: &Element) -> String {
+    return match elem {
+        TokenRef(t) => `TK_{t.name}`,
+        Literal(l) => literal_const_name(&l.text),
+        _ => panic("single_token_first: unexpected element"),
+    };
 }
 
 /// Generate scan functions for a left-recursive rule. Mirrors the parse-side
