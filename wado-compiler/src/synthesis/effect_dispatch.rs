@@ -25,9 +25,43 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::ModuleSource;
 use crate::package::Package;
 use crate::tir::{
-    EffectRef, TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind, TirTemplatePart, TypeId,
-    TypeTable,
+    EffectRef, TirEffectOp, TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind, TirTemplatePart,
+    TypeId, TypeTable,
 };
+
+/// Canonical identity of an effect: `(defining_module, name)`.
+///
+/// Two effects in distinct modules that happen to share a name (rare in
+/// practice but possible) compare unequal. Mirrors the resolver's
+/// canonicalisation of `EffectRef::Concrete { name, module_source }`.
+#[allow(dead_code)]
+type EffectKey = (ModuleSource, String);
+
+/// Metadata for a single effect, indexed by `EffectKey`.
+#[allow(dead_code)]
+#[derive(Debug, Clone)]
+struct EffectMeta {
+    /// The operation declarations (in source order) — copied so later
+    /// passes don't have to walk the module tree again.
+    operations: Vec<TirEffectOp>,
+}
+
+/// Walk every TIR module and build an `EffectKey -> EffectMeta` index.
+#[allow(dead_code)]
+fn build_effect_index(project: &Package) -> IndexMap<EffectKey, EffectMeta> {
+    let mut out: IndexMap<EffectKey, EffectMeta> = IndexMap::default();
+    for (module_source, module) in &project.tir_modules {
+        for effect in &module.effects {
+            out.insert(
+                (module_source.clone(), effect.name.clone()),
+                EffectMeta {
+                    operations: effect.operations.clone(),
+                },
+            );
+        }
+    }
+    out
+}
 
 /// Run the effect dispatch synthesis pass on the package.
 ///
