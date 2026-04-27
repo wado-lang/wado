@@ -355,6 +355,7 @@ fn synthesize_dispatch_wrappers(
     for op in &plan.operations {
         let wrapper = build_dispatch_wrapper_function(
             entry_source,
+            &effect_module,
             &effect_name,
             op,
             plan,
@@ -368,6 +369,7 @@ fn synthesize_dispatch_wrappers(
 #[allow(dead_code)]
 fn build_dispatch_wrapper_function(
     entry_source: &ModuleSource,
+    effect_module: &ModuleSource,
     effect_name: &str,
     op: &TirEffectOp,
     plan: &DispatchPlan,
@@ -683,7 +685,27 @@ fn build_dispatch_wrapper_function(
         params,
         return_type,
         task_return_type: None,
-        effects: Vec::new(),
+        // The wrapper is the implementation of `<E>::<op>`. It declares
+        // effect `E` for two reasons:
+        //
+        // - For WASI effects, the fallback path (no handler installed)
+        //   calls the existing `__cm_binding__<E>_<op>` adapter, which
+        //   carries effect `E` itself. Declaring `E` on the wrapper
+        //   matches the cm_binding convention so downstream phases that
+        //   consult `effects` (DCE root walk, inliner, codegen) treat
+        //   the wrapper consistently with a hand-written effect call.
+        // - For user-defined effects, the fallback panics; declaring
+        //   `E` is still the honest type — the wrapper *implements* `E`,
+        //   even if its body never propagates the effect further.
+        //
+        // Effect-check has already run by this point, so this declaration
+        // is documentation rather than an obligation; downstream passes
+        // that re-walk effects (codegen export tables, `used_wasi_*`
+        // tracking) get the right answer.
+        effects: vec![EffectRef::Concrete {
+            name: effect_name.to_string(),
+            module_source: effect_module.clone(),
+        }],
         stores: vec![],
         body: Some(body),
         span,
