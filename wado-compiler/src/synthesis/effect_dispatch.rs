@@ -1209,8 +1209,9 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
     let span = expr.span;
     let result_type = expr.type_id;
 
-    let TirExprKind::WithHandler { bindings, body, .. } =
-        std::mem::replace(&mut expr.kind, TirExprKind::Unit)
+    let TirExprKind::WithHandler {
+        bindings, mut body, ..
+    } = std::mem::replace(&mut expr.kind, TirExprKind::Unit)
     else {
         return;
     };
@@ -1416,14 +1417,367 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
     }
 
     // Compose the desugared block: prelude + body.stmts + reversed restore.
+    //
+    // Before composing, walk `body` and splice the restore sequence in
+    // front of every control-flow exit that leaves this `with` body —
+    // `return`, plus `break`/`continue` whose target is declared
+    // outside the body. This keeps the per-effect dispatch global in
+    // sync with the lexical do-block scope even when the body exits
+    // via early jumps. See WEP 2026-04-11 (Effect Handler).
+    //
+    // The early-exit restore sequence has the same order as the
+    // fall-through one — reverse install order — so we materialise
+    // `restore` once into `restore_seq` and reuse it for both.
+    let restore_seq: Vec<TirStmt> = restore.iter().rev().cloned().collect();
+    let mut injector = RestoreInjector::new(&restore_seq, ctx);
+    injector.visit_block(&mut body);
+
     let mut stmts: Vec<TirStmt> =
-        Vec::with_capacity(prelude.len() + body.stmts.len() + restore.len());
+        Vec::with_capacity(prelude.len() + body.stmts.len() + restore_seq.len());
     stmts.extend(prelude);
     stmts.extend(body.stmts);
-    stmts.extend(restore.into_iter().rev());
+    stmts.extend(restore_seq);
 
     expr.kind = TirExprKind::Block(TirBlock::new(stmts, span));
     expr.type_id = result_type;
+}
+
+/// Walks a `with`-body and splices the per-`with` restore sequence in
+/// front of every control-flow statement that exits the body — i.e.
+/// every jump that would otherwise skip the fall-through restore at
+/// the end of the desugared block.
+///
+/// Exits are determined relative to the loops and labeled blocks that
+/// appear *inside* the body:
+///
+/// - `Return` — always exits (returns from the enclosing function).
+/// - `Continue` and `Break` without a label — exit when there is no
+///   anonymous loop (`loop { }` / `VariadicForOf`) currently open
+///   inside the body.
+/// - `Break { label: Some(l) }` — exits when `l` was not declared
+///   inside the body.
+///
+/// Value-carrying jumps (`return v`, `break L: v`) are rewritten to
+/// evaluate the value *before* the restore runs and *after* the
+/// dispatch global is still pointing at the do-block's handler:
+///
+/// ```text
+/// let __early_jump_<n> = v;   // evaluated under the do-block handler
+/// __restore_seq__;            // global goes back to outer scope
+/// return __early_jump_<n>;    // jump propagates the saved value
+/// ```
+///
+/// Without that bind, a `return Counter::next()` inside the body
+/// would evaluate `Counter::next()` *after* restoring, picking up
+/// whatever handler the outer scope had instead of the inner one.
+///
+/// `Closure` bodies are *not* descended into: a `return`/`break`/
+/// `continue` inside a closure targets the closure itself, not the
+/// `with` body. Inner `WithHandler` nodes have already been desugared
+/// to plain `Block` expressions by the time this runs, so each
+/// `with` only injects its own restores; nesting composes by
+/// successive splice — innermost first, outermost last — which yields
+/// the correct reverse-install order at every exit point.
+#[allow(dead_code)]
+struct RestoreInjector<'a, 'b> {
+    /// The restore statements to splice in front of every exit, in
+    /// the exact order they should appear (reverse install order —
+    /// matching the fall-through restore at the end of the desugared
+    /// block).
+    restore_seq: &'a [TirStmt],
+    /// Number of anonymous loops (`loop { }` / `VariadicForOf`)
+    /// currently open along the walk. While positive, bare
+    /// `break`/`continue` stay inside the `with` body.
+    inner_loop_depth: u32,
+    /// Stack of labels declared by `LabeledBlock` (statement or
+    /// expression form) along the walk. `break L` whose `L` is in
+    /// this stack stays inside the `with` body.
+    inner_labels: Vec<String>,
+    /// Local-allocation context, used to mint fresh temp locals for
+    /// value-carrying early exits (`return v`, `break L: v`).
+    ctx: &'b mut LowerCtx,
+}
+
+#[allow(dead_code)]
+impl<'a, 'b> RestoreInjector<'a, 'b> {
+    fn new(restore_seq: &'a [TirStmt], ctx: &'b mut LowerCtx) -> Self {
+        Self {
+            restore_seq,
+            inner_loop_depth: 0,
+            inner_labels: Vec::new(),
+            ctx,
+        }
+    }
+
+    fn visit_block(&mut self, block: &mut TirBlock) {
+        let mut i = 0;
+        while i < block.stmts.len() {
+            // Recurse into the children of this stmt first so nested
+            // exits inside an `If`/`Match`/`LabeledBlock`/loop body
+            // get their own restores. Then check whether the stmt
+            // itself is an exit.
+            self.visit_stmt(&mut block.stmts[i]);
+
+            if !self.is_exit_stmt(&block.stmts[i].kind) {
+                i += 1;
+                continue;
+            }
+
+            let stmt_span = block.stmts[i].span;
+            let mut to_insert: Vec<TirStmt> = Vec::new();
+
+            // Value-carrying exits must evaluate their value under the
+            // do-block's still-installed handler before the restore
+            // runs. Bind the value to a fresh temp local, then restore,
+            // then jump with the temp.
+            let value_slot: Option<&mut Option<TirExpr>> = match &mut block.stmts[i].kind {
+                TirStmtKind::Return { value } => Some(value),
+                TirStmtKind::Break { value, .. } => Some(value),
+                _ => None,
+            };
+            if let Some(value_slot) = value_slot
+                && let Some(v) = value_slot.as_mut()
+            {
+                let value_type = v.type_id;
+                let value_expr =
+                    std::mem::replace(v, TirExpr::new(TirExprKind::Unit, value_type, stmt_span));
+                let temp_local = self.ctx.alloc_local(value_type);
+                let temp_name = format!("__early_jump_{temp_local}");
+                to_insert.push(TirStmt::new(
+                    TirStmtKind::Let {
+                        name: temp_name.clone(),
+                        local_index: temp_local,
+                        is_mut: false,
+                        is_reactive: false,
+                        type_id: value_type,
+                        value: value_expr,
+                        skip_value_copy: true,
+                    },
+                    stmt_span,
+                ));
+                *v = TirExpr::new(
+                    TirExprKind::Local {
+                        index: temp_local,
+                        name: temp_name,
+                    },
+                    value_type,
+                    stmt_span,
+                );
+            }
+
+            to_insert.extend(self.restore_seq.iter().cloned());
+
+            let n = to_insert.len();
+            if n > 0 {
+                block.stmts.splice(i..i, to_insert);
+                i += n;
+            }
+            i += 1;
+        }
+    }
+
+    fn visit_stmt(&mut self, stmt: &mut TirStmt) {
+        match &mut stmt.kind {
+            TirStmtKind::Let { value, .. }
+            | TirStmtKind::Expr(value)
+            | TirStmtKind::TaskReturn { value }
+            | TirStmtKind::LetDestructure { value, .. } => self.visit_expr(value),
+            TirStmtKind::Return { value } | TirStmtKind::Break { value, .. } => {
+                if let Some(v) = value {
+                    self.visit_expr(v);
+                }
+            }
+            TirStmtKind::Continue => {}
+            TirStmtKind::Loop { body } => {
+                self.inner_loop_depth += 1;
+                self.visit_block(body);
+                self.inner_loop_depth -= 1;
+            }
+            TirStmtKind::VariadicForOf { iterable, body, .. } => {
+                self.visit_expr(iterable);
+                self.inner_loop_depth += 1;
+                self.visit_block(body);
+                self.inner_loop_depth -= 1;
+            }
+            TirStmtKind::LabeledBlock { label, block } => {
+                self.inner_labels.push(label.clone());
+                self.visit_block(block);
+                self.inner_labels.pop();
+            }
+            TirStmtKind::If {
+                condition,
+                then_block,
+                else_block,
+            } => {
+                self.visit_expr(condition);
+                self.visit_block(then_block);
+                if let Some(eb) = else_block {
+                    self.visit_block(eb);
+                }
+            }
+            TirStmtKind::IfLet {
+                scrutinee,
+                then_block,
+                else_block,
+                ..
+            } => {
+                self.visit_expr(scrutinee);
+                self.visit_block(then_block);
+                if let Some(eb) = else_block {
+                    self.visit_block(eb);
+                }
+            }
+        }
+    }
+
+    fn visit_expr(&mut self, expr: &mut TirExpr) {
+        match &mut expr.kind {
+            TirExprKind::Block(block) => self.visit_block(block),
+            TirExprKind::LabeledBlock { label, block, .. } => {
+                self.inner_labels.push(label.clone());
+                self.visit_block(block);
+                self.inner_labels.pop();
+            }
+            TirExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                self.visit_expr(condition);
+                self.visit_block(then_branch);
+                if let Some(eb) = else_branch {
+                    self.visit_block(eb);
+                }
+            }
+            TirExprKind::Match { expr: scrut, arms } => {
+                self.visit_expr(scrut);
+                for arm in arms {
+                    if let Some(g) = &mut arm.guard {
+                        self.visit_expr(g);
+                    }
+                    self.visit_expr(&mut arm.body);
+                }
+            }
+            TirExprKind::Switch {
+                scrutinee,
+                arms,
+                default,
+                ..
+            } => {
+                self.visit_expr(scrutinee);
+                for arm in arms {
+                    self.visit_block(arm);
+                }
+                self.visit_block(default);
+            }
+            TirExprKind::Closure { .. } => {
+                // Closure bodies are a separate function: their
+                // `return`/`break`/`continue` target the closure, not
+                // the enclosing `with`. Do not descend.
+            }
+            TirExprKind::WithHandler { .. } => {
+                unreachable!(
+                    "inner WithHandler should already be desugared to a \
+                     plain Block by the recursive `lower_dispatch_in_expr`"
+                );
+            }
+            TirExprKind::Binary { left, right, .. } => {
+                self.visit_expr(left);
+                self.visit_expr(right);
+            }
+            TirExprKind::Unary { expr: inner, .. }
+            | TirExprKind::Cast { expr: inner, .. }
+            | TirExprKind::FieldAccess { expr: inner, .. }
+            | TirExprKind::TupleSpread { expr: inner }
+            | TirExprKind::TupleZip { expr: inner }
+            | TirExprKind::TypePackExpansion {
+                call_expr: inner, ..
+            }
+            | TirExprKind::VariantTag { expr: inner }
+            | TirExprKind::VariantTest { expr: inner, .. }
+            | TirExprKind::VariantPayload { expr: inner, .. }
+            | TirExprKind::ClosureToCanonical { functor: inner, .. }
+            | TirExprKind::Resume { value: inner } => {
+                self.visit_expr(inner);
+            }
+            TirExprKind::Assign { target, value }
+            | TirExprKind::Index {
+                expr: target,
+                index: value,
+            } => {
+                self.visit_expr(target);
+                self.visit_expr(value);
+            }
+            TirExprKind::GlobalVarSet { value, .. } => self.visit_expr(value),
+            TirExprKind::Call { args, .. } => {
+                for arg in args {
+                    self.visit_expr(&mut arg.expr);
+                }
+            }
+            TirExprKind::CmRawCall { args, .. } => {
+                for arg in args {
+                    self.visit_expr(arg);
+                }
+            }
+            TirExprKind::IndirectCall { callee, args } => {
+                self.visit_expr(callee);
+                for arg in args {
+                    self.visit_expr(arg);
+                }
+            }
+            TirExprKind::MethodCall { receiver, args, .. } => {
+                self.visit_expr(receiver);
+                for arg in args {
+                    self.visit_expr(&mut arg.expr);
+                }
+            }
+            TirExprKind::StructLiteral { fields, .. } => {
+                for f in fields {
+                    self.visit_expr(&mut f.value);
+                }
+            }
+            TirExprKind::TupleLiteral { elements } => {
+                for e in elements {
+                    self.visit_expr(e);
+                }
+            }
+            TirExprKind::VariantConstruct { payload, .. } => {
+                if let Some(p) = payload {
+                    self.visit_expr(p);
+                }
+            }
+            TirExprKind::TemplateString { parts } => {
+                for part in parts {
+                    if let TirTemplatePart::Interpolation { expr, .. } = part {
+                        self.visit_expr(expr);
+                    }
+                }
+            }
+            TirExprKind::IntLiteral { .. }
+            | TirExprKind::FloatLiteral { .. }
+            | TirExprKind::BoolLiteral(_)
+            | TirExprKind::CharLiteral(_)
+            | TirExprKind::StringLiteral(_)
+            | TirExprKind::BytesLiteral(_)
+            | TirExprKind::Null
+            | TirExprKind::Unit
+            | TirExprKind::Local { .. }
+            | TirExprKind::FuncRef { .. }
+            | TirExprKind::GlobalVarGet { .. }
+            | TirExprKind::Capture { .. }
+            | TirExprKind::EnumConstruct { .. } => {}
+        }
+    }
+
+    fn is_exit_stmt(&self, kind: &TirStmtKind) -> bool {
+        match kind {
+            TirStmtKind::Return { .. } => true,
+            TirStmtKind::Continue => self.inner_loop_depth == 0,
+            TirStmtKind::Break { label: None, .. } => self.inner_loop_depth == 0,
+            TirStmtKind::Break { label: Some(l), .. } => !self.inner_labels.iter().any(|x| x == l),
+            _ => false,
+        }
+    }
 }
 
 /// Build the `op_<n>` closure for a single (effect, op, handler-impl)

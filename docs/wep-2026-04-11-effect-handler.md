@@ -88,6 +88,30 @@ Status: Draft
       restore), `effect_handler_self_delegation.wado` (handler method
       delegates to outer chain via recursive `<E>::<op>` call). All
       pass under `-O0`, `-O1`, `-O2`, `-O3`, `-Os`.
+- [x] Early-exit restore. `return v` / `break L: v` / `continue` /
+      label-less `break` from inside a `with` body now splice the
+      per-`with` restore sequence in front of the jump, so the
+      dispatch global is restored before the function leaves the
+      do-block scope. Implemented as a TIR walker
+      (`RestoreInjector`) that runs inside `desugar_with_handler`
+      after the inner body has been desugared. Value-carrying jumps
+      are rewritten to evaluate the value into a fresh temp local
+      first (so the value evaluates under the do-block's
+      still-installed handler), then run the restore sequence, then
+      jump with the temp. Jumps targeting labels / loops declared
+      _inside_ the do-block body (e.g. `break inner_label;` to a
+      label in the body) are detected and skipped — they don't exit
+      the `with`, so no restore is needed. Closures inside the body
+      are not descended into; their `return`/`break`/`continue`
+      target the closure itself.
+      End-to-end fixtures: `effect_handler_early_return.wado`
+      (return crosses the do-block),
+      `effect_handler_break_label_cross.wado` (`break L` whose `L`
+      is outside the do-block),
+      `effect_handler_continue_cross.wado` (`continue` of an outer
+      `while`), `effect_handler_inner_break.wado` (negative — break
+      to an inner label must not splice). All pass under `-O0`,
+      `-O1`, `-O2`, `-O3`, `-Os`.
 - [ ] Bundled handlers (`with &mut h do`). The resolver already
       diagnoses this with `BundledHandlerNotSupported`; lowering is
       deferred until the dispatch-wrapper path lands.
@@ -147,10 +171,14 @@ run. Its scope:
      ```
      global.set $__effect_<E> __save_<E>
      ```
-   Early `return` from inside `body` is a known limitation in the MVP:
-   the global is not restored on early return. Diagnose at resolver
-   level (forbid `return` inside `do { ... }`) or wrap with a labeled
-   block + `try_finally` once exception handling lands.
+   Early-exit jumps from `body` — `return v`, `break L: v` /
+   `break L` whose `L` is declared outside the body, and bare
+   `break` / `continue` exiting an outer loop — are handled by
+   `RestoreInjector` (see Implementation Status). The walker
+   splices the restore sequence in front of the jump and, for
+   value-carrying jumps, binds the value to a fresh temp first so
+   the value evaluates under the do-block's still-installed
+   handler.
 6. `Resume { value }` lowers to `Return { value: Some(value) }`. No
    post-resume / Stack Switching support in the MVP (per WEP).
 7. Call site rewriting: every call to an effect operation routes
@@ -874,7 +902,7 @@ Compiles to:
 
 1. Construct a dispatch record: `struct.new $Dispatch_Stdout (global.get $__effect_Stdout, mock_ref, funcref_for_each_op)`
 2. `global.set $__effect_Stdout` with the new dispatch record
-3. Execute body
+3. Execute body — every control-flow exit from the body (`return`, `break L`/`continue` to a target outside the body) gets the restore step (4) spliced in front of it; value-carrying jumps bind the value to a temp local first so it evaluates under the still-installed handler
 4. `global.set $__effect_Stdout` with the dispatch record's `outer` field (restore)
 
 Nesting composes naturally — each `with` block links to the previous dispatch record via `outer`.
