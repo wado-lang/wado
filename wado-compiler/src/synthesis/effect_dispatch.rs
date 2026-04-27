@@ -1041,167 +1041,97 @@ fn walk_dispatch_children(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut Lower
     }
 }
 
-/// Return the maximum `Local { index }` referenced anywhere inside
-/// `expr` (-1 sentinel = `0` if no locals are referenced).
+/// Return the largest local index already in use anywhere inside
+/// `expr` — both in `Local { index }` reads and in binding sites
+/// (`Let.local_index`, `IfLet`/`LetDestructure`/`Match` arm patterns,
+/// `VariadicForOf.binding_local`). Returns `0` if no locals are
+/// referenced.
 ///
 /// Used to seed a closure body's local counter at synthesis time —
-/// the lower phase will rebuild each closure's local table later, but
-/// we must not collide with indices the body already uses.
+/// the lower phase rebuilds each closure functor's local table later
+/// from `Let` statements, but we must not collide with indices the
+/// body already uses.
+///
+/// The walk does **not** descend into nested closures; their locals
+/// live in a different scope.
 #[allow(dead_code)]
 fn max_local_index_in_expr(expr: &TirExpr) -> u32 {
-    let mut max: u32 = 0;
-    walk_locals(expr, &mut |idx| {
-        if idx > max {
-            max = idx;
-        }
-    });
-    max
+    use crate::tir_visitor::TirRefVisitor;
+    let mut visitor = MaxLocalIndex(0);
+    visitor.visit_expr(expr);
+    visitor.0
 }
 
-#[allow(dead_code)]
-fn walk_locals(expr: &TirExpr, f: &mut dyn FnMut(u32)) {
-    match &expr.kind {
-        TirExprKind::Local { index, .. } => f(*index),
-        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
-            for stmt in &block.stmts {
-                walk_locals_in_stmt(stmt, f);
-            }
+struct MaxLocalIndex(u32);
+
+impl MaxLocalIndex {
+    fn note(&mut self, idx: u32) {
+        if idx > self.0 {
+            self.0 = idx;
         }
-        TirExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            walk_locals(condition, f);
-            for stmt in &then_branch.stmts {
-                walk_locals_in_stmt(stmt, f);
-            }
-            if let Some(eb) = else_branch {
-                for stmt in &eb.stmts {
-                    walk_locals_in_stmt(stmt, f);
+    }
+
+    fn walk_pattern(&mut self, pattern: &crate::tir::TirPattern) {
+        use crate::tir::TirPattern;
+        match pattern {
+            TirPattern::Binding { local_index, .. } => self.note(*local_index),
+            TirPattern::Tuple(items, _) | TirPattern::Or(items) => {
+                for p in items {
+                    self.walk_pattern(p);
                 }
             }
-        }
-        TirExprKind::Match { expr, arms } => {
-            walk_locals(expr, f);
-            for arm in arms {
-                if let Some(g) = &arm.guard {
-                    walk_locals(g, f);
-                }
-                walk_locals(&arm.body, f);
-            }
-        }
-        TirExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            walk_locals(scrutinee, f);
-            for arm in arms {
-                for stmt in &arm.stmts {
-                    walk_locals_in_stmt(stmt, f);
+            TirPattern::Variant { bindings, .. } => {
+                for p in bindings {
+                    self.walk_pattern(p);
                 }
             }
-            for stmt in &default.stmts {
-                walk_locals_in_stmt(stmt, f);
-            }
-        }
-        TirExprKind::Call { args, .. } => {
-            for arg in args {
-                walk_locals(&arg.expr, f);
-            }
-        }
-        TirExprKind::IndirectCall { callee, args } => {
-            walk_locals(callee, f);
-            for arg in args {
-                walk_locals(arg, f);
-            }
-        }
-        TirExprKind::CmRawCall { args, .. } => {
-            for arg in args {
-                walk_locals(arg, f);
-            }
-        }
-        TirExprKind::MethodCall { receiver, args, .. } => {
-            walk_locals(receiver, f);
-            for arg in args {
-                walk_locals(&arg.expr, f);
-            }
-        }
-        TirExprKind::Binary { left, right, .. } => {
-            walk_locals(left, f);
-            walk_locals(right, f);
-        }
-        TirExprKind::Unary { expr, .. }
-        | TirExprKind::Cast { expr, .. }
-        | TirExprKind::FieldAccess { expr, .. }
-        | TirExprKind::TupleSpread { expr }
-        | TirExprKind::TupleZip { expr }
-        | TirExprKind::TypePackExpansion {
-            call_expr: expr, ..
-        }
-        | TirExprKind::VariantTag { expr }
-        | TirExprKind::VariantTest { expr, .. }
-        | TirExprKind::VariantPayload { expr, .. }
-        | TirExprKind::ClosureToCanonical { functor: expr, .. } => walk_locals(expr, f),
-        TirExprKind::Assign { target, value } => {
-            walk_locals(target, f);
-            walk_locals(value, f);
-        }
-        TirExprKind::GlobalVarSet { value, .. } => walk_locals(value, f),
-        TirExprKind::Index { expr, index } => {
-            walk_locals(expr, f);
-            walk_locals(index, f);
-        }
-        TirExprKind::StructLiteral { fields, .. } => {
-            for field in fields {
-                walk_locals(&field.value, f);
-            }
-        }
-        TirExprKind::TupleLiteral { elements } => {
-            for elem in elements {
-                walk_locals(elem, f);
-            }
-        }
-        TirExprKind::Closure { body, .. } => {
-            // Don't descend into nested closures — their locals are in
-            // a different scope.
-            let _ = body;
-        }
-        TirExprKind::VariantConstruct { payload, .. } => {
-            if let Some(p) = payload {
-                walk_locals(p, f);
-            }
-        }
-        TirExprKind::Resume { value } => walk_locals(value, f),
-        TirExprKind::WithHandler { bindings, body, .. } => {
-            for binding in bindings {
-                walk_locals(&binding.handler, f);
-            }
-            for stmt in &body.stmts {
-                walk_locals_in_stmt(stmt, f);
-            }
-        }
-        TirExprKind::TemplateString { parts } => {
-            for part in parts {
-                if let TirTemplatePart::Interpolation { expr, .. } = part {
-                    walk_locals(expr, f);
+            TirPattern::Struct { fields, .. } => {
+                for f in fields {
+                    self.walk_pattern(&f.pattern);
                 }
             }
+            TirPattern::Wildcard
+            | TirPattern::Literal(_)
+            | TirPattern::Enum { .. }
+            | TirPattern::ConstantValue { .. }
+            | TirPattern::Range { .. } => {}
         }
-        TirExprKind::IntLiteral { .. }
-        | TirExprKind::FloatLiteral { .. }
-        | TirExprKind::BoolLiteral(_)
-        | TirExprKind::CharLiteral(_)
-        | TirExprKind::StringLiteral(_)
-        | TirExprKind::BytesLiteral(_)
-        | TirExprKind::Null
-        | TirExprKind::Unit
-        | TirExprKind::FuncRef { .. }
-        | TirExprKind::GlobalVarGet { .. }
-        | TirExprKind::Capture { .. }
-        | TirExprKind::EnumConstruct { .. } => {}
+    }
+}
+
+impl crate::tir_visitor::TirRefVisitor for MaxLocalIndex {
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        match &expr.kind {
+            TirExprKind::Local { index, .. } => self.note(*index),
+            TirExprKind::Closure { .. } => return, // separate scope
+            TirExprKind::Match {
+                expr: scrutinee,
+                arms,
+            } => {
+                self.visit_expr(scrutinee);
+                for arm in arms {
+                    self.walk_pattern(&arm.pattern);
+                    if let Some(guard) = &arm.guard {
+                        self.visit_expr(guard);
+                    }
+                    self.visit_expr(&arm.body);
+                }
+                return;
+            }
+            _ => {}
+        }
+        self.walk_expr(expr);
+    }
+
+    fn visit_stmt(&mut self, stmt: &TirStmt) {
+        match &stmt.kind {
+            TirStmtKind::Let { local_index, .. } => self.note(*local_index),
+            TirStmtKind::IfLet { pattern, .. }
+            | TirStmtKind::LetDestructure { pattern, .. } => self.walk_pattern(pattern),
+            TirStmtKind::VariadicForOf { binding_local, .. } => self.note(*binding_local),
+            _ => {}
+        }
+        self.walk_stmt(stmt);
     }
 }
 
@@ -1594,67 +1524,6 @@ fn build_trap_closure(
     )
 }
 
-#[allow(dead_code)]
-fn walk_locals_in_stmt(stmt: &TirStmt, f: &mut dyn FnMut(u32)) {
-    match &stmt.kind {
-        TirStmtKind::Let {
-            value, local_index, ..
-        } => {
-            f(*local_index);
-            walk_locals(value, f);
-        }
-        TirStmtKind::Expr(value) | TirStmtKind::TaskReturn { value } => walk_locals(value, f),
-        TirStmtKind::Return { value } | TirStmtKind::Break { value, .. } => {
-            if let Some(v) = value {
-                walk_locals(v, f);
-            }
-        }
-        TirStmtKind::Continue => {}
-        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-            for stmt in &body.stmts {
-                walk_locals_in_stmt(stmt, f);
-            }
-        }
-        TirStmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            walk_locals(condition, f);
-            for stmt in &then_block.stmts {
-                walk_locals_in_stmt(stmt, f);
-            }
-            if let Some(eb) = else_block {
-                for stmt in &eb.stmts {
-                    walk_locals_in_stmt(stmt, f);
-                }
-            }
-        }
-        TirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            walk_locals(scrutinee, f);
-            for stmt in &then_block.stmts {
-                walk_locals_in_stmt(stmt, f);
-            }
-            if let Some(eb) = else_block {
-                for stmt in &eb.stmts {
-                    walk_locals_in_stmt(stmt, f);
-                }
-            }
-        }
-        TirStmtKind::LetDestructure { value, .. } => walk_locals(value, f),
-        TirStmtKind::VariadicForOf { iterable, body, .. } => {
-            walk_locals(iterable, f);
-            for stmt in &body.stmts {
-                walk_locals_in_stmt(stmt, f);
-            }
-        }
-    }
-}
 
 /// Rewrite every effect-operation call site so it routes through a
 /// dispatch wrapper.
