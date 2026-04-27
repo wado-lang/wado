@@ -370,10 +370,21 @@ impl<'a> Interpreter<'a> {
                 let Some(target) = int_primitive_of(expr.type_id, self.type_table) else {
                     return Lattice::Unevaluated;
                 };
+                // Resolve the cast input to its raw u64 bit pattern.
+                // Literal leaves carry the bits directly; for any other
+                // node (e.g. a Stage 1 env-resolved `Local`), recover
+                // the bits via the lattice — but only when the lattice
+                // value is itself an integer. Float / Bool / unresolved
+                // cases stay `Unevaluated` so the cast doesn't fabricate
+                // a bogus integer payload.
                 let raw = match &inner.kind {
                     TirExprKind::IntLiteral { value, .. } => *value,
                     TirExprKind::CharLiteral(c) => *c as u64,
-                    _ => return self.expr_to_lattice(inner),
+                    _ => match self.expr_to_lattice(inner) {
+                        Lattice::Const(Value::Int { value, .. }) => value,
+                        Lattice::Const(_) => return Lattice::Unevaluated,
+                        other => return other,
+                    },
                 };
                 Lattice::Const(cast_int(raw, target))
             }

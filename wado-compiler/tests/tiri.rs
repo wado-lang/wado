@@ -728,3 +728,65 @@ fn nested_const_locals_chain() {
         }),
     );
 }
+
+#[test]
+fn cast_through_env_local_applies_target_prim() {
+    // Regression: previously the `Cast` fallback path returned the
+    // *input's* lattice value verbatim when the operand was a
+    // non-literal (e.g. an env-resolved `Local`), so a `u as i32`
+    // wrote the raw u32 bits at an i32-typed expression slot. A
+    // 0xFFFFFFFF u32 cast to i32 must produce -1, not the positive
+    // 4294967295 the buggy path leaked through.
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    // env: u = Const(Int{0xFFFFFFFF, U32}) — equivalent to `let u: u32
+    // = -1 as u32;`.
+    interp.bind_local(
+        0,
+        Lattice::Const(Value::Int {
+            value: 0xFFFF_FFFF,
+            prim: PrimitiveType::U32,
+        }),
+    );
+    let cast_expr = TirExpr::new(
+        TirExprKind::Cast {
+            expr: Box::new(local_expr(0, TypeTable::U32)),
+            target_type: TypeTable::I32,
+        },
+        TypeTable::I32,
+        Span::default(),
+    );
+    // u as i32 must equal -1 (sign-extended bit pattern in u64 form).
+    let neg_one_bits = i64::from(-1_i32) as u64;
+    assert_eq!(
+        interp.reduce_to_lattice(&cast_expr),
+        Lattice::Const(Value::Int {
+            value: neg_one_bits,
+            prim: PrimitiveType::I32,
+        }),
+    );
+
+    // Crucially the *equality* with the -1 literal must also fold to
+    // Const(true) — the original bug surfaced as `(u as i32) == -1`
+    // folding to `false` (because the LHS still carried U32 bits at an
+    // I32 slot, and the comparator's same-prim eval re-interpreted
+    // them as the unsigned 4294967295).
+    let lhs = TirExpr::new(
+        TirExprKind::Cast {
+            expr: Box::new(local_expr(0, TypeTable::U32)),
+            target_type: TypeTable::I32,
+        },
+        TypeTable::I32,
+        Span::default(),
+    );
+    let cmp = binary(
+        TirBinaryOp::Eq,
+        lhs,
+        int_lit(neg_one_bits, TypeTable::I32, "-1"),
+        TypeTable::BOOL,
+    );
+    assert_eq!(
+        interp.reduce_to_lattice(&cmp),
+        Lattice::Const(Value::Bool(true)),
+    );
+}
