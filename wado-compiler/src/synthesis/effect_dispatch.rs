@@ -24,9 +24,10 @@
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::ModuleSource;
 use crate::package::Package;
+use crate::synthesis::common::synth_span;
 use crate::tir::{
-    EffectRef, TirEffectOp, TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind, TirTemplatePart,
-    TypeId, TypeTable,
+    EffectRef, TirBlock, TirEffectOp, TirExpr, TirExprKind, TirField, TirStmt, TirStmtKind,
+    TirStruct, TirTemplatePart, TypeId, TypeTable,
 };
 
 /// Canonical identity of an effect: `(defining_module, name)`.
@@ -125,6 +126,134 @@ struct DispatchPlan {
     /// Cached operation declarations (cloned from `EffectMeta`) so the
     /// wrapper / closure synth doesn't have to walk back to the index.
     operations: Vec<TirEffectOp>,
+}
+
+/// Synthesise the `__Dispatch_<E>` Wasm GC struct for one effect.
+///
+/// Two-phase construction handles the recursive
+/// `outer: Option<&__Dispatch_<E>>` field:
+///
+/// 1. `make_struct` interns an empty / forward-declared struct type id
+///    in the shared `TypeTable`.
+/// 2. Field types — including the `Option<&Self>` outer field, which
+///    references that very type id — are computed in the same borrow
+///    scope.
+///
+/// The matching `TirStruct` decl is then appended to the entry module's
+/// `structs` list. Layout:
+///
+/// ```text
+/// struct __Dispatch_<E> {
+///     outer: Option<&__Dispatch_<E>>,
+///     op_<n>: fn(<op_n_params>) -> <op_n_ret>,
+///     ...
+/// }
+/// ```
+///
+/// All synthesised dispatch infrastructure lives in the entry module,
+/// mirroring `cm_binding`'s placement of WASI binding adapters.
+#[allow(dead_code)]
+fn synthesize_dispatch_struct(
+    project: &mut Package,
+    entry_source: &ModuleSource,
+    key: &EffectKey,
+    meta: &EffectMeta,
+) -> DispatchPlan {
+    let (_, effect_name) = key;
+    let struct_name = format!("__Dispatch_{effect_name}");
+    let global_name = format!("__effect_{effect_name}");
+
+    let entry_module = project
+        .tir_modules
+        .get_mut(entry_source)
+        .expect("entry module must exist");
+    let tt_rc = entry_module.type_table.clone();
+
+    // Build all the type IDs in a single borrow scope. The recursive
+    // `outer` field type is computed off the freshly-interned struct
+    // type id.
+    let struct_type_id;
+    let inner_ref_type_id;
+    let nullable_ref_type_id;
+    let mut op_field_types: Vec<TypeId> = Vec::with_capacity(meta.operations.len());
+    {
+        let mut tt = tt_rc.borrow_mut();
+        struct_type_id = tt.make_struct(struct_name.clone(), entry_source.clone());
+        inner_ref_type_id = tt.make_ref(struct_type_id);
+        nullable_ref_type_id = tt.make_option(inner_ref_type_id);
+        for op in &meta.operations {
+            let param_types: Vec<TypeId> = op.params.iter().map(|p| p.type_id).collect();
+            let op_func_type = tt.make_function(param_types, op.return_type, vec![], vec![]);
+            op_field_types.push(op_func_type);
+        }
+    }
+
+    // Build the field decls: outer at index 0, then ops in source order.
+    let outer_field_type = nullable_ref_type_id;
+    let mut fields: Vec<TirField> = Vec::with_capacity(meta.operations.len() + 1);
+    fields.push(TirField {
+        name: "outer".to_string(),
+        is_pub: false,
+        type_id: outer_field_type,
+        index: 0,
+        span: synth_span(),
+        is_hidden: false,
+        serde_rename: None,
+        serde_default: false,
+        default_expr: None,
+    });
+
+    let mut wrapper_names: IndexMap<String, String> = IndexMap::default();
+    let mut field_names: IndexMap<String, String> = IndexMap::default();
+    let mut field_types: IndexMap<String, TypeId> = IndexMap::default();
+    let mut field_indices: IndexMap<String, u32> = IndexMap::default();
+
+    for (i, op) in meta.operations.iter().enumerate() {
+        let field_name = format!("op_{}", op.name);
+        let field_type = op_field_types[i];
+        let field_index = (i + 1) as u32;
+        fields.push(TirField {
+            name: field_name.clone(),
+            is_pub: false,
+            type_id: field_type,
+            index: field_index,
+            span: synth_span(),
+            is_hidden: false,
+            serde_rename: None,
+            serde_default: false,
+            default_expr: None,
+        });
+        wrapper_names.insert(
+            op.name.clone(),
+            format!("__effect_dispatch__{}__{}", effect_name, op.name),
+        );
+        field_names.insert(op.name.clone(), field_name);
+        field_types.insert(op.name.clone(), field_type);
+        field_indices.insert(op.name.clone(), field_index);
+    }
+
+    entry_module.add_struct(TirStruct {
+        name: struct_name,
+        module_source: entry_source.clone(),
+        is_pub: false,
+        type_params: vec![],
+        monomorph_info: None,
+        fields,
+        span: synth_span(),
+        serde_rename_all: None,
+    });
+
+    DispatchPlan {
+        struct_type_id,
+        nullable_ref_type_id,
+        inner_ref_type_id,
+        global_name,
+        wrapper_names,
+        field_names,
+        field_types,
+        field_indices,
+        operations: meta.operations.clone(),
+    }
 }
 
 /// Run the effect dispatch synthesis pass on the package.
