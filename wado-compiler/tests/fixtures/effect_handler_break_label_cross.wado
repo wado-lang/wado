@@ -1,0 +1,60 @@
+// `break label` crossing a `with E = h do { ... }` body must restore
+// the per-effect dispatch global so the rest of the function observes
+// the outer scope's handler. The break target is a labeled block
+// declared *outside* the `with`, so the jump exits the do-block and
+// the synthesis must splice the restore in front of the break.
+//
+// `helper(early=true)` exits the do-block via the labeled break; with
+// the fix, `Counter::next()` after the labeled block sees the outer
+// handler (returns 1). `helper(early=false)` exits the do-block via
+// fall-through, which already restores. Both paths must produce the
+// same composite result so the trailing `Counter::next()` reflects
+// the outer handler in either case.
+
+use { println, Stdout } from "core:cli";
+
+effect Counter {
+    fn next() -> i32;
+}
+
+struct Outer {}
+struct Inner {}
+
+impl Counter for Outer {
+    fn next(&self) -> i32 {
+        resume 1
+    }
+}
+
+impl Counter for Inner {
+    fn next(&self) -> i32 {
+        resume 2
+    }
+}
+
+fn helper(early: bool) -> i32 {
+    let inner = Inner {};
+    let mut inside = 0;
+    outer_label: {
+        with Counter = &inner do {
+            inside = Counter::next();
+            if early {
+                break outer_label;
+            }
+        }
+    }
+    let after = Counter::next();
+    return after * 10 + inside;
+}
+
+export fn run() with Stdout {
+    let outer = Outer {};
+    with Counter = &outer do {
+        let early = helper(true);
+        let normal = helper(false);
+        println(`early={early}, normal={normal}`);
+    }
+}
+
+__DATA__
+{"stdout_contains": ["early=12, normal=12"]}

@@ -1,0 +1,54 @@
+// Early `return` from inside `with E = h do { ... }` must restore the
+// per-effect dispatch global so the caller sees the outer scope's
+// handler, not the do-block's. Verifies the case described in WEP
+// 2026-04-11 (lines 150–153) by stacking two handlers for the same
+// effect: an outer handler in `run` and an inner handler in `helper`.
+// `helper` early-returns from inside the inner `with`. After helper
+// returns, `Counter::next()` in `run` must dispatch to the OUTER
+// handler.
+//
+// Without the restore-on-early-exit injection, `__effect_Counter`
+// would still point at helper's inner dispatch struct after helper
+// returns, and the second `Counter::next()` in `run` would observe
+// `2` (the inner handler) instead of `1`.
+
+use { println, Stdout } from "core:cli";
+
+effect Counter {
+    fn next() -> i32;
+}
+
+struct Outer {}
+struct Inner {}
+
+impl Counter for Outer {
+    fn next(&self) -> i32 {
+        resume 1
+    }
+}
+
+impl Counter for Inner {
+    fn next(&self) -> i32 {
+        resume 2
+    }
+}
+
+fn helper() -> i32 {
+    let inner = Inner {};
+    with Counter = &inner do {
+        return Counter::next();
+    }
+    return 999;
+}
+
+export fn run() with Stdout {
+    let outer = Outer {};
+    with Counter = &outer do {
+        let h = helper();
+        let after = Counter::next();
+        println(`helper={h}, after={after}`);
+    }
+}
+
+__DATA__
+{"stdout_contains": ["helper=2, after=1"]}

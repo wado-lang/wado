@@ -1,0 +1,51 @@
+// `break label` whose target is *inside* the `with` body must not
+// trigger restore injection — the do-block has not been exited yet,
+// and a premature restore would leave subsequent calls in the body
+// dispatching through the wrong handler.
+//
+// Same structure as the cross-label fixture, but the labeled block
+// lives inside the `with` body. The break exits only the labeled
+// block; the do-block keeps running, so `Counter::next()` after the
+// break must still observe the inner handler (returns 2).
+
+use { println, Stdout } from "core:cli";
+
+effect Counter {
+    fn next() -> i32;
+}
+
+struct Outer {}
+struct Inner {}
+
+impl Counter for Outer {
+    fn next(&self) -> i32 {
+        resume 1
+    }
+}
+
+impl Counter for Inner {
+    fn next(&self) -> i32 {
+        resume 2
+    }
+}
+
+export fn run() with Stdout {
+    let outer = Outer {};
+    let inner = Inner {};
+    with Counter = &outer do {
+        let mut a = 0;
+        let mut b = 0;
+        with Counter = &inner do {
+            inside_label: {
+                a = Counter::next();
+                break inside_label;
+            }
+            b = Counter::next();
+        }
+        let outside = Counter::next();
+        println(`a={a}, b={b}, outside={outside}`);
+    }
+}
+
+__DATA__
+{"stdout_contains": ["a=2, b=2, outside=1"]}
