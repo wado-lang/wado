@@ -1,0 +1,53 @@
+// Phase 4 nested handlers for the same effect: the inner handler
+// shadows the outer one for the duration of the inner `with` block.
+//
+// The dispatch global's `outer` field chains the inner dispatch
+// struct to the outer one; the dispatch wrapper restores `outer`
+// before invoking the closure, so a self-delegation call from the
+// inner handler reaches the outer handler instead of recursing.
+
+use { println, Stdout } from "core:cli";
+
+effect Counter {
+    fn next() -> i32;
+}
+
+struct AddOne {
+    base: i32,
+}
+
+impl Counter for AddOne {
+    fn next(&mut self) -> i32 {
+        self.base += 1;
+        resume self.base
+    }
+}
+
+struct AddTen {
+    base: i32,
+}
+
+impl Counter for AddTen {
+    fn next(&mut self) -> i32 {
+        self.base += 10;
+        resume self.base
+    }
+}
+
+export fn run() with Stdout {
+    let mut outer = AddOne { base: 0 };
+    let mut inner = AddTen { base: 100 };
+    with Counter = &mut outer do {
+        let o1 = Counter::next();           // 1 (outer)
+        with Counter = &mut inner do {
+            let i1 = Counter::next();       // 110 (inner)
+            let i2 = Counter::next();       // 120 (inner)
+            println(`outer1={o1}, inner1={i1}, inner2={i2}`);
+        };
+        let o2 = Counter::next();           // 2 (outer, after inner block exits)
+        println(`outer2={o2}`);
+    }
+}
+
+__DATA__
+{"stdout_contains": ["outer1=1, inner1=110, inner2=120", "outer2=2"]}
