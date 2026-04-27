@@ -26,8 +26,8 @@ use crate::name::ModuleSource;
 use crate::package::Package;
 use crate::synthesis::common::synth_span;
 use crate::tir::{
-    EffectRef, TirBlock, TirEffectOp, TirExpr, TirExprKind, TirField, TirStmt, TirStmtKind,
-    TirStruct, TirTemplatePart, TypeId, TypeTable,
+    EffectRef, TirBlock, TirEffectOp, TirExpr, TirExprKind, TirField, TirGlobal, TirStmt,
+    TirStmtKind, TirStruct, TirTemplatePart, TypeId, TypeTable,
 };
 
 /// Canonical identity of an effect: `(defining_module, name)`.
@@ -254,6 +254,43 @@ fn synthesize_dispatch_struct(
         field_indices,
         operations: meta.operations.clone(),
     }
+}
+
+/// Synthesise the `__effect_<E>` mutable global for one effect.
+///
+/// The slot stores `Option<&__Dispatch_<E>>` and starts at `null`
+/// (meaning: no handler installed). `lower::globals` recognises the
+/// `null` initializer and flags the slot `is_nullable: true` so the
+/// downstream Wasm validator accepts a `(mut (ref null $Dispatch))`
+/// global with a `ref.null` initializer. `lazy_init` stays `false` so
+/// codegen does not narrow `global.get` results with
+/// `ref.as_non_null` — `None` reads must round-trip cleanly.
+#[allow(dead_code)]
+fn synthesize_dispatch_global(
+    project: &mut Package,
+    entry_source: &ModuleSource,
+    plan: &DispatchPlan,
+) {
+    let span = synth_span();
+    let initializer = TirExpr::new(TirExprKind::Null, plan.nullable_ref_type_id, span);
+    let global = TirGlobal {
+        name: plan.global_name.clone(),
+        ty: plan.nullable_ref_type_id,
+        initializer,
+        mutable: true,
+        wado_mutable: true,
+        is_pub: false,
+        module_source: entry_source.clone(),
+        span,
+        is_nullable: false,
+        lazy_init: false,
+        local_types: Vec::new(),
+    };
+    let entry_module = project
+        .tir_modules
+        .get_mut(entry_source)
+        .expect("entry module must exist");
+    entry_module.globals.push(global);
 }
 
 /// Run the effect dispatch synthesis pass on the package.
