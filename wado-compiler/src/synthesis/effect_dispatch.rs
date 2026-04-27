@@ -351,9 +351,16 @@ fn synthesize_dispatch_wrappers(
         .tir_modules
         .get_mut(entry_source)
         .expect("entry module must exist");
+    let type_table = entry_module.type_table.clone();
     for op in &plan.operations {
-        let wrapper =
-            build_dispatch_wrapper_function(entry_source, &effect_name, op, plan, is_wasi);
+        let wrapper = build_dispatch_wrapper_function(
+            entry_source,
+            &effect_name,
+            op,
+            plan,
+            is_wasi,
+            &type_table,
+        );
         entry_module.add_function(wrapper);
     }
 }
@@ -365,6 +372,7 @@ fn build_dispatch_wrapper_function(
     op: &TirEffectOp,
     plan: &DispatchPlan,
     is_wasi: bool,
+    type_table: &std::rc::Rc<std::cell::RefCell<TypeTable>>,
 ) -> TirFunction {
     let span = synth_span();
     let op_name = &op.name;
@@ -594,22 +602,40 @@ fn build_dispatch_wrapper_function(
         // User-defined effect: well-typed programs never reach the wrapper
         // without a handler installed, since effect-check requires every
         // call-site to have a `with E = h do { ... }` in scope. If we get
-        // here anyway, trap.
-        let trap_call = TirExpr::new(
+        // here anyway, panic with a diagnostic identifying the operation
+        // — useful when a future refactor introduces a path that bypasses
+        // effect-check.
+        let string_type_id = type_table
+            .borrow()
+            .find_struct_type("String", &ModuleSource::string())
+            .unwrap_or_else(|| {
+                panic!(
+                    "core:prelude/string.wado String type missing from \
+                     the package type table at effect-dispatch synthesis"
+                )
+            });
+        let message = TirExpr::new(
+            TirExprKind::StringLiteral(format!(
+                "no handler installed for `{effect_name}::{op_name}`"
+            )),
+            string_type_id,
+            span,
+        );
+        let panic_call = TirExpr::new(
             TirExprKind::Call {
                 func: FunctionRef {
-                    module_source: ModuleSource::builtin(),
-                    name: "unreachable".to_string(),
+                    module_source: ModuleSource::internal(),
+                    name: "panic".to_string(),
                     monomorph_info: None,
                     method_info: None,
                 },
                 type_args: vec![],
-                args: vec![],
+                args: vec![CallArg::new(message, false)],
             },
             TypeTable::NEVER,
             span,
         );
-        else_stmts.push(TirStmt::new(TirStmtKind::Expr(trap_call), span));
+        else_stmts.push(TirStmt::new(TirStmtKind::Expr(panic_call), span));
     }
     let else_block = TirBlock::new(else_stmts, span);
 
@@ -1172,25 +1198,46 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
     let mut restore: Vec<TirStmt> = Vec::new();
 
     for binding in bindings {
-        let Some(EffectRef::Concrete {
-            name: effect_name,
-            module_source: effect_module,
-        }) = binding.effect.clone()
-        else {
-            continue;
+        let (effect_name, effect_module) = match binding.effect.clone() {
+            Some(EffectRef::Concrete {
+                name,
+                module_source,
+            }) => (name, module_source),
+            Some(EffectRef::Param { name }) => panic!(
+                "effect-dispatch synthesis received an unresolved \
+                 `EffectRef::Param {{ name: {name:?} }}` in a `with` \
+                 binding — the resolver should have substituted it \
+                 with a concrete effect before this pass runs"
+            ),
+            None => panic!(
+                "effect-dispatch synthesis received a `with` binding \
+                 without a resolved effect — effect-check should have \
+                 rejected this earlier"
+            ),
         };
         let key: EffectKey = (effect_module.clone(), effect_name.clone());
-        let Some(plan) = env.plans.get(&key) else {
-            continue;
-        };
+        let plan = env.plans.get(&key).unwrap_or_else(|| {
+            panic!(
+                "effect-dispatch synthesis: no DispatchPlan for \
+                 effect `{effect_name}` in module {effect_module:?} — \
+                 `identify_active_effects` and \
+                 `synthesize_dispatch_infrastructure` are out of sync"
+            )
+        });
         let handler_type = binding.handler.type_id;
         let handler_underlying = deref_type(&env.type_table.borrow(), handler_type);
         let handler_type_name = env.type_table.borrow().type_name(handler_underlying);
         let impl_key: HandlerImplKey =
-            (handler_type_name, effect_module, effect_name.clone());
-        let Some(impl_info) = env.impl_index.get(&impl_key) else {
-            continue;
-        };
+            (handler_type_name.clone(), effect_module.clone(), effect_name.clone());
+        let impl_info = env.impl_index.get(&impl_key).unwrap_or_else(|| {
+            panic!(
+                "effect-dispatch synthesis: no `impl {effect_name} for \
+                 {handler_type_name}` registered in the impl index for \
+                 effect module {effect_module:?} — the resolver should \
+                 have rejected the `with {effect_name} = h do` binding \
+                 if no matching impl exists"
+            )
+        });
 
         // 1. let __h_<E> = handler_expr;
         let h_local = ctx.alloc_local(handler_type);
