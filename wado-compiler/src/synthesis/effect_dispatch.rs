@@ -1546,6 +1546,380 @@ fn walk_locals_in_stmt(stmt: &TirStmt, f: &mut dyn FnMut(u32)) {
     }
 }
 
+/// Rewrite every effect-operation call site so it routes through a
+/// dispatch wrapper.
+///
+/// Two call shapes are recognised:
+///
+/// 1. **WASI-binding shape**: a `Call` whose `func.name` is
+///    `__cm_binding__<E>_<op>` (any module). Produced by the
+///    `cm_binding` synthesis pass for every used WASI effect call.
+/// 2. **User-effect shape**: a `Call` whose `func.module_source` is
+///    `ModuleSource::Local { path: "<E>" }` and `func.name` is the
+///    bare op name. Produced by the resolver's `local_namespace`
+///    callee for user-defined effect calls (`MyEffect::op(...)`).
+///
+/// Both rewrite to a `Call` to `__effect_dispatch__<E>__<op>` in the
+/// entry module. The function's `args` and the call-expression's
+/// `type_id` are preserved.
+///
+/// Calls inside `__effect_dispatch__*` wrappers and `__cm_binding__*`
+/// adapters are left alone — they belong to the synthesised
+/// infrastructure and rewriting them would either loop forever or
+/// break the WASI fallback path.
+#[allow(dead_code)]
+fn rewrite_call_sites_to_wrappers(
+    project: &mut Package,
+    plans: &IndexMap<EffectKey, DispatchPlan>,
+) {
+    let entry_source = project.entry_module_source.clone();
+
+    // Pre-build O(1) lookup maps.
+    let mut binding_to_wrapper: IndexMap<String, String> = IndexMap::default();
+    let mut user_to_wrapper: IndexMap<(String, String), String> = IndexMap::default();
+    for ((_, effect_name), plan) in plans {
+        for (op_name, wrapper_name) in &plan.wrapper_names {
+            binding_to_wrapper.insert(
+                format!("__cm_binding__{effect_name}_{op_name}"),
+                wrapper_name.clone(),
+            );
+            user_to_wrapper.insert(
+                (effect_name.clone(), op_name.clone()),
+                wrapper_name.clone(),
+            );
+        }
+    }
+
+    for module in project.tir_modules.values_mut() {
+        for func_rc in &module.functions {
+            let mut func = func_rc.borrow_mut();
+            if is_synthesized_effect_infra(&func.name) {
+                continue;
+            }
+            if let Some(body) = &mut func.body {
+                rewrite_calls_in_block(
+                    body,
+                    &binding_to_wrapper,
+                    &user_to_wrapper,
+                    &entry_source,
+                );
+            }
+        }
+        for impl_block in &mut module.impls {
+            for method in &mut impl_block.methods {
+                if is_synthesized_effect_infra(&method.name) {
+                    continue;
+                }
+                if let Some(body) = &mut method.body {
+                    rewrite_calls_in_block(
+                        body,
+                        &binding_to_wrapper,
+                        &user_to_wrapper,
+                        &entry_source,
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[allow(dead_code)]
+fn is_synthesized_effect_infra(name: &str) -> bool {
+    name.starts_with("__effect_dispatch__") || name.starts_with("__cm_binding__")
+}
+
+#[allow(dead_code)]
+fn rewrite_calls_in_block(
+    block: &mut TirBlock,
+    binding_to_wrapper: &IndexMap<String, String>,
+    user_to_wrapper: &IndexMap<(String, String), String>,
+    entry_source: &ModuleSource,
+) {
+    for stmt in &mut block.stmts {
+        rewrite_calls_in_stmt(stmt, binding_to_wrapper, user_to_wrapper, entry_source);
+    }
+}
+
+#[allow(dead_code)]
+fn rewrite_calls_in_stmt(
+    stmt: &mut TirStmt,
+    binding_to_wrapper: &IndexMap<String, String>,
+    user_to_wrapper: &IndexMap<(String, String), String>,
+    entry_source: &ModuleSource,
+) {
+    match &mut stmt.kind {
+        TirStmtKind::Let { value, .. }
+        | TirStmtKind::Expr(value)
+        | TirStmtKind::TaskReturn { value } => {
+            rewrite_calls_in_expr(value, binding_to_wrapper, user_to_wrapper, entry_source);
+        }
+        TirStmtKind::Return { value } | TirStmtKind::Break { value, .. } => {
+            if let Some(v) = value {
+                rewrite_calls_in_expr(v, binding_to_wrapper, user_to_wrapper, entry_source);
+            }
+        }
+        TirStmtKind::Continue => {}
+        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+            rewrite_calls_in_block(body, binding_to_wrapper, user_to_wrapper, entry_source);
+        }
+        TirStmtKind::If {
+            condition,
+            then_block,
+            else_block,
+        } => {
+            rewrite_calls_in_expr(condition, binding_to_wrapper, user_to_wrapper, entry_source);
+            rewrite_calls_in_block(then_block, binding_to_wrapper, user_to_wrapper, entry_source);
+            if let Some(eb) = else_block {
+                rewrite_calls_in_block(eb, binding_to_wrapper, user_to_wrapper, entry_source);
+            }
+        }
+        TirStmtKind::IfLet {
+            scrutinee,
+            then_block,
+            else_block,
+            ..
+        } => {
+            rewrite_calls_in_expr(scrutinee, binding_to_wrapper, user_to_wrapper, entry_source);
+            rewrite_calls_in_block(then_block, binding_to_wrapper, user_to_wrapper, entry_source);
+            if let Some(eb) = else_block {
+                rewrite_calls_in_block(eb, binding_to_wrapper, user_to_wrapper, entry_source);
+            }
+        }
+        TirStmtKind::LetDestructure { value, .. } => {
+            rewrite_calls_in_expr(value, binding_to_wrapper, user_to_wrapper, entry_source);
+        }
+        TirStmtKind::VariadicForOf { iterable, body, .. } => {
+            rewrite_calls_in_expr(iterable, binding_to_wrapper, user_to_wrapper, entry_source);
+            rewrite_calls_in_block(body, binding_to_wrapper, user_to_wrapper, entry_source);
+        }
+    }
+}
+
+#[allow(dead_code)]
+fn rewrite_calls_in_expr(
+    expr: &mut TirExpr,
+    binding_to_wrapper: &IndexMap<String, String>,
+    user_to_wrapper: &IndexMap<(String, String), String>,
+    entry_source: &ModuleSource,
+) {
+    // Recurse into children first.
+    rewrite_call_children(expr, binding_to_wrapper, user_to_wrapper, entry_source);
+
+    // Then check if THIS expression is a Call worth rewriting.
+    if let TirExprKind::Call { func, .. } = &expr.kind {
+        let wrapper_name = match_effect_call(func, binding_to_wrapper, user_to_wrapper);
+        if let Some(name) = wrapper_name
+            && let TirExprKind::Call {
+                args,
+                type_args: _,
+                func: _,
+            } = std::mem::replace(&mut expr.kind, TirExprKind::Unit)
+        {
+            expr.kind = TirExprKind::Call {
+                func: FunctionRef {
+                    module_source: entry_source.clone(),
+                    name,
+                    monomorph_info: None,
+                    method_info: None,
+                },
+                type_args: Vec::new(),
+                args,
+            };
+        }
+    }
+}
+
+#[allow(dead_code)]
+fn match_effect_call(
+    func: &FunctionRef,
+    binding_to_wrapper: &IndexMap<String, String>,
+    user_to_wrapper: &IndexMap<(String, String), String>,
+) -> Option<String> {
+    if let Some(wrapper) = binding_to_wrapper.get(&func.name) {
+        return Some(wrapper.clone());
+    }
+    if let ModuleSource::Local { path } = &func.module_source
+        && let Some(wrapper) = user_to_wrapper.get(&(path.clone(), func.name.clone()))
+    {
+        return Some(wrapper.clone());
+    }
+    None
+}
+
+#[allow(dead_code)]
+fn rewrite_call_children(
+    expr: &mut TirExpr,
+    binding_to_wrapper: &IndexMap<String, String>,
+    user_to_wrapper: &IndexMap<(String, String), String>,
+    entry_source: &ModuleSource,
+) {
+    match &mut expr.kind {
+        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+            rewrite_calls_in_block(block, binding_to_wrapper, user_to_wrapper, entry_source);
+        }
+        TirExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            rewrite_calls_in_expr(condition, binding_to_wrapper, user_to_wrapper, entry_source);
+            rewrite_calls_in_block(then_branch, binding_to_wrapper, user_to_wrapper, entry_source);
+            if let Some(eb) = else_branch {
+                rewrite_calls_in_block(eb, binding_to_wrapper, user_to_wrapper, entry_source);
+            }
+        }
+        TirExprKind::Match { expr, arms } => {
+            rewrite_calls_in_expr(expr, binding_to_wrapper, user_to_wrapper, entry_source);
+            for arm in arms {
+                if let Some(g) = &mut arm.guard {
+                    rewrite_calls_in_expr(g, binding_to_wrapper, user_to_wrapper, entry_source);
+                }
+                rewrite_calls_in_expr(
+                    &mut arm.body,
+                    binding_to_wrapper,
+                    user_to_wrapper,
+                    entry_source,
+                );
+            }
+        }
+        TirExprKind::Switch {
+            scrutinee,
+            arms,
+            default,
+            ..
+        } => {
+            rewrite_calls_in_expr(scrutinee, binding_to_wrapper, user_to_wrapper, entry_source);
+            for arm in arms {
+                rewrite_calls_in_block(arm, binding_to_wrapper, user_to_wrapper, entry_source);
+            }
+            rewrite_calls_in_block(default, binding_to_wrapper, user_to_wrapper, entry_source);
+        }
+        TirExprKind::Call { args, .. } => {
+            for arg in args {
+                rewrite_calls_in_expr(
+                    &mut arg.expr,
+                    binding_to_wrapper,
+                    user_to_wrapper,
+                    entry_source,
+                );
+            }
+        }
+        TirExprKind::IndirectCall { callee, args } => {
+            rewrite_calls_in_expr(callee, binding_to_wrapper, user_to_wrapper, entry_source);
+            for arg in args {
+                rewrite_calls_in_expr(arg, binding_to_wrapper, user_to_wrapper, entry_source);
+            }
+        }
+        TirExprKind::CmRawCall { args, .. } => {
+            for arg in args {
+                rewrite_calls_in_expr(arg, binding_to_wrapper, user_to_wrapper, entry_source);
+            }
+        }
+        TirExprKind::MethodCall { receiver, args, .. } => {
+            rewrite_calls_in_expr(receiver, binding_to_wrapper, user_to_wrapper, entry_source);
+            for arg in args {
+                rewrite_calls_in_expr(
+                    &mut arg.expr,
+                    binding_to_wrapper,
+                    user_to_wrapper,
+                    entry_source,
+                );
+            }
+        }
+        TirExprKind::Binary { left, right, .. } => {
+            rewrite_calls_in_expr(left, binding_to_wrapper, user_to_wrapper, entry_source);
+            rewrite_calls_in_expr(right, binding_to_wrapper, user_to_wrapper, entry_source);
+        }
+        TirExprKind::Unary { expr, .. }
+        | TirExprKind::Cast { expr, .. }
+        | TirExprKind::FieldAccess { expr, .. }
+        | TirExprKind::TupleSpread { expr }
+        | TirExprKind::TupleZip { expr }
+        | TirExprKind::TypePackExpansion {
+            call_expr: expr, ..
+        }
+        | TirExprKind::VariantTag { expr }
+        | TirExprKind::VariantTest { expr, .. }
+        | TirExprKind::VariantPayload { expr, .. }
+        | TirExprKind::ClosureToCanonical { functor: expr, .. } => {
+            rewrite_calls_in_expr(expr, binding_to_wrapper, user_to_wrapper, entry_source);
+        }
+        TirExprKind::Assign { target, value } => {
+            rewrite_calls_in_expr(target, binding_to_wrapper, user_to_wrapper, entry_source);
+            rewrite_calls_in_expr(value, binding_to_wrapper, user_to_wrapper, entry_source);
+        }
+        TirExprKind::GlobalVarSet { value, .. } => {
+            rewrite_calls_in_expr(value, binding_to_wrapper, user_to_wrapper, entry_source);
+        }
+        TirExprKind::Index { expr, index } => {
+            rewrite_calls_in_expr(expr, binding_to_wrapper, user_to_wrapper, entry_source);
+            rewrite_calls_in_expr(index, binding_to_wrapper, user_to_wrapper, entry_source);
+        }
+        TirExprKind::StructLiteral { fields, .. } => {
+            for field in fields {
+                rewrite_calls_in_expr(
+                    &mut field.value,
+                    binding_to_wrapper,
+                    user_to_wrapper,
+                    entry_source,
+                );
+            }
+        }
+        TirExprKind::TupleLiteral { elements } => {
+            for elem in elements {
+                rewrite_calls_in_expr(elem, binding_to_wrapper, user_to_wrapper, entry_source);
+            }
+        }
+        TirExprKind::Closure { body, .. } => {
+            rewrite_calls_in_expr(body, binding_to_wrapper, user_to_wrapper, entry_source);
+        }
+        TirExprKind::VariantConstruct { payload, .. } => {
+            if let Some(p) = payload {
+                rewrite_calls_in_expr(p, binding_to_wrapper, user_to_wrapper, entry_source);
+            }
+        }
+        TirExprKind::Resume { value } => {
+            rewrite_calls_in_expr(value, binding_to_wrapper, user_to_wrapper, entry_source);
+        }
+        TirExprKind::WithHandler { bindings, body, .. } => {
+            for binding in bindings {
+                rewrite_calls_in_expr(
+                    &mut binding.handler,
+                    binding_to_wrapper,
+                    user_to_wrapper,
+                    entry_source,
+                );
+            }
+            rewrite_calls_in_block(body, binding_to_wrapper, user_to_wrapper, entry_source);
+        }
+        TirExprKind::TemplateString { parts } => {
+            for part in parts {
+                if let TirTemplatePart::Interpolation { expr, .. } = part {
+                    rewrite_calls_in_expr(
+                        expr,
+                        binding_to_wrapper,
+                        user_to_wrapper,
+                        entry_source,
+                    );
+                }
+            }
+        }
+        TirExprKind::IntLiteral { .. }
+        | TirExprKind::FloatLiteral { .. }
+        | TirExprKind::BoolLiteral(_)
+        | TirExprKind::CharLiteral(_)
+        | TirExprKind::StringLiteral(_)
+        | TirExprKind::BytesLiteral(_)
+        | TirExprKind::Null
+        | TirExprKind::Unit
+        | TirExprKind::Local { .. }
+        | TirExprKind::FuncRef { .. }
+        | TirExprKind::GlobalVarGet { .. }
+        | TirExprKind::Capture { .. }
+        | TirExprKind::EnumConstruct { .. } => {}
+    }
+}
+
 /// Run the effect dispatch synthesis pass on the package.
 ///
 /// Returns a `Result` so a future implementation that rejects malformed
