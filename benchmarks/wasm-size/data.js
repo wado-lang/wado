@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777286220531,
+  "lastUpdate": 1777288431362,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -16841,6 +16841,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 614203,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c6477918364ef430eb91314e727e0f536e5998f4",
+          "message": "Merge pull request #938 from wado-lang/claude/effect-handlers-phase-4-oH88Q\n\nEffect handlers Phase 4: cross-function dispatch protocol",
+          "timestamp": "2026-04-27T20:08:48+09:00",
+          "tree_id": "e7d1a8329d3ac7f7512ad4e06936634fa8752fcc",
+          "url": "https://github.com/wado-lang/wado/commit/c6477918364ef430eb91314e727e0f536e5998f4"
+        },
+        "date": 1777288431221,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8982,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19030,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 611451,
             "unit": "bytes"
           }
         ]
