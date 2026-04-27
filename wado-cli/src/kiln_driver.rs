@@ -994,6 +994,137 @@ where
     Ok(outcome)
 }
 
+/// Outcome of [`check_pipeline`].
+///
+/// `stale.len()` is non-zero iff at least one invocation produced bytes
+/// that did not match the on-disk source. Each entry is the
+/// project-root-relative path of the divergent file.
+#[derive(Debug, Default)]
+pub struct CheckOutcome {
+    pub checked: Vec<String>,
+    pub stale: Vec<String>,
+    pub missing: Vec<String>,
+    /// Redirect index for the resolver, populated identically to
+    /// [`PipelineOutcome::invocations`] so the downstream compile can
+    /// resolve `use { ... } from "<schema>"` even though `check_pipeline`
+    /// did not write outputs to disk.
+    pub invocations: wado_compiler::kiln::InvocationIndex,
+}
+
+/// Run the Kiln pipeline in `wado check` mode: re-run every invocation
+/// from scratch (ignoring `metadata.json`), byte-compare each output
+/// against the on-disk file, and surface
+/// [`Code::KilnGeneratedStaleOnDisk`] diagnostics for mismatches.
+///
+/// Does not write generator outputs to disk and does not touch
+/// `metadata.json`. Suitable for CI: a clean checkout of a
+/// committed-source project should produce zero divergence.
+pub async fn check_pipeline<H, P>(
+    manifest: &Manifest,
+    manifest_root: &Path,
+    host: &H,
+    provider: &P,
+    inline_invocations: Vec<wado_compiler::kiln::Invocation>,
+) -> Result<CheckOutcome, PipelineError>
+where
+    H: CompilerHost,
+    P: GeneratorProvider,
+{
+    let plan_order =
+        wado_compiler::kiln::build_plan(inline_invocations).map_err(DriverError::Plan)?;
+    let mut planned = PlanOutcome {
+        plan: plan_order,
+        manifest_root: manifest_root.to_path_buf(),
+    };
+    if planned.plan.order.is_empty() {
+        return Ok(CheckOutcome::default());
+    }
+
+    typed_encode_options(manifest, &mut planned.plan.order, provider, host).await;
+
+    let mut outcome = CheckOutcome::default();
+    for invocation in &planned.plan.order {
+        let invocation_name = invocation_id(invocation);
+
+        let component = provider
+            .get_component(&invocation.module)
+            .await
+            .map_err(|source| PipelineError::Provider {
+                invocation: invocation_name.clone(),
+                source,
+            })?;
+        let run = execute_with_mode(
+            invocation,
+            &component,
+            manifest_root,
+            host,
+            ExecuteMode::DryRun,
+        )
+        .await
+        .map_err(|source| PipelineError::Execute {
+            invocation: invocation_name.clone(),
+            source,
+        })?;
+        outcome.checked.push(invocation_name.clone());
+
+        if let Some(entry_path) = run.outputs.iter().find(|o| o.is_entry).map(|o| &o.path) {
+            let decl_file = invocation.decl_site.module.clone();
+            let joined = manifest_root.join(entry_path);
+            let abs = std::fs::canonicalize(&joined).unwrap_or(joined);
+            let uri = path_to_kiln_uri(&abs);
+            outcome
+                .invocations
+                .insert(&decl_file, invocation.from.as_str(), &uri);
+        }
+
+        for output in &run.outputs {
+            let abs = manifest_root.join(&output.path);
+            match std::fs::read(&abs) {
+                Ok(existing) => {
+                    if existing != output.bytes {
+                        emit_stale_on_disk_warning(host, &invocation_name, &output.path);
+                        outcome.stale.push(output.path.clone());
+                    }
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                    emit_missing_on_disk_warning(host, &invocation_name, &output.path);
+                    outcome.missing.push(output.path.clone());
+                }
+                Err(source) => {
+                    return Err(PipelineError::Io { path: abs, source });
+                }
+            }
+        }
+    }
+    Ok(outcome)
+}
+
+fn emit_stale_on_disk_warning<H: CompilerHost>(host: &H, invocation: &str, path: &str) {
+    use wado_compiler::{Code, Diagnostic, Severity};
+    host.emit_diagnostic(Diagnostic {
+        severity: Severity::Warning,
+        code: Code::KilnGeneratedStaleOnDisk,
+        message: format!(
+            "kiln[{invocation}]: {path} differs from generator output; \
+             commit the regenerated file or revert the local edit",
+        ),
+        span: None,
+    });
+}
+
+fn emit_missing_on_disk_warning<H: CompilerHost>(host: &H, invocation: &str, path: &str) {
+    use wado_compiler::{Code, Diagnostic, Severity};
+    host.emit_diagnostic(Diagnostic {
+        severity: Severity::Warning,
+        code: Code::KilnGeneratedStaleOnDisk,
+        message: format!(
+            "kiln[{invocation}]: {path} is missing on disk but the generator produced it; \
+             run `wado compile` to materialize it",
+        ),
+        span: None,
+    });
+}
+
 fn is_unsupported(err: &PipelineError) -> bool {
     matches!(
         err,

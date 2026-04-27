@@ -6,6 +6,7 @@ use lexopt::Arg::{Long, Value};
 enum Cmd {
     Init,
     Compile,
+    Check,
     Run,
     Serve,
     Test,
@@ -21,6 +22,7 @@ impl Cmd {
     const ALL: &[Self] = &[
         Self::Init,
         Self::Compile,
+        Self::Check,
         Self::Run,
         Self::Serve,
         Self::Test,
@@ -36,6 +38,7 @@ impl Cmd {
         match self {
             Self::Init => "init",
             Self::Compile => "compile",
+            Self::Check => "check",
             Self::Run => "run",
             Self::Serve => "serve",
             Self::Test => "test",
@@ -50,7 +53,7 @@ impl Cmd {
 
     const fn args(self) -> &'static str {
         match self {
-            Self::Compile | Self::Run | Self::Serve => "[options] [file.wado]",
+            Self::Compile | Self::Run | Self::Serve | Self::Check => "[options] [file.wado]",
             Self::Test => "[options] [files or dirs...]",
             Self::Format | Self::Doc | Self::Dump => "[options] <file.wado>...",
             Self::Init | Self::Syntax | Self::Lsp => "[options]",
@@ -62,6 +65,7 @@ impl Cmd {
         match self {
             Self::Init => "Create a new wado.toml manifest",
             Self::Compile => "Compile a Wado source file",
+            Self::Check => "Verify Kiln generators match committed source (CI)",
             Self::Run => "Compile and run a Wado CLI program",
             Self::Serve => "Compile and serve a Wado HTTP service",
             Self::Test => "Run tests in Wado source files",
@@ -146,6 +150,11 @@ async fn async_main() {
                         let opts =
                             wado_cli::compile::parse_args(parser).unwrap_or_else(|e| e.exit());
                         wado_cli::compile::run(opts).await;
+                    }
+                    Cmd::Check => {
+                        let opts =
+                            wado_cli::check::parse_args(parser).unwrap_or_else(|e| e.exit());
+                        wado_cli::check::run(opts).await;
                     }
                     Cmd::Run => {
                         let opts = wado_cli::run::parse_args(parser).unwrap_or_else(|e| e.exit());
