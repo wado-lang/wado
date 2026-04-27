@@ -4368,7 +4368,6 @@ fn "wado-compiler/tests/fixtures/display_1.wado/test_template_specifiers_inspect
     let __cond_24: bool;
     let __cond_26: bool;
     let __cond_28: bool;
-    let f32_val: f32;
     let __cond_30: bool;
     let __cond_31: bool;
     let __cond_32: bool;
@@ -5081,11 +5080,10 @@ condition: `{neg_zero:?}` == \"-0.0\"
         });
         unreachable;
     }
-    f32_val = builtin::f32_demote_f64(2.5);
     __cond_30 = "core:prelude/string.wado/String^Eq::eq"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_155 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_156 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_155 };
-        "core:prelude/primitive.wado/f32::inspect_into"(f32_val, __local_156);
+        "core:prelude/primitive.wado/f32::inspect_into"(2.5_f32, __local_156);
         break __tmpl: __local_155;
         unreachable;
     }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("2.5"), used: 3 });

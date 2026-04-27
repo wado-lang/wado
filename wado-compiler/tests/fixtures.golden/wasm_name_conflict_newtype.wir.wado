@@ -159,8 +159,6 @@ global mut global:core::prelude/fpfmt.wado::POW10: ref null "core:prelude//Array
 global mut global:__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/wasm_name_conflict_newtype.wado/run"() with Stdout {
-    let a: f64;
-    let va: f64;
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
     let __local_6: ref "core:prelude/string.wado//String";
@@ -172,15 +170,13 @@ fn "wado-compiler/tests/fixtures/wasm_name_conflict_newtype.wado/run"() with Std
         "wado-compiler/tests/fixtures/wasm_name_conflict_newtype.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
-    a = 3.14;
-    va = a;
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(19), used: 0 };
         "core:prelude/string.wado/String::push"(__local_4, 97);
         "core:prelude/string.wado/String::push"(__local_4, 58);
         "core:prelude/string.wado/String::push"(__local_4, 32);
         __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
-        "core:prelude/primitive.wado/f64::fmt_into"(va, __local_5);
+        "core:prelude/primitive.wado/f64::fmt_into"(3.14, __local_5);
         break __tmpl: __local_4;
         unreachable;
     });
