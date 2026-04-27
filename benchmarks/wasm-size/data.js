@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777288431362,
+  "lastUpdate": 1777294423013,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -16865,6 +16865,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c6477918364ef430eb91314e727e0f536e5998f4"
         },
         "date": 1777288431221,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8982,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19030,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 611451,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0bb9b9f4382082181ca3a961c8e419e0eabc449a",
+          "message": "Merge pull request #940 from wado-lang/claude/effect-handler-continuation-oJukZ\n\neffect-dispatch: restore on early exit from `with` body",
+          "timestamp": "2026-04-27T21:48:43+09:00",
+          "tree_id": "12eb1890ee017a938197dc26a5d131f62eaea9bd",
+          "url": "https://github.com/wado-lang/wado/commit/0bb9b9f4382082181ca3a961c8e419e0eabc449a"
+        },
+        "date": 1777294422717,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
