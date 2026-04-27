@@ -729,6 +729,161 @@ fn nested_const_locals_chain() {
     );
 }
 
+/// Assert that `Cast{Local{0}, target_ty}` folds to
+/// `Const(Int{expected_value, target_prim})` when env binds local 0
+/// to `Const(Int{src_value, src_prim})`. Exercises the Stage 1
+/// env-resolved cast path that the previous regression silently
+/// corrupted.
+fn check_env_cast(
+    src_value: u64,
+    src_prim: PrimitiveType,
+    src_ty: TypeId,
+    target_ty: TypeId,
+    target_prim: PrimitiveType,
+    expected_value: u64,
+) {
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    interp.bind_local(
+        0,
+        Lattice::Const(Value::Int {
+            value: src_value,
+            prim: src_prim,
+        }),
+    );
+    let cast_expr = TirExpr::new(
+        TirExprKind::Cast {
+            expr: Box::new(local_expr(0, src_ty)),
+            target_type: target_ty,
+        },
+        target_ty,
+        Span::default(),
+    );
+    assert_eq!(
+        interp.reduce_to_lattice(&cast_expr),
+        Lattice::Const(Value::Int {
+            value: expected_value,
+            prim: target_prim,
+        }),
+        "{src_prim:?}({src_value:#x}) as {target_prim:?}",
+    );
+}
+
+#[test]
+fn env_cast_int_variants_match_literal_leaf_path() {
+    // Cross-prim cast through an env-resolved Local must match what
+    // the literal-leaf path produces, for every relevant integer
+    // pairing. Each row exercises a different arithmetic intent —
+    // sign-extension, zero-extension, narrowing, and reinterpret —
+    // so a regression in `cast_int` for any prim shows up here
+    // before it reaches an e2e fixture.
+
+    // Sign-extension widening: i8(-1) as i32 → -1 (sign-extended)
+    let neg_one_i64 = i64::from(-1_i8) as u64;
+    check_env_cast(
+        neg_one_i64,
+        PrimitiveType::I8,
+        TypeTable::I8,
+        TypeTable::I32,
+        PrimitiveType::I32,
+        i64::from(-1_i32) as u64,
+    );
+
+    // Sign-extension widening: i8(-1) as i64
+    check_env_cast(
+        neg_one_i64,
+        PrimitiveType::I8,
+        TypeTable::I8,
+        TypeTable::I64,
+        PrimitiveType::I64,
+        -1_i64 as u64,
+    );
+
+    // Zero-extension widening: u8(0xFF) as i32 → 255 (positive)
+    check_env_cast(
+        0xFF,
+        PrimitiveType::U8,
+        TypeTable::U8,
+        TypeTable::I32,
+        PrimitiveType::I32,
+        255,
+    );
+
+    // Zero-extension widening: u8(0xFF) as u32 → 255
+    check_env_cast(
+        0xFF,
+        PrimitiveType::U8,
+        TypeTable::U8,
+        TypeTable::U32,
+        PrimitiveType::U32,
+        255,
+    );
+
+    // Narrowing: i32(0x1234_5678) as i8 → 0x78 (sign-extended → 0x78
+    // since the high bit is clear)
+    check_env_cast(
+        0x1234_5678,
+        PrimitiveType::I32,
+        TypeTable::I32,
+        TypeTable::I8,
+        PrimitiveType::I8,
+        0x78,
+    );
+
+    // Narrowing with sign-flip: i32(0x1234_5680) as i8 → -128 (high
+    // bit of the truncated byte is set, sign-extended)
+    check_env_cast(
+        0x1234_5680,
+        PrimitiveType::I32,
+        TypeTable::I32,
+        TypeTable::I8,
+        PrimitiveType::I8,
+        i64::from(-128_i8) as u64,
+    );
+
+    // Narrowing: i64(0x1_FFFF_FFFF) as i32 → -1 (lower 32 bits =
+    // 0xFFFF_FFFF, sign-extended back to i64)
+    check_env_cast(
+        0x1_FFFF_FFFF,
+        PrimitiveType::I64,
+        TypeTable::I64,
+        TypeTable::I32,
+        PrimitiveType::I32,
+        i64::from(-1_i32) as u64,
+    );
+
+    // Same-width reinterpret: i32(-1) as u32 → 0xFFFF_FFFF
+    check_env_cast(
+        i64::from(-1_i32) as u64,
+        PrimitiveType::I32,
+        TypeTable::I32,
+        TypeTable::U32,
+        PrimitiveType::U32,
+        0xFFFF_FFFF,
+    );
+
+    // Same-width reinterpret: u32(0xFFFF_FFFF) as i32 → -1 (the
+    // case the original regression first surfaced on)
+    check_env_cast(
+        0xFFFF_FFFF,
+        PrimitiveType::U32,
+        TypeTable::U32,
+        TypeTable::I32,
+        PrimitiveType::I32,
+        i64::from(-1_i32) as u64,
+    );
+
+    // Same-width reinterpret 64-bit: i64(-1) as u64
+    check_env_cast(
+        -1_i64 as u64,
+        PrimitiveType::I64,
+        TypeTable::I64,
+        TypeTable::U64,
+        PrimitiveType::U64,
+        u64::MAX,
+    );
+}
+
 #[test]
 fn cast_through_env_local_applies_target_prim() {
     // Regression: previously the `Cast` fallback path returned the
