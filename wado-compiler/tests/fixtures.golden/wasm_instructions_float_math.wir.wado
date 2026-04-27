@@ -264,7 +264,7 @@ fn "wado-compiler/tests/fixtures/wasm_instructions_float_math.wado/run"() with S
         break __tmpl: __local_32;
         unreachable;
     });
-    abs_neg32 = builtin::f32_abs(builtin::f32_demote_f64(-2.5));
+    abs_neg32 = builtin::f32_abs(-2.5_f32);
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_34 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 };
         "core:prelude/string.wado/String::push_str"(__local_34, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("f32_abs(-2.5) = "), used: 16 });
@@ -470,11 +470,11 @@ fn "wado-compiler/tests/fixtures/wasm_instructions_float_math.wado/run"() with S
         break __tmpl: __local_76;
         unreachable;
     });
-    f32_ceil = builtin::f32_ceil(builtin::f32_demote_f64(2.3));
-    f32_floor = builtin::f32_floor(builtin::f32_demote_f64(2.7));
-    f32_sqrt = builtin::f32_sqrt(builtin::f32_demote_f64(4));
-    f32_min = f32.min(builtin::f32_demote_f64(3), builtin::f32_demote_f64(5));
-    f32_max = f32.max(builtin::f32_demote_f64(3), builtin::f32_demote_f64(5));
+    f32_ceil = builtin::f32_ceil(2.3_f32);
+    f32_floor = builtin::f32_floor(2.7_f32);
+    f32_sqrt = builtin::f32_sqrt(4_f32);
+    f32_min = f32.min(3_f32, 5_f32);
+    f32_max = f32.max(3_f32, 5_f32);
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_78 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 };
         "core:prelude/string.wado/String::push_str"(__local_78, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("f32_ceil(2.3) = "), used: 16 });

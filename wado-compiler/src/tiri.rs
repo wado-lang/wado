@@ -23,15 +23,25 @@
 //! - Integer bitwise: `BitAnd`, `BitOr`, `BitXor`, Shl, Shr
 //! - Integer unary: Neg, `BitNot`
 //! - Integer types: i8, i16, i32, i64, u8, u16, u32, u64
-//! - Integer cast: truncation/extension between integer types
 //! - Float arithmetic: Add, Sub, Mul, Div (skipped when result is NaN)
 //! - Float comparison: Eq, `NotEq`, Lt, `LtEq`, Gt, `GtEq`
 //! - Float unary: Neg (via sign-bit flip, safe for all values including NaN)
 //! - Float types: f32, f64
 //! - Boolean logical: And, Or (including identity rules `false || X → X`,
 //!   `true && X → X`, `X || false → X`, `X && true → X`)
-//! - Boolean equality: Eq, `NotEq`
+//! - Boolean equality and ordering: Eq, `NotEq`, Lt, `LtEq`, Gt, `GtEq`
+//!   (`false < true`)
 //! - Boolean unary: Not
+//! - Char comparison: Eq, `NotEq`, Lt, `LtEq`, Gt, `GtEq` (codepoint
+//!   order)
+//! - Casts (`expr as T`):
+//!   - int ↔ int (truncation / sign- or zero-extension)
+//!   - int ↔ float (signed / unsigned conversion; float → int uses
+//!     Wasm `trunc_sat` semantics: NaN ↦ 0, ±∞ saturate to MIN/MAX)
+//!   - f32 ↔ f64 (rounding on demote, exact on promote)
+//!   - bool → int / float (true ↦ 1 / 1.0, false ↦ 0 / 0.0)
+//!   - char → int (codepoint, then truncated to target width)
+//!   - u8 → char (the only int → char form the resolver permits)
 //! - Local variables (Stage 1): immutable `let` bindings whose RHS reduces
 //!   to a constant flow into the env and are read back as that constant
 //!   in their use sites. `let mut` and post-assign locals stay
@@ -150,6 +160,8 @@ pub enum Value {
     Float { value: f64, prim: PrimitiveType },
     /// Boolean value.
     Bool(bool),
+    /// Unicode scalar value (`char`).
+    Char(char),
 }
 
 impl Value {
@@ -180,6 +192,15 @@ impl Value {
         }
     }
 
+    /// Returns the char value, or `None` if not a char.
+    #[must_use]
+    pub fn as_char(&self) -> Option<char> {
+        match self {
+            Self::Char(c) => Some(*c),
+            _ => None,
+        }
+    }
+
     /// Render the value as a TIR-compatible literal repr string.
     #[must_use]
     pub fn format_repr(&self) -> String {
@@ -187,6 +208,7 @@ impl Value {
             Self::Int { value, prim } => format_int_repr(*value, *prim),
             Self::Float { value, .. } => format_float_repr(*value),
             Self::Bool(b) => b.to_string(),
+            Self::Char(c) => format_char_repr(*c),
         }
     }
 }
@@ -552,8 +574,10 @@ impl<'a> Interpreter<'a> {
     fn expr_to_lattice(&self, expr: &TirExpr) -> Lattice {
         match &expr.kind {
             TirExprKind::BoolLiteral(b) => Lattice::Const(Value::Bool(*b)),
+            TirExprKind::CharLiteral(c) => Lattice::Const(Value::Char(*c)),
             TirExprKind::IntLiteral { value, .. } => {
-                let Some(prim) = int_primitive_of(expr.type_id, self.type_table) else {
+                let Some(prim) = prim_of(expr.type_id, self.type_table).filter(|p| is_int_prim(*p))
+                else {
                     return Lattice::Unevaluated;
                 };
                 Lattice::Const(Value::Int {
@@ -666,26 +690,21 @@ impl<'a> Interpreter<'a> {
                 option_to_lattice(eval_unary(*op, v))
             }
             TirExprKind::Cast { expr: inner, .. } => {
-                let Some(target) = int_primitive_of(expr.type_id, self.type_table) else {
+                let Some(target) = prim_of(expr.type_id, self.type_table) else {
                     return Lattice::Unevaluated;
                 };
-                // Resolve the cast input to its raw u64 bit pattern.
-                // Literal leaves carry the bits directly; for any other
-                // node (e.g. a Stage 1 env-resolved `Local`), recover
-                // the bits via the lattice — but only when the lattice
-                // value is itself an integer. Float / Bool / unresolved
-                // cases stay `Unevaluated` so the cast doesn't fabricate
-                // a bogus integer payload.
-                let raw = match &inner.kind {
-                    TirExprKind::IntLiteral { value, .. } => *value,
-                    TirExprKind::CharLiteral(c) => *c as u64,
-                    _ => match self.expr_to_lattice(inner) {
-                        Lattice::Const(Value::Int { value, .. }) => value,
-                        Lattice::Const(_) => return Lattice::Unevaluated,
-                        other => return other,
-                    },
-                };
-                Lattice::Const(cast_int(raw, target))
+                // Resolve the cast input via the lattice; literal leaves
+                // collapse to `Const(_)` directly, env-resolved locals
+                // fall through the same path. `eval_cast` decides which
+                // (source, target) pairs are foldable; unsupported pairs
+                // (e.g. casts targeting i128/v128, or a target the
+                // resolver should already have rejected) return `None`
+                // and surface as `NonConst` rather than fabricating a
+                // bogus payload.
+                match self.expr_to_lattice(inner) {
+                    Lattice::Const(v) => option_to_lattice(eval_cast(v, target)),
+                    other => other,
+                }
             }
             _ => Lattice::Unevaluated,
         }
@@ -780,6 +799,7 @@ fn value_to_expr_kind(v: Value) -> TirExprKind {
             value,
         },
         Value::Bool(b) => TirExprKind::BoolLiteral(b),
+        Value::Char(c) => TirExprKind::CharLiteral(c),
     }
 }
 
@@ -832,6 +852,7 @@ fn rewrite_short_circuit(expr: &mut TirExpr) -> bool {
 fn eval_binary(left: Value, op: TirBinaryOp, right: Value) -> Option<Value> {
     match (left, right) {
         (Value::Bool(l), Value::Bool(r)) => eval_bool_binary(l, op, r),
+        (Value::Char(l), Value::Char(r)) => eval_char_binary(l, op, r),
         (Value::Float { value: l, prim: lp }, Value::Float { value: r, prim: rp }) if lp == rp => {
             eval_float_binary(l, op, r, lp)
         }
@@ -856,7 +877,7 @@ fn eval_unary(op: TirUnaryOp, operand: Value) -> Option<Value> {
                     prim,
                 })
             }
-            Value::Bool(_) => None,
+            Value::Bool(_) | Value::Char(_) => None,
         },
         TirUnaryOp::Not => match operand {
             Value::Bool(b) => Some(Value::Bool(!b)),
@@ -873,11 +894,170 @@ fn eval_unary(op: TirUnaryOp, operand: Value) -> Option<Value> {
     }
 }
 
-/// Cast an integer bit pattern to a target integer primitive.
-fn cast_int(value: u64, target: PrimitiveType) -> Value {
-    Value::Int {
-        value: truncate_int(value, target),
+/// Evaluate an `as` cast at compile time.
+///
+/// Source values are the lattice-resolved [`Value`] of the cast input;
+/// `target` is the destination primitive (resolved from the cast node's
+/// `type_id`). Returns `None` for unsupported pairs — the caller maps
+/// that to [`Lattice::NonConst`] so the runtime cast still happens, no
+/// bogus value gets folded in.
+///
+/// The supported set mirrors what the resolver permits in source:
+///
+/// - `Int` source ↦ Int (already supported), Float, Char (only when
+///   source is `U8` per [`expr.rs`]'s `u8 as char` carve-out).
+/// - `Float` source ↦ Float, Int (saturating, matching Wasm's
+///   `*.trunc_sat_*` semantics — Rust's `as` since 1.45 implements the
+///   same rounding/saturation rules so we forward to it).
+/// - `Bool` source ↦ Int (0/1), Float (0.0/1.0). Bool → Bool is the
+///   identity.
+/// - `Char` source ↦ Int (codepoint, then truncated). Char → Char is the
+///   identity.
+///
+/// 128-bit (`I128`/`U128`) and SIMD (`V128`) targets are reachable here
+/// (they are valid `Primitive` variants) but currently unsupported and
+/// fall through to `None`.
+fn eval_cast(source: Value, target: PrimitiveType) -> Option<Value> {
+    let int_target = is_int_prim(target);
+    let float_target = matches!(target, PrimitiveType::F32 | PrimitiveType::F64);
+    match source {
+        // The source `prim` is irrelevant for int→int because
+        // `truncate_int` operates on the already sign- or zero-extended
+        // u64 representation set up at construction time.
+        Value::Int { value, .. } if int_target => Some(Value::Int {
+            value: truncate_int(value, target),
+            prim: target,
+        }),
+        Value::Int { value, prim } if float_target => Some(int_to_float(value, prim, target)),
+        // Only `u8 as char` is permitted by the resolver; every u8 is a
+        // valid Unicode scalar, so `char::from(u8)` is total.
+        Value::Int {
+            value,
+            prim: PrimitiveType::U8,
+        } if target == PrimitiveType::Char => Some(Value::Char(char::from(value as u8))),
+
+        Value::Float { value, prim } if float_target => Some(float_to_float(value, prim, target)),
+        Value::Float { value, prim } if int_target => Some(float_to_int(value, prim, target)),
+
+        Value::Bool(b) if int_target => Some(Value::Int {
+            value: u64::from(b),
+            prim: target,
+        }),
+        Value::Bool(b) if float_target => Some(Value::Float {
+            value: if b { 1.0 } else { 0.0 },
+            prim: target,
+        }),
+        Value::Bool(b) if target == PrimitiveType::Bool => Some(Value::Bool(b)),
+
+        Value::Char(c) if int_target => Some(Value::Int {
+            value: truncate_int(u64::from(c as u32), target),
+            prim: target,
+        }),
+        Value::Char(c) if target == PrimitiveType::Char => Some(Value::Char(c)),
+
+        _ => None,
+    }
+}
+
+/// True for the eight integer primitives the engine models. 128-bit
+/// (`I128`/`U128`) is intentionally excluded — those types lower to
+/// stdlib calls in source, not a `Cast` node tiri can fold.
+fn is_int_prim(p: PrimitiveType) -> bool {
+    matches!(
+        p,
+        PrimitiveType::I8
+            | PrimitiveType::I16
+            | PrimitiveType::I32
+            | PrimitiveType::I64
+            | PrimitiveType::U8
+            | PrimitiveType::U16
+            | PrimitiveType::U32
+            | PrimitiveType::U64,
+    )
+}
+
+/// Convert an integer (held as the sign-extended u64 bit pattern of
+/// `prim`) into a float of `target` width. Signed widths are routed
+/// through `i64` so the negative range survives; unsigned widths use
+/// `u64` directly. F32 results are widened back to f64 so the engine's
+/// canonical [`Value::Float`] repr is preserved.
+fn int_to_float(value: u64, prim: PrimitiveType, target: PrimitiveType) -> Value {
+    let f = if is_signed_int(prim) {
+        // `truncate_int` already sign-extended `value` into the i64 range
+        // for I8/I16/I32, and an I64 value's u64 bits round-trip through
+        // `as i64 as f64`.
+        match target {
+            PrimitiveType::F32 => f64::from((value as i64) as f32),
+            _ => (value as i64) as f64,
+        }
+    } else {
+        match target {
+            PrimitiveType::F32 => f64::from(value as f32),
+            _ => value as f64,
+        }
+    };
+    Value::Float {
+        value: f,
         prim: target,
+    }
+}
+
+/// Float ↔ float conversion. Widening (f32 → f64) is a no-op on the
+/// stored f64 since every f32 is exactly representable; narrowing
+/// (f64 → f32) routes through `as f32` to apply the rounding step,
+/// then re-widens to f64 for storage. Same-width casts are the identity.
+fn float_to_float(value: f64, prim: PrimitiveType, target: PrimitiveType) -> Value {
+    let v = match (prim, target) {
+        (PrimitiveType::F64, PrimitiveType::F32) => f64::from(value as f32),
+        (PrimitiveType::F32 | PrimitiveType::F64, PrimitiveType::F64)
+        | (PrimitiveType::F32, PrimitiveType::F32) => value,
+        _ => panic!("float_to_float: non-float prim ({prim:?} → {target:?})"),
+    };
+    Value::Float {
+        value: v,
+        prim: target,
+    }
+}
+
+/// Float → integer with Wasm `trunc_sat` semantics: NaN ↦ 0, ±∞ saturate
+/// to the target's MIN/MAX, finite values truncate toward zero with
+/// saturation. Rust's `as` since 1.45 matches this exactly, so we
+/// dispatch through it for the source/target widths that map directly.
+///
+/// Caller guarantees `target` is one of the i8..u64 primitives (the
+/// dispatch in [`eval_cast`] enforces this); panics otherwise to flag
+/// a bug rather than fabricate a zero.
+fn float_to_int(value: f64, prim: PrimitiveType, target: PrimitiveType) -> Value {
+    // For F32 sources the stored f64 is bit-equivalent to the original
+    // f32, but the truncation must be performed at f32 precision to
+    // match the runtime cast — large magnitudes saturate sooner. Cast
+    // back through f32 first when needed; otherwise the f64 path is a
+    // no-op widening and the same code computes the answer.
+    let raw = match prim {
+        PrimitiveType::F32 => trunc_sat_to_int(f64::from(value as f32), target),
+        _ => trunc_sat_to_int(value, target),
+    };
+    Value::Int {
+        value: truncate_int(raw, target),
+        prim: target,
+    }
+}
+
+/// Saturating float → int conversion, dispatched by target width.
+/// Operates on f64 since every f32 fits exactly; the caller is
+/// responsible for narrowing to f32 precision first when the source
+/// type was F32.
+fn trunc_sat_to_int(value: f64, target: PrimitiveType) -> u64 {
+    match target {
+        PrimitiveType::I8 => i64::from(value as i8) as u64,
+        PrimitiveType::I16 => i64::from(value as i16) as u64,
+        PrimitiveType::I32 => i64::from(value as i32) as u64,
+        PrimitiveType::I64 => value as i64 as u64,
+        PrimitiveType::U8 => u64::from(value as u8),
+        PrimitiveType::U16 => u64::from(value as u16),
+        PrimitiveType::U32 => u64::from(value as u32),
+        PrimitiveType::U64 => value as u64,
+        _ => panic!("trunc_sat_to_int: non-integer target {target:?}"),
     }
 }
 
@@ -887,6 +1067,27 @@ fn eval_bool_binary(l: bool, op: TirBinaryOp, r: bool) -> Option<Value> {
         TirBinaryOp::Or => Some(Value::Bool(l || r)),
         TirBinaryOp::Eq => Some(Value::Bool(l == r)),
         TirBinaryOp::NotEq => Some(Value::Bool(l != r)),
+        // bool implements Ord with `false < true`. Spelled with `&&`
+        // rather than `<` to satisfy clippy's `bool_comparison` lint
+        // without tripping `needless_bitwise_bool`.
+        TirBinaryOp::Lt => Some(Value::Bool(!l && r)),
+        TirBinaryOp::LtEq => Some(Value::Bool(l <= r)),
+        TirBinaryOp::Gt => Some(Value::Bool(l && !r)),
+        TirBinaryOp::GtEq => Some(Value::Bool(l >= r)),
+        _ => None,
+    }
+}
+
+/// `char` comparisons. char implements `Eq` and `Ord` (codepoint
+/// order); arithmetic / bitwise ops are not defined.
+fn eval_char_binary(l: char, op: TirBinaryOp, r: char) -> Option<Value> {
+    match op {
+        TirBinaryOp::Eq => Some(Value::Bool(l == r)),
+        TirBinaryOp::NotEq => Some(Value::Bool(l != r)),
+        TirBinaryOp::Lt => Some(Value::Bool(l < r)),
+        TirBinaryOp::LtEq => Some(Value::Bool(l <= r)),
+        TirBinaryOp::Gt => Some(Value::Bool(l > r)),
+        TirBinaryOp::GtEq => Some(Value::Bool(l >= r)),
         _ => None,
     }
 }
@@ -1156,18 +1357,13 @@ fn is_f32_type(type_id: TypeId, type_table: &TypeTable) -> bool {
     )
 }
 
-fn int_primitive_of(type_id: TypeId, type_table: &TypeTable) -> Option<PrimitiveType> {
+/// Resolve any primitive type from a [`TypeId`]. Used by the cast path
+/// where the target may be int / float / bool / char (i128/u128/v128
+/// are returned but [`eval_cast`] declines to fold them) and by
+/// `IntLiteral` lattice resolution after a [`is_int_prim`] filter.
+fn prim_of(type_id: TypeId, type_table: &TypeTable) -> Option<PrimitiveType> {
     match type_table.get(type_id) {
-        ResolvedType::Primitive(
-            p @ (PrimitiveType::I8
-            | PrimitiveType::I16
-            | PrimitiveType::I32
-            | PrimitiveType::I64
-            | PrimitiveType::U8
-            | PrimitiveType::U16
-            | PrimitiveType::U32
-            | PrimitiveType::U64),
-        ) => Some(*p),
+        ResolvedType::Primitive(p) => Some(*p),
         _ => None,
     }
 }
@@ -1196,6 +1392,23 @@ pub(crate) fn format_int_repr(value: u64, prim: PrimitiveType) -> String {
         (value as i64).to_string()
     } else {
         value.to_string()
+    }
+}
+
+/// Render a `char` as a Wado-friendly literal repr (`'A'`, `'\n'`,
+/// `'\u{1F600}'`, …). Used when re-emitting a folded `char` value as a
+/// `TirExprKind::CharLiteral`.
+#[must_use]
+pub(crate) fn format_char_repr(c: char) -> String {
+    match c {
+        '\\' => "'\\\\'".to_string(),
+        '\'' => "'\\''".to_string(),
+        '\n' => "'\\n'".to_string(),
+        '\r' => "'\\r'".to_string(),
+        '\t' => "'\\t'".to_string(),
+        '\0' => "'\\0'".to_string(),
+        c if c.is_ascii_graphic() || c == ' ' => format!("'{c}'"),
+        c => format!("'\\u{{{:X}}}'", c as u32),
     }
 }
 

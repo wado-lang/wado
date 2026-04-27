@@ -266,7 +266,6 @@ fn "wado-compiler/tests/fixtures/index_assign_types.wado/run"() with Stdout {
     let __local_19: ref "core:prelude/format.wado//Formatter";
     let __local_30: ref "core:prelude/types.wado//Box<i32>";
     let __local_46: ref "core:prelude/types.wado//Box<i64>";
-    let value: f32;
     let __local_62: ref "core:prelude/types.wado//Box<f32>";
     let __local_76: ref "core:prelude/types.wado//Box<f64>";
     let __local_90: ref "core:prelude/types.wado//Box<bool>";
@@ -338,16 +337,15 @@ fn "wado-compiler/tests/fixtures/index_assign_types.wado/run"() with Stdout {
         unreachable;
     });
     arr_f32 = __seq_lit: block -> ref "core:prelude//Array<f32>" {
-        __local_4 = struct.new "core:prelude//Array<f32>" { repr: array.new_fixed<f32>(builtin::f32_demote_f64(0)), used: 1 };
+        __local_4 = struct.new "core:prelude//Array<f32>" { repr: array.new_fixed<f32>(0_f32), used: 1 };
         break __seq_lit: __local_4;
         unreachable;
     };
-    value = builtin::f32_demote_f64(3.14);
     if 0 >= arr_f32.used {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }
-    builtin::array_set<f32>(arr_f32.repr, 0, value);
+    builtin::array_set<f32>(arr_f32.repr, 0, 3.14_f32);
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_14 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
         "core:prelude/string.wado/String::push"(__local_14, 102);

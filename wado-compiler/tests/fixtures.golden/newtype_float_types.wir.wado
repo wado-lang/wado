@@ -63,17 +63,9 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 fn "wado-compiler/tests/fixtures/newtype_float_types.wado/run"() with Stdout {
-    let deg_as_rad: f64;
-    let deg_f64: f64;
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("f64 newtype arithmetic works"), used: 28 });
-    deg_as_rad = 180;
-    if deg_as_rad > 0 {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("f64 newtype cast works"), used: 22 });
-    }
-    deg_f64 = 180;
-    if deg_f64 > 90 {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("newtype to f64 cast works"), used: 25 });
-    }
+    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("f64 newtype cast works"), used: 22 });
+    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("newtype to f64 cast works"), used: 25 });
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("chained f64 newtype works"), used: 25 });
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("newtype comparison works"), used: 24 });
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("float newtype tests passed"), used: 26 });
@@ -123,13 +115,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     __for_1: block {
         i = 0;
         block {
-            l4: loop {
+            l2: loop {
                 if i >= len {
                     break __for_1;
                 }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l4;
+                continue l2;
             };
         };
     };

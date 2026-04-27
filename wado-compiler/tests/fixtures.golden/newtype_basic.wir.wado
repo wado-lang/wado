@@ -155,9 +155,6 @@ global mut global:core::prelude/fpfmt.wado::POW10: ref null "core:prelude//Array
 global mut global:__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/newtype_basic.wado/run"() with Stdout {
-    let raw: f64;
-    let from_raw: f64;
-    let km_from_m: f64;
     let __local_7: ref "core:prelude/string.wado//String";
     let __local_8: ref "core:prelude/format.wado//Formatter";
     let __local_9: ref "core:prelude/string.wado//String";
@@ -169,8 +166,10 @@ fn "wado-compiler/tests/fixtures/newtype_basic.wado/run"() with Stdout {
     let __local_17: ref "core:prelude/types.wado//Box<f64>";
     let __local_20: ref "core:prelude/format.wado//Formatter";
     let __local_24: ref "core:prelude/string.wado//String";
+    let __local_31: ref "core:prelude/types.wado//Box<f64>";
     let __local_34: ref "core:prelude/format.wado//Formatter";
     let __local_38: ref "core:prelude/string.wado//String";
+    let __local_41: ref "core:prelude/types.wado//Box<f64>";
     let __local_44: ref "core:prelude/format.wado//Formatter";
     let __local_48: ref "core:prelude/string.wado//String";
     __inline___initialize_modules_0: block {
@@ -192,7 +191,6 @@ fn "wado-compiler/tests/fixtures/newtype_basic.wado/run"() with Stdout {
         break __tmpl: __local_7;
         unreachable;
     });
-    raw = 1000;
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_9 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
         "core:prelude/string.wado/String::push"(__local_9, 114);
@@ -201,29 +199,29 @@ fn "wado-compiler/tests/fixtures/newtype_basic.wado/run"() with Stdout {
         "core:prelude/string.wado/String::push"(__local_9, 58);
         "core:prelude/string.wado/String::push"(__local_9, 32);
         __local_10 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_9 };
-        "core:prelude/primitive.wado/f64::fmt_into"(raw, __local_10);
+        "core:prelude/primitive.wado/f64::fmt_into"(1000, __local_10);
         break __tmpl: __local_9;
         unreachable;
     });
-    from_raw = 100;
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_11 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(26), used: 0 };
         "core:prelude/string.wado/String::push_str"(__local_11, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("from_raw: "), used: 10 });
         __local_12 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_11 };
+        __local_31 = struct.new "core:prelude/types.wado//Box<f64>" { value: 100 };
         __local_34 = __local_12;
-        "core:prelude/primitive.wado/f64::inspect_into"(from_raw, __local_34);
+        "core:prelude/primitive.wado/f64::inspect_into"(100, __local_34);
         __local_38 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" as Meters"), used: 10 };
         "core:prelude/string.wado/String::push_str"(__local_34.buf, __local_38);
         break __tmpl: __local_11;
         unreachable;
     });
-    km_from_m = 1000 / 1000;
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_13 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(27), used: 0 };
         "core:prelude/string.wado/String::push_str"(__local_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("km_from_m: "), used: 11 });
         __local_14 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_13 };
+        __local_41 = struct.new "core:prelude/types.wado//Box<f64>" { value: 1 };
         __local_44 = __local_14;
-        "core:prelude/primitive.wado/f64::inspect_into"(km_from_m, __local_44);
+        "core:prelude/primitive.wado/f64::inspect_into"(1, __local_44);
         __local_48 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" as Kilometers"), used: 14 };
         "core:prelude/string.wado/String::push_str"(__local_44.buf, __local_48);
         break __tmpl: __local_13;

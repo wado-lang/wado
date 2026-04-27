@@ -15,6 +15,25 @@ use wado_compiler::tir::{
 };
 use wado_compiler::tiri::{Interpreter, Lattice, Value};
 
+fn char_lit(c: char) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::CharLiteral(c),
+        TypeTable::CHAR,
+        Span::default(),
+    )
+}
+
+fn cast_expr(inner: TirExpr, target_ty: TypeId) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::Cast {
+            expr: Box::new(inner),
+            target_type: target_ty,
+        },
+        target_ty,
+        Span::default(),
+    )
+}
+
 fn int_lit(value: u64, type_id: TypeId, repr: &str) -> TirExpr {
     TirExpr::new(
         TirExprKind::IntLiteral {
@@ -1323,4 +1342,554 @@ fn reduce_local_block_leaves_nonconst_if_alone() {
     assert!(!interp.reduce_local_block(&mut block));
     assert_eq!(block.stmts.len(), 1);
     assert!(matches!(block.stmts[0].kind, TirStmtKind::If { .. }));
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Cast — bool / char / int ↔ float
+// ──────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn cast_bool_true_to_i32_is_one() {
+    let e = cast_expr(bool_lit(true), TypeTable::I32);
+    assert_eq!(
+        eval(&e),
+        Some(Value::Int {
+            value: 1,
+            prim: PrimitiveType::I32
+        })
+    );
+}
+
+#[test]
+fn cast_bool_false_to_i32_is_zero() {
+    let e = cast_expr(bool_lit(false), TypeTable::I32);
+    assert_eq!(
+        eval(&e),
+        Some(Value::Int {
+            value: 0,
+            prim: PrimitiveType::I32
+        })
+    );
+}
+
+#[test]
+fn cast_bool_to_i64_zero_extends() {
+    let e = cast_expr(bool_lit(true), TypeTable::I64);
+    assert_eq!(
+        eval(&e),
+        Some(Value::Int {
+            value: 1,
+            prim: PrimitiveType::I64
+        })
+    );
+}
+
+#[test]
+fn cast_bool_to_u8_is_one() {
+    let e = cast_expr(bool_lit(true), TypeTable::U8);
+    assert_eq!(
+        eval(&e),
+        Some(Value::Int {
+            value: 1,
+            prim: PrimitiveType::U8
+        })
+    );
+}
+
+#[test]
+fn cast_bool_to_f64_is_one_point_zero() {
+    let e = cast_expr(bool_lit(true), TypeTable::F64);
+    assert_eq!(
+        eval(&e),
+        Some(Value::Float {
+            value: 1.0,
+            prim: PrimitiveType::F64
+        })
+    );
+}
+
+#[test]
+fn cast_bool_to_f32_is_zero_point_zero() {
+    let e = cast_expr(bool_lit(false), TypeTable::F32);
+    assert_eq!(
+        eval(&e),
+        Some(Value::Float {
+            value: 0.0,
+            prim: PrimitiveType::F32
+        })
+    );
+}
+
+#[test]
+fn cast_char_to_i32_is_codepoint() {
+    let e = cast_expr(char_lit('A'), TypeTable::I32);
+    assert_eq!(
+        eval(&e),
+        Some(Value::Int {
+            value: 65,
+            prim: PrimitiveType::I32
+        })
+    );
+}
+
+#[test]
+fn cast_char_emoji_to_i32_is_codepoint() {
+    let e = cast_expr(char_lit('😀'), TypeTable::I32);
+    assert_eq!(
+        eval(&e),
+        Some(Value::Int {
+            value: 0x1F600,
+            prim: PrimitiveType::I32
+        })
+    );
+}
+
+#[test]
+fn cast_char_to_u32_is_codepoint() {
+    let e = cast_expr(char_lit('A'), TypeTable::U32);
+    assert_eq!(
+        eval(&e),
+        Some(Value::Int {
+            value: 65,
+            prim: PrimitiveType::U32
+        })
+    );
+}
+
+#[test]
+fn cast_char_to_u8_truncates() {
+    // U+0141 (Ł) — codepoint 0x141; low byte is 0x41.
+    let e = cast_expr(char_lit('Ł'), TypeTable::U8);
+    assert_eq!(
+        eval(&e),
+        Some(Value::Int {
+            value: 0x41,
+            prim: PrimitiveType::U8
+        })
+    );
+}
+
+#[test]
+fn cast_u8_to_char_succeeds() {
+    let e = cast_expr(int_lit(65, TypeTable::U8, "65"), TypeTable::CHAR);
+    assert_eq!(eval(&e), Some(Value::Char('A')));
+}
+
+#[test]
+fn cast_u8_max_to_char_is_y_with_diaeresis() {
+    let e = cast_expr(int_lit(255, TypeTable::U8, "255"), TypeTable::CHAR);
+    assert_eq!(eval(&e), Some(Value::Char('\u{FF}')));
+}
+
+#[test]
+fn cast_i32_to_f64_signed_convert() {
+    let e = cast_expr(
+        int_lit((-42_i32) as u64, TypeTable::I32, "-42"),
+        TypeTable::F64,
+    );
+    assert_eq!(
+        eval(&e),
+        Some(Value::Float {
+            value: -42.0,
+            prim: PrimitiveType::F64
+        })
+    );
+}
+
+#[test]
+fn cast_u32_large_to_f64_unsigned_convert() {
+    // 3_000_000_000 is > i32::MAX so a signed conversion would yield a
+    // negative number — this checks the unsigned path.
+    let e = cast_expr(
+        int_lit(3_000_000_000, TypeTable::U32, "3000000000"),
+        TypeTable::F64,
+    );
+    assert_eq!(
+        eval(&e),
+        Some(Value::Float {
+            value: 3_000_000_000.0,
+            prim: PrimitiveType::F64
+        })
+    );
+}
+
+#[test]
+fn cast_u64_huge_to_f64_unsigned_convert() {
+    let e = cast_expr(
+        int_lit(
+            10_000_000_000_000_000_000,
+            TypeTable::U64,
+            "10000000000000000000",
+        ),
+        TypeTable::F64,
+    );
+    assert_eq!(
+        eval(&e),
+        Some(Value::Float {
+            value: 10_000_000_000_000_000_000.0,
+            prim: PrimitiveType::F64
+        })
+    );
+}
+
+#[test]
+fn cast_i32_to_f32_signed_convert() {
+    let e = cast_expr(int_lit(42, TypeTable::I32, "42"), TypeTable::F32);
+    assert_eq!(
+        eval(&e),
+        Some(Value::Float {
+            value: 42.0,
+            prim: PrimitiveType::F32
+        })
+    );
+}
+
+#[test]
+fn cast_i8_negative_to_f64_preserves_sign() {
+    // -5 as i8 has bit pattern 0xFB (sign-extended to 0xFFFF_FFFF_FFFF_FFFB).
+    let e = cast_expr(
+        int_lit(i64::from(-5_i8) as u64, TypeTable::I8, "-5"),
+        TypeTable::F64,
+    );
+    assert_eq!(
+        eval(&e),
+        Some(Value::Float {
+            value: -5.0,
+            prim: PrimitiveType::F64
+        })
+    );
+}
+
+#[test]
+fn cast_f64_to_i32_truncates_toward_zero() {
+    let e = cast_expr(float_lit(2.7, TypeTable::F64, "2.7"), TypeTable::I32);
+    assert_eq!(
+        eval(&e),
+        Some(Value::Int {
+            value: 2,
+            prim: PrimitiveType::I32
+        })
+    );
+}
+
+#[test]
+fn cast_f64_negative_to_i32_truncates_toward_zero() {
+    let e = cast_expr(float_lit(-7.9, TypeTable::F64, "-7.9"), TypeTable::I32);
+    assert_eq!(
+        eval(&e),
+        Some(Value::Int {
+            value: (-7_i32) as u64,
+            prim: PrimitiveType::I32
+        })
+    );
+}
+
+#[test]
+fn cast_f64_to_u32_unsigned_trunc() {
+    let e = cast_expr(
+        float_lit(3_000_000_000.0, TypeTable::F64, "3000000000.0"),
+        TypeTable::U32,
+    );
+    assert_eq!(
+        eval(&e),
+        Some(Value::Int {
+            value: 3_000_000_000,
+            prim: PrimitiveType::U32
+        })
+    );
+}
+
+#[test]
+fn cast_f64_nan_to_i32_is_zero() {
+    // Wasm `i32.trunc_sat_f64_s` says NaN → 0. Rust's `as` matches.
+    let e = cast_expr(float_lit(f64::NAN, TypeTable::F64, "nan"), TypeTable::I32);
+    assert_eq!(
+        eval(&e),
+        Some(Value::Int {
+            value: 0,
+            prim: PrimitiveType::I32
+        })
+    );
+}
+
+#[test]
+fn cast_f64_huge_to_i32_saturates_to_max() {
+    let e = cast_expr(float_lit(1e30, TypeTable::F64, "1e30"), TypeTable::I32);
+    assert_eq!(
+        eval(&e),
+        Some(Value::Int {
+            value: u64::from(i32::MAX as u32),
+            prim: PrimitiveType::I32
+        })
+    );
+}
+
+#[test]
+fn cast_f64_neg_huge_to_i32_saturates_to_min() {
+    let e = cast_expr(float_lit(-1e30, TypeTable::F64, "-1e30"), TypeTable::I32);
+    assert_eq!(
+        eval(&e),
+        Some(Value::Int {
+            value: i64::from(i32::MIN) as u64,
+            prim: PrimitiveType::I32,
+        })
+    );
+}
+
+#[test]
+fn cast_f32_to_f64_promotes_exactly() {
+    let e = cast_expr(float_lit(1.5, TypeTable::F32, "1.5"), TypeTable::F64);
+    assert_eq!(
+        eval(&e),
+        Some(Value::Float {
+            value: 1.5,
+            prim: PrimitiveType::F64
+        })
+    );
+}
+
+#[test]
+fn cast_f64_to_f32_rounds() {
+    // 0.1 (f64) is not exactly representable in f32, so the cast
+    // through f32 produces a different bit pattern than the original
+    // f64 — that's the rounding step we want to observe.
+    let e = cast_expr(float_lit(0.1, TypeTable::F64, "0.1"), TypeTable::F32);
+    let v = eval(&e).expect("expected reduction");
+    match v {
+        Value::Float { value, prim } => {
+            assert_eq!(prim, PrimitiveType::F32);
+            assert_eq!(
+                value,
+                f64::from(0.1_f32),
+                "0.1 rounded to f32, then widened"
+            );
+            assert_ne!(value, 0.1_f64, "rounding step must change the bits");
+        }
+        other => panic!("expected float, got {other:?}"),
+    }
+}
+
+#[test]
+fn cast_f32_to_i32_uses_f32_precision_for_truncation() {
+    let e = cast_expr(float_lit(1000.0, TypeTable::F32, "1000.0"), TypeTable::I32);
+    assert_eq!(
+        eval(&e),
+        Some(Value::Int {
+            value: 1000,
+            prim: PrimitiveType::I32
+        })
+    );
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Bool ordering / Char comparisons
+// ──────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn bool_lt_false_lt_true_is_true() {
+    let e = binary(
+        TirBinaryOp::Lt,
+        bool_lit(false),
+        bool_lit(true),
+        TypeTable::BOOL,
+    );
+    expect_bool(&e, true);
+}
+
+#[test]
+fn bool_lt_true_lt_false_is_false() {
+    let e = binary(
+        TirBinaryOp::Lt,
+        bool_lit(true),
+        bool_lit(false),
+        TypeTable::BOOL,
+    );
+    expect_bool(&e, false);
+}
+
+#[test]
+fn bool_lt_eq_reflexive() {
+    let e = binary(
+        TirBinaryOp::LtEq,
+        bool_lit(true),
+        bool_lit(true),
+        TypeTable::BOOL,
+    );
+    expect_bool(&e, true);
+}
+
+#[test]
+fn bool_gt() {
+    let e = binary(
+        TirBinaryOp::Gt,
+        bool_lit(true),
+        bool_lit(false),
+        TypeTable::BOOL,
+    );
+    expect_bool(&e, true);
+}
+
+#[test]
+fn bool_gt_eq_reflexive() {
+    let e = binary(
+        TirBinaryOp::GtEq,
+        bool_lit(false),
+        bool_lit(false),
+        TypeTable::BOOL,
+    );
+    expect_bool(&e, true);
+}
+
+#[test]
+fn char_eq_equal_chars_is_true() {
+    let e = binary(
+        TirBinaryOp::Eq,
+        char_lit('A'),
+        char_lit('A'),
+        TypeTable::BOOL,
+    );
+    expect_bool(&e, true);
+}
+
+#[test]
+fn char_eq_different_chars_is_false() {
+    let e = binary(
+        TirBinaryOp::Eq,
+        char_lit('A'),
+        char_lit('B'),
+        TypeTable::BOOL,
+    );
+    expect_bool(&e, false);
+}
+
+#[test]
+fn char_not_eq() {
+    let e = binary(
+        TirBinaryOp::NotEq,
+        char_lit('A'),
+        char_lit('B'),
+        TypeTable::BOOL,
+    );
+    expect_bool(&e, true);
+}
+
+#[test]
+fn char_lt_is_codepoint_order() {
+    let e = binary(
+        TirBinaryOp::Lt,
+        char_lit('A'),
+        char_lit('B'),
+        TypeTable::BOOL,
+    );
+    expect_bool(&e, true);
+}
+
+#[test]
+fn char_gt() {
+    let e = binary(
+        TirBinaryOp::Gt,
+        char_lit('z'),
+        char_lit('a'),
+        TypeTable::BOOL,
+    );
+    expect_bool(&e, true);
+}
+
+#[test]
+fn char_lt_eq_reflexive() {
+    let e = binary(
+        TirBinaryOp::LtEq,
+        char_lit('m'),
+        char_lit('m'),
+        TypeTable::BOOL,
+    );
+    expect_bool(&e, true);
+}
+
+#[test]
+fn char_unicode_lt() {
+    let e = binary(
+        TirBinaryOp::Lt,
+        char_lit('a'),
+        char_lit('日'),
+        TypeTable::BOOL,
+    );
+    expect_bool(&e, true);
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// CharLiteral lattice + arithmetic-on-char rejection
+// ──────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn char_literal_reduces_to_const() {
+    assert_eq!(eval(&char_lit('A')), Some(Value::Char('A')));
+}
+
+#[test]
+fn char_arithmetic_is_unreducible() {
+    // char does not implement Add — the resolver rejects it, but if a
+    // synthesized node ever reaches tiri it must not fold.
+    let e = binary(
+        TirBinaryOp::Add,
+        char_lit('A'),
+        char_lit('B'),
+        TypeTable::CHAR,
+    );
+    assert_eq!(eval(&e), None);
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Cast through env-resolved Local for non-int sources
+// ──────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn cast_bool_to_int_through_env_local() {
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    interp.bind_local(0, Lattice::Const(Value::Bool(true)));
+    let e = cast_expr(local_expr(0, TypeTable::BOOL), TypeTable::I32);
+    assert_eq!(
+        interp.reduce_to_lattice(&e),
+        Lattice::Const(Value::Int {
+            value: 1,
+            prim: PrimitiveType::I32
+        })
+    );
+}
+
+#[test]
+fn cast_char_to_int_through_env_local() {
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    interp.bind_local(0, Lattice::Const(Value::Char('A')));
+    let e = cast_expr(local_expr(0, TypeTable::CHAR), TypeTable::I32);
+    assert_eq!(
+        interp.reduce_to_lattice(&e),
+        Lattice::Const(Value::Int {
+            value: 65,
+            prim: PrimitiveType::I32
+        })
+    );
+}
+
+#[test]
+fn cast_int_to_float_through_env_local() {
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    interp.bind_local(
+        0,
+        Lattice::Const(Value::Int {
+            value: 42,
+            prim: PrimitiveType::I32,
+        }),
+    );
+    let e = cast_expr(local_expr(0, TypeTable::I32), TypeTable::F64);
+    assert_eq!(
+        interp.reduce_to_lattice(&e),
+        Lattice::Const(Value::Float {
+            value: 42.0,
+            prim: PrimitiveType::F64
+        })
+    );
 }
