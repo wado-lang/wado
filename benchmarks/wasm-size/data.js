@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777302407250,
+  "lastUpdate": 1777323271219,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -17041,6 +17041,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/5c604c0ab30dfb689daaead2ccf74691bbe63c2d"
         },
         "date": 1777302406978,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8982,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19030,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 611451,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "635e8f4a5a8889d7f3627f5e4f9b754fe0c1acef",
+          "message": "Merge pull request #945 from wado-lang/claude/tiri-stage2-join-6IwoP\n\nfeat(tiri): Stage 2 — `if` reduction with `Lattice::join`",
+          "timestamp": "2026-04-28T05:45:37+09:00",
+          "tree_id": "256cf58acecb5a4e6b0779dda13f46fa55799646",
+          "url": "https://github.com/wado-lang/wado/commit/635e8f4a5a8889d7f3627f5e4f9b754fe0c1acef"
+        },
+        "date": 1777323270907,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
