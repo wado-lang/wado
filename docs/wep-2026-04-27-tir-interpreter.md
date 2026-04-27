@@ -89,18 +89,27 @@ relocation + API reshape with zero behaviour change.
   shared `step_budget`. Expressions that don't terminate within the
   budget are left as residuals.
 
-### Stage 5 — wasm-CTFE backend
+### Stage 5 — wasm-CTFE backend (via `CompilerHost`)
 
-- New companion module `wado_compiler::tiri::wasm_eval` (or a sibling
-  crate) that compiles a callee to wasm using the existing pipeline,
-  caches the resulting `wasmtime::Module` per
-  `(FunctionKey, monomorph_args)`, and runs it with `wasmtime` fuel.
+- `wado-compiler` itself must compile to `wasm32-unknown-unknown` (CI
+  enforces this), so it cannot link `wasmtime` directly. The CTFE
+  backend follows the existing Kiln pattern instead: extend
+  `CompilerHost` with a `run_compile_time_eval(component_wasm, args)`
+  hook (mirroring today's `run_generator`). Hosts that have a Wasm
+  runtime — `wado-cli` via `wasmtime` — implement it; LSP and
+  browser hosts return `Unsupported` and tiri stays in-process.
+- tiri compiles a pure callee to wasm using the existing pipeline,
+  caches the resulting component bytes per
+  `(FunctionKey, monomorph_args)`, and hands them to the host with
+  the constant args. The host runs the component (with fuel /
+  resource limits of its choice) and returns the result.
 - Triggered when in-process reduction exceeds `step_budget` but the
   callee is still pure-by-effects.
 - Result is decoded back into a `Value` and used as if the in-process
   evaluator had produced it.
 - Enables `compute_lookup_table(256)` and similar workloads at compile
-  time without re-implementing every TIR construct.
+  time without re-implementing every TIR construct, and without
+  breaking wasm32 compatibility of `wado-compiler`.
 
 ## Cost model
 
@@ -137,10 +146,12 @@ codegen.
 - `const_folding.rs` shrinks to a thin glue file, and stays that way.
 - `tiri` may eventually subsume `const_propagation`, `const_branch_prune`,
   and parts of `inline` — to be evaluated when each stage lands.
-- The wasmtime dependency, already present for `wado run`, will become a
-  compile-time dependency of the wasm-CTFE backend. This is acceptable
-  for the host compiler binary; the LSP / browser build will gate the
-  backend behind `cfg(not(target_arch = "wasm32"))`.
+- `wasmtime` is **not** linked by `wado-compiler` (the crate must build
+  for `wasm32-unknown-unknown`). The wasm-CTFE backend instead routes
+  through `CompilerHost`, just like Kiln generator execution does today.
+  Hosts without a Wasm runtime (LSP, browser) decline the call and
+  tiri falls back to in-process reduction — no `cfg`-gated backend in
+  the compiler crate itself.
 - Effect-system guarantees become load-bearing for CTFE soundness. A bug
   in effect inference could cause non-pure functions to be CTFE-evaluated.
   This is the same trust we already place in effect-check elsewhere.
