@@ -2420,6 +2420,14 @@ pub enum TirExprKind {
         functor_id: Option<u32>,
         /// Pre-desugar source text for inspect output.
         source_text: Option<String>,
+        /// Closure-scope address-taken locals, captured from the
+        /// closure's resolution `FunctionContext`. The boxing pass uses
+        /// this when descending into the closure body — the body's
+        /// `Local { index: N }` references closure locals, not the
+        /// parent function's, so the parent's set would mis-box. Empty
+        /// for synthesised closures (e.g. effect-handler dispatch),
+        /// which never take addresses.
+        address_taken_locals: crate::hashmap::IndexSet<u32>,
     },
 
     /// Indirect call through a callable value (closure or funcref)

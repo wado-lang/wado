@@ -449,6 +449,7 @@ impl ClosureLowerer {
                     captures: Vec::new(),
                     functor_id: None,
                     source_text: None,
+                    address_taken_locals: crate::hashmap::IndexSet::default(),
                 };
                 expr.type_id = func_type;
             }
@@ -3416,6 +3417,7 @@ impl ClosureLowerer {
                 captures,
                 functor_id,
                 source_text,
+                address_taken_locals,
             } => TirExpr::new(
                 TirExprKind::Closure {
                     params: params.clone(),
@@ -3423,6 +3425,7 @@ impl ClosureLowerer {
                     captures: captures.clone(),
                     functor_id: *functor_id,
                     source_text: source_text.clone(),
+                    address_taken_locals: address_taken_locals.clone(),
                 },
                 expr.type_id,
                 expr.span,

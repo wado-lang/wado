@@ -819,6 +819,7 @@ fn generate_struct_deserialize(
             captures: vec![],
             functor_id: None,
             source_text: None,
+            address_taken_locals: crate::hashmap::IndexSet::default(),
         },
         lookup_fn_type,
         span,
