@@ -280,6 +280,27 @@ fn run_optimization_passes(
         changed |= run_pass("tir/container_sroa", project, profiler, |p| {
             scalarize_containers(p)
         });
+        // Run value-copy elision *before* inlining: the inliner expands
+        // every reachable `$value_copy$T<id>` body into a labeled
+        // block, after which the `Call($value_copy$T, [arg])` shape the
+        // elider matches on no longer exists. Running before inline
+        // lets the elider strip wrappers around `match Parser::expect(p,
+        // K) { Ok(v) => v, Err(e) => return Err(e) }`-style `?`
+        // desugarings, where the match's `Ok` arm produces a value
+        // that is observably read-only and the surplus copy can fold
+        // away.
+        //
+        // No post-pass run is needed: the only way a fresh
+        // `$value_copy$T(arg)` `Call` shape can appear after lowering
+        // is for the inliner to expand a function whose body still
+        // contains a wrapper. The next iteration's pre-inline run
+        // catches those, and if the loop converges (no pass returned
+        // `changed`) the inliner did nothing this round, so no new
+        // wrappers were introduced.
+        run_pass("tir/value_copy_elide", project, profiler, |p| {
+            elide_synthesized_value_copies(p);
+            false
+        });
         changed |= run_pass("tir/inline", project, profiler, |p| {
             inline_functions(p, threshold)
         });
@@ -316,16 +337,6 @@ fn run_optimization_passes(
         });
         changed |= run_pass("tir/tmpl_hoist", project, profiler, |p| {
             hoist_template_buffers(p)
-        });
-        // Elide single-use `$value_copy$T<id>` wrappers whose source is
-        // observably read-only. Runs inside the loop so newly-exposed
-        // wrappers from inlining/SROA get removed in the same fixed-point
-        // pass. Returns no `changed` signal (the optimizer doesn't depend
-        // on its output to make further progress); follow-up DCE picks up
-        // helpers whose call sites all got elided.
-        run_pass("tir/value_copy_elide", project, profiler, |p| {
-            elide_synthesized_value_copies(p);
-            false
         });
         profiler.span_end(&format!("tir/iteration {}", i + 1));
         if !changed {

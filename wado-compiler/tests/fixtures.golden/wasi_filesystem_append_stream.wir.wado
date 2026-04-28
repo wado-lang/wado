@@ -188,25 +188,21 @@ type "functype//core:prelude/types.wado/AsyncCall<Result<unit,ErrorCode>>::wait"
 
 type "functype//core:prelude/types.wado/AsyncCall<Result<Descriptor,ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<Result<Descriptor,ErrorCode>>") -> ref "core:prelude/types.wado//Result<Descriptor,ErrorCode>";  // TypeId(53)
 
-type "functype//core:prelude/array.wado/Array<u8>::push" = fn(ref "core:prelude//Array<u8>", u8);  // TypeId(54)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(54)
 
-type "functype//core:prelude/array.wado/Array<u8>::grow" = fn(ref "core:prelude//Array<u8>");  // TypeId(55)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(55)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(56)
+type "functype//wasi/future-drop-readable:transmission-filesystem" = fn(i32);  // TypeId(56)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(57)
+type "functype//wasi/stream-drop-readable" = fn(i32);  // TypeId(57)
 
-type "functype//wasi/future-drop-readable:transmission-filesystem" = fn(i32);  // TypeId(58)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(58)
 
-type "functype//wasi/stream-drop-readable" = fn(i32);  // TypeId(59)
+type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(59)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(60)
+type "functype//wado-compiler/tests/fixtures/wasi_filesystem_append_stream.wado/__cm_binding__Descriptor_read_via_stream" = fn(i32, i64) -> [i32, i32];  // TypeId(60)
 
-type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(61)
-
-type "functype//wado-compiler/tests/fixtures/wasi_filesystem_append_stream.wado/__cm_binding__Descriptor_read_via_stream" = fn(i32, i64) -> [i32, i32];  // TypeId(62)
-
-type "functype//core:internal/cm_waitable_set_wait" = fn(i32) -> [i32, i32, u32];  // TypeId(63)
+type "functype//core:internal/cm_waitable_set_wait" = fn(i32) -> [i32, i32, u32];  // TypeId(61)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-read from "wasi/stream-read";
@@ -919,49 +915,6 @@ fn "core:prelude/types.wado/AsyncCall<Result<Descriptor,ErrorCode>>::wait"(self)
     result = __local_7;
     drop("mem/realloc"(self.__cm_outptr, self.__cm_size, self.__cm_align, 0));
     return result;
-}
-
-fn "core:prelude/array.wado/Array<u8>::push"(self, value) {
-    let used: i32;
-    used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<u8>::grow"(self);
-    }
-    builtin::array_set_u8(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn "core:prelude/array.wado/Array<u8>::grow"(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref builtin::array<u8>;
-    let old_repr: ref builtin::array<u8>;
-    let used: i32;
-    let i: i32;
-    let __local_7: i32;
-    capacity = builtin::array_len(self.repr);
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_7 = capacity * 2;
-        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-        unreachable;
-    };
-    new_repr = builtin::array_new<u8>(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_0: block {
-        i = 0;
-        block {
-            l110: loop {
-                if i >= used {
-                    break __for_0;
-                }
-                builtin::array_set_u8(new_repr, i, builtin::array_get<u8>(old_repr, i));
-                i = i + 1;
-                continue l110;
-            };
-        };
-    };
-    self.repr = new_repr;
 }
 
 export fn "wado-compiler/tests/fixtures/wasi_filesystem_append_stream.wado/__cm_export__run" as "run"

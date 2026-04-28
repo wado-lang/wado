@@ -58,19 +58,15 @@ type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/st
 
 type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(22)
 
-type "functype//core:prelude/array.wado/Array<u8>::push" = fn(ref "core:prelude//Array<u8>", u8);  // TypeId(23)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(23)
 
-type "functype//core:prelude/array.wado/Array<u8>::grow" = fn(ref "core:prelude//Array<u8>");  // TypeId(24)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(24)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(25)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(25)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(26)
+type "functype//core:prelude/string.wado/String::from_utf8<ArrayIter<u8>>" = fn(ref "core:prelude/array.wado//ArrayIter<u8>") -> [i32, ref null "core:prelude/string.wado//String"];  // TypeId(26)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(27)
-
-type "functype//core:prelude/string.wado/String::from_utf8<ArrayIter<u8>>" = fn(ref "core:prelude/array.wado//ArrayIter<u8>") -> [i32, ref null "core:prelude/string.wado//String"];  // TypeId(28)
-
-type "functype//core:prelude/array.wado/ArrayIter<u8>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<u8>") -> [i32, u8];  // TypeId(29)
+type "functype//core:prelude/array.wado/ArrayIter<u8>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<u8>") -> [i32, u8];  // TypeId(27)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -89,7 +85,6 @@ fn "wado-compiler/tests/fixtures/ice_array_iter_into_iterator.wado/run"() with S
     let __local_0: ref "core:prelude//Array<u8>";
     let arr: ref "core:prelude//Array<u8>";
     let s: ref "core:prelude/string.wado//String";
-    let __local_19: ref "core:prelude/string.wado//String";
     arr = __seq_lit: block -> ref "core:prelude//Array<u8>" {
         __local_0 = struct.new "core:prelude//Array<u8>" { repr: array.new_fixed<u8>(72, 101, 108, 108, 111), used: 5 };
         break __seq_lit: __local_0;
@@ -99,11 +94,7 @@ fn "wado-compiler/tests/fixtures/ice_array_iter_into_iterator.wado/run"() with S
     let __sroa___pattern_temp_0_payload_0: ref null "core:prelude/string.wado//String";
     multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = "core:prelude/string.wado/String::from_utf8<ArrayIter<u8>>"(struct.new "core:prelude/array.wado//ArrayIter<u8>" { repr: arr.repr, used: arr.used, index: 0 });
     if __sroa___pattern_temp_0_discriminant == 0 {
-        s = __inline__value_copy_T25_11: block -> ref "core:prelude/string.wado//String" {
-            __local_19 = ref.as_non_null(__sroa___pattern_temp_0_payload_0);
-            break __inline__value_copy_T25_11: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(__local_19.repr)), used: __local_19.used };
-            unreachable;
-        };
+        s = ref.as_non_null(__sroa___pattern_temp_0_payload_0);
         "core:cli/println"(s);
     }
 }
@@ -421,49 +412,6 @@ fn "core:prelude/array.wado/ArrayIter<u8>^Iterator::next"(self) {
     item = builtin::array_get<u8>(self.repr, self.index);
     self.index = self.index + 1;
     return 0, item;
-}
-
-fn "core:prelude/array.wado/Array<u8>::push"(self, value) {
-    let used: i32;
-    used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<u8>::grow"(self);
-    }
-    builtin::array_set_u8(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn "core:prelude/array.wado/Array<u8>::grow"(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref builtin::array<u8>;
-    let old_repr: ref builtin::array<u8>;
-    let used: i32;
-    let i: i32;
-    let __local_7: i32;
-    capacity = builtin::array_len(self.repr);
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_7 = capacity * 2;
-        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-        unreachable;
-    };
-    new_repr = builtin::array_new<u8>(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_0: block {
-        i = 0;
-        block {
-            l48: loop {
-                if i >= used {
-                    break __for_0;
-                }
-                builtin::array_set_u8(new_repr, i, builtin::array_get<u8>(old_repr, i));
-                i = i + 1;
-                continue l48;
-            };
-        };
-    };
-    self.repr = new_repr;
 }
 
 export fn "wado-compiler/tests/fixtures/ice_array_iter_into_iterator.wado/__cm_export__run" as "run"

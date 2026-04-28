@@ -41,7 +41,7 @@ use crate::compiler_host::SpanEmitter;
 use crate::optimize::OptLevel;
 use crate::wir::WirPackage;
 
-pub use dce::{dce_unreachable_functions, dce_unreachable_types};
+pub use dce::{compact_dead_items, dce_unreachable_types, mark_unreachable_defined_functions};
 
 use array::{
     collapse_array_push_sequences, promote_constant_arrays_to_data, split_large_array_literals,
@@ -181,8 +181,13 @@ pub fn optimize_wir(module: &mut WirPackage, opt_level: OptLevel, profiler: &dyn
 
     // Phase 8: Final DCE & compaction
     //
-    // Mark unreachable types as dead and compact all dead items out of the module.
+    // Mark functions orphaned by earlier WIR passes as dead (notably
+    // `collapse_array_push_sequences` deleting the only call site of a
+    // single-element array literal's `Array<T>::push` instantiation),
+    // then mark unreachable types as dead and compact all dead items
+    // out of the module.
     profiler.span_start("wir/phase8_dce_compact");
+    dce::mark_unreachable_defined_functions(module);
     dce_unreachable_types(module);
     dce::compact_dead_items(module);
     profiler.span_end("wir/phase8_dce_compact");

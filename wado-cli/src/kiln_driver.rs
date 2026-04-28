@@ -12,11 +12,16 @@
 //!    writing the response to disk under the invocation's output
 //!    directory, with a canonical `#![generated]` header stamped on each
 //!    file — see [`execute`].
-//! 3. Convert an [`InvocationRun`] into a [`wado_manifest::GeneratorCacheEntry`]
-//!    for persistence (`build_cache_entry`), check a recorded entry for
-//!    freshness against the current filesystem + sources (`cache_matches`),
-//!    and delete orphaned `#![generated]` files left over from an earlier
-//!    run (`reconcile_outputs`).
+//! 3. Convert an [`InvocationRun`] into a [`crate::kiln_metadata::Metadata`]
+//!    record for persistence (`build_metadata`), check a recorded
+//!    `metadata.json` for freshness against the current filesystem +
+//!    sources (`cache_matches`), and delete orphaned `#![generated]`
+//!    files left over from an earlier run (`reconcile_outputs`).
+//!
+//! Per-invocation cache state lives at
+//! `<manifest_root>/build/kiln/<invocation_id>/metadata.json` (see
+//! [`crate::kiln_metadata`]). `wado.lock` is dependency-pin-only since
+//! WEP M9 — it does not contain any generator-cache rows.
 
 use std::path::{Path, PathBuf};
 
@@ -32,8 +37,10 @@ use wado_compiler::kiln::{
     Plan, PlanError, content_hash, encode_options_canonical, file_hash, generator_identity,
     has_generated_marker, hex_digest, validate_options,
 };
-use wado_manifest::{
-    FileHash as ManifestFileHash, GeneratorCacheEntry, Manifest, OutputHash as ManifestOutputHash,
+use wado_manifest::Manifest;
+
+use crate::kiln_metadata::{
+    self, FileHash as MetaFileHash, METADATA_VERSION, Metadata, OutputEntry as MetaOutputEntry,
 };
 
 /// Outcome of plan construction.
@@ -94,9 +101,10 @@ pub struct InvocationRun {
     pub reads: Vec<GeneratorReadRecord>,
 }
 
-/// Output-file identity written to `wado.lock`.
+/// Output-file identity recorded after a generator run.
 ///
-/// Produced by [`execute`], consumed by the cache-check / lockfile layer.
+/// Produced by [`execute`], consumed by the cache-check / metadata layer
+/// and by `wado check` (which compares `bytes` against on-disk content).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OutputHash {
     /// Project-root-relative forward-slash path of the written file.
@@ -106,6 +114,11 @@ pub struct OutputHash {
     /// Whether the generator marked this file as the invocation's entry
     /// module — the one a consuming `use ... from "<from>"` resolves to.
     pub is_entry: bool,
+    /// Full file bytes (header + generator body) as they would land on
+    /// disk. Always populated by [`execute`], regardless of write mode,
+    /// so `wado check` can byte-compare against the on-disk file without
+    /// re-running the generator.
+    pub bytes: Vec<u8>,
 }
 
 /// Errors from [`execute`].
@@ -173,6 +186,40 @@ pub async fn execute<H: CompilerHost>(
     manifest_root: &Path,
     host: &H,
 ) -> Result<InvocationRun, ExecuteError> {
+    execute_with_mode(
+        invocation,
+        component_wasm,
+        manifest_root,
+        host,
+        ExecuteMode::WriteAndWarnOnOverwrite,
+    )
+    .await
+}
+
+/// Behavior knob for [`execute_with_mode`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExecuteMode {
+    /// Default `wado compile` behavior: write generator outputs to disk,
+    /// surface a [`Code::KilnGeneratedRegenerated`] warning when the new
+    /// bytes differ from the pre-existing on-disk file.
+    WriteAndWarnOnOverwrite,
+    /// `wado check` behavior: do not write to disk. The caller is
+    /// responsible for byte-comparing the returned [`InvocationRun`]
+    /// against on-disk files and surfacing
+    /// [`Code::KilnGeneratedStaleOnDisk`].
+    DryRun,
+}
+
+/// Run a generator and optionally write outputs to disk.
+///
+/// The default `execute` calls this with [`ExecuteMode::WriteAndWarnOnOverwrite`].
+pub async fn execute_with_mode<H: CompilerHost>(
+    invocation: &Invocation,
+    component_wasm: &[u8],
+    manifest_root: &Path,
+    host: &H,
+    mode: ExecuteMode,
+) -> Result<InvocationRun, ExecuteError> {
     let primary = load_input(host, &invocation.from).await?;
     let primary_hash = file_hash(&invocation.from, primary.content.as_bytes());
     let mut inputs = Vec::with_capacity(invocation.inputs.len());
@@ -213,29 +260,50 @@ pub async fn execute<H: CompilerHost>(
     for file in &response.files {
         let rel = validate_rel_output_path(&file.path)?;
         let full_path = output_dir_abs.join(&rel);
-        if let Some(parent) = full_path.parent() {
-            std::fs::create_dir_all(parent).map_err(|source| ExecuteError::Io {
-                path: parent.to_path_buf(),
-                source,
-            })?;
-        }
         let mut bytes = Vec::with_capacity(header.len() + file.content.len());
         bytes.extend_from_slice(header.as_bytes());
         bytes.extend_from_slice(file.content.as_bytes());
-        std::fs::write(&full_path, &bytes).map_err(|source| ExecuteError::Io {
-            path: full_path.clone(),
-            source,
-        })?;
 
         let normalized = InvocationPath::normalize(&format!(
             "{}/{}",
             invocation.output_dir.as_str(),
             rel.to_string_lossy()
         ));
+
+        match mode {
+            ExecuteMode::WriteAndWarnOnOverwrite => {
+                if let Some(parent) = full_path.parent() {
+                    std::fs::create_dir_all(parent).map_err(|source| ExecuteError::Io {
+                        path: parent.to_path_buf(),
+                        source,
+                    })?;
+                }
+                if let Ok(existing) = std::fs::read(&full_path)
+                    && existing != bytes
+                {
+                    emit_generated_regenerated_warning(
+                        host,
+                        &invocation.decl_site.synthetic_id,
+                        normalized.as_str(),
+                    );
+                }
+                std::fs::write(&full_path, &bytes).map_err(|source| ExecuteError::Io {
+                    path: full_path.clone(),
+                    source,
+                })?;
+            }
+            ExecuteMode::DryRun => {
+                // Skip directory creation and write; caller (wado check)
+                // compares `bytes` against the on-disk file itself.
+            }
+        }
+
+        let hash = file_hash(&normalized, &bytes).hash;
         outputs.push(OutputHash {
             path: normalized.as_str().to_string(),
-            hash: file_hash(&normalized, &bytes).hash,
+            hash,
             is_entry: file.is_entry,
+            bytes,
         });
     }
 
@@ -247,33 +315,33 @@ pub async fn execute<H: CompilerHost>(
     })
 }
 
-/// Convert an [`InvocationRun`] into a [`GeneratorCacheEntry`] ready to be
-/// written to `wado.lock`.
+/// Convert an [`InvocationRun`] into a [`Metadata`] record ready to be
+/// written to `build/kiln/<invocation_id>/metadata.json`.
 ///
-/// `invocation_name` is the lockfile-facing key — the synthesized id derived
-/// from `(decl_file, from)` for inline clauses. `options_hash` is the hex
-/// SHA-256 of the canonical options encoding —
-/// produced by [`wado_compiler::kiln::hash_options_canonical`] so it stays
-/// stable across the M3 provisional encoder and the M4 lifted-form encoder.
+/// `invocation_name` is the synthesized id derived from `(decl_file,
+/// from)` for inline clauses, used both as the directory name and as
+/// the metadata's own `invocation` field. `options_hash` is the hex
+/// SHA-256 of the canonical options encoding — produced by
+/// [`wado_compiler::kiln::hash_options_canonical`] so it stays stable
+/// across the M3 provisional encoder and the M4 lifted-form encoder.
 ///
-/// The emitted entry contains hex-encoded hashes (as required by
-/// `wado-manifest`'s TOML form) and sorts the `reads` list lexicographically
-/// by path, mirroring what [`cache_matches`] expects on the next run.
+/// Sorts the `reads` list lexicographically by path, mirroring what
+/// [`cache_matches`] expects on the next run.
 #[must_use]
-pub fn build_cache_entry(
+pub fn build_metadata(
     invocation_name: &str,
     invocation: &Invocation,
     run: &InvocationRun,
     options_hash: String,
-) -> GeneratorCacheEntry {
+) -> Metadata {
     let generator = generator_identity(&invocation.module);
-    let primary = to_manifest_file_hash(&run.primary);
-    let inputs: Vec<ManifestFileHash> = run.inputs.iter().map(to_manifest_file_hash).collect();
+    let primary = to_meta_file_hash(&run.primary);
+    let inputs: Vec<MetaFileHash> = run.inputs.iter().map(to_meta_file_hash).collect();
 
-    let mut reads: Vec<ManifestFileHash> = run
+    let mut reads: Vec<MetaFileHash> = run
         .reads
         .iter()
-        .map(|r| ManifestFileHash {
+        .map(|r| MetaFileHash {
             path: InvocationPath::normalize(&r.path).as_str().to_string(),
             hash: hex_digest(&r.content_hash),
         })
@@ -281,17 +349,18 @@ pub fn build_cache_entry(
     reads.sort_by(|a, b| a.path.cmp(&b.path));
     reads.dedup_by(|a, b| a.path == b.path);
 
-    let outputs: Vec<ManifestOutputHash> = run
+    let outputs: Vec<MetaOutputEntry> = run
         .outputs
         .iter()
-        .map(|o| ManifestOutputHash {
+        .map(|o| MetaOutputEntry {
             path: o.path.clone(),
             hash: hex_digest(&o.hash),
             entry: o.is_entry,
         })
         .collect();
 
-    GeneratorCacheEntry {
+    Metadata {
+        version: METADATA_VERSION,
         invocation: invocation_name.to_string(),
         generator,
         primary,
@@ -302,8 +371,8 @@ pub fn build_cache_entry(
     }
 }
 
-fn to_manifest_file_hash(f: &FileHash) -> ManifestFileHash {
-    ManifestFileHash {
+fn to_meta_file_hash(f: &FileHash) -> MetaFileHash {
+    MetaFileHash {
         path: f.path.clone(),
         hash: hex_digest(&f.hash),
     }
@@ -345,66 +414,125 @@ fn path_to_kiln_uri(path: &Path) -> String {
     }
 }
 
-/// Check whether a recorded cache entry is still valid for the given
+/// Outcome of comparing a [`Metadata`] record to the current state of
+/// the filesystem. See [`cache_matches`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CacheCheck {
+    /// Cache key matches and every output file's bytes match the recorded
+    /// hash. The generator can be skipped silently.
+    Hit,
+    /// Cache key matches, but at least one output file's on-disk bytes
+    /// differ from the recorded hash — the user has hand-edited the file.
+    /// The generator is still skipped (the edit is honored), but a
+    /// `Code::KilnGeneratedModified` warning has been emitted.
+    HitButModified,
+    /// Cache key does not match (or a referenced file is missing). The
+    /// generator must run.
+    Miss,
+}
+
+/// Check whether a recorded `metadata.json` is still valid for the given
 /// invocation.
 ///
 /// Re-hashes the primary + declared inputs via `host.load_source`, then
 /// re-hashes every `reads` entry the same way, then re-hashes every output
 /// file from disk (via `manifest_root` joined with the recorded output
-/// path). Returns `true` iff every hash matches the lockfile record.
+/// path). Returns:
 ///
-/// Any load or read failure — missing file, permissions, content drift —
-/// is treated as a cache miss and surfaces as `Ok(false)`. Callers that
-/// need to distinguish "stale cache" from "I/O broken" should fall through
-/// to [`execute`]; it will surface the underlying error if the file is
-/// genuinely missing at run time.
+/// - [`CacheCheck::Hit`] when every hash matches.
+/// - [`CacheCheck::HitButModified`] when the cache key matches but an
+///   output file's on-disk bytes differ from `metadata.outputs[].hash`.
+///   The user has hand-edited a generated file; honor the edit and skip
+///   the generator. A `Code::KilnGeneratedModified` warning is emitted
+///   for each modified file before returning.
+/// - [`CacheCheck::Miss`] when an input/read hash drifted, or an output
+///   file is missing/unreadable.
+///
+/// Load or read failures on inputs are treated as a cache miss; on outputs
+/// the missing file produces a brief log warning before returning miss,
+/// since the next step (`execute`) will regenerate it anyway.
 pub async fn cache_matches<H: CompilerHost>(
-    entry: &GeneratorCacheEntry,
+    metadata: &Metadata,
     invocation: &Invocation,
     manifest_root: &Path,
     host: &H,
-) -> bool {
-    if entry.primary.path != invocation.from.as_str() {
-        return false;
+) -> CacheCheck {
+    if metadata.primary.path != invocation.from.as_str() {
+        return CacheCheck::Miss;
     }
-    if !matches_file(host, &invocation.from, &entry.primary.hash).await {
-        return false;
+    if !matches_file(host, &invocation.from, &metadata.primary.hash).await {
+        return CacheCheck::Miss;
     }
 
-    if entry.inputs.len() != invocation.inputs.len() {
-        return false;
+    if metadata.inputs.len() != invocation.inputs.len() {
+        return CacheCheck::Miss;
     }
-    for (declared, recorded) in invocation.inputs.iter().zip(&entry.inputs) {
+    for (declared, recorded) in invocation.inputs.iter().zip(&metadata.inputs) {
         if declared.as_str() != recorded.path {
-            return false;
+            return CacheCheck::Miss;
         }
         if !matches_file(host, declared, &recorded.hash).await {
-            return false;
+            return CacheCheck::Miss;
         }
     }
 
-    for read in &entry.reads {
+    for read in &metadata.reads {
         let normalized = InvocationPath::normalize(&read.path);
         if !matches_file(host, &normalized, &read.hash).await {
-            return false;
+            return CacheCheck::Miss;
         }
     }
 
-    for output in &entry.outputs {
+    let mut modified_paths: Vec<String> = Vec::new();
+    for output in &metadata.outputs {
         let abs = manifest_root.join(&output.path);
         match std::fs::read(&abs) {
             Ok(bytes) => {
                 if !hash_matches_bytes(&bytes, &output.hash) {
-                    return false;
+                    modified_paths.push(output.path.clone());
                 }
             }
             Err(source) => {
                 emit_cache_io_warning(host, &abs, &source);
-                return false;
+                return CacheCheck::Miss;
             }
         }
     }
-    true
+    if modified_paths.is_empty() {
+        CacheCheck::Hit
+    } else {
+        for path in &modified_paths {
+            emit_generated_modified_warning(host, &metadata.invocation, path);
+        }
+        CacheCheck::HitButModified
+    }
+}
+
+fn emit_generated_modified_warning<H: CompilerHost>(host: &H, invocation: &str, path: &str) {
+    use wado_compiler::{Diagnostic, Severity};
+    host.emit_diagnostic(Diagnostic {
+        severity: Severity::Warning,
+        code: wado_compiler::Code::KilnGeneratedModified,
+        message: format!(
+            "kiln[{invocation}]: {path} has been modified after generation; \
+             the on-disk content is honored, but `wado check` will fail. \
+             Run `wado compile` (or delete the file) to regenerate.",
+        ),
+        span: None,
+    });
+}
+
+fn emit_generated_regenerated_warning<H: CompilerHost>(host: &H, invocation: &str, path: &str) {
+    use wado_compiler::{Diagnostic, Severity};
+    host.emit_diagnostic(Diagnostic {
+        severity: Severity::Warning,
+        code: wado_compiler::Code::KilnGeneratedRegenerated,
+        message: format!(
+            "kiln[{invocation}]: regenerating {path} (previous content differed from \
+             generator output); local edits to this file have been overwritten.",
+        ),
+        span: None,
+    });
 }
 
 fn emit_cache_io_warning<H: CompilerHost>(host: &H, path: &Path, source: &std::io::Error) {
@@ -662,14 +790,15 @@ pub enum PipelineError {
         invocation: String,
         source: ProviderError,
     },
-    /// Reading or writing `wado.lock` or an output directory failed.
+    /// Reading or writing an output directory failed.
     Io {
         path: PathBuf,
         source: std::io::Error,
     },
-    /// Parsing an existing `wado.lock` failed.
-    LockParse {
-        source: wado_manifest::LockFileError,
+    /// Writing per-invocation `metadata.json` failed.
+    MetadataSave {
+        invocation: String,
+        source: kiln_metadata::MetadataError,
     },
 }
 
@@ -686,7 +815,9 @@ impl std::fmt::Display for PipelineError {
             PipelineError::Io { path, source } => {
                 write!(f, "kiln: I/O error at {}: {source}", path.display())
             }
-            PipelineError::LockParse { source } => write!(f, "kiln: invalid wado.lock: {source}"),
+            PipelineError::MetadataSave { invocation, source } => {
+                write!(f, "kiln[{invocation}]: {source}")
+            }
         }
     }
 }
@@ -739,30 +870,31 @@ where
 
     typed_encode_options(manifest, &mut planned.plan.order, provider, host).await;
 
-    let mut lock = load_lockfile(manifest_root)?;
-    let mut new_cache: Vec<GeneratorCacheEntry> = Vec::with_capacity(planned.plan.order.len());
     let mut outcome = PipelineOutcome::default();
     let mut kept_by_dir: indexmap::IndexMap<String, Vec<String>> = indexmap::IndexMap::new();
 
     for invocation in &planned.plan.order {
         let invocation_name = invocation_id(invocation);
 
-        let existing = lock
-            .generator_cache
-            .iter()
-            .find(|e| e.invocation == invocation_name)
-            .cloned();
+        let existing = match kiln_metadata::load(manifest_root, &invocation_name) {
+            Ok(m) => m,
+            Err(source) => {
+                emit_metadata_load_warning(host, &invocation_name, &source);
+                None
+            }
+        };
 
         let options_hash =
             wado_compiler::kiln::hash_options_canonical(&invocation.options_canonical);
 
         let (entry, executed) =
-            if let Some(prior) = existing.clone().filter(|e| e.options_hash == options_hash) {
-                if cache_matches(&prior, invocation, manifest_root, host).await {
-                    outcome.cached.push(invocation_name.clone());
-                    (Some(prior), false)
-                } else {
-                    match run_and_build_entry(
+            if let Some(prior) = existing.clone().filter(|m| m.options_hash == options_hash) {
+                match cache_matches(&prior, invocation, manifest_root, host).await {
+                    CacheCheck::Hit | CacheCheck::HitButModified => {
+                        outcome.cached.push(invocation_name.clone());
+                        (Some(prior), false)
+                    }
+                    CacheCheck::Miss => match run_and_build_metadata(
                         &invocation_name,
                         invocation,
                         manifest_root,
@@ -772,9 +904,9 @@ where
                     )
                     .await
                     {
-                        Ok(entry) => {
+                        Ok(metadata) => {
                             outcome.executed.push(invocation_name.clone());
-                            (Some(entry), true)
+                            (Some(metadata), true)
                         }
                         Err(e) if is_unsupported(&e) => {
                             emit_stale_warning(host, &invocation_name);
@@ -782,10 +914,10 @@ where
                             (Some(prior), false)
                         }
                         Err(e) => return Err(e),
-                    }
+                    },
                 }
             } else {
-                match run_and_build_entry(
+                match run_and_build_metadata(
                     &invocation_name,
                     invocation,
                     manifest_root,
@@ -795,9 +927,9 @@ where
                 )
                 .await
                 {
-                    Ok(entry) => {
+                    Ok(metadata) => {
                         outcome.executed.push(invocation_name.clone());
-                        (Some(entry), true)
+                        (Some(metadata), true)
                     }
                     Err(e) if is_unsupported(&e) => {
                         emit_stale_warning(host, &invocation_name);
@@ -808,15 +940,15 @@ where
                 }
             };
 
-        if let Some(entry) = entry {
+        if let Some(metadata) = entry {
             if executed {
                 let dir = invocation.output_dir.as_str().to_string();
                 let kept = kept_by_dir.entry(dir).or_default();
-                for o in &entry.outputs {
+                for o in &metadata.outputs {
                     kept.push(o.path.clone());
                 }
             }
-            if let Some(entry_path) = entry.outputs.iter().find(|o| o.entry).map(|o| &o.path) {
+            if let Some(entry_path) = metadata.outputs.iter().find(|o| o.entry).map(|o| &o.path) {
                 let decl_file = invocation.decl_site.module.clone();
                 // Compose a `file:` URI from the canonicalized absolute
                 // path. Canonicalizing here means the loader does not
@@ -832,7 +964,14 @@ where
                     .invocations
                     .insert(&decl_file, invocation.from.as_str(), &uri);
             }
-            new_cache.push(entry);
+            if executed
+                && let Err(source) = kiln_metadata::save(manifest_root, &invocation_name, &metadata)
+            {
+                return Err(PipelineError::MetadataSave {
+                    invocation: invocation_name.clone(),
+                    source,
+                });
+            }
         }
     }
 
@@ -851,10 +990,138 @@ where
     }
     outcome.deleted.sort();
 
-    lock.generator_cache = new_cache;
-
-    save_lockfile(manifest_root, &lock)?;
     Ok(outcome)
+}
+
+/// Outcome of [`check_pipeline`].
+///
+/// `stale.len()` is non-zero iff at least one invocation produced bytes
+/// that did not match the on-disk source. Each entry is the
+/// project-root-relative path of the divergent file.
+#[derive(Debug, Default)]
+pub struct CheckOutcome {
+    pub checked: Vec<String>,
+    pub stale: Vec<String>,
+    pub missing: Vec<String>,
+    /// Redirect index for the resolver, populated identically to
+    /// [`PipelineOutcome::invocations`] so the downstream compile can
+    /// resolve `use { ... } from "<schema>"` even though `check_pipeline`
+    /// did not write outputs to disk.
+    pub invocations: wado_compiler::kiln::InvocationIndex,
+}
+
+/// Run the Kiln pipeline in `wado check` mode: re-run every invocation
+/// from scratch (ignoring `metadata.json`), byte-compare each output
+/// against the on-disk file, and surface
+/// [`Code::KilnGeneratedStaleOnDisk`] diagnostics for mismatches.
+///
+/// Does not write generator outputs to disk and does not touch
+/// `metadata.json`. Suitable for CI: a clean checkout of a
+/// committed-source project should produce zero divergence.
+pub async fn check_pipeline<H, P>(
+    manifest: &Manifest,
+    manifest_root: &Path,
+    host: &H,
+    provider: &P,
+    inline_invocations: Vec<wado_compiler::kiln::Invocation>,
+) -> Result<CheckOutcome, PipelineError>
+where
+    H: CompilerHost,
+    P: GeneratorProvider,
+{
+    let plan_order =
+        wado_compiler::kiln::build_plan(inline_invocations).map_err(DriverError::Plan)?;
+    let mut planned = PlanOutcome {
+        plan: plan_order,
+        manifest_root: manifest_root.to_path_buf(),
+    };
+    if planned.plan.order.is_empty() {
+        return Ok(CheckOutcome::default());
+    }
+
+    typed_encode_options(manifest, &mut planned.plan.order, provider, host).await;
+
+    let mut outcome = CheckOutcome::default();
+    for invocation in &planned.plan.order {
+        let invocation_name = invocation_id(invocation);
+
+        let component = provider
+            .get_component(&invocation.module)
+            .await
+            .map_err(|source| PipelineError::Provider {
+                invocation: invocation_name.clone(),
+                source,
+            })?;
+        let run = execute_with_mode(
+            invocation,
+            &component,
+            manifest_root,
+            host,
+            ExecuteMode::DryRun,
+        )
+        .await
+        .map_err(|source| PipelineError::Execute {
+            invocation: invocation_name.clone(),
+            source,
+        })?;
+        outcome.checked.push(invocation_name.clone());
+
+        if let Some(entry_path) = run.outputs.iter().find(|o| o.is_entry).map(|o| &o.path) {
+            let decl_file = invocation.decl_site.module.clone();
+            let joined = manifest_root.join(entry_path);
+            let abs = std::fs::canonicalize(&joined).unwrap_or(joined);
+            let uri = path_to_kiln_uri(&abs);
+            outcome
+                .invocations
+                .insert(&decl_file, invocation.from.as_str(), &uri);
+        }
+
+        for output in &run.outputs {
+            let abs = manifest_root.join(&output.path);
+            match std::fs::read(&abs) {
+                Ok(existing) => {
+                    if existing != output.bytes {
+                        emit_stale_on_disk_warning(host, &invocation_name, &output.path);
+                        outcome.stale.push(output.path.clone());
+                    }
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                    emit_missing_on_disk_warning(host, &invocation_name, &output.path);
+                    outcome.missing.push(output.path.clone());
+                }
+                Err(source) => {
+                    return Err(PipelineError::Io { path: abs, source });
+                }
+            }
+        }
+    }
+    Ok(outcome)
+}
+
+fn emit_stale_on_disk_warning<H: CompilerHost>(host: &H, invocation: &str, path: &str) {
+    use wado_compiler::{Code, Diagnostic, Severity};
+    host.emit_diagnostic(Diagnostic {
+        severity: Severity::Warning,
+        code: Code::KilnGeneratedStaleOnDisk,
+        message: format!(
+            "kiln[{invocation}]: {path} differs from generator output; \
+             commit the regenerated file or revert the local edit",
+        ),
+        span: None,
+    });
+}
+
+fn emit_missing_on_disk_warning<H: CompilerHost>(host: &H, invocation: &str, path: &str) {
+    use wado_compiler::{Code, Diagnostic, Severity};
+    host.emit_diagnostic(Diagnostic {
+        severity: Severity::Warning,
+        code: Code::KilnGeneratedStaleOnDisk,
+        message: format!(
+            "kiln[{invocation}]: {path} is missing on disk but the generator produced it; \
+             run `wado compile` to materialize it",
+        ),
+        span: None,
+    });
 }
 
 fn is_unsupported(err: &PipelineError) -> bool {
@@ -951,14 +1218,14 @@ async fn typed_encode_options<H, P>(
     }
 }
 
-async fn run_and_build_entry<H, P>(
+async fn run_and_build_metadata<H, P>(
     invocation_name: &str,
     invocation: &Invocation,
     manifest_root: &Path,
     host: &H,
     provider: &P,
     options_hash: String,
-) -> Result<GeneratorCacheEntry, PipelineError>
+) -> Result<Metadata, PipelineError>
 where
     H: CompilerHost,
     P: GeneratorProvider,
@@ -976,7 +1243,7 @@ where
             invocation: invocation_name.to_string(),
             source,
         })?;
-    Ok(build_cache_entry(
+    Ok(build_metadata(
         invocation_name,
         invocation,
         &run,
@@ -988,34 +1255,21 @@ fn invocation_id(inv: &Invocation) -> String {
     inv.decl_site.synthetic_id.clone()
 }
 
-fn load_lockfile(manifest_root: &Path) -> Result<wado_manifest::LockFile, PipelineError> {
-    let path = manifest_root.join("wado.lock");
-    let content = match std::fs::read_to_string(&path) {
-        Ok(s) => s,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            return Ok(wado_manifest::LockFile {
-                version: 1,
-                deps_hash: String::new(),
-                packages: Vec::new(),
-                build_dependencies: Vec::new(),
-                generator_cache: Vec::new(),
-            });
-        }
-        Err(source) => {
-            return Err(PipelineError::Io { path, source });
-        }
-    };
-    content
-        .parse()
-        .map_err(|source| PipelineError::LockParse { source })
-}
-
-fn save_lockfile(
-    manifest_root: &Path,
-    lock: &wado_manifest::LockFile,
-) -> Result<(), PipelineError> {
-    let path = manifest_root.join("wado.lock");
-    std::fs::write(&path, lock.to_toml()).map_err(|source| PipelineError::Io { path, source })
+fn emit_metadata_load_warning<H: CompilerHost>(
+    host: &H,
+    invocation: &str,
+    source: &kiln_metadata::MetadataError,
+) {
+    use wado_compiler::{Code, Diagnostic, Severity};
+    host.emit_diagnostic(Diagnostic {
+        severity: Severity::Warning,
+        code: Code::Log,
+        message: format!(
+            "kiln[{invocation}]: failed to read metadata.json ({source}); \
+             treating as cache miss and re-running generator",
+        ),
+        span: None,
+    });
 }
 
 #[cfg(test)]
@@ -1349,7 +1603,7 @@ mod tests {
         }
 
         #[test]
-        fn build_cache_entry_round_trips_paths_and_hashes() {
+        fn build_metadata_round_trips_paths_and_hashes() {
             let tmp = tempfile::tempdir().unwrap();
             let response = GeneratorResponse {
                 files: vec![GeneratorOutputFile {
@@ -1367,7 +1621,7 @@ mod tests {
                 response,
                 &[("schema.proto", b"primary"), ("dep.proto", b"dep")],
             );
-            let entry = build_cache_entry(
+            let entry = build_metadata(
                 "proto",
                 &sample_invocation(),
                 &run,
@@ -1390,7 +1644,7 @@ mod tests {
         }
 
         #[test]
-        fn build_cache_entry_sorts_reads_lexicographically() {
+        fn build_metadata_sorts_reads_lexicographically() {
             let tmp = tempfile::tempdir().unwrap();
             let response = GeneratorResponse {
                 files: vec![],
@@ -1414,8 +1668,7 @@ mod tests {
                 response,
                 &[("schema.proto", b"p"), ("dep.proto", b"d")],
             );
-            let entry =
-                build_cache_entry("proto", &sample_invocation(), &run, "sha256:o".to_string());
+            let entry = build_metadata("proto", &sample_invocation(), &run, "sha256:o".to_string());
             assert_eq!(entry.reads.len(), 2);
             assert_eq!(entry.reads[0].path, "a.proto");
             assert_eq!(entry.reads[1].path, "z.proto");
@@ -1437,13 +1690,12 @@ mod tests {
                 response,
                 &[("schema.proto", b"p"), ("dep.proto", b"d")],
             );
-            let entry =
-                build_cache_entry("proto", &sample_invocation(), &run, "sha256:o".to_string());
+            let entry = build_metadata("proto", &sample_invocation(), &run, "sha256:o".to_string());
             let host = HashOnlyHost::new(&[("schema.proto", b"p"), ("dep.proto", b"d")]);
             let hit = runtime().block_on(async {
                 cache_matches(&entry, &sample_invocation(), tmp.path(), &host).await
             });
-            assert!(hit);
+            assert_eq!(hit, CacheCheck::Hit);
         }
 
         #[test]
@@ -1458,13 +1710,12 @@ mod tests {
                 response,
                 &[("schema.proto", b"p"), ("dep.proto", b"d")],
             );
-            let entry =
-                build_cache_entry("proto", &sample_invocation(), &run, "sha256:o".to_string());
+            let entry = build_metadata("proto", &sample_invocation(), &run, "sha256:o".to_string());
             let host = HashOnlyHost::new(&[("schema.proto", b"different"), ("dep.proto", b"d")]);
             let hit = runtime().block_on(async {
                 cache_matches(&entry, &sample_invocation(), tmp.path(), &host).await
             });
-            assert!(!hit);
+            assert_eq!(hit, CacheCheck::Miss);
         }
 
         #[test]
@@ -1483,14 +1734,43 @@ mod tests {
                 response,
                 &[("schema.proto", b"p"), ("dep.proto", b"d")],
             );
-            let entry =
-                build_cache_entry("proto", &sample_invocation(), &run, "sha256:o".to_string());
+            let entry = build_metadata("proto", &sample_invocation(), &run, "sha256:o".to_string());
             std::fs::remove_file(tmp.path().join("build/kiln/proto/lib.wado")).unwrap();
             let host = HashOnlyHost::new(&[("schema.proto", b"p"), ("dep.proto", b"d")]);
             let hit = runtime().block_on(async {
                 cache_matches(&entry, &sample_invocation(), tmp.path(), &host).await
             });
-            assert!(!hit);
+            assert_eq!(hit, CacheCheck::Miss);
+        }
+
+        #[test]
+        fn cache_matches_returns_hit_but_modified_when_output_edited_in_place() {
+            let tmp = tempfile::tempdir().unwrap();
+            let response = GeneratorResponse {
+                files: vec![GeneratorOutputFile {
+                    path: "lib.wado".to_string(),
+                    content: "pub fn hello() {}\n".to_string(),
+                    is_entry: true,
+                }],
+                reads: vec![],
+            };
+            let run = run_execute_and_return(
+                tmp.path(),
+                response,
+                &[("schema.proto", b"p"), ("dep.proto", b"d")],
+            );
+            let entry = build_metadata("proto", &sample_invocation(), &run, "sha256:o".to_string());
+            // Hand-edit the generated file after generation.
+            std::fs::write(
+                tmp.path().join("build/kiln/proto/lib.wado"),
+                b"// edited by hand\n",
+            )
+            .unwrap();
+            let host = HashOnlyHost::new(&[("schema.proto", b"p"), ("dep.proto", b"d")]);
+            let hit = runtime().block_on(async {
+                cache_matches(&entry, &sample_invocation(), tmp.path(), &host).await
+            });
+            assert_eq!(hit, CacheCheck::HitButModified);
         }
 
         #[test]
@@ -1512,8 +1792,7 @@ mod tests {
                 response,
                 &[("schema.proto", b"p"), ("dep.proto", b"d")],
             );
-            let entry =
-                build_cache_entry("proto", &sample_invocation(), &run, "sha256:o".to_string());
+            let entry = build_metadata("proto", &sample_invocation(), &run, "sha256:o".to_string());
             let host = HashOnlyHost::new(&[
                 ("schema.proto", b"p"),
                 ("dep.proto", b"d"),
@@ -1522,7 +1801,7 @@ mod tests {
             let hit = runtime().block_on(async {
                 cache_matches(&entry, &sample_invocation(), tmp.path(), &host).await
             });
-            assert!(!hit);
+            assert_eq!(hit, CacheCheck::Miss);
         }
 
         #[test]

@@ -165,17 +165,13 @@ type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref 
 
 type "functype//core:prelude/array.wado/ArrayIter<Tuple<i32,String>>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<Tuple<i32,String>>") -> ref null "tuple//[i32, String]";  // TypeId(55)
 
-type "functype//core:prelude/array.wado/Array<Tuple<i32,String>>::push" = fn(ref "core:prelude//Array<Tuple<i32,String>>", ref "tuple//[i32, String]");  // TypeId(56)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(56)
 
-type "functype//core:prelude/array.wado/Array<Tuple<i32,String>>::grow" = fn(ref "core:prelude//Array<Tuple<i32,String>>");  // TypeId(57)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(57)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(58)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(58)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(59)
-
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(60)
-
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(61)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(59)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -214,10 +210,8 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/describe"(a, b) {
     let __local_29: ref "core:prelude/format.wado//Formatter";
     let __local_35: ref "core:prelude/format.wado//Formatter";
     let __local_40: ref "core:prelude/format.wado//Formatter";
-    let __local_43: ref "core:prelude/string.wado//String";
-    let __local_44: ref "core:prelude/string.wado//String";
-    let __local_46: bool;
-    let __local_47: bool;
+    let __local_44: bool;
+    let __local_45: bool;
     return let __match_scrut_0: ref "tuple//[TupleValue, TupleValue]", __match_scrut_0 = struct.new "tuple//[TupleValue, TupleValue]" { 0: a, 1: b }, (if __local_13 = __match_scrut_0.0; __local_14 = __match_scrut_0.1; (if __local_13.discriminant == 0 -> i32 {
         __local_14.discriminant == 0;
     } else {
@@ -251,18 +245,18 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/describe"(a, b) {
             "core:prelude/string.wado/String::push"(__local_8, 58);
             "core:prelude/string.wado/String::push"(__local_8, 32);
             __local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_8 };
-            __local_46 = __local_2;
+            __local_44 = __local_2;
             __local_24 = __local_9;
-            "core:prelude/format.wado/Formatter::pad"(__local_24, (if __local_46 -> ref "core:prelude/string.wado//String" {
+            "core:prelude/format.wado/Formatter::pad"(__local_24, (if __local_44 -> ref "core:prelude/string.wado//String" {
                 struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("true"), used: 4 };
             } else {
                 struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
             }));
             "core:prelude/string.wado/String::push"(__local_8, 32);
             __local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_8 };
-            __local_47 = __local_3;
+            __local_45 = __local_3;
             __local_29 = __local_9;
-            "core:prelude/format.wado/Formatter::pad"(__local_29, (if __local_47 -> ref "core:prelude/string.wado//String" {
+            "core:prelude/format.wado/Formatter::pad"(__local_29, (if __local_45 -> ref "core:prelude/string.wado//String" {
                 struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("true"), used: 4 };
             } else {
                 struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
@@ -310,16 +304,8 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/describe"(a, b) {
     } else {
         0;
     }) -> i32 {
-        __local_6 = __inline__value_copy_T19_14: block -> ref "core:prelude/string.wado//String" {
-            __local_43 = ref.cast "wado-compiler/tests/fixtures/tuple_2.wado//TupleValue::Text"(__local_19).payload_0;
-            break __inline__value_copy_T19_14: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(__local_43.repr)), used: __local_43.used };
-            unreachable;
-        };
-        __local_7 = __inline__value_copy_T19_15: block -> ref "core:prelude/string.wado//String" {
-            __local_44 = ref.cast "wado-compiler/tests/fixtures/tuple_2.wado//TupleValue::Text"(__local_20).payload_0;
-            break __inline__value_copy_T19_15: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(__local_44.repr)), used: __local_44.used };
-            unreachable;
-        };
+        __local_6 = ref.cast "wado-compiler/tests/fixtures/tuple_2.wado//TupleValue::Text"(__local_19).payload_0;
+        __local_7 = ref.cast "wado-compiler/tests/fixtures/tuple_2.wado//TupleValue::Text"(__local_20).payload_0;
         1;
     } else {
         0;
@@ -377,10 +363,6 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_for_of"() with Stdout {
     let __pattern_temp_1: ref "tuple//[i32, String]";
     let __pattern_temp_2: ref null "tuple//[i32, String]";
     let __pattern_temp_3: ref "tuple//[i32, String]";
-    let __local_23: ref "tuple//[i32, String]";
-    let __local_24: ref "core:prelude/string.wado//String";
-    let __local_32: ref "tuple//[i32, String]";
-    let __local_33: ref "core:prelude/string.wado//String";
     pairs = __seq_lit: block -> ref "core:prelude//Array<Tuple<i32,String>>" {
         __local_0 = struct.new "core:prelude//Array<Tuple<i32,String>>" { repr: array.new_fixed<ref "tuple//[i32, String]">(struct.new "tuple//[i32, String]" { 0: 1, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("one"), used: 3 } }, struct.new "tuple//[i32, String]" { 0: 2, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("two"), used: 3 } }, struct.new "tuple//[i32, String]" { 0: 3, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("three"), used: 5 } }), used: 3 };
         break __seq_lit: __local_0;
@@ -391,17 +373,23 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_for_of"() with Stdout {
         l14: loop {
             __pattern_temp_0 = "core:prelude/array.wado/ArrayIter<Tuple<i32,String>>^Iterator::next"(__iter_2);
             if ref.is_null(__pattern_temp_0) == 0 {
+<<<<<<< HEAD
                 __pattern_temp_1 = __inline__value_copy_T402_7: block -> ref "tuple//[i32, String]" {
                     __local_23 = ref.as_non_null(__pattern_temp_0);
                     break __inline__value_copy_T402_7: struct.new "tuple//[i32, String]" { 0: __local_23.0, 1: __local_23.1 };
                     unreachable;
                 };
-                num = __pattern_temp_1.0;
-                name_4 = __inline__value_copy_T19_8: block -> ref "core:prelude/string.wado//String" {
-                    __local_24 = __pattern_temp_1.1;
-                    break __inline__value_copy_T19_8: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(__local_24.repr)), used: __local_24.used };
+||||||| f476182
+                __pattern_temp_1 = __inline__value_copy_T397_7: block -> ref "tuple//[i32, String]" {
+                    __local_23 = ref.as_non_null(__pattern_temp_0);
+                    break __inline__value_copy_T397_7: struct.new "tuple//[i32, String]" { 0: __local_23.0, 1: __local_23.1 };
                     unreachable;
                 };
+=======
+                __pattern_temp_1 = ref.as_non_null(__pattern_temp_0);
+>>>>>>> origin/main
+                num = __pattern_temp_1.0;
+                name_4 = __pattern_temp_1.1;
                 "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
                     __local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 };
                     __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_7 };
@@ -423,17 +411,23 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_for_of"() with Stdout {
         l17: loop {
             __pattern_temp_2 = "core:prelude/array.wado/ArrayIter<Tuple<i32,String>>^Iterator::next"(__iter_5);
             if ref.is_null(__pattern_temp_2) == 0 {
+<<<<<<< HEAD
                 __pattern_temp_3 = __inline__value_copy_T402_14: block -> ref "tuple//[i32, String]" {
                     __local_32 = ref.as_non_null(__pattern_temp_2);
                     break __inline__value_copy_T402_14: struct.new "tuple//[i32, String]" { 0: __local_32.0, 1: __local_32.1 };
                     unreachable;
                 };
-                drop(__pattern_temp_3.0);
-                name_6 = __inline__value_copy_T19_15: block -> ref "core:prelude/string.wado//String" {
-                    __local_33 = __pattern_temp_3.1;
-                    break __inline__value_copy_T19_15: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(__local_33.repr)), used: __local_33.used };
+||||||| f476182
+                __pattern_temp_3 = __inline__value_copy_T397_14: block -> ref "tuple//[i32, String]" {
+                    __local_32 = ref.as_non_null(__pattern_temp_2);
+                    break __inline__value_copy_T397_14: struct.new "tuple//[i32, String]" { 0: __local_32.0, 1: __local_32.1 };
                     unreachable;
                 };
+=======
+                __pattern_temp_3 = ref.as_non_null(__pattern_temp_2);
+>>>>>>> origin/main
+                drop(__pattern_temp_3.0);
+                name_6 = __pattern_temp_3.1;
                 "core:cli/println"(name_6);
             } else {
                 break b16;
@@ -460,55 +454,44 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_if_let"() with Stdout {
     let __pattern_temp_1: ref "tuple//[i32, i32]";
     let __pattern_temp_3: ref "tuple//[i32, i32]";
     let __pattern_temp_5: ref "tuple//[i32, i32]";
-    let __local_19: ref "tuple//[i32, i32]";
-    let __local_23: ref "core:prelude/format.wado//Formatter";
-    let __local_28: ref "core:prelude/format.wado//Formatter";
-    let __local_31: ref "tuple//[i32, i32]";
-    let __local_35: ref "core:prelude/format.wado//Formatter";
-    let __local_40: ref "core:prelude/format.wado//Formatter";
-    let __local_43: ref "tuple//[i32, i32]";
+    let __local_22: ref "core:prelude/format.wado//Formatter";
+    let __local_27: ref "core:prelude/format.wado//Formatter";
+    let __local_33: ref "core:prelude/format.wado//Formatter";
+    let __local_38: ref "core:prelude/format.wado//Formatter";
     opt = struct.new "tuple//[i32, i32]" { 0: 10, 1: 20 };
     if ref.is_null(opt) == 0 {
-        __pattern_temp_1 = __inline__value_copy_T110_0: block -> ref "tuple//[i32, i32]" {
-            __local_19 = ref.as_non_null(opt);
-            break __inline__value_copy_T110_0: struct.new "tuple//[i32, i32]" { 0: __local_19.0, 1: __local_19.1 };
-            unreachable;
-        };
+        __pattern_temp_1 = ref.as_non_null(opt);
         x_1 = __pattern_temp_1.0;
         y_2 = __pattern_temp_1.1;
         "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
             __local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 };
             __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_7 };
-            __local_23 = __local_8;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(x_1, __local_23);
+            __local_22 = __local_8;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(x_1, __local_22);
             "core:prelude/string.wado/String::push"(__local_7, 44);
             "core:prelude/string.wado/String::push"(__local_7, 32);
             __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_7 };
-            __local_28 = __local_8;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(y_2, __local_28);
+            __local_27 = __local_8;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(y_2, __local_27);
             break __tmpl: __local_7;
             unreachable;
         });
     }
     none = ref.null none;
     if ref.is_null(none) == 0 {
-        __pattern_temp_3 = __inline__value_copy_T110_8: block -> ref "tuple//[i32, i32]" {
-            __local_31 = ref.as_non_null(none);
-            break __inline__value_copy_T110_8: struct.new "tuple//[i32, i32]" { 0: __local_31.0, 1: __local_31.1 };
-            unreachable;
-        };
+        __pattern_temp_3 = ref.as_non_null(none);
         x_4 = __pattern_temp_3.0;
         y_5 = __pattern_temp_3.1;
         "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
             __local_9 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 };
             __local_10 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_9 };
-            __local_35 = __local_10;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(x_4, __local_35);
+            __local_33 = __local_10;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(x_4, __local_33);
             "core:prelude/string.wado/String::push"(__local_9, 44);
             "core:prelude/string.wado/String::push"(__local_9, 32);
             __local_10 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_9 };
-            __local_40 = __local_10;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(y_5, __local_40);
+            __local_38 = __local_10;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(y_5, __local_38);
             break __tmpl: __local_9;
             unreachable;
         });
@@ -516,11 +499,7 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_if_let"() with Stdout {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("none"), used: 4 });
     }
     if ref.is_null(opt) == 0 {
-        __pattern_temp_5 = __inline__value_copy_T110_16: block -> ref "tuple//[i32, i32]" {
-            __local_43 = ref.as_non_null(opt);
-            break __inline__value_copy_T110_16: struct.new "tuple//[i32, i32]" { 0: __local_43.0, 1: __local_43.1 };
-            unreachable;
-        };
+        __pattern_temp_5 = ref.as_non_null(opt);
         drop(__pattern_temp_5.0);
         y_6 = __pattern_temp_5.1;
         "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -715,108 +694,88 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_literal"() with Stdout {
     let __local_29: char;
     let __local_30: ref "core:prelude/string.wado//String";
     let __local_33: bool;
-    let __local_34: ref "core:prelude/string.wado//String";
-    let __local_41: ref "core:prelude/string.wado//String";
-    let __local_44: ref "core:prelude/string.wado//String";
-    let __local_51: ref "core:prelude/string.wado//String";
     pair = struct.new "tuple//[i32, i32]" { 0: 42, 1: 10 };
-    result = __inline__value_copy_T19_0: block -> ref "core:prelude/string.wado//String" {
-        let __match_scrut_0: ref "tuple//[i32, i32]";
-        __match_scrut_0 = pair;
-        __local_34 = (if __local_1 = __match_scrut_0.0; __local_26 = __match_scrut_0.1; __local_26 == 10 -> ref "core:prelude/string.wado//String" {
-            __local_1 = __match_scrut_0.0;
-            __local_26 = __match_scrut_0.1;
-            __tmpl: block -> ref "core:prelude/string.wado//String" {
-                __local_16 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(29), used: 0 };
-                "core:prelude/string.wado/String::push_str"(__local_16, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("matched int: "), used: 13 });
-                __local_17 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_16 };
-                "core:prelude/primitive.wado/i32::fmt_decimal"(__local_1, __local_17);
-                break __tmpl: __local_16;
-                unreachable;
-            };
-        } else {
-            struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no match"), used: 8 };
-        });
-        break __inline__value_copy_T19_0: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(__local_34.repr)), used: __local_34.used };
-        unreachable;
-    };
+    let __match_scrut_0: ref "tuple//[i32, i32]";
+    __match_scrut_0 = pair;
+    result = (if __local_1 = __match_scrut_0.0; __local_26 = __match_scrut_0.1; __local_26 == 10 -> ref "core:prelude/string.wado//String" {
+        __local_1 = __match_scrut_0.0;
+        __local_26 = __match_scrut_0.1;
+        __tmpl: block -> ref "core:prelude/string.wado//String" {
+            __local_16 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(29), used: 0 };
+            "core:prelude/string.wado/String::push_str"(__local_16, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("matched int: "), used: 13 });
+            __local_17 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_16 };
+            "core:prelude/primitive.wado/i32::fmt_decimal"(__local_1, __local_17);
+            break __tmpl: __local_16;
+            unreachable;
+        };
+    } else {
+        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no match"), used: 8 };
+    });
     "core:cli/println"(result);
     bpair = struct.new "tuple//[String, bool]" { 0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("yes"), used: 3 }, 1: 1 };
-    result3 = __inline__value_copy_T19_5: block -> ref "core:prelude/string.wado//String" {
-        let __match_scrut_1: ref "tuple//[String, bool]";
-        __match_scrut_1 = bpair;
-        __local_41 = (if __local_4 = __match_scrut_1.0; __local_27 = __match_scrut_1.1; __local_27 == 1 -> ref "core:prelude/string.wado//String" {
-            __local_4 = __match_scrut_1.0;
-            __local_27 = __match_scrut_1.1;
-            __tmpl: block -> ref "core:prelude/string.wado//String" {
-                __local_18 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(30), used: 0 };
-                "core:prelude/string.wado/String::push_str"(__local_18, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("matched bool: "), used: 14 });
-                "core:prelude/string.wado/String::push_str"(__local_18, __local_4);
-                break __tmpl: __local_18;
-                unreachable;
-            };
+    let __match_scrut_1: ref "tuple//[String, bool]";
+    __match_scrut_1 = bpair;
+    result3 = (if __local_4 = __match_scrut_1.0; __local_27 = __match_scrut_1.1; __local_27 == 1 -> ref "core:prelude/string.wado//String" {
+        __local_4 = __match_scrut_1.0;
+        __local_27 = __match_scrut_1.1;
+        __tmpl: block -> ref "core:prelude/string.wado//String" {
+            __local_18 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(30), used: 0 };
+            "core:prelude/string.wado/String::push_str"(__local_18, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("matched bool: "), used: 14 });
+            "core:prelude/string.wado/String::push_str"(__local_18, __local_4);
+            break __tmpl: __local_18;
+            unreachable;
+        };
+    __local_5 = __match_scrut_1.0;
+    __local_28 = __match_scrut_1.1;
+    } else if __local_28 == 0 -> ref "core:prelude/string.wado//String" {
         __local_5 = __match_scrut_1.0;
         __local_28 = __match_scrut_1.1;
-        } else if __local_28 == 0 -> ref "core:prelude/string.wado//String" {
-            __local_5 = __match_scrut_1.0;
-            __local_28 = __match_scrut_1.1;
-            __tmpl: block -> ref "core:prelude/string.wado//String" {
-                __local_19 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(29), used: 0 };
-                "core:prelude/string.wado/String::push_str"(__local_19, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("not matched: "), used: 13 });
-                "core:prelude/string.wado/String::push_str"(__local_19, __local_5);
-                break __tmpl: __local_19;
-                unreachable;
-            };
-        } else {
+        __tmpl: block -> ref "core:prelude/string.wado//String" {
+            __local_19 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(29), used: 0 };
+            "core:prelude/string.wado/String::push_str"(__local_19, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("not matched: "), used: 13 });
+            "core:prelude/string.wado/String::push_str"(__local_19, __local_5);
+            break __tmpl: __local_19;
             unreachable;
-        });
-        break __inline__value_copy_T19_5: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(__local_41.repr)), used: __local_41.used };
+        };
+    } else {
         unreachable;
-    };
+    });
     "core:cli/println"(result3);
     cpair = struct.new "tuple//[i32, char]" { 0: 99, 1: 88 };
-    result4 = __inline__value_copy_T19_8: block -> ref "core:prelude/string.wado//String" {
-        let __match_scrut_2: ref "tuple//[i32, char]";
-        __match_scrut_2 = cpair;
-        __local_44 = (if __local_8 = __match_scrut_2.0; __local_29 = __match_scrut_2.1; __local_29 == 88 -> ref "core:prelude/string.wado//String" {
-            __local_8 = __match_scrut_2.0;
-            __local_29 = __match_scrut_2.1;
-            __tmpl: block -> ref "core:prelude/string.wado//String" {
-                __local_20 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(30), used: 0 };
-                "core:prelude/string.wado/String::push_str"(__local_20, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("matched char: "), used: 14 });
-                __local_21 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_20 };
-                "core:prelude/primitive.wado/i32::fmt_decimal"(__local_8, __local_21);
-                break __tmpl: __local_20;
-                unreachable;
-            };
-        } else {
-            struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no match"), used: 8 };
-        });
-        break __inline__value_copy_T19_8: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(__local_44.repr)), used: __local_44.used };
-        unreachable;
-    };
+    let __match_scrut_2: ref "tuple//[i32, char]";
+    __match_scrut_2 = cpair;
+    result4 = (if __local_8 = __match_scrut_2.0; __local_29 = __match_scrut_2.1; __local_29 == 88 -> ref "core:prelude/string.wado//String" {
+        __local_8 = __match_scrut_2.0;
+        __local_29 = __match_scrut_2.1;
+        __tmpl: block -> ref "core:prelude/string.wado//String" {
+            __local_20 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(30), used: 0 };
+            "core:prelude/string.wado/String::push_str"(__local_20, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("matched char: "), used: 14 });
+            __local_21 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_20 };
+            "core:prelude/primitive.wado/i32::fmt_decimal"(__local_8, __local_21);
+            break __tmpl: __local_20;
+            unreachable;
+        };
+    } else {
+        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no match"), used: 8 };
+    });
     "core:cli/println"(result4);
     spair = struct.new "tuple//[i32, String]" { 0: 7, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 } };
-    result5 = __inline__value_copy_T19_13: block -> ref "core:prelude/string.wado//String" {
-        let __match_scrut_3: ref "tuple//[i32, String]";
-        __match_scrut_3 = spair;
-        __local_51 = (if __local_11 = __match_scrut_3.0; __local_30 = __match_scrut_3.1; "core:prelude/string.wado/String^Eq::eq"(__local_30, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 }) -> ref "core:prelude/string.wado//String" {
-            __local_11 = __match_scrut_3.0;
-            __local_30 = __match_scrut_3.1;
-            __tmpl: block -> ref "core:prelude/string.wado//String" {
-                __local_22 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 };
-                "core:prelude/string.wado/String::push_str"(__local_22, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("matched string: "), used: 16 });
-                __local_23 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_22 };
-                "core:prelude/primitive.wado/i32::fmt_decimal"(__local_11, __local_23);
-                break __tmpl: __local_22;
-                unreachable;
-            };
-        } else {
-            struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no match"), used: 8 };
-        });
-        break __inline__value_copy_T19_13: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(__local_51.repr)), used: __local_51.used };
-        unreachable;
-    };
+    let __match_scrut_3: ref "tuple//[i32, String]";
+    __match_scrut_3 = spair;
+    result5 = (if __local_11 = __match_scrut_3.0; __local_30 = __match_scrut_3.1; "core:prelude/string.wado/String^Eq::eq"(__local_30, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 }) -> ref "core:prelude/string.wado//String" {
+        __local_11 = __match_scrut_3.0;
+        __local_30 = __match_scrut_3.1;
+        __tmpl: block -> ref "core:prelude/string.wado//String" {
+            __local_22 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 };
+            "core:prelude/string.wado/String::push_str"(__local_22, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("matched string: "), used: 16 });
+            __local_23 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_22 };
+            "core:prelude/primitive.wado/i32::fmt_decimal"(__local_11, __local_23);
+            break __tmpl: __local_22;
+            unreachable;
+        };
+    } else {
+        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no match"), used: 8 };
+    });
     "core:cli/println"(result5);
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_24 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(28), used: 0 };
@@ -860,43 +819,38 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_match"() with Stdout {
     let __local_17: ref "core:prelude/format.wado//Formatter";
     let __local_18: ref "core:prelude/string.wado//String";
     let __local_19: ref "core:prelude/format.wado//Formatter";
-    let __local_21: ref "core:prelude/string.wado//String";
-    let __local_25: ref "core:prelude/format.wado//Formatter";
-    let __local_30: ref "core:prelude/format.wado//Formatter";
+    let __local_24: ref "core:prelude/format.wado//Formatter";
+    let __local_29: ref "core:prelude/format.wado//Formatter";
     pair = struct.new "tuple//[i32, i32]" { 0: 5, 1: 10 };
-    label = __inline__value_copy_T19_1: block -> ref "core:prelude/string.wado//String" {
-        let __match_scrut_0: ref "tuple//[i32, i32]";
-        __match_scrut_0 = pair;
-        __local_21 = (if __local_1 = __match_scrut_0.0; __local_2 = __match_scrut_0.1; (__local_1 + __local_2) > 20 -> ref "core:prelude/string.wado//String" {
-            __local_1 = __match_scrut_0.0;
-            __local_2 = __match_scrut_0.1;
-            struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("large"), used: 5 };
+    let __match_scrut_0: ref "tuple//[i32, i32]";
+    __match_scrut_0 = pair;
+    label = (if __local_1 = __match_scrut_0.0; __local_2 = __match_scrut_0.1; (__local_1 + __local_2) > 20 -> ref "core:prelude/string.wado//String" {
+        __local_1 = __match_scrut_0.0;
+        __local_2 = __match_scrut_0.1;
+        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("large"), used: 5 };
+    __local_3 = __match_scrut_0.0;
+    __local_4 = __match_scrut_0.1;
+    } else if __local_3 == __local_4 -> ref "core:prelude/string.wado//String" {
         __local_3 = __match_scrut_0.0;
         __local_4 = __match_scrut_0.1;
-        } else if __local_3 == __local_4 -> ref "core:prelude/string.wado//String" {
-            __local_3 = __match_scrut_0.0;
-            __local_4 = __match_scrut_0.1;
-            struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("equal"), used: 5 };
-        } else {
-            __local_5 = __match_scrut_0.0;
-            __local_6 = __match_scrut_0.1;
-            __tmpl: block -> ref "core:prelude/string.wado//String" {
-                __local_14 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 };
-                __local_15 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_14 };
-                __local_25 = __local_15;
-                "core:prelude/primitive.wado/i32::fmt_decimal"(__local_5, __local_25);
-                "core:prelude/string.wado/String::push"(__local_14, 44);
-                "core:prelude/string.wado/String::push"(__local_14, 32);
-                __local_15 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_14 };
-                __local_30 = __local_15;
-                "core:prelude/primitive.wado/i32::fmt_decimal"(__local_6, __local_30);
-                break __tmpl: __local_14;
-                unreachable;
-            };
-        });
-        break __inline__value_copy_T19_1: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(__local_21.repr)), used: __local_21.used };
-        unreachable;
-    };
+        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("equal"), used: 5 };
+    } else {
+        __local_5 = __match_scrut_0.0;
+        __local_6 = __match_scrut_0.1;
+        __tmpl: block -> ref "core:prelude/string.wado//String" {
+            __local_14 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 };
+            __local_15 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_14 };
+            __local_24 = __local_15;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(__local_5, __local_24);
+            "core:prelude/string.wado/String::push"(__local_14, 44);
+            "core:prelude/string.wado/String::push"(__local_14, 32);
+            __local_15 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_14 };
+            __local_29 = __local_15;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(__local_6, __local_29);
+            break __tmpl: __local_14;
+            unreachable;
+        };
+    });
     "core:cli/println"(label);
     let __match_scrut_1: ref "tuple//[i32, i32]";
     __match_scrut_1 = pair;
@@ -1359,49 +1313,6 @@ fn "core:prelude/array.wado/ArrayIter<Tuple<i32,String>>^Iterator::next"(self) {
     item = builtin::array_get<ref "tuple//[i32, String]">(self.repr, self.index);
     self.index = self.index + 1;
     return item;
-}
-
-fn "core:prelude/array.wado/Array<Tuple<i32,String>>::push"(self, value) {
-    let used: i32;
-    used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<Tuple<i32,String>>::grow"(self);
-    }
-    builtin::array_set<ref "tuple//[i32, String]">(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn "core:prelude/array.wado/Array<Tuple<i32,String>>::grow"(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref builtin::array<Tuple<i32,String>>;
-    let old_repr: ref builtin::array<Tuple<i32,String>>;
-    let used: i32;
-    let i: i32;
-    let __local_7: i32;
-    capacity = builtin::array_len(self.repr);
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_7 = capacity * 2;
-        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-        unreachable;
-    };
-    new_repr = builtin::array_new<ref "tuple//[i32, String]">(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_0: block {
-        i = 0;
-        block {
-            l91: loop {
-                if i >= used {
-                    break __for_0;
-                }
-                builtin::array_set<ref "tuple//[i32, String]">(new_repr, i, builtin::array_get<ref "tuple//[i32, String]">(old_repr, i));
-                i = i + 1;
-                continue l91;
-            };
-        };
-    };
-    self.repr = new_repr;
 }
 
 export fn "wado-compiler/tests/fixtures/tuple_2.wado/__cm_export__run" as "run"

@@ -95,21 +95,17 @@ type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref 
 
 type "functype//core:prelude/array.wado/Array<Score>::sorted" = fn(ref "core:prelude//Array<i32>") -> ref "core:prelude//Array<i32>";  // TypeId(37)
 
-type "functype//core:prelude/array.wado/Array<Score>::push" = fn(ref "core:prelude//Array<i32>", i32);  // TypeId(38)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(38)
 
-type "functype//core:prelude/array.wado/Array<Score>::grow" = fn(ref "core:prelude//Array<i32>");  // TypeId(39)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(39)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(40)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(40)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(41)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(41)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(42)
+type "functype//core:prelude/primitive.wado/i32^Ord::cmp" = fn(i32, i32) -> "core:prelude/traits.wado//enum:Ordering";  // TypeId(42)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(43)
-
-type "functype//core:prelude/primitive.wado/i32^Ord::cmp" = fn(i32, i32) -> "core:prelude/traits.wado//enum:Ordering";  // TypeId(44)
-
-type "functype//wado-compiler/tests/fixtures/newtype_array_sort.wado/Array<Score>::sort_by$__Closure_2" = fn(ref "core:prelude//Array<i32>");  // TypeId(45)
+type "functype//wado-compiler/tests/fixtures/newtype_array_sort.wado/Array<Score>::sort_by$__Closure_2" = fn(ref "core:prelude//Array<i32>");  // TypeId(43)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -666,49 +662,6 @@ fn "core:prelude/array.wado/Array<Score>::sorted"(self) {
     return copy;
 }
 
-fn "core:prelude/array.wado/Array<Score>::push"(self, value) {
-    let used: i32;
-    used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<Score>::grow"(self);
-    }
-    builtin::array_set<i32>(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn "core:prelude/array.wado/Array<Score>::grow"(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref builtin::array<i32>;
-    let old_repr: ref builtin::array<i32>;
-    let used: i32;
-    let i: i32;
-    let __local_7: i32;
-    capacity = builtin::array_len(self.repr);
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_7 = capacity * 2;
-        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-        unreachable;
-    };
-    new_repr = builtin::array_new<i32>(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_0: block {
-        i = 0;
-        block {
-            l54: loop {
-                if i >= used {
-                    break __for_0;
-                }
-                builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
-                i = i + 1;
-                continue l54;
-            };
-        };
-    };
-    self.repr = new_repr;
-}
-
 fn "wado-compiler/tests/fixtures/newtype_array_sort.wado/Array<Score>::sort_by$__Closure_2"(self) {
     let n: i32;
     let src: ref builtin::array<i32>;
@@ -733,14 +686,14 @@ fn "wado-compiler/tests/fixtures/newtype_array_sort.wado/Array<Score>::sort_by$_
     width = 1;
     __for_11: block {
         block {
-            l58: loop {
+            l54: loop {
                 if width >= n {
                     break __for_11;
                 }
                 __for_12: block {
                     start = 0;
                     block {
-                        l61: loop {
+                        l57: loop {
                             if start >= n {
                                 break __for_12;
                             }
@@ -756,7 +709,7 @@ fn "wado-compiler/tests/fixtures/newtype_array_sort.wado/Array<Score>::sort_by$_
                                 __for_13: block {
                                     k = start;
                                     block {
-                                        l65: loop {
+                                        l61: loop {
                                             if k >= end {
                                                 break __for_13;
                                             }
@@ -781,19 +734,19 @@ fn "wado-compiler/tests/fixtures/newtype_array_sort.wado/Array<Score>::sort_by$_
                                                 j = j + 1;
                                             }
                                             k = k + 1;
-                                            continue l65;
+                                            continue l61;
                                         };
                                     };
                                 };
                                 builtin::array_copy<i32>(src, start, buf, start, end - start);
                             }
                             start = start + (width * 2);
-                            continue l61;
+                            continue l57;
                         };
                     };
                 };
                 width = width * 2;
-                continue l58;
+                continue l54;
             };
         };
     };

@@ -1,0 +1,33 @@
+// Test that the WIR-level DCE removes `Array<T>::push` / `::grow`
+// instantiations whose only call site was eliminated by Phase 3's
+// `collapse_array_push_sequences`.
+//
+// The single-element array literal `[w]` lowers to a TIR
+// `SequenceLiteralBuilder::push_literal` chain that the WIR optimizer
+// rewrites to `array.new_fixed`. After that rewrite, the monomorphized
+// `Array<Widget>::push` (and its `Array<Widget>::grow` callee) have
+// zero call sites — they must not appear in the final WIR.
+
+use { println } from "core:cli";
+
+pub struct Widget {
+    pub id: i32,
+}
+
+export fn run() with Stdout {
+    let w = Widget { id: 7 };
+    let widgets: Array<Widget> = [w];
+    println(`{widgets[0].id}`);
+}
+
+__DATA__
+{
+    "stdout": "7\n",
+    "wir_not_expect:O2": [
+        "Array<Widget>::push",
+        "Array<Widget>::grow"
+    ],
+    "wir_expect:O2": [
+        "array.new_fixed"
+    ]
+}

@@ -150,17 +150,12 @@ fn "wado-compiler/tests/fixtures/opt_sroa_variant_per_case.wado/make_payload"(x)
 
 fn "wado-compiler/tests/fixtures/opt_sroa_variant_per_case.wado/use_payload"(x) {
     let p: ref "wado-compiler/tests/fixtures/opt_sroa_variant_per_case.wado//Payload";
-    let __local_4: ref "wado-compiler/tests/fixtures/opt_sroa_variant_per_case.wado//Payload";
     let __sroa_result_discriminant: i32;
     let __sroa_result_case0_payload_0: ref null "wado-compiler/tests/fixtures/opt_sroa_variant_per_case.wado//Payload";
     let __sroa_result_case1_payload_0: ref null "core:prelude/string.wado//String";
     multivalue_bind [__sroa_result_discriminant, __sroa_result_case0_payload_0, __sroa_result_case1_payload_0] = "wado-compiler/tests/fixtures/opt_sroa_variant_per_case.wado/make_payload"(x);
     if __sroa_result_discriminant == 0 {
-        p = __inline__value_copy_T38_0: block -> ref "wado-compiler/tests/fixtures/opt_sroa_variant_per_case.wado//Payload" {
-            __local_4 = ref.as_non_null(__sroa_result_case0_payload_0);
-            break __inline__value_copy_T38_0: struct.new "wado-compiler/tests/fixtures/opt_sroa_variant_per_case.wado//Payload" { value: __local_4.value };
-            unreachable;
-        };
+        p = ref.as_non_null(__sroa_result_case0_payload_0);
         return p.value;
     }
     return -1;
@@ -168,17 +163,12 @@ fn "wado-compiler/tests/fixtures/opt_sroa_variant_per_case.wado/use_payload"(x) 
 
 fn "wado-compiler/tests/fixtures/opt_sroa_variant_per_case.wado/use_err_branch"(x) {
     let msg: ref "core:prelude/string.wado//String";
-    let __local_4: ref "core:prelude/string.wado//String";
     let __sroa_result_discriminant: i32;
     let __sroa_result_case0_payload_0: ref null "wado-compiler/tests/fixtures/opt_sroa_variant_per_case.wado//Payload";
     let __sroa_result_case1_payload_0: ref null "core:prelude/string.wado//String";
     multivalue_bind [__sroa_result_discriminant, __sroa_result_case0_payload_0, __sroa_result_case1_payload_0] = "wado-compiler/tests/fixtures/opt_sroa_variant_per_case.wado/make_payload"(x);
     if __sroa_result_discriminant == 1 {
-        msg = __inline__value_copy_T25_0: block -> ref "core:prelude/string.wado//String" {
-            __local_4 = ref.as_non_null(__sroa_result_case1_payload_0);
-            break __inline__value_copy_T25_0: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(__local_4.repr)), used: __local_4.used };
-            unreachable;
-        };
+        msg = ref.as_non_null(__sroa_result_case1_payload_0);
         return msg;
     }
     return struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ok"), used: 2 };

@@ -292,14 +292,10 @@ fn "wado-compiler/tests/fixtures/treemap_btree2.wado/run"() with Stdout {
     let __local_78: ref "wado-compiler/tests/fixtures/treemap_btree2.wado//BTreeNode<String,i32>";
     let __local_79: ref null "wado-compiler/tests/fixtures/treemap_btree2.wado//BTreeNode<String,i32>";
     let __local_82: ref "core:prelude/types.wado//Box<i32>";
-    let __local_88: ref "tuple//[String, i32]";
-    let __local_89: ref "core:prelude/string.wado//String";
     let root: ref "wado-compiler/tests/fixtures/treemap_btree2.wado//BTreeNode<String,i32>";
-    let __pattern_temp_0_98: ref null "wado-compiler/tests/fixtures/treemap_btree2.wado//BTreeNode<String,i32>";
-    let __local_101: ref "core:prelude/types.wado//Box<i32>";
-    let __local_108: ref "core:prelude/types.wado//Box<i32>";
-    let __local_113: ref "tuple//[String, i32]";
-    let __local_114: ref "core:prelude/string.wado//String";
+    let __pattern_temp_0_96: ref null "wado-compiler/tests/fixtures/treemap_btree2.wado//BTreeNode<String,i32>";
+    let __local_99: ref "core:prelude/types.wado//Box<i32>";
+    let __local_106: ref "core:prelude/types.wado//Box<i32>";
     map = struct.new "wado-compiler/tests/fixtures/treemap_btree2.wado//TreeMap<String,i32>" { root: ref.null none, t: 3, size: 0, deleted_count: 0 };
     key_34 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("apple"), used: 5 };
     "wado-compiler/tests/fixtures/treemap_btree2.wado/TreeMap<String,i32>::insert"(map, key_34, 1);
@@ -396,6 +392,7 @@ fn "wado-compiler/tests/fixtures/treemap_btree2.wado/run"() with Stdout {
         l2: loop {
             __pattern_temp_0_29 = "core:prelude/array.wado/ArrayIter<Tuple<String,i32>>^Iterator::next"(__iter_2);
             if ref.is_null(__pattern_temp_0_29) == 0 {
+<<<<<<< HEAD
                 entry_3 = __inline__value_copy_T437_34: block -> ref "tuple//[String, i32]" {
                     __local_88 = ref.as_non_null(__pattern_temp_0_29);
                     break __inline__value_copy_T437_34: struct.new "tuple//[String, i32]" { 0: __local_88.0, 1: __local_88.1 };
@@ -406,6 +403,21 @@ fn "wado-compiler/tests/fixtures/treemap_btree2.wado/run"() with Stdout {
                     break __inline__value_copy_T34_35: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(__local_89.repr)), used: __local_89.used };
                     unreachable;
                 };
+||||||| f476182
+                entry_3 = __inline__value_copy_T432_34: block -> ref "tuple//[String, i32]" {
+                    __local_88 = ref.as_non_null(__pattern_temp_0_29);
+                    break __inline__value_copy_T432_34: struct.new "tuple//[String, i32]" { 0: __local_88.0, 1: __local_88.1 };
+                    unreachable;
+                };
+                key_4 = __inline__value_copy_T34_35: block -> ref "core:prelude/string.wado//String" {
+                    __local_89 = entry_3.0;
+                    break __inline__value_copy_T34_35: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(__local_89.repr)), used: __local_89.used };
+                    unreachable;
+                };
+=======
+                entry_3 = ref.as_non_null(__pattern_temp_0_29);
+                key_4 = entry_3.0;
+>>>>>>> origin/main
                 value_5 = entry_3.1;
                 "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
                     __local_21 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(35), used: 0 };
@@ -428,9 +440,9 @@ fn "wado-compiler/tests/fixtures/treemap_btree2.wado/run"() with Stdout {
 === After compaction ==="), used: 25 });
     if "wado-compiler/tests/fixtures/treemap_btree2.wado/TreeMap<String,i32>::needs_compaction"(map) {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Compaction needed, running..."), used: 29 });
-        __pattern_temp_0_98 = map.root;
-        if ref.is_null(__pattern_temp_0_98) == 0 {
-            root = ref.as_non_null(__pattern_temp_0_98);
+        __pattern_temp_0_96 = map.root;
+        if ref.is_null(__pattern_temp_0_96) == 0 {
+            root = ref.as_non_null(__pattern_temp_0_96);
             "wado-compiler/tests/fixtures/treemap_btree2.wado/BTreeNode<String,i32>::compact"(root);
             map.deleted_count = 0;
         }
@@ -444,8 +456,8 @@ fn "wado-compiler/tests/fixtures/treemap_btree2.wado/run"() with Stdout {
         "core:prelude/string.wado/String::push"(__local_23, 58);
         "core:prelude/string.wado/String::push"(__local_23, 32);
         __local_24 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_23 };
-        __local_101 = struct.new "core:prelude/types.wado//Box<i32>" { value: map.size };
-        "core:prelude/primitive.wado/i32::fmt_decimal"(__local_101.value, __local_24);
+        __local_99 = struct.new "core:prelude/types.wado//Box<i32>" { value: map.size };
+        "core:prelude/primitive.wado/i32::fmt_decimal"(__local_99.value, __local_24);
         break __tmpl: __local_23;
         unreachable;
     });
@@ -453,8 +465,8 @@ fn "wado-compiler/tests/fixtures/treemap_btree2.wado/run"() with Stdout {
         __local_25 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(31), used: 0 };
         "core:prelude/string.wado/String::push_str"(__local_25, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Deleted count: "), used: 15 });
         __local_26 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_25 };
-        __local_108 = struct.new "core:prelude/types.wado//Box<i32>" { value: map.deleted_count };
-        "core:prelude/primitive.wado/i32::fmt_decimal"(__local_108.value, __local_26);
+        __local_106 = struct.new "core:prelude/types.wado//Box<i32>" { value: map.deleted_count };
+        "core:prelude/primitive.wado/i32::fmt_decimal"(__local_106.value, __local_26);
         break __tmpl: __local_25;
         unreachable;
     });
@@ -466,6 +478,7 @@ fn "wado-compiler/tests/fixtures/treemap_btree2.wado/run"() with Stdout {
         l7: loop {
             __pattern_temp_1 = "core:prelude/array.wado/ArrayIter<Tuple<String,i32>>^Iterator::next"(__iter_7);
             if ref.is_null(__pattern_temp_1) == 0 {
+<<<<<<< HEAD
                 entry_8 = __inline__value_copy_T437_51: block -> ref "tuple//[String, i32]" {
                     __local_113 = ref.as_non_null(__pattern_temp_1);
                     break __inline__value_copy_T437_51: struct.new "tuple//[String, i32]" { 0: __local_113.0, 1: __local_113.1 };
@@ -476,6 +489,21 @@ fn "wado-compiler/tests/fixtures/treemap_btree2.wado/run"() with Stdout {
                     break __inline__value_copy_T34_52: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(__local_114.repr)), used: __local_114.used };
                     unreachable;
                 };
+||||||| f476182
+                entry_8 = __inline__value_copy_T432_51: block -> ref "tuple//[String, i32]" {
+                    __local_113 = ref.as_non_null(__pattern_temp_1);
+                    break __inline__value_copy_T432_51: struct.new "tuple//[String, i32]" { 0: __local_113.0, 1: __local_113.1 };
+                    unreachable;
+                };
+                key_9 = __inline__value_copy_T34_52: block -> ref "core:prelude/string.wado//String" {
+                    __local_114 = entry_8.0;
+                    break __inline__value_copy_T34_52: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(__local_114.repr)), used: __local_114.used };
+                    unreachable;
+                };
+=======
+                entry_8 = ref.as_non_null(__pattern_temp_1);
+                key_9 = entry_8.0;
+>>>>>>> origin/main
                 value_10 = entry_8.1;
                 "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
                     __local_27 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(35), used: 0 };
