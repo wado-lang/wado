@@ -1,0 +1,56 @@
+// Min repro: returning Result<(), ErrorCode> with `return Result::Err(e)`
+// from a match arm pattern-bound `e: ErrorCode`, when the Ok arm performs
+// stream I/O.
+//
+// Failure case: WIR pipeline emits a function with multi-value return
+// `(result i32 i32)` but the Err arm body leaves the boxed ErrorCode
+// `(ref $error_code_struct)` on the stack instead of unboxing it to
+// the i32 discriminant. wasmparser rejects with:
+//   func N failed to validate
+//   type mismatch: expected i32, found (ref $type)
+//
+// Originally observed in package-gale/scripts/extract_antlr4_descriptors.wado
+// `fn write_file_string(...)`.
+
+use { Stdout } from "core:cli";
+use {
+    Preopens, Descriptor, DescriptorFlags, PathFlags, OpenFlags, Filesize,
+} from "wasi:filesystem";
+use { ErrorCode } from "wasi:filesystem/types.wado";
+
+fn write_helper(dir: &Descriptor, path: &String, content: &String) -> Result<(), ErrorCode> {
+    let opened = dir.open_at(
+        PathFlags::none(),
+        *path,
+        OpenFlags::Create | OpenFlags::Truncate,
+        DescriptorFlags::Read | DescriptorFlags::Write,
+    ).wait();
+    match opened {
+        Err(e) => return Result::Err(e),
+        Ok(file) => {
+            let bytes: Array<u8> = content.bytes().collect();
+            let [rx, tx] = Stream::<u8>::new();
+            let sub = file.write_via_stream(rx, 0 as Filesize);
+            tx.write(bytes);
+            tx.drop();
+            sub.drop();
+            return Result::Ok(());
+        },
+    }
+}
+
+export fn run() with Stdout, Preopens {
+    let dirs = Preopens::get_directories();
+    if dirs.len() == 0 {
+        return;
+    }
+    // Force the function to be lowered — the multi-value calling
+    // convention is selected during lowering based on the call sites.
+    let result = write_helper(&dirs[0].0, &"never_actually_opened.txt", &"hello");
+    if let Err(_) = result {
+        return;
+    }
+}
+
+__DATA__
+{"stdout": ""}

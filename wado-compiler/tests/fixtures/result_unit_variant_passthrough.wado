@@ -1,0 +1,70 @@
+// Min repro: returning Result<(), V> with `return Result::Err(e)` from a
+// match arm pattern-bound `e: V`.
+//
+// Failure case: the WIR pipeline emits a function with multi-value return
+// `(result i32 i32)` but the body leaves a `(ref $variant_struct)` on
+// the stack for the payload — no unbox to i32. wasmparser rejects the
+// module with:
+//   func N failed to validate
+//   type mismatch: expected i32, found (ref $type)
+//
+// Originally observed in package-gale/scripts/extract_antlr4_descriptors.wado
+// for `fn write_file_string(...) -> Result<(), ErrorCode>` after a
+// `dir.open_at(...).wait()` Result match.
+
+variant Color {
+    Red,
+    Green,
+    Blue,
+}
+
+// (1) Direct passthrough — works today.
+fn passthrough(c: Result<i32, Color>) -> Result<(), Color> {
+    match c {
+        Err(e) => return Result::Err(e),
+        Ok(_) => return Result::Ok(()),
+    }
+}
+
+test "Ok unit return" {
+    assert passthrough(Result::<i32, Color>::Ok(1)) matches { Ok(_) };
+}
+
+test "Err passthrough preserves variant case" {
+    assert passthrough(Result::<i32, Color>::Err(Color::Red)) matches { Err(Color::Red) };
+    assert passthrough(Result::<i32, Color>::Err(Color::Green)) matches { Err(Color::Green) };
+    assert passthrough(Result::<i32, Color>::Err(Color::Blue)) matches { Err(Color::Blue) };
+}
+
+// (2) Same shape, but the Ok arm has a non-trivial body that builds and
+//     drops some locals before returning. This variant of the pattern
+//     mirrors `write_file_string` more closely.
+fn passthrough_with_ok_work(c: Result<i32, Color>, bytes: Array<u8>) -> Result<(), Color> {
+    match c {
+        Err(e) => return Result::Err(e),
+        Ok(_) => {
+            let mut total: i32 = 0;
+            for let b of bytes {
+                total += b as i32;
+            }
+            // Use total so it isn't optimized away.
+            if total < 0 {
+                return Result::Err(Color::Red);
+            }
+            return Result::Ok(());
+        },
+    }
+}
+
+test "Ok arm with body still preserves Err passthrough" {
+    let arr: Array<u8> = [1, 2, 3];
+    assert passthrough_with_ok_work(Result::<i32, Color>::Ok(1), arr) matches { Ok(_) };
+    let arr2: Array<u8> = [];
+    assert passthrough_with_ok_work(
+        Result::<i32, Color>::Err(Color::Green),
+        arr2,
+    ) matches { Err(Color::Green) };
+}
+
+__DATA__
+{"test": {}}
