@@ -1545,6 +1545,45 @@ pub fn mangle_local_trait_method(struct_name: &str, trait_name: &str, method_nam
     format!("{struct_name}^{trait_name}::{method_name}")
 }
 
+/// Build the per-instantiation effect-dispatch struct name.
+///
+/// `label` is the dispatch instantiation label produced by the
+/// effect-dispatch synthesis (`Counter`, `Stream<u8>`, …).
+///
+/// Examples:
+/// - `dispatch_struct_name("Counter")` → `"__Dispatch_Counter"`
+/// - `dispatch_struct_name("Stream<u8>")` → `"__Dispatch_Stream<u8>"`
+pub fn dispatch_struct_name(label: &str) -> String {
+    format!("__Dispatch_{label}")
+}
+
+/// Build the per-instantiation effect-dispatch global name.
+///
+/// Examples:
+/// - `dispatch_global_name("Counter")` → `"__effect_Counter"`
+/// - `dispatch_global_name("Stream<u8>")` → `"__effect_Stream<u8>"`
+pub fn dispatch_global_name(label: &str) -> String {
+    format!("__effect_{label}")
+}
+
+/// Build the per-operation effect-dispatch wrapper function name.
+///
+/// Examples:
+/// - `dispatch_wrapper_name("Counter", "next")` → `"__effect_dispatch__Counter__next"`
+/// - `dispatch_wrapper_name("Stream<u8>", "read")` → `"__effect_dispatch__Stream<u8>__read"`
+pub fn dispatch_wrapper_name(label: &str, op_name: &str) -> String {
+    format!("__effect_dispatch__{label}__{op_name}")
+}
+
+/// Build the dispatch struct's per-operation field name.
+///
+/// Examples:
+/// - `dispatch_field_name("next")` → `"op_next"`
+/// - `dispatch_field_name("read")` → `"op_read"`
+pub fn dispatch_field_name(op_name: &str) -> String {
+    format!("op_{op_name}")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
