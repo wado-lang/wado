@@ -74,11 +74,11 @@ type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // Ty
 
 type "functype//wado-compiler/tests/fixtures/effect_handler_self_delegation.wado/run" = fn();  // TypeId(21)
 
-type "functype//wado-compiler/tests/fixtures/effect_handler_self_delegation.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(22)
+type "functype//wado-compiler/tests/fixtures/effect_handler_self_delegation.wado/__effect_dispatch__Counter__next" = fn() -> i32;  // TypeId(22)
 
-type "functype//wado-compiler/tests/fixtures/effect_handler_self_delegation.wado/__cm_export__run" = fn();  // TypeId(23)
+type "functype//wado-compiler/tests/fixtures/effect_handler_self_delegation.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(23)
 
-type "functype//wado-compiler/tests/fixtures/effect_handler_self_delegation.wado/__effect_dispatch__Counter__next" = fn() -> i32;  // TypeId(24)
+type "functype//wado-compiler/tests/fixtures/effect_handler_self_delegation.wado/__cm_export__run" = fn();  // TypeId(24)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(25)
 
@@ -198,16 +198,7 @@ fn "wado-compiler/tests/fixtures/effect_handler_self_delegation.wado/run"() with
     });
 }
 
-fn "wado-compiler/tests/fixtures/effect_handler_self_delegation.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return "wasi/wasi:cli/Stdout::write_via_stream"(data);
-}
-
-fn "wado-compiler/tests/fixtures/effect_handler_self_delegation.wado/__cm_export__run"() {
-    "wado-compiler/tests/fixtures/effect_handler_self_delegation.wado/run"();
-    "wasi/task-return"(0);
-}
-
-fn "wado-compiler/tests/fixtures/effect_handler_self_delegation.wado/__effect_dispatch__Counter__next"() with Counter {
+fn "wado-compiler/tests/fixtures/effect_handler_self_delegation.wado/__effect_dispatch__Counter__next"() {
     let __saved: ref null "wado-compiler/tests/fixtures/effect_handler_self_delegation.wado//__Dispatch_Counter";
     let __d: ref "wado-compiler/tests/fixtures/effect_handler_self_delegation.wado//__Dispatch_Counter";
     let __result: i32;
@@ -226,6 +217,15 @@ fn "wado-compiler/tests/fixtures/effect_handler_self_delegation.wado/__effect_di
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no handler installed for `Counter::next`"), used: 40 });
         unreachable;
     }
+}
+
+fn "wado-compiler/tests/fixtures/effect_handler_self_delegation.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+    return "wasi/wasi:cli/Stdout::write_via_stream"(data);
+}
+
+fn "wado-compiler/tests/fixtures/effect_handler_self_delegation.wado/__cm_export__run"() {
+    "wado-compiler/tests/fixtures/effect_handler_self_delegation.wado/run"();
+    "wasi/task-return"(0);
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {
