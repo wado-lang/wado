@@ -316,6 +316,13 @@ pub enum TypeError {
     /// unknown name). Both kinds are installable as handlers; see WEP
     /// 2026-04-11.
     NotAnEffect { name: String, span: Span },
+
+    /// `with E => h do` where `E` is a generic effect parameter
+    /// (`<effect E>`). Generic effect parameters are propagation-only:
+    /// the compiler does not know `E`'s operation list at effect-check
+    /// time, so it cannot generate dispatch infrastructure. See WEP
+    /// 2026-01-27 § Generic Effect Parameters Are Propagation-Only.
+    GenericEffectParamNotInstallable { name: String, span: Span },
 }
 
 impl std::fmt::Display for TypeError {
@@ -597,6 +604,13 @@ impl std::fmt::Display for TypeError {
                     span.line, span.column, name
                 )
             }
+            TypeError::GenericEffectParamNotInstallable { name, span } => {
+                write!(
+                    f,
+                    "{}:{}: cannot install a handler for generic effect parameter '{}'; abstract effect parameters are propagation-only — use a concrete effect name in `with`",
+                    span.line, span.column, name
+                )
+            }
         }
     }
 }
@@ -840,6 +854,13 @@ impl From<TypeError> for crate::compiler_host::Diagnostic {
                 Code::UnknownType,
                 format!(
                     "'{name}' is not an effect; only effect names are valid in `with E => h do` clauses"
+                ),
+                *span,
+            ),
+            TypeError::GenericEffectParamNotInstallable { name, span } => (
+                Code::UnsupportedFeature,
+                format!(
+                    "cannot install a handler for generic effect parameter '{name}'; abstract effect parameters are propagation-only — use a concrete effect name in `with`"
                 ),
                 *span,
             ),

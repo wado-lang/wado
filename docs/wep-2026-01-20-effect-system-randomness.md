@@ -92,9 +92,7 @@ pub struct HashMap<K, V> {
 }
 
 impl HashMap {
-    // NOTE: Syntax for effects on expressions not yet finalized.
-    // This might be `with InsecureSeed` or something else.
-    pub fn new<K, V>() -> HashMap<K, V> /* with InsecureSeed? */ {
+    pub fn new<K, V>() -> HashMap<K, V> with InsecureSeed {
         let seed = get_insecure_seed();  // Called once per HashMap instance
         return HashMap { seed, ... };
     }
@@ -103,6 +101,8 @@ impl HashMap {
     // Expected: O(1), Worst case: O(n)
 }
 ```
+
+Effect requirements live on the function signature, like every other effect in Wado. There is no per-expression `with` syntax: a caller satisfies `HashMap::new`'s `InsecureSeed` requirement by declaring `with InsecureSeed` on its own signature (or by being inside a `with InsecureSeed => h do { ... }` block).
 
 ### InsecureSeed is NOT an Ambient Effect
 
@@ -113,8 +113,7 @@ world MyApp {
     import InsecureSeed;  // Required only if using HashMap
 }
 
-fn process() /* with InsecureSeed? */ {
-    // NOTE: Effect syntax on expressions not yet decided
+fn process() with InsecureSeed {
     let map: HashMap<String, i32> = HashMap::new();
     map.insert("key", 42);
 }
@@ -166,11 +165,10 @@ Following `wep-2026-01-18-iterator-based-literal-coercion.md`, object literals c
 
 ```wado
 let tree: TreeMap<String, i32> = {"a": 1, "b": 2};
-// NOTE: Effect syntax not finalized
-let hash: HashMap<String, i32> = {"a": 1, "b": 2}; /* with InsecureSeed? */
+let hash: HashMap<String, i32> = {"a": 1, "b": 2};  // requires `with InsecureSeed` on the enclosing function
 ```
 
-The coercion mechanism handles calling constructors with appropriate effects.
+The coercion mechanism handles calling constructors with appropriate effects; the constructor's `with InsecureSeed` is checked against the enclosing function's effect set as usual.
 
 ## Consequences
 
@@ -206,21 +204,9 @@ The coercion mechanism handles calling constructors with appropriate effects.
 - **Rejected**: Vulnerable to Hash DoS attacks
 - Security cannot be optional for default implementations
 
-### Open Questions
+### Implementation Status
 
-**Effect syntax for expressions**: The syntax for requiring effects on expressions (like `HashMap::new()`) is not yet finalized. Current WEP uses comments to indicate uncertainty:
-
-```wado
-let map = HashMap::new() /* with InsecureSeed? */;
-```
-
-Possible syntaxes to consider:
-
-- `HashMap::new() with InsecureSeed`
-- `with InsecureSeed { HashMap::new() }`
-- Effect inference (constructor signature already declares the requirement)
-
-This decision affects ergonomics and will be addressed in a future WEP.
+`InsecureSeed` is declared in `lib/wasi/random/insecure_seed.wado` and is reachable from any function declaring `with InsecureSeed`. `TreeMap` is implemented in `core:collections`; `HashMap` is not yet implemented — it will land alongside `SipHash 1-3` and a `Hash`/`Eq` trait pair.
 
 ## Relationship with wasi-keyvalue
 

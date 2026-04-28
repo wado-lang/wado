@@ -1,0 +1,39 @@
+// Negative test: installing a handler for a generic `<effect E>`
+// parameter is unsupported. `E` is opaque inside the function body —
+// the compiler does not know its operation list at effect-check time
+// (which runs before monomorphisation), so `with E => h do` cannot
+// be lowered to a dispatch struct. See WEP-2026-01-27 § Generic
+// Effect Parameters Are Propagation-Only.
+//
+// The diagnostic must clearly indicate the feature is unsupported,
+// not bottom out in a confusing "not an effect" message.
+
+use { println, Stdout } from "core:cli";
+
+effect Greeting {
+    fn hello() -> i32;
+}
+
+struct Mock {
+    _phantom: i32,
+}
+
+impl Greeting for Mock {
+    fn hello(&self) -> i32 {
+        resume 0
+    }
+}
+
+fn try_handle<effect E>(f: fn() with E) {
+    let mut m = Mock { _phantom: 0 };
+    with E => &mut m do {
+        f();
+    }
+}
+
+export fn run() with Stdout {
+    println("unreachable");
+}
+
+__DATA__
+{"compile_error": "cannot install a handler for generic effect parameter"}
