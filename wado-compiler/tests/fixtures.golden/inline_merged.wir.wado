@@ -117,25 +117,21 @@ type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(44)
 
-type "functype//core:prelude/array.wado/Array<InlineItem>::push" = fn(ref "core:prelude//Array<InlineItem>", ref "wado-compiler/tests/fixtures/inline_merged.wado//InlineItem");  // TypeId(45)
+type "functype//core:prelude/array.wado/Array<i32>::push" = fn(ref "core:prelude//Array<i32>", i32);  // TypeId(45)
 
-type "functype//core:prelude/array.wado/Array<InlineItem>::grow" = fn(ref "core:prelude//Array<InlineItem>");  // TypeId(46)
+type "functype//core:prelude/array.wado/Array<i32>::grow" = fn(ref "core:prelude//Array<i32>");  // TypeId(46)
 
-type "functype//core:prelude/array.wado/Array<i32>::push" = fn(ref "core:prelude//Array<i32>", i32);  // TypeId(47)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(47)
 
-type "functype//core:prelude/array.wado/Array<i32>::grow" = fn(ref "core:prelude//Array<i32>");  // TypeId(48)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(48)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(49)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(49)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(50)
+type "functype//wado-compiler/tests/fixtures/inline_merged.wado/inline_big_match" = fn(i32) -> [i64, i64];  // TypeId(50)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(51)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(51)
 
-type "functype//wado-compiler/tests/fixtures/inline_merged.wado/inline_big_match" = fn(i32) -> [i64, i64];  // TypeId(52)
-
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(53)
-
-type "functype//core:prelude/primitive.wado/i64::fmt_decimal" = fn(i64, ref "core:prelude/format.wado//Formatter");  // TypeId(54)
+type "functype//core:prelude/primitive.wado/i64::fmt_decimal" = fn(i64, ref "core:prelude/format.wado//Formatter");  // TypeId(52)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -836,49 +832,6 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/array.wado/Array<InlineItem>::push"(self, value) {
-    let used: i32;
-    used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<InlineItem>::grow"(self);
-    }
-    builtin::array_set<ref "wado-compiler/tests/fixtures/inline_merged.wado//InlineItem">(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn "core:prelude/array.wado/Array<InlineItem>::grow"(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref builtin::array<InlineItem>;
-    let old_repr: ref builtin::array<InlineItem>;
-    let used: i32;
-    let i: i32;
-    let __local_7: i32;
-    capacity = builtin::array_len(self.repr);
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_7 = capacity * 2;
-        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-        unreachable;
-    };
-    new_repr = builtin::array_new<ref "wado-compiler/tests/fixtures/inline_merged.wado//InlineItem">(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_0: block {
-        i = 0;
-        block {
-            l69: loop {
-                if i >= used {
-                    break __for_0;
-                }
-                builtin::array_set<ref "wado-compiler/tests/fixtures/inline_merged.wado//InlineItem">(new_repr, i, builtin::array_get<ref "wado-compiler/tests/fixtures/inline_merged.wado//InlineItem">(old_repr, i));
-                i = i + 1;
-                continue l69;
-            };
-        };
-    };
-    self.repr = new_repr;
-}
-
 fn "core:prelude/array.wado/Array<i32>::push"(self, value) {
     let used: i32;
     used = self.used;
@@ -909,13 +862,13 @@ fn "core:prelude/array.wado/Array<i32>::grow"(self) {
     __for_0: block {
         i = 0;
         block {
-            l73: loop {
+            l69: loop {
                 if i >= used {
                     break __for_0;
                 }
                 builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
                 i = i + 1;
-                continue l73;
+                continue l69;
             };
         };
     };

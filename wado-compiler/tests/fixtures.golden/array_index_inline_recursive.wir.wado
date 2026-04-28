@@ -94,23 +94,15 @@ type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(34)
 
-type "functype//core:prelude/array.wado/Array<String>::grow" = fn(ref "core:prelude//Array<String>");  // TypeId(35)
+type "functype//wado-compiler/tests/fixtures/array_index_inline_recursive.wado/Node<String>::traverse" = fn(ref "wado-compiler/tests/fixtures/array_index_inline_recursive.wado//Node<String>", i32);  // TypeId(35)
 
-type "functype//wado-compiler/tests/fixtures/array_index_inline_recursive.wado/Node<String>::traverse" = fn(ref "wado-compiler/tests/fixtures/array_index_inline_recursive.wado//Node<String>", i32);  // TypeId(36)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(36)
 
-type "functype//core:prelude/array.wado/Array<Node<String>>::push" = fn(ref "core:prelude//Array<Node<String>>", ref "wado-compiler/tests/fixtures/array_index_inline_recursive.wado//Node<String>");  // TypeId(37)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(37)
 
-type "functype//core:prelude/array.wado/Array<Node<String>>::grow" = fn(ref "core:prelude//Array<Node<String>>");  // TypeId(38)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(38)
 
-type "functype//core:prelude/array.wado/Array<String>::push" = fn(ref "core:prelude//Array<String>", ref "core:prelude/string.wado//String");  // TypeId(39)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(40)
-
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(41)
-
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(42)
-
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(43)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(39)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -523,39 +515,6 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/array.wado/Array<String>::grow"(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref builtin::array<String>;
-    let old_repr: ref builtin::array<String>;
-    let used: i32;
-    let i: i32;
-    let __local_7: i32;
-    capacity = builtin::array_len(self.repr);
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_7 = capacity * 2;
-        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-        unreachable;
-    };
-    new_repr = builtin::array_new<ref "core:prelude/string.wado//String">(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_0: block {
-        i = 0;
-        block {
-            l43: loop {
-                if i >= used {
-                    break __for_0;
-                }
-                builtin::array_set<ref "core:prelude/string.wado//String">(new_repr, i, builtin::array_get<ref "core:prelude/string.wado//String">(old_repr, i));
-                i = i + 1;
-                continue l43;
-            };
-        };
-    };
-    self.repr = new_repr;
-}
-
 fn "wado-compiler/tests/fixtures/array_index_inline_recursive.wado/Node<String>::traverse"(self, depth) with Stdout {
     let i: i32;
     let _licm_children_6: ref "core:prelude//Array<Node<String>>";
@@ -569,70 +528,17 @@ fn "wado-compiler/tests/fixtures/array_index_inline_recursive.wado/Node<String>:
             _licm_used_7 = _licm_children_6.used;
             _licm_repr_8 = _licm_children_6.repr;
             block {
-                l47: loop {
+                l44: loop {
                     if i >= _licm_used_7 {
                         break __for_0;
                     }
                     "wado-compiler/tests/fixtures/array_index_inline_recursive.wado/Node<String>::traverse"(builtin::array_get<ref "wado-compiler/tests/fixtures/array_index_inline_recursive.wado//Node<String>">(_licm_repr_8, i), depth + 1);
                     i = i + 1;
-                    continue l47;
+                    continue l44;
                 };
             };
         };
     }
-}
-
-fn "core:prelude/array.wado/Array<Node<String>>::push"(self, value) {
-    let used: i32;
-    used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<Node<String>>::grow"(self);
-    }
-    builtin::array_set<ref "wado-compiler/tests/fixtures/array_index_inline_recursive.wado//Node<String>">(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn "core:prelude/array.wado/Array<Node<String>>::grow"(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref builtin::array<Node<String>>;
-    let old_repr: ref builtin::array<Node<String>>;
-    let used: i32;
-    let i: i32;
-    let __local_7: i32;
-    capacity = builtin::array_len(self.repr);
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_7 = capacity * 2;
-        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-        unreachable;
-    };
-    new_repr = builtin::array_new<ref "wado-compiler/tests/fixtures/array_index_inline_recursive.wado//Node<String>">(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_0: block {
-        i = 0;
-        block {
-            l51: loop {
-                if i >= used {
-                    break __for_0;
-                }
-                builtin::array_set<ref "wado-compiler/tests/fixtures/array_index_inline_recursive.wado//Node<String>">(new_repr, i, builtin::array_get<ref "wado-compiler/tests/fixtures/array_index_inline_recursive.wado//Node<String>">(old_repr, i));
-                i = i + 1;
-                continue l51;
-            };
-        };
-    };
-    self.repr = new_repr;
-}
-
-fn "core:prelude/array.wado/Array<String>::push"(self, value) {
-    let used: i32;
-    used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<String>::grow"(self);
-    }
-    builtin::array_set<ref "core:prelude/string.wado//String">(self.repr, used, value);
-    self.used = used + 1;
 }
 
 export fn "wado-compiler/tests/fixtures/array_index_inline_recursive.wado/__cm_export__run" as "run"

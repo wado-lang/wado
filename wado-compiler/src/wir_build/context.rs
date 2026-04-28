@@ -910,6 +910,7 @@ impl<'a> WirContext<'a> {
             dead_func_indices,
             dead_global_indices,
             needed_canonicals,
+            defined_func_base: DEFINED_FUNC_BASE,
         }
     }
 }

@@ -63,6 +63,19 @@ pub struct WirPackage {
     /// Populated during WIR translation via `WirContext::ensure_canonical`.
     /// Used by the component codegen to determine which canonical imports to generate.
     pub needed_canonicals: IndexSet<CanonicalIntrinsic>,
+    /// Absolute Wasm function index of the first defined function (i.e. the
+    /// number of imported functions). Defined function `i` (the `i`-th entry
+    /// in [`functions`](Self::functions)) has the absolute index
+    /// `defined_func_base + i`, which is the value carried by `WirFuncId`.
+    ///
+    /// - GC module (built by `wir_build`): [`crate::wir_build::DEFINED_FUNC_BASE`].
+    /// - Memory module (built by `WasmModuleInfo::to_wir_package`): `0` (no
+    ///   function imports).
+    ///
+    /// Used by DCE / compaction passes to translate between absolute
+    /// `WirFuncId` indices and 0-based array indices into
+    /// [`functions`](Self::functions) without hard-coding the offset.
+    pub defined_func_base: u32,
 }
 
 /// Functions and globals extracted from a `#![wasm_module("name")]` source module.
@@ -231,6 +244,7 @@ impl WirPackage {
             dead_func_indices: IndexSet::default(),
             dead_global_indices: IndexSet::default(),
             needed_canonicals: IndexSet::default(),
+            defined_func_base: 0,
         }
     }
 }
