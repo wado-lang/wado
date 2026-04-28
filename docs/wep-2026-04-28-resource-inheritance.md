@@ -45,23 +45,41 @@ A future WEP can extend `extends` to `i32`-backed resources if we find a lowerin
 
 ### How the representation is chosen for a given resource
 
-The representation is a property of the `resource` declaration, decided as follows:
+Backing is **always declared explicitly** on the resource, and **structurally verified** by the compiler. There is no namespace-based inference, no default-by-omission for resources that participate in CM bindings.
 
-1. A resource generated from WIT (via `wado-from-idl --wit-dir ...`) is `i32`-backed. WIT defines the canonical ABI; we follow it.
-2. A resource generated from WebIDL (via the future `wado-from-idl --webidl-dir ...`) is `externref`-backed.
-3. A resource declared in user code has its representation inferred from its `#[cm("...")]` namespace, with an explicit attribute as escape hatch:
-   - `#[cm("web:...")]` → `externref`
-   - `#[cm("wasi:...")]` → `i32`
-   - No `#[cm(...)]` → defaults to `i32` (matches today's behavior)
-   - `#[extern_ref]` (or similar; concrete spelling TBD) forces `externref`
+Concretely:
 
-The exact attribute spelling and the inference rule are an open detail to settle when we start implementation. The principle is: bindings generators emit something explicit; user code rarely has to think about it.
+- `#[cm(...)]` on a `resource` requires a `type=...` field. Allowed values in v1: `externref` and `i32`.
+  ```wado
+  #[cm("web:dom#Element", type=externref)]
+  pub resource Element { ... }
+
+  #[cm("wasi:http/types@0.3.0#request", type=i32)]
+  pub resource Request { ... }
+  ```
+- A resource without `#[cm(...)]` is `i32`-backed and **cannot use `extends`** in v1. Hierarchies require explicit CM identity.
+- `resource X extends Y { ... }` is a compile error unless **both** `X` and `Y` declare `type=externref`. Mismatched backings in an `extends` family is a hard error, not a warning.
+- A resource declared with `type=externref` but without any `extends` relationship is allowed (a future-proof opt-in to the GC backing).
+
+### Why mandatory + structural over namespace inference
+
+Considered alternatives:
+
+1. **Infer from namespace** (`web:*` → externref, `wasi:*` → i32).
+   - Pros: zero boilerplate, generators always get the right form.
+   - Cons: hidden rule baked into the compiler, hard to extend to new namespaces (`node:*`, vendor-specific), silent surprise if a user picks a `web:*` URL by accident.
+2. **Mandatory explicit attribute, no validation.**
+   - Pros: every declaration is grep-able; no magic.
+   - Cons: a generator that forgets the attribute or picks the wrong value silently mismatches the host glue at runtime.
+3. **Mandatory explicit attribute + structural validation (chosen).**
+   - Pros: every declaration is self-describing; cross-declaration consistency is enforced by the compiler, so "broken state compiles" cannot happen — `extends` mismatches are rejected, and declared backing is the single source of truth.
+   - Cons: more boilerplate per declaration. In practice, ~all `#[cm(...)]`-bearing resources are emitted by `wado-from-idl`, so the cost falls on one tool, not on humans.
 
 ### No cross-representation conversion in v1
 
 An `externref`-backed resource and an `i32`-backed resource are **distinct types from Wado's perspective**, even if they happen to point to the same host concept. There is no implicit conversion, and no `as`-cast, between them in v1.
 
-In practice this is not a constraint: WebIDL bindings live in `web:*` modules and do not appear in WIT signatures, and vice versa. If the need arises later (e.g., a hybrid component that talks to both browser APIs and WASI), we can add a typed bridge in a follow-up WEP.
+In practice this is not a constraint: WebIDL bindings live in `web:*` modules and do not appear in WIT signatures, and vice versa. As CM-GC matures (per [GC in Components](./wep-2026-03-28-gc-in-components.md)), more types migrate to `externref`-style representations on their own; we expect the moment "convert i32 to externref" becomes urgent to never quite arrive.
 
 ## Consequences
 
