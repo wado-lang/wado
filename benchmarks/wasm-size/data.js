@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777413920059,
+  "lastUpdate": 1777417761837,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -17589,6 +17589,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 1522768,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bd79c8252bbbb2e4d560737ec45edbe33be6c7c6",
+          "message": "Merge pull request #956 from wado-lang/claude/reduce-gale-wasm-size-wpPAI\n\nperf(gale): dedup token-kind set checks into shared helpers (-15.8% wasm)",
+          "timestamp": "2026-04-29T08:03:50+09:00",
+          "tree_id": "f44fe8e113180f20a2f0547cdffa0ed6c4182c57",
+          "url": "https://github.com/wado-lang/wado/commit/bd79c8252bbbb2e4d560737ec45edbe33be6c7c6"
+        },
+        "date": 1777417761513,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8774,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18518,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 1281621,
             "unit": "bytes"
           }
         ]
