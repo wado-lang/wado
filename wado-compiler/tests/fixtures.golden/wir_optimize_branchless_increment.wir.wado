@@ -81,17 +81,13 @@ type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(31)
 
-type "functype//core:prelude/array.wado/Array<bool>::push" = fn(ref "core:prelude//Array<bool>", bool);  // TypeId(32)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(32)
 
-type "functype//core:prelude/array.wado/Array<bool>::grow" = fn(ref "core:prelude//Array<bool>");  // TypeId(33)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(33)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(34)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(34)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(35)
-
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(36)
-
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(37)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(35)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -620,49 +616,6 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
         }
         return "core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
     }
-}
-
-fn "core:prelude/array.wado/Array<bool>::push"(self, value) {
-    let used: i32;
-    used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<bool>::grow"(self);
-    }
-    builtin::array_set<bool>(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn "core:prelude/array.wado/Array<bool>::grow"(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref builtin::array<bool>;
-    let old_repr: ref builtin::array<bool>;
-    let used: i32;
-    let i: i32;
-    let __local_7: i32;
-    capacity = builtin::array_len(self.repr);
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_7 = capacity * 2;
-        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-        unreachable;
-    };
-    new_repr = builtin::array_new<bool>(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_0: block {
-        i = 0;
-        block {
-            l50: loop {
-                if i >= used {
-                    break __for_0;
-                }
-                builtin::array_set<bool>(new_repr, i, builtin::array_get<bool>(old_repr, i));
-                i = i + 1;
-                continue l50;
-            };
-        };
-    };
-    self.repr = new_repr;
 }
 
 export fn "wado-compiler/tests/fixtures/wir_optimize_branchless_increment.wado/__cm_export____test_0" as "__test_0"

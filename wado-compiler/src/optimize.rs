@@ -280,6 +280,19 @@ fn run_optimization_passes(
         changed |= run_pass("tir/container_sroa", project, profiler, |p| {
             scalarize_containers(p)
         });
+        // Run value-copy elision *before* inlining: the inliner expands
+        // every reachable `$value_copy$T<id>` body into a labeled
+        // block, after which the `Call($value_copy$T, [arg])` shape the
+        // elider matches on no longer exists. Running before inline
+        // lets the elider strip wrappers around `match Parser::expect(p,
+        // K) { Ok(v) => v, Err(e) => return Err(e) }`-style `?`
+        // desugarings, where the match's `Ok` arm produces a value
+        // that is observably read-only and the surplus copy can fold
+        // away.
+        run_pass("tir/value_copy_elide_pre_inline", project, profiler, |p| {
+            elide_synthesized_value_copies(p);
+            false
+        });
         changed |= run_pass("tir/inline", project, profiler, |p| {
             inline_functions(p, threshold)
         });

@@ -203,27 +203,19 @@ type "functype//core:prelude/array.wado/Array<i32>::push" = fn(ref "core:prelude
 
 type "functype//core:prelude/array.wado/Array<i32>::grow" = fn(ref "core:prelude//Array<i32>");  // TypeId(75)
 
-type "functype//core:prelude/array.wado/Array<Point>::push" = fn(ref "core:prelude//Array<Point>", ref "wado-compiler/tests/fixtures/generic_struct_1.wado//Point");  // TypeId(76)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(76)
 
-type "functype//core:prelude/array.wado/Array<Point>::grow" = fn(ref "core:prelude//Array<Point>");  // TypeId(77)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(77)
 
-type "functype//core:prelude/array.wado/Array<Pair<i32,String>>::push" = fn(ref "core:prelude//Array<Pair<i32,String>>", ref "wado-compiler/tests/fixtures/generic_struct_1.wado//Pair<i32,String>");  // TypeId(78)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(78)
 
-type "functype//core:prelude/array.wado/Array<Pair<i32,String>>::grow" = fn(ref "core:prelude//Array<Pair<i32,String>>");  // TypeId(79)
+type "functype//core:prelude/string.wado/StrCharIter^Iterator::next" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(79)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(80)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(80)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(81)
+type "functype//core:collections/TreeMap<String,i32>::split" = fn(ref null "core:collections//TreeMapNode<String>") -> ref null "core:collections//TreeMapNode<String>";  // TypeId(81)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(82)
-
-type "functype//core:prelude/string.wado/StrCharIter^Iterator::next" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(83)
-
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(84)
-
-type "functype//core:collections/TreeMap<String,i32>::split" = fn(ref null "core:collections//TreeMapNode<String>") -> ref null "core:collections//TreeMapNode<String>";  // TypeId(85)
-
-type "functype//core:collections/TreeMap<String,i32>::skew" = fn(ref null "core:collections//TreeMapNode<String>") -> ref null "core:collections//TreeMapNode<String>";  // TypeId(86)
+type "functype//core:collections/TreeMap<String,i32>::skew" = fn(ref null "core:collections//TreeMapNode<String>") -> ref null "core:collections//TreeMapNode<String>";  // TypeId(82)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -1733,92 +1725,6 @@ fn "core:prelude/array.wado/Array<i32>::grow"(self) {
                 builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
                 i = i + 1;
                 continue l128;
-            };
-        };
-    };
-    self.repr = new_repr;
-}
-
-fn "core:prelude/array.wado/Array<Point>::push"(self, value) {
-    let used: i32;
-    used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<Point>::grow"(self);
-    }
-    builtin::array_set<ref "wado-compiler/tests/fixtures/generic_struct_1.wado//Point">(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn "core:prelude/array.wado/Array<Point>::grow"(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref builtin::array<Point>;
-    let old_repr: ref builtin::array<Point>;
-    let used: i32;
-    let i: i32;
-    let __local_7: i32;
-    capacity = builtin::array_len(self.repr);
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_7 = capacity * 2;
-        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-        unreachable;
-    };
-    new_repr = builtin::array_new<ref "wado-compiler/tests/fixtures/generic_struct_1.wado//Point">(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_0: block {
-        i = 0;
-        block {
-            l132: loop {
-                if i >= used {
-                    break __for_0;
-                }
-                builtin::array_set<ref "wado-compiler/tests/fixtures/generic_struct_1.wado//Point">(new_repr, i, builtin::array_get<ref "wado-compiler/tests/fixtures/generic_struct_1.wado//Point">(old_repr, i));
-                i = i + 1;
-                continue l132;
-            };
-        };
-    };
-    self.repr = new_repr;
-}
-
-fn "core:prelude/array.wado/Array<Pair<i32,String>>::push"(self, value) {
-    let used: i32;
-    used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<Pair<i32,String>>::grow"(self);
-    }
-    builtin::array_set<ref "wado-compiler/tests/fixtures/generic_struct_1.wado//Pair<i32,String>">(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn "core:prelude/array.wado/Array<Pair<i32,String>>::grow"(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref builtin::array<Pair<i32,String>>;
-    let old_repr: ref builtin::array<Pair<i32,String>>;
-    let used: i32;
-    let i: i32;
-    let __local_7: i32;
-    capacity = builtin::array_len(self.repr);
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_7 = capacity * 2;
-        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-        unreachable;
-    };
-    new_repr = builtin::array_new<ref "wado-compiler/tests/fixtures/generic_struct_1.wado//Pair<i32,String>">(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_0: block {
-        i = 0;
-        block {
-            l136: loop {
-                if i >= used {
-                    break __for_0;
-                }
-                builtin::array_set<ref "wado-compiler/tests/fixtures/generic_struct_1.wado//Pair<i32,String>">(new_repr, i, builtin::array_get<ref "wado-compiler/tests/fixtures/generic_struct_1.wado//Pair<i32,String>">(old_repr, i));
-                i = i + 1;
-                continue l136;
             };
         };
     };

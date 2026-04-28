@@ -111,21 +111,17 @@ type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref 
 
 type "functype//./sub/iterator_generic_map_lib.wado/GenericMapIter<ArrayIter<i32>,i32>^Iterator::next" = fn(ref "./sub/iterator_generic_map_lib.wado//GenericMapIter<ArrayIter<i32>,i32>") -> ref "core:prelude/types.wado//Option<i32>";  // TypeId(38)
 
-type "functype//core:prelude/array.wado/Array<i32>::push" = fn(ref "core:prelude//Array<i32>", i32);  // TypeId(39)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(39)
 
-type "functype//core:prelude/array.wado/Array<i32>::grow" = fn(ref "core:prelude//Array<i32>");  // TypeId(40)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(40)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(41)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(41)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(42)
+type "functype//core:prelude/array.wado/ArrayIter<i32>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(42)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(43)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(43)
 
-type "functype//core:prelude/array.wado/ArrayIter<i32>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(44)
-
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(45)
-
-type "functype//wado-compiler/tests/fixtures/iterator_generic_map_cross_module.wado/__Closure_2::__call" = fn(i32) -> i32;  // TypeId(46)
+type "functype//wado-compiler/tests/fixtures/iterator_generic_map_cross_module.wado/__Closure_2::__call" = fn(i32) -> i32;  // TypeId(44)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -691,49 +687,6 @@ fn "core:prelude/array.wado/ArrayIter<i32>^Iterator::next"(self) {
     item = builtin::array_get<i32>(self.repr, self.index);
     self.index = self.index + 1;
     return 0, item;
-}
-
-fn "core:prelude/array.wado/Array<i32>::push"(self, value) {
-    let used: i32;
-    used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<i32>::grow"(self);
-    }
-    builtin::array_set<i32>(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn "core:prelude/array.wado/Array<i32>::grow"(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref builtin::array<i32>;
-    let old_repr: ref builtin::array<i32>;
-    let used: i32;
-    let i: i32;
-    let __local_7: i32;
-    capacity = builtin::array_len(self.repr);
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_7 = capacity * 2;
-        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-        unreachable;
-    };
-    new_repr = builtin::array_new<i32>(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_0: block {
-        i = 0;
-        block {
-            l58: loop {
-                if i >= used {
-                    break __for_0;
-                }
-                builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
-                i = i + 1;
-                continue l58;
-            };
-        };
-    };
-    self.repr = new_repr;
 }
 
 fn "wado-compiler/tests/fixtures/iterator_generic_map_cross_module.wado/__Closure_2::__call"(x) {

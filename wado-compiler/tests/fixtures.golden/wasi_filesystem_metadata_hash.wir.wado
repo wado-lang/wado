@@ -247,8 +247,6 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_metadata_hash.wado/run"() with 
     let same: bool;
     let file3: i32;
     let different: bool;
-    let __local_23: ref "wasi:filesystem/types.wado//MetadataHashValue";
-    let __local_24: ref "wasi:filesystem/types.wado//MetadataHashValue";
     dirs = "wado-compiler/tests/fixtures/wasi_filesystem_metadata_hash.wado/__cm_binding__Preopens_get_directories"();
     if dirs.used == 0 {
         "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no preopened directories available"), used: 34 });
@@ -269,19 +267,11 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_metadata_hash.wado/run"() with 
         file1 = ref.cast "core:prelude/types.wado//Result<Descriptor,ErrorCode>::Ok"(file1_result).payload_0;
         hash1_result = "core:prelude/types.wado/AsyncCall<Result<MetadataHashValue,ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_metadata_hash.wado/__cm_binding__Descriptor_metadata_hash"(file1));
         if ref.test "core:prelude/types.wado//Result<MetadataHashValue,ErrorCode>::Ok"(hash1_result) {
-            hash1 = __inline__value_copy_T53_4: block -> ref "wasi:filesystem/types.wado//MetadataHashValue" {
-                __local_23 = ref.cast "core:prelude/types.wado//Result<MetadataHashValue,ErrorCode>::Ok"(hash1_result).payload_0;
-                break __inline__value_copy_T53_4: struct.new "wasi:filesystem/types.wado//MetadataHashValue" { lower: __local_23.lower, upper: __local_23.upper };
-                unreachable;
-            };
+            hash1 = ref.cast "core:prelude/types.wado//Result<MetadataHashValue,ErrorCode>::Ok"(hash1_result).payload_0;
             "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("metadata_hash: got hash from file descriptor"), used: 44 });
             hash_at_result = "core:prelude/types.wado/AsyncCall<Result<MetadataHashValue,ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_metadata_hash.wado/__cm_binding__Descriptor_metadata_hash_at"(dir, 0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello.txt"), used: 9 }));
             if ref.test "core:prelude/types.wado//Result<MetadataHashValue,ErrorCode>::Ok"(hash_at_result) {
-                hash_at = __inline__value_copy_T53_5: block -> ref "wasi:filesystem/types.wado//MetadataHashValue" {
-                    __local_24 = ref.cast "core:prelude/types.wado//Result<MetadataHashValue,ErrorCode>::Ok"(hash_at_result).payload_0;
-                    break __inline__value_copy_T53_5: struct.new "wasi:filesystem/types.wado//MetadataHashValue" { lower: __local_24.lower, upper: __local_24.upper };
-                    unreachable;
-                };
+                hash_at = ref.cast "core:prelude/types.wado//Result<MetadataHashValue,ErrorCode>::Ok"(hash_at_result).payload_0;
                 if (if hash1.lower == hash_at.lower -> i32 {
                     hash1.upper == hash_at.upper;
                 } else {

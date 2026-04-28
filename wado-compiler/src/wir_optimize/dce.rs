@@ -209,6 +209,106 @@ fn remap_func_ids(instr: &mut WirInstr, remap: &IndexMap<u32, u32>) {
     });
 }
 
+/// Mark defined functions unreachable from exports/elements as dead
+/// (`module.dead_func_indices`), so the subsequent `compact_dead_items`
+/// removes them and remaps every `WirFuncId` reference.
+///
+/// Must run on the GC module after WIR optimization passes that may
+/// orphan functions whose only call sites were eliminated — most
+/// notably `collapse_array_push_sequences` (Phase 3), which rewrites a
+/// single-element array literal `[v]` from `Array<T>::push(self, v)` to
+/// `array.new_fixed`, leaving the monomorphic `Array<T>::push` and its
+/// `Array<T>::grow` callee with no callers.
+///
+/// Unlike `dce_unreachable_functions`, this pass does not physically
+/// remove items: it only sets dead flags. The compaction pass handles
+/// the post-DCE renumbering of `WirFuncId` values throughout bodies,
+/// exports, and element tables. This separation is required for the
+/// GC module because:
+///
+/// - `WirFuncId` indices for defined functions start at
+///   [`DEFINED_FUNC_BASE`], not 0; the existing in-place
+///   `dce_unreachable_functions` assumes 0-based indexing and is
+///   mem-module-only.
+/// - `module.types` mixes function types with struct / variant / array
+///   types; the 1:1 function/type-table correspondence used by
+///   `dce_unreachable_functions` does not hold here.
+pub fn mark_unreachable_defined_functions(module: &mut WirPackage) {
+    use crate::wir_build::DEFINED_FUNC_BASE;
+
+    let num_funcs = u32::try_from(module.functions.len()).unwrap();
+    if num_funcs == 0 {
+        return;
+    }
+
+    // Build call graph keyed by 0-based defined-function array index.
+    // `WirFuncId::index()` returns the absolute Wasm function index
+    // (`DEFINED_FUNC_BASE + i` for defined functions, `< DEFINED_FUNC_BASE`
+    // for imports). Imports have no body and cannot be removed by this
+    // pass, so we simply ignore any callee whose index falls in the
+    // import range.
+    let to_array_idx = |abs_idx: u32| -> Option<u32> {
+        abs_idx
+            .checked_sub(DEFINED_FUNC_BASE)
+            .filter(|i| *i < num_funcs)
+    };
+
+    let mut callees_of: Vec<IndexSet<u32>> = Vec::with_capacity(module.functions.len());
+    for func in &module.functions {
+        let mut callees: IndexSet<u32> = IndexSet::default();
+        if let Some(body) = &func.body {
+            let mut abs_callees: IndexSet<u32> = IndexSet::default();
+            collect_func_refs_from_body(body, &mut abs_callees);
+            for c in abs_callees {
+                if let Some(arr_idx) = to_array_idx(c) {
+                    callees.insert(arr_idx);
+                }
+            }
+        }
+        callees_of.push(callees);
+    }
+
+    // Roots: exports + element tables. Both reference functions via
+    // `WirFuncId` (absolute index).
+    let mut reachable: IndexSet<u32> = IndexSet::default();
+    let mut queue: std::collections::VecDeque<u32> = std::collections::VecDeque::new();
+    let seed = |abs_idx: u32,
+                reachable: &mut IndexSet<u32>,
+                queue: &mut std::collections::VecDeque<u32>| {
+        if let Some(arr_idx) = to_array_idx(abs_idx)
+            && reachable.insert(arr_idx)
+        {
+            queue.push_back(arr_idx);
+        }
+    };
+    for export in &module.exports {
+        if let WirExportDesc::Func { func_id } = &export.desc {
+            seed(func_id.index(), &mut reachable, &mut queue);
+        }
+    }
+    for elem in &module.elements {
+        for fid in &elem.func_ids {
+            seed(fid.index(), &mut reachable, &mut queue);
+        }
+    }
+
+    while let Some(idx) = queue.pop_front() {
+        if let Some(callees) = callees_of.get(idx as usize) {
+            for &c in callees {
+                if reachable.insert(c) {
+                    queue.push_back(c);
+                }
+            }
+        }
+    }
+
+    for i in 0..num_funcs {
+        if !reachable.contains(&i) {
+            module.dead_func_indices.insert(i);
+        }
+    }
+}
+
 /// Mark types that are not referenced by any live function, import, or global
 /// as dead by adding them to `module.dead_type_indices`.
 ///

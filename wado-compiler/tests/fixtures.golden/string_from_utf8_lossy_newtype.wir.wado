@@ -109,19 +109,15 @@ type "functype//core:prelude/string.wado/String::from_utf8_lossy<MyBytes>" = fn(
 
 type "functype//core:prelude/array.wado/ArrayIter<u8>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<u8>") -> ref "core:prelude/types.wado//Option<u8>";  // TypeId(38)
 
-type "functype//core:prelude/array.wado/Array<u8>::push" = fn(ref "core:prelude//Array<u8>", u8);  // TypeId(39)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(39)
 
-type "functype//core:prelude/array.wado/Array<u8>::grow" = fn(ref "core:prelude//Array<u8>");  // TypeId(40)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(40)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(41)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(41)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(42)
+type "functype//core:prelude/string.wado/StrCharIter^Iterator::next" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(42)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(43)
-
-type "functype//core:prelude/string.wado/StrCharIter^Iterator::next" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(44)
-
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(45)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(43)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -144,15 +140,10 @@ fn "wado-compiler/tests/fixtures/string_from_utf8_lossy_newtype.wado/run"() {
     let __cond: bool;
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
-    let __local_8: ref "core:prelude//Array<u8>";
-    let __local_25: ref "core:prelude/format.wado//Formatter";
-    bytes = __inline__value_copy_T20_2: block -> ref "core:prelude//Array<u8>" {
-        __local_8 = __seq_lit: block -> ref "core:prelude//Array<u8>" {
-            __local_0 = struct.new "core:prelude//Array<u8>" { repr: array.new_fixed<u8>(72, 101, 108, 108, 111), used: 5 };
-            break __seq_lit: __local_0;
-            unreachable;
-        };
-        break __inline__value_copy_T20_2: struct.new "core:prelude//Array<u8>" { repr: ref.as_non_null(builtin::array_clone<u8>(__local_8.repr)), used: 5 };
+    let __local_24: ref "core:prelude/format.wado//Formatter";
+    bytes = __seq_lit: block -> ref "core:prelude//Array<u8>" {
+        __local_0 = struct.new "core:prelude//Array<u8>" { repr: array.new_fixed<u8>(72, 101, 108, 108, 111), used: 5 };
+        break __seq_lit: __local_0;
         unreachable;
     };
     s = "core:prelude/string.wado/String::from_utf8_lossy<MyBytes>"(bytes);
@@ -172,8 +163,8 @@ fn "wado-compiler/tests/fixtures/string_from_utf8_lossy_newtype.wado/run"() {
             "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/string_from_utf8_lossy_newtype.wado"), used: 64 });
             "core:prelude/string.wado/String::push"(__local_5, 58);
             __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
-            __local_25 = __local_6;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(10, __local_25);
+            __local_24 = __local_6;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(10, __local_24);
             "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: s == \"Hello\"
 "), used: 25 });
@@ -849,49 +840,6 @@ fn "core:prelude/array.wado/ArrayIter<u8>^Iterator::next"(self) {
     item = builtin::array_get<u8>(self.repr, self.index);
     self.index = self.index + 1;
     return struct.new "core:prelude/types.wado//Option<u8>::Some" { discriminant: 0, payload_0: item };
-}
-
-fn "core:prelude/array.wado/Array<u8>::push"(self, value) {
-    let used: i32;
-    used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<u8>::grow"(self);
-    }
-    builtin::array_set_u8(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn "core:prelude/array.wado/Array<u8>::grow"(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref builtin::array<u8>;
-    let old_repr: ref builtin::array<u8>;
-    let used: i32;
-    let i: i32;
-    let __local_7: i32;
-    capacity = builtin::array_len(self.repr);
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_7 = capacity * 2;
-        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-        unreachable;
-    };
-    new_repr = builtin::array_new<u8>(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_0: block {
-        i = 0;
-        block {
-            l98: loop {
-                if i >= used {
-                    break __for_0;
-                }
-                builtin::array_set_u8(new_repr, i, builtin::array_get<u8>(old_repr, i));
-                i = i + 1;
-                continue l98;
-            };
-        };
-    };
-    self.repr = new_repr;
 }
 
 export fn "wado-compiler/tests/fixtures/string_from_utf8_lossy_newtype.wado/__cm_export__run" as "run"

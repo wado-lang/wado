@@ -325,19 +325,14 @@ fn "wado-compiler/tests/fixtures/serde_json_rename.wado/__test_0_serialize_with_
     let __cond: bool;
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
-    let __local_8: ref "core:prelude/string.wado//String";
-    let __local_12: ref "core:prelude/format.wado//Formatter";
+    let __local_11: ref "core:prelude/format.wado//Formatter";
     resp = struct.new "wado-compiler/tests/fixtures/serde_json_rename.wado//ApiResponse" { status_code: 200, response_data: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ok"), used: 2 } };
     let __sroa_r_discriminant: i32;
     let __sroa_r_case0_payload_0: ref null "core:prelude/string.wado//String";
     let __sroa_r_case1_payload_0: ref null "core:serde//SerializeError";
     multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/to_string<ApiResponse>"(resp);
     if __sroa_r_discriminant == 0 {
-        s = __inline__value_copy_T19_0: block -> ref "core:prelude/string.wado//String" {
-            __local_8 = ref.as_non_null(__sroa_r_case0_payload_0);
-            break __inline__value_copy_T19_0: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(__local_8.repr)), used: __local_8.used };
-            unreachable;
-        };
+        s = ref.as_non_null(__sroa_r_case0_payload_0);
         __v0 = s;
         __cond = "core:prelude/string.wado/String^Eq::eq"(__v0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("{\"status_code\":200,\"data\":\"ok\"}"), used: 31 });
         if __cond == 0 {
@@ -352,8 +347,8 @@ fn "wado-compiler/tests/fixtures/serde_json_rename.wado/__test_0_serialize_with_
                 "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_rename.wado"), used: 51 });
                 "core:prelude/string.wado/String::push"(__local_5, 58);
                 __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
-                __local_12 = __local_6;
-                "core:prelude/primitive.wado/i32::fmt_decimal"(23, __local_12);
+                __local_11 = __local_6;
+                "core:prelude/primitive.wado/i32::fmt_decimal"(23, __local_11);
                 "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: s == `{\"status_code\":200,\"data\":\"ok\"}`
 "), used: 51 });
@@ -384,20 +379,15 @@ fn "wado-compiler/tests/fixtures/serde_json_rename.wado/__test_1_deserialize_wit
     let __local_7: ref "core:prelude/format.wado//Formatter";
     let __local_8: ref "core:prelude/string.wado//String";
     let __local_9: ref "core:prelude/format.wado//Formatter";
-    let __local_11: ref "wado-compiler/tests/fixtures/serde_json_rename.wado//ApiResponse";
-    let __local_15: ref "core:prelude/format.wado//Formatter";
-    let __local_20: ref "core:prelude/format.wado//Formatter";
-    let __local_26: ref "core:prelude/format.wado//Formatter";
+    let __local_14: ref "core:prelude/format.wado//Formatter";
+    let __local_19: ref "core:prelude/format.wado//Formatter";
+    let __local_25: ref "core:prelude/format.wado//Formatter";
     let __sroa_r_discriminant: i32;
     let __sroa_r_case0_payload_0: ref null "wado-compiler/tests/fixtures/serde_json_rename.wado//ApiResponse";
     let __sroa_r_case1_payload_0: ref null "core:serde//DeserializeError";
     multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/from_string<ApiResponse>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("{\"status_code\":200,\"data\":\"ok\"}"), used: 31 });
     if __sroa_r_discriminant == 0 {
-        resp = __inline__value_copy_T42_0: block -> ref "wado-compiler/tests/fixtures/serde_json_rename.wado//ApiResponse" {
-            __local_11 = ref.as_non_null(__sroa_r_case0_payload_0);
-            break __inline__value_copy_T42_0: struct.new "wado-compiler/tests/fixtures/serde_json_rename.wado//ApiResponse" { status_code: __local_11.status_code, response_data: __local_11.response_data };
-            unreachable;
-        };
+        resp = ref.as_non_null(__sroa_r_case0_payload_0);
         __v0_2 = resp.status_code;
         __cond_3 = __v0_2 == 200;
         if __cond_3 == 0 {
@@ -412,15 +402,15 @@ fn "wado-compiler/tests/fixtures/serde_json_rename.wado/__test_1_deserialize_wit
                 "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_rename.wado"), used: 51 });
                 "core:prelude/string.wado/String::push"(__local_6, 58);
                 __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
-                __local_15 = __local_7;
-                "core:prelude/primitive.wado/i32::fmt_decimal"(32, __local_15);
+                __local_14 = __local_7;
+                "core:prelude/primitive.wado/i32::fmt_decimal"(32, __local_14);
                 "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: resp.status_code == 200
 "), used: 36 });
                 "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("resp.status_code: "), used: 18 });
                 __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
-                __local_20 = __local_7;
-                "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_2, __local_20);
+                __local_19 = __local_7;
+                "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_2, __local_19);
                 "core:prelude/string.wado/String::push"(__local_6, 10);
                 break __tmpl: __local_6;
                 unreachable;
@@ -441,8 +431,8 @@ condition: resp.status_code == 200
                 "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_rename.wado"), used: 51 });
                 "core:prelude/string.wado/String::push"(__local_8, 58);
                 __local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_8 };
-                __local_26 = __local_9;
-                "core:prelude/primitive.wado/i32::fmt_decimal"(33, __local_26);
+                __local_25 = __local_9;
+                "core:prelude/primitive.wado/i32::fmt_decimal"(33, __local_25);
                 "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: resp.response_data == \"ok\"
 "), used: 39 });
@@ -473,32 +463,22 @@ fn "wado-compiler/tests/fixtures/serde_json_rename.wado/__test_2_roundtrip_with_
     let __local_10: ref "core:prelude/format.wado//Formatter";
     let __local_11: ref "core:prelude/string.wado//String";
     let __local_12: ref "core:prelude/format.wado//Formatter";
-    let __local_15: ref "core:prelude/string.wado//String";
-    let __local_16: ref "wado-compiler/tests/fixtures/serde_json_rename.wado//ApiResponse";
-    let __local_20: ref "core:prelude/format.wado//Formatter";
-    let __local_25: ref "core:prelude/format.wado//Formatter";
-    let __local_31: ref "core:prelude/format.wado//Formatter";
+    let __local_18: ref "core:prelude/format.wado//Formatter";
+    let __local_23: ref "core:prelude/format.wado//Formatter";
+    let __local_29: ref "core:prelude/format.wado//Formatter";
     orig = struct.new "wado-compiler/tests/fixtures/serde_json_rename.wado//ApiResponse" { status_code: 404, response_data: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("not found"), used: 9 } };
     let __sroa_json_r_discriminant: i32;
     let __sroa_json_r_case0_payload_0: ref null "core:prelude/string.wado//String";
     let __sroa_json_r_case1_payload_0: ref null "core:serde//SerializeError";
     multivalue_bind [__sroa_json_r_discriminant, __sroa_json_r_case0_payload_0, __sroa_json_r_case1_payload_0] = "core:json/core/json/to_string<ApiResponse>"(orig);
     if __sroa_json_r_discriminant == 0 {
-        json = __inline__value_copy_T19_0: block -> ref "core:prelude/string.wado//String" {
-            __local_15 = ref.as_non_null(__sroa_json_r_case0_payload_0);
-            break __inline__value_copy_T19_0: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(__local_15.repr)), used: __local_15.used };
-            unreachable;
-        };
+        json = ref.as_non_null(__sroa_json_r_case0_payload_0);
         let __sroa_parsed_r_discriminant: i32;
         let __sroa_parsed_r_case0_payload_0: ref null "wado-compiler/tests/fixtures/serde_json_rename.wado//ApiResponse";
         let __sroa_parsed_r_case1_payload_0: ref null "core:serde//DeserializeError";
         multivalue_bind [__sroa_parsed_r_discriminant, __sroa_parsed_r_case0_payload_0, __sroa_parsed_r_case1_payload_0] = "core:json/core/json/from_string<ApiResponse>"(json);
         if __sroa_parsed_r_discriminant == 0 {
-            parsed = __inline__value_copy_T42_1: block -> ref "wado-compiler/tests/fixtures/serde_json_rename.wado//ApiResponse" {
-                __local_16 = ref.as_non_null(__sroa_parsed_r_case0_payload_0);
-                break __inline__value_copy_T42_1: struct.new "wado-compiler/tests/fixtures/serde_json_rename.wado//ApiResponse" { status_code: __local_16.status_code, response_data: __local_16.response_data };
-                unreachable;
-            };
+            parsed = ref.as_non_null(__sroa_parsed_r_case0_payload_0);
             __v0_5 = parsed.status_code;
             __cond_6 = __v0_5 == 404;
             if __cond_6 == 0 {
@@ -513,15 +493,15 @@ fn "wado-compiler/tests/fixtures/serde_json_rename.wado/__test_2_roundtrip_with_
                     "core:prelude/string.wado/String::push_str"(__local_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_rename.wado"), used: 51 });
                     "core:prelude/string.wado/String::push"(__local_9, 58);
                     __local_10 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_9 };
-                    __local_20 = __local_10;
-                    "core:prelude/primitive.wado/i32::fmt_decimal"(45, __local_20);
+                    __local_18 = __local_10;
+                    "core:prelude/primitive.wado/i32::fmt_decimal"(45, __local_18);
                     "core:prelude/string.wado/String::push_str"(__local_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: parsed.status_code == 404
 "), used: 38 });
                     "core:prelude/string.wado/String::push_str"(__local_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("parsed.status_code: "), used: 20 });
                     __local_10 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_9 };
-                    __local_25 = __local_10;
-                    "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_5, __local_25);
+                    __local_23 = __local_10;
+                    "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_5, __local_23);
                     "core:prelude/string.wado/String::push"(__local_9, 10);
                     break __tmpl: __local_9;
                     unreachable;
@@ -542,8 +522,8 @@ condition: parsed.status_code == 404
                     "core:prelude/string.wado/String::push_str"(__local_11, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_rename.wado"), used: 51 });
                     "core:prelude/string.wado/String::push"(__local_11, 58);
                     __local_12 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_11 };
-                    __local_31 = __local_12;
-                    "core:prelude/primitive.wado/i32::fmt_decimal"(46, __local_31);
+                    __local_29 = __local_12;
+                    "core:prelude/primitive.wado/i32::fmt_decimal"(46, __local_29);
                     "core:prelude/string.wado/String::push_str"(__local_11, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: parsed.response_data == \"not found\"
 "), used: 48 });
@@ -3561,7 +3541,6 @@ fn "wado-compiler/tests/fixtures/serde_json_rename.wado/ApiResponse^Deserialize:
     let __local_18: ref "core:json//JsonStructAccess";
     let __local_20: ref "core:json//JsonDeserializer";
     let __local_22: ref "core:json//JsonDeserializer";
-    let __local_23: ref "core:prelude/string.wado//String";
     let __sroa___result_discriminant: i32;
     let __sroa___result_case0_payload_0: ref null "core:json//JsonStructAccess";
     let __sroa___result_case1_payload_0: ref null "core:serde//DeserializeError";
@@ -3607,12 +3586,8 @@ fn "wado-compiler/tests/fixtures/serde_json_rename.wado/ApiResponse^Deserialize:
                             };
                             __local_17 = __local_11;
                             if ref.test "core:prelude/types.wado//Result<String,DeserializeError>::Ok"(__local_17) {
-                                __local_12 = __inline__value_copy_T19_7: block -> ref "core:prelude/string.wado//String" {
-                                    __local_23 = ref.cast "core:prelude/types.wado//Result<String,DeserializeError>::Ok"(__local_17).payload_0;
-                                    break __inline__value_copy_T19_7: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(__local_23.repr)), used: __local_23.used };
-                                    unreachable;
-                                };
-                                response_data = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(__local_12.repr)), used: __local_12.used };
+                                __local_12 = ref.cast "core:prelude/types.wado//Result<String,DeserializeError>::Ok"(__local_17).payload_0;
+                                response_data = __local_12;
                                 seen = seen | 2;
                             } else {
                                 return struct.new "core:prelude/types.wado//Result<ApiResponse,DeserializeError>::Err" { discriminant: 1, payload_0: ref.cast "core:prelude/types.wado//Result<String,DeserializeError>::Err"(__local_11).payload_0 };

@@ -126,37 +126,33 @@ type "functype//core:prelude/format.wado/Formatter::apply_padding" = fn(ref "cor
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(51)
 
-type "functype//core:prelude/array.wado/Array<u64>::push" = fn(ref "core:prelude//Array<u64>", u64);  // TypeId(52)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(52)
 
-type "functype//core:prelude/array.wado/Array<u64>::grow" = fn(ref "core:prelude//Array<u64>");  // TypeId(53)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(53)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(54)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(54)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(55)
+type "functype//core:prelude/fpfmt.wado/unpack64" = fn(f64) -> [u64, i32];  // TypeId(55)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(56)
+type "functype//core:prelude/fpfmt.wado/pow10_coarse" = fn(i32) -> [u64, u64];  // TypeId(56)
 
-type "functype//core:prelude/fpfmt.wado/unpack64" = fn(f64) -> [u64, i32];  // TypeId(57)
+type "functype//core:prelude/fpfmt.wado/mul_pow10" = fn(i32) -> [u64, u64];  // TypeId(57)
 
-type "functype//core:prelude/fpfmt.wado/pow10_coarse" = fn(i32) -> [u64, u64];  // TypeId(58)
+type "functype//core:prelude/fpfmt.wado/fixed_width_for_prec" = fn(f64, i32) -> [u64, i32];  // TypeId(58)
 
-type "functype//core:prelude/fpfmt.wado/mul_pow10" = fn(i32) -> [u64, u64];  // TypeId(59)
+type "functype//core:prelude/fpfmt.wado/short" = fn(f64) -> [u64, i32];  // TypeId(59)
 
-type "functype//core:prelude/fpfmt.wado/fixed_width_for_prec" = fn(f64, i32) -> [u64, i32];  // TypeId(60)
+type "functype//core:prelude/fpfmt.wado/trim_zeros" = fn(u64, i32) -> [u64, i32];  // TypeId(60)
 
-type "functype//core:prelude/fpfmt.wado/short" = fn(f64) -> [u64, i32];  // TypeId(61)
+type "functype//core:prelude/fpfmt.wado/check_special" = fn(f64) -> [bool, bool, i32];  // TypeId(61)
 
-type "functype//core:prelude/fpfmt.wado/trim_zeros" = fn(u64, i32) -> [u64, i32];  // TypeId(62)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(62)
 
-type "functype//core:prelude/fpfmt.wado/check_special" = fn(f64) -> [bool, bool, i32];  // TypeId(63)
+type "functype//core:prelude/primitive.wado/f64::fmt_into" = fn(f64, ref "core:prelude/format.wado//Formatter");  // TypeId(63)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(64)
+type "functype//core:prelude/primitive.wado/f64::inspect_into" = fn(f64, ref "core:prelude/format.wado//Formatter");  // TypeId(64)
 
-type "functype//core:prelude/primitive.wado/f64::fmt_into" = fn(f64, ref "core:prelude/format.wado//Formatter");  // TypeId(65)
-
-type "functype//core:prelude/primitive.wado/f64::inspect_into" = fn(f64, ref "core:prelude/format.wado//Formatter");  // TypeId(66)
-
-type "functype//core:prelude/primitive.wado/f64::fmt_fixed" = fn(f64, i32, ref "core:prelude/format.wado//Formatter");  // TypeId(67)
+type "functype//core:prelude/primitive.wado/f64::fmt_fixed" = fn(f64, i32, ref "core:prelude/format.wado//Formatter");  // TypeId(65)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -239,16 +235,14 @@ fn "wado-compiler/tests/fixtures/newtype_operator_trait.wado/run"() with Stdout 
     let __local_130: ref "core:prelude/format.wado//Formatter";
     let __local_134: ref "core:prelude/format.wado//Formatter";
     let __local_137: ref "core:prelude/format.wado//Formatter";
-    let __local_138: ref "wado-compiler/tests/fixtures/newtype_operator_trait.wado//Vec2";
-    let __local_144: ref "core:prelude/format.wado//Formatter";
-    let __local_154: ref "core:prelude/format.wado//Formatter";
-    let __local_161: ref "core:prelude/format.wado//Formatter";
-    let __local_164: ref "wado-compiler/tests/fixtures/newtype_operator_trait.wado//Vec2";
-    let __local_165: ref "wado-compiler/tests/fixtures/newtype_operator_trait.wado//Vec2";
-    let __local_171: ref "core:prelude/format.wado//Formatter";
-    let __local_176: ref "core:prelude/format.wado//Formatter";
-    let __local_180: ref "core:prelude/format.wado//Formatter";
-    let __local_183: ref "core:prelude/format.wado//Formatter";
+    let __local_143: ref "core:prelude/format.wado//Formatter";
+    let __local_153: ref "core:prelude/format.wado//Formatter";
+    let __local_160: ref "core:prelude/format.wado//Formatter";
+    let __local_163: ref "wado-compiler/tests/fixtures/newtype_operator_trait.wado//Vec2";
+    let __local_169: ref "core:prelude/format.wado//Formatter";
+    let __local_174: ref "core:prelude/format.wado//Formatter";
+    let __local_178: ref "core:prelude/format.wado//Formatter";
+    let __local_181: ref "core:prelude/format.wado//Formatter";
     let __sroa_p3_x: f64;
     let __sroa_p3_y: f64;
     let __sroa_diff_x: f64;
@@ -550,11 +544,7 @@ condition: neg.y == -2.0
         break __tmpl: __local_46;
         unreachable;
     });
-    same = __inline__value_copy_T20_57: block -> ref "wado-compiler/tests/fixtures/newtype_operator_trait.wado//Vec2" {
-        __local_138 = struct.new "wado-compiler/tests/fixtures/newtype_operator_trait.wado//Vec2" { x: 1, y: 2 };
-        break __inline__value_copy_T20_57: struct.new "wado-compiler/tests/fixtures/newtype_operator_trait.wado//Vec2" { x: 1, y: 2 };
-        unreachable;
-    };
+    same = struct.new "wado-compiler/tests/fixtures/newtype_operator_trait.wado//Vec2" { x: 1, y: 2 };
     __v0_18 = p1;
     __v1_19 = same;
     __cond_20 = (if __v0_18.x == __v1_19.x -> i32 {
@@ -576,8 +566,8 @@ condition: neg.y == -2.0
             "core:prelude/string.wado/String::push_str"(__local_48, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/newtype_operator_trait.wado"), used: 56 });
             "core:prelude/string.wado/String::push"(__local_48, 58);
             __local_49 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_48 };
-            __local_144 = __local_49;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(64, __local_144);
+            __local_143 = __local_49;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(64, __local_143);
             "core:prelude/string.wado/String::push_str"(__local_48, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: p1 == same
 "), used: 23 });
@@ -624,8 +614,8 @@ condition: p1 == same
             "core:prelude/string.wado/String::push_str"(__local_50, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/newtype_operator_trait.wado"), used: 56 });
             "core:prelude/string.wado/String::push"(__local_50, 58);
             __local_51 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_50 };
-            __local_154 = __local_51;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(65, __local_154);
+            __local_153 = __local_51;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(65, __local_153);
             "core:prelude/string.wado/String::push_str"(__local_50, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: !p1 == p2
 "), used: 22 });
@@ -645,8 +635,8 @@ condition: !p1 == p2
             "core:prelude/string.wado/String::push"(__local_50, 10);
             "core:prelude/string.wado/String::push_str"(__local_50, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("p1 == p2: "), used: 10 });
             __local_51 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_50 };
-            __local_161 = __local_51;
-            "core:prelude/format.wado/Formatter::pad"(__local_161, (if __v2 -> ref "core:prelude/string.wado//String" {
+            __local_160 = __local_51;
+            "core:prelude/format.wado/Formatter::pad"(__local_160, (if __v2 -> ref "core:prelude/string.wado//String" {
                 struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("true"), used: 4 };
             } else {
                 struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
@@ -658,14 +648,9 @@ condition: !p1 == p2
         unreachable;
     }
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("eq: true"), used: 8 });
-    drop(__inline__value_copy_T21_75: block -> ref "wado-compiler/tests/fixtures/newtype_operator_trait.wado//Vec2" {
-        __local_164 = struct.new "wado-compiler/tests/fixtures/newtype_operator_trait.wado//Vec2" { x: 5, y: 6 };
-        break __inline__value_copy_T21_75: struct.new "wado-compiler/tests/fixtures/newtype_operator_trait.wado//Vec2" { x: 5, y: 6 };
-        unreachable;
-    });
-    drop(__inline__value_copy_T21_76: block -> ref "wado-compiler/tests/fixtures/newtype_operator_trait.wado//Vec2" {
-        __local_165 = struct.new "wado-compiler/tests/fixtures/newtype_operator_trait.wado//Vec2" { x: 1, y: 1 };
-        break __inline__value_copy_T21_76: struct.new "wado-compiler/tests/fixtures/newtype_operator_trait.wado//Vec2" { x: 1, y: 1 };
+    drop(__inline__value_copy_T21_74: block -> ref "wado-compiler/tests/fixtures/newtype_operator_trait.wado//Vec2" {
+        __local_163 = struct.new "wado-compiler/tests/fixtures/newtype_operator_trait.wado//Vec2" { x: 5, y: 6 };
+        break __inline__value_copy_T21_74: struct.new "wado-compiler/tests/fixtures/newtype_operator_trait.wado//Vec2" { x: 5, y: 6 };
         unreachable;
     });
     __sroa_v3_x = 5 + 1;
@@ -685,8 +670,8 @@ condition: !p1 == p2
             "core:prelude/string.wado/String::push_str"(__local_52, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/newtype_operator_trait.wado"), used: 56 });
             "core:prelude/string.wado/String::push"(__local_52, 58);
             __local_53 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_52 };
-            __local_171 = __local_53;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(74, __local_171);
+            __local_169 = __local_53;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(74, __local_169);
             "core:prelude/string.wado/String::push_str"(__local_52, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: v3.x == 6.0
 "), used: 24 });
@@ -697,8 +682,8 @@ condition: v3.x == 6.0
             "core:prelude/string.wado/String::push"(__local_52, 58);
             "core:prelude/string.wado/String::push"(__local_52, 32);
             __local_53 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_52 };
-            __local_176 = __local_53;
-            "core:prelude/primitive.wado/f64::inspect_into"(__sroa_v3_x, __local_176);
+            __local_174 = __local_53;
+            "core:prelude/primitive.wado/f64::inspect_into"(__sroa_v3_x, __local_174);
             "core:prelude/string.wado/String::push"(__local_52, 10);
             break __tmpl: __local_52;
             unreachable;
@@ -709,13 +694,13 @@ condition: v3.x == 6.0
         __local_54 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(44), used: 0 };
         "core:prelude/string.wado/String::push_str"(__local_54, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("velocity: "), used: 10 });
         __local_55 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_54 };
-        __local_180 = __local_55;
-        "core:prelude/primitive.wado/f64::fmt_into"(__sroa_v3_x, __local_180);
+        __local_178 = __local_55;
+        "core:prelude/primitive.wado/f64::fmt_into"(__sroa_v3_x, __local_178);
         "core:prelude/string.wado/String::push"(__local_54, 44);
         "core:prelude/string.wado/String::push"(__local_54, 32);
         __local_55 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_54 };
-        __local_183 = __local_55;
-        "core:prelude/primitive.wado/f64::fmt_into"(__sroa_v3_y, __local_183);
+        __local_181 = __local_55;
+        "core:prelude/primitive.wado/f64::fmt_into"(__sroa_v3_y, __local_181);
         break __tmpl: __local_54;
         unreachable;
     });
@@ -2471,49 +2456,6 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
         }
         return "core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
     }
-}
-
-fn "core:prelude/array.wado/Array<u64>::push"(self, value) {
-    let used: i32;
-    used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<u64>::grow"(self);
-    }
-    builtin::array_set<u64>(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn "core:prelude/array.wado/Array<u64>::grow"(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref builtin::array<u64>;
-    let old_repr: ref builtin::array<u64>;
-    let used: i32;
-    let i: i32;
-    let __local_7: i32;
-    capacity = builtin::array_len(self.repr);
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_7 = capacity * 2;
-        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-        unreachable;
-    };
-    new_repr = builtin::array_new<u64>(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_0: block {
-        i = 0;
-        block {
-            l218: loop {
-                if i >= used {
-                    break __for_0;
-                }
-                builtin::array_set<u64>(new_repr, i, builtin::array_get<u64>(old_repr, i));
-                i = i + 1;
-                continue l218;
-            };
-        };
-    };
-    self.repr = new_repr;
 }
 
 export fn "wado-compiler/tests/fixtures/newtype_operator_trait.wado/__cm_export__run" as "run"

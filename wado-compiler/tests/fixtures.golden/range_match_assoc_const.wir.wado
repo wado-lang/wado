@@ -113,23 +113,18 @@ fn "wado-compiler/tests/fixtures/range_match_assoc_const.wado/__test_0_range_pat
     let __cond: bool;
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
-    let __local_6: ref "core:prelude/string.wado//String";
-    let __local_10: ref "core:prelude/format.wado//Formatter";
-    sign = __inline__value_copy_T25_0: block -> ref "core:prelude/string.wado//String" {
-        let __match_scrut_0: i32;
-        __match_scrut_0 = -5;
-        __local_6 = (if (__match_scrut_0 >= -2147483648) & (__match_scrut_0 < 0) -> ref "core:prelude/string.wado//String" {
-            struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("negative"), used: 8 };
-        } else if __match_scrut_0 == 0 -> ref "core:prelude/string.wado//String" {
-            struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("zero"), used: 4 };
-        } else if (__match_scrut_0 >= 1) & (__match_scrut_0 <= 2147483647) -> ref "core:prelude/string.wado//String" {
-            struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("positive"), used: 8 };
-        } else {
-            unreachable;
-        });
-        break __inline__value_copy_T25_0: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(__local_6.repr)), used: __local_6.used };
+    let __local_9: ref "core:prelude/format.wado//Formatter";
+    let __match_scrut_0: i32;
+    __match_scrut_0 = -5;
+    sign = (if (__match_scrut_0 >= -2147483648) & (__match_scrut_0 < 0) -> ref "core:prelude/string.wado//String" {
+        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("negative"), used: 8 };
+    } else if __match_scrut_0 == 0 -> ref "core:prelude/string.wado//String" {
+        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("zero"), used: 4 };
+    } else if (__match_scrut_0 >= 1) & (__match_scrut_0 <= 2147483647) -> ref "core:prelude/string.wado//String" {
+        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("positive"), used: 8 };
+    } else {
         unreachable;
-    };
+    });
     __v0 = sign;
     __cond = "core:prelude/string.wado/String^Eq::eq"(__v0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("negative"), used: 8 });
     if __cond == 0 {
@@ -144,8 +139,8 @@ fn "wado-compiler/tests/fixtures/range_match_assoc_const.wado/__test_0_range_pat
             "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/range_match_assoc_const.wado"), used: 57 });
             "core:prelude/string.wado/String::push"(__local_4, 58);
             __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
-            __local_10 = __local_5;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(10, __local_10);
+            __local_9 = __local_5;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(10, __local_9);
             "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: sign == \"negative\"
 "), used: 31 });

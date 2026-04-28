@@ -29,20 +29,22 @@ The optimizer runs after lowering and before Wasm emission. `optimize.rs` orches
 1. Early DCE — remove unreachable functions/types/globals (all levels).
 2. Fixed-point iteration loop (skipped at `-O0`):
    1. Container SROA
-   2. Function Inlining
-   3. LabeledBlock Fusion
-   4. Reference Elimination
-   5. SROA
-   6. Copy Propagation
-   7. Common Subexpression Elimination
-   8. Store-to-Load Forwarding
-   9. Constant Propagation
-   10. Constant Folding
-   11. Constant Global Promotion
-   12. Constant Branch Pruning
-   13. Loop-Invariant Code Motion
-   14. Condition Implication
-   15. Template String Buffer Hoisting
+   2. Value-Copy Elision (pre-inline)
+   3. Function Inlining
+   4. LabeledBlock Fusion
+   5. Reference Elimination
+   6. SROA
+   7. Copy Propagation
+   8. Common Subexpression Elimination
+   9. Store-to-Load Forwarding
+   10. Constant Propagation
+   11. Constant Folding
+   12. Constant Global Promotion
+   13. Constant Branch Pruning
+   14. Loop-Invariant Code Motion
+   15. Condition Implication
+   16. Template String Buffer Hoisting
+   17. Value-Copy Elision (post-pass)
 3. Hot Field Scalarization — runs once after the loop converges.
 4. Final DCE — clean up code made dead by optimizations.
 5. Select Lowering — post-optimization rewrite (all levels).
@@ -57,6 +59,19 @@ All TIR passes live in `wado-compiler/src/optimize/`.
 Replaces small pure-function calls with their body, sized by an expression-count threshold. Eligible callees are pure, non-recursive, non-generic, take/return no references, are not from the core library, and fit under the threshold. `#[inline]` multiplies the threshold 5×, `#[inline(always)]` forces, `#[inline(never)]` blocks.
 
 E2E: [opt_inline.wado](../wado-compiler/tests/fixtures/opt_inline.wado), [opt_inline_backtrack_miscompile.wado](../wado-compiler/tests/fixtures/opt_inline_backtrack_miscompile.wado).
+
+### Value-Copy Elision (`value_copy_elide.rs`)
+
+Strips the synthesized `$value_copy$T<id>(arg)` wrapper from `let x = $value_copy$T(arg)` (and the equivalent `Assign`) bindings whose target is observably read-only — when the source root that `arg` reads from is not assigned, field-mutated, or captured for the rest of the function, eliding the wrapper aliases storage in a way that's externally indistinguishable from the freshly-allocated copy.
+
+The pass runs twice per fixed-point iteration:
+
+- Pre-inline. The inliner expands every reachable `$value_copy$T` body into a labeled block, after which the `Call($value_copy$T, [arg])` shape the elider matches on no longer exists. Running before `tir/inline` is what lets the elider strip wrappers around `match make()? { Ok(v) => v, Err(e) => return Err(e) }`-style `?` desugarings — without the pre-inline pass, the wrappers in every `parse_*` `?` site would survive through codegen.
+- Post-pass. Re-runs at the end of each iteration to pick up wrappers newly exposed by the iteration's other passes (SROA, copy propagation, branch pruning, …) before the next iteration's inline runs.
+
+The strip walker descends through every TIR expression that can syntactically embed a `TirBlock` (`If`, `Match`, `Switch`, `Block`, `LabeledBlock`, calls, struct/tuple/variant literals, …) so wrappers nested inside `let x = if cond { let y = $value_copy$T(...); ... } else { ... };` patterns — common in `parse_*` rule bodies — are reached.
+
+E2E: [value_copy_elide_qmark.wado](../wado-compiler/tests/fixtures/value_copy_elide_qmark.wado).
 
 ### Container SROA (`container_sroa.rs`)
 
@@ -252,6 +267,7 @@ Trivial init-guard removal — removes compiler-generated module-initialization 
 
 ### Phase 8: Final DCE and Compaction
 
+- Dead defined-function elimination — `mark_unreachable_defined_functions` walks `module.exports` + `module.elements` and BFSes the WIR call graph, marking unreachable defined-function indices as dead. Catches functions orphaned by Phase 3 `collapse_array_push_sequences` (e.g. `Array<T>::push` / `::grow` instantiations whose only call site was a single-element array literal). Marks via `module.dead_func_indices`; the actual removal + reindexing happens in compaction. E2E: [wir_optimize_dce_orphan_push.wado](../wado-compiler/tests/fixtures/wir_optimize_dce_orphan_push.wado).
 - Dead type elimination — removes GC type definitions not referenced by any live code (transitive).
 - Compact dead items — removes all items marked dead from the module.
 
