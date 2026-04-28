@@ -213,9 +213,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     // in the AST (`SelfKind` has no `Self_` variant),
                     // so the match is exhaustive over the resource
                     // case.
-                    (SelfKind::Ref, Some(self_t)) => {
-                        scope.type_table.borrow_mut().make_ref(self_t)
-                    }
+                    (SelfKind::Ref, Some(self_t)) => scope.type_table.borrow_mut().make_ref(self_t),
                     (SelfKind::MutRef, Some(self_t)) => {
                         scope.type_table.borrow_mut().make_mut_ref(self_t)
                     }
@@ -1198,8 +1196,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 struct_name: struct_name.to_string(),
                 base_struct_name: struct_name.to_string(),
                 trait_name: trait_name.map(String::from),
-                base_trait_name: base_trait_name.clone(),
-                trait_type_args: trait_type_args.clone(),
+                base_trait_name,
+                trait_type_args,
                 method_name: func.name.clone(),
                 method_type_args: vec![],
                 is_type_param_receiver: false,

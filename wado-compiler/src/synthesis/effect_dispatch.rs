@@ -88,7 +88,7 @@ struct EffectMeta {
     /// `true` when this entry comes from a `pub resource R { ... }`
     /// declaration rather than a `pub effect E { ... }`. Resources are
     /// not effects in Wado's effect system: their dispatch wrapper must
-    /// declare `effects: vec![]` to match the cm_binding adapter and to
+    /// declare `effects: vec![]` to match the `cm_binding` adapter and to
     /// avoid teaching downstream effect-tracking phases (DCE, codegen
     /// `used_wasi_*`) that "Fields" is a side effect of the wrapper.
     is_resource: bool,
@@ -745,7 +745,7 @@ fn build_dispatch_wrapper_function(
             TirExprKind::Call {
                 func: FunctionRef {
                     module_source: ModuleSource::local(base_name.to_string()),
-                    name: op_name.to_string(),
+                    name: op_name.clone(),
                     monomorph_info: None,
                     method_info: None,
                 },
@@ -782,9 +782,7 @@ fn build_dispatch_wrapper_function(
                 )
             });
         let message = TirExpr::new(
-            TirExprKind::StringLiteral(format!(
-                "no handler installed for `{label}::{op_name}`"
-            )),
+            TirExprKind::StringLiteral(format!("no handler installed for `{label}::{op_name}`")),
             string_type_id,
             span,
         );
@@ -918,7 +916,7 @@ fn build_dispatch_wrapper_function(
 /// pre-cm_binding call shape that user code emits — `MethodCall` for
 /// instance ops (those whose first param is the synthesised `self`
 /// receiver from gap 3), `Call` for static ops — with `method_info`
-/// carrying the original `cm_name`. cm_binding's
+/// carrying the original `cm_name`. `cm_binding`'s
 /// `rewrite_cm_resource_methods` then walks the wrapper body and
 /// rewrites the placeholder into the appropriate
 /// `cm_stream_*` / `cm_future_*` / `__cm_binding__<R>_<op>` /
@@ -2293,20 +2291,20 @@ fn build_trap_closure(
 }
 
 /// Rewrite every effect-operation call site so it routes through a
-/// dispatch wrapper. Runs **before** cm_binding, so the call shapes
+/// dispatch wrapper. Runs **before** `cm_binding`, so the call shapes
 /// it recognises are the pre-cm_binding forms the resolver emits:
 ///
 /// 1. **User-effect shape** — `Call` whose `func.module_source` is
 ///    `ModuleSource::Local { path: "<E>" }` and `func.name` is the
 ///    bare op name. Produced by the resolver for `Effect::op(...)`.
-/// 2. **Resource cm_name shape** — `Call` (static) or `MethodCall`
+/// 2. **Resource `cm_name` shape** — `Call` (static) or `MethodCall`
 ///    (instance) whose `func.method_info.cm_name` is `Some(...)`.
 ///    Produced by the resolver for `R::op(args)` /
 ///    `receiver.op(args)` on a resource declaration.
 ///
 /// Calls inside `__effect_dispatch__*` wrappers are left alone — they
 /// belong to the synthesised infrastructure and rewriting them would
-/// short-circuit the wrapper's fallback. (cm_binding adapters
+/// short-circuit the wrapper's fallback. (`cm_binding` adapters
 /// (`__cm_binding__*`) don't exist yet at this phase, so they need
 /// no carve-out.)
 fn rewrite_call_sites_to_wrappers(
@@ -2368,8 +2366,7 @@ fn rewrite_call_sites_to_wrappers(
                 // call shape regardless of whether the op carries a CM
                 // attribute (the WASI effect adapter generation in
                 // cm_binding still kicks in for the wrapper fallback).
-                user_to_wrapper
-                    .insert((base_name.clone(), op.name.clone()), wrapper_name.clone());
+                user_to_wrapper.insert((base_name.clone(), op.name.clone()), wrapper_name.clone());
             }
         }
     }
@@ -2415,18 +2412,17 @@ struct RewriteCtx<'a> {
     /// (e.g. `Counter::next()`).
     user_to_wrapper: &'a IndexMap<(String, String), String>,
     /// `(resource_module, base_name, cm_name) → [(type_args,
-    /// wrapper_name)]` for resource MethodCalls / Calls with
+    /// wrapper_name)]` for resource `MethodCalls` / Calls with
     /// `method_info.cm_name` set. Multiple instantiations live under
     /// the same key; the rewriter narrows by the call's type args.
-    cm_to_wrappers:
-        &'a IndexMap<(ModuleSource, String, String), Vec<(Vec<TypeId>, String)>>,
+    cm_to_wrappers: &'a IndexMap<(ModuleSource, String, String), Vec<(Vec<TypeId>, String)>>,
     type_table: std::rc::Rc<std::cell::RefCell<TypeTable>>,
     entry_source: &'a ModuleSource,
 }
 
 /// Pick the wrapper name for a resource method/call given its
 /// `cm_name`-tagged shape. Returns `None` if no instantiation matches
-/// (the call falls through to cm_binding's normal rewriting).
+/// (the call falls through to `cm_binding`'s normal rewriting).
 fn pick_resource_wrapper(
     base_name: &str,
     decl_module: &ModuleSource,
@@ -2434,14 +2430,13 @@ fn pick_resource_wrapper(
     call_type_args: &[TypeId],
     ctx: &RewriteCtx<'_>,
 ) -> Option<String> {
-    let candidates = ctx
-        .cm_to_wrappers
-        .get(&(decl_module.clone(), base_name.to_string(), cm_name.to_string()))?;
+    let candidates = ctx.cm_to_wrappers.get(&(
+        decl_module.clone(),
+        base_name.to_string(),
+        cm_name.to_string(),
+    ))?;
     // Exact instantiation match first.
-    if let Some((_, name)) = candidates
-        .iter()
-        .find(|(args, _)| args == call_type_args)
-    {
+    if let Some((_, name)) = candidates.iter().find(|(args, _)| args == call_type_args) {
         return Some(name.clone());
     }
     // Single-instantiation fallback: when the call site couldn't
@@ -2563,15 +2558,17 @@ fn rewrite_calls_in_expr(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
                 let decl_module = func.module_source.clone();
                 // Static resource call: receiver type isn't directly
                 // available, fall back to single-instantiation routing.
-                pick_resource_wrapper(&base_name, &decl_module, cm_name, &[], ctx).map(
-                    |wrapper| {
-                        wrapper_call(wrapper, args.clone(), return_type, expr.span, ctx.entry_source)
-                    },
-                )
+                pick_resource_wrapper(&base_name, &decl_module, cm_name, &[], ctx).map(|wrapper| {
+                    wrapper_call(
+                        wrapper,
+                        args.clone(),
+                        return_type,
+                        expr.span,
+                        ctx.entry_source,
+                    )
+                })
             } else if let ModuleSource::Local { path } = &func.module_source
-                && let Some(wrapper) = ctx
-                    .user_to_wrapper
-                    .get(&(path.clone(), func.name.clone()))
+                && let Some(wrapper) = ctx.user_to_wrapper.get(&(path.clone(), func.name.clone()))
             {
                 Some(wrapper_call(
                     wrapper.clone(),
@@ -2613,13 +2610,8 @@ fn rewrite_calls_in_expr(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
                 let receiver_arg = if is_already_ref {
                     receiver_value
                 } else {
-                    let ref_type_id =
-                        ctx.type_table.borrow_mut().make_ref(receiver_value.type_id);
-                    crate::synthesis::common::ref_expr(
-                        receiver_value,
-                        ref_type_id,
-                        expr.span,
-                    )
+                    let ref_type_id = ctx.type_table.borrow_mut().make_ref(receiver_value.type_id);
+                    crate::synthesis::common::ref_expr(receiver_value, ref_type_id, expr.span)
                 };
                 let mut all_args: Vec<CallArg> = Vec::with_capacity(args.len() + 1);
                 all_args.push(CallArg::new(receiver_arg, false));
@@ -2676,12 +2668,7 @@ fn rewrite_call_children(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
             else_branch,
         } => {
             rewrite_calls_in_expr(condition, ctx);
-            rewrite_calls_in_block(
-                then_branch,
-                ctx,
-                
-                
-            );
+            rewrite_calls_in_block(then_branch, ctx);
             if let Some(eb) = else_branch {
                 rewrite_calls_in_block(eb, ctx);
             }
@@ -2692,12 +2679,7 @@ fn rewrite_call_children(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
                 if let Some(g) = &mut arm.guard {
                     rewrite_calls_in_expr(g, ctx);
                 }
-                rewrite_calls_in_expr(
-                    &mut arm.body,
-                    ctx,
-                    
-                    
-                );
+                rewrite_calls_in_expr(&mut arm.body, ctx);
             }
         }
         TirExprKind::Switch {
@@ -2714,12 +2696,7 @@ fn rewrite_call_children(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
         }
         TirExprKind::Call { args, .. } => {
             for arg in args {
-                rewrite_calls_in_expr(
-                    &mut arg.expr,
-                    ctx,
-                    
-                    
-                );
+                rewrite_calls_in_expr(&mut arg.expr, ctx);
             }
         }
         TirExprKind::IndirectCall { callee, args } => {
@@ -2736,12 +2713,7 @@ fn rewrite_call_children(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
         TirExprKind::MethodCall { receiver, args, .. } => {
             rewrite_calls_in_expr(receiver, ctx);
             for arg in args {
-                rewrite_calls_in_expr(
-                    &mut arg.expr,
-                    ctx,
-                    
-                    
-                );
+                rewrite_calls_in_expr(&mut arg.expr, ctx);
             }
         }
         TirExprKind::Binary { left, right, .. } => {
@@ -2775,12 +2747,7 @@ fn rewrite_call_children(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
         }
         TirExprKind::StructLiteral { fields, .. } => {
             for field in fields {
-                rewrite_calls_in_expr(
-                    &mut field.value,
-                    ctx,
-                    
-                    
-                );
+                rewrite_calls_in_expr(&mut field.value, ctx);
             }
         }
         TirExprKind::TupleLiteral { elements } => {
@@ -2801,12 +2768,7 @@ fn rewrite_call_children(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
         }
         TirExprKind::WithHandler { bindings, body, .. } => {
             for binding in bindings {
-                rewrite_calls_in_expr(
-                    &mut binding.handler,
-                    ctx,
-                    
-                    
-                );
+                rewrite_calls_in_expr(&mut binding.handler, ctx);
             }
             rewrite_calls_in_block(body, ctx);
         }
@@ -2842,17 +2804,17 @@ fn rewrite_call_children(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
 ///   with `func.method_info.cm_name` set — and replaced with `Call`s
 ///   to the per-monomorphisation wrapper.
 /// - Wrapper fallback bodies emit the same cm_name-tagged placeholder
-///   shape that user code emits, so cm_binding rewrites both
+///   shape that user code emits, so `cm_binding` rewrites both
 ///   uniformly. (Generic resources like `Stream<T>` / `Future<T>`
 ///   route through `cm_stream_*` internal binding calls and `CmRawCall`
 ///   intrinsics; non-generic resources like `Fields` route through
 ///   `__cm_binding__<R>_<op>` adapters; effects route through their
-///   own adapters. The placeholder's `cm_name` lets cm_binding pick
+///   own adapters. The placeholder's `cm_name` lets `cm_binding` pick
 ///   the right shape per op without dispatch synthesis duplicating
 ///   that routing.)
 ///
 /// Resume rewriting also lands here because it's purely local and has
-/// no ordering constraint with cm_binding.
+/// no ordering constraint with `cm_binding`.
 ///
 /// Returns the package with wrappers / call-site rewrites applied. The
 /// `WithHandler` desugaring is deferred to `synthesize_post_check` —

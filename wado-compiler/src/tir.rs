@@ -823,7 +823,7 @@ impl TypeTable {
     ///
     /// `retain` preserves the invariant that `self.get(id)` does not panic
     /// for any surviving `id`. After `erase_newtypes_and_flags`, `get(id)`
-    /// follows `self.redirects` to a canonical TypeId; if the redirect's
+    /// follows `self.redirects` to a canonical `TypeId`; if the redirect's
     /// target were removed, `get(id)` would panic on a surviving id.
     /// To keep the invariant, the kept set is implicitly extended with
     /// the redirect targets of every kept id, and stale redirect entries

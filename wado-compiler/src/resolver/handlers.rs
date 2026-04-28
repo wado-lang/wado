@@ -303,17 +303,19 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         effects
             .into_iter()
-            .map(|(effect_name, effect_module, type_args)| TirHandlerBinding {
-                effect: Some(EffectRef::Concrete {
-                    name: effect_name,
-                    module_source: effect_module,
-                }),
-                trait_type_args: type_args,
-                handler: handler.clone(),
-                handler_type,
-                span: binding.span,
-                bundle_group: Some(bundle_group),
-            })
+            .map(
+                |(effect_name, effect_module, type_args)| TirHandlerBinding {
+                    effect: Some(EffectRef::Concrete {
+                        name: effect_name,
+                        module_source: effect_module,
+                    }),
+                    trait_type_args: type_args,
+                    handler: handler.clone(),
+                    handler_type,
+                    span: binding.span,
+                    bundle_group: Some(bundle_group),
+                },
+            )
             .collect()
     }
 
@@ -401,7 +403,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .collect(),
                 _ => Vec::new(),
             };
-            if seen.insert((decl_module.clone(), base_trait_name.clone(), type_args.clone())) {
+            if seen.insert((
+                decl_module.clone(),
+                base_trait_name.clone(),
+                type_args.clone(),
+            )) {
                 out.push((base_trait_name, decl_module, type_args));
             }
         }

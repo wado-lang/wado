@@ -7476,9 +7476,7 @@ fn rewrite_cm_methods_in_expr(expr: &mut TirExpr, tt: &TypeTable, entry_source: 
         | TirExprKind::VariantTag { expr: inner }
         | TirExprKind::VariantTest { expr: inner, .. }
         | TirExprKind::VariantPayload { expr: inner, .. }
-        | TirExprKind::ClosureToCanonical {
-            functor: inner, ..
-        } => {
+        | TirExprKind::ClosureToCanonical { functor: inner, .. } => {
             rewrite_cm_methods_in_expr(inner, tt, entry_source);
         }
         TirExprKind::Switch {
