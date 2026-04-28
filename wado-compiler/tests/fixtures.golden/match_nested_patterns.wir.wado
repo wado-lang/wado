@@ -81,14 +81,14 @@ struct wado-compiler/tests/fixtures/match_nested_patterns.wado//Line {  // TypeI
     mut end: ref "wado-compiler/tests/fixtures/match_nested_patterns.wado//Point",
 }
 
-array builtin::array<Tuple<Color,i32>> (mut ref "tuple//[Color, i32]");  // TypeId(15)
+array builtin::array<Tuple<wado-compiler/tests/fixtures/match_nested_patterns.wado/Color,i32>> (mut ref "tuple//[Color, i32]");  // TypeId(15)
 
 array builtin::array<Tuple<i32,i32>> (mut ref "tuple//[i32, i32]");  // TypeId(16)
 
 array builtin::array<u64> (mut u64);  // TypeId(17)
 
-struct core:prelude/array.wado//ArrayIter<Tuple<Color,i32>> {  // TypeId(18)
-    mut repr: ref builtin::array<Tuple<Color,i32>>,
+struct core:prelude/array.wado//ArrayIter<Tuple<wado-compiler/tests/fixtures/match_nested_patterns.wado/Color,i32>> {  // TypeId(18)
+    mut repr: ref "builtin::array<Tuple<wado-compiler/tests/fixtures/match_nested_patterns.wado/Color,i32>>",
     mut used: i32,
     mut index: i32,
 }
@@ -120,7 +120,7 @@ struct core:prelude//Array<Tuple<i32,i32>> {  // TypeId(23)
 }
 
 struct core:prelude//Array<Tuple<Color,i32>> {  // TypeId(24)
-    mut repr: ref builtin::array<Tuple<Color,i32>>,
+    mut repr: ref "builtin::array<Tuple<wado-compiler/tests/fixtures/match_nested_patterns.wado/Color,i32>>",
     mut used: i32,
 }
 
@@ -244,11 +244,11 @@ type "functype//core:prelude/array.wado/Array<u64>::push" = fn(ref "core:prelude
 
 type "functype//core:prelude/array.wado/Array<u64>::grow" = fn(ref "core:prelude//Array<u64>");  // TypeId(84)
 
-type "functype//core:prelude/array.wado/ArrayIter<Tuple<Color,i32>>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<Tuple<Color,i32>>") -> ref null "tuple//[Color, i32]";  // TypeId(85)
+type "functype//core:prelude/array.wado/ArrayIter<Tuple<wado-compiler/tests/fixtures/match_nested_patterns.wado/Color,i32>>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<Tuple<wado-compiler/tests/fixtures/match_nested_patterns.wado/Color,i32>>") -> ref null "tuple//[Color, i32]";  // TypeId(85)
 
-type "functype//core:prelude/array.wado/Array<Tuple<Color,i32>>::push" = fn(ref "core:prelude//Array<Tuple<Color,i32>>", ref "tuple//[Color, i32]");  // TypeId(86)
+type "functype//core:prelude/array.wado/Array<Tuple<wado-compiler/tests/fixtures/match_nested_patterns.wado/Color,i32>>::push" = fn(ref "core:prelude//Array<Tuple<Color,i32>>", ref "tuple//[Color, i32]");  // TypeId(86)
 
-type "functype//core:prelude/array.wado/Array<Tuple<Color,i32>>::grow" = fn(ref "core:prelude//Array<Tuple<Color,i32>>");  // TypeId(87)
+type "functype//core:prelude/array.wado/Array<Tuple<wado-compiler/tests/fixtures/match_nested_patterns.wado/Color,i32>>::grow" = fn(ref "core:prelude//Array<Tuple<Color,i32>>");  // TypeId(87)
 
 type "functype//core:prelude/array.wado/ArrayIter<Tuple<i32,i32>>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<Tuple<i32,i32>>") -> ref null "tuple//[i32, i32]";  // TypeId(88)
 
@@ -1271,7 +1271,7 @@ fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/matches_nested"() wi
 fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/for_of_with_nested_match"() with Stdout {
     let __local_0: ref "core:prelude//Array<Tuple<Color,i32>>";
     let items: ref "core:prelude//Array<Tuple<Color,i32>>";
-    let __iter_2: ref "core:prelude/array.wado//ArrayIter<Tuple<Color,i32>>";
+    let __iter_2: ref "core:prelude/array.wado//ArrayIter<Tuple<wado-compiler/tests/fixtures/match_nested_patterns.wado/Color,i32>>";
     let color: "wado-compiler/tests/fixtures/match_nested_patterns.wado//enum:Color";
     let n: i32;
     let desc: ref "core:prelude/string.wado//String";
@@ -1290,10 +1290,10 @@ fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/for_of_with_nested_m
         break __seq_lit: __local_0;
         unreachable;
     };
-    __iter_2 = struct.new "core:prelude/array.wado//ArrayIter<Tuple<Color,i32>>" { repr: items.repr, used: 3, index: 0 };
+    __iter_2 = struct.new "core:prelude/array.wado//ArrayIter<Tuple<wado-compiler/tests/fixtures/match_nested_patterns.wado/Color,i32>>" { repr: items.repr, used: 3, index: 0 };
     b61: block {
         l62: loop {
-            __pattern_temp_0 = "core:prelude/array.wado/ArrayIter<Tuple<Color,i32>>^Iterator::next"(__iter_2);
+            __pattern_temp_0 = "core:prelude/array.wado/ArrayIter<Tuple<wado-compiler/tests/fixtures/match_nested_patterns.wado/Color,i32>>^Iterator::next"(__iter_2);
             if ref.is_null(__pattern_temp_0) == 0 {
                 __pattern_temp_1 = __inline__value_copy_T408_7: block -> ref "tuple//[Color, i32]" {
                     __local_24 = ref.as_non_null(__pattern_temp_0);
@@ -3228,7 +3228,7 @@ fn "core:prelude/array.wado/Array<u64>::grow"(self) {
     self.repr = new_repr;
 }
 
-fn "core:prelude/array.wado/ArrayIter<Tuple<Color,i32>>^Iterator::next"(self) {
+fn "core:prelude/array.wado/ArrayIter<Tuple<wado-compiler/tests/fixtures/match_nested_patterns.wado/Color,i32>>^Iterator::next"(self) {
     let item: ref "tuple//[Color, i32]";
     if self.index >= self.used {
         return ref.null none;
@@ -3238,21 +3238,21 @@ fn "core:prelude/array.wado/ArrayIter<Tuple<Color,i32>>^Iterator::next"(self) {
     return item;
 }
 
-fn "core:prelude/array.wado/Array<Tuple<Color,i32>>::push"(self, value) {
+fn "core:prelude/array.wado/Array<Tuple<wado-compiler/tests/fixtures/match_nested_patterns.wado/Color,i32>>::push"(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<Tuple<Color,i32>>::grow"(self);
+        "core:prelude/array.wado/Array<Tuple<wado-compiler/tests/fixtures/match_nested_patterns.wado/Color,i32>>::grow"(self);
     }
     builtin::array_set<ref "tuple//[Color, i32]">(self.repr, used, value);
     self.used = used + 1;
 }
 
-fn "core:prelude/array.wado/Array<Tuple<Color,i32>>::grow"(self) {
+fn "core:prelude/array.wado/Array<Tuple<wado-compiler/tests/fixtures/match_nested_patterns.wado/Color,i32>>::grow"(self) {
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref builtin::array<Tuple<Color,i32>>;
-    let old_repr: ref builtin::array<Tuple<Color,i32>>;
+    let new_repr: ref "builtin::array<Tuple<wado-compiler/tests/fixtures/match_nested_patterns.wado/Color,i32>>";
+    let old_repr: ref "builtin::array<Tuple<wado-compiler/tests/fixtures/match_nested_patterns.wado/Color,i32>>";
     let used: i32;
     let i: i32;
     let __local_7: i32;

@@ -205,17 +205,17 @@ struct core:prelude/types.wado//Option<u64>::Some {  // TypeId(31)
     payload_0: u64,
 }
 
-variant core:prelude/types.wado//Result<Response,ErrorCode> {  // TypeId(32)
+variant core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode> {  // TypeId(32)
     Ok(i32),
     Err(ref "wasi:http/types.wado//ErrorCode"),
 }
 
-struct core:prelude/types.wado//Result<Response,ErrorCode>::Ok {  // TypeId(33)
+struct core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok {  // TypeId(33)
     discriminant: i32,
     payload_0: i32,
 }
 
-struct core:prelude/types.wado//Result<Response,ErrorCode>::Err {  // TypeId(34)
+struct core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Err {  // TypeId(34)
     discriminant: i32,
     payload_0: ref "wasi:http/types.wado//ErrorCode",
 }
@@ -383,7 +383,7 @@ fn "wado-compiler/tests/fixtures/http-fields.wado/handle"() {
     let __local_37: ref "core:prelude/format.wado//Formatter";
     let __local_38: ref "core:prelude/string.wado//String";
     let __local_39: ref "core:prelude/format.wado//Formatter";
-    let __task_ret: ref "core:prelude/types.wado//Result<Response,ErrorCode>";
+    let __task_ret: ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";
     let __tv_1: i32;
     let __tv_2: i32;
     let __tv_3: i64;
@@ -752,7 +752,7 @@ condition: cloned_still_has
     let __sroa___pattern_temp_3_1: i32;
     multivalue_bind [__sroa___pattern_temp_3_0, __sroa___pattern_temp_3_1] = "wado-compiler/tests/fixtures/http-fields.wado/__cm_binding__Response_new"(response_headers, struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, trailers_future);
     response = __sroa___pattern_temp_3_0;
-    __task_ret = struct.new "core:prelude/types.wado//Result<Response,ErrorCode>::Ok" { discriminant: 0, payload_0: response };
+    __task_ret = struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: response };
     __tv_1 = 0;
     __tv_2 = 0;
     __tv_3 = 0_i64;
@@ -760,12 +760,12 @@ condition: cloned_still_has
     __tv_5 = 0;
     __tv_6 = 0;
     __tv_7 = 0;
-    if ref.test "core:prelude/types.wado//Result<Response,ErrorCode>::Ok"(__task_ret) {
-        __ok_val = ref.cast "core:prelude/types.wado//Result<Response,ErrorCode>::Ok"(__task_ret).payload_0;
+    if ref.test "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok"(__task_ret) {
+        __ok_val = ref.cast "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok"(__task_ret).payload_0;
         __tv_1 = __ok_val;
         "wasi/task-return"(0, __tv_1, 0, 0_i64, 0, 0, 0, 0);
     } else {
-        __err_val = ref.cast "core:prelude/types.wado//Result<Response,ErrorCode>::Err"(__task_ret).payload_0;
+        __err_val = ref.cast "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Err"(__task_ret).payload_0;
         __tv_1 = __err_val.discriminant;
         if ref.test "wasi:http/types.wado//ErrorCode::DnsError"(__err_val) {
             __case_payload_52 = __inline__value_copy_T24_46: block -> ref "wasi:http/types.wado//DnsErrorPayload" {

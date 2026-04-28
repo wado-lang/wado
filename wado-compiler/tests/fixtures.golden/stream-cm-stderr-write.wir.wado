@@ -4,12 +4,12 @@
 
 array builtin::array<u8> (mut u8);  // TypeId(0)
 
-variant core:prelude/types.wado//Result<unit,ErrorCode> {  // TypeId(1)
+variant core:prelude/types.wado//Result<unit,wasi:cli/types.wado/ErrorCode> {  // TypeId(1)
     Ok,
     Err(i32),
 }
 
-struct core:prelude/types.wado//Result<unit,ErrorCode>::Err {  // TypeId(2)
+struct core:prelude/types.wado//Result<unit,wasi:cli/types.wado/ErrorCode>::Err {  // TypeId(2)
     discriminant: i32,
     payload_0: i32,
 }
@@ -101,9 +101,9 @@ fn "wado-compiler/tests/fixtures/stream-cm-stderr-write.wado/run"() with Stderr 
         "wasi/waitable-join"(__fr_handle_2, 0);
         "wasi/waitable-set-drop"(__fr_ws_2);
         __fr_result_2 = 0;
-    }; let __fr_opt_3: ref null "core:prelude/types.wado//Result<unit,ErrorCode>"; __fr_opt_3 = (if (__fr_result_2 & 15) == 0 -> ref null "core:prelude/types.wado//Result<unit,ErrorCode>" {
-        ref.as_non_null((if builtin::load_i32(__fr_ptr_2) == 0 -> ref "core:prelude/types.wado//Result<unit,ErrorCode>" {
-            struct.new "core:prelude/types.wado//Result<unit,ErrorCode>" { 0 };
+    }; let __fr_opt_3: ref null "core:prelude/types.wado//Result<unit,wasi:cli/types.wado/ErrorCode>"; __fr_opt_3 = (if (__fr_result_2 & 15) == 0 -> ref null "core:prelude/types.wado//Result<unit,wasi:cli/types.wado/ErrorCode>" {
+        ref.as_non_null((if builtin::load_i32(__fr_ptr_2) == 0 -> ref "core:prelude/types.wado//Result<unit,wasi:cli/types.wado/ErrorCode>" {
+            struct.new "core:prelude/types.wado//Result<unit,wasi:cli/types.wado/ErrorCode>" { 0 };
         } else {
             unreachable;
         }));

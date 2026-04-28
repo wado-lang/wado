@@ -330,8 +330,7 @@ fn register_struct(
         }),
     );
 
-    ctx.struct_type_map
-        .insert(struct_name.clone(), type_id.clone());
+    ctx.struct_type_map.insert(struct_name, type_id.clone());
 
     // Also register under the qualified-args mangle so that lookups
     // through `mangle_type_name(GenericInstance)` (which threads
@@ -346,8 +345,7 @@ fn register_struct(
             .iter()
             .map(|t| type_table.mangle_type_arg_for_generic(*t))
             .collect();
-        let qualified_name =
-            crate::name::mangle_generic_name(&mono.generic_name, &qualified_args);
+        let qualified_name = crate::name::mangle_generic_name(&mono.generic_name, &qualified_args);
         if qualified_name != tir_struct.name {
             let qualified_sn = StructName::new(effective_module, qualified_name);
             ctx.struct_type_map.entry(qualified_sn).or_insert(type_id);

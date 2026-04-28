@@ -20,22 +20,22 @@ struct core:prelude/format.wado//Formatter {  // TypeId(2)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-variant core:prelude/types.wado//Option<TerminalInput> {  // TypeId(3)
+variant core:prelude/types.wado//Option<wasi:cli/terminal_input.wado/TerminalInput> {  // TypeId(3)
     Some(i32),
     None,
 }
 
-struct core:prelude/types.wado//Option<TerminalInput>::Some {  // TypeId(4)
+struct core:prelude/types.wado//Option<wasi:cli/terminal_input.wado/TerminalInput>::Some {  // TypeId(4)
     discriminant: i32,
     payload_0: i32,
 }
 
-variant core:prelude/types.wado//Option<TerminalOutput> {  // TypeId(5)
+variant core:prelude/types.wado//Option<wasi:cli/terminal_output.wado/TerminalOutput> {  // TypeId(5)
     Some(i32),
     None,
 }
 
-struct core:prelude/types.wado//Option<TerminalOutput>::Some {  // TypeId(6)
+struct core:prelude/types.wado//Option<wasi:cli/terminal_output.wado/TerminalOutput>::Some {  // TypeId(6)
     discriminant: i32,
     payload_0: i32,
 }
@@ -70,11 +70,11 @@ type "functype//wado-compiler/tests/fixtures/wasi_cli_terminal.wado/run" = fn();
 
 type "functype//wado-compiler/tests/fixtures/wasi_cli_terminal.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(21)
 
-type "functype//wado-compiler/tests/fixtures/wasi_cli_terminal.wado/__cm_binding__TerminalStdin_get_terminal_stdin" = fn() -> ref "core:prelude/types.wado//Option<TerminalInput>";  // TypeId(22)
+type "functype//wado-compiler/tests/fixtures/wasi_cli_terminal.wado/__cm_binding__TerminalStdin_get_terminal_stdin" = fn() -> ref "core:prelude/types.wado//Option<wasi:cli/terminal_input.wado/TerminalInput>";  // TypeId(22)
 
-type "functype//wado-compiler/tests/fixtures/wasi_cli_terminal.wado/__cm_binding__TerminalStdout_get_terminal_stdout" = fn() -> ref "core:prelude/types.wado//Option<TerminalOutput>";  // TypeId(23)
+type "functype//wado-compiler/tests/fixtures/wasi_cli_terminal.wado/__cm_binding__TerminalStdout_get_terminal_stdout" = fn() -> ref "core:prelude/types.wado//Option<wasi:cli/terminal_output.wado/TerminalOutput>";  // TypeId(23)
 
-type "functype//wado-compiler/tests/fixtures/wasi_cli_terminal.wado/__cm_binding__TerminalStderr_get_terminal_stderr" = fn() -> ref "core:prelude/types.wado//Option<TerminalOutput>";  // TypeId(24)
+type "functype//wado-compiler/tests/fixtures/wasi_cli_terminal.wado/__cm_binding__TerminalStderr_get_terminal_stderr" = fn() -> ref "core:prelude/types.wado//Option<wasi:cli/terminal_output.wado/TerminalOutput>";  // TypeId(24)
 
 type "functype//wado-compiler/tests/fixtures/wasi_cli_terminal.wado/__cm_export__run" = fn();  // TypeId(25)
 
@@ -138,11 +138,11 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 fn "wado-compiler/tests/fixtures/wasi_cli_terminal.wado/run"() with Stdout, TerminalStdin, TerminalStdout, TerminalStderr {
-    let stdin_terminal: ref "core:prelude/types.wado//Option<TerminalInput>";
+    let stdin_terminal: ref "core:prelude/types.wado//Option<wasi:cli/terminal_input.wado/TerminalInput>";
     let __cond_1: bool;
-    let stdout_terminal: ref "core:prelude/types.wado//Option<TerminalOutput>";
+    let stdout_terminal: ref "core:prelude/types.wado//Option<wasi:cli/terminal_output.wado/TerminalOutput>";
     let __cond_3: bool;
-    let stderr_terminal: ref "core:prelude/types.wado//Option<TerminalOutput>";
+    let stderr_terminal: ref "core:prelude/types.wado//Option<wasi:cli/terminal_output.wado/TerminalOutput>";
     let __cond_5: bool;
     let __local_6: ref "core:prelude/string.wado//String";
     let __local_7: ref "core:prelude/format.wado//Formatter";
@@ -151,7 +151,7 @@ fn "wado-compiler/tests/fixtures/wasi_cli_terminal.wado/run"() with Stdout, Term
     let __local_10: ref "core:prelude/string.wado//String";
     let __local_11: ref "core:prelude/format.wado//Formatter";
     stdin_terminal = "wado-compiler/tests/fixtures/wasi_cli_terminal.wado/__cm_binding__TerminalStdin_get_terminal_stdin"();
-    let __match_scrut_0: ref "core:prelude/types.wado//Option<TerminalInput>";
+    let __match_scrut_0: ref "core:prelude/types.wado//Option<wasi:cli/terminal_input.wado/TerminalInput>";
     __match_scrut_0 = stdin_terminal;
     __cond_1 = (if __match_scrut_0.discriminant == 1 -> bool {
         1;
@@ -185,7 +185,7 @@ condition: stdin_terminal matches { None }
         unreachable;
     }
     stdout_terminal = "wado-compiler/tests/fixtures/wasi_cli_terminal.wado/__cm_binding__TerminalStdout_get_terminal_stdout"();
-    let __match_scrut_1: ref "core:prelude/types.wado//Option<TerminalOutput>";
+    let __match_scrut_1: ref "core:prelude/types.wado//Option<wasi:cli/terminal_output.wado/TerminalOutput>";
     __match_scrut_1 = stdout_terminal;
     __cond_3 = (if __match_scrut_1.discriminant == 1 -> bool {
         1;
@@ -219,7 +219,7 @@ condition: stdout_terminal matches { None }
         unreachable;
     }
     stderr_terminal = "wado-compiler/tests/fixtures/wasi_cli_terminal.wado/__cm_binding__TerminalStderr_get_terminal_stderr"();
-    let __match_scrut_2: ref "core:prelude/types.wado//Option<TerminalOutput>";
+    let __match_scrut_2: ref "core:prelude/types.wado//Option<wasi:cli/terminal_output.wado/TerminalOutput>";
     __match_scrut_2 = stderr_terminal;
     __cond_5 = (if __match_scrut_2.discriminant == 1 -> bool {
         1;
@@ -262,13 +262,13 @@ fn "wado-compiler/tests/fixtures/wasi_cli_terminal.wado/__cm_binding__Stdout_wri
 fn "wado-compiler/tests/fixtures/wasi_cli_terminal.wado/__cm_binding__TerminalStdin_get_terminal_stdin"() with TerminalStdin {
     let __outptr: i32;
     let __disc: i32;
-    let __option_result: ref "core:prelude/types.wado//Option<TerminalInput>";
+    let __option_result: ref "core:prelude/types.wado//Option<wasi:cli/terminal_input.wado/TerminalInput>";
     __outptr = "mem/realloc"(0, 0, 4, 8);
     "wasi/wasi:cli/TerminalStdin::get_terminal_stdin"(__outptr);
     __disc = builtin::load_u8(__outptr);
-    __option_result = struct.new "core:prelude/types.wado//Option<TerminalInput>" { 1 };
+    __option_result = struct.new "core:prelude/types.wado//Option<wasi:cli/terminal_input.wado/TerminalInput>" { 1 };
     if __disc != 0 {
-        __option_result = struct.new "core:prelude/types.wado//Option<TerminalInput>::Some" { discriminant: 0, payload_0: builtin::load_i32(__outptr + 4) };
+        __option_result = struct.new "core:prelude/types.wado//Option<wasi:cli/terminal_input.wado/TerminalInput>::Some" { discriminant: 0, payload_0: builtin::load_i32(__outptr + 4) };
     }
     drop("mem/realloc"(__outptr, 8, 4, 0));
     return __option_result;
@@ -277,13 +277,13 @@ fn "wado-compiler/tests/fixtures/wasi_cli_terminal.wado/__cm_binding__TerminalSt
 fn "wado-compiler/tests/fixtures/wasi_cli_terminal.wado/__cm_binding__TerminalStdout_get_terminal_stdout"() with TerminalStdout {
     let __outptr: i32;
     let __disc: i32;
-    let __option_result: ref "core:prelude/types.wado//Option<TerminalOutput>";
+    let __option_result: ref "core:prelude/types.wado//Option<wasi:cli/terminal_output.wado/TerminalOutput>";
     __outptr = "mem/realloc"(0, 0, 4, 8);
     "wasi/wasi:cli/TerminalStdout::get_terminal_stdout"(__outptr);
     __disc = builtin::load_u8(__outptr);
-    __option_result = struct.new "core:prelude/types.wado//Option<TerminalOutput>" { 1 };
+    __option_result = struct.new "core:prelude/types.wado//Option<wasi:cli/terminal_output.wado/TerminalOutput>" { 1 };
     if __disc != 0 {
-        __option_result = struct.new "core:prelude/types.wado//Option<TerminalOutput>::Some" { discriminant: 0, payload_0: builtin::load_i32(__outptr + 4) };
+        __option_result = struct.new "core:prelude/types.wado//Option<wasi:cli/terminal_output.wado/TerminalOutput>::Some" { discriminant: 0, payload_0: builtin::load_i32(__outptr + 4) };
     }
     drop("mem/realloc"(__outptr, 8, 4, 0));
     return __option_result;
@@ -292,13 +292,13 @@ fn "wado-compiler/tests/fixtures/wasi_cli_terminal.wado/__cm_binding__TerminalSt
 fn "wado-compiler/tests/fixtures/wasi_cli_terminal.wado/__cm_binding__TerminalStderr_get_terminal_stderr"() with TerminalStderr {
     let __outptr: i32;
     let __disc: i32;
-    let __option_result: ref "core:prelude/types.wado//Option<TerminalOutput>";
+    let __option_result: ref "core:prelude/types.wado//Option<wasi:cli/terminal_output.wado/TerminalOutput>";
     __outptr = "mem/realloc"(0, 0, 4, 8);
     "wasi/wasi:cli/TerminalStderr::get_terminal_stderr"(__outptr);
     __disc = builtin::load_u8(__outptr);
-    __option_result = struct.new "core:prelude/types.wado//Option<TerminalOutput>" { 1 };
+    __option_result = struct.new "core:prelude/types.wado//Option<wasi:cli/terminal_output.wado/TerminalOutput>" { 1 };
     if __disc != 0 {
-        __option_result = struct.new "core:prelude/types.wado//Option<TerminalOutput>::Some" { discriminant: 0, payload_0: builtin::load_i32(__outptr + 4) };
+        __option_result = struct.new "core:prelude/types.wado//Option<wasi:cli/terminal_output.wado/TerminalOutput>::Some" { discriminant: 0, payload_0: builtin::load_i32(__outptr + 4) };
     }
     drop("mem/realloc"(__outptr, 8, 4, 0));
     return __option_result;
