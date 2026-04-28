@@ -1486,7 +1486,7 @@ fn parse_arr(p: &mut Parser) -> Result<ArrNode, ParseError> {
     let kind = p.peek_kind();
     if kind == TK_LIT_LBRACKET {
         let lbracket = p.expect(TK_LIT_LBRACKET)?;
-        if p.peek_kind() matches { TK_STRING | TK_NUMBER | TK_LIT_LBRACE | TK_LIT_LBRACKET | TK_LIT_TRUE | TK_LIT_FALSE | TK_LIT_NULL } {
+        if _gale_kind_set_0(p.peek_kind()) {
             let value = parse_value(p)?;
             let mut comma_value_list: Array<CommaValueItem> = [];
             loop {
@@ -1702,5 +1702,9 @@ pub fn to_tree(node: &JsonNode) -> CstNode {
     let mut recorder = TreeRecorder::new();
     walk_json(&mut recorder, node);
     return recorder.build();
+}
+
+fn _gale_kind_set_0(k: i32) -> bool {
+    return k matches { TK_LIT_FALSE | TK_LIT_LBRACE | TK_LIT_LBRACKET | TK_LIT_NULL | TK_LIT_TRUE | TK_NUMBER | TK_STRING };
 }
 

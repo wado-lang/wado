@@ -36,12 +36,11 @@ use {
     count_general_groups,
 } from "./gen_util.wado";
 use { collect_literal_tokens, gen_token_constants, gen_lexer } from "./lexer_gen.wado";
-use { gen_parser } from "./parser_gen.wado";
+use { gen_parser, gen_kind_set_helpers } from "./parser_gen.wado";
 use { gen_visitor } from "./visitor_gen.wado";
 use { gen_highlight } from "./highlight_gen.wado";
 use { GenContext } from "./gen_context.wado";
 use { CodeWriter, StructSpec, VariantSpec, EnumSpec } from "./wadopoet.wado";
-use { dedup_kind_set_matches } from "./dedup_kind_sets.wado";
 
 pub struct GenerateOptions {
     pub highlight: bool,
@@ -69,8 +68,12 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> String {
     if options.highlight {
         gen_highlight(&mut w, grammar, &lit_tokens);
     }
-    let raw = w.to_string();
-    return dedup_kind_set_matches(&raw);
+    // Emit token-kind-set helpers last, after every `ctx.kind_check_str`
+    // call across parser/scan/lookahead generation has had a chance to
+    // intern its set. Visitor and highlight do not emit `matches { TK_* }`
+    // checks so this ordering is safe.
+    gen_kind_set_helpers(&mut w, &ctx);
+    return w.to_string();
 }
 
 fn gen_header(w: &mut CodeWriter, grammar: &Grammar) {

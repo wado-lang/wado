@@ -864,7 +864,7 @@ impl Parser {
 
 fn scan_text(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    while pos < tokens.len() && tokens[pos].kind matches { TK_WORD | TK_NUMBER | TK_PRAGMA } {
+    while pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) {
         let sp = pos;
         let gp_0 = pos;
         sg_0: {
@@ -960,5 +960,9 @@ pub fn to_tree(node: &TextNode) -> CstNode {
     let mut recorder = TreeRecorder::new();
     walk_text(&mut recorder, node);
     return recorder.build();
+}
+
+fn _gale_kind_set_0(k: i32) -> bool {
+    return k matches { TK_NUMBER | TK_PRAGMA | TK_WORD };
 }
 

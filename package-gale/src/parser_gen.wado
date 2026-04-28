@@ -43,7 +43,7 @@ use {
     case_names_for_rule,
     gen_visibility_comment,
 } from "./gen_util.wado";
-use { GenContext, is_nullable, sets_overlap, is_simple_token_group } from "./gen_context.wado";
+use { GenContext, KindSetEntry, is_nullable, sets_overlap, is_simple_token_group } from "./gen_context.wado";
 use { CodeWriter, StructSpec, ImplSpec, FnSpec, ParamSpec } from "./wadopoet.wado";
 use { log_stderr } from "core:cli";
 use { TreeSet } from "core:collections";
@@ -1293,7 +1293,7 @@ fn gen_scan_function(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext
                 firsts.push(t);
             }
         }
-        let check = kind_check_str(&firsts, "tokens[pos].kind");
+        let check = ctx.kind_check_str(&firsts, "tokens[pos].kind");
         w.begin(`if pos < tokens.len() && {check}`);
         w.line("return pos + 1;");
         w.end();
@@ -1487,7 +1487,7 @@ fn gen_scan_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, lr_indices
             dedup_append_arr(&mut union_first, &d.suffix_first_sets[*idx]);
         }
 
-        let cond = kind_check_str(&union_first, "suffix_kind");
+        let cond = ctx.kind_check_str(&union_first, "suffix_kind");
         if is_first {
             w.begin(`if {cond}`);
             is_first = false;
@@ -1629,7 +1629,7 @@ fn gen_scan_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, rule: &Par
                 }
             } else {
                 let second = compute_lr_second_token(shared_tk, &alt.elements, ctx);
-                let sub_cond = kind_check_str(&second, "second_kind");
+                let sub_cond = ctx.kind_check_str(&second, "second_kind");
                 if sub_first {
                     w.begin(`if {sub_cond}`);
                     sub_first = false;
@@ -1758,7 +1758,7 @@ fn gen_scan_multi_alt(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &mut G
 
     let mut first_branch = true;
     for let mut g = 0; g < groups_alts.len(); g += 1 {
-        let cond = kind_check_str(&groups_tokens[g], &"alt_kind");
+        let cond = ctx.kind_check_str(&groups_tokens[g], &"alt_kind");
         if first_branch {
             w.begin(`if {cond}`);
             first_branch = false;
@@ -1849,7 +1849,7 @@ fn i32_arrays_equal(a: &Array<i32>, b: &Array<i32>) -> bool {
     return true;
 }
 
-fn build_scan_lookahead_condition(pos_sets: &Array<Array<String>>, depth: i32) -> String {
+fn build_scan_lookahead_condition(ctx: &mut GenContext, pos_sets: &Array<Array<String>>, depth: i32) -> String {
     let mut cond = String::with_capacity(128);
     for let mut d = 0; d < depth; d += 1 {
         if d > 0 {
@@ -1857,11 +1857,11 @@ fn build_scan_lookahead_condition(pos_sets: &Array<Array<String>>, depth: i32) -
         }
         let tokens = &pos_sets[d];
         if d == 0 {
-            cond.push_str(kind_check_str(tokens, &"alt_kind"));
+            cond.push_str(ctx.kind_check_str(tokens, &"alt_kind"));
         } else {
             cond.push_str(`pos + {d} < tokens.len() && `);
             let tok_expr = `tokens[pos + {d}].kind`;
-            cond.push_str(kind_check_str(tokens, &tok_expr));
+            cond.push_str(ctx.kind_check_str(tokens, &tok_expr));
         }
     }
     return cond;
@@ -1883,7 +1883,7 @@ fn gen_scan_repeat_optional_with_follow(w: &mut CodeWriter, rep: &RepeatElement,
         return;
     }
 
-    let check = kind_check_str(&first, &"tokens[pos].kind");
+    let check = ctx.kind_check_str(&first, &"tokens[pos].kind");
     w.begin(`if pos < tokens.len() && {check}`);
     w.line("let sp = pos;");
     gen_scan_element_assign(w, inner, ctx);
@@ -1937,7 +1937,7 @@ fn gen_scan_elements_in_block(w: &mut CodeWriter, elements: &Array<Element>, sta
 fn gen_scan_repeat(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext, fail_stmt: &String) {
     let mut visiting: Array<String> = [];
     let inner_first = ctx.first_of_element(&rep.element, &mut visiting);
-    let check = kind_check_str(&inner_first, "tokens[pos].kind");
+    let check = ctx.kind_check_str(&inner_first, "tokens[pos].kind");
 
     if let Optional = rep.kind {
         // If the optional's inner has nested optionals (e.g.
@@ -2293,7 +2293,7 @@ fn gen_scan_group(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &mut GenCo
     if gate_emitted {
         let sgk_var = `sgk_{gc}`;
         w.line(`let {sgk_var} = if pos < tokens.len() \{ tokens[pos].kind \} else \{ TK_EOF \};`);
-        let gate = kind_check_str(&union_first, &sgk_var);
+        let gate = ctx.kind_check_str(&union_first, &sgk_var);
         w.begin(`if {gate}`);
     }
 
@@ -2594,7 +2594,7 @@ fn gen_multi_alt_body(w: &mut CodeWriter, rule: &ParserRule, type_name: &String,
         let cond_depth = if depth < pos_sets.len() { depth } else { pos_sets.len() };
 
         if cond_depth > 0 {
-            let cond = build_lookahead_condition(pos_sets, cond_depth);
+            let cond = build_lookahead_condition(ctx, pos_sets, cond_depth);
             w.begin(`if {cond}`);
         } else {
             w.begin("scope:");
@@ -2781,7 +2781,7 @@ fn gen_repeat(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext, nam
                     w.line(`{lab_name}.push({inner_info.0});`);
                     w.end();
                 } else {
-                    w.begin(`while {first_check_str(&first)}`);
+                    w.begin(`while {ctx.first_check_str(&first)}`);
                     let mut nc: Array<[String, i32]> = [];
                     gen_element(w, &lab.element, ctx, &mut nc);
                     w.line(`{lab_name}.push({inner_info.0});`);
@@ -2805,7 +2805,7 @@ fn gen_repeat(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext, nam
                 } else {
                     let plus_flag = dedup_name(&"_plus_first", name_counts);
                     w.line(`let mut {plus_flag} = true;`);
-                    w.begin(`while {plus_flag} || {first_check_str(&first)}`);
+                    w.begin(`while {plus_flag} || {ctx.first_check_str(&first)}`);
                     w.line(`{plus_flag} = false;`);
                     let mut nc: Array<[String, i32]> = [];
                     gen_element(w, &lab.element, ctx, &mut nc);
@@ -2814,7 +2814,7 @@ fn gen_repeat(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext, nam
                 }
             }
             if let Optional = rep.kind {
-                w.begin(`if {first_check_str(&first)}`);
+                w.begin(`if {ctx.first_check_str(&first)}`);
                 let mut nc: Array<[String, i32]> = [];
                 gen_element(w, &lab.element, ctx, &mut nc);
                 w.line(`{lab_name}.push({inner_info.0});`);
@@ -2849,7 +2849,7 @@ fn gen_repeat(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext, nam
                 w.line(`{list_name}.push({field_info.0});`);
                 w.end();
             } else {
-                w.begin(`while {first_check_str(&first)}`);
+                w.begin(`while {ctx.first_check_str(&first)}`);
                 let mut nc: Array<[String, i32]> = [];
                 if is_group_store {
                     ctx.group_counter = gc_before;
@@ -2885,7 +2885,7 @@ fn gen_repeat(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext, nam
             } else {
                 let plus_flag = dedup_name(&"_plus_first", name_counts);
                 w.line(`let mut {plus_flag} = true;`);
-                w.begin(`while {plus_flag} || {first_check_str(&first)}`);
+                w.begin(`while {plus_flag} || {ctx.first_check_str(&first)}`);
                 w.line(`{plus_flag} = false;`);
                 let mut nc: Array<[String, i32]> = [];
                 if is_group_store {
@@ -2905,7 +2905,7 @@ fn gen_repeat(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext, nam
                 ctx.group_counter = gc_before;
                 gen_storable_optional(w, inner, ctx, &first, name_counts, &type_str, &opt_name, &field_info.0);
             } else {
-                w.begin(`let {opt_name}: Option<{type_str}> = if {first_check_str(&first)}`);
+                w.begin(`let {opt_name}: Option<{type_str}> = if {ctx.first_check_str(&first)}`);
                 let mut nc: Array<[String, i32]> = [];
                 gen_element(w, inner, ctx, &mut nc);
                 w.line(`Option::<{type_str}>::Some({field_info.0})`);
@@ -2924,7 +2924,7 @@ fn gen_repeat(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext, nam
                 gen_element(w, inner, ctx, &mut nc);
                 w.end();
             } else {
-                w.begin(`while {first_check_str(&first)}`);
+                w.begin(`while {ctx.first_check_str(&first)}`);
                 let mut nc: Array<[String, i32]> = [];
                 gen_element(w, inner, ctx, &mut nc);
                 w.end();
@@ -2945,7 +2945,7 @@ fn gen_repeat(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext, nam
                 w.end();
             } else {
                 gen_element(w, inner, ctx, name_counts);
-                w.begin(`while {first_check_str(&first)}`);
+                w.begin(`while {ctx.first_check_str(&first)}`);
                 let mut nc: Array<[String, i32]> = [];
                 gen_element(w, inner, ctx, &mut nc);
                 w.end();
@@ -2989,7 +2989,7 @@ fn compute_iter_follow(inner: &Element, first_of_inner: &Array<String>, outer_fo
     return *outer_follow;
 }
 
-fn wildcard_non_greedy_condition(follow_first: &Array<String>) -> String {
+fn wildcard_non_greedy_condition(ctx: &mut GenContext, follow_first: &Array<String>) -> String {
     // Continue while peek is not EOF and not in the follow set. `follow_first`
     // may already contain TK_EOF (e.g. when the follow is the final `EOF`
     // token). Dedup into a single exclusion set so we emit one check.
@@ -3006,19 +3006,7 @@ fn wildcard_non_greedy_condition(follow_first: &Array<String>) -> String {
             excluded.push(*tk);
         }
     }
-    if excluded.len() == 1 {
-        return `p.peek_kind() != {excluded[0]}`;
-    }
-    let mut result = String::with_capacity(64);
-    result.push_str("!(p.peek_kind() matches { ");
-    for let mut i = 0; i < excluded.len(); i += 1 {
-        if i > 0 {
-            result.push_str(" | ");
-        }
-        result.push_str(excluded[i]);
-    }
-    result.push_str(" })");
-    return result;
+    return ctx.kind_negate_check_str(&excluded, &"p.peek_kind()");
 }
 
 fn compute_non_greedy_condition(inner: &Element, follow_first: &Array<String>, follow_second: &Array<String>, ctx: &mut GenContext) -> String {
@@ -3027,10 +3015,10 @@ fn compute_non_greedy_condition(inner: &Element, follow_first: &Array<String>, f
     // keep looping while the current token is not EOF and not in the follow
     // set (i.e. the continuation can't yet fire).
     if let Wildcard(_) = inner {
-        return wildcard_non_greedy_condition(follow_first);
+        return wildcard_non_greedy_condition(ctx, follow_first);
     }
     if let Not(_) = inner {
-        return wildcard_non_greedy_condition(follow_first);
+        return wildcard_non_greedy_condition(ctx, follow_first);
     }
 
     let mut visiting: Array<String> = [];
@@ -3047,7 +3035,7 @@ fn compute_non_greedy_condition(inner: &Element, follow_first: &Array<String>, f
             // Very broad first set — match minimum (1 for +?, 0 for *?)
             return "false";
         }
-        return first_check_str(&continue_first);
+        return ctx.first_check_str(&continue_first);
     }
 
     // First sets completely overlap (e.g. both start with ',').
@@ -3059,8 +3047,8 @@ fn compute_non_greedy_condition(inner: &Element, follow_first: &Array<String>, f
             let inner_second_first = ctx.first_of_elements_from(&g.alternatives[0].elements, 1);
             let second_continue = subtract_sets(&inner_second_first, follow_second);
             if second_continue.len() > 0 {
-                let peek0_cond = first_check_str(&raw_first);
-                let peek1_cond = kind_check_str(&second_continue, "p.peek_at(1)");
+                let peek0_cond = ctx.first_check_str(&raw_first);
+                let peek1_cond = ctx.kind_check_str(&second_continue, "p.peek_at(1)");
                 return `({peek0_cond}) && ({peek1_cond})`;
             }
         }
@@ -3165,7 +3153,7 @@ fn gen_repeat_with_follow(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut Gen
         let field_info = element_field_info(inner, ctx);
         let type_str = field_info.1;
         let opt_name = dedup_name(&field_info.0, name_counts);
-        w.begin(`let {opt_name}: Option<{type_str}> = if {first_check_str(&first)}`);
+        w.begin(`let {opt_name}: Option<{type_str}> = if {ctx.first_check_str(&first)}`);
         let mut nc: Array<[String, i32]> = [];
         gen_element(w, inner, ctx, &mut nc);
         w.line(`Option::<{type_str}>::Some({field_info.0})`);
@@ -3519,7 +3507,7 @@ fn gen_optional_with_backtrack(w: &mut CodeWriter, inner: &Element, ctx: &mut Ge
         return;
     }
 
-    w.begin(`if {first_check_str(first)}`);
+    w.begin(`if {ctx.first_check_str(first)}`);
 
     let saved = dedup_name(&"opt_saved", name_counts);
     let label = dedup_name(&"opt_bt", name_counts);
@@ -3807,7 +3795,7 @@ fn gen_storable_optional_with_backtrack(w: &mut CodeWriter, inner: &Element, ctx
         return;
     }
 
-    w.begin(`let {opt_name}: Option<{type_str}> = if {first_check_str(first)}`);
+    w.begin(`let {opt_name}: Option<{type_str}> = if {ctx.first_check_str(first)}`);
 
     let saved = dedup_name(&"opt_saved", name_counts);
     let label = dedup_name(&"opt_bt", name_counts);
@@ -4252,7 +4240,7 @@ fn gen_consume_group(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &mut Ge
             dedup_append_arr(&mut union_first, &first_sets[*idx]);
         }
 
-        let cond = kind_check_str(&union_first, &grp_var);
+        let cond = ctx.kind_check_str(&union_first, &grp_var);
         if g == 0 {
             w.begin(`if {cond}`);
         } else {
@@ -4295,9 +4283,9 @@ fn gen_consume_group_store(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &
                 let case_name = group_case_name(&alts[i]);
 
                 if i == 0 {
-                    w.begin(`let {var_name}: {type_name} = if {first_check_str(&first_sets[i])}`);
+                    w.begin(`let {var_name}: {type_name} = if {ctx.first_check_str(&first_sets[i])}`);
                 } else if i < alts.len() - 1 {
-                    w.else_begin(`else if {first_check_str(&first_sets[i])}`);
+                    w.else_begin(`else if {ctx.first_check_str(&first_sets[i])}`);
                 } else {
                     w.else_begin("else");
                 }
@@ -4323,7 +4311,7 @@ fn gen_consume_group_store(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &
                 dedup_append_arr(&mut union_first, &first_sets[*idx]);
             }
 
-            let cond = kind_check_str(&union_first, &grp_var);
+            let cond = ctx.kind_check_str(&union_first, &grp_var);
             if g == 0 {
                 w.begin(`if {cond}`);
             } else {
@@ -4499,7 +4487,7 @@ fn gen_consume_group_store_optional(w: &mut CodeWriter, alts: &Array<Alternative
             dedup_append_arr(&mut union_first, &first_sets[*idx]);
         }
 
-        let cond = kind_check_str(&union_first, &grp_var);
+        let cond = ctx.kind_check_str(&union_first, &grp_var);
         if g == 0 {
             w.begin(`if {cond}`);
         } else {
@@ -4603,7 +4591,7 @@ fn gen_general_group_store_optional(w: &mut CodeWriter, alts: &Array<Alternative
             dedup_append_arr(&mut union_first, &first_sets[*idx]);
         }
 
-        let cond = kind_check_str(&union_first, &grp_var);
+        let cond = ctx.kind_check_str(&union_first, &grp_var);
         if g == 0 {
             w.begin(`if {cond}`);
         } else {
@@ -4652,9 +4640,9 @@ fn gen_general_group_store(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &
         for let mut g = 0; g < groups.len(); g += 1 {
             let alt_idx = groups[g][0];
             if g == 0 {
-                w.begin(`let {var_name}: {type_name} = if {first_check_str(&first_sets[alt_idx])}`);
+                w.begin(`let {var_name}: {type_name} = if {ctx.first_check_str(&first_sets[alt_idx])}`);
             } else if g < groups.len() - 1 {
-                w.else_begin(`else if {first_check_str(&first_sets[alt_idx])}`);
+                w.else_begin(`else if {ctx.first_check_str(&first_sets[alt_idx])}`);
             } else {
                 w.else_begin("else");
             }
@@ -4683,7 +4671,7 @@ fn gen_general_group_store(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &
                 dedup_append_arr(&mut union_first, &first_sets[*idx]);
             }
 
-            let cond = kind_check_str(&union_first, &grp_var);
+            let cond = ctx.kind_check_str(&union_first, &grp_var);
             if g == 0 {
                 w.begin(`if {cond}`);
             } else {
@@ -5008,7 +4996,7 @@ fn gen_group_prediction_code_skip(w: &mut CodeWriter, node: &PredictionNode, alt
         let check_var = if d.depth == 0 { "p.peek_kind()" } else { `p.peek_at({d.depth})` };
         for let mut i = 0; i < d.branches.len(); i += 1 {
             let branch = &d.branches[i];
-            let cond = kind_check_str(&branch.tokens, &check_var);
+            let cond = ctx.kind_check_str(&branch.tokens, &check_var);
             if i == 0 {
                 w.begin(`if {cond}`);
             } else {
@@ -5463,7 +5451,7 @@ fn gen_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, rule: &ParserRu
                 }
             } else {
                 let second = compute_lr_second_token(shared_tk, &alt.elements, ctx);
-                let sub_cond = kind_check_str(&second, "p.peek_at(1)");
+                let sub_cond = ctx.kind_check_str(&second, "p.peek_at(1)");
                 if sub_first {
                     w.begin(`if {sub_cond}`);
                     sub_first = false;
@@ -5547,7 +5535,7 @@ fn gen_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, type_name: &Str
             dedup_append_arr(&mut union_first, &d.suffix_first_sets[*idx]);
         }
 
-        let cond = kind_check_str(&union_first, "suffix_kind");
+        let cond = ctx.kind_check_str(&union_first, "suffix_kind");
         if is_first {
             w.begin(`if {cond}`);
             is_first = false;
@@ -5769,7 +5757,7 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
         let check_var = if d.depth == 0 { "p.peek_kind()" } else { `p.peek_at({d.depth})` };
         for let mut i = 0; i < d.branches.len(); i += 1 {
             let branch = &d.branches[i];
-            let cond = kind_check_str(&branch.tokens, &check_var);
+            let cond = ctx.kind_check_str(&branch.tokens, &check_var);
             if i == 0 {
                 w.begin(`if {cond}`);
             } else {
@@ -5827,7 +5815,7 @@ fn gen_multi_alt_body_bt(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
             dedup_append_arr(&mut union_first, &first_sets[*idx]);
         }
 
-        let cond = kind_check_str(&union_first, "kind");
+        let cond = ctx.kind_check_str(&union_first, "kind");
         w.begin(`if {cond}`);
 
         if group.len() == 1 {
@@ -5888,30 +5876,39 @@ fn gen_parse_entry(w: &mut CodeWriter, parser_rules: &Array<ParserRule>) {
     w.blank();
 }
 
-fn first_check_str(first_set: &Array<String>) -> String {
-    return kind_check_str(first_set, "p.peek_kind()");
+/// Emit a `_gale_kind_set_<id>(k: i32) -> bool` function for every
+/// multi-element token-kind set interned during parser codegen. The
+/// `ctx.kind_check_str` and `ctx.kind_negate_check_str` methods rewrite
+/// every multi-element `matches { ... }` check into a call into one of
+/// these helpers, so duplicate sets share a single function body in
+/// the generated wasm.
+pub fn gen_kind_set_helpers(w: &mut CodeWriter, ctx: &GenContext) {
+    let entries = ctx.kind_sets();
+    for let entry of &entries {
+        gen_kind_set_helper(w, entry);
+    }
 }
 
-fn kind_check_str(tokens: &Array<String>, expr: &String) -> String {
-    if tokens.len() == 0 {
-        return "true";
-    }
-    if tokens.len() == 1 {
-        return `{expr} == {tokens[0]}`;
-    }
-    let mut result = String::with_capacity(64);
-    result.push_str(`{expr} matches \{ `);
-    for let mut i = 0; i < tokens.len(); i += 1 {
+fn gen_kind_set_helper(w: &mut CodeWriter, entry: &KindSetEntry) {
+    let mut f = FnSpec::new(&`_gale_kind_set_{entry.id}`);
+    f.add_param("k", "i32");
+    f.set_return_type("bool");
+    f.emit_begin(w);
+    let mut body = String::with_capacity(64);
+    body.push_str("return k matches { ");
+    for let mut i = 0; i < entry.tokens.len(); i += 1 {
         if i > 0 {
-            result.push_str(" | ");
+            body.push_str(" | ");
         }
-        result.push_str(tokens[i]);
+        body.push_str(entry.tokens[i]);
     }
-    result.push_str(" }");
-    return result;
+    body.push_str(" };");
+    w.line(&body);
+    w.end();
+    w.blank();
 }
 
-fn build_lookahead_condition(pos_sets: &Array<Array<String>>, depth: i32) -> String {
+fn build_lookahead_condition(ctx: &mut GenContext, pos_sets: &Array<Array<String>>, depth: i32) -> String {
     let mut cond = String::with_capacity(128);
     for let mut d = 0; d < depth; d += 1 {
         if d > 0 {
@@ -5919,18 +5916,7 @@ fn build_lookahead_condition(pos_sets: &Array<Array<String>>, depth: i32) -> Str
         }
         let tokens = &pos_sets[d];
         let check_expr = if d == 0 { "kind" } else { `p.peek_at({d})` };
-        if tokens.len() == 1 {
-            cond.push_str(`{check_expr} == {tokens[0]}`);
-        } else {
-            cond.push_str(`{check_expr} matches \{ `);
-            for let mut j = 0; j < tokens.len(); j += 1 {
-                if j > 0 {
-                    cond.push_str(" | ");
-                }
-                cond.push_str(tokens[j]);
-            }
-            cond.push_str(" }");
-        }
+        cond.push_str(ctx.kind_check_str(tokens, &check_expr));
     }
     return cond;
 }

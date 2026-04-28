@@ -758,7 +758,7 @@ fn scan_line(tokens: &Array<Token>, pos: i32) -> i32 {
         }
         return -1;
     }
-    while pos < tokens.len() && tokens[pos].kind matches { TK_KEYWORD | TK_IDENT | TK_EXACT } {
+    while pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) {
         let sp = pos;
         let gp_1 = pos;
         sg_1: {
@@ -858,5 +858,9 @@ pub fn to_tree(node: &LineNode) -> CstNode {
     let mut recorder = TreeRecorder::new();
     walk_line(&mut recorder, node);
     return recorder.build();
+}
+
+fn _gale_kind_set_0(k: i32) -> bool {
+    return k matches { TK_EXACT | TK_IDENT | TK_KEYWORD };
 }
 

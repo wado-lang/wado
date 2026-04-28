@@ -1,0 +1,139 @@
+use { GenContext } from "./gen_context.wado";
+use { ParserRule } from "./ir.wado";
+use { LitToken } from "./lexer_gen.wado";
+
+fn mk_ctx() -> GenContext {
+    let rules: Array<ParserRule> = [];
+    let toks: Array<LitToken> = [];
+    return GenContext::new(&rules, &toks);
+}
+
+// --- kind_check_str ---
+
+test "kind_check_str: empty set returns 'true'" {
+    let mut ctx = mk_ctx();
+    let empty: Array<String> = [];
+    let s = ctx.kind_check_str(&empty, &"k");
+    assert s == "true", `expected "true" got "{s}"`;
+}
+
+test "kind_check_str: single token uses '==' not 'matches'" {
+    let mut ctx = mk_ctx();
+    let toks: Array<String> = ["TK_FOO"];
+    let s = ctx.kind_check_str(&toks, &"kind");
+    assert s == "kind == TK_FOO", `expected "kind == TK_FOO", got "{s}"`;
+    // Single-token check must NOT intern (no helper would be emitted).
+    assert ctx.kind_sets().is_empty(), "single-token check should not intern";
+}
+
+test "kind_check_str: multi-token uses helper call" {
+    let mut ctx = mk_ctx();
+    let toks: Array<String> = ["TK_FOO", "TK_BAR"];
+    let s = ctx.kind_check_str(&toks, &"k");
+    assert s == "_gale_kind_set_0(k)", `expected helper call, got "{s}"`;
+    assert ctx.kind_sets().len() == 1;
+}
+
+// --- intern_kind_set determinism ---
+
+test "intern_kind_set: same set returns same id (insertion order)" {
+    let mut ctx = mk_ctx();
+    let ab: Array<String> = ["TK_A", "TK_B"];
+    let cd: Array<String> = ["TK_C", "TK_D"];
+    let id1 = ctx.intern_kind_set(&ab);
+    let id2 = ctx.intern_kind_set(&cd);
+    let id1_again = ctx.intern_kind_set(&ab);
+    assert id1 == 0;
+    assert id2 == 1;
+    assert id1_again == id1, `expected reuse of id {id1}, got {id1_again}`;
+}
+
+test "intern_kind_set: order-independent (sets are unordered)" {
+    let mut ctx = mk_ctx();
+    let abc: Array<String> = ["TK_A", "TK_B", "TK_C"];
+    let cab: Array<String> = ["TK_C", "TK_A", "TK_B"];
+    let bca: Array<String> = ["TK_B", "TK_C", "TK_A"];
+    let id1 = ctx.intern_kind_set(&abc);
+    let id2 = ctx.intern_kind_set(&cab);
+    let id3 = ctx.intern_kind_set(&bca);
+    assert id1 == id2 && id2 == id3, `permutations must collapse: {id1} {id2} {id3}`;
+    assert ctx.kind_sets().len() == 1;
+}
+
+test "intern_kind_set: duplicates within a set are deduplicated" {
+    let mut ctx = mk_ctx();
+    let with_dup: Array<String> = ["TK_A", "TK_B", "TK_A"];
+    let no_dup: Array<String> = ["TK_A", "TK_B"];
+    let id1 = ctx.intern_kind_set(&with_dup);
+    let id2 = ctx.intern_kind_set(&no_dup);
+    assert id1 == id2, "duplicate-tolerant interning";
+    let entries = ctx.kind_sets();
+    assert entries.len() == 1;
+    assert entries[0].tokens.len() == 2, `expected 2 unique tokens, got {entries[0].tokens.len()}`;
+}
+
+test "intern_kind_set: stored tokens are sorted" {
+    let mut ctx = mk_ctx();
+    let unsorted: Array<String> = ["TK_C", "TK_A", "TK_B"];
+    ctx.intern_kind_set(&unsorted);
+    let entries = ctx.kind_sets();
+    assert entries.len() == 1;
+    let toks = &entries[0].tokens;
+    assert toks[0] == "TK_A";
+    assert toks[1] == "TK_B";
+    assert toks[2] == "TK_C";
+}
+
+test "kind_sets: returns entries in insertion order" {
+    let mut ctx = mk_ctx();
+    let xy: Array<String> = ["TK_X", "TK_Y"];
+    let ab: Array<String> = ["TK_A", "TK_B"];
+    let mn: Array<String> = ["TK_M", "TK_N"];
+    ctx.intern_kind_set(&xy);
+    ctx.intern_kind_set(&ab);
+    ctx.intern_kind_set(&mn);
+    let entries = ctx.kind_sets();
+    assert entries.len() == 3;
+    assert entries[0].id == 0;
+    assert entries[1].id == 1;
+    assert entries[2].id == 2;
+    // First-seen set should come first regardless of token order.
+    assert entries[0].tokens[0] == "TK_X";
+    assert entries[1].tokens[0] == "TK_A";
+    assert entries[2].tokens[0] == "TK_M";
+}
+
+// --- kind_negate_check_str ---
+
+test "kind_negate_check_str: empty set returns 'false'" {
+    let mut ctx = mk_ctx();
+    let empty: Array<String> = [];
+    assert ctx.kind_negate_check_str(&empty, &"k") == "false";
+}
+
+test "kind_negate_check_str: single token uses '!='" {
+    let mut ctx = mk_ctx();
+    let toks: Array<String> = ["TK_FOO"];
+    let s = ctx.kind_negate_check_str(&toks, &"k");
+    assert s == "k != TK_FOO", `expected "k != TK_FOO", got "{s}"`;
+    assert ctx.kind_sets().is_empty();
+}
+
+test "kind_negate_check_str: multi-token uses negated helper" {
+    let mut ctx = mk_ctx();
+    let toks: Array<String> = ["TK_A", "TK_B"];
+    let s = ctx.kind_negate_check_str(&toks, &"k");
+    assert s == "!_gale_kind_set_0(k)", `expected negated helper, got "{s}"`;
+    assert ctx.kind_sets().len() == 1;
+}
+
+test "kind_negate_check_str: shares ids with kind_check_str" {
+    let mut ctx = mk_ctx();
+    let toks: Array<String> = ["TK_A", "TK_B"];
+    let pos = ctx.kind_check_str(&toks, &"k");
+    let neg = ctx.kind_negate_check_str(&toks, &"k");
+    // Both reference the same helper id, just with/without the leading `!`.
+    assert pos == "_gale_kind_set_0(k)";
+    assert neg == "!_gale_kind_set_0(k)";
+    assert ctx.kind_sets().len() == 1, "positive and negative must share";
+}

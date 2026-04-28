@@ -895,7 +895,7 @@ fn scan_constant(tokens: &Array<Token>, pos: i32) -> i32 {
 fn parse_file(p: &mut Parser) -> Result<FileNode, ParseError> {
     let start = p.peek().span.start;
     let mut wildcard_list: Array<Token> = [];
-    while !(p.peek_kind() matches { TK_EOF | TK_LIT_PUBLIC }) {
+    while !_gale_kind_set_0(p.peek_kind()) {
         let wildcard = p.match_any()?;
         wildcard_list.push(wildcard);
     }
@@ -923,7 +923,7 @@ fn parse_file(p: &mut Parser) -> Result<FileNode, ParseError> {
         _plus_first = false;
         let constant = parse_constant(p)?;
         let mut wildcard_list: Array<Token> = [];
-        while !(p.peek_kind() matches { TK_EOF | TK_LIT_PUBLIC }) {
+        while !_gale_kind_set_0(p.peek_kind()) {
             let wildcard = p.match_any()?;
             wildcard_list.push(wildcard);
         }
@@ -994,5 +994,9 @@ pub fn to_tree(node: &FileNode) -> CstNode {
     let mut recorder = TreeRecorder::new();
     walk_file(&mut recorder, node);
     return recorder.build();
+}
+
+fn _gale_kind_set_0(k: i32) -> bool {
+    return k matches { TK_EOF | TK_LIT_PUBLIC };
 }
 
