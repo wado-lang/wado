@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777408085270,
+  "lastUpdate": 1777408125658,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -17481,6 +17481,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/fa32e880949fb0c9c8542a8d2dfc8d46e7e28660"
         },
         "date": 1777408084959,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8774,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18518,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 1522768,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4e37d9b1d5a62f8b8ae6d63ed27586c341b39352",
+          "message": "Merge pull request #952 from wado-lang/claude/optimize-gale-gen-speed-ANZ1J\n\nperf(gale): cache to_snake_case/escape_ident on IR nodes (-50% on SQLite.g4)",
+          "timestamp": "2026-04-29T05:23:06+09:00",
+          "tree_id": "22098c4d8f4c3f7a6167a13a239c4f65a8cbbb26",
+          "url": "https://github.com/wado-lang/wado/commit/4e37d9b1d5a62f8b8ae6d63ed27586c341b39352"
+        },
+        "date": 1777408125370,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
