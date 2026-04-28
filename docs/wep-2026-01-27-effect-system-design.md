@@ -74,6 +74,35 @@ run_both(
 
 Effects are types. No bounds needed.
 
+#### Generic Effect Parameters Are Propagation-Only
+
+A function body can use `E` only by **forwarding** it: calling functions that declare `with E`, or passing `fn() with E` values to other generic functions. The body cannot:
+
+- Install a handler for `E` (`with E => h do { ... }` requires a concrete effect declaration).
+- Call any operation through `E` (`E::<op>(...)` — `E` has no known operations).
+- Inspect or branch on what `E` resolves to.
+
+The reason is that effect-check runs before monomorphisation, so at the type-check site there is no operation list to dispatch against and no way to verify that a handler value implements `E`. Without effect bounds (`<effect E: SomeEffect>`), effect rows (`<E | SomeEffect>`), or full effect inference, abstract `E` is **opaque inside the function body**.
+
+```wado
+fn ok<effect E>(f: fn() with E) with E {
+    f();                              // OK: forwarding
+}
+
+// fn bad<effect E>(f: fn() with E, h: ???) {
+//     with E => h do { f(); }       // ERROR: E is not a concrete effect
+// }
+```
+
+For handler installation, write a function that takes a concrete effect:
+
+```wado
+fn run_with_mock_counter(f: fn() with Counter) {
+    let mut c = MockCounter { value: 0 };
+    with Counter => &mut c do { f(); }
+}
+```
+
 #### Single Effect Parameter Per Function
 
 A function may declare **at most one** `<effect E>` parameter. Multiple effect parameters (`<effect E1, effect E2>`) are rejected at compile time (`effect_polymorphism_multi_param_error.wado`).
