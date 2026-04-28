@@ -10,6 +10,17 @@ use {
 } from "./gen_util.wado";
 use { TreeMap } from "core:collections";
 
+/// A token-kind set interned during parser codegen. Multi-element
+/// `<expr> matches { TK_X | TK_Y | ... }` checks are emitted as
+/// `_gale_kind_set_<id>(<expr>)`; the body is shared via a single
+/// helper function emitted at the end of the parser section.
+pub struct KindSetEntry {
+    pub id: i32,
+    /// Canonical (sorted, unique) token list. Tokens are `TK_*` global
+    /// constants in the generated source.
+    pub tokens: Array<String>,
+}
+
 pub struct GenContext {
     pub parser_rules: Array<ParserRule>,
     pub lit_tokens: Array<LitToken>,
@@ -24,6 +35,10 @@ pub struct GenContext {
     /// Maps single-alt group type name → the rule name that first defines it.
     /// Used to resolve general group type names inside shared single-alt groups.
     single_alt_owner: TreeMap<String, String>,
+    /// Registry of token-kind sets keyed by canonical (sorted, joined
+    /// with `|`) representation. IDs are assigned in insertion order so
+    /// the same input grammar always produces the same helper names.
+    kind_set_registry: TreeMap<String, KindSetEntry>,
 }
 
 impl GenContext {
@@ -45,6 +60,7 @@ impl GenContext {
             group_counter: 0,
             alt_gc_starts: [],
             single_alt_owner,
+            kind_set_registry: TreeMap::<String, KindSetEntry>::new(),
         };
     }
 
@@ -445,6 +461,96 @@ impl GenContext {
         }
         return self.current_rule_name;
     }
+
+    /// Intern a token-kind set. The same set (regardless of input order
+    /// or duplicates) maps to a single `id`. Helper IDs are assigned in
+    /// first-seen order across the codegen pass.
+    pub fn intern_kind_set(&mut self, tokens: &Array<String>) -> i32 {
+        let canonical = canonical_kind_set(tokens);
+        let key = join_pipe(&canonical);
+        if let Some(entry) = self.kind_set_registry.get(key) {
+            return entry.id;
+        }
+        let id = self.kind_set_registry.len();
+        self.kind_set_registry[key] = KindSetEntry { id, tokens: canonical };
+        return id;
+    }
+
+    /// All interned kind sets in helper-ID order (i.e. insertion order).
+    /// Consumed by `gen_kind_set_helpers` to emit the helper functions.
+    pub fn kind_sets(&self) -> Array<KindSetEntry> {
+        return self.kind_set_registry.values();
+    }
+
+    /// Render a token-set membership check on `expr`.
+    ///
+    ///   - 0 tokens → `"true"` (the empty set never excludes anything in
+    ///     practice; callers that build up first-sets use this).
+    ///   - 1 token  → `<expr> == TK_X` (no `matches` overhead).
+    ///   - ≥2 tokens → `_gale_kind_set_<id>(<expr>)` after interning.
+    ///
+    /// Multi-element sets always go through the helper indirection so
+    /// duplicate sets across the grammar share a single function body
+    /// in the generated wasm.
+    pub fn kind_check_str(&mut self, tokens: &Array<String>, expr: &String) -> String {
+        if tokens.is_empty() {
+            return "true";
+        }
+        if tokens.len() == 1 {
+            return `{*expr} == {tokens[0]}`;
+        }
+        let id = self.intern_kind_set(tokens);
+        return `_gale_kind_set_{id}({*expr})`;
+    }
+
+    /// Sugar for `kind_check_str` against `p.peek_kind()`.
+    pub fn first_check_str(&mut self, first_set: &Array<String>) -> String {
+        return self.kind_check_str(first_set, &"p.peek_kind()");
+    }
+
+    /// Render the negation of a token-set membership check —
+    /// `!_gale_kind_set_<id>(<expr>)` for ≥2 tokens, else
+    /// `<expr> != TK_X`. Used by non-greedy emit sites.
+    pub fn kind_negate_check_str(&mut self, tokens: &Array<String>, expr: &String) -> String {
+        if tokens.is_empty() {
+            return "false";
+        }
+        if tokens.len() == 1 {
+            return `{*expr} != {tokens[0]}`;
+        }
+        let id = self.intern_kind_set(tokens);
+        return `!_gale_kind_set_{id}({*expr})`;
+    }
+}
+
+/// Sort tokens lexicographically and remove duplicates, producing the
+/// canonical representative of the set. Two `matches { ... }` checks
+/// over equal sets (regardless of order or repeated elements) collapse
+/// to the same canonical form and therefore the same helper id.
+fn canonical_kind_set(tokens: &Array<String>) -> Array<String> {
+    let mut sorted = *tokens;
+    sorted.sort();
+    let mut out: Array<String> = [];
+    for let mut i = 0; i < sorted.len(); i += 1 {
+        if i == 0 || sorted[i] != sorted[i - 1] {
+            out.push(sorted[i]);
+        }
+    }
+    return out;
+}
+
+/// Join an already-canonicalised token list with `|`. The resulting
+/// string is the registry key. `|` cannot appear in `TK_*` identifiers
+/// so this is unambiguous.
+fn join_pipe(tokens: &Array<String>) -> String {
+    let mut s = String::with_capacity(64);
+    for let mut i = 0; i < tokens.len(); i += 1 {
+        if i > 0 {
+            s.push('|');
+        }
+        s.push_str(tokens[i]);
+    }
+    return s;
 }
 
 /// Build a map from single-alt group type name to the first rule that contains it.

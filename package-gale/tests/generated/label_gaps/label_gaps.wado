@@ -889,7 +889,7 @@ impl Parser {
 
 fn scan_program(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    while pos < tokens.len() && tokens[pos].kind matches { TK_ID | TK_PAIR | TK_LIST } {
+    while pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) {
         let sp = pos;
         pos = scan_stmt(tokens, pos);
         if pos < 0 { pos = sp; break; }
@@ -1214,5 +1214,9 @@ pub fn to_tree(node: &ProgramNode) -> CstNode {
     let mut recorder = TreeRecorder::new();
     walk_program(&mut recorder, node);
     return recorder.build();
+}
+
+fn _gale_kind_set_0(k: i32) -> bool {
+    return k matches { TK_ID | TK_LIST | TK_PAIR };
 }
 

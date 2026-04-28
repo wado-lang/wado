@@ -1126,7 +1126,7 @@ impl Parser {
 
 fn scan_sexpr(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    while pos < tokens.len() && tokens[pos].kind matches { TK_STRING | TK_SYMBOL | TK_NUMBER | TK_DOT | TK_LPAREN } {
+    while pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) {
         let sp = pos;
         pos = scan_item(tokens, pos);
         if pos < 0 { pos = sp; break; }
@@ -1142,7 +1142,7 @@ fn scan_item(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
-        if alt_kind matches { TK_STRING | TK_SYMBOL | TK_NUMBER | TK_DOT } {
+        if _gale_kind_set_1(alt_kind) {
             pos = start;
             try_0: {
                 pos = scan_atom(tokens, pos);
@@ -1183,7 +1183,7 @@ fn scan_list_(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LPAREN { return -1; }
     pos += 1;
-    while pos < tokens.len() && tokens[pos].kind matches { TK_STRING | TK_SYMBOL | TK_NUMBER | TK_DOT | TK_LPAREN } {
+    while pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) {
         let sp = pos;
         pos = scan_item(tokens, pos);
         if pos < 0 { pos = sp; break; }
@@ -1195,7 +1195,7 @@ fn scan_list_(tokens: &Array<Token>, pos: i32) -> i32 {
 }
 
 fn scan_atom(tokens: &Array<Token>, pos: i32) -> i32 {
-    if pos < tokens.len() && tokens[pos].kind matches { TK_STRING | TK_SYMBOL | TK_NUMBER | TK_DOT } {
+    if pos < tokens.len() && _gale_kind_set_1(tokens[pos].kind) {
         return pos + 1;
     }
     return -1;
@@ -1277,7 +1277,7 @@ fn parse_item_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
 fn parse_item(p: &mut Parser) -> Result<ItemNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
-    if kind matches { TK_STRING | TK_SYMBOL | TK_NUMBER | TK_DOT } {
+    if _gale_kind_set_1(kind) {
         let atom = parse_atom(p)?;
         return Result::<ItemNode, ParseError>::Ok(ItemNode::Alt0(ItemAlt0 {
             span: Span::new(start, p.last_end()),
@@ -1459,5 +1459,13 @@ pub fn to_tree(node: &SexprNode) -> CstNode {
     let mut recorder = TreeRecorder::new();
     walk_sexpr(&mut recorder, node);
     return recorder.build();
+}
+
+fn _gale_kind_set_0(k: i32) -> bool {
+    return k matches { TK_DOT | TK_LPAREN | TK_NUMBER | TK_STRING | TK_SYMBOL };
+}
+
+fn _gale_kind_set_1(k: i32) -> bool {
+    return k matches { TK_DOT | TK_NUMBER | TK_STRING | TK_SYMBOL };
 }
 

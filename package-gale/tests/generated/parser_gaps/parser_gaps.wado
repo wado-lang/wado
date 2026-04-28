@@ -884,7 +884,7 @@ impl Parser {
 
 fn scan_program(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    while pos < tokens.len() && tokens[pos].kind matches { TK_LIST | TK_NOT | TK_SET | TK_ANY } {
+    while pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) {
         let sp = pos;
         pos = scan_stmt(tokens, pos);
         if pos < 0 { pos = sp; break; }
@@ -908,7 +908,7 @@ fn scan_stmt(tokens: &Array<Token>, pos: i32) -> i32 {
                 break scan_alts;
             }
             return -1;
-        } else if alt_kind matches { TK_NOT | TK_SET } {
+        } else if _gale_kind_set_1(alt_kind) {
             pos = start;
             try_1: {
                 pos = scan_not_stmt(tokens, pos);
@@ -1039,7 +1039,7 @@ fn parse_stmt(p: &mut Parser) -> Result<StmtNode, ParseError> {
             list_stmt,
         }));
     }
-    if kind matches { TK_NOT | TK_SET } {
+    if _gale_kind_set_1(kind) {
         let not_stmt = parse_not_stmt(p)?;
         return Result::<StmtNode, ParseError>::Ok(StmtNode::Alt1(StmtAlt1 {
             span: Span::new(start, p.last_end()),
@@ -1227,5 +1227,13 @@ pub fn to_tree(node: &ProgramNode) -> CstNode {
     let mut recorder = TreeRecorder::new();
     walk_program(&mut recorder, node);
     return recorder.build();
+}
+
+fn _gale_kind_set_0(k: i32) -> bool {
+    return k matches { TK_ANY | TK_LIST | TK_NOT | TK_SET };
+}
+
+fn _gale_kind_set_1(k: i32) -> bool {
+    return k matches { TK_NOT | TK_SET };
 }
 

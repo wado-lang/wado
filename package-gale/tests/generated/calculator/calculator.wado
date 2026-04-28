@@ -1469,7 +1469,7 @@ fn scan_expression(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_multiplying_expression(tokens, pos);
     if pos < 0 { return -1; }
-    while pos < tokens.len() && tokens[pos].kind matches { TK_PLUS | TK_MINUS } {
+    while pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) {
         let sp = pos;
         sg_0_done: {
             sg_0: {
@@ -1505,7 +1505,7 @@ fn scan_multiplying_expression(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_pow_expression(tokens, pos);
     if pos < 0 { return -1; }
-    while pos < tokens.len() && tokens[pos].kind matches { TK_TIMES | TK_DIV } {
+    while pos < tokens.len() && _gale_kind_set_1(tokens[pos].kind) {
         let sp = pos;
         sg_2_done: {
             sg_2: {
@@ -1584,7 +1584,7 @@ fn scan_signed_atom(tokens: &Array<Token>, pos: i32) -> i32 {
                 break scan_alts;
             }
             return -1;
-        } else if alt_kind matches { TK_COS | TK_TAN | TK_SIN | TK_ACOS | TK_ATAN | TK_ASIN | TK_LOG | TK_LN | TK_SQRT } {
+        } else if _gale_kind_set_2(alt_kind) {
             pos = start;
             try_2: {
                 pos = scan_func_(tokens, pos);
@@ -1592,7 +1592,7 @@ fn scan_signed_atom(tokens: &Array<Token>, pos: i32) -> i32 {
                 break scan_alts;
             }
             return -1;
-        } else if alt_kind matches { TK_SCIENTIFIC_NUMBER | TK_VARIABLE | TK_PI | TK_EULER | TK_I | TK_LPAREN } {
+        } else if _gale_kind_set_3(alt_kind) {
             pos = start;
             try_3: {
                 pos = scan_atom(tokens, pos);
@@ -1628,7 +1628,7 @@ fn scan_atom(tokens: &Array<Token>, pos: i32) -> i32 {
                 break scan_alts;
             }
             return -1;
-        } else if alt_kind matches { TK_PI | TK_EULER | TK_I } {
+        } else if _gale_kind_set_4(alt_kind) {
             pos = start;
             try_2: {
                 pos = scan_constant(tokens, pos);
@@ -1663,7 +1663,7 @@ fn scan_scientific(tokens: &Array<Token>, pos: i32) -> i32 {
 }
 
 fn scan_constant(tokens: &Array<Token>, pos: i32) -> i32 {
-    if pos < tokens.len() && tokens[pos].kind matches { TK_PI | TK_EULER | TK_I } {
+    if pos < tokens.len() && _gale_kind_set_4(tokens[pos].kind) {
         return pos + 1;
     }
     return -1;
@@ -1705,14 +1705,14 @@ fn scan_func_(tokens: &Array<Token>, pos: i32) -> i32 {
 }
 
 fn scan_funcname(tokens: &Array<Token>, pos: i32) -> i32 {
-    if pos < tokens.len() && tokens[pos].kind matches { TK_COS | TK_TAN | TK_SIN | TK_ACOS | TK_ATAN | TK_ASIN | TK_LOG | TK_LN | TK_SQRT } {
+    if pos < tokens.len() && _gale_kind_set_2(tokens[pos].kind) {
         return pos + 1;
     }
     return -1;
 }
 
 fn scan_relop(tokens: &Array<Token>, pos: i32) -> i32 {
-    if pos < tokens.len() && tokens[pos].kind matches { TK_EQ | TK_GT | TK_LT } {
+    if pos < tokens.len() && _gale_kind_set_5(tokens[pos].kind) {
         return pos + 1;
     }
     return -1;
@@ -1878,14 +1878,14 @@ fn parse_signed_atom(p: &mut Parser) -> Result<SignedAtomNode, ParseError> {
             signed_atom,
         }));
     }
-    if kind matches { TK_COS | TK_TAN | TK_SIN | TK_ACOS | TK_ATAN | TK_ASIN | TK_LOG | TK_LN | TK_SQRT } {
+    if _gale_kind_set_2(kind) {
         let func_ = parse_func_(p)?;
         return Result::<SignedAtomNode, ParseError>::Ok(SignedAtomNode::Alt2(SignedAtomAlt2 {
             span: Span::new(start, p.last_end()),
             func_,
         }));
     }
-    if kind matches { TK_SCIENTIFIC_NUMBER | TK_VARIABLE | TK_PI | TK_EULER | TK_I | TK_LPAREN } {
+    if _gale_kind_set_3(kind) {
         let atom = parse_atom(p)?;
         return Result::<SignedAtomNode, ParseError>::Ok(SignedAtomNode::Alt3(SignedAtomAlt3 {
             span: Span::new(start, p.last_end()),
@@ -1916,7 +1916,7 @@ fn parse_atom(p: &mut Parser) -> Result<AtomNode, ParseError> {
             variable,
         }));
     }
-    if kind matches { TK_PI | TK_EULER | TK_I } {
+    if _gale_kind_set_4(kind) {
         let constant = parse_constant(p)?;
         return Result::<AtomNode, ParseError>::Ok(AtomNode::Alt2(AtomAlt2 {
             span: Span::new(start, p.last_end()),
@@ -2350,5 +2350,29 @@ pub fn to_tree(node: &EquationNode) -> CstNode {
     let mut recorder = TreeRecorder::new();
     walk_equation(&mut recorder, node);
     return recorder.build();
+}
+
+fn _gale_kind_set_0(k: i32) -> bool {
+    return k matches { TK_MINUS | TK_PLUS };
+}
+
+fn _gale_kind_set_1(k: i32) -> bool {
+    return k matches { TK_DIV | TK_TIMES };
+}
+
+fn _gale_kind_set_2(k: i32) -> bool {
+    return k matches { TK_ACOS | TK_ASIN | TK_ATAN | TK_COS | TK_LN | TK_LOG | TK_SIN | TK_SQRT | TK_TAN };
+}
+
+fn _gale_kind_set_3(k: i32) -> bool {
+    return k matches { TK_EULER | TK_I | TK_LPAREN | TK_PI | TK_SCIENTIFIC_NUMBER | TK_VARIABLE };
+}
+
+fn _gale_kind_set_4(k: i32) -> bool {
+    return k matches { TK_EULER | TK_I | TK_PI };
+}
+
+fn _gale_kind_set_5(k: i32) -> bool {
+    return k matches { TK_EQ | TK_GT | TK_LT };
 }
 
