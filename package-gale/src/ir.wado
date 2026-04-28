@@ -720,10 +720,6 @@ pub fn normalize_caches(grammar: &mut Grammar) {
 }
 
 fn normalize_element_owned(elem: Element) -> Element {
-    // NOTE: pattern-matching with `if let X(y) = &elem` triggers a compiler
-    // codegen bug when the payload struct has a defaulted field
-    // (see fixtures/default_field_variant_payload_ref_match.wado), so we
-    // move-bind here even though it forces re-wrapping in every branch.
     if let RuleRef(r) = elem {
         let snake = if r.snake_name.is_empty() { to_snake_case(&r.name) } else { r.snake_name };
         let field = if r.field_name.is_empty() { escape_ident(&snake) } else { r.field_name };

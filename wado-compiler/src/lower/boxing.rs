@@ -6,8 +6,8 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::{ModuleSource, mangle_generic_name};
 use crate::tir::{
     MonomorphInfo, PrimitiveType, ResolvedType, TirBlock, TirExpr, TirExprKind, TirField,
-    TirFunction, TirModule, TirStmt, TirStmtKind, TirStruct, TirStructField, TirUnaryOp, TypeId,
-    TypeTable,
+    TirFunction, TirModule, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField,
+    TirUnaryOp, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -463,18 +463,101 @@ impl BoxLowerer {
     fn transform_function(&self, func: &mut TirFunction, type_table_rc: &Rc<RefCell<TypeTable>>) {
         let type_table = type_table_rc.borrow();
 
-        // Update local_types for address-taken primitive locals
+        // Update local_types for address-taken locals.
+        //
+        // Parameters need special handling: their local type cannot be silently
+        // changed to Box<T> because the Wasm function-call convention reads the
+        // unwrapped value into local index 0..param_count. Instead, allocate a
+        // shadow local of Box<T>, wrap the param value into it via a prelude
+        // statement at body start, and remap every body reference from the
+        // param's local index to the shadow's local index.
         let address_taken = func.address_taken_locals.clone();
+        let param_count = u32::try_from(func.params.len()).unwrap();
+
+        // (param_idx, shadow_local_idx, box_type_id, original_type_id, name)
+        let mut shadowed_params: Vec<(u32, u32, TypeId, TypeId, String)> = Vec::new();
+
+        let mut effective_address_taken = address_taken.clone();
+
         for &local_idx in &address_taken {
             let local_type_id = func.local_types[local_idx as usize];
-            if let Some(&box_type_id) = self.box_struct_types.get(&local_type_id) {
+            let Some(&box_type_id) = self.box_struct_types.get(&local_type_id) else {
+                continue;
+            };
+            if local_idx < param_count {
+                let shadow_idx = func.local_count;
+                func.local_count += 1;
+                func.local_types.push(box_type_id);
+                effective_address_taken.swap_remove(&local_idx);
+                effective_address_taken.insert(shadow_idx);
+                let name = func.params[local_idx as usize].name.clone();
+                shadowed_params.push((local_idx, shadow_idx, box_type_id, local_type_id, name));
+            } else {
                 func.local_types[local_idx as usize] = box_type_id;
             }
         }
 
+        // Apply param-shadow rewriting: build prelude wraps, remap body locals,
+        // then prepend the prelude. Done before `transform_block` so that the
+        // box-aware rewriting sees the shadow locals consistently.
+        if !shadowed_params.is_empty()
+            && let Some(body) = &mut func.body
+        {
+            let mut remap: IndexMap<u32, u32> = IndexMap::default();
+            for (param_idx, shadow_idx, _, _, _) in &shadowed_params {
+                remap.insert(*param_idx, *shadow_idx);
+            }
+            Self::remap_locals_in_block(body, &remap);
+
+            let mut prelude_stmts: Vec<TirStmt> = Vec::with_capacity(shadowed_params.len());
+            for (param_idx, shadow_idx, box_type_id, original_type_id, name) in &shadowed_params {
+                let box_struct_name =
+                    if let ResolvedType::Struct { name, .. } = type_table.get(*box_type_id) {
+                        name.clone()
+                    } else {
+                        panic!("Box type should be a struct");
+                    };
+                let span = func.span;
+                let param_read = TirExpr::new(
+                    TirExprKind::Local {
+                        index: *param_idx,
+                        name: name.clone(),
+                    },
+                    *original_type_id,
+                    span,
+                );
+                let wrap = TirExpr::new(
+                    TirExprKind::StructLiteral {
+                        struct_type: *box_type_id,
+                        struct_name: box_struct_name,
+                        fields: vec![TirStructField {
+                            name: "value".to_string(),
+                            value: param_read,
+                            field_index: 0,
+                        }],
+                    },
+                    *box_type_id,
+                    span,
+                );
+                prelude_stmts.push(TirStmt::new(
+                    TirStmtKind::Let {
+                        name: format!("__boxed_param_{param_idx}"),
+                        local_index: *shadow_idx,
+                        is_mut: false,
+                        is_reactive: false,
+                        type_id: *box_type_id,
+                        value: wrap,
+                        skip_value_copy: true,
+                    },
+                    span,
+                ));
+            }
+            body.stmts.splice(0..0, prelude_stmts);
+        }
+
         // Transform the function body
         if let Some(body) = &mut func.body {
-            self.transform_block(body, &address_taken, &type_table);
+            self.transform_block(body, &effective_address_taken, &type_table);
         }
 
         // Expand non-box deref assignments (*ref = value) to field-by-field assignments.
@@ -494,6 +577,240 @@ impl BoxLowerer {
         // "this local was ever address-taken in source" signal that
         // survives optimizer iterations even after the syntactic `&x`
         // markers in the body have been inlined/elided.
+    }
+
+    /// Rewrite every `Local { index }` reference in `block` according to
+    /// `remap`. Used by `transform_function` to redirect address-taken
+    /// parameter reads to the param's Box-typed shadow local.
+    ///
+    /// Closure bodies are skipped: closure locals live in their own scope
+    /// and reuse the same indices, so descending would cause unrelated
+    /// remappings.
+    fn remap_locals_in_block(block: &mut TirBlock, remap: &IndexMap<u32, u32>) {
+        for stmt in &mut block.stmts {
+            Self::remap_locals_in_stmt(stmt, remap);
+        }
+    }
+
+    fn remap_locals_in_stmt(stmt: &mut TirStmt, remap: &IndexMap<u32, u32>) {
+        match &mut stmt.kind {
+            TirStmtKind::Let { value, .. } => Self::remap_locals_in_expr(value, remap),
+            TirStmtKind::Expr(expr) => Self::remap_locals_in_expr(expr, remap),
+            TirStmtKind::Return { value: Some(v) } => Self::remap_locals_in_expr(v, remap),
+            TirStmtKind::Return { value: None } => {}
+            TirStmtKind::TaskReturn { value } => Self::remap_locals_in_expr(value, remap),
+            TirStmtKind::If {
+                condition,
+                then_block,
+                else_block,
+            } => {
+                Self::remap_locals_in_expr(condition, remap);
+                Self::remap_locals_in_block(then_block, remap);
+                if let Some(eb) = else_block {
+                    Self::remap_locals_in_block(eb, remap);
+                }
+            }
+            TirStmtKind::Loop { body } => Self::remap_locals_in_block(body, remap),
+            TirStmtKind::Break {
+                value: Some(v), ..
+            } => Self::remap_locals_in_expr(v, remap),
+            TirStmtKind::Break { value: None, .. } | TirStmtKind::Continue => {}
+            TirStmtKind::LabeledBlock { block, .. } => Self::remap_locals_in_block(block, remap),
+            TirStmtKind::IfLet {
+                scrutinee,
+                pattern,
+                then_block,
+                else_block,
+            } => {
+                Self::remap_locals_in_expr(scrutinee, remap);
+                Self::remap_locals_in_pattern(pattern, remap);
+                Self::remap_locals_in_block(then_block, remap);
+                if let Some(eb) = else_block {
+                    Self::remap_locals_in_block(eb, remap);
+                }
+            }
+            TirStmtKind::LetDestructure { value, pattern, .. } => {
+                Self::remap_locals_in_expr(value, remap);
+                Self::remap_locals_in_pattern(pattern, remap);
+            }
+            TirStmtKind::VariadicForOf { iterable, body, .. } => {
+                Self::remap_locals_in_expr(iterable, remap);
+                Self::remap_locals_in_block(body, remap);
+            }
+        }
+    }
+
+    fn remap_locals_in_expr(expr: &mut TirExpr, remap: &IndexMap<u32, u32>) {
+        match &mut expr.kind {
+            TirExprKind::Local { index, .. } => {
+                if let Some(&new_idx) = remap.get(index) {
+                    *index = new_idx;
+                }
+            }
+            TirExprKind::Binary { left, right, .. } => {
+                Self::remap_locals_in_expr(left, remap);
+                Self::remap_locals_in_expr(right, remap);
+            }
+            TirExprKind::Unary { expr: inner, .. } => Self::remap_locals_in_expr(inner, remap),
+            TirExprKind::Assign { target, value } => {
+                Self::remap_locals_in_expr(target, remap);
+                Self::remap_locals_in_expr(value, remap);
+            }
+            TirExprKind::Cast { expr: inner, .. }
+            | TirExprKind::FieldAccess { expr: inner, .. }
+            | TirExprKind::TupleSpread { expr: inner }
+            | TirExprKind::TupleZip { expr: inner }
+            | TirExprKind::TypePackExpansion {
+                call_expr: inner, ..
+            }
+            | TirExprKind::VariantTag { expr: inner }
+            | TirExprKind::VariantPayload { expr: inner, .. }
+            | TirExprKind::VariantTest { expr: inner, .. }
+            | TirExprKind::ClosureToCanonical { functor: inner, .. } => {
+                Self::remap_locals_in_expr(inner, remap)
+            }
+            TirExprKind::Index { expr: e, index, .. } => {
+                Self::remap_locals_in_expr(e, remap);
+                Self::remap_locals_in_expr(index, remap);
+            }
+            TirExprKind::Call { args, .. } => {
+                for arg in args {
+                    Self::remap_locals_in_expr(&mut arg.expr, remap);
+                }
+            }
+            TirExprKind::CmRawCall { args, .. } => {
+                for arg in args {
+                    Self::remap_locals_in_expr(arg, remap);
+                }
+            }
+            TirExprKind::MethodCall { receiver, args, .. } => {
+                Self::remap_locals_in_expr(receiver, remap);
+                for arg in args {
+                    Self::remap_locals_in_expr(&mut arg.expr, remap);
+                }
+            }
+            TirExprKind::IndirectCall { callee, args } => {
+                Self::remap_locals_in_expr(callee, remap);
+                for arg in args {
+                    Self::remap_locals_in_expr(arg, remap);
+                }
+            }
+            TirExprKind::Block(block) => Self::remap_locals_in_block(block, remap),
+            TirExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                Self::remap_locals_in_expr(condition, remap);
+                Self::remap_locals_in_block(then_branch, remap);
+                if let Some(eb) = else_branch {
+                    Self::remap_locals_in_block(eb, remap);
+                }
+            }
+            TirExprKind::Match { expr: e, arms } => {
+                Self::remap_locals_in_expr(e, remap);
+                for arm in arms {
+                    Self::remap_locals_in_pattern(&mut arm.pattern, remap);
+                    if let Some(g) = &mut arm.guard {
+                        Self::remap_locals_in_expr(g, remap);
+                    }
+                    Self::remap_locals_in_expr(&mut arm.body, remap);
+                }
+            }
+            TirExprKind::StructLiteral { fields, .. } => {
+                for field in fields {
+                    Self::remap_locals_in_expr(&mut field.value, remap);
+                }
+            }
+            TirExprKind::TupleLiteral { elements } => {
+                for elem in elements {
+                    Self::remap_locals_in_expr(elem, remap);
+                }
+            }
+            TirExprKind::VariantConstruct { payload, .. } => {
+                if let Some(p) = payload {
+                    Self::remap_locals_in_expr(p, remap);
+                }
+            }
+            TirExprKind::GlobalVarSet { value, .. } => Self::remap_locals_in_expr(value, remap),
+            TirExprKind::LabeledBlock { block, .. } => Self::remap_locals_in_block(block, remap),
+            TirExprKind::Switch {
+                scrutinee,
+                arms,
+                default,
+                ..
+            } => {
+                Self::remap_locals_in_expr(scrutinee, remap);
+                for arm in arms {
+                    Self::remap_locals_in_block(arm, remap);
+                }
+                Self::remap_locals_in_block(default, remap);
+            }
+            TirExprKind::TemplateString { parts } => {
+                for part in parts {
+                    if let crate::tir::TirTemplatePart::Interpolation { expr, .. } = part {
+                        Self::remap_locals_in_expr(expr, remap);
+                    }
+                }
+            }
+            TirExprKind::WithHandler { bindings, body, .. } => {
+                for b in bindings {
+                    Self::remap_locals_in_expr(&mut b.handler, remap);
+                }
+                Self::remap_locals_in_block(body, remap);
+            }
+            TirExprKind::Resume { value } => Self::remap_locals_in_expr(value, remap),
+            // Closure bodies and Capture references live in the closure's own
+            // local-index scope; do not descend.
+            TirExprKind::Closure { .. } | TirExprKind::Capture { .. } => {}
+            // Leaf nodes with no sub-expressions or no Local references.
+            TirExprKind::IntLiteral { .. }
+            | TirExprKind::FloatLiteral { .. }
+            | TirExprKind::BoolLiteral(_)
+            | TirExprKind::CharLiteral(_)
+            | TirExprKind::StringLiteral(_)
+            | TirExprKind::BytesLiteral(_)
+            | TirExprKind::Null
+            | TirExprKind::Unit
+            | TirExprKind::FuncRef { .. }
+            | TirExprKind::GlobalVarGet { .. }
+            | TirExprKind::EnumConstruct { .. } => {}
+        }
+    }
+
+    fn remap_locals_in_pattern(pattern: &mut TirPattern, remap: &IndexMap<u32, u32>) {
+        match pattern {
+            TirPattern::Binding { local_index, .. } => {
+                if let Some(&new_idx) = remap.get(local_index) {
+                    *local_index = new_idx;
+                }
+            }
+            TirPattern::Tuple(sub, _) => {
+                for p in sub {
+                    Self::remap_locals_in_pattern(p, remap);
+                }
+            }
+            TirPattern::Struct { fields, .. } => {
+                for f in fields {
+                    Self::remap_locals_in_pattern(&mut f.pattern, remap);
+                }
+            }
+            TirPattern::Variant { bindings, .. } => {
+                for p in bindings {
+                    Self::remap_locals_in_pattern(p, remap);
+                }
+            }
+            TirPattern::Or(alts) => {
+                for p in alts {
+                    Self::remap_locals_in_pattern(p, remap);
+                }
+            }
+            TirPattern::ConstantValue { expr } => Self::remap_locals_in_expr(expr, remap),
+            TirPattern::Wildcard
+            | TirPattern::Literal(_)
+            | TirPattern::Enum { .. }
+            | TirPattern::Range { .. } => {}
+        }
     }
 
     /// Transform a block of statements.
