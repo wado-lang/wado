@@ -10,8 +10,8 @@
 
 use wado_compiler::Span;
 use wado_compiler::tir::{
-    PrimitiveType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind, TirUnaryOp,
-    TypeId, TypeTable,
+    PrimitiveType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirLiteralPattern, TirMatchArm,
+    TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
 use wado_compiler::tiri::{Interpreter, Lattice, Value};
 
@@ -1892,4 +1892,1019 @@ fn cast_int_to_float_through_env_local() {
             prim: PrimitiveType::F64
         })
     );
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Stage 2.5 — `match` expression reduction (Phase A: payload-free patterns)
+// ──────────────────────────────────────────────────────────────────────────────
+
+fn match_expr(scrutinee: TirExpr, arms: Vec<TirMatchArm>, type_id: TypeId) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::Match {
+            expr: Box::new(scrutinee),
+            arms,
+        },
+        type_id,
+        Span::default(),
+    )
+}
+
+fn arm(pattern: TirPattern, body: TirExpr) -> TirMatchArm {
+    TirMatchArm {
+        pattern,
+        guard: None,
+        body,
+        span: Span::default(),
+    }
+}
+
+fn arm_with_guard(pattern: TirPattern, guard: TirExpr, body: TirExpr) -> TirMatchArm {
+    TirMatchArm {
+        pattern,
+        guard: Some(guard),
+        body,
+        span: Span::default(),
+    }
+}
+
+fn lit_pat_i128(value: i128) -> TirPattern {
+    TirPattern::Literal(TirLiteralPattern::I128(value))
+}
+
+fn lit_pat_u128(value: u128) -> TirPattern {
+    TirPattern::Literal(TirLiteralPattern::U128(value))
+}
+
+fn lit_pat_bool(value: bool) -> TirPattern {
+    TirPattern::Literal(TirLiteralPattern::Bool(value))
+}
+
+fn lit_pat_char(value: char) -> TirPattern {
+    TirPattern::Literal(TirLiteralPattern::Char(value))
+}
+
+fn range_pat(start: i128, end: i128, inclusive: bool, is_unsigned: bool) -> TirPattern {
+    TirPattern::Range {
+        start,
+        end,
+        inclusive,
+        is_unsigned,
+    }
+}
+
+#[test]
+fn match_const_int_picks_matching_arm() {
+    // `match 2 { 1 => 10, 2 => 20, _ => 30 }` should reduce to `Const(20)`.
+    let table = TypeTable::new();
+    let expr = match_expr(
+        int_lit(2, TypeTable::I32, "2"),
+        vec![
+            arm(lit_pat_i128(1), int_lit(10, TypeTable::I32, "10")),
+            arm(lit_pat_i128(2), int_lit(20, TypeTable::I32, "20")),
+            arm(TirPattern::Wildcard, int_lit(30, TypeTable::I32, "30")),
+        ],
+        TypeTable::I32,
+    );
+    assert_eq!(
+        Interpreter::new(&table).reduce_to_lattice(&expr),
+        Lattice::Const(Value::Int {
+            value: 20,
+            prim: PrimitiveType::I32,
+        }),
+    );
+}
+
+#[test]
+fn match_const_int_falls_through_to_wildcard() {
+    // No literal arm matches; the wildcard absorbs it.
+    let table = TypeTable::new();
+    let expr = match_expr(
+        int_lit(99, TypeTable::I32, "99"),
+        vec![
+            arm(lit_pat_i128(1), int_lit(10, TypeTable::I32, "10")),
+            arm(TirPattern::Wildcard, int_lit(30, TypeTable::I32, "30")),
+        ],
+        TypeTable::I32,
+    );
+    assert_eq!(
+        Interpreter::new(&table).reduce_to_lattice(&expr),
+        Lattice::Const(Value::Int {
+            value: 30,
+            prim: PrimitiveType::I32,
+        }),
+    );
+}
+
+#[test]
+fn match_const_bool_picks_arm() {
+    // `match true { true => 1, false => 0 }` → 1.
+    let table = TypeTable::new();
+    let expr = match_expr(
+        bool_lit(true),
+        vec![
+            arm(lit_pat_bool(true), int_lit(1, TypeTable::I32, "1")),
+            arm(lit_pat_bool(false), int_lit(0, TypeTable::I32, "0")),
+        ],
+        TypeTable::I32,
+    );
+    assert_eq!(
+        Interpreter::new(&table).reduce_to_lattice(&expr),
+        Lattice::Const(Value::Int {
+            value: 1,
+            prim: PrimitiveType::I32,
+        }),
+    );
+}
+
+#[test]
+fn match_const_char_or_pattern_matches_alt() {
+    // `match 'b' { 'a' | 'b' | 'c' => 1, _ => 0 }` → 1.
+    let table = TypeTable::new();
+    let expr = match_expr(
+        char_lit('b'),
+        vec![
+            arm(
+                TirPattern::Or(vec![
+                    lit_pat_char('a'),
+                    lit_pat_char('b'),
+                    lit_pat_char('c'),
+                ]),
+                int_lit(1, TypeTable::I32, "1"),
+            ),
+            arm(TirPattern::Wildcard, int_lit(0, TypeTable::I32, "0")),
+        ],
+        TypeTable::I32,
+    );
+    assert_eq!(
+        Interpreter::new(&table).reduce_to_lattice(&expr),
+        Lattice::Const(Value::Int {
+            value: 1,
+            prim: PrimitiveType::I32,
+        }),
+    );
+}
+
+#[test]
+fn match_const_char_or_pattern_misses_all_alts() {
+    // `match 'z' { 'a' | 'b' => 1, _ => 0 }` → 0.
+    let table = TypeTable::new();
+    let expr = match_expr(
+        char_lit('z'),
+        vec![
+            arm(
+                TirPattern::Or(vec![lit_pat_char('a'), lit_pat_char('b')]),
+                int_lit(1, TypeTable::I32, "1"),
+            ),
+            arm(TirPattern::Wildcard, int_lit(0, TypeTable::I32, "0")),
+        ],
+        TypeTable::I32,
+    );
+    assert_eq!(
+        Interpreter::new(&table).reduce_to_lattice(&expr),
+        Lattice::Const(Value::Int {
+            value: 0,
+            prim: PrimitiveType::I32,
+        }),
+    );
+}
+
+#[test]
+fn match_const_int_inclusive_range_at_upper_bound() {
+    // `0..=10` includes 10. `match 10 { 0..=10 => 1, _ => 0 }` → 1.
+    let table = TypeTable::new();
+    let expr = match_expr(
+        int_lit(10, TypeTable::I32, "10"),
+        vec![
+            arm(
+                range_pat(0, 10, true, false),
+                int_lit(1, TypeTable::I32, "1"),
+            ),
+            arm(TirPattern::Wildcard, int_lit(0, TypeTable::I32, "0")),
+        ],
+        TypeTable::I32,
+    );
+    assert_eq!(
+        Interpreter::new(&table).reduce_to_lattice(&expr),
+        Lattice::Const(Value::Int {
+            value: 1,
+            prim: PrimitiveType::I32,
+        }),
+    );
+}
+
+#[test]
+fn match_const_int_exclusive_range_excludes_upper_bound() {
+    // `0..<10` excludes 10. `match 10 { 0..<10 => 1, _ => 0 }` → 0.
+    let table = TypeTable::new();
+    let expr = match_expr(
+        int_lit(10, TypeTable::I32, "10"),
+        vec![
+            arm(
+                range_pat(0, 10, false, false),
+                int_lit(1, TypeTable::I32, "1"),
+            ),
+            arm(TirPattern::Wildcard, int_lit(0, TypeTable::I32, "0")),
+        ],
+        TypeTable::I32,
+    );
+    assert_eq!(
+        Interpreter::new(&table).reduce_to_lattice(&expr),
+        Lattice::Const(Value::Int {
+            value: 0,
+            prim: PrimitiveType::I32,
+        }),
+    );
+}
+
+#[test]
+fn match_const_int_signed_negative_in_range() {
+    // Signed range covering negatives: `-5..=5` matches -3.
+    let table = TypeTable::new();
+    let neg_three_bits = i64::from(-3_i32) as u64;
+    let expr = match_expr(
+        int_lit(neg_three_bits, TypeTable::I32, "-3"),
+        vec![
+            arm(
+                range_pat(-5, 5, true, false),
+                int_lit(7, TypeTable::I32, "7"),
+            ),
+            arm(TirPattern::Wildcard, int_lit(0, TypeTable::I32, "0")),
+        ],
+        TypeTable::I32,
+    );
+    assert_eq!(
+        Interpreter::new(&table).reduce_to_lattice(&expr),
+        Lattice::Const(Value::Int {
+            value: 7,
+            prim: PrimitiveType::I32,
+        }),
+    );
+}
+
+#[test]
+fn match_const_u8_unsigned_range() {
+    // `match 200u8 { 0..=255 => 1, _ => 0 }` → 1, with is_unsigned=true.
+    let table = TypeTable::new();
+    let expr = match_expr(
+        int_lit(200, TypeTable::U8, "200"),
+        vec![
+            arm(
+                range_pat(0, 255, true, true),
+                int_lit(1, TypeTable::I32, "1"),
+            ),
+            arm(TirPattern::Wildcard, int_lit(0, TypeTable::I32, "0")),
+        ],
+        TypeTable::I32,
+    );
+    assert_eq!(
+        Interpreter::new(&table).reduce_to_lattice(&expr),
+        Lattice::Const(Value::Int {
+            value: 1,
+            prim: PrimitiveType::I32,
+        }),
+    );
+}
+
+#[test]
+fn match_const_u128_literal_pattern() {
+    // u128 literal pattern matches a u128 value.
+    let table = TypeTable::new();
+    let expr = match_expr(
+        int_lit(42, TypeTable::U64, "42"),
+        vec![
+            arm(lit_pat_u128(42), int_lit(1, TypeTable::I32, "1")),
+            arm(TirPattern::Wildcard, int_lit(0, TypeTable::I32, "0")),
+        ],
+        TypeTable::I32,
+    );
+    assert_eq!(
+        Interpreter::new(&table).reduce_to_lattice(&expr),
+        Lattice::Const(Value::Int {
+            value: 1,
+            prim: PrimitiveType::I32,
+        }),
+    );
+}
+
+#[test]
+fn match_const_int_unreachable_arm_does_not_contaminate() {
+    // SCCP infeasible-edge analogue: when the scrutinee is constant and
+    // the matching arm is identified, later arms (with values that would
+    // disagree under a join) MUST NOT contribute to the result. The
+    // engine simply returns the chosen arm's value.
+    let table = TypeTable::new();
+    let expr = match_expr(
+        int_lit(1, TypeTable::I32, "1"),
+        vec![
+            arm(lit_pat_i128(1), int_lit(5, TypeTable::I32, "5")),
+            // This arm "would" reduce to NonConst because the inner
+            // expression isn't foldable; under feasible-edge semantics
+            // it is dropped from the lattice computation.
+            arm(
+                TirPattern::Wildcard,
+                local_expr(0, TypeTable::I32), // unbound → Unevaluated
+            ),
+        ],
+        TypeTable::I32,
+    );
+    assert_eq!(
+        Interpreter::new(&table).reduce_to_lattice(&expr),
+        Lattice::Const(Value::Int {
+            value: 5,
+            prim: PrimitiveType::I32,
+        }),
+    );
+}
+
+#[test]
+fn match_nonconst_scrut_all_arms_equal_collapses() {
+    // `match x { 1 => 7, 2 => 7, _ => 7 }` with non-constant `x`
+    // (speculatable Local) collapses to `7`.
+    let table = TypeTable::new();
+    let expr = match_expr(
+        local_expr(0, TypeTable::I32),
+        vec![
+            arm(lit_pat_i128(1), int_lit(7, TypeTable::I32, "7")),
+            arm(lit_pat_i128(2), int_lit(7, TypeTable::I32, "7")),
+            arm(TirPattern::Wildcard, int_lit(7, TypeTable::I32, "7")),
+        ],
+        TypeTable::I32,
+    );
+    assert_eq!(
+        Interpreter::new(&table).reduce_to_lattice(&expr),
+        Lattice::Const(Value::Int {
+            value: 7,
+            prim: PrimitiveType::I32,
+        }),
+    );
+}
+
+#[test]
+fn match_nonconst_scrut_unequal_arms_is_nonconst() {
+    let table = TypeTable::new();
+    let expr = match_expr(
+        local_expr(0, TypeTable::I32),
+        vec![
+            arm(lit_pat_i128(1), int_lit(1, TypeTable::I32, "1")),
+            arm(TirPattern::Wildcard, int_lit(2, TypeTable::I32, "2")),
+        ],
+        TypeTable::I32,
+    );
+    assert_eq!(
+        Interpreter::new(&table).reduce_to_lattice(&expr),
+        Lattice::NonConst,
+    );
+}
+
+#[test]
+fn match_nonconst_scrut_with_unevaluated_arm_does_not_fold() {
+    // Regression mirroring the `if` Unevaluated-arm test: under a
+    // non-constant scrutinee, an arm whose body is structurally a
+    // `Local` (Unevaluated) must promote to NonConst before the join
+    // — so the surrounding match cannot collapse to the *other* arm's
+    // Const.
+    let table = TypeTable::new();
+    let expr = match_expr(
+        local_expr(0, TypeTable::I32),
+        vec![
+            arm(lit_pat_i128(1), int_lit(7, TypeTable::I32, "7")),
+            arm(TirPattern::Wildcard, local_expr(1, TypeTable::I32)),
+        ],
+        TypeTable::I32,
+    );
+    assert_eq!(
+        Interpreter::new(&table).reduce_to_lattice(&expr),
+        Lattice::NonConst,
+    );
+}
+
+#[test]
+fn match_with_guard_under_const_scrut_does_not_rewrite() {
+    // Guards inspect bindings tiri does not model; the engine cannot
+    // commit to the guarded arm even when its pattern would
+    // otherwise definitely match. The lattice can still be `Const(7)`
+    // (the only candidate body produces 7; the trap-on-guard-failure
+    // case is unreachable, hence Bottom in SCCP), but the match
+    // expression must NOT be rewritten — that would erase the trap.
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    let mut expr = match_expr(
+        int_lit(1, TypeTable::I32, "1"),
+        vec![arm_with_guard(
+            lit_pat_i128(1),
+            local_expr(0, TypeTable::BOOL),
+            int_lit(7, TypeTable::I32, "7"),
+        )],
+        TypeTable::I32,
+    );
+    assert!(!interp.reduce_local(&mut expr));
+    assert!(matches!(expr.kind, TirExprKind::Match { .. }));
+}
+
+#[test]
+fn match_guarded_arm_blocks_rewrite_to_later_definite_arm() {
+    // The guarded arm could fire if the guard succeeds, so the
+    // engine cannot skip it and pick the later wildcard arm. The
+    // match must be left structurally intact.
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    let mut expr = match_expr(
+        int_lit(1, TypeTable::I32, "1"),
+        vec![
+            arm_with_guard(
+                lit_pat_i128(1),
+                local_expr(0, TypeTable::BOOL),
+                int_lit(7, TypeTable::I32, "7"),
+            ),
+            arm(TirPattern::Wildcard, int_lit(8, TypeTable::I32, "8")),
+        ],
+        TypeTable::I32,
+    );
+    assert!(!interp.reduce_local(&mut expr));
+    assert!(matches!(expr.kind, TirExprKind::Match { .. }));
+}
+
+#[test]
+fn match_guarded_arm_two_distinct_arm_bodies_is_nonconst() {
+    // Lattice-level check: when a guarded arm and a later definite
+    // arm produce different Const bodies, the merged lattice goes to
+    // NonConst (the value depends on whether the guard fires).
+    let table = TypeTable::new();
+    let expr = match_expr(
+        int_lit(1, TypeTable::I32, "1"),
+        vec![
+            arm_with_guard(
+                lit_pat_i128(1),
+                local_expr(0, TypeTable::BOOL),
+                int_lit(7, TypeTable::I32, "7"),
+            ),
+            arm(TirPattern::Wildcard, int_lit(8, TypeTable::I32, "8")),
+        ],
+        TypeTable::I32,
+    );
+    assert_eq!(
+        Interpreter::new(&table).reduce_to_lattice(&expr),
+        Lattice::NonConst,
+    );
+}
+
+#[test]
+fn match_const_scrut_unsupported_pattern_does_not_rewrite() {
+    // A pattern the engine doesn't model (Tuple here, Phase A scope)
+    // is treated as Unknown — the rewrite step must bail since we
+    // cannot prove the arm fires. The match expression must remain
+    // structurally intact (so its trap-on-no-match behaviour is
+    // preserved at runtime).
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    let mut expr = match_expr(
+        int_lit(1, TypeTable::I32, "1"),
+        vec![arm(
+            TirPattern::Tuple(vec![], false),
+            int_lit(99, TypeTable::I32, "99"),
+        )],
+        TypeTable::I32,
+    );
+    assert!(!interp.reduce_local(&mut expr));
+    assert!(matches!(expr.kind, TirExprKind::Match { .. }));
+}
+
+#[test]
+fn reduce_local_rewrites_const_match_to_arm_body_block() {
+    // The visitor-driven path: `reduce_local` rewrites a constant-scrut
+    // `Match` in place to a `Block` containing the chosen arm's body
+    // expression as a single tail statement.
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    let mut expr = match_expr(
+        int_lit(2, TypeTable::I32, "2"),
+        vec![
+            arm(lit_pat_i128(1), int_lit(10, TypeTable::I32, "10")),
+            arm(lit_pat_i128(2), int_lit(20, TypeTable::I32, "20")),
+            arm(TirPattern::Wildcard, int_lit(30, TypeTable::I32, "30")),
+        ],
+        TypeTable::I32,
+    );
+    assert!(interp.reduce_local(&mut expr));
+    let TirExprKind::Block(b) = &expr.kind else {
+        panic!("expected Block, got {:?}", expr.kind);
+    };
+    assert_eq!(b.stmts.len(), 1);
+    let TirStmtKind::Expr(tail) = &b.stmts[0].kind else {
+        panic!("expected Expr stmt");
+    };
+    let TirExprKind::IntLiteral { value, .. } = tail.kind else {
+        panic!("expected IntLiteral tail");
+    };
+    assert_eq!(value, 20);
+}
+
+#[test]
+fn reduce_local_collapses_equal_arm_match_to_literal() {
+    // Non-const speculatable scrutinee with all arms producing the same
+    // Const collapses to that literal.
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    let mut expr = match_expr(
+        local_expr(0, TypeTable::I32),
+        vec![
+            arm(lit_pat_i128(1), int_lit(7, TypeTable::I32, "7")),
+            arm(TirPattern::Wildcard, int_lit(7, TypeTable::I32, "7")),
+        ],
+        TypeTable::I32,
+    );
+    assert!(interp.reduce_local(&mut expr));
+    let TirExprKind::IntLiteral { value, .. } = expr.kind else {
+        panic!("expected IntLiteral, got {:?}", expr.kind);
+    };
+    assert_eq!(value, 7);
+}
+
+#[test]
+fn reduce_local_leaves_unequal_arm_match_alone() {
+    // Different Const arms under a non-const scrutinee: the match is
+    // not rewritten.
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    let mut expr = match_expr(
+        local_expr(0, TypeTable::I32),
+        vec![
+            arm(lit_pat_i128(1), int_lit(1, TypeTable::I32, "1")),
+            arm(TirPattern::Wildcard, int_lit(2, TypeTable::I32, "2")),
+        ],
+        TypeTable::I32,
+    );
+    assert!(!interp.reduce_local(&mut expr));
+    assert!(matches!(expr.kind, TirExprKind::Match { .. }));
+}
+
+#[test]
+fn reduce_local_recurses_into_match_arm_body() {
+    // The driver path enters `reduce` (not `reduce_local`) which uses
+    // `reduce_in_place` to recurse into children. The arm body
+    // `1 + 2` should fold to `3` even when the surrounding match
+    // doesn't itself collapse (here the arm body's reduction is
+    // observable as the engine's lattice value).
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    let folded = interp.reduce(&match_expr(
+        int_lit(1, TypeTable::I32, "1"),
+        vec![arm(
+            lit_pat_i128(1),
+            binary(
+                TirBinaryOp::Add,
+                int_lit(1, TypeTable::I32, "1"),
+                int_lit(2, TypeTable::I32, "2"),
+                TypeTable::I32,
+            ),
+        )],
+        TypeTable::I32,
+    ));
+    // After reduce: the match collapsed to Block([Expr(3)]).
+    let TirExprKind::Block(b) = &folded.kind else {
+        panic!("expected Block, got {:?}", folded.kind);
+    };
+    let TirStmtKind::Expr(tail) = &b.stmts[0].kind else {
+        panic!("expected Expr stmt");
+    };
+    let TirExprKind::IntLiteral { value, .. } = tail.kind else {
+        panic!("expected IntLiteral");
+    };
+    assert_eq!(value, 3);
+}
+
+#[test]
+fn match_const_char_range_inclusive() {
+    // `match 'm' { 'a'..='z' => 1, _ => 0 }` → 1 (chars compare by
+    // codepoint).
+    let table = TypeTable::new();
+    let expr = match_expr(
+        char_lit('m'),
+        vec![
+            arm(
+                range_pat(
+                    i128::from(u32::from('a')),
+                    i128::from(u32::from('z')),
+                    true,
+                    false,
+                ),
+                int_lit(1, TypeTable::I32, "1"),
+            ),
+            arm(TirPattern::Wildcard, int_lit(0, TypeTable::I32, "0")),
+        ],
+        TypeTable::I32,
+    );
+    assert_eq!(
+        Interpreter::new(&table).reduce_to_lattice(&expr),
+        Lattice::Const(Value::Int {
+            value: 1,
+            prim: PrimitiveType::I32,
+        }),
+    );
+}
+
+#[test]
+fn match_const_char_range_excludes_outside() {
+    // `match '0' { 'a'..='z' => 1, _ => 0 }` → 0 ('0' is below 'a').
+    let table = TypeTable::new();
+    let expr = match_expr(
+        char_lit('0'),
+        vec![
+            arm(
+                range_pat(
+                    i128::from(u32::from('a')),
+                    i128::from(u32::from('z')),
+                    true,
+                    false,
+                ),
+                int_lit(1, TypeTable::I32, "1"),
+            ),
+            arm(TirPattern::Wildcard, int_lit(0, TypeTable::I32, "0")),
+        ],
+        TypeTable::I32,
+    );
+    assert_eq!(
+        Interpreter::new(&table).reduce_to_lattice(&expr),
+        Lattice::Const(Value::Int {
+            value: 0,
+            prim: PrimitiveType::I32,
+        }),
+    );
+}
+
+#[test]
+fn match_constant_value_pattern_against_const_int() {
+    // `ConstantValue { expr: 42 }` matches scrut == 42 → Yes.
+    let table = TypeTable::new();
+    let expr = match_expr(
+        int_lit(42, TypeTable::I32, "42"),
+        vec![
+            arm(
+                TirPattern::ConstantValue {
+                    expr: Box::new(int_lit(42, TypeTable::I32, "42")),
+                },
+                int_lit(1, TypeTable::I32, "1"),
+            ),
+            arm(TirPattern::Wildcard, int_lit(0, TypeTable::I32, "0")),
+        ],
+        TypeTable::I32,
+    );
+    assert_eq!(
+        Interpreter::new(&table).reduce_to_lattice(&expr),
+        Lattice::Const(Value::Int {
+            value: 1,
+            prim: PrimitiveType::I32,
+        }),
+    );
+}
+
+#[test]
+fn match_constant_value_pattern_misses() {
+    // `ConstantValue { expr: 99 }` against scrut == 42 → No.
+    let table = TypeTable::new();
+    let expr = match_expr(
+        int_lit(42, TypeTable::I32, "42"),
+        vec![
+            arm(
+                TirPattern::ConstantValue {
+                    expr: Box::new(int_lit(99, TypeTable::I32, "99")),
+                },
+                int_lit(1, TypeTable::I32, "1"),
+            ),
+            arm(TirPattern::Wildcard, int_lit(0, TypeTable::I32, "0")),
+        ],
+        TypeTable::I32,
+    );
+    assert_eq!(
+        Interpreter::new(&table).reduce_to_lattice(&expr),
+        Lattice::Const(Value::Int {
+            value: 0,
+            prim: PrimitiveType::I32,
+        }),
+    );
+}
+
+#[test]
+fn match_constant_value_pattern_unanalyzable_is_unknown() {
+    // ConstantValue whose expr is a Local (Unevaluated) is Unknown
+    // — the engine can't decide. With const scrut, the rewrite
+    // bails out, keeping the Match intact.
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    let mut expr = match_expr(
+        int_lit(42, TypeTable::I32, "42"),
+        vec![arm(
+            TirPattern::ConstantValue {
+                expr: Box::new(local_expr(0, TypeTable::I32)),
+            },
+            int_lit(1, TypeTable::I32, "1"),
+        )],
+        TypeTable::I32,
+    );
+    assert!(!interp.reduce_local(&mut expr));
+    assert!(matches!(expr.kind, TirExprKind::Match { .. }));
+}
+
+#[test]
+fn match_or_pattern_no_match_no_unknowns_is_definite_no() {
+    // Or-pattern with all definite-No alternatives reports No, so
+    // a wildcard later catches the scrut. With const scrut == 99
+    // and `Or([1, 2])` arm, the engine drops the Or arm and picks
+    // the wildcard — `reduce_local` rewrites the match to the
+    // wildcard's body block.
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    let mut expr = match_expr(
+        int_lit(99, TypeTable::I32, "99"),
+        vec![
+            arm(
+                TirPattern::Or(vec![lit_pat_i128(1), lit_pat_i128(2)]),
+                int_lit(10, TypeTable::I32, "10"),
+            ),
+            arm(TirPattern::Wildcard, int_lit(20, TypeTable::I32, "20")),
+        ],
+        TypeTable::I32,
+    );
+    assert!(interp.reduce_local(&mut expr));
+    let TirExprKind::Block(b) = &expr.kind else {
+        panic!("expected Block");
+    };
+    let TirStmtKind::Expr(tail) = &b.stmts[0].kind else {
+        panic!("expected Expr stmt");
+    };
+    let TirExprKind::IntLiteral { value, .. } = tail.kind else {
+        panic!("expected IntLiteral");
+    };
+    assert_eq!(value, 20);
+}
+
+#[test]
+fn match_signed_negative_against_unsigned_range_is_no() {
+    // A signed negative scrutinee (e.g. -1 in i32) can never be in
+    // an unsigned range like `0..=255`. Engine returns definite No
+    // for that arm, falling through to the wildcard.
+    let table = TypeTable::new();
+    let neg_one_bits = i64::from(-1_i32) as u64;
+    let expr = match_expr(
+        int_lit(neg_one_bits, TypeTable::I32, "-1"),
+        vec![
+            arm(
+                range_pat(0, 255, true, true),
+                int_lit(1, TypeTable::I32, "1"),
+            ),
+            arm(TirPattern::Wildcard, int_lit(0, TypeTable::I32, "0")),
+        ],
+        TypeTable::I32,
+    );
+    assert_eq!(
+        Interpreter::new(&table).reduce_to_lattice(&expr),
+        Lattice::Const(Value::Int {
+            value: 0,
+            prim: PrimitiveType::I32,
+        }),
+    );
+}
+
+#[test]
+fn match_const_int_picks_first_of_overlapping_arms() {
+    // First-match wins: arms `1`, `1..=5` both match scrut 1; the
+    // engine commits to the first.
+    let table = TypeTable::new();
+    let expr = match_expr(
+        int_lit(1, TypeTable::I32, "1"),
+        vec![
+            arm(lit_pat_i128(1), int_lit(10, TypeTable::I32, "10")),
+            arm(
+                range_pat(1, 5, true, false),
+                int_lit(20, TypeTable::I32, "20"),
+            ),
+        ],
+        TypeTable::I32,
+    );
+    assert_eq!(
+        Interpreter::new(&table).reduce_to_lattice(&expr),
+        Lattice::Const(Value::Int {
+            value: 10,
+            prim: PrimitiveType::I32,
+        }),
+    );
+}
+
+#[test]
+fn match_via_env_resolved_local_scrutinee() {
+    // Scrutinee is a `Local` bound to `Const(2)` in env. The match
+    // should still fold via the lattice path (as with `if`).
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    interp.bind_local(
+        0,
+        Lattice::Const(Value::Int {
+            value: 2,
+            prim: PrimitiveType::I32,
+        }),
+    );
+    let expr = match_expr(
+        local_expr(0, TypeTable::I32),
+        vec![
+            arm(lit_pat_i128(1), int_lit(10, TypeTable::I32, "10")),
+            arm(lit_pat_i128(2), int_lit(20, TypeTable::I32, "20")),
+            arm(TirPattern::Wildcard, int_lit(30, TypeTable::I32, "30")),
+        ],
+        TypeTable::I32,
+    );
+    assert_eq!(
+        interp.reduce_to_lattice(&expr),
+        Lattice::Const(Value::Int {
+            value: 20,
+            prim: PrimitiveType::I32,
+        }),
+    );
+}
+
+#[test]
+fn match_const_scrut_with_only_or_pattern_arms_picks_first() {
+    // No wildcard, but the or-pattern covers the scrut value exactly.
+    let table = TypeTable::new();
+    let expr = match_expr(
+        int_lit(2, TypeTable::I32, "2"),
+        vec![
+            arm(
+                TirPattern::Or(vec![lit_pat_i128(1), lit_pat_i128(2)]),
+                int_lit(10, TypeTable::I32, "10"),
+            ),
+            arm(lit_pat_i128(3), int_lit(20, TypeTable::I32, "20")),
+        ],
+        TypeTable::I32,
+    );
+    assert_eq!(
+        Interpreter::new(&table).reduce_to_lattice(&expr),
+        Lattice::Const(Value::Int {
+            value: 10,
+            prim: PrimitiveType::I32,
+        }),
+    );
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Stage 2.5 — exhaustiveness gate (review feedback)
+//
+// Without an unguarded catch-all the lowering inserts an `Unreachable`
+// fallback for unmatched scrutinee values. Wado's resolver enforces
+// match exhaustiveness for `bool` / `enum` / `variant` / range-covered
+// `int`, but explicitly skips it for `struct` / `string` / `tuple` / …
+// The engine must not collapse a non-exhaustive match to a literal
+// (it would erase the trap), nor return a `Const(_)` lattice for one
+// (a downstream `if` collapse could erase the trap on its behalf).
+// ──────────────────────────────────────────────────────────────────────────────
+
+fn binding_pat(name: &str, local_index: u32, type_id: TypeId) -> TirPattern {
+    TirPattern::Binding {
+        name: name.to_string(),
+        local_index,
+        type_id,
+    }
+}
+
+#[test]
+fn match_nonconst_scrut_non_exhaustive_all_arms_equal_does_not_rewrite() {
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    let mut expr = match_expr(
+        local_expr(0, TypeTable::I32),
+        vec![
+            arm(lit_pat_i128(1), int_lit(7, TypeTable::I32, "7")),
+            arm(lit_pat_i128(2), int_lit(7, TypeTable::I32, "7")),
+        ],
+        TypeTable::I32,
+    );
+    assert!(!interp.reduce_local(&mut expr));
+    assert!(matches!(expr.kind, TirExprKind::Match { .. }));
+}
+
+#[test]
+fn match_nonconst_scrut_non_exhaustive_lattice_is_nonconst() {
+    let table = TypeTable::new();
+    let expr = match_expr(
+        local_expr(0, TypeTable::I32),
+        vec![
+            arm(lit_pat_i128(1), int_lit(7, TypeTable::I32, "7")),
+            arm(lit_pat_i128(2), int_lit(7, TypeTable::I32, "7")),
+        ],
+        TypeTable::I32,
+    );
+    assert_eq!(
+        Interpreter::new(&table).reduce_to_lattice(&expr),
+        Lattice::NonConst,
+    );
+}
+
+#[test]
+fn match_nonconst_scrut_exhaustive_wildcard_collapses() {
+    // Sanity: with an unguarded wildcard the match IS exhaustive,
+    // so the gate lets the all-arms-equal collapse fire.
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    let mut expr = match_expr(
+        local_expr(0, TypeTable::I32),
+        vec![
+            arm(lit_pat_i128(1), int_lit(7, TypeTable::I32, "7")),
+            arm(TirPattern::Wildcard, int_lit(7, TypeTable::I32, "7")),
+        ],
+        TypeTable::I32,
+    );
+    assert!(interp.reduce_local(&mut expr));
+    let TirExprKind::IntLiteral { value, .. } = expr.kind else {
+        panic!("expected IntLiteral");
+    };
+    assert_eq!(value, 7);
+}
+
+#[test]
+fn match_const_scrut_only_unknown_arms_lattice_is_nonconst() {
+    // Const scrutinee, but the only arm has an Unknown pattern (Tuple
+    // here, since Phase A doesn't model tuple patterns). No definite
+    // Yes is found, so the runtime may fall through to the trap. The
+    // lattice must report `NonConst` — *not* `Const(99)` — even
+    // though the only candidate body is `Const(99)`.
+    let table = TypeTable::new();
+    let expr = match_expr(
+        int_lit(1, TypeTable::I32, "1"),
+        vec![arm(
+            TirPattern::Tuple(vec![], false),
+            int_lit(99, TypeTable::I32, "99"),
+        )],
+        TypeTable::I32,
+    );
+    assert_eq!(
+        Interpreter::new(&table).reduce_to_lattice(&expr),
+        Lattice::NonConst,
+    );
+}
+
+#[test]
+fn match_nonconst_scrut_or_pattern_with_embedded_wildcard_is_exhaustive() {
+    // `Or([1, _])` contains an unguarded wildcard alternative; the
+    // engine should recognize it as a catch-all and let the
+    // collapse fire.
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    let mut expr = match_expr(
+        local_expr(0, TypeTable::I32),
+        vec![arm(
+            TirPattern::Or(vec![lit_pat_i128(1), TirPattern::Wildcard]),
+            int_lit(7, TypeTable::I32, "7"),
+        )],
+        TypeTable::I32,
+    );
+    assert!(interp.reduce_local(&mut expr));
+    let TirExprKind::IntLiteral { value, .. } = expr.kind else {
+        panic!("expected IntLiteral");
+    };
+    assert_eq!(value, 7);
+}
+
+#[test]
+fn match_nonconst_scrut_binding_pattern_counts_as_exhaustive() {
+    // A `Binding` pattern always matches and captures the value —
+    // a catch-all by another name.
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    let mut expr = match_expr(
+        local_expr(0, TypeTable::I32),
+        vec![
+            arm(lit_pat_i128(1), int_lit(7, TypeTable::I32, "7")),
+            arm(
+                binding_pat("x", 1, TypeTable::I32),
+                int_lit(7, TypeTable::I32, "7"),
+            ),
+        ],
+        TypeTable::I32,
+    );
+    assert!(interp.reduce_local(&mut expr));
+    let TirExprKind::IntLiteral { value, .. } = expr.kind else {
+        panic!("expected IntLiteral");
+    };
+    assert_eq!(value, 7);
+}
+
+#[test]
+fn match_nonconst_scrut_guarded_wildcard_does_not_count_as_exhaustive() {
+    // A guarded catch-all is NOT exhaustive — if the guard fails,
+    // control falls through to the implicit trap.
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    let mut expr = match_expr(
+        local_expr(0, TypeTable::I32),
+        vec![
+            arm(lit_pat_i128(1), int_lit(7, TypeTable::I32, "7")),
+            arm_with_guard(
+                TirPattern::Wildcard,
+                local_expr(1, TypeTable::BOOL),
+                int_lit(7, TypeTable::I32, "7"),
+            ),
+        ],
+        TypeTable::I32,
+    );
+    assert!(!interp.reduce_local(&mut expr));
+    assert!(matches!(expr.kind, TirExprKind::Match { .. }));
 }

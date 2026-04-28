@@ -57,6 +57,17 @@
 //! - `if` statements (Stage 2): a constant condition splices the chosen
 //!   branch's stmts into the parent block via
 //!   [`Interpreter::reduce_local_block`].
+//! - `match` expressions (Stage 2.5, Phase A): a constant scrutinee
+//!   collapses the node to the first arm whose pattern provably matches
+//!   (treating later arms as SCCP infeasible edges); a non-constant
+//!   speculatable scrutinee with every arm reducing to the same lattice
+//!   constant collapses to that constant. Phase A patterns: `_`, integer
+//!   / bool / char literal, integer range (signed and unsigned), or-of
+//!   the above, and `ConstantValue` whose inner expression reduces to a
+//!   primitive `Value`. `Binding`, `Tuple`, `Variant`, `Struct`, `Enum`,
+//!   string / null literal patterns are deferred (treated as `Unknown`,
+//!   which never lets a const-scrutinee match commit and never drops a
+//!   later arm).
 //!
 //! Float arithmetic uses native Rust IEEE 754 ops (same as Wasm), following
 //! cranelift's approach: fold the result, but skip if it is NaN since NaN
@@ -72,8 +83,8 @@
 
 use crate::hashmap::IndexMap;
 use crate::tir::{
-    PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind,
-    TirUnaryOp, TypeId, TypeTable,
+    PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirLiteralPattern,
+    TirMatchArm, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
 
 /// Three-state lattice over compile-time evaluation results.
@@ -318,6 +329,19 @@ impl<'a> Interpreter<'a> {
                 }
                 c
             }
+            TirExprKind::Match {
+                expr: scrutinee,
+                arms,
+            } => {
+                let mut c = self.reduce_in_place(scrutinee);
+                for arm in arms {
+                    if let Some(g) = &mut arm.guard {
+                        c |= self.reduce_in_place(g);
+                    }
+                    c |= self.reduce_in_place(&mut arm.body);
+                }
+                c
+            }
             _ => false,
         };
 
@@ -406,7 +430,10 @@ impl<'a> Interpreter<'a> {
         if rewrite_short_circuit(expr) {
             return true;
         }
-        self.rewrite_if_expr(expr)
+        if self.rewrite_if_expr(expr) {
+            return true;
+        }
+        self.rewrite_match_expr(expr)
     }
 
     /// Apply stmt-level rewrites that may expand or contract the stmt
@@ -529,6 +556,102 @@ impl<'a> Interpreter<'a> {
         true
     }
 
+    /// Stage-2.5 rewrite for a `match` expression. The two reductions are:
+    ///
+    /// 1. **Const scrutinee**: pick the first arm whose pattern
+    ///    provably matches (no guard, definite `Yes`). Replace the
+    ///    `Match` with `Block { stmts: [Expr(arm.body)] }` so the
+    ///    surrounding pass walks the arm's residual normally. If any
+    ///    earlier arm is `Unknown`, we cannot prove a definite arm
+    ///    fires first — bail.
+    /// 2. **Non-const speculatable scrutinee, all-arms-equal collapse**:
+    ///    when every arm has no guard and reduces to the same
+    ///    `Const(v)`, rewrite the whole match to that literal. The
+    ///    same `is_speculatable` gate as the `if` rule applies, since
+    ///    we're dropping the scrutinee's evaluation.
+    fn rewrite_match_expr(&mut self, expr: &mut TirExpr) -> bool {
+        let TirExprKind::Match {
+            expr: scrutinee,
+            arms,
+        } = &expr.kind
+        else {
+            return false;
+        };
+        if arms.is_empty() {
+            return false;
+        }
+
+        // Rule 1: const scrutinee → splice the chosen arm.
+        if let Lattice::Const(scrut_v) = self.expr_to_lattice(scrutinee) {
+            // Walk arms; bail at first Unknown without committing.
+            let mut chosen: Option<usize> = None;
+            for (i, arm) in arms.iter().enumerate() {
+                if arm.guard.is_some() {
+                    return false;
+                }
+                match self.pattern_matches(&scrut_v, &arm.pattern) {
+                    PatternMatch::Yes => {
+                        chosen = Some(i);
+                        break;
+                    }
+                    PatternMatch::No => {}
+                    PatternMatch::Unknown => return false,
+                }
+            }
+            let Some(idx) = chosen else {
+                return false;
+            };
+            let TirExprKind::Match { arms, .. } =
+                std::mem::replace(&mut expr.kind, TirExprKind::Unit)
+            else {
+                unreachable!();
+            };
+            let body = arms
+                .into_iter()
+                .nth(idx)
+                .expect("chosen index in range")
+                .body;
+            let span = body.span;
+            expr.kind = TirExprKind::Block(TirBlock::new(
+                vec![TirStmt::new(TirStmtKind::Expr(body), span)],
+                span,
+            ));
+            return true;
+        }
+
+        // Rule 2: non-const speculatable scrutinee, all-arms-equal.
+        if !is_speculatable(scrutinee) {
+            return false;
+        }
+        if arms.iter().any(|a| a.guard.is_some()) {
+            return false;
+        }
+        // The match must be provably exhaustive — otherwise an unmatched
+        // scrutinee value would trap (the lowering inserts an
+        // Unreachable fallback), and rewriting the whole expression to
+        // a literal would silently drop that trap. Wado's resolver
+        // skips exhaustiveness checks for some scrutinee types
+        // (struct, string, tuple, …); without an unguarded catch-all
+        // we cannot prove the fallback is unreachable.
+        if !is_provably_exhaustive(arms) {
+            return false;
+        }
+        let mut common: Option<Value> = None;
+        for arm in arms {
+            let Lattice::Const(v) = self.expr_to_lattice(&arm.body) else {
+                return false;
+            };
+            match common {
+                None => common = Some(v),
+                Some(c) if c != v => return false,
+                Some(_) => {}
+            }
+        }
+        let v = common.expect("at least one arm");
+        expr.kind = value_to_expr_kind(v);
+        true
+    }
+
     /// Reduce `expr` to a [`Lattice`] value without mutating the
     /// caller's tree.
     ///
@@ -637,7 +760,194 @@ impl<'a> Interpreter<'a> {
                     }
                 }
             }
+            TirExprKind::Match {
+                expr: scrutinee,
+                arms,
+            } => self.match_lattice(scrutinee, arms),
             _ => Lattice::Unevaluated,
+        }
+    }
+
+    /// Lattice value of a `match` expression, mirroring the [`If`] rules:
+    ///
+    /// - When the scrutinee is `Const(v)`, walk arms in source order. The
+    ///   first arm whose pattern provably matches (and has no guard, since
+    ///   guards inspect bindings tiri does not yet model) contributes its
+    ///   body's lattice to the result; later arms are SCCP-infeasible
+    ///   edges and never participate.
+    /// - When an earlier arm is `Unknown` (an unmodelled pattern, an
+    ///   unanalyzable `ConstantValue`, or a guarded arm), we cannot prove
+    ///   it doesn't fire — so we conservatively treat every later arm
+    ///   from that point on as also feasible, and join them all.
+    /// - When the scrutinee is non-constant, every arm body is feasible:
+    ///   join all of them, promoting `Unevaluated` arm values to
+    ///   `NonConst` first (the same fix as the `If` non-const-condition
+    ///   path — an arm we couldn't analyze is reachable, not infeasible).
+    fn match_lattice(&self, scrutinee: &TirExpr, arms: &[TirMatchArm]) -> Lattice {
+        let scrut_const = self.expr_to_lattice(scrutinee).as_const();
+
+        // No-arm match shouldn't be syntactically possible, but guard
+        // defensively: nothing reachable, nothing to say.
+        if arms.is_empty() {
+            return Lattice::Unevaluated;
+        }
+
+        if let Some(scrut_v) = scrut_const {
+            // Const scrutinee: walk arms collecting candidates from
+            // the first Unknown onward (which is also the first
+            // arm we can't rule out) until we hit a definite Yes (or
+            // run out of arms).
+            let mut candidates = Vec::<Lattice>::new();
+            let mut yes_found = false;
+            for arm in arms {
+                let pm = if arm.guard.is_some() {
+                    // A guard's outcome depends on bindings we don't
+                    // model; even if the pattern's structural match is
+                    // definite, the arm's firing isn't. Treat as
+                    // Unknown.
+                    PatternMatch::Unknown
+                } else {
+                    self.pattern_matches(&scrut_v, &arm.pattern)
+                };
+                let body_lat = arm_lattice_for_feasible_join(self.expr_to_lattice(&arm.body));
+                match pm {
+                    PatternMatch::No => {}
+                    PatternMatch::Yes => {
+                        if candidates.is_empty() {
+                            // Clean feasible-edge: only this arm's body
+                            // value flows out. Use the un-promoted
+                            // lattice — `Unevaluated` here means the
+                            // body really is unanalyzable, mirroring
+                            // the `If` const-cond rule.
+                            return self.expr_to_lattice(&arm.body);
+                        }
+                        // Earlier Unknown arms could also fire; this
+                        // Yes arm is the last possibility. Include it
+                        // in the join and stop — no later arm is
+                        // reachable past a guaranteed match.
+                        candidates.push(body_lat);
+                        yes_found = true;
+                        break;
+                    }
+                    PatternMatch::Unknown => candidates.push(body_lat),
+                }
+            }
+            // Without a proven Yes, the runtime may fall through every
+            // arm and trap on the lowering's Unreachable fallback. The
+            // SCCP value lattice over only the arm bodies would silently
+            // drop that observable trap when a caller (e.g. the `if`
+            // both-arms-equal collapse) acts on the resulting `Const`.
+            // Bail to NonConst so downstream rewrites stay safe.
+            if !yes_found {
+                return Lattice::NonConst;
+            }
+            join_all(&candidates)
+        } else {
+            // Non-const scrutinee: every arm body is reachable. The
+            // implicit Unreachable fallback is reachable too unless the
+            // match is provably exhaustive — without an unguarded
+            // catch-all (or pattern set covering the type's domain) we
+            // cannot prove the trap is dead, and a `Const(v)` lattice
+            // here would let other passes drop it. Stay conservative.
+            if !is_provably_exhaustive(arms) {
+                return Lattice::NonConst;
+            }
+            let mut acc = Lattice::Unevaluated;
+            for arm in arms {
+                let body_lat = arm_lattice_for_feasible_join(self.expr_to_lattice(&arm.body));
+                // A guard makes the arm's *firing* uncertain, but if it
+                // does fire, its body is what flows out — so the body
+                // lattice still participates in the join.
+                acc = acc.join(body_lat);
+            }
+            acc
+        }
+    }
+
+    /// Decide whether `pat` matches the constant scrutinee `value`.
+    /// Returns `Unknown` for any pattern shape Phase A doesn't model.
+    fn pattern_matches(&self, value: &Value, pat: &TirPattern) -> PatternMatch {
+        match pat {
+            TirPattern::Wildcard => PatternMatch::Yes,
+            TirPattern::Literal(lit) => match (lit, value) {
+                (TirLiteralPattern::I128(p), Value::Int { value: v, prim }) => {
+                    bool_to_match(int_value_matches_i128(*v, *prim, *p))
+                }
+                (TirLiteralPattern::U128(p), Value::Int { value: v, prim }) => {
+                    bool_to_match(int_value_matches_u128(*v, *prim, *p))
+                }
+                (TirLiteralPattern::Bool(p), Value::Bool(v)) => bool_to_match(p == v),
+                (TirLiteralPattern::Char(p), Value::Char(v)) => bool_to_match(p == v),
+                // Type mismatch between pattern and value: definite No.
+                // (The resolver should already reject ill-typed
+                // patterns; if one slips through, returning No is safe
+                // since the arm cannot fire at runtime either.)
+                (
+                    TirLiteralPattern::I128(_)
+                    | TirLiteralPattern::U128(_)
+                    | TirLiteralPattern::Bool(_)
+                    | TirLiteralPattern::Char(_),
+                    _,
+                ) => PatternMatch::No,
+                // String / Null patterns: tiri's `Value` doesn't carry
+                // string/null info, so we can't decide. Unknown leaves
+                // the arm in play.
+                (TirLiteralPattern::String(_) | TirLiteralPattern::Null, _) => {
+                    PatternMatch::Unknown
+                }
+            },
+            TirPattern::Or(alts) => {
+                let mut any_unknown = false;
+                for alt in alts {
+                    match self.pattern_matches(value, alt) {
+                        PatternMatch::Yes => return PatternMatch::Yes,
+                        PatternMatch::No => {}
+                        PatternMatch::Unknown => any_unknown = true,
+                    }
+                }
+                if any_unknown {
+                    PatternMatch::Unknown
+                } else {
+                    PatternMatch::No
+                }
+            }
+            TirPattern::Range {
+                start,
+                end,
+                inclusive,
+                is_unsigned,
+            } => match value {
+                Value::Int { value: v, prim } => bool_to_match(range_matches_int(
+                    *v,
+                    *prim,
+                    *start,
+                    *end,
+                    *inclusive,
+                    *is_unsigned,
+                )),
+                Value::Char(c) => {
+                    let cp = i128::from(u32::from(*c));
+                    bool_to_match(if *inclusive {
+                        cp >= *start && cp <= *end
+                    } else {
+                        cp >= *start && cp < *end
+                    })
+                }
+                _ => PatternMatch::No,
+            },
+            TirPattern::ConstantValue { expr } => match self.expr_to_lattice(expr).as_const() {
+                Some(v) if &v == value => PatternMatch::Yes,
+                Some(_) => PatternMatch::No,
+                None => PatternMatch::Unknown,
+            },
+            // Phase A out-of-scope patterns. Treat as Unknown so they
+            // never wrongly commit a match (Yes) and never wrongly drop
+            // a later arm (No).
+            TirPattern::Binding { .. }
+            | TirPattern::Tuple(_, _)
+            | TirPattern::Variant { .. }
+            | TirPattern::Enum { .. }
+            | TirPattern::Struct { .. } => PatternMatch::Unknown,
         }
     }
 
@@ -719,6 +1029,147 @@ fn option_to_lattice(opt: Option<Value>) -> Lattice {
     match opt {
         Some(v) => Lattice::Const(v),
         None => Lattice::NonConst,
+    }
+}
+
+/// Outcome of testing a [`TirPattern`] against a constant scrutinee
+/// [`Value`]. The three states mirror the pattern's contribution to
+/// SCCP feasibility in [`Interpreter::match_lattice`]:
+///
+/// - `Yes` — the pattern provably matches; later arms are infeasible
+///   edges.
+/// - `No` — the pattern provably does not match; this arm is an
+///   infeasible edge.
+/// - `Unknown` — the engine cannot decide (an unmodelled pattern
+///   shape, a guard the engine doesn't analyze, a `ConstantValue`
+///   whose inner expression doesn't reduce). The arm stays in play
+///   and contributes to the join with all later arms.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PatternMatch {
+    Yes,
+    No,
+    Unknown,
+}
+
+fn bool_to_match(b: bool) -> PatternMatch {
+    if b {
+        PatternMatch::Yes
+    } else {
+        PatternMatch::No
+    }
+}
+
+/// Conservatively decide whether a `match`'s arm set is exhaustive
+/// — i.e. whether the lowering's implicit `Unreachable` fallback is
+/// provably dead. Mirrors the resolver's [`is_catch_all_pattern`]
+/// rule: at least one unguarded `Wildcard` / `Binding` arm (or an
+/// `Or` pattern containing one) is sufficient. Variant-set / range-set
+/// coverage proofs are deferred until tiri models those pattern shapes
+/// structurally; treating them as non-exhaustive here is the safe
+/// answer (it costs an optimization, not correctness).
+fn is_provably_exhaustive(arms: &[TirMatchArm]) -> bool {
+    arms.iter()
+        .any(|a| a.guard.is_none() && pattern_is_catch_all(&a.pattern))
+}
+
+fn pattern_is_catch_all(pat: &TirPattern) -> bool {
+    match pat {
+        TirPattern::Wildcard | TirPattern::Binding { .. } => true,
+        TirPattern::Or(alts) => alts.iter().any(pattern_is_catch_all),
+        _ => false,
+    }
+}
+
+/// Join a slice of lattice values via [`Lattice::join`]. Empty input
+/// returns [`Lattice::Unevaluated`] (the join's identity).
+fn join_all(lats: &[Lattice]) -> Lattice {
+    let mut acc = Lattice::Unevaluated;
+    for &l in lats {
+        acc = acc.join(l);
+    }
+    acc
+}
+
+/// Compare an integer value (raw bits + prim) against a signed i128
+/// pattern literal. Returns `true` iff the values are equal under
+/// the prim's signedness interpretation.
+fn int_value_matches_i128(value: u64, prim: PrimitiveType, pat: i128) -> bool {
+    let Some(v) = int_value_as_i128(value, prim) else {
+        return false;
+    };
+    v == pat
+}
+
+/// Compare an integer value (raw bits + prim) against an unsigned
+/// u128 pattern literal.
+fn int_value_matches_u128(value: u64, prim: PrimitiveType, pat: u128) -> bool {
+    if is_signed_int(prim) {
+        // Signed value cannot represent values outside i64 range
+        // anyway; reinterpret as unsigned for comparison.
+        let v = value as i64;
+        if v < 0 {
+            return false;
+        }
+        u128::from(v as u64) == pat
+    } else {
+        u128::from(value) == pat
+    }
+}
+
+/// Convert a (raw bits, prim) integer into an i128, sign- or
+/// zero-extending per the prim's signedness. Returns `None` for
+/// non-integer prims.
+fn int_value_as_i128(value: u64, prim: PrimitiveType) -> Option<i128> {
+    if !is_int_prim(prim) {
+        return None;
+    }
+    if is_signed_int(prim) {
+        // Stored as sign-extended i64 → widen to i128.
+        Some(i128::from(value as i64))
+    } else {
+        Some(i128::from(value))
+    }
+}
+
+/// Decide whether a (raw bits, prim) integer falls inside a range
+/// pattern. Returns `false` for non-integer prims and for negative
+/// signed values against an unsigned-typed range (which by
+/// construction starts at zero or higher); otherwise returns the
+/// usual half-open / closed range membership test in i128 space.
+fn range_matches_int(
+    value: u64,
+    prim: PrimitiveType,
+    start: i128,
+    end: i128,
+    inclusive: bool,
+    is_unsigned_pat: bool,
+) -> bool {
+    if !is_int_prim(prim) {
+        return false;
+    }
+    let v: i128 = if is_unsigned_pat || !is_signed_int(prim) {
+        // Treat the value as unsigned. For a signed prim with negative
+        // bits, the unsigned reinterpretation differs — fall back to
+        // sign-extended comparison, then ensure it stays nonneg before
+        // entering an unsigned range check.
+        if is_signed_int(prim) {
+            let signed = i128::from(value as i64);
+            if signed < 0 {
+                // The pattern is unsigned; a negative scrutinee can't
+                // be in `[start, end]` when start ≥ 0.
+                return false;
+            }
+            signed
+        } else {
+            i128::from(value)
+        }
+    } else {
+        i128::from(value as i64)
+    };
+    if inclusive {
+        v >= start && v <= end
+    } else {
+        v >= start && v < end
     }
 }
 
