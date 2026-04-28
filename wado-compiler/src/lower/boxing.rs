@@ -685,8 +685,22 @@ impl BoxLowerer {
                     self.transform_expr(elem, address_taken, type_table);
                 }
             }
-            TirExprKind::Closure { body, .. } => {
-                self.transform_expr(body, address_taken, type_table);
+            TirExprKind::Closure {
+                body,
+                address_taken_locals,
+                ..
+            } => {
+                // Closure bodies have their own local scope: `Local { index: N }`
+                // inside refers to the closure's Nth local, not the parent's.
+                // Use the closure's own `address_taken_locals` (populated by the
+                // resolver from the closure's `FunctionContext`, or empty for
+                // synthesised closures) so primitive-ref boxing applies to the
+                // right scope. Descending with the parent's set would treat
+                // closure locals as parent locals at the same index, causing
+                // unrelated boxings (e.g. an i32 closure param boxed because
+                // the parent function happens to have an address-taken i32 at
+                // the same index).
+                self.transform_expr(body, address_taken_locals, type_table);
             }
             TirExprKind::IndirectCall { callee, args } => {
                 self.transform_expr(callee, address_taken, type_table);

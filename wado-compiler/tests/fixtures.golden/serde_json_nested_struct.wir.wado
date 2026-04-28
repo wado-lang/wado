@@ -312,75 +312,71 @@ type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref 
 
 type "functype//core:prelude/format.wado/String^Inspect::inspect" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/format.wado//Formatter");  // TypeId(101)
 
-type "functype//core:prelude/array.wado/Array<u64>::push" = fn(ref "core:prelude//Array<u64>", u64);  // TypeId(102)
+type "functype//wado-compiler/tests/fixtures/serde_json_nested_struct.wado/Line^Deserialize::deserialize<JsonDeserializer>" = fn(ref "core:json//JsonDeserializer") -> ref "core:prelude/types.wado//Result<Line,DeserializeError>";  // TypeId(102)
 
-type "functype//core:prelude/array.wado/Array<u64>::grow" = fn(ref "core:prelude//Array<u64>");  // TypeId(103)
+type "functype//wado-compiler/tests/fixtures/serde_json_nested_struct.wado/Point^Deserialize::deserialize<JsonDeserializer>" = fn(ref "core:json//JsonDeserializer") -> ref "core:prelude/types.wado//Result<Point,DeserializeError>";  // TypeId(103)
 
-type "functype//wado-compiler/tests/fixtures/serde_json_nested_struct.wado/Line^Deserialize::deserialize<JsonDeserializer>" = fn(ref "core:json//JsonDeserializer") -> ref "core:prelude/types.wado//Result<Line,DeserializeError>";  // TypeId(104)
+type "functype//core:json/JsonStructSerializer^SerializeStruct::field<Point>" = fn(ref "core:json//JsonStructSerializer", ref "core:prelude/string.wado//String", ref "wado-compiler/tests/fixtures/serde_json_nested_struct.wado//Point") -> ref null "core:serde//SerializeError";  // TypeId(104)
 
-type "functype//wado-compiler/tests/fixtures/serde_json_nested_struct.wado/Point^Deserialize::deserialize<JsonDeserializer>" = fn(ref "core:json//JsonDeserializer") -> ref "core:prelude/types.wado//Result<Point,DeserializeError>";  // TypeId(105)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(105)
 
-type "functype//core:json/JsonStructSerializer^SerializeStruct::field<Point>" = fn(ref "core:json//JsonStructSerializer", ref "core:prelude/string.wado//String", ref "wado-compiler/tests/fixtures/serde_json_nested_struct.wado//Point") -> ref null "core:serde//SerializeError";  // TypeId(106)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(106)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(107)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(107)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(108)
+type "functype//core:prelude/fpfmt.wado/unpack64" = fn(f64) -> [u64, i32];  // TypeId(108)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(109)
+type "functype//core:prelude/fpfmt.wado/pow10_coarse" = fn(i32) -> [u64, u64];  // TypeId(109)
 
-type "functype//core:prelude/fpfmt.wado/unpack64" = fn(f64) -> [u64, i32];  // TypeId(110)
+type "functype//core:prelude/fpfmt.wado/mul_pow10" = fn(i32) -> [u64, u64];  // TypeId(110)
 
-type "functype//core:prelude/fpfmt.wado/pow10_coarse" = fn(i32) -> [u64, u64];  // TypeId(111)
+type "functype//core:prelude/fpfmt.wado/fixed_width_for_prec" = fn(f64, i32) -> [u64, i32];  // TypeId(111)
 
-type "functype//core:prelude/fpfmt.wado/mul_pow10" = fn(i32) -> [u64, u64];  // TypeId(112)
+type "functype//core:prelude/fpfmt.wado/short" = fn(f64) -> [u64, i32];  // TypeId(112)
 
-type "functype//core:prelude/fpfmt.wado/fixed_width_for_prec" = fn(f64, i32) -> [u64, i32];  // TypeId(113)
+type "functype//core:prelude/fpfmt.wado/trim_zeros" = fn(u64, i32) -> [u64, i32];  // TypeId(113)
 
-type "functype//core:prelude/fpfmt.wado/short" = fn(f64) -> [u64, i32];  // TypeId(114)
+type "functype//core:prelude/fpfmt.wado/check_special" = fn(f64) -> [bool, bool, i32];  // TypeId(114)
 
-type "functype//core:prelude/fpfmt.wado/trim_zeros" = fn(u64, i32) -> [u64, i32];  // TypeId(115)
+type "functype//core:json/core/json/from_string<Line>" = fn(ref "core:prelude/string.wado//String") -> [i32, ref null "wado-compiler/tests/fixtures/serde_json_nested_struct.wado//Line", ref null "core:serde//DeserializeError"];  // TypeId(115)
 
-type "functype//core:prelude/fpfmt.wado/check_special" = fn(f64) -> [bool, bool, i32];  // TypeId(116)
+type "functype//core:json/core/json/to_string<Line>" = fn(ref "wado-compiler/tests/fixtures/serde_json_nested_struct.wado//Line") -> [i32, ref null "core:prelude/string.wado//String", ref null "core:serde//SerializeError"];  // TypeId(116)
 
-type "functype//core:json/core/json/from_string<Line>" = fn(ref "core:prelude/string.wado//String") -> [i32, ref null "wado-compiler/tests/fixtures/serde_json_nested_struct.wado//Line", ref null "core:serde//DeserializeError"];  // TypeId(117)
+type "functype//core:prelude/string.wado/StrCharIter^Iterator::next" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(117)
 
-type "functype//core:json/core/json/to_string<Line>" = fn(ref "wado-compiler/tests/fixtures/serde_json_nested_struct.wado//Line") -> [i32, ref null "core:prelude/string.wado//String", ref null "core:serde//SerializeError"];  // TypeId(118)
+type "functype//core:json/JsonStructAccess^DeserializeStruct::next_field" = fn(ref "core:json//JsonStructAccess") -> [i32, ref null "core:prelude/types.wado//Option<i32>", ref null "core:serde//DeserializeError"];  // TypeId(118)
 
-type "functype//core:prelude/string.wado/StrCharIter^Iterator::next" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(119)
+type "functype//core:prelude/primitive.wado/char::is_hexdigit" = fn(char) -> bool;  // TypeId(119)
 
-type "functype//core:json/JsonStructAccess^DeserializeStruct::next_field" = fn(ref "core:json//JsonStructAccess") -> [i32, ref null "core:prelude/types.wado//Option<i32>", ref null "core:serde//DeserializeError"];  // TypeId(120)
+type "functype//core:prelude/primitive.wado/char::hex_digit_value" = fn(char) -> i32;  // TypeId(120)
 
-type "functype//core:prelude/primitive.wado/char::is_hexdigit" = fn(char) -> bool;  // TypeId(121)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(121)
 
-type "functype//core:prelude/primitive.wado/char::hex_digit_value" = fn(char) -> i32;  // TypeId(122)
+type "functype//core:prelude/primitive.wado/i64::fmt_base" = fn(i64, bool, ref "core:prelude/format.wado//Formatter", i32, bool, ref "core:prelude/string.wado//String");  // TypeId(122)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(123)
+type "functype//core:prelude/primitive.wado/f64::fmt_into" = fn(f64, ref "core:prelude/format.wado//Formatter");  // TypeId(123)
 
-type "functype//core:prelude/primitive.wado/i64::fmt_base" = fn(i64, bool, ref "core:prelude/format.wado//Formatter", i32, bool, ref "core:prelude/string.wado//String");  // TypeId(124)
+type "functype//core:prelude/primitive.wado/f64::inspect_into" = fn(f64, ref "core:prelude/format.wado//Formatter");  // TypeId(124)
 
-type "functype//core:prelude/primitive.wado/f64::fmt_into" = fn(f64, ref "core:prelude/format.wado//Formatter");  // TypeId(125)
+type "functype//core:prelude/primitive.wado/f64::fmt_fixed" = fn(f64, i32, ref "core:prelude/format.wado//Formatter");  // TypeId(125)
 
-type "functype//core:prelude/primitive.wado/f64::inspect_into" = fn(f64, ref "core:prelude/format.wado//Formatter");  // TypeId(126)
+type "functype//core:prelude/primitive.wado/char^Display::fmt" = fn(char, ref "core:prelude/format.wado//Formatter");  // TypeId(126)
 
-type "functype//core:prelude/primitive.wado/f64::fmt_fixed" = fn(f64, i32, ref "core:prelude/format.wado//Formatter");  // TypeId(127)
+type "functype//core:prelude/primitive.wado/i32^LowerHex::fmt" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(127)
 
-type "functype//core:prelude/primitive.wado/char^Display::fmt" = fn(char, ref "core:prelude/format.wado//Formatter");  // TypeId(128)
+type "functype//core:json/JsonSerializer^Serializer::serialize_f64" = fn(ref "core:prelude/string.wado//String", f64) -> ref null "core:serde//SerializeError";  // TypeId(128)
 
-type "functype//core:prelude/primitive.wado/i32^LowerHex::fmt" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(129)
+type "functype//wado-compiler/tests/fixtures/serde_json_nested_struct.wado/Line^Serialize::serialize<JsonSerializer>" = fn(ref "wado-compiler/tests/fixtures/serde_json_nested_struct.wado//Line", ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(129)
 
-type "functype//core:json/JsonSerializer^Serializer::serialize_f64" = fn(ref "core:prelude/string.wado//String", f64) -> ref null "core:serde//SerializeError";  // TypeId(130)
+type "functype//wado-compiler/tests/fixtures/serde_json_nested_struct.wado/Point^Serialize::serialize<JsonSerializer>" = fn(ref "wado-compiler/tests/fixtures/serde_json_nested_struct.wado//Point", ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(130)
 
-type "functype//wado-compiler/tests/fixtures/serde_json_nested_struct.wado/Line^Serialize::serialize<JsonSerializer>" = fn(ref "wado-compiler/tests/fixtures/serde_json_nested_struct.wado//Line", ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(131)
+type "functype//core:json/JsonStructSerializer^SerializeStruct::field<f64>" = fn(ref "core:json//JsonStructSerializer", ref "core:prelude/string.wado//String", f64) -> ref null "core:serde//SerializeError";  // TypeId(131)
 
-type "functype//wado-compiler/tests/fixtures/serde_json_nested_struct.wado/Point^Serialize::serialize<JsonSerializer>" = fn(ref "wado-compiler/tests/fixtures/serde_json_nested_struct.wado//Point", ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(132)
+type "functype//core:json/JsonDeserializer^Deserializer::begin_struct" = fn(ref "core:json//JsonDeserializer", ref struct) -> [i32, ref null "core:json//JsonStructAccess", ref null "core:serde//DeserializeError"];  // TypeId(132)
 
-type "functype//core:json/JsonStructSerializer^SerializeStruct::field<f64>" = fn(ref "core:json//JsonStructSerializer", ref "core:prelude/string.wado//String", f64) -> ref null "core:serde//SerializeError";  // TypeId(133)
+type "functype//wado-compiler/tests/fixtures/serde_json_nested_struct.wado/__Closure_2::__call" = fn(ref "core:prelude/string.wado//String", i32, i32) -> ref "core:prelude/types.wado//Option<i32>";  // TypeId(133)
 
-type "functype//core:json/JsonDeserializer^Deserializer::begin_struct" = fn(ref "core:json//JsonDeserializer", ref struct) -> [i32, ref null "core:json//JsonStructAccess", ref null "core:serde//DeserializeError"];  // TypeId(134)
-
-type "functype//wado-compiler/tests/fixtures/serde_json_nested_struct.wado/__Closure_2::__call" = fn(ref "core:prelude/string.wado//String", i32, i32) -> ref "core:prelude/types.wado//Option<i32>";  // TypeId(135)
-
-type "functype//wado-compiler/tests/fixtures/serde_json_nested_struct.wado/__Closure_3::__call" = fn(ref "core:prelude/string.wado//String", i32, i32) -> ref "core:prelude/types.wado//Option<i32>";  // TypeId(136)
+type "functype//wado-compiler/tests/fixtures/serde_json_nested_struct.wado/__Closure_3::__call" = fn(ref "core:prelude/string.wado//String", i32, i32) -> ref "core:prelude/types.wado//Option<i32>";  // TypeId(134)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -405,19 +401,14 @@ fn "wado-compiler/tests/fixtures/serde_json_nested_struct.wado/__test_0_nested_s
     let __cond: bool;
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
-    let __local_8: ref "core:prelude/string.wado//String";
-    let __local_12: ref "core:prelude/format.wado//Formatter";
+    let __local_11: ref "core:prelude/format.wado//Formatter";
     line = struct.new "wado-compiler/tests/fixtures/serde_json_nested_struct.wado//Line" { start_point: struct.new "wado-compiler/tests/fixtures/serde_json_nested_struct.wado//Point" { x: 1, y: 2 }, end_point: struct.new "wado-compiler/tests/fixtures/serde_json_nested_struct.wado//Point" { x: 3, y: 4 } };
     let __sroa_r_discriminant: i32;
     let __sroa_r_case0_payload_0: ref null "core:prelude/string.wado//String";
     let __sroa_r_case1_payload_0: ref null "core:serde//SerializeError";
     multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/to_string<Line>"(line);
     if __sroa_r_discriminant == 0 {
-        s = __inline__value_copy_T21_0: block -> ref "core:prelude/string.wado//String" {
-            __local_8 = ref.as_non_null(__sroa_r_case0_payload_0);
-            break __inline__value_copy_T21_0: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(__local_8.repr)), used: __local_8.used };
-            unreachable;
-        };
+        s = ref.as_non_null(__sroa_r_case0_payload_0);
         __v0 = s;
         __cond = "core:prelude/string.wado/String^Eq::eq"(__v0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("{\"startPoint\":{\"x\":1,\"y\":2},\"endPoint\":{\"x\":3,\"y\":4}}"), used: 53 });
         if __cond == 0 {
@@ -432,8 +423,8 @@ fn "wado-compiler/tests/fixtures/serde_json_nested_struct.wado/__test_0_nested_s
                 "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_nested_struct.wado"), used: 58 });
                 "core:prelude/string.wado/String::push"(__local_5, 58);
                 __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
-                __local_12 = __local_6;
-                "core:prelude/primitive.wado/i32::fmt_decimal"(29, __local_12);
+                __local_11 = __local_6;
+                "core:prelude/primitive.wado/i32::fmt_decimal"(29, __local_11);
                 "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: s == `{\"startPoint\":{\"x\":1,\"y\":2},\"endPoint\":{\"x\":3,\"y\":4}}`
 "), used: 73 });
@@ -474,37 +465,27 @@ fn "wado-compiler/tests/fixtures/serde_json_nested_struct.wado/__test_1_nested_s
     let __local_18: ref "core:prelude/format.wado//Formatter";
     let __local_19: ref "core:prelude/string.wado//String";
     let __local_20: ref "core:prelude/format.wado//Formatter";
-    let __local_23: ref "core:prelude/string.wado//String";
-    let __local_24: ref "wado-compiler/tests/fixtures/serde_json_nested_struct.wado//Line";
-    let __local_28: ref "core:prelude/format.wado//Formatter";
-    let __local_33: ref "core:prelude/format.wado//Formatter";
-    let __local_37: ref "core:prelude/format.wado//Formatter";
-    let __local_42: ref "core:prelude/format.wado//Formatter";
-    let __local_46: ref "core:prelude/format.wado//Formatter";
-    let __local_51: ref "core:prelude/format.wado//Formatter";
-    let __local_55: ref "core:prelude/format.wado//Formatter";
-    let __local_60: ref "core:prelude/format.wado//Formatter";
+    let __local_26: ref "core:prelude/format.wado//Formatter";
+    let __local_31: ref "core:prelude/format.wado//Formatter";
+    let __local_35: ref "core:prelude/format.wado//Formatter";
+    let __local_40: ref "core:prelude/format.wado//Formatter";
+    let __local_44: ref "core:prelude/format.wado//Formatter";
+    let __local_49: ref "core:prelude/format.wado//Formatter";
+    let __local_53: ref "core:prelude/format.wado//Formatter";
+    let __local_58: ref "core:prelude/format.wado//Formatter";
     line = struct.new "wado-compiler/tests/fixtures/serde_json_nested_struct.wado//Line" { start_point: struct.new "wado-compiler/tests/fixtures/serde_json_nested_struct.wado//Point" { x: 10.5, y: 20.5 }, end_point: struct.new "wado-compiler/tests/fixtures/serde_json_nested_struct.wado//Point" { x: 30.5, y: 40.5 } };
     let __sroa_json_r_discriminant: i32;
     let __sroa_json_r_case0_payload_0: ref null "core:prelude/string.wado//String";
     let __sroa_json_r_case1_payload_0: ref null "core:serde//SerializeError";
     multivalue_bind [__sroa_json_r_discriminant, __sroa_json_r_case0_payload_0, __sroa_json_r_case1_payload_0] = "core:json/core/json/to_string<Line>"(line);
     if __sroa_json_r_discriminant == 0 {
-        json = __inline__value_copy_T21_0: block -> ref "core:prelude/string.wado//String" {
-            __local_23 = ref.as_non_null(__sroa_json_r_case0_payload_0);
-            break __inline__value_copy_T21_0: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(__local_23.repr)), used: __local_23.used };
-            unreachable;
-        };
+        json = ref.as_non_null(__sroa_json_r_case0_payload_0);
         let __sroa_parsed_r_discriminant: i32;
         let __sroa_parsed_r_case0_payload_0: ref null "wado-compiler/tests/fixtures/serde_json_nested_struct.wado//Line";
         let __sroa_parsed_r_case1_payload_0: ref null "core:serde//DeserializeError";
         multivalue_bind [__sroa_parsed_r_discriminant, __sroa_parsed_r_case0_payload_0, __sroa_parsed_r_case1_payload_0] = "core:json/core/json/from_string<Line>"(json);
         if __sroa_parsed_r_discriminant == 0 {
-            parsed = __inline__value_copy_T43_1: block -> ref "wado-compiler/tests/fixtures/serde_json_nested_struct.wado//Line" {
-                __local_24 = ref.as_non_null(__sroa_parsed_r_case0_payload_0);
-                break __inline__value_copy_T43_1: struct.new "wado-compiler/tests/fixtures/serde_json_nested_struct.wado//Line" { start_point: __local_24.start_point, end_point: __local_24.end_point };
-                unreachable;
-            };
+            parsed = ref.as_non_null(__sroa_parsed_r_case0_payload_0);
             __v0_5 = parsed.start_point.x;
             __cond_6 = __v0_5 == 10.5;
             if __cond_6 == 0 {
@@ -519,15 +500,15 @@ fn "wado-compiler/tests/fixtures/serde_json_nested_struct.wado/__test_1_nested_s
                     "core:prelude/string.wado/String::push_str"(__local_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_nested_struct.wado"), used: 58 });
                     "core:prelude/string.wado/String::push"(__local_13, 58);
                     __local_14 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_13 };
-                    __local_28 = __local_14;
-                    "core:prelude/primitive.wado/i32::fmt_decimal"(44, __local_28);
+                    __local_26 = __local_14;
+                    "core:prelude/primitive.wado/i32::fmt_decimal"(44, __local_26);
                     "core:prelude/string.wado/String::push_str"(__local_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: parsed.start_point.x == 10.5
 "), used: 41 });
                     "core:prelude/string.wado/String::push_str"(__local_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("parsed.start_point.x: "), used: 22 });
                     __local_14 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_13 };
-                    __local_33 = __local_14;
-                    "core:prelude/primitive.wado/f64::inspect_into"(__v0_5, __local_33);
+                    __local_31 = __local_14;
+                    "core:prelude/primitive.wado/f64::inspect_into"(__v0_5, __local_31);
                     "core:prelude/string.wado/String::push"(__local_13, 10);
                     break __tmpl: __local_13;
                     unreachable;
@@ -548,15 +529,15 @@ condition: parsed.start_point.x == 10.5
                     "core:prelude/string.wado/String::push_str"(__local_15, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_nested_struct.wado"), used: 58 });
                     "core:prelude/string.wado/String::push"(__local_15, 58);
                     __local_16 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_15 };
-                    __local_37 = __local_16;
-                    "core:prelude/primitive.wado/i32::fmt_decimal"(45, __local_37);
+                    __local_35 = __local_16;
+                    "core:prelude/primitive.wado/i32::fmt_decimal"(45, __local_35);
                     "core:prelude/string.wado/String::push_str"(__local_15, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: parsed.start_point.y == 20.5
 "), used: 41 });
                     "core:prelude/string.wado/String::push_str"(__local_15, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("parsed.start_point.y: "), used: 22 });
                     __local_16 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_15 };
-                    __local_42 = __local_16;
-                    "core:prelude/primitive.wado/f64::inspect_into"(__v0_7, __local_42);
+                    __local_40 = __local_16;
+                    "core:prelude/primitive.wado/f64::inspect_into"(__v0_7, __local_40);
                     "core:prelude/string.wado/String::push"(__local_15, 10);
                     break __tmpl: __local_15;
                     unreachable;
@@ -577,15 +558,15 @@ condition: parsed.start_point.y == 20.5
                     "core:prelude/string.wado/String::push_str"(__local_17, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_nested_struct.wado"), used: 58 });
                     "core:prelude/string.wado/String::push"(__local_17, 58);
                     __local_18 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_17 };
-                    __local_46 = __local_18;
-                    "core:prelude/primitive.wado/i32::fmt_decimal"(46, __local_46);
+                    __local_44 = __local_18;
+                    "core:prelude/primitive.wado/i32::fmt_decimal"(46, __local_44);
                     "core:prelude/string.wado/String::push_str"(__local_17, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: parsed.end_point.x == 30.5
 "), used: 39 });
                     "core:prelude/string.wado/String::push_str"(__local_17, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("parsed.end_point.x: "), used: 20 });
                     __local_18 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_17 };
-                    __local_51 = __local_18;
-                    "core:prelude/primitive.wado/f64::inspect_into"(__v0_9, __local_51);
+                    __local_49 = __local_18;
+                    "core:prelude/primitive.wado/f64::inspect_into"(__v0_9, __local_49);
                     "core:prelude/string.wado/String::push"(__local_17, 10);
                     break __tmpl: __local_17;
                     unreachable;
@@ -606,15 +587,15 @@ condition: parsed.end_point.x == 30.5
                     "core:prelude/string.wado/String::push_str"(__local_19, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_nested_struct.wado"), used: 58 });
                     "core:prelude/string.wado/String::push"(__local_19, 58);
                     __local_20 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_19 };
-                    __local_55 = __local_20;
-                    "core:prelude/primitive.wado/i32::fmt_decimal"(47, __local_55);
+                    __local_53 = __local_20;
+                    "core:prelude/primitive.wado/i32::fmt_decimal"(47, __local_53);
                     "core:prelude/string.wado/String::push_str"(__local_19, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: parsed.end_point.y == 40.5
 "), used: 39 });
                     "core:prelude/string.wado/String::push_str"(__local_19, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("parsed.end_point.y: "), used: 20 });
                     __local_20 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_19 };
-                    __local_60 = __local_20;
-                    "core:prelude/primitive.wado/f64::inspect_into"(__v0_11, __local_60);
+                    __local_58 = __local_20;
+                    "core:prelude/primitive.wado/f64::inspect_into"(__v0_11, __local_58);
                     "core:prelude/string.wado/String::push"(__local_19, 10);
                     break __tmpl: __local_19;
                     unreachable;
@@ -4727,49 +4708,6 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     "core:prelude/string.wado/String::push"(f.buf, 34);
 }
 
-fn "core:prelude/array.wado/Array<u64>::push"(self, value) {
-    let used: i32;
-    used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<u64>::grow"(self);
-    }
-    builtin::array_set<u64>(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn "core:prelude/array.wado/Array<u64>::grow"(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref builtin::array<u64>;
-    let old_repr: ref builtin::array<u64>;
-    let used: i32;
-    let i: i32;
-    let __local_7: i32;
-    capacity = builtin::array_len(self.repr);
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_7 = capacity * 2;
-        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-        unreachable;
-    };
-    new_repr = builtin::array_new<u64>(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_0: block {
-        i = 0;
-        block {
-            l483: loop {
-                if i >= used {
-                    break __for_0;
-                }
-                builtin::array_set<u64>(new_repr, i, builtin::array_get<u64>(old_repr, i));
-                i = i + 1;
-                continue l483;
-            };
-        };
-    };
-    self.repr = new_repr;
-}
-
 fn "wado-compiler/tests/fixtures/serde_json_nested_struct.wado/Line^Deserialize::deserialize<JsonDeserializer>"(d) {
     let sd: ref "core:json//JsonStructAccess";
     let seen: u32;
@@ -4784,8 +4722,6 @@ fn "wado-compiler/tests/fixtures/serde_json_nested_struct.wado/Line^Deserialize:
     let __local_16: ref "core:prelude/types.wado//Result<Point,DeserializeError>";
     let __local_17: ref "core:prelude/types.wado//Result<Point,DeserializeError>";
     let __local_18: ref "core:json//JsonStructAccess";
-    let __local_20: ref "wado-compiler/tests/fixtures/serde_json_nested_struct.wado//Point";
-    let __local_23: ref "wado-compiler/tests/fixtures/serde_json_nested_struct.wado//Point";
     let __sroa___result_discriminant: i32;
     let __sroa___result_case0_payload_0: ref null "core:json//JsonStructAccess";
     let __sroa___result_case1_payload_0: ref null "core:serde//DeserializeError";
@@ -4799,8 +4735,8 @@ fn "wado-compiler/tests/fixtures/serde_json_nested_struct.wado/Line^Deserialize:
         seen = 0;
         start_point = ref.null none;
         end_point = ref.null none;
-        b486: block {
-            l487: loop {
+        b482: block {
+            l483: loop {
                 let __sroa___next_discriminant: i32;
                 let __sroa___next_case0_payload_0: ref null "core:prelude/types.wado//Option<i32>";
                 let __sroa___next_case1_payload_0: ref null "core:serde//DeserializeError";
@@ -4813,12 +4749,8 @@ fn "wado-compiler/tests/fixtures/serde_json_nested_struct.wado/Line^Deserialize:
                             __local_9 = "wado-compiler/tests/fixtures/serde_json_nested_struct.wado/Point^Deserialize::deserialize<JsonDeserializer>"(sd.de);
                             __local_16 = __local_9;
                             if ref.test "core:prelude/types.wado//Result<Point,DeserializeError>::Ok"(__local_16) {
-                                __local_10 = __inline__value_copy_T19_2: block -> ref "wado-compiler/tests/fixtures/serde_json_nested_struct.wado//Point" {
-                                    __local_20 = ref.cast "core:prelude/types.wado//Result<Point,DeserializeError>::Ok"(__local_16).payload_0;
-                                    break __inline__value_copy_T19_2: struct.new "wado-compiler/tests/fixtures/serde_json_nested_struct.wado//Point" { x: __local_20.x, y: __local_20.y };
-                                    unreachable;
-                                };
-                                start_point = struct.new "wado-compiler/tests/fixtures/serde_json_nested_struct.wado//Point" { x: __local_10.x, y: __local_10.y };
+                                __local_10 = ref.cast "core:prelude/types.wado//Result<Point,DeserializeError>::Ok"(__local_16).payload_0;
+                                start_point = __local_10;
                                 seen = seen | 1;
                             } else {
                                 return struct.new "core:prelude/types.wado//Result<Line,DeserializeError>::Err" { discriminant: 1, payload_0: ref.cast "core:prelude/types.wado//Result<Point,DeserializeError>::Err"(__local_9).payload_0 };
@@ -4827,12 +4759,8 @@ fn "wado-compiler/tests/fixtures/serde_json_nested_struct.wado/Line^Deserialize:
                             __local_11 = "wado-compiler/tests/fixtures/serde_json_nested_struct.wado/Point^Deserialize::deserialize<JsonDeserializer>"(sd.de);
                             __local_17 = __local_11;
                             if ref.test "core:prelude/types.wado//Result<Point,DeserializeError>::Ok"(__local_17) {
-                                __local_12 = __inline__value_copy_T19_5: block -> ref "wado-compiler/tests/fixtures/serde_json_nested_struct.wado//Point" {
-                                    __local_23 = ref.cast "core:prelude/types.wado//Result<Point,DeserializeError>::Ok"(__local_17).payload_0;
-                                    break __inline__value_copy_T19_5: struct.new "wado-compiler/tests/fixtures/serde_json_nested_struct.wado//Point" { x: __local_23.x, y: __local_23.y };
-                                    unreachable;
-                                };
-                                end_point = struct.new "wado-compiler/tests/fixtures/serde_json_nested_struct.wado//Point" { x: __local_12.x, y: __local_12.y };
+                                __local_12 = ref.cast "core:prelude/types.wado//Result<Point,DeserializeError>::Ok"(__local_17).payload_0;
+                                end_point = __local_12;
                                 seen = seen | 2;
                             } else {
                                 return struct.new "core:prelude/types.wado//Result<Line,DeserializeError>::Err" { discriminant: 1, payload_0: ref.cast "core:prelude/types.wado//Result<Point,DeserializeError>::Err"(__local_11).payload_0 };
@@ -4841,12 +4769,12 @@ fn "wado-compiler/tests/fixtures/serde_json_nested_struct.wado/Line^Deserialize:
                             drop("core:json/JsonDeserializer::skip_value"(sd.de));
                         }
                     } else {
-                        break b486;
+                        break b482;
                     }
                 } else {
                     return struct.new "core:prelude/types.wado//Result<Line,DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(__sroa___next_case1_payload_0) };
                 }
-                continue l487;
+                continue l483;
             };
         };
         if (seen & 3) != 3 {
@@ -4888,8 +4816,8 @@ fn "wado-compiler/tests/fixtures/serde_json_nested_struct.wado/Point^Deserialize
         seen = 0;
         x = 0;
         y = 0;
-        b496: block {
-            l497: loop {
+        b492: block {
+            l493: loop {
                 let __sroa___next_discriminant: i32;
                 let __sroa___next_case0_payload_0: ref null "core:prelude/types.wado//Option<i32>";
                 let __sroa___next_case1_payload_0: ref null "core:serde//DeserializeError";
@@ -4930,12 +4858,12 @@ fn "wado-compiler/tests/fixtures/serde_json_nested_struct.wado/Point^Deserialize
                             drop("core:json/JsonDeserializer::skip_value"(sd.de));
                         }
                     } else {
-                        break b496;
+                        break b492;
                     }
                 } else {
                     return struct.new "core:prelude/types.wado//Result<Point,DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(__sroa___next_case1_payload_0) };
                 }
-                continue l497;
+                continue l493;
             };
         };
         if (seen & 3) != 3 {

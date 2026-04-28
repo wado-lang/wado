@@ -141,6 +141,16 @@ pub enum Code {
     /// A `use ... from "<path>"` whose source is a non-`.wado` schema is missing
     /// the required `with { generator: { ... } }` clause.
     KilnMissingWith,
+    /// A generated `.wado` file on disk has been modified after generation
+    /// (cache key matches metadata.json but on-disk content does not). The
+    /// edit is honored — compilation proceeds against the on-disk content.
+    KilnGeneratedModified,
+    /// On a cache miss, the generator produced bytes that differ from the
+    /// pre-existing file at the same path. The new bytes overwrite the old.
+    KilnGeneratedRegenerated,
+    /// `wado check` re-ran the generator and the output bytes differ from
+    /// the on-disk (committed) file. Promoted to error in CI default.
+    KilnGeneratedStaleOnDisk,
 }
 
 impl std::fmt::Display for Code {
@@ -175,6 +185,9 @@ impl std::fmt::Display for Code {
             Code::KilnStaleCache => "KILN_STALE_CACHE",
             Code::KilnGeneratorForbiddenImport => "KILN_GENERATOR_FORBIDDEN_IMPORT",
             Code::KilnMissingWith => "KILN_MISSING_WITH",
+            Code::KilnGeneratedModified => "KILN_GENERATED_MODIFIED",
+            Code::KilnGeneratedRegenerated => "KILN_GENERATED_REGENERATED",
+            Code::KilnGeneratedStaleOnDisk => "KILN_GENERATED_STALE_ON_DISK",
         };
         write!(f, "{name}")
     }

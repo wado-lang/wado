@@ -91,13 +91,13 @@ type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // Ty
 
 type "functype//wado-compiler/tests/fixtures/effect_handler_bundled_mixed.wado/run" = fn();  // TypeId(25)
 
-type "functype//wado-compiler/tests/fixtures/effect_handler_bundled_mixed.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(26)
+type "functype//wado-compiler/tests/fixtures/effect_handler_bundled_mixed.wado/__effect_dispatch__Greeting__hello" = fn() -> ref "core:prelude/string.wado//String";  // TypeId(26)
 
-type "functype//wado-compiler/tests/fixtures/effect_handler_bundled_mixed.wado/__cm_export__run" = fn();  // TypeId(27)
+type "functype//wado-compiler/tests/fixtures/effect_handler_bundled_mixed.wado/__effect_dispatch__Counter__tick" = fn() -> i32;  // TypeId(27)
 
-type "functype//wado-compiler/tests/fixtures/effect_handler_bundled_mixed.wado/__effect_dispatch__Greeting__hello" = fn() -> ref "core:prelude/string.wado//String";  // TypeId(28)
+type "functype//wado-compiler/tests/fixtures/effect_handler_bundled_mixed.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(28)
 
-type "functype//wado-compiler/tests/fixtures/effect_handler_bundled_mixed.wado/__effect_dispatch__Counter__tick" = fn() -> i32;  // TypeId(29)
+type "functype//wado-compiler/tests/fixtures/effect_handler_bundled_mixed.wado/__cm_export__run" = fn();  // TypeId(29)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(30)
 
@@ -255,16 +255,7 @@ fn "wado-compiler/tests/fixtures/effect_handler_bundled_mixed.wado/run"() with S
     });
 }
 
-fn "wado-compiler/tests/fixtures/effect_handler_bundled_mixed.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return "wasi/wasi:cli/Stdout::write_via_stream"(data);
-}
-
-fn "wado-compiler/tests/fixtures/effect_handler_bundled_mixed.wado/__cm_export__run"() {
-    "wado-compiler/tests/fixtures/effect_handler_bundled_mixed.wado/run"();
-    "wasi/task-return"(0);
-}
-
-fn "wado-compiler/tests/fixtures/effect_handler_bundled_mixed.wado/__effect_dispatch__Greeting__hello"() with Greeting {
+fn "wado-compiler/tests/fixtures/effect_handler_bundled_mixed.wado/__effect_dispatch__Greeting__hello"() {
     let __saved: ref null "wado-compiler/tests/fixtures/effect_handler_bundled_mixed.wado//__Dispatch_Greeting";
     let __d: ref "wado-compiler/tests/fixtures/effect_handler_bundled_mixed.wado//__Dispatch_Greeting";
     let __result: ref "core:prelude/string.wado//String";
@@ -285,7 +276,7 @@ fn "wado-compiler/tests/fixtures/effect_handler_bundled_mixed.wado/__effect_disp
     }
 }
 
-fn "wado-compiler/tests/fixtures/effect_handler_bundled_mixed.wado/__effect_dispatch__Counter__tick"() with Counter {
+fn "wado-compiler/tests/fixtures/effect_handler_bundled_mixed.wado/__effect_dispatch__Counter__tick"() {
     let __saved: ref null "wado-compiler/tests/fixtures/effect_handler_bundled_mixed.wado//__Dispatch_Counter";
     let __d: ref "wado-compiler/tests/fixtures/effect_handler_bundled_mixed.wado//__Dispatch_Counter";
     let __result: i32;
@@ -304,6 +295,15 @@ fn "wado-compiler/tests/fixtures/effect_handler_bundled_mixed.wado/__effect_disp
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no handler installed for `Counter::tick`"), used: 40 });
         unreachable;
     }
+}
+
+fn "wado-compiler/tests/fixtures/effect_handler_bundled_mixed.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+    return "wasi/wasi:cli/Stdout::write_via_stream"(data);
+}
+
+fn "wado-compiler/tests/fixtures/effect_handler_bundled_mixed.wado/__cm_export__run"() {
+    "wado-compiler/tests/fixtures/effect_handler_bundled_mixed.wado/run"();
+    "wasi/task-return"(0);
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {

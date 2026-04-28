@@ -439,17 +439,7 @@ async fn maybe_run_pipeline(
     let (manifest, manifest_root) = match manifest_pair {
         Some(pair) => pair,
         None if inline.is_empty() => return Ok(PipelineOutcome::default()),
-        None => {
-            let manifest = wado_manifest::Manifest {
-                package: None,
-                registries: indexmap::IndexMap::new(),
-                dependencies: indexmap::IndexMap::new(),
-                dev_dependencies: indexmap::IndexMap::new(),
-                build_dependencies: indexmap::IndexMap::new(),
-                workspace: None,
-            };
-            (manifest, probe_manifest_root)
-        }
+        None => (empty_manifest(), probe_manifest_root),
     };
 
     if inline.is_empty() {
@@ -463,7 +453,22 @@ async fn maybe_run_pipeline(
 /// `use ... with { generator: { ... } }` clauses. Returns an empty vector when
 /// the file cannot be parsed — downstream compilation will surface the parse
 /// error, so we don't need to report it twice.
-fn collect_inline_invocations_for_entry(
+/// Construct an empty in-memory `wado.toml` manifest used as a fallback
+/// when the compiled file has no nearby manifest. Shared with
+/// [`crate::check`].
+#[must_use]
+pub fn empty_manifest() -> wado_manifest::Manifest {
+    wado_manifest::Manifest {
+        package: None,
+        registries: indexmap::IndexMap::new(),
+        dependencies: indexmap::IndexMap::new(),
+        dev_dependencies: indexmap::IndexMap::new(),
+        build_dependencies: indexmap::IndexMap::new(),
+        workspace: None,
+    }
+}
+
+pub fn collect_inline_invocations_for_entry(
     entry_file: &Path,
     manifest_root: &Path,
 ) -> Vec<wado_compiler::kiln::Invocation> {
@@ -493,7 +498,7 @@ fn collect_inline_invocations_for_entry(
 /// `manifest_root`). Silently returns `None` when no manifest is found or the
 /// manifest cannot be parsed — the caller treats this as "no Kiln config" and
 /// continues.
-fn load_nearest_manifest(
+pub fn load_nearest_manifest(
     entry_file: &Path,
 ) -> Option<(wado_manifest::Manifest, std::path::PathBuf)> {
     let mut dir = entry_file

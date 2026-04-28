@@ -13,6 +13,7 @@
 )]
 
 pub mod args;
+pub mod check;
 pub mod compile;
 pub mod compiler_host;
 pub mod doc;
@@ -21,6 +22,7 @@ pub mod format;
 pub mod http_hooks;
 pub mod init;
 pub mod kiln_driver;
+pub mod kiln_metadata;
 pub mod kiln_provider;
 pub mod kiln_runtime;
 pub mod lsp;

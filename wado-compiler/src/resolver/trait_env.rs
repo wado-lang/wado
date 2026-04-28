@@ -29,6 +29,16 @@ pub(super) type TraitDeclIndex = IndexMap<String, (ModuleSource, usize)>;
 /// so the resolver and dispatch synthesis need to distinguish them quickly.
 pub(super) type EffectDeclIndex = IndexMap<String, (ModuleSource, usize)>;
 
+/// Pre-built index: resource name → (`ModuleSource`, item index) for resource declarations.
+/// Resources participate in `with R => h do` / `impl R for Type` exactly like
+/// effects (see WEP 2026-04-11): both kinds of declaration carry a list of
+/// operations that user handler implementations satisfy and that the
+/// dispatch-synthesis pass routes through wrappers. Indexed separately from
+/// effects so the resolver can keep diagnostics ("not an effect", "not a
+/// resource") truthful and so the dispatch synthesis can know not to declare
+/// the resource on its wrapper's `effects` list (resources are not effects).
+pub(super) type ResourceDeclIndex = IndexMap<String, (ModuleSource, usize)>;
+
 /// Pre-built list of blanket trait impls: `impl<T: Trait> OtherTrait for T`.
 /// These are impl blocks where the impl type is a free type parameter with trait bounds.
 /// Stored separately because they can't be indexed by concrete type name.
@@ -56,6 +66,10 @@ pub(crate) struct TraitEnv {
     pub(super) decl_index: TraitDeclIndex,
     /// Effect name → effect declaration location.
     pub(super) effect_decl_index: EffectDeclIndex,
+    /// Resource name → resource declaration location. Used alongside
+    /// `effect_decl_index` to recognise handler-installable kinds in `with`
+    /// clauses and `impl R for T` blocks.
+    pub(super) resource_decl_index: ResourceDeclIndex,
     /// Blanket impls (`impl<T: Bound> Trait for T`), checked as fallback.
     pub(super) blanket_impl_index: BlanketTraitImplIndex,
     /// `type_name` → `[(method_name, ModuleSource, item_idx, method_idx)]` for static methods.
@@ -74,6 +88,7 @@ impl TraitEnv {
         let mut impl_index: TraitImplIndex = IndexMap::default();
         let mut decl_index: TraitDeclIndex = IndexMap::default();
         let mut effect_decl_index: EffectDeclIndex = IndexMap::default();
+        let mut resource_decl_index: ResourceDeclIndex = IndexMap::default();
         let mut blanket_impl_index: BlanketTraitImplIndex = Vec::new();
         // type name → module source, for orphan rule "is this type local?" checks
         let mut type_decl_index: IndexMap<String, ModuleSource> = IndexMap::default();
@@ -131,6 +146,9 @@ impl TraitEnv {
                             .or_insert((module_source.clone(), item_idx));
                     }
                     Item::Resource(resource) => {
+                        resource_decl_index
+                            .entry(resource.name.clone())
+                            .or_insert((module_source.clone(), item_idx));
                         // Index static methods from resource declarations
                         for (method_idx, method) in resource.methods.iter().enumerate() {
                             let has_self = method.params.iter().any(|p| {
@@ -221,6 +239,7 @@ impl TraitEnv {
                 impl_index,
                 decl_index,
                 effect_decl_index,
+                resource_decl_index,
                 blanket_impl_index,
                 static_method_index,
                 resource_static_method_index,

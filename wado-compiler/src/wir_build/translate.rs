@@ -257,25 +257,53 @@ impl FunctionTranslator<'_, '_> {
     /// Get the WIR local name for a given local index.
     /// Uses the TIR variable name if available, otherwise falls back to `__local_N`.
     ///
-    /// Parameters keep their original names (matching `WirFunction::param_names`).
-    /// Non-parameter locals that shadow a parameter name get an `_{index}` suffix.
+    /// WIR locals are looked up by name during codegen (`current_locals` is
+    /// keyed by name in `codegen::emit::resolve_local`), so any two locals
+    /// that share a name would clobber each other's entry and silently
+    /// mis-resolve. The disambiguation rules here mirror
+    /// `wir_build::functions`'s construction of `WirFunction::param_names`:
+    ///
+    /// - When two params share a name (e.g. a synthesised closure's
+    ///   implicit `self: &__Closure` env collides with an explicit
+    ///   `self`-named param forwarded from a source method), every such
+    ///   param's name is suffixed with `_{local_index}`.
+    /// - A non-param local that shadows a param keeps the original
+    ///   collision-resolution shape: the param keeps its raw name and the
+    ///   non-param gets the `_{index}` suffix. This avoids renaming params
+    ///   just because a `let self = ...` happens to shadow them in the
+    ///   body.
     pub(super) fn local_name(&self, index: u32) -> String {
-        if let Some(name) = self.local_names.get(&index) {
-            let count = self.local_names.values().filter(|n| *n == name).count();
-            if count > 1 {
-                // Check if this index belongs to a parameter — params keep
-                // their original names so they match `WirFunction::param_names`.
-                let is_param = self.tir_func.params.iter().any(|p| p.local_index == index);
-                if is_param {
-                    name.clone()
-                } else {
-                    format!("{name}_{index}")
-                }
-            } else {
-                name.clone()
+        let Some(name) = self.local_names.get(&index) else {
+            return format!("__local_{index}");
+        };
+
+        let is_param = self.tir_func.params.iter().any(|p| p.local_index == index);
+        if is_param {
+            // Duplicate PARAM names are unambiguous in TIR (each carries its
+            // local_index) but share a single bucket in WIR's name-keyed
+            // `current_locals`, so suffix every collision with the index.
+            let param_count = self
+                .tir_func
+                .params
+                .iter()
+                .filter(|p| {
+                    self.local_names
+                        .get(&p.local_index)
+                        .is_some_and(|n| n == name)
+                })
+                .count();
+            if param_count > 1 {
+                return format!("{name}_{index}");
             }
+            return name.clone();
+        }
+
+        // Non-param: shadow a param-or-let by suffixing the non-param.
+        let total = self.local_names.values().filter(|n| *n == name).count();
+        if total > 1 {
+            format!("{name}_{index}")
         } else {
-            format!("__local_{index}")
+            name.clone()
         }
     }
 

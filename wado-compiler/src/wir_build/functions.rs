@@ -1,6 +1,7 @@
 //! Function collection — gathers all reachable functions from the `FlatPackage`,
 //! registers their types and creates `WirFunction` stubs (bodies filled later).
 
+use crate::hashmap::IndexMap;
 use crate::name::ModuleSource;
 use crate::tir::{TirFunction, TypeTable};
 use crate::wir::{
@@ -365,16 +366,28 @@ fn register_single_function(
         return;
     }
 
-    // Build param types, filtering out unit-type params (unit has no Wasm representation)
+    // Build param types, filtering out unit-type params (unit has no Wasm representation).
+    // WIR locals are looked up by name during codegen, so any two params sharing a
+    // name would clobber each other in `current_locals`. Disambiguate duplicates by
+    // suffixing `_{local_index}`; matches `FunctionTranslator::local_name`.
     let mut params: Vec<WirType> = Vec::new();
     let mut param_names: Vec<String> = Vec::new();
+    let mut name_counts: IndexMap<String, u32> = IndexMap::default();
+    for p in &tir_func.params {
+        *name_counts.entry(p.name.clone()).or_insert(0) += 1;
+    }
     for p in &tir_func.params {
         let wir_type = ctx.type_id_to_wir_type(type_table, p.type_id);
         if matches!(wir_type, WirType::Unit) {
             continue;
         }
         params.push(wir_type);
-        param_names.push(p.name.clone());
+        let unique_name = if name_counts.get(&p.name).copied().unwrap_or(0) > 1 {
+            format!("{}_{}", p.name, p.local_index)
+        } else {
+            p.name.clone()
+        };
+        param_names.push(unique_name);
     }
 
     // Build result types

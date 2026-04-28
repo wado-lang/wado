@@ -1,0 +1,77 @@
+// Bundled-form handler for `Future<i32>` + `FutureWritable<i32>`,
+// per WEP-2026-04-11-effect-handler.md.
+//
+// `MockFuture` implements both ends of the CM future pair against a
+// single shared `stored` slot; the bundled `with &mut f do` form
+// installs both handlers at once for the duration of the `do` block.
+// Inside the block, `Future::<i32>::new()` / `tx.write(value)` /
+// `rx.read()` / `tx.drop()` / `rx.drop()` all dispatch through the
+// per-monomorphisation `__effect_dispatch__Future<i32>__*` /
+// `__effect_dispatch__FutureWritable<i32>__*` wrappers into
+// `MockFuture`'s methods rather than the CM canonical
+// `future-{new,read,write,drop-*}` intrinsics.
+
+use { println, Stdout } from "core:cli";
+
+struct MockFuture {
+    stored: Option<i32>,
+    write_count: i32,
+    read_count: i32,
+}
+
+impl Future<i32> for MockFuture {
+    fn new(&mut self) -> [Future<i32>, FutureWritable<i32>] {
+        // Hand out a fake handle pair. Both ends share the
+        // MockFuture's `stored` slot, so a write through the
+        // FutureWritable end is observed by a read on the Future
+        // end without a concurrent runtime task.
+        let id: i32 = 0;
+        resume [id as Future<i32>, id as FutureWritable<i32>]
+    }
+    fn read(&mut self, this: &Future<i32>) -> Option<i32> {
+        let _ = this;
+        self.read_count += 1;
+        resume self.stored
+    }
+    fn drop(&mut self, this: &Future<i32>) {
+        let _ = this;
+        resume ()
+    }
+    ..
+}
+
+impl FutureWritable<i32> for MockFuture {
+    fn write(&mut self, this: &FutureWritable<i32>, value: i32) {
+        let _ = this;
+        self.stored = Option::Some(value);
+        self.write_count += 1;
+        resume ()
+    }
+    fn drop(&mut self, this: &FutureWritable<i32>) {
+        let _ = this;
+        resume ()
+    }
+    ..
+}
+
+export fn run() with Stdout {
+    let mut f = MockFuture {
+        stored: null,
+        write_count: 0,
+        read_count: 0,
+    };
+    with &mut f do {
+        let [rx, tx] = Future::<i32>::new();
+        tx.write(42);
+        let value = rx.read();
+        assert value matches { Some(42) };
+        tx.drop();
+        rx.drop();
+    }
+    assert f.write_count == 1;
+    assert f.read_count == 1;
+    println(`writes={f.write_count} reads={f.read_count}`);
+}
+
+__DATA__
+{"stdout_contains": ["writes=1 reads=1"]}

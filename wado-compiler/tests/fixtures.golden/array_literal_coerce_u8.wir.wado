@@ -111,27 +111,15 @@ type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(40)
 
-type "functype//core:prelude/array.wado/Array<u16>::push" = fn(ref "core:prelude//Array<u16>", u16);  // TypeId(41)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(41)
 
-type "functype//core:prelude/array.wado/Array<u16>::grow" = fn(ref "core:prelude//Array<u16>");  // TypeId(42)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(42)
 
-type "functype//core:prelude/array.wado/Array<i64>::push" = fn(ref "core:prelude//Array<i64>", i64);  // TypeId(43)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(43)
 
-type "functype//core:prelude/array.wado/Array<i64>::grow" = fn(ref "core:prelude//Array<i64>");  // TypeId(44)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(44)
 
-type "functype//core:prelude/array.wado/Array<u8>::push" = fn(ref "core:prelude//Array<u8>", u8);  // TypeId(45)
-
-type "functype//core:prelude/array.wado/Array<u8>::grow" = fn(ref "core:prelude//Array<u8>");  // TypeId(46)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(47)
-
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(48)
-
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(49)
-
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(50)
-
-type "functype//core:prelude/primitive.wado/i64::fmt_decimal" = fn(i64, ref "core:prelude/format.wado//Formatter");  // TypeId(51)
+type "functype//core:prelude/primitive.wado/i64::fmt_decimal" = fn(i64, ref "core:prelude/format.wado//Formatter");  // TypeId(45)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -793,135 +781,6 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
         }
         return "core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
     }
-}
-
-fn "core:prelude/array.wado/Array<u16>::push"(self, value) {
-    let used: i32;
-    used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<u16>::grow"(self);
-    }
-    builtin::array_set<u16>(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn "core:prelude/array.wado/Array<u16>::grow"(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref builtin::array<u16>;
-    let old_repr: ref builtin::array<u16>;
-    let used: i32;
-    let i: i32;
-    let __local_7: i32;
-    capacity = builtin::array_len(self.repr);
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_7 = capacity * 2;
-        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-        unreachable;
-    };
-    new_repr = builtin::array_new<u16>(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_0: block {
-        i = 0;
-        block {
-            l59: loop {
-                if i >= used {
-                    break __for_0;
-                }
-                builtin::array_set<u16>(new_repr, i, builtin::array_get<u16>(old_repr, i));
-                i = i + 1;
-                continue l59;
-            };
-        };
-    };
-    self.repr = new_repr;
-}
-
-fn "core:prelude/array.wado/Array<i64>::push"(self, value) {
-    let used: i32;
-    used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<i64>::grow"(self);
-    }
-    builtin::array_set<i64>(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn "core:prelude/array.wado/Array<i64>::grow"(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref builtin::array<i64>;
-    let old_repr: ref builtin::array<i64>;
-    let used: i32;
-    let i: i32;
-    let __local_7: i32;
-    capacity = builtin::array_len(self.repr);
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_7 = capacity * 2;
-        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-        unreachable;
-    };
-    new_repr = builtin::array_new<i64>(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_0: block {
-        i = 0;
-        block {
-            l63: loop {
-                if i >= used {
-                    break __for_0;
-                }
-                builtin::array_set<i64>(new_repr, i, builtin::array_get<i64>(old_repr, i));
-                i = i + 1;
-                continue l63;
-            };
-        };
-    };
-    self.repr = new_repr;
-}
-
-fn "core:prelude/array.wado/Array<u8>::push"(self, value) {
-    let used: i32;
-    used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<u8>::grow"(self);
-    }
-    builtin::array_set_u8(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn "core:prelude/array.wado/Array<u8>::grow"(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref builtin::array<u8>;
-    let old_repr: ref builtin::array<u8>;
-    let used: i32;
-    let i: i32;
-    let __local_7: i32;
-    capacity = builtin::array_len(self.repr);
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_7 = capacity * 2;
-        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-        unreachable;
-    };
-    new_repr = builtin::array_new<u8>(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_0: block {
-        i = 0;
-        block {
-            l67: loop {
-                if i >= used {
-                    break __for_0;
-                }
-                builtin::array_set_u8(new_repr, i, builtin::array_get<u8>(old_repr, i));
-                i = i + 1;
-                continue l67;
-            };
-        };
-    };
-    self.repr = new_repr;
 }
 
 export fn "wado-compiler/tests/fixtures/array_literal_coerce_u8.wado/__cm_export__run" as "run"

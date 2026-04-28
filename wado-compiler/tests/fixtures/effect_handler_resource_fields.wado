@@ -1,0 +1,63 @@
+// Resource handler dispatch on a real CM resource.
+//
+// Per WEP-2026-04-11-effect-handler.md, resources participate in the
+// dispatch protocol identically to effects: `with R => h do { ... }`
+// installs a handler whose `impl R for T` methods intercept calls to
+// `R::<op>` (static) and `r.<op>(...)` (instance), with self-delegation
+// reaching the outer handler chain.
+//
+// This fixture locks the three pieces together on `wasi:http`'s
+// `Fields` resource:
+//
+//   1. Static-method dispatch — `Fields::new()` inside the `with` body
+//      reaches the user handler's `new` rather than the WASI CM
+//      adapter directly.
+//   2. Instance-method dispatch — `f.has(name)` reaches the handler's
+//      `has`, not the resource method's CM adapter.
+//   3. Self-delegation — the handler bodies' `Fields::new()` /
+//      `this.has(name)` route to the wasmtime-provided implementation,
+//      exactly as for user-declared effects (see
+//      effect_handler_self_delegation.wado).
+
+use { Request, Response, ErrorCode, Fields, FieldName, Trailers } from "wasi:http";
+
+global mut new_count: i32 = 0;
+global mut has_count: i32 = 0;
+
+struct CountingFields {
+    _phantom: i32,
+}
+
+impl Fields for CountingFields {
+    fn new(&self) -> Fields {
+        new_count += 1;
+        let real = Fields::new();
+        resume real
+    }
+    fn has(&self, this: &Fields, name: FieldName) -> bool {
+        has_count += 1;
+        resume this.has(name)
+    }
+    ..
+}
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    let counter = CountingFields { _phantom: 0 };
+    with Fields => &counter do {
+        let f = Fields::new();
+        let _a = f.has("x-test" as FieldName);
+        let _b = f.has("x-test" as FieldName);
+    }
+
+    assert new_count == 1;
+    assert has_count == 2;
+
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let response_headers = Fields::new();
+    let [response, _tx_future] = Response::new(response_headers, null, trailers_future);
+    task return Result::<Response, ErrorCode>::Ok(response);
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
+
+__DATA__
+{"wasi:http/service": {"status": 200}}

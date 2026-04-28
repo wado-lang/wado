@@ -311,8 +311,10 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// `with E => h do` clause where `E` is not a known effect declaration
-    /// (it might be a regular trait, an unrelated type, or an unknown name).
+    /// `with E => h do` clause where `E` is not a known effect or resource
+    /// declaration (it might be a regular trait, an unrelated type, or an
+    /// unknown name). Both kinds are installable as handlers; see WEP
+    /// 2026-04-11.
     NotAnEffect { name: String, span: Span },
 }
 
@@ -591,7 +593,7 @@ impl std::fmt::Display for TypeError {
             TypeError::NotAnEffect { name, span } => {
                 write!(
                     f,
-                    "{}:{}: '{}' is not an effect; only effect names are valid in `with E => h do` clauses",
+                    "{}:{}: '{}' is not an effect or resource; only effect and resource names are valid in `with E => h do` clauses",
                     span.line, span.column, name
                 )
             }

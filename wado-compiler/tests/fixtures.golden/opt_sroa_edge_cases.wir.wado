@@ -159,37 +159,33 @@ type "functype//core:prelude/format.wado/Formatter::apply_padding" = fn(ref "cor
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(67)
 
-type "functype//core:prelude/array.wado/Array<u64>::push" = fn(ref "core:prelude//Array<u64>", u64);  // TypeId(68)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(68)
 
-type "functype//core:prelude/array.wado/Array<u64>::grow" = fn(ref "core:prelude//Array<u64>");  // TypeId(69)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(69)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(70)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(70)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(71)
+type "functype//wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado/make_point" = fn(i32, i32) -> [i32, i32];  // TypeId(71)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(72)
+type "functype//core:prelude/fpfmt.wado/unpack64" = fn(f64) -> [u64, i32];  // TypeId(72)
 
-type "functype//wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado/make_point" = fn(i32, i32) -> [i32, i32];  // TypeId(73)
+type "functype//core:prelude/fpfmt.wado/pow10_coarse" = fn(i32) -> [u64, u64];  // TypeId(73)
 
-type "functype//core:prelude/fpfmt.wado/unpack64" = fn(f64) -> [u64, i32];  // TypeId(74)
+type "functype//core:prelude/fpfmt.wado/mul_pow10" = fn(i32) -> [u64, u64];  // TypeId(74)
 
-type "functype//core:prelude/fpfmt.wado/pow10_coarse" = fn(i32) -> [u64, u64];  // TypeId(75)
+type "functype//core:prelude/fpfmt.wado/fixed_width_for_prec" = fn(f64, i32) -> [u64, i32];  // TypeId(75)
 
-type "functype//core:prelude/fpfmt.wado/mul_pow10" = fn(i32) -> [u64, u64];  // TypeId(76)
+type "functype//core:prelude/fpfmt.wado/short" = fn(f64) -> [u64, i32];  // TypeId(76)
 
-type "functype//core:prelude/fpfmt.wado/fixed_width_for_prec" = fn(f64, i32) -> [u64, i32];  // TypeId(77)
+type "functype//core:prelude/fpfmt.wado/trim_zeros" = fn(u64, i32) -> [u64, i32];  // TypeId(77)
 
-type "functype//core:prelude/fpfmt.wado/short" = fn(f64) -> [u64, i32];  // TypeId(78)
+type "functype//core:prelude/fpfmt.wado/check_special" = fn(f64) -> [bool, bool, i32];  // TypeId(78)
 
-type "functype//core:prelude/fpfmt.wado/trim_zeros" = fn(u64, i32) -> [u64, i32];  // TypeId(79)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(79)
 
-type "functype//core:prelude/fpfmt.wado/check_special" = fn(f64) -> [bool, bool, i32];  // TypeId(80)
+type "functype//core:prelude/primitive.wado/f64::inspect_into" = fn(f64, ref "core:prelude/format.wado//Formatter");  // TypeId(80)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(81)
-
-type "functype//core:prelude/primitive.wado/f64::inspect_into" = fn(f64, ref "core:prelude/format.wado//Formatter");  // TypeId(82)
-
-type "functype//core:prelude/primitive.wado/f64::fmt_fixed" = fn(f64, i32, ref "core:prelude/format.wado//Formatter");  // TypeId(83)
+type "functype//core:prelude/primitive.wado/f64::fmt_fixed" = fn(f64, i32, ref "core:prelude/format.wado//Formatter");  // TypeId(81)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -261,20 +257,15 @@ fn "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado/interleaved_field_ops"
 
 fn "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado/struct_in_match"(n) {
     let p: ref "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point";
-    let __local_2: ref "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point";
-    p = __inline__value_copy_T19_0: block -> ref "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" {
-        let __match_scrut_0: i32;
-        __match_scrut_0 = n;
-        __local_2 = (if __match_scrut_0 == 0 -> ref "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" {
-            struct.new "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" { x: 1, y: 2 };
-        } else if __match_scrut_0 == 1 -> ref "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" {
-            struct.new "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" { x: 10, y: 20 };
-        } else {
-            struct.new "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" { x: 100, y: 200 };
-        });
-        break __inline__value_copy_T19_0: struct.new "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" { x: __local_2.x, y: __local_2.y };
-        unreachable;
-    };
+    let __match_scrut_0: i32;
+    __match_scrut_0 = n;
+    p = (if __match_scrut_0 == 0 -> ref "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" {
+        struct.new "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" { x: 1, y: 2 };
+    } else if __match_scrut_0 == 1 -> ref "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" {
+        struct.new "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" { x: 10, y: 20 };
+    } else {
+        struct.new "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" { x: 100, y: 200 };
+    });
     return p.x + p.y;
 }
 
@@ -306,16 +297,11 @@ fn "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado/dependent_field_constr
 
 fn "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado/struct_from_conditional"(flag) {
     let p: ref "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point";
-    let __local_2: ref "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point";
-    p = __inline__value_copy_T19_0: block -> ref "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" {
-        __local_2 = (if flag -> ref "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" {
-            struct.new "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" { x: 10, y: 20 };
-        } else {
-            struct.new "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" { x: 30, y: 40 };
-        });
-        break __inline__value_copy_T19_0: struct.new "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" { x: __local_2.x, y: __local_2.y };
-        unreachable;
-    };
+    p = (if flag -> ref "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" {
+        struct.new "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" { x: 10, y: 20 };
+    } else {
+        struct.new "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" { x: 30, y: 40 };
+    });
     return p.x + p.y;
 }
 
@@ -2791,49 +2777,6 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
         }
         return "core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
     }
-}
-
-fn "core:prelude/array.wado/Array<u64>::push"(self, value) {
-    let used: i32;
-    used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<u64>::grow"(self);
-    }
-    builtin::array_set<u64>(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn "core:prelude/array.wado/Array<u64>::grow"(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref builtin::array<u64>;
-    let old_repr: ref builtin::array<u64>;
-    let used: i32;
-    let i: i32;
-    let __local_7: i32;
-    capacity = builtin::array_len(self.repr);
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_7 = capacity * 2;
-        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-        unreachable;
-    };
-    new_repr = builtin::array_new<u64>(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_0: block {
-        i = 0;
-        block {
-            l227: loop {
-                if i >= used {
-                    break __for_0;
-                }
-                builtin::array_set<u64>(new_repr, i, builtin::array_get<u64>(old_repr, i));
-                i = i + 1;
-                continue l227;
-            };
-        };
-    };
-    self.repr = new_repr;
 }
 
 export fn "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado/__cm_export__run" as "run"

@@ -246,31 +246,27 @@ type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref 
 
 type "functype//core:prelude/format.wado/String^Inspect::inspect" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/format.wado//Formatter");  // TypeId(73)
 
-type "functype//core:prelude/array.wado/Array<i32>::push" = fn(ref "core:prelude//Array<i32>", i32);  // TypeId(74)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(74)
 
-type "functype//core:prelude/array.wado/Array<i32>::grow" = fn(ref "core:prelude//Array<i32>");  // TypeId(75)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(75)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(76)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(76)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(77)
+type "functype//wado-compiler/tests/fixtures/try_merged.wado/process" = fn(bool, bool) -> [i32, i32, ref null "wado-compiler/tests/fixtures/try_merged.wado//AppError"];  // TypeId(77)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(78)
+type "functype//core:prelude/primitive.wado/i32^TryFrom<i64>::try_from" = fn(i64) -> [i32, i32, ref null "core:prelude/traits.wado//ConvertError"];  // TypeId(78)
 
-type "functype//wado-compiler/tests/fixtures/try_merged.wado/process" = fn(bool, bool) -> [i32, i32, ref null "wado-compiler/tests/fixtures/try_merged.wado//AppError"];  // TypeId(79)
+type "functype//core:prelude/primitive.wado/u32^TryFrom<i32>::try_from" = fn(i32) -> [i32, u32, ref null "core:prelude/traits.wado//ConvertError"];  // TypeId(79)
 
-type "functype//core:prelude/primitive.wado/i32^TryFrom<i64>::try_from" = fn(i64) -> [i32, i32, ref null "core:prelude/traits.wado//ConvertError"];  // TypeId(80)
+type "functype//core:prelude/primitive.wado/u8^TryFrom<u32>::try_from" = fn(u32) -> [i32, u8, ref null "core:prelude/traits.wado//ConvertError"];  // TypeId(80)
 
-type "functype//core:prelude/primitive.wado/u32^TryFrom<i32>::try_from" = fn(i32) -> [i32, u32, ref null "core:prelude/traits.wado//ConvertError"];  // TypeId(81)
+type "functype//core:prelude/string.wado/StrCharIter^Iterator::next" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(81)
 
-type "functype//core:prelude/primitive.wado/u8^TryFrom<u32>::try_from" = fn(u32) -> [i32, u8, ref null "core:prelude/traits.wado//ConvertError"];  // TypeId(82)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(82)
 
-type "functype//core:prelude/string.wado/StrCharIter^Iterator::next" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(83)
+type "functype//core:prelude/primitive.wado/u32::fmt_decimal" = fn(u32, ref "core:prelude/format.wado//Formatter");  // TypeId(83)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(84)
-
-type "functype//core:prelude/primitive.wado/u32::fmt_decimal" = fn(u32, ref "core:prelude/format.wado//Formatter");  // TypeId(85)
-
-type "functype//core:prelude/primitive.wado/i64::fmt_decimal" = fn(i64, ref "core:prelude/format.wado//Formatter");  // TypeId(86)
+type "functype//core:prelude/primitive.wado/i64::fmt_decimal" = fn(i64, ref "core:prelude/format.wado//Formatter");  // TypeId(84)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -306,12 +302,11 @@ fn "wado-compiler/tests/fixtures/try_merged.wado/test_try_from_narrowing"() with
     let __local_31: ref "core:prelude/format.wado//Formatter";
     let __local_41: ref "core:prelude/format.wado//Formatter";
     let __local_46: ref "core:prelude/format.wado//Formatter";
-    let __local_49: ref "core:prelude/traits.wado//ConvertError";
-    let __local_53: ref "core:prelude/format.wado//Formatter";
-    let __local_60: ref "core:prelude/format.wado//Formatter";
-    let __local_65: ref "core:prelude/format.wado//Formatter";
-    let __local_71: ref "core:prelude/format.wado//Formatter";
-    let __local_76: ref "core:prelude/format.wado//Formatter";
+    let __local_52: ref "core:prelude/format.wado//Formatter";
+    let __local_59: ref "core:prelude/format.wado//Formatter";
+    let __local_64: ref "core:prelude/format.wado//Formatter";
+    let __local_70: ref "core:prelude/format.wado//Formatter";
+    let __local_75: ref "core:prelude/format.wado//Formatter";
     let __sroa_r1_discriminant: i32;
     let __sroa_r1_case0_payload_0: i32;
     let __sroa_r1_case1_payload_0: ref null "core:prelude/traits.wado//ConvertError";
@@ -357,11 +352,7 @@ condition: n == 42
     let __sroa_r2_case1_payload_0: ref null "core:prelude/traits.wado//ConvertError";
     multivalue_bind [__sroa_r2_discriminant, __sroa_r2_case0_payload_0, __sroa_r2_case1_payload_0] = "core:prelude/primitive.wado/i32^TryFrom<i64>::try_from"(3000000000_i64);
     if __sroa_r2_discriminant == 1 {
-        msg = __inline__value_copy_T54_7: block -> ref "core:prelude/traits.wado//ConvertError" {
-            __local_49 = ref.as_non_null(__sroa_r2_case1_payload_0);
-            break __inline__value_copy_T54_7: struct.new "core:prelude/traits.wado//ConvertError" { message: __local_49.message };
-            unreachable;
-        };
+        msg = ref.as_non_null(__sroa_r2_case1_payload_0);
         __v0 = msg.message;
         __cond_9 = "core:prelude/string.wado/String^Eq::eq"(__v0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("3000000000 out of range for i32"), used: 31 });
         if __cond_9 == 0 {
@@ -376,8 +367,8 @@ condition: n == 42
                 "core:prelude/string.wado/String::push_str"(__local_26, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/try_merged.wado"), used: 44 });
                 "core:prelude/string.wado/String::push"(__local_26, 58);
                 __local_27 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_26 };
-                __local_53 = __local_27;
-                "core:prelude/primitive.wado/i32::fmt_decimal"(14, __local_53);
+                __local_52 = __local_27;
+                "core:prelude/primitive.wado/i32::fmt_decimal"(14, __local_52);
                 "core:prelude/string.wado/String::push_str"(__local_26, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: msg.message == \"3000000000 out of range for i32\"
 "), used: 61 });
@@ -422,8 +413,8 @@ condition: msg.message == \"3000000000 out of range for i32\"
                 "core:prelude/string.wado/String::push_str"(__local_28, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/try_merged.wado"), used: 44 });
                 "core:prelude/string.wado/String::push"(__local_28, 58);
                 __local_29 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_28 };
-                __local_60 = __local_29;
-                "core:prelude/primitive.wado/i32::fmt_decimal"(27, __local_60);
+                __local_59 = __local_29;
+                "core:prelude/primitive.wado/i32::fmt_decimal"(27, __local_59);
                 "core:prelude/string.wado/String::push_str"(__local_28, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: n == 100 as u32
 "), used: 28 });
@@ -431,8 +422,8 @@ condition: n == 100 as u32
                 "core:prelude/string.wado/String::push"(__local_28, 58);
                 "core:prelude/string.wado/String::push"(__local_28, 32);
                 __local_29 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_28 };
-                __local_65 = __local_29;
-                "core:prelude/primitive.wado/u32::fmt_decimal"(n_14, __local_65);
+                __local_64 = __local_29;
+                "core:prelude/primitive.wado/u32::fmt_decimal"(n_14, __local_64);
                 "core:prelude/string.wado/String::push"(__local_28, 10);
                 break __tmpl: __local_28;
                 unreachable;
@@ -462,8 +453,8 @@ condition: n == 100 as u32
                 "core:prelude/string.wado/String::push_str"(__local_30, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/try_merged.wado"), used: 44 });
                 "core:prelude/string.wado/String::push"(__local_30, 58);
                 __local_31 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_30 };
-                __local_71 = __local_31;
-                "core:prelude/primitive.wado/i32::fmt_decimal"(34, __local_71);
+                __local_70 = __local_31;
+                "core:prelude/primitive.wado/i32::fmt_decimal"(34, __local_70);
                 "core:prelude/string.wado/String::push_str"(__local_30, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: n == 200 as u8
 "), used: 27 });
@@ -471,8 +462,8 @@ condition: n == 200 as u8
                 "core:prelude/string.wado/String::push"(__local_30, 58);
                 "core:prelude/string.wado/String::push"(__local_30, 32);
                 __local_31 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_30 };
-                __local_76 = __local_31;
-                "core:prelude/primitive.wado/i32::fmt_decimal"(n_19, __local_76);
+                __local_75 = __local_31;
+                "core:prelude/primitive.wado/i32::fmt_decimal"(n_19, __local_75);
                 "core:prelude/string.wado/String::push"(__local_30, 10);
                 break __tmpl: __local_30;
                 unreachable;
@@ -958,11 +949,24 @@ fn "wado-compiler/tests/fixtures/try_merged.wado/test_try_op_result_from"() with
     let __local_24: i32;
     let __local_25: ref "wado-compiler/tests/fixtures/try_merged.wado//LowError";
     let __local_26: i32;
+<<<<<<< HEAD
     let __local_29: ref "wado-compiler/tests/fixtures/try_merged.wado//LowError";
     let __local_33: ref "core:prelude/format.wado//Formatter";
     let __local_38: ref "core:prelude/format.wado//Formatter";
     let __match_scrut_1: ref "core:prelude/types.wado//Result<i32,wado-compiler/tests/fixtures/try_merged.wado/HighError>";
     __match_scrut_1 = __inline_high_op_0: block -> ref "core:prelude/types.wado//Result<i32,wado-compiler/tests/fixtures/try_merged.wado/HighError>" {
+||||||| e14fc87
+    let __local_29: ref "wado-compiler/tests/fixtures/try_merged.wado//LowError";
+    let __local_33: ref "core:prelude/format.wado//Formatter";
+    let __local_38: ref "core:prelude/format.wado//Formatter";
+    let __match_scrut_1: ref "core:prelude/types.wado//Result<i32,HighError>";
+    __match_scrut_1 = __inline_high_op_0: block -> ref "core:prelude/types.wado//Result<i32,HighError>" {
+=======
+    let __local_32: ref "core:prelude/format.wado//Formatter";
+    let __local_37: ref "core:prelude/format.wado//Formatter";
+    let __match_scrut_1: ref "core:prelude/types.wado//Result<i32,HighError>";
+    __match_scrut_1 = __inline_high_op_0: block -> ref "core:prelude/types.wado//Result<i32,HighError>" {
+>>>>>>> origin/main
         let __match_scrut_0: ref "core:prelude/types.wado//Result<i32,LowError>";
         __match_scrut_0 = struct.new "core:prelude/types.wado//Result<i32,LowError>::Ok" { discriminant: 0, payload_0: 100 };
         __local_16 = (if ref.test "core:prelude/types.wado//Result<i32,LowError>::Ok"(__match_scrut_0) -> i32 {
@@ -1036,11 +1040,7 @@ condition: high_op(false) matches { Ok(n) && n == 101 }
     if ref.test "core:prelude/types.wado//Result<i32,wado-compiler/tests/fixtures/try_merged.wado/HighError>::Err"(r2) {
         e = ref.cast "core:prelude/types.wado//Result<i32,wado-compiler/tests/fixtures/try_merged.wado/HighError>::Err"(r2).payload_0;
         if ref.test "wado-compiler/tests/fixtures/try_merged.wado//HighError::Low"(e) {
-            inner = __inline__value_copy_T19_8: block -> ref "wado-compiler/tests/fixtures/try_merged.wado//LowError" {
-                __local_29 = ref.cast "wado-compiler/tests/fixtures/try_merged.wado//HighError::Low"(e).payload_0;
-                break __inline__value_copy_T19_8: struct.new "wado-compiler/tests/fixtures/try_merged.wado//LowError" { code: __local_29.code };
-                unreachable;
-            };
+            inner = ref.cast "wado-compiler/tests/fixtures/try_merged.wado//HighError::Low"(e).payload_0;
             __v0 = inner.code;
             __cond_6 = __v0 == 42;
             if __cond_6 == 0 {
@@ -1055,15 +1055,15 @@ condition: high_op(false) matches { Ok(n) && n == 101 }
                     "core:prelude/string.wado/String::push_str"(__local_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/try_merged.wado"), used: 44 });
                     "core:prelude/string.wado/String::push"(__local_9, 58);
                     __local_10 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_9 };
-                    __local_33 = __local_10;
-                    "core:prelude/primitive.wado/i32::fmt_decimal"(150, __local_33);
+                    __local_32 = __local_10;
+                    "core:prelude/primitive.wado/i32::fmt_decimal"(150, __local_32);
                     "core:prelude/string.wado/String::push_str"(__local_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: inner.code == 42
 "), used: 29 });
                     "core:prelude/string.wado/String::push_str"(__local_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("inner.code: "), used: 12 });
                     __local_10 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_9 };
-                    __local_38 = __local_10;
-                    "core:prelude/primitive.wado/i32::fmt_decimal"(__v0, __local_38);
+                    __local_37 = __local_10;
+                    "core:prelude/primitive.wado/i32::fmt_decimal"(__v0, __local_37);
                     "core:prelude/string.wado/String::push"(__local_9, 10);
                     break __tmpl: __local_9;
                     unreachable;
@@ -1116,44 +1116,39 @@ fn "wado-compiler/tests/fixtures/try_merged.wado/process"(io_ok, valid) {
     let __local_5: i32;
     let __local_6: ref "wado-compiler/tests/fixtures/try_merged.wado//ParseError";
     let n: i32;
-    let __local_8: ref "core:prelude/string.wado//String";
-    let __local_11: ref "core:prelude/string.wado//String";
-    raw = __inline__value_copy_T20_0: block -> ref "core:prelude/string.wado//String" {
-        let __match_scrut_0: ref "core:prelude/types.wado//Result<String,IoError>";
-        __match_scrut_0 = __inline_read_data_1: block -> ref "core:prelude/types.wado//Result<String,IoError>" {
-            if io_ok {
-                break __inline_read_data_1: struct.new "core:prelude/types.wado//Result<String,IoError>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("42"), used: 2 } };
-            }
-            break __inline_read_data_1: struct.new "core:prelude/types.wado//Result<String,IoError>::Err" { discriminant: 1, payload_0: struct.new "wado-compiler/tests/fixtures/try_merged.wado//IoError" { message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("disk error"), used: 10 } } };
-            unreachable;
-        };
-        __local_8 = (if ref.test "core:prelude/types.wado//Result<String,IoError>::Ok"(__match_scrut_0) -> ref "core:prelude/string.wado//String" {
-            let __cast_2: ref "core:prelude/types.wado//Result<String,IoError>::Ok";
-            __cast_2 = ref.cast "core:prelude/types.wado//Result<String,IoError>::Ok"(__match_scrut_0);
-            __local_2 = __cast_2.payload_0;
-            __local_2;
-        } else {
-            let __cast_1: ref "core:prelude/types.wado//Result<String,IoError>::Err";
-            __cast_1 = ref.cast "core:prelude/types.wado//Result<String,IoError>::Err"(__match_scrut_0);
-            __local_3 = __cast_1.payload_0;
-            return 1, 0, struct.new "wado-compiler/tests/fixtures/try_merged.wado//AppError::Io" { discriminant: 0, payload_0: __local_3 };
-            unreachable;
-            unreachable;
-        });
-        break __inline__value_copy_T20_0: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(__local_8.repr)), used: __local_8.used };
+    let __local_10: ref "core:prelude/string.wado//String";
+    let __match_scrut_0: ref "core:prelude/types.wado//Result<String,IoError>";
+    __match_scrut_0 = __inline_read_data_0: block -> ref "core:prelude/types.wado//Result<String,IoError>" {
+        if io_ok {
+            break __inline_read_data_0: struct.new "core:prelude/types.wado//Result<String,IoError>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("42"), used: 2 } };
+        }
+        break __inline_read_data_0: struct.new "core:prelude/types.wado//Result<String,IoError>::Err" { discriminant: 1, payload_0: struct.new "wado-compiler/tests/fixtures/try_merged.wado//IoError" { message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("disk error"), used: 10 } } };
         unreachable;
     };
+    raw = (if ref.test "core:prelude/types.wado//Result<String,IoError>::Ok"(__match_scrut_0) -> ref "core:prelude/string.wado//String" {
+        let __cast_2: ref "core:prelude/types.wado//Result<String,IoError>::Ok";
+        __cast_2 = ref.cast "core:prelude/types.wado//Result<String,IoError>::Ok"(__match_scrut_0);
+        __local_2 = __cast_2.payload_0;
+        __local_2;
+    } else {
+        let __cast_1: ref "core:prelude/types.wado//Result<String,IoError>::Err";
+        __cast_1 = ref.cast "core:prelude/types.wado//Result<String,IoError>::Err"(__match_scrut_0);
+        __local_3 = __cast_1.payload_0;
+        return 1, 0, struct.new "wado-compiler/tests/fixtures/try_merged.wado//AppError::Io" { discriminant: 0, payload_0: __local_3 };
+        unreachable;
+        unreachable;
+    });
     let __match_scrut_1: ref "core:prelude/types.wado//Result<i32,ParseError>";
-    __match_scrut_1 = __inline_parse_number_3: block -> ref "core:prelude/types.wado//Result<i32,ParseError>" {
-        __local_11 = (if valid -> ref "core:prelude/string.wado//String" {
+    __match_scrut_1 = __inline_parse_number_2: block -> ref "core:prelude/types.wado//Result<i32,ParseError>" {
+        __local_10 = (if valid -> ref "core:prelude/string.wado//String" {
             raw;
         } else {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("bad"), used: 3 };
         });
-        if "core:prelude/string.wado/String^Eq::eq"(__local_11, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("42"), used: 2 }) {
-            break __inline_parse_number_3: struct.new "core:prelude/types.wado//Result<i32,ParseError>::Ok" { discriminant: 0, payload_0: 42 };
+        if "core:prelude/string.wado/String^Eq::eq"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("42"), used: 2 }) {
+            break __inline_parse_number_2: struct.new "core:prelude/types.wado//Result<i32,ParseError>::Ok" { discriminant: 0, payload_0: 42 };
         }
-        break __inline_parse_number_3: struct.new "core:prelude/types.wado//Result<i32,ParseError>::Err" { discriminant: 1, payload_0: struct.new "wado-compiler/tests/fixtures/try_merged.wado//ParseError" { input: __local_11 } };
+        break __inline_parse_number_2: struct.new "core:prelude/types.wado//Result<i32,ParseError>::Err" { discriminant: 1, payload_0: struct.new "wado-compiler/tests/fixtures/try_merged.wado//ParseError" { input: __local_10 } };
         unreachable;
     };
     n = (if ref.test "core:prelude/types.wado//Result<i32,ParseError>::Ok"(__match_scrut_1) -> i32 {
@@ -1191,10 +1186,8 @@ fn "wado-compiler/tests/fixtures/try_merged.wado/test_try_op_variant_from"() wit
     let __local_19: ref "core:prelude/format.wado//Formatter";
     let __local_28: ref "core:prelude/format.wado//Formatter";
     let __local_33: ref "core:prelude/format.wado//Formatter";
-    let __local_36: ref "wado-compiler/tests/fixtures/try_merged.wado//IoError";
-    let __local_40: ref "core:prelude/format.wado//Formatter";
-    let __local_44: ref "wado-compiler/tests/fixtures/try_merged.wado//ParseError";
-    let __local_48: ref "core:prelude/format.wado//Formatter";
+    let __local_39: ref "core:prelude/format.wado//Formatter";
+    let __local_46: ref "core:prelude/format.wado//Formatter";
     let __sroa_r1_discriminant: i32;
     let __sroa_r1_case0_payload_0: i32;
     let __sroa_r1_case1_payload_0: ref null "wado-compiler/tests/fixtures/try_merged.wado//AppError";
@@ -1242,11 +1235,7 @@ condition: n == 42
     if __sroa_r2_discriminant == 1 {
         e_5 = ref.as_non_null(__sroa_r2_case1_payload_0);
         if ref.test "wado-compiler/tests/fixtures/try_merged.wado//AppError::Io"(e_5) {
-            inner_6 = __inline__value_copy_T21_7: block -> ref "wado-compiler/tests/fixtures/try_merged.wado//IoError" {
-                __local_36 = ref.cast "wado-compiler/tests/fixtures/try_merged.wado//AppError::Io"(e_5).payload_0;
-                break __inline__value_copy_T21_7: struct.new "wado-compiler/tests/fixtures/try_merged.wado//IoError" { message: __local_36.message };
-                unreachable;
-            };
+            inner_6 = ref.cast "wado-compiler/tests/fixtures/try_merged.wado//AppError::Io"(e_5).payload_0;
             __v0_7 = inner_6.message;
             __cond_8 = "core:prelude/string.wado/String^Eq::eq"(__v0_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("disk error"), used: 10 });
             if __cond_8 == 0 {
@@ -1261,8 +1250,8 @@ condition: n == 42
                     "core:prelude/string.wado/String::push_str"(__local_16, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/try_merged.wado"), used: 44 });
                     "core:prelude/string.wado/String::push"(__local_16, 58);
                     __local_17 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_16 };
-                    __local_40 = __local_17;
-                    "core:prelude/primitive.wado/i32::fmt_decimal"(223, __local_40);
+                    __local_39 = __local_17;
+                    "core:prelude/primitive.wado/i32::fmt_decimal"(223, __local_39);
                     "core:prelude/string.wado/String::push_str"(__local_16, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: inner.message == \"disk error\"
 "), used: 42 });
@@ -1290,11 +1279,7 @@ condition: inner.message == \"disk error\"
     if __sroa_r3_discriminant == 1 {
         e_10 = ref.as_non_null(__sroa_r3_case1_payload_0);
         if ref.test "wado-compiler/tests/fixtures/try_merged.wado//AppError::Parse"(e_10) {
-            inner_11 = __inline__value_copy_T22_13: block -> ref "wado-compiler/tests/fixtures/try_merged.wado//ParseError" {
-                __local_44 = ref.cast "wado-compiler/tests/fixtures/try_merged.wado//AppError::Parse"(e_10).payload_0;
-                break __inline__value_copy_T22_13: struct.new "wado-compiler/tests/fixtures/try_merged.wado//ParseError" { input: __local_44.input };
-                unreachable;
-            };
+            inner_11 = ref.cast "wado-compiler/tests/fixtures/try_merged.wado//AppError::Parse"(e_10).payload_0;
             __v0_12 = inner_11.input;
             __cond_13 = "core:prelude/string.wado/String^Eq::eq"(__v0_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("bad"), used: 3 });
             if __cond_13 == 0 {
@@ -1309,8 +1294,8 @@ condition: inner.message == \"disk error\"
                     "core:prelude/string.wado/String::push_str"(__local_18, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/try_merged.wado"), used: 44 });
                     "core:prelude/string.wado/String::push"(__local_18, 58);
                     __local_19 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_18 };
-                    __local_48 = __local_19;
-                    "core:prelude/primitive.wado/i32::fmt_decimal"(233, __local_48);
+                    __local_46 = __local_19;
+                    "core:prelude/primitive.wado/i32::fmt_decimal"(233, __local_46);
                     "core:prelude/string.wado/String::push_str"(__local_18, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: inner.input == \"bad\"
 "), used: 33 });
@@ -1972,49 +1957,6 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
         };
     };
     "core:prelude/string.wado/String::push"(f.buf, 34);
-}
-
-fn "core:prelude/array.wado/Array<i32>::push"(self, value) {
-    let used: i32;
-    used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<i32>::grow"(self);
-    }
-    builtin::array_set<i32>(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn "core:prelude/array.wado/Array<i32>::grow"(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref builtin::array<i32>;
-    let old_repr: ref builtin::array<i32>;
-    let used: i32;
-    let i: i32;
-    let __local_7: i32;
-    capacity = builtin::array_len(self.repr);
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_7 = capacity * 2;
-        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-        unreachable;
-    };
-    new_repr = builtin::array_new<i32>(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_0: block {
-        i = 0;
-        block {
-            l130: loop {
-                if i >= used {
-                    break __for_0;
-                }
-                builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
-                i = i + 1;
-                continue l130;
-            };
-        };
-    };
-    self.repr = new_repr;
 }
 
 export fn "wado-compiler/tests/fixtures/try_merged.wado/__cm_export__run" as "run"

@@ -1,8 +1,17 @@
 //! Dead Code Elimination (DCE) passes for WIR.
 //!
-//! - **`dce_unreachable_functions`**: removes functions not reachable from exports.
-//! - **`dce_unreachable_types`**: marks GC types not referenced by any live code as dead.
-//! - **`compact_dead_items`**: removes all dead-marked items and remaps indices.
+//! - **`mark_unreachable_defined_functions`**: marks defined functions
+//!   not reachable from exports/elements as dead via
+//!   `dead_func_indices`.
+//! - **`dce_unreachable_types`**: marks GC types not referenced by any
+//!   live code as dead via `dead_type_indices`.
+//! - **`compact_dead_items`**: removes all dead-marked items and remaps
+//!   indices.
+//!
+//! All three operate on either the GC module or the memory module — the
+//! base offset between absolute `WirFuncId` indices and 0-based
+//! `module.functions` array indices is read from
+//! [`WirPackage::defined_func_base`].
 
 use std::rc::Rc;
 
@@ -10,136 +19,6 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::wir::{
     WirExportDesc, WirFuncId, WirImportDesc, WirInstr, WirPackage, WirType, WirTypeDef, WirTypeId,
 };
-
-/// Remove functions unreachable from exports via call-graph analysis.
-///
-/// Performs BFS from exported functions and element-referenced functions,
-/// removing any function not transitively called. Remaps all `WirFuncId`
-/// indices so the surviving functions are contiguously numbered.
-///
-/// This is a standalone pass that works on any `WirPackage` (GC module or
-/// memory module). It is separate from `optimize_wir` because it should
-/// also run on modules that skip the main optimization pipeline (e.g.,
-/// the linear-memory module built by `WasmModuleInfo::to_wir_package`).
-pub fn dce_unreachable_functions(module: &mut WirPackage) {
-    let num_funcs = module.functions.len();
-    if num_funcs == 0 {
-        return;
-    }
-
-    // Collect root function indices: exported + element-referenced
-    let mut roots: IndexSet<u32> = IndexSet::default();
-    for export in &module.exports {
-        if let WirExportDesc::Func { func_id } = &export.desc {
-            roots.insert(func_id.index());
-        }
-    }
-    for elem in &module.elements {
-        for fid in &elem.func_ids {
-            roots.insert(fid.index());
-        }
-    }
-
-    // Build call graph: function index → set of callee indices
-    let mut callees_of: Vec<IndexSet<u32>> = Vec::with_capacity(num_funcs);
-    for func in &module.functions {
-        let mut callees = IndexSet::default();
-        if let Some(body) = &func.body {
-            collect_func_refs_from_body(body, &mut callees);
-        }
-        callees_of.push(callees);
-    }
-
-    // BFS from roots
-    let mut reachable: IndexSet<u32> = IndexSet::default();
-    let mut queue = std::collections::VecDeque::new();
-    for &root in &roots {
-        if reachable.insert(root) {
-            queue.push_back(root);
-        }
-    }
-    while let Some(idx) = queue.pop_front() {
-        if let Some(callees) = callees_of.get(idx as usize) {
-            for &callee in callees {
-                if reachable.insert(callee) {
-                    queue.push_back(callee);
-                }
-            }
-        }
-    }
-
-    if reachable.len() == num_funcs {
-        return; // nothing to remove
-    }
-
-    // Build old→new index remap
-    let mut remap: IndexMap<u32, u32> = IndexMap::default();
-    let mut new_idx = 0u32;
-    for old_idx in 0..num_funcs as u32 {
-        if reachable.contains(&old_idx) {
-            remap.insert(old_idx, new_idx);
-            new_idx += 1;
-        }
-    }
-
-    // Filter functions and types (1:1 correspondence)
-    let mut new_functions = Vec::with_capacity(reachable.len());
-    let mut new_types = Vec::with_capacity(reachable.len());
-    for (i, (func, type_def)) in module
-        .functions
-        .drain(..)
-        .zip(module.types.drain(..))
-        .enumerate()
-    {
-        if reachable.contains(&(i as u32)) {
-            new_functions.push(func);
-            new_types.push(type_def);
-        }
-    }
-    module.functions = new_functions;
-    module.types = new_types;
-
-    // Remap func IDs in function bodies
-    for func in &mut module.functions {
-        if let Some(body) = &mut func.body {
-            for instr in body {
-                remap_func_ids(instr, &remap);
-            }
-        }
-        // Remap type_id (same indexing as functions for mem-module)
-        if let Some(&new) = remap.get(&func.type_id.index()) {
-            func.type_id = WirTypeId::new(new, Rc::from(func.type_id.fq()));
-        }
-    }
-
-    // Remap exports
-    for export in &mut module.exports {
-        if let WirExportDesc::Func { func_id } = &mut export.desc
-            && let Some(&new) = remap.get(&func_id.index())
-        {
-            *func_id = WirFuncId::new(new, Rc::from(func_id.fq()));
-        }
-    }
-
-    // Remap elements
-    for elem in &mut module.elements {
-        for fid in &mut elem.func_ids {
-            if let Some(&new) = remap.get(&fid.index()) {
-                *fid = WirFuncId::new(new, Rc::from(fid.fq()));
-            }
-        }
-    }
-
-    // Remap name section
-    module.names.function_names.retain_mut(|(idx, _)| {
-        if let Some(&new) = remap.get(idx) {
-            *idx = new;
-            true
-        } else {
-            false
-        }
-    });
-}
 
 fn collect_func_refs_from_body(body: &[WirInstr], out: &mut IndexSet<u32>) {
     for instr in body {
@@ -207,6 +86,95 @@ fn remap_func_ids(instr: &mut WirInstr, remap: &IndexMap<u32, u32>) {
     instr.for_each_boxed_child_mut(&mut |child| {
         remap_func_ids(child, remap);
     });
+}
+
+/// Mark defined functions unreachable from exports/elements as dead
+/// (`module.dead_func_indices`), so the subsequent `compact_dead_items`
+/// removes them and remaps every `WirFuncId` reference.
+///
+/// Works on both the GC module (defined function indices start at
+/// [`crate::wir_build::DEFINED_FUNC_BASE`]) and the memory module
+/// (0-based indices) by reading the offset from
+/// [`WirPackage::defined_func_base`].
+///
+/// Catches functions orphaned by earlier WIR passes whose only call
+/// sites were eliminated — most notably
+/// `collapse_array_push_sequences` (Phase 3), which rewrites a
+/// single-element array literal `[v]` from `Array<T>::push(self, v)` to
+/// `array.new_fixed`, leaving the monomorphic `Array<T>::push` and its
+/// `Array<T>::grow` callee with no callers.
+///
+/// This pass only sets dead flags; the actual removal + reindexing
+/// happens in [`compact_dead_items`].
+pub fn mark_unreachable_defined_functions(module: &mut WirPackage) {
+    let num_funcs = u32::try_from(module.functions.len()).unwrap();
+    if num_funcs == 0 {
+        return;
+    }
+
+    // Translate an absolute Wasm function index (the value carried by
+    // `WirFuncId`) into a 0-based index into `module.functions`. Returns
+    // `None` for imported functions (whose index is below the base) and
+    // for indices outside the defined-function range. Imports have no
+    // body and cannot be DCE'd by this pass.
+    let base = module.defined_func_base;
+    let to_array_idx =
+        |abs_idx: u32| -> Option<u32> { abs_idx.checked_sub(base).filter(|i| *i < num_funcs) };
+
+    let mut callees_of: Vec<IndexSet<u32>> = Vec::with_capacity(module.functions.len());
+    for func in &module.functions {
+        let mut callees: IndexSet<u32> = IndexSet::default();
+        if let Some(body) = &func.body {
+            let mut abs_callees: IndexSet<u32> = IndexSet::default();
+            collect_func_refs_from_body(body, &mut abs_callees);
+            for c in abs_callees {
+                if let Some(arr_idx) = to_array_idx(c) {
+                    callees.insert(arr_idx);
+                }
+            }
+        }
+        callees_of.push(callees);
+    }
+
+    // Roots: exports + element tables. Both reference functions via
+    // `WirFuncId` (absolute index).
+    let mut reachable: IndexSet<u32> = IndexSet::default();
+    let mut queue: std::collections::VecDeque<u32> = std::collections::VecDeque::new();
+    let seed = |abs_idx: u32,
+                reachable: &mut IndexSet<u32>,
+                queue: &mut std::collections::VecDeque<u32>| {
+        if let Some(arr_idx) = to_array_idx(abs_idx)
+            && reachable.insert(arr_idx)
+        {
+            queue.push_back(arr_idx);
+        }
+    };
+    for export in &module.exports {
+        if let WirExportDesc::Func { func_id } = &export.desc {
+            seed(func_id.index(), &mut reachable, &mut queue);
+        }
+    }
+    for elem in &module.elements {
+        for fid in &elem.func_ids {
+            seed(fid.index(), &mut reachable, &mut queue);
+        }
+    }
+
+    while let Some(idx) = queue.pop_front() {
+        if let Some(callees) = callees_of.get(idx as usize) {
+            for &c in callees {
+                if reachable.insert(c) {
+                    queue.push_back(c);
+                }
+            }
+        }
+    }
+
+    for i in 0..num_funcs {
+        if !reachable.contains(&i) {
+            module.dead_func_indices.insert(i);
+        }
+    }
 }
 
 /// Mark types that are not referenced by any live function, import, or global
@@ -424,20 +392,17 @@ fn compact_funcs(module: &mut WirPackage) {
     if module.dead_func_indices.is_empty() {
         return;
     }
-    use crate::wir_build::DEFINED_FUNC_BASE;
 
-    // Build remap: old WirFuncId (DEFINED_FUNC_BASE + i) → new WirFuncId (DEFINED_FUNC_BASE + new_i)
+    // Build remap: old WirFuncId (base + i) → new WirFuncId (base + new_i).
+    // The base is taken from `module.defined_func_base` so this works for
+    // both the GC module (`DEFINED_FUNC_BASE`) and the memory module (`0`).
+    let base = module.defined_func_base;
     let dead = &module.dead_func_indices;
     let mut remap: IndexMap<u32, u32> = IndexMap::default();
     let mut new_i = 0u32;
-    for (i, func) in module.functions.iter().enumerate() {
-        let i = u32::try_from(i).unwrap();
+    for i in 0..u32::try_from(module.functions.len()).unwrap() {
         if !dead.contains(&i) {
-            remap.insert(DEFINED_FUNC_BASE + i, DEFINED_FUNC_BASE + new_i);
-            // Also remap type_id index if it maps to itself (used in mem-module).
-            // For the GC module, type_id is an index into module.types (not 1:1 with funcs),
-            // so we handle it in compact_types. Just handle func indices here.
-            let _ = func; // suppress unused warning
+            remap.insert(base + i, base + new_i);
             new_i += 1;
         }
     }

@@ -830,7 +830,17 @@ fn build_memory_module(
         max: None,
     };
     let mut wir = wasm_mod.to_wir_package(strip_names, memory);
-    crate::wir_optimize::dce_unreachable_functions(&mut wir);
+    // Memory-module DCE: BFS from exports/elements to mark unreachable
+    // defined functions, mirror those indices into `dead_type_indices`
+    // (the mem module has a 1:1 function/type correspondence — each
+    // function owns its own func type at the same array index — so any
+    // dead function's type is also dead), then run the generic
+    // compaction.
+    crate::wir_optimize::mark_unreachable_defined_functions(&mut wir);
+    for &i in &wir.dead_func_indices.clone() {
+        wir.dead_type_indices.insert(i);
+    }
+    crate::wir_optimize::compact_dead_items(&mut wir);
     super::emit::emit_core_module(&wir, strip_names)
 }
 

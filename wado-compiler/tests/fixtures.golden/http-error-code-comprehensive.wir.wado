@@ -877,34 +877,24 @@ fn "wado-compiler/tests/fixtures/http-error-code-comprehensive.wado/handle"() {
     let __local_550: ref "core:prelude/format.wado//Formatter";
     let __local_557: ref "core:prelude/format.wado//Formatter";
     let __local_576: ref "core:prelude/format.wado//Formatter";
-    let __local_580: ref "wasi:http/types.wado//DnsErrorPayload";
-    let __local_581: ref "core:prelude/string.wado//String";
-    let __local_585: ref "core:prelude/format.wado//Formatter";
-    let __local_592: ref "core:prelude/format.wado//Formatter";
-    let __local_597: ref "core:prelude/format.wado//Formatter";
-    let __local_603: ref "core:prelude/format.wado//Formatter";
-    let __local_610: ref "core:prelude/format.wado//Formatter";
-    let __local_614: ref "wasi:http/types.wado//TlsAlertReceivedPayload";
-    let __local_618: ref "core:prelude/format.wado//Formatter";
-    let __local_623: ref "core:prelude/format.wado//Formatter";
-    let __local_626: ref "core:prelude/string.wado//String";
-    let __local_630: ref "core:prelude/format.wado//Formatter";
-    let __local_637: ref "core:prelude/format.wado//Formatter";
-    let __local_644: ref "core:prelude/format.wado//Formatter";
-    let __local_651: ref "core:prelude/format.wado//Formatter";
-    let __local_658: ref "core:prelude/format.wado//Formatter";
-    let __local_665: ref "core:prelude/format.wado//Formatter";
-    let __local_672: ref "core:prelude/format.wado//Formatter";
-    let __local_679: ref "core:prelude/format.wado//Formatter";
-    let __local_686: ref "core:prelude/format.wado//Formatter";
-    let __local_693: ref "core:prelude/format.wado//Formatter";
-    let __local_751: ref "wasi:http/types.wado//DnsErrorPayload";
-    let __local_752: ref "wasi:http/types.wado//TlsAlertReceivedPayload";
-    let __local_753: ref "wasi:http/types.wado//FieldSizePayload";
-    let __local_754: ref "wasi:http/types.wado//FieldSizePayload";
-    let __local_755: ref "wasi:http/types.wado//FieldSizePayload";
-    let __local_756: ref "wasi:http/types.wado//FieldSizePayload";
-    let __local_757: ref "core:prelude/string.wado//String";
+    let __local_583: ref "core:prelude/format.wado//Formatter";
+    let __local_590: ref "core:prelude/format.wado//Formatter";
+    let __local_595: ref "core:prelude/format.wado//Formatter";
+    let __local_601: ref "core:prelude/format.wado//Formatter";
+    let __local_608: ref "core:prelude/format.wado//Formatter";
+    let __local_615: ref "core:prelude/format.wado//Formatter";
+    let __local_620: ref "core:prelude/format.wado//Formatter";
+    let __local_626: ref "core:prelude/format.wado//Formatter";
+    let __local_633: ref "core:prelude/format.wado//Formatter";
+    let __local_640: ref "core:prelude/format.wado//Formatter";
+    let __local_647: ref "core:prelude/format.wado//Formatter";
+    let __local_654: ref "core:prelude/format.wado//Formatter";
+    let __local_661: ref "core:prelude/format.wado//Formatter";
+    let __local_668: ref "core:prelude/format.wado//Formatter";
+    let __local_675: ref "core:prelude/format.wado//Formatter";
+    let __local_682: ref "core:prelude/format.wado//Formatter";
+    let __local_689: ref "core:prelude/format.wado//Formatter";
+    let __local_747: ref "core:prelude/string.wado//String";
     __v0_1 = "wado-compiler/tests/fixtures/http-error-code-comprehensive.wado/error_tag"(struct.new "wasi:http/types.wado//ErrorCode" { 0 });
     __cond_2 = "core:prelude/string.wado/String^Eq::eq"(__v0_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("dns-timeout"), used: 11 });
     if __cond_2 == 0 {
@@ -1804,18 +1794,10 @@ condition: error_tag(&dns_err) == \"dns-error\"
     }
     __pattern_temp_0 = dns_err.value;
     if ref.test "wasi:http/types.wado//ErrorCode::DnsError"(__pattern_temp_0) {
-        p_55 = __inline__value_copy_T24_135: block -> ref "wasi:http/types.wado//DnsErrorPayload" {
-            __local_580 = ref.cast "wasi:http/types.wado//ErrorCode::DnsError"(__pattern_temp_0).payload_0;
-            break __inline__value_copy_T24_135: struct.new "wasi:http/types.wado//DnsErrorPayload" { rcode: __local_580.rcode, info_code: __local_580.info_code };
-            unreachable;
-        };
+        p_55 = ref.cast "wasi:http/types.wado//ErrorCode::DnsError"(__pattern_temp_0).payload_0;
         __pattern_temp_1 = p_55.rcode;
         if ref.is_null(__pattern_temp_1) == 0 {
-            rcode = __inline__value_copy_T19_136: block -> ref "core:prelude/string.wado//String" {
-                __local_581 = ref.as_non_null(__pattern_temp_1);
-                break __inline__value_copy_T19_136: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(__local_581.repr)), used: __local_581.used };
-                unreachable;
-            };
+            rcode = ref.as_non_null(__pattern_temp_1);
             __v0_57 = rcode;
             __cond_58 = "core:prelude/string.wado/String^Eq::eq"(__v0_57, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("NXDOMAIN"), used: 8 });
             if __cond_58 == 0 {
@@ -1835,8 +1817,8 @@ condition: error_tag(&dns_err) == \"dns-error\"
                     "core:prelude/string.wado/String::push_str"(__local_184, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http-error-code-comprehensive.wado"), used: 63 });
                     "core:prelude/string.wado/String::push"(__local_184, 58);
                     __local_185 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_184 };
-                    __local_585 = __local_185;
-                    "core:prelude/primitive.wado/i32::fmt_decimal"(100, __local_585);
+                    __local_583 = __local_185;
+                    "core:prelude/primitive.wado/i32::fmt_decimal"(100, __local_583);
                     "core:prelude/string.wado/String::push_str"(__local_184, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: rcode == \"NXDOMAIN\"
 "), used: 32 });
@@ -1877,8 +1859,8 @@ condition: rcode == \"NXDOMAIN\"
                     "core:prelude/string.wado/String::push_str"(__local_186, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http-error-code-comprehensive.wado"), used: 63 });
                     "core:prelude/string.wado/String::push"(__local_186, 58);
                     __local_187 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_186 };
-                    __local_592 = __local_187;
-                    "core:prelude/primitive.wado/i32::fmt_decimal"(103, __local_592);
+                    __local_590 = __local_187;
+                    "core:prelude/primitive.wado/i32::fmt_decimal"(103, __local_590);
                     "core:prelude/string.wado/String::push_str"(__local_186, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: code == 3
 "), used: 22 });
@@ -1889,8 +1871,8 @@ condition: code == 3
                     "core:prelude/string.wado/String::push"(__local_186, 58);
                     "core:prelude/string.wado/String::push"(__local_186, 32);
                     __local_187 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_186 };
-                    __local_597 = __local_187;
-                    "core:prelude/primitive.wado/i32::fmt_decimal"(code, __local_597);
+                    __local_595 = __local_187;
+                    "core:prelude/primitive.wado/i32::fmt_decimal"(code, __local_595);
                     "core:prelude/string.wado/String::push"(__local_186, 10);
                     break __tmpl: __local_186;
                     unreachable;
@@ -1920,8 +1902,8 @@ condition: code == 3
             "core:prelude/string.wado/String::push_str"(__local_188, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http-error-code-comprehensive.wado"), used: 63 });
             "core:prelude/string.wado/String::push"(__local_188, 58);
             __local_189 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_188 };
-            __local_603 = __local_189;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(113, __local_603);
+            __local_601 = __local_189;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(113, __local_601);
             "core:prelude/string.wado/String::push_str"(__local_188, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: error_tag(&dns_err2) == \"dns-error\"
 "), used: 48 });
@@ -1955,8 +1937,8 @@ condition: error_tag(&dns_err2) == \"dns-error\"
             "core:prelude/string.wado/String::push_str"(__local_190, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http-error-code-comprehensive.wado"), used: 63 });
             "core:prelude/string.wado/String::push"(__local_190, 58);
             __local_191 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_190 };
-            __local_610 = __local_191;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(121, __local_610);
+            __local_608 = __local_191;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(121, __local_608);
             "core:prelude/string.wado/String::push_str"(__local_190, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: error_tag(&tls_err) == \"tls-alert-received\"
 "), used: 56 });
@@ -1971,11 +1953,7 @@ condition: error_tag(&tls_err) == \"tls-alert-received\"
     }
     __pattern_temp_3 = tls_err.value;
     if ref.test "wasi:http/types.wado//ErrorCode::TlsAlertReceived"(__pattern_temp_3) {
-        p_70 = __inline__value_copy_T25_159: block -> ref "wasi:http/types.wado//TlsAlertReceivedPayload" {
-            __local_614 = ref.cast "wasi:http/types.wado//ErrorCode::TlsAlertReceived"(__pattern_temp_3).payload_0;
-            break __inline__value_copy_T25_159: struct.new "wasi:http/types.wado//TlsAlertReceivedPayload" { alert_id: __local_614.alert_id, alert_message: __local_614.alert_message };
-            unreachable;
-        };
+        p_70 = ref.cast "wasi:http/types.wado//ErrorCode::TlsAlertReceived"(__pattern_temp_3).payload_0;
         __pattern_temp_4 = p_70.alert_id;
         if ref.test "core:prelude/types.wado//Option<u8>::Some"(__pattern_temp_4) {
             id = ref.cast "core:prelude/types.wado//Option<u8>::Some"(__pattern_temp_4).payload_0;
@@ -1997,8 +1975,8 @@ condition: error_tag(&tls_err) == \"tls-alert-received\"
                     "core:prelude/string.wado/String::push_str"(__local_192, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http-error-code-comprehensive.wado"), used: 63 });
                     "core:prelude/string.wado/String::push"(__local_192, 58);
                     __local_193 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_192 };
-                    __local_618 = __local_193;
-                    "core:prelude/primitive.wado/i32::fmt_decimal"(124, __local_618);
+                    __local_615 = __local_193;
+                    "core:prelude/primitive.wado/i32::fmt_decimal"(124, __local_615);
                     "core:prelude/string.wado/String::push_str"(__local_192, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: id == 48
 "), used: 21 });
@@ -2007,8 +1985,8 @@ condition: id == 48
                     "core:prelude/string.wado/String::push"(__local_192, 58);
                     "core:prelude/string.wado/String::push"(__local_192, 32);
                     __local_193 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_192 };
-                    __local_623 = __local_193;
-                    "core:prelude/primitive.wado/i32::fmt_decimal"(id, __local_623);
+                    __local_620 = __local_193;
+                    "core:prelude/primitive.wado/i32::fmt_decimal"(id, __local_620);
                     "core:prelude/string.wado/String::push"(__local_192, 10);
                     break __tmpl: __local_192;
                     unreachable;
@@ -2018,11 +1996,7 @@ condition: id == 48
         }
         __pattern_temp_5 = p_70.alert_message;
         if ref.is_null(__pattern_temp_5) == 0 {
-            msg = __inline__value_copy_T19_167: block -> ref "core:prelude/string.wado//String" {
-                __local_626 = ref.as_non_null(__pattern_temp_5);
-                break __inline__value_copy_T19_167: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(__local_626.repr)), used: __local_626.used };
-                unreachable;
-            };
+            msg = ref.as_non_null(__pattern_temp_5);
             __v0_75 = msg;
             __cond_76 = "core:prelude/string.wado/String^Eq::eq"(__v0_75, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("handshake failure"), used: 17 });
             if __cond_76 == 0 {
@@ -2042,8 +2016,8 @@ condition: id == 48
                     "core:prelude/string.wado/String::push_str"(__local_194, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http-error-code-comprehensive.wado"), used: 63 });
                     "core:prelude/string.wado/String::push"(__local_194, 58);
                     __local_195 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_194 };
-                    __local_630 = __local_195;
-                    "core:prelude/primitive.wado/i32::fmt_decimal"(127, __local_630);
+                    __local_626 = __local_195;
+                    "core:prelude/primitive.wado/i32::fmt_decimal"(127, __local_626);
                     "core:prelude/string.wado/String::push_str"(__local_194, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: msg == \"handshake failure\"
 "), used: 39 });
@@ -2083,8 +2057,8 @@ condition: msg == \"handshake failure\"
             "core:prelude/string.wado/String::push_str"(__local_196, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http-error-code-comprehensive.wado"), used: 63 });
             "core:prelude/string.wado/String::push"(__local_196, 58);
             __local_197 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_196 };
-            __local_637 = __local_197;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(137, __local_637);
+            __local_633 = __local_197;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(137, __local_633);
             "core:prelude/string.wado/String::push_str"(__local_196, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: error_tag(&header_err) == \"http-request-header-size\"
 "), used: 65 });
@@ -2117,8 +2091,8 @@ condition: error_tag(&header_err) == \"http-request-header-size\"
             "core:prelude/string.wado/String::push_str"(__local_198, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http-error-code-comprehensive.wado"), used: 63 });
             "core:prelude/string.wado/String::push"(__local_198, 58);
             __local_199 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_198 };
-            __local_644 = __local_199;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(142, __local_644);
+            __local_640 = __local_199;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(142, __local_640);
             "core:prelude/string.wado/String::push_str"(__local_198, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: error_tag(&trailer_err) == \"http-request-trailer-size\"
 "), used: 67 });
@@ -2151,8 +2125,8 @@ condition: error_tag(&trailer_err) == \"http-request-trailer-size\"
             "core:prelude/string.wado/String::push_str"(__local_200, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http-error-code-comprehensive.wado"), used: 63 });
             "core:prelude/string.wado/String::push"(__local_200, 58);
             __local_201 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_200 };
-            __local_651 = __local_201;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(146, __local_651);
+            __local_647 = __local_201;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(146, __local_647);
             "core:prelude/string.wado/String::push_str"(__local_200, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: error_tag(&body_err) == \"http-request-body-size\"
 "), used: 61 });
@@ -2185,8 +2159,8 @@ condition: error_tag(&body_err) == \"http-request-body-size\"
             "core:prelude/string.wado/String::push_str"(__local_202, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http-error-code-comprehensive.wado"), used: 63 });
             "core:prelude/string.wado/String::push"(__local_202, 58);
             __local_203 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_202 };
-            __local_658 = __local_203;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(148, __local_658);
+            __local_654 = __local_203;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(148, __local_654);
             "core:prelude/string.wado/String::push_str"(__local_202, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: error_tag(&body_err_none) == \"http-request-body-size\"
 "), used: 66 });
@@ -2219,8 +2193,8 @@ condition: error_tag(&body_err_none) == \"http-request-body-size\"
             "core:prelude/string.wado/String::push_str"(__local_204, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http-error-code-comprehensive.wado"), used: 63 });
             "core:prelude/string.wado/String::push"(__local_204, 58);
             __local_205 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_204 };
-            __local_665 = __local_205;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(151, __local_665);
+            __local_661 = __local_205;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(151, __local_661);
             "core:prelude/string.wado/String::push_str"(__local_204, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: error_tag(&resp_body_err) == \"http-response-body-size\"
 "), used: 67 });
@@ -2253,8 +2227,8 @@ condition: error_tag(&resp_body_err) == \"http-response-body-size\"
             "core:prelude/string.wado/String::push_str"(__local_206, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http-error-code-comprehensive.wado"), used: 63 });
             "core:prelude/string.wado/String::push"(__local_206, 58);
             __local_207 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_206 };
-            __local_672 = __local_207;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(154, __local_672);
+            __local_668 = __local_207;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(154, __local_668);
             "core:prelude/string.wado/String::push_str"(__local_206, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: error_tag(&transfer_err) == \"http-response-transfer-coding\"
 "), used: 72 });
@@ -2287,8 +2261,8 @@ condition: error_tag(&transfer_err) == \"http-response-transfer-coding\"
             "core:prelude/string.wado/String::push_str"(__local_208, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http-error-code-comprehensive.wado"), used: 63 });
             "core:prelude/string.wado/String::push"(__local_208, 58);
             __local_209 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_208 };
-            __local_679 = __local_209;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(156, __local_679);
+            __local_675 = __local_209;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(156, __local_675);
             "core:prelude/string.wado/String::push_str"(__local_208, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: error_tag(&content_err) == \"http-response-content-coding\"
 "), used: 70 });
@@ -2321,8 +2295,8 @@ condition: error_tag(&content_err) == \"http-response-content-coding\"
             "core:prelude/string.wado/String::push_str"(__local_210, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http-error-code-comprehensive.wado"), used: 63 });
             "core:prelude/string.wado/String::push"(__local_210, 58);
             __local_211 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_210 };
-            __local_686 = __local_211;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(159, __local_686);
+            __local_682 = __local_211;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(159, __local_682);
             "core:prelude/string.wado/String::push_str"(__local_210, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: error_tag(&internal) == \"internal-error\"
 "), used: 53 });
@@ -2355,8 +2329,8 @@ condition: error_tag(&internal) == \"internal-error\"
             "core:prelude/string.wado/String::push_str"(__local_212, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http-error-code-comprehensive.wado"), used: 63 });
             "core:prelude/string.wado/String::push"(__local_212, 58);
             __local_213 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_212 };
-            __local_693 = __local_213;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(161, __local_693);
+            __local_689 = __local_213;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(161, __local_689);
             "core:prelude/string.wado/String::push_str"(__local_212, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: error_tag(&internal_none) == \"internal-error\"
 "), used: 58 });
@@ -2710,11 +2684,7 @@ condition: roe3 matches { Other(_) }
         __err_val = ref.cast "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Err"(__task_ret).payload_0;
         __tv_1 = __err_val.discriminant;
         if ref.test "wasi:http/types.wado//ErrorCode::DnsError"(__err_val) {
-            __case_payload_244 = __inline__value_copy_T24_254: block -> ref "wasi:http/types.wado//DnsErrorPayload" {
-                __local_751 = ref.cast "wasi:http/types.wado//ErrorCode::DnsError"(__err_val).payload_0;
-                break __inline__value_copy_T24_254: struct.new "wasi:http/types.wado//DnsErrorPayload" { rcode: __local_751.rcode, info_code: __local_751.info_code };
-                unreachable;
-            };
+            __case_payload_244 = ref.cast "wasi:http/types.wado//ErrorCode::DnsError"(__err_val).payload_0;
             __opt_val_246 = __case_payload_244.rcode;
             __opt_disc_247 = ref.is_null(__opt_val_246) == 0;
             __opt_inner_0_248 = 0;
@@ -2740,11 +2710,7 @@ condition: roe3 matches { Other(_) }
             __tv_6 = __opt_inner_0_255;
         }
         if ref.test "wasi:http/types.wado//ErrorCode::TlsAlertReceived"(__err_val) {
-            __case_payload_257 = __inline__value_copy_T25_255: block -> ref "wasi:http/types.wado//TlsAlertReceivedPayload" {
-                __local_752 = ref.cast "wasi:http/types.wado//ErrorCode::TlsAlertReceived"(__err_val).payload_0;
-                break __inline__value_copy_T25_255: struct.new "wasi:http/types.wado//TlsAlertReceivedPayload" { alert_id: __local_752.alert_id, alert_message: __local_752.alert_message };
-                unreachable;
-            };
+            __case_payload_257 = ref.cast "wasi:http/types.wado//ErrorCode::TlsAlertReceived"(__err_val).payload_0;
             __opt_val_259 = __case_payload_257.alert_id;
             __opt_disc_260 = ref.test "core:prelude/types.wado//Option<u8>::Some"(__opt_val_259);
             __opt_inner_0_261 = 0;
@@ -2800,11 +2766,7 @@ condition: roe3 matches { Other(_) }
             __opt_inner_3 = 0;
             __opt_inner_4 = 0;
             if __opt_disc_282 != 0 {
-                __struct_val = __inline__value_copy_T27_256: block -> ref "wasi:http/types.wado//FieldSizePayload" {
-                    __local_753 = ref.as_non_null(__case_payload_280);
-                    break __inline__value_copy_T27_256: struct.new "wasi:http/types.wado//FieldSizePayload" { field_name: __local_753.field_name, field_size: __local_753.field_size };
-                    unreachable;
-                };
+                __struct_val = ref.as_non_null(__case_payload_280);
                 __opt_val_289 = __struct_val.field_name;
                 __opt_disc_290 = ref.is_null(__opt_val_289) == 0;
                 __opt_inner_0_291 = 0;
@@ -2848,11 +2810,7 @@ condition: roe3 matches { Other(_) }
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_303);
         }
         if ref.test "wasi:http/types.wado//ErrorCode::HttpRequestTrailerSize"(__err_val) {
-            __case_payload_305 = __inline__value_copy_T27_257: block -> ref "wasi:http/types.wado//FieldSizePayload" {
-                __local_754 = ref.cast "wasi:http/types.wado//ErrorCode::HttpRequestTrailerSize"(__err_val).payload_0;
-                break __inline__value_copy_T27_257: struct.new "wasi:http/types.wado//FieldSizePayload" { field_name: __local_754.field_name, field_size: __local_754.field_size };
-                unreachable;
-            };
+            __case_payload_305 = ref.cast "wasi:http/types.wado//ErrorCode::HttpRequestTrailerSize"(__err_val).payload_0;
             __opt_val_307 = __case_payload_305.field_name;
             __opt_disc_308 = ref.is_null(__opt_val_307) == 0;
             __opt_inner_0_309 = 0;
@@ -2889,11 +2847,7 @@ condition: roe3 matches { Other(_) }
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_321);
         }
         if ref.test "wasi:http/types.wado//ErrorCode::HttpResponseHeaderSize"(__err_val) {
-            __case_payload_323 = __inline__value_copy_T27_258: block -> ref "wasi:http/types.wado//FieldSizePayload" {
-                __local_755 = ref.cast "wasi:http/types.wado//ErrorCode::HttpResponseHeaderSize"(__err_val).payload_0;
-                break __inline__value_copy_T27_258: struct.new "wasi:http/types.wado//FieldSizePayload" { field_name: __local_755.field_name, field_size: __local_755.field_size };
-                unreachable;
-            };
+            __case_payload_323 = ref.cast "wasi:http/types.wado//ErrorCode::HttpResponseHeaderSize"(__err_val).payload_0;
             __opt_val_325 = __case_payload_323.field_name;
             __opt_disc_326 = ref.is_null(__opt_val_325) == 0;
             __opt_inner_0_327 = 0;
@@ -2941,11 +2895,7 @@ condition: roe3 matches { Other(_) }
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_344);
         }
         if ref.test "wasi:http/types.wado//ErrorCode::HttpResponseTrailerSize"(__err_val) {
-            __case_payload_346 = __inline__value_copy_T27_259: block -> ref "wasi:http/types.wado//FieldSizePayload" {
-                __local_756 = ref.cast "wasi:http/types.wado//ErrorCode::HttpResponseTrailerSize"(__err_val).payload_0;
-                break __inline__value_copy_T27_259: struct.new "wasi:http/types.wado//FieldSizePayload" { field_name: __local_756.field_name, field_size: __local_756.field_size };
-                unreachable;
-            };
+            __case_payload_346 = ref.cast "wasi:http/types.wado//ErrorCode::HttpResponseTrailerSize"(__err_val).payload_0;
             __opt_val_348 = __case_payload_346.field_name;
             __opt_disc_349 = ref.is_null(__opt_val_348) == 0;
             __opt_inner_0_350 = 0;
@@ -3020,9 +2970,9 @@ condition: roe3 matches { Other(_) }
         }
         "wasi/task-return"(1, __tv_1, __tv_2, __tv_3, __tv_4, __tv_5, __tv_6, __tv_7);
     }
-    "core:internal/cm_stream_write_u8"(resp_tx, __inline_String__as_bytes_260: block -> ref "core:prelude//Array<u8>" {
-        __local_757 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ok"), used: 2 };
-        break __inline_String__as_bytes_260: "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: __local_757.repr, used: __local_757.used, index: 0 });
+    "core:internal/cm_stream_write_u8"(resp_tx, __inline_String__as_bytes_250: block -> ref "core:prelude//Array<u8>" {
+        __local_747 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ok"), used: 2 };
+        break __inline_String__as_bytes_250: "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: __local_747.repr, used: __local_747.used, index: 0 });
         unreachable;
     });
     "wasi/stream-drop-writable"(resp_tx);

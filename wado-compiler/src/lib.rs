@@ -483,7 +483,7 @@ fn compile_after_load<H: CompilerHost>(
     // the original `WithHandler` shape.
     let package = {
         let _span = logger.span("effect-dispatch");
-        synthesis::effect_dispatch::synthesize(package).map_err(|message| {
+        synthesis::effect_dispatch::synthesize_post_check(package).map_err(|message| {
             let _ = logger.error(compiler_host::Diagnostic {
                 severity: compiler_host::Severity::Error,
                 code: compiler_host::Code::UnsupportedFeature,
@@ -777,7 +777,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             // Dump path mirrors the main compile pipeline (Phase 8c).
             let package = {
                 let _span = logger.span("effect-dispatch");
-                synthesis::effect_dispatch::synthesize(package).map_err(|message| {
+                synthesis::effect_dispatch::synthesize_post_check(package).map_err(|message| {
                     let _ = logger.error(compiler_host::Diagnostic {
                         severity: compiler_host::Severity::Error,
                         code: compiler_host::Code::UnsupportedFeature,
