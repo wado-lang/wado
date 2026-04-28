@@ -654,7 +654,9 @@ fn collect_param_field_usage_in_expr(
                 type_table,
             );
         }
-        TirExprKind::TemplateString { .. } => {}
+        TirExprKind::TemplateString { .. } => {
+            unreachable!("TemplateString should be expanded before this phase")
+        }
         TirExprKind::IntLiteral { .. }
         | TirExprKind::FloatLiteral { .. }
         | TirExprKind::BoolLiteral(_)

@@ -2261,6 +2261,14 @@ fn expr_has_side_effects(expr: &TirExpr) -> bool {
                 || arms.iter().any(block_has_side_effects)
                 || block_has_side_effects(default)
         }
+        TirExprKind::TemplateString { .. } => {
+            unreachable!("TemplateString should be expanded before this phase")
+        }
+        TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+            unreachable!(
+                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
+            )
+        }
         _ => false,
     }
 }
@@ -2378,6 +2386,14 @@ fn remove_dead_global_sets_expr(expr: &mut TirExpr, used: &IndexSet<(String, Str
                 remove_dead_global_sets_block(arm, used);
             }
             remove_dead_global_sets_block(default, used);
+        }
+        TirExprKind::TemplateString { .. } => {
+            unreachable!("TemplateString should be expanded before this phase")
+        }
+        TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+            unreachable!(
+                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
+            )
         }
         _ => {}
     }
