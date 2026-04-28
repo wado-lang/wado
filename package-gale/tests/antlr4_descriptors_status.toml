@@ -1,0 +1,30 @@
+# Triage state for ANTLR4 runtime-testsuite descriptors.
+#
+# Each entry's key is "<Category>/<Name>" (no .txt suffix). Sections:
+#
+#   [todo] — descriptor parses cleanly with `antlr4` but Gale rejects it.
+#            The generated test gets `#[TODO]` so the failure is recorded
+#            without blocking CI. Drop the entry once the underlying gap
+#            is closed.
+#   [skip] — descriptor will not be emitted as a Wado test at all (use
+#            for genuinely target-language-specific tests, never for
+#            things we just haven't fixed yet).
+#
+# The free-form value is a one-line reason that flows into the generated
+# test as a comment. The reason text is written verbatim — keep it free
+# of backslashes (the parser does not unescape) and double quotes.
+#
+# After editing this file, re-run:
+#   package-gale/scripts/extract-antlr4-descriptors.sh
+
+[todo]
+"Sets/UnicodeEscapedBMPRangeSet" = "descriptor uses the ANTLR4 testsuite double-backslash unicode escape form that Gale does not unwrap"
+"Sets/UnicodeEscapedSMPRangeSet" = "descriptor uses the ANTLR4 testsuite double-backslash unicode escape form that Gale does not unwrap"
+"Sets/UnicodeEscapedSMPRangeSetMismatch" = "descriptor uses the ANTLR4 testsuite double-backslash unicode escape form that Gale does not unwrap"
+"Sets/UnicodeNegatedSMPSetIncludesBMPCodePoints" = "descriptor uses the ANTLR4 testsuite double-backslash unicode escape form that Gale does not unwrap"
+"LexerExec/NonGreedyOptional" = "Gale parser does not recognise the non-greedy optional operator (??) on a single element"
+"ParseTrees/AltNum" = "descriptor uses StringTemplate <...> directives at grammar level that the ANTLR4 testsuite substitutes per-target before compilation"
+"ParseTrees/TokenAndRuleContextString" = "descriptor uses StringTemplate <...> directives at grammar level that the ANTLR4 testsuite substitutes per-target before compilation"
+
+[skip]
+# (none yet — every Phase 1 descriptor either parses or is recorded as TODO)
