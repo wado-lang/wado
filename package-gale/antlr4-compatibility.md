@@ -56,8 +56,9 @@ Two test sources cover Stage A today:
    under `tests/`.
 2. **Upstream descriptor corpus** at
    `vendor/antlr4/runtime-testsuite/resources/.../descriptors/`,
-   extracted into `tests/antlr4_descriptors/<Category>/<Name>.g4`
-   and exercised by per-category `tests/antlr4_descriptor_*_test.wado`.
+   extracted into `tests/antlr4-compat/grammars/<Category>/<Name>.g4`
+   and exercised by per-category
+   `tests/antlr4-compat/<category>_test.wado` (`#![generated]`-tagged).
    Generation and verification of (2) is what the rest of this doc
    covers.
 
@@ -127,10 +128,10 @@ vendor/antlr4/.../descriptors/<Category>/<Name>.txt
     RuntimeTestDescriptorParser.parse, mirrors them to disk)
                   │
                   ▼
-tests/antlr4_descriptors/<Category>/<Name>.g4   (extracted grammar)
-tests/antlr4_descriptor_<category>_test.wado    (one test per descriptor)
-                  │              │
-                  │              └── consults tests/antlr4_descriptors_status.toml
+tests/antlr4-compat/grammars/<Category>/<Name>.g4   (extracted grammar)
+tests/antlr4-compat/<category>_test.wado            (one test per descriptor,
+                  │              │                   tagged `#![generated]`)
+                  │              └── consults tests/antlr4-compat/status.toml
                   │                  to decorate todo / skip entries
                   ▼
         wado test  (runs the generated tests through the
@@ -143,15 +144,18 @@ to emit Wado source, plus `core:cli` and `wasi:filesystem` for I/O.
 
 ### Files
 
+All compat-related artefacts (extracted grammars, generated tests,
+triage state) live under `package-gale/tests/antlr4-compat/`:
+
 | Path                                      | Role                                                             |
 | ----------------------------------------- | ---------------------------------------------------------------- |
 | `scripts/extract_antlr4_descriptors.wado` | Extractor (single-file Wado script)                              |
 | `scripts/extract-antlr4-descriptors.sh`   | Wrapper resolving the category list and forwarding to `wado run` |
-| `tests/antlr4_descriptors/`               | Generated `.g4` files (committed)                                |
-| `tests/antlr4_descriptor_*_test.wado`     | Generated tests (committed)                                      |
-| `tests/antlr4_descriptors_status.toml`    | Manually maintained triage state                                 |
+| `tests/antlr4-compat/grammars/`           | Generated `.g4` files (committed)                                |
+| `tests/antlr4-compat/<category>_test.wado` | Generated tests (committed; each carries `#![generated(by=…)]`) |
+| `tests/antlr4-compat/status.toml`         | Manually maintained triage state                                 |
 
-### Triage states (`antlr4_descriptors_status.toml`)
+### Triage states (`status.toml`)
 
 ```toml
 [todo]
@@ -210,11 +214,11 @@ for `git submodule update --init …` and never auto-initialises.
 ### Running the generated tests
 
 ```sh
-# All descriptor-based tests
-wado test package-gale/tests/antlr4_descriptor_*_test.wado
+# All descriptor-based tests (and the rest of package-gale)
+wado test package-gale
 
 # A single category
-wado test package-gale/tests/antlr4_descriptor_lexer_exec_test.wado
+wado test package-gale/tests/antlr4-compat/lexer_exec_test.wado
 ```
 
 Output for a healthy run looks like:
@@ -245,7 +249,7 @@ When the descriptor extractor surfaces a previously-unseen failure:
    level — those are testsuite-only, not real `.g4`, and belong in
    `[skip]`.
 2. **Reproduce locally** to confirm Gale's parse error:
-   `wado run package-gale -- dump tests/antlr4_descriptors/<Category>/<Name>.g4`.
+   `wado run package-gale -- dump tests/antlr4-compat/grammars/<Category>/<Name>.g4`.
 3. **Decide on the bucket:**
    - Real Gale gap → `[todo]` with a one-line reason. Mirror the gap
      in `TODO.md` so it is tracked alongside the existing gaps.

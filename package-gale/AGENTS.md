@@ -172,7 +172,7 @@ Grammars with actions/predicates (ANTLR4, Rust, TypeScript) contain `{...}` acti
 2. Add a parse test in `g4/integration_test.wado`
 3. Add a driver test under `tests/` that imports the grammar via `use ... with { generator: { module: "../src/generator.wado", options: { ... } } }`. The compiler runs Gale on the `.g4` at build time and resolves the `use` against the freshly generated parser.
 
-### Layer 3: ANTLR4 Descriptor Compatibility Tests (`tests/antlr4_descriptor_*_test.wado`)
+### Layer 3: ANTLR4 Descriptor Compatibility Tests (`tests/antlr4-compat/`)
 
 A separate, long-lived effort that imports ANTLR4's upstream
 runtime-testsuite descriptors as parse-only Wado tests. Tracked in
