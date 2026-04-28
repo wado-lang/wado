@@ -140,31 +140,111 @@ impl<H: CompilerHost> Resolver<'_, H> {
     /// resource (e.g. `resource Stream<T>`) are brought into scope before
     /// resolving each method's params and return type so that `T` maps to a
     /// proper `TypeParam` rather than `UNKNOWN`.
+    /// Lower a resource / effect declaration's method list to
+    /// [`TirEffectOp`]s. Type-param scope is set up once at the start
+    /// (so operation signatures can mention `T` for generic resources)
+    /// and then each method's params + return are resolved.
+    ///
+    /// `resource_self`, when `Some((name, module))`, signals that this
+    /// is a resource decl rather than an effect decl: methods declared
+    /// with `&self`/`&mut self` shorthand get the receiver synthesised
+    /// as a real `TirEffectOp` parameter at index 0 (with type
+    /// `&Self`/`&mut Self`) so dispatch wrapper signatures match the
+    /// post-cm-binding call shape `__cm_binding__<R>_<op>(self, args)`.
+    /// For effects (where `resource_self == None`) any `self_kind` is
+    /// silently dropped — effect declarations don't take receivers.
     fn resolve_effect_ops(
         &mut self,
         type_params: &[ast::GenericParam],
         methods: &[ast::EffectMethod],
+        resource_self: Option<(&str, ModuleSource)>,
     ) -> Vec<TirEffectOp> {
         let mut scope = self.enter_inherited_type_param_scope();
         scope.trait_ctx.type_params.clear();
         scope.register_generic_params(type_params, 0);
 
+        // Construct the resource's `Self` type after type params are in
+        // scope, so a generic resource's `GenericResource` instance can
+        // reference its own `TypeParam`s (which gap-2 substitution then
+        // specialises per impl-block instantiation). For non-generic
+        // resources this is just a plain `Resource { name, module }`.
+        let self_type: Option<TypeId> = resource_self.map(|(name, module)| {
+            if type_params.iter().any(|p| !p.is_effect) {
+                let type_arg_ids: Vec<TypeId> = type_params
+                    .iter()
+                    .filter(|p| !p.is_effect)
+                    .map(|p| {
+                        scope
+                            .trait_ctx
+                            .type_params
+                            .get(&p.name)
+                            .map(|(_, id)| *id)
+                            .expect("type param registered by register_generic_params")
+                    })
+                    .collect();
+                scope
+                    .type_table
+                    .borrow_mut()
+                    .intern(crate::tir::ResolvedType::GenericResource {
+                        name: name.to_string(),
+                        module_source: module,
+                        type_args: type_arg_ids,
+                    })
+            } else {
+                scope
+                    .type_table
+                    .borrow_mut()
+                    .make_resource(name.to_string(), module)
+            }
+        });
+
         let mut ops = Vec::with_capacity(methods.len());
         for method in methods {
             let mut params = Vec::with_capacity(method.params.len());
-            for (idx, p) in method.params.iter().enumerate() {
-                if !matches!(p.self_kind, SelfKind::None) {
-                    continue;
-                }
-                let type_id = scope.resolve_type(&p.ty);
+            let mut next_local: u32 = 0;
+            for p in &method.params {
+                let type_id = match (p.self_kind, self_type) {
+                    (SelfKind::None, _) => scope.resolve_type(&p.ty),
+                    // `&self` / `&mut self` on a resource method:
+                    // synthesise the receiver as a first regular
+                    // parameter so the dispatch wrapper and the
+                    // cm_binding adapter agree on signature shape
+                    // `(self, ...)`. By-value self isn't representable
+                    // in the AST (`SelfKind` has no `Self_` variant),
+                    // so the match is exhaustive over the resource
+                    // case.
+                    (SelfKind::Ref, Some(self_t)) => {
+                        scope.type_table.borrow_mut().make_ref(self_t)
+                    }
+                    (SelfKind::MutRef, Some(self_t)) => {
+                        scope.type_table.borrow_mut().make_mut_ref(self_t)
+                    }
+                    // No `Self` in scope (effect decls) — drop the
+                    // receiver as before; effect operations don't take
+                    // receivers and the resolver should already have
+                    // diagnosed `&self` in an `effect` decl elsewhere.
+                    _ => continue,
+                };
+                let name = if matches!(p.self_kind, SelfKind::None) {
+                    p.name.clone()
+                } else {
+                    // The AST `&self`/`&mut self` shorthand has an
+                    // empty name field; give it a real name so
+                    // downstream phases that key by parameter name
+                    // (WIR `param_names`, the closure synthesis's
+                    // `Local { name }` builder, ...) round-trip
+                    // unambiguously.
+                    "self".to_string()
+                };
                 params.push(TirParam {
-                    name: p.name.clone(),
+                    name,
                     type_id,
-                    local_index: idx as u32,
+                    local_index: next_local,
                     is_mut: p.is_mut,
                     default_expr: None,
                     span: p.span,
                 });
+                next_local += 1;
             }
             let return_type = method
                 .return_type
@@ -182,7 +262,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
     }
 
     pub(super) fn resolve_effect_decl(&mut self, decl: &ast::EffectDecl) -> TirEffect {
-        let operations = self.resolve_effect_ops(&[], &decl.methods);
+        let operations = self.resolve_effect_ops(&[], &decl.methods, None);
         TirEffect {
             name: decl.name.clone(),
             is_pub: decl.is_pub,
@@ -192,7 +272,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
     }
 
     pub(super) fn resolve_resource_decl(&mut self, decl: &ast::ResourceDecl) -> TirResource {
-        let operations = self.resolve_effect_ops(&decl.type_params, &decl.methods);
+        let module_source = self.current_module_source.clone();
+        let operations = self.resolve_effect_ops(
+            &decl.type_params,
+            &decl.methods,
+            Some((decl.name.as_str(), module_source)),
+        );
         TirResource {
             name: decl.name.clone(),
             is_pub: decl.is_pub,

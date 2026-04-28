@@ -276,14 +276,27 @@ Status: Draft
          this gap surfaced no longer fires; Stream/Future
          fixtures advance past WIR closure registration to the
          next-gap call-site rewriting failure.
-      3. **(open)** `Stream<T>` / `Future<T>` operations
-         declared with the `&self` shorthand have their
-         receiver param filtered out by
-         `Resolver::resolve_effect_ops`, so the synthesised
-         wrapper signature does not include the receiver. The
-         wrapper must take the resource handle as its first
-         argument to forward to `cm_stream_*` / `cm_future_*` /
-         `CmRawCall`.
+      3. **(done)** `&self` / `&mut self` shorthand carries
+         the resource receiver into operation signatures.
+         `Resolver::resolve_effect_ops` now takes an optional
+         `(name, module)` and, when supplied, constructs the
+         resource's `Self` type (`Resource` for non-generic,
+         `GenericResource { name, module, type_args }` for
+         generic — referencing the resource's own
+         `TypeParam`s so gap-2 substitution still specialises
+         per instantiation). Methods declared with `&self` /
+         `&mut self` get the receiver synthesised as a real
+         `TirEffectOp` parameter at index 0 (named `self`,
+         typed `&Self` or `&mut Self`). Effect decls keep the
+         existing filter behaviour. Verified via
+         `dump --tir-monomorphized`: each per-instantiation
+         dispatch wrapper (e.g.
+         `__effect_dispatch__Stream<u8>__read(self: &Stream<u8>,
+         max: i32) -> Array<u8>`) now carries the receiver,
+         `__Dispatch_<R><args>` op-closure fields match
+         (`op_read: fn(&Stream<u8>, i32) -> Array<u8>`), and
+         the closure body forwards the receiver to the user
+         impl method.
       4. **(open)** Stream/Future call sites bypass the
          `__cm_binding__<R>_<op>` adapter shape that today's
          call-site rewriter intercepts. They lower instead to

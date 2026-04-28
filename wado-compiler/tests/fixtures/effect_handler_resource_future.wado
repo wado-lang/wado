@@ -7,13 +7,13 @@
 // — the writable end stores the value, the readable end returns
 // `Some(value)` once written and `None` otherwise.
 //
-// Status: Gaps 1 (base-trait-name lookup) and 2 (per-monomorph
-// dispatch infra) are closed in this branch. Two gaps remain before
-// this fixture flips green. The next failure mirrors the Stream
+// Status: Gaps 1 (base-trait-name lookup), 2 (per-monomorph
+// dispatch infra), and 3 (`&self` receiver in the wrapper
+// signature) are closed in this branch. One gap remains before this
+// fixture flips green. The next failure mirrors the Stream
 // fixture's: `tx.write(42)` lowers through the CM canonical-method
 // translator (`future-write`), which today's dispatch call-site
-// rewriter doesn't intercept. Gap 4 closes this; gap 3 (`&self`
-// receiver filtered out of the wrapper signature) is also open.
+// rewriter doesn't intercept. Gap 4 closes this.
 
 use { println, Stdout } from "core:cli";
 

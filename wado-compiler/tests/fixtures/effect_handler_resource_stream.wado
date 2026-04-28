@@ -4,25 +4,26 @@
 // can implement both ends of the CM stream pair, and the bundled
 // handler form `with &mut s do` installs both at once.
 //
-// Status: Gaps 1 (base-trait-name lookup) and 2 (per-monomorph
-// dispatch infra) are closed in this branch. Two gaps remain before
-// this fixture flips green; see WEP-2026-04-11 for the full list.
-// The current failure surfaces in WIR build at the
-// `tx.write(payload)` call site:
+// Status: Gaps 1 (base-trait-name lookup), 2 (per-monomorph
+// dispatch infra), and 3 (`&self` receiver in the wrapper signature)
+// are closed in this branch. One gap remains before this fixture
+// flips green; see WEP-2026-04-11 for the full list. The current
+// failure surfaces in WIR build at the `tx.write(payload)` call
+// site:
 //
 //   panic at wado-compiler/src/wir_build/canonical_abi.rs:187:
 //     [WIR] unhandled canonical method: stream-write
 //
 // — i.e. the synthesised `__effect_dispatch__Stream<u8>__write`
-// wrapper exists, but the user call `tx.write(payload)` lowers
-// through the CM canonical-method translator (`stream-write`)
-// rather than the `__cm_binding__Stream_write` adapter shape that
-// today's dispatch call-site rewriter intercepts. Gap 4 closes
-// this: the dispatch synthesis must recognise and rewrite
-// `CmRawCall { local_name: "stream-..." }` and `__cm_stream_*`
-// internal binding calls in addition to the existing
-// `__cm_binding__<R>_<op>` form. Gap 3 (`&self` shorthand pulls
-// the receiver out of the wrapper signature) is also still open.
+// wrapper exists with the right `(self: &StreamWritable<u8>, data:
+// Array<u8>)` signature, but the user call `tx.write(payload)`
+// lowers through the CM canonical-method translator
+// (`stream-write`) rather than the `__cm_binding__Stream_write`
+// adapter shape that today's dispatch call-site rewriter
+// intercepts. Gap 4 closes this: the dispatch synthesis must
+// recognise and rewrite `CmRawCall { local_name: "stream-..." }`
+// and `__cm_stream_*` internal binding calls in addition to the
+// existing `__cm_binding__<R>_<op>` form.
 
 use { println, Stdout } from "core:cli";
 
