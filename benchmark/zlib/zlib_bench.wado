@@ -7,10 +7,11 @@
 // Or manually (from benchmark/ directory):
 //   cargo run --bin wado -- run -O2 --dir .::. zlib/zlib_bench.wado
 
-use { println, Stdout } from "core:cli";
+use { Stdout } from "core:cli";
 use { MonotonicClock } from "wasi:clocks";
 use { zlib_compress, inflate_zlib } from "core:zlib";
 use { Preopens, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
+use { Benchmark } from "core:benchmark";
 
 fn read_file_bytes(path: String) -> Array<u8> with Preopens {
     let dirs = Preopens::get_directories();
@@ -40,39 +41,13 @@ test "benchmark" {
 
 export fn run() with Stdout, MonotonicClock, Preopens {
     let data = read_file_bytes("json_twitter/twitter.json");
-    let iterations = 10;
+    let mut b = Benchmark::new("zlib");
+    b.iterations = 10;
+    b.input_size = Option::Some(data.len());
 
-    println(`zlib {data.len()} bytes x {iterations} iterations`);
+    let compressed = b.run("compress", || zlib_compress(&data));
+    let decompressed = b.run("decompress", || inflate_zlib(&compressed).unwrap());
 
-    // Benchmark compression (10 iterations)
-    let t0 = MonotonicClock::now();
-    let mut compressed: Array<u8> = [];
-    for let mut iter = 0; iter < iterations; iter += 1 {
-        compressed = zlib_compress(&data);
-    }
-    let t1 = MonotonicClock::now();
-
-    let compress_ns = (t1 - t0) as u64;
-    let compress_ms = compress_ns / 1000000;
-    println(`Compressed: {data.len()} -> {compressed.len()} bytes`);
-    println(`Compress: {compress_ms} ms`);
-
-    // Benchmark decompression (10 iterations)
-    let t2 = MonotonicClock::now();
-    let mut decompressed: Array<u8> = [];
-    for let mut iter = 0; iter < iterations; iter += 1 {
-        decompressed = inflate_zlib(&compressed).unwrap();
-    }
-    let t3 = MonotonicClock::now();
-
-    let decompress_ns = (t3 - t2) as u64;
-    let decompress_ms = decompress_ns / 1000000;
-    println(`Decompress: {decompress_ms} ms`);
-
-    // Verify round-trip
+    b.println(`compressed: {data.len()} -> {compressed.len()} bytes`);
     assert decompressed.len() == data.len(), "decompressed size mismatch";
-
-    let total_ns = (t1 - t0 + t3 - t2) as u64;
-    let total_ms = total_ns / 1000000;
-    println(`Elapsed: {total_ms} ms`);
 }

@@ -4,11 +4,12 @@
 //
 // Parses a GeoJSON FeatureCollection with 480 polygon rings and 55,563 coordinate points.
 
-use { println, Stdout } from "core:cli";
+use { Stdout } from "core:cli";
 use { Serialize, Deserialize } from "core:serde";
 use { from_string } from "core:json";
 use { MonotonicClock } from "wasi:clocks";
 use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
+use { Benchmark } from "core:benchmark";
 
 struct Properties {
     name: String,
@@ -68,34 +69,26 @@ test "benchmark" {
     run();
 }
 
-export fn run() with Stdout, MonotonicClock, Preopens {
-    let json_data = read_file("json_canada/canada.json");
-    let iterations = 1;
-    println(`json-canada: {json_data.len()} bytes, {iterations} iterations`);
-
-    let start = MonotonicClock::now();
-    let mut total_points = 0;
-    for let mut i = 0; i < iterations; i += 1 {
-        let result = from_string::<FeatureCollection>(json_data);
-        if let Ok(fc) = result {
-            for let feat of fc.features {
-                for let ring of feat.geometry.coordinates {
-                    total_points = total_points + ring.len();
-                }
-            }
-        } else {
-            if let Err(e) = result {
-                println(`Parse error: {e.message}`);
-            }
-            break;
+fn count_points(json_data: String) -> i32 {
+    let fc = match from_string::<FeatureCollection>(json_data) {
+        Ok(fc) => fc,
+        Err(e) => panic(`Parse error: {e.message}`),
+    };
+    let mut total = 0;
+    for let feat of fc.features {
+        for let ring of feat.geometry.coordinates {
+            total = total + ring.len();
         }
     }
-    let end = MonotonicClock::now();
-    let elapsed_ns = (end - start) as u64;
-    let elapsed_ms = elapsed_ns / 1000000;
-    let elapsed_us = elapsed_ns / 1000;
+    return total;
+}
 
-    assert total_points == 55563 * iterations;
-    println(`Parsed {total_points} total coordinate points`);
-    println(`Elapsed: {elapsed_ms}.{elapsed_us % 1000} ms`);
+export fn run() with Stdout, MonotonicClock, Preopens {
+    let json_data = read_file("json_canada/canada.json");
+    let mut b = Benchmark::new("json-canada");
+    b.input_size = Option::Some(json_data.len());
+
+    let total_points = b.run("", || count_points(json_data));
+    assert total_points == 55563;
+    b.println(`parsed {total_points} coordinate points`);
 }

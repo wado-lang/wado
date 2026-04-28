@@ -3,9 +3,10 @@
 // Highlights a collection of realistic SQLite statements repeatedly and measures throughput.
 // Comparison baseline: tree-sitter with tree-sitter-sql grammar.
 
-use { println, Stdout } from "core:cli";
+use { Stdout } from "core:cli";
 use { MonotonicClock } from "wasi:clocks";
 use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
+use { Benchmark } from "core:benchmark";
 use sqlite from "../../package-gale/tests/grammars/SQLite.g4"
     with {
         generator: {
@@ -45,23 +46,10 @@ test "benchmark" {
 
 export fn run() with Stdout, MonotonicClock, Preopens {
     let sql = read_file("sqlite_parse/queries.sql");
-    let iterations = 100;
-    println(`syntax-highlight (Gale): {sql.len()} bytes, {iterations} iterations`);
+    let mut b = Benchmark::new("syntax-highlight (Gale)");
+    b.iterations = 100;
+    b.input_size = Option::Some(sql.len());
 
-    // Warm up
-    let warmup = sqlite::highlight(&sql);
-    assert warmup.len() > 0;
-
-    let start = MonotonicClock::now();
-    for let mut i = 0; i < iterations; i += 1 {
-        let html = sqlite::highlight(&sql);
-        assert html.len() > 0;
-    }
-    let end = MonotonicClock::now();
-    let elapsed_ns = (end - start) as u64;
-    let elapsed_us = elapsed_ns / 1000;
-    let per_iter_us = elapsed_us / iterations as u64;
-
-    println(`Elapsed: {elapsed_us / 1000}.{elapsed_us % 1000} ms ({iterations} iterations)`);
-    println(`Per iteration: {per_iter_us}.{elapsed_us * 1000 / iterations as u64 % 1000} us`);
+    let last_len = b.run("", || sqlite::highlight(&sql).len());
+    assert last_len > 0;
 }

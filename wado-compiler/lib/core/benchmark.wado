@@ -1,0 +1,146 @@
+//! Benchmark utilities: lazy headers, timed phases, per-iteration reports.
+//!
+//! Used by files in `benchmark/`. A benchmark typically looks like:
+//!
+//! ```wado
+//! use { Benchmark } from "core:benchmark";
+//!
+//! test "benchmark" { run(); }
+//!
+//! export fn run() with Stdout, MonotonicClock {
+//!     let mut b = Benchmark::new("count-prime");
+//!     let count = b.run("", || count_primes(10_000_000));
+//!     b.println(`count = {count}`);
+//! }
+//! ```
+//!
+//! For multi-phase or iteration-driven benchmarks, configure via field
+//! assignment after `new`:
+//!
+//! ```wado
+//! let mut b = Benchmark::new("zlib");
+//! b.iterations = 10;
+//! b.input_size = Option::Some(data.len());
+//! let compressed = b.run("compress", || zlib_compress(&data));
+//! let _ = b.run("decompress", || inflate_zlib(&compressed).unwrap());
+//! ```
+
+use { println, Stdout } from "core:cli";
+use { MonotonicClock } from "wasi:clocks";
+
+/// A benchmark run. The driver prints a header on the first measurement,
+/// then a labeled line per `run()` phase reporting elapsed time (and
+/// per-iteration time when `iterations > 1`).
+pub struct Benchmark {
+    pub name: String,
+    pub iterations: i32 = 1,
+    /// Number of unmeasured warmup runs. `-1` (the default) means "auto":
+    /// 1 warmup if `iterations >= 2`, otherwise 0.
+    pub warmup: i32 = -1,
+    /// Optional input size, shown in the header (e.g. `"631044 bytes"`).
+    pub input_size: Option<i32> = null,
+    header_printed: bool = false,
+}
+
+impl Benchmark {
+    /// Create a benchmark with default settings (single iteration, no input size).
+    pub fn new(name: String) -> Benchmark {
+        return Benchmark { name };
+    }
+
+    /// Run a single phase. Performs warmup (if any) then `iterations` timed
+    /// runs of `f`. Prints the header on first call. Returns the final
+    /// timed iteration's value.
+    ///
+    /// `label` may be empty for an unlabeled single-phase benchmark.
+    pub fn run<T>(&mut self, label: String, f: fn() -> T) -> T
+        with Stdout, MonotonicClock
+    {
+        self.ensure_header();
+        let warmup_n = self.effective_warmup();
+        for let mut w = 0; w < warmup_n; w += 1 {
+            f();
+        }
+        let start = MonotonicClock::now();
+        let mut result = f();
+        for let mut i = 1; i < self.iterations; i += 1 {
+            result = f();
+        }
+        let end = MonotonicClock::now();
+        report(label, (end - start) as u64, self.iterations);
+        return result;
+    }
+
+    /// Print an indented note line. Useful for accumulator values or final
+    /// counts alongside the timing output.
+    pub fn println(&mut self, msg: String) with Stdout {
+        self.ensure_header();
+        println(`  {msg}`);
+    }
+
+    fn ensure_header(&mut self) with Stdout {
+        if self.header_printed {
+            return;
+        }
+        self.header_printed = true;
+
+        let mut s = self.name;
+        let has_size = if self.input_size matches { Some(_) } { true } else { false };
+        if let Some(size) = self.input_size {
+            s = `{s}: {size} bytes`;
+        }
+        if self.iterations > 1 {
+            if has_size {
+                s = `{s} x {self.iterations} iter`;
+            } else {
+                s = `{s}: {self.iterations} iter`;
+            }
+        }
+        let warmup_n = self.effective_warmup();
+        if warmup_n > 0 {
+            s = `{s} (warmup {warmup_n})`;
+        }
+        println(s);
+    }
+
+    fn effective_warmup(&self) -> i32 {
+        if self.warmup >= 0 {
+            return self.warmup;
+        }
+        if self.iterations >= 2 {
+            return 1;
+        }
+        return 0;
+    }
+}
+
+fn report(label: String, elapsed_ns: u64, iterations: i32) with Stdout {
+    let total_str = format_ms(elapsed_ns);
+    if iterations > 1 {
+        let per_str = format_ms(elapsed_ns / (iterations as u64));
+        if label.len() > 0 {
+            println(`  {label}: {total_str} ms total   {per_str} ms/iter`);
+        } else {
+            println(`  Elapsed: {total_str} ms total   {per_str} ms/iter`);
+        }
+    } else {
+        if label.len() > 0 {
+            println(`  {label}: {total_str} ms`);
+        } else {
+            println(`  Elapsed: {total_str} ms`);
+        }
+    }
+}
+
+/// Format nanoseconds as `MS.FFF` (3 decimal digits = microseconds).
+fn format_ms(ns: u64) -> String {
+    let ms = ns / 1_000_000;
+    let us = (ns / 1_000) % 1_000;
+    if us >= 100 {
+        return `{ms}.{us}`;
+    }
+    if us >= 10 {
+        return `{ms}.0{us}`;
+    }
+    return `{ms}.00{us}`;
+}

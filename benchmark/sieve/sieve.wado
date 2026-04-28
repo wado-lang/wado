@@ -8,8 +8,9 @@
 // Or manually:
 //   cargo run --bin wado -- run benchmark/sieve.wado
 
-use { println, Stdout } from "core:cli";
+use { Stdout } from "core:cli";
 use { MonotonicClock } from "wasi:clocks";
+use { Benchmark } from "core:benchmark";
 
 fn sieve_count(limit: i32) -> i32 {
     // Pre-allocate sieve array filled with true
@@ -48,15 +49,7 @@ test "benchmark" {
 
 export fn run() with Stdout, MonotonicClock {
     let limit = 10000000;
-
-    let start = MonotonicClock::now();
-    let count = sieve_count(limit);
-    let end = MonotonicClock::now();
-
-    let elapsed_ns = (end - start) as u64;
-    // Convert nanoseconds to milliseconds (integer division)
-    let elapsed_ms = elapsed_ns / 1000000;
-
-    println(`Sieve prime count up to {limit}: {count}`);
-    println(`Elapsed: {elapsed_ms} ms`);
+    let mut b = Benchmark::new(`sieve up to {limit}`);
+    let count = b.run("", || sieve_count(limit));
+    b.println(`count = {count}`);
 }
