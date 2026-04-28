@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777378752143,
+  "lastUpdate": 1777382600704,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -17349,6 +17349,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/e9e68358a78284117a54e572f7a567d92f257e5b"
         },
         "date": 1777378751887,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8774,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18518,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 1522768,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9c04d52a39a3c5f34b8ea8bb3b19ee1e4efe9278",
+          "message": "Merge pull request #951 from wado-lang/claude/antlr4-compatibility-tests-oa4LA\n\ngale: bootstrap ANTLR4 compatibility test infrastructure + two compiler bug fixes",
+          "timestamp": "2026-04-28T22:17:54+09:00",
+          "tree_id": "b233e3483d9a7ef837b794e162048ef2e556235d",
+          "url": "https://github.com/wado-lang/wado/commit/9c04d52a39a3c5f34b8ea8bb3b19ee1e4efe9278"
+        },
+        "date": 1777382600394,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
