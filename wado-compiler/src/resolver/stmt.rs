@@ -13,6 +13,7 @@ use crate::tir::{
 use crate::token::Span;
 
 use super::Resolver;
+use super::typecheck::{TypeCheckResult, check_assignable};
 use super::types::{FunctionContext, TypeError};
 use super::util;
 
@@ -307,7 +308,22 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .is_some_and(|inner| inner == TypeTable::UNKNOWN)
                     && type_table.as_option(type_id).is_some()
             };
-            if !is_null_to_option {
+            // Function-type compatibility is structural over params and return,
+            // ignoring effects (see `typecheck::check_assignable` rule 7). This
+            // lets `let c: fn() with Stdout = || { ... }` accept a closure with
+            // a synthesized `fn() with []` type without a spurious mismatch,
+            // while still rejecting genuine signature mismatches such as a
+            // closure with the wrong arity or parameter types.
+            let is_compatible_fn_type = {
+                let type_table = self.type_table.borrow();
+                matches!(type_table.get(value.type_id), ResolvedType::Function { .. })
+                    && matches!(type_table.get(type_id), ResolvedType::Function { .. })
+                    && matches!(
+                        check_assignable(value.type_id, type_id, &type_table),
+                        TypeCheckResult::Compatible
+                    )
+            };
+            if !is_null_to_option && !is_compatible_fn_type {
                 let _ = self.logger.error(TypeError::TypeMismatch {
                     expected: self.type_table.borrow().type_name(type_id),
                     found: self.type_table.borrow().type_name(value.type_id),

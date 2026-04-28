@@ -1842,6 +1842,255 @@ impl ClosureLowerer {
                     expr.span,
                 )
             }
+            TirExprKind::CmRawCall { local_name, args } => {
+                let new_args = args
+                    .iter()
+                    .map(|a| {
+                        self.transform_closure_body(
+                            a,
+                            captures,
+                            struct_type_id,
+                            self_ref_type,
+                            span,
+                        )
+                    })
+                    .collect();
+                TirExpr::new(
+                    TirExprKind::CmRawCall {
+                        local_name: local_name.clone(),
+                        args: new_args,
+                    },
+                    expr.type_id,
+                    expr.span,
+                )
+            }
+            TirExprKind::IndirectCall { callee, args } => {
+                let new_callee = self.transform_closure_body(
+                    callee,
+                    captures,
+                    struct_type_id,
+                    self_ref_type,
+                    span,
+                );
+                let new_args = args
+                    .iter()
+                    .map(|a| {
+                        self.transform_closure_body(
+                            a,
+                            captures,
+                            struct_type_id,
+                            self_ref_type,
+                            span,
+                        )
+                    })
+                    .collect();
+                TirExpr::new(
+                    TirExprKind::IndirectCall {
+                        callee: Box::new(new_callee),
+                        args: new_args,
+                    },
+                    expr.type_id,
+                    expr.span,
+                )
+            }
+            TirExprKind::ClosureToCanonical {
+                functor,
+                functor_id,
+                target_fn_type,
+                closure_module,
+            } => TirExpr::new(
+                TirExprKind::ClosureToCanonical {
+                    functor: Box::new(self.transform_closure_body(
+                        functor,
+                        captures,
+                        struct_type_id,
+                        self_ref_type,
+                        span,
+                    )),
+                    functor_id: *functor_id,
+                    target_fn_type: *target_fn_type,
+                    closure_module: closure_module.clone(),
+                },
+                expr.type_id,
+                expr.span,
+            ),
+            TirExprKind::Match {
+                expr: scrutinee,
+                arms,
+            } => {
+                let new_scrutinee = self.transform_closure_body(
+                    scrutinee,
+                    captures,
+                    struct_type_id,
+                    self_ref_type,
+                    span,
+                );
+                let new_arms = arms
+                    .iter()
+                    .map(|arm| TirMatchArm {
+                        pattern: self.transform_closure_body_pattern(&arm.pattern),
+                        guard: arm.guard.as_ref().map(|g| {
+                            self.transform_closure_body(
+                                g,
+                                captures,
+                                struct_type_id,
+                                self_ref_type,
+                                span,
+                            )
+                        }),
+                        body: self.transform_closure_body(
+                            &arm.body,
+                            captures,
+                            struct_type_id,
+                            self_ref_type,
+                            span,
+                        ),
+                        span: arm.span,
+                    })
+                    .collect();
+                TirExpr::new(
+                    TirExprKind::Match {
+                        expr: Box::new(new_scrutinee),
+                        arms: new_arms,
+                    },
+                    expr.type_id,
+                    expr.span,
+                )
+            }
+            TirExprKind::Switch {
+                scrutinee,
+                min_value,
+                arms,
+                default,
+            } => {
+                let new_scrutinee = self.transform_closure_body(
+                    scrutinee,
+                    captures,
+                    struct_type_id,
+                    self_ref_type,
+                    span,
+                );
+                let new_arms = arms
+                    .iter()
+                    .map(|arm| {
+                        self.transform_closure_body_block(
+                            arm,
+                            captures,
+                            struct_type_id,
+                            self_ref_type,
+                        )
+                    })
+                    .collect();
+                let new_default = self.transform_closure_body_block(
+                    default,
+                    captures,
+                    struct_type_id,
+                    self_ref_type,
+                );
+                TirExpr::new(
+                    TirExprKind::Switch {
+                        scrutinee: Box::new(new_scrutinee),
+                        min_value: *min_value,
+                        arms: new_arms,
+                        default: new_default,
+                    },
+                    expr.type_id,
+                    expr.span,
+                )
+            }
+            TirExprKind::VariantConstruct {
+                variant_type,
+                case_index,
+                case_name,
+                payload,
+            } => TirExpr::new(
+                TirExprKind::VariantConstruct {
+                    variant_type: *variant_type,
+                    case_index: *case_index,
+                    case_name: case_name.clone(),
+                    payload: payload.as_ref().map(|p| {
+                        Box::new(self.transform_closure_body(
+                            p,
+                            captures,
+                            struct_type_id,
+                            self_ref_type,
+                            span,
+                        ))
+                    }),
+                },
+                expr.type_id,
+                expr.span,
+            ),
+            TirExprKind::VariantTag { expr: inner } => TirExpr::new(
+                TirExprKind::VariantTag {
+                    expr: Box::new(self.transform_closure_body(
+                        inner,
+                        captures,
+                        struct_type_id,
+                        self_ref_type,
+                        span,
+                    )),
+                },
+                expr.type_id,
+                expr.span,
+            ),
+            TirExprKind::VariantTest {
+                expr: inner,
+                case_index,
+                case_name,
+            } => TirExpr::new(
+                TirExprKind::VariantTest {
+                    expr: Box::new(self.transform_closure_body(
+                        inner,
+                        captures,
+                        struct_type_id,
+                        self_ref_type,
+                        span,
+                    )),
+                    case_index: *case_index,
+                    case_name: case_name.clone(),
+                },
+                expr.type_id,
+                expr.span,
+            ),
+            TirExprKind::VariantPayload {
+                expr: inner,
+                case_index,
+                payload_type,
+            } => TirExpr::new(
+                TirExprKind::VariantPayload {
+                    expr: Box::new(self.transform_closure_body(
+                        inner,
+                        captures,
+                        struct_type_id,
+                        self_ref_type,
+                        span,
+                    )),
+                    case_index: *case_index,
+                    payload_type: *payload_type,
+                },
+                expr.type_id,
+                expr.span,
+            ),
+            TirExprKind::GlobalVarSet {
+                module_source,
+                name,
+                value,
+            } => TirExpr::new(
+                TirExprKind::GlobalVarSet {
+                    module_source: module_source.clone(),
+                    name: name.clone(),
+                    value: Box::new(self.transform_closure_body(
+                        value,
+                        captures,
+                        struct_type_id,
+                        self_ref_type,
+                        span,
+                    )),
+                },
+                expr.type_id,
+                expr.span,
+            ),
             // Terminals that don't need transformation
             TirExprKind::IntLiteral { .. }
             | TirExprKind::FloatLiteral { .. }
@@ -1852,10 +2101,20 @@ impl ClosureLowerer {
             | TirExprKind::Null
             | TirExprKind::Unit
             | TirExprKind::FuncRef { .. }
+            | TirExprKind::GlobalVarGet { .. }
             | TirExprKind::EnumConstruct { .. } => expr.clone(),
-            // For remaining expression types, clone as-is
-            // (IndirectCall, Closure, etc. - rare in closure bodies)
-            _ => expr.clone(),
+            // Constructs that are desugared / lowered before this pass.
+            // Reaching them here would silently drop sub-expressions (and any
+            // captured locals inside them), so make the failure explicit.
+            TirExprKind::Closure { .. }
+            | TirExprKind::TemplateString { .. }
+            | TirExprKind::WithHandler { .. }
+            | TirExprKind::Resume { .. } => {
+                panic!(
+                    "[lower/closure] unexpected {:?} in closure body during transform_closure_body — should be lowered earlier",
+                    std::mem::discriminant(&expr.kind)
+                )
+            }
         }
     }
 

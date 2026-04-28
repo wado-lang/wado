@@ -37,7 +37,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             Expr::Literal(lit) => self.resolve_literal(lit, ctx),
             Expr::Ident(ident) => self.resolve_ident(ident, ctx, expected_type),
             Expr::Binary(binary) => self.resolve_binary(binary, ctx, expected_type),
-            Expr::Unary(unary) => self.resolve_unary(unary, ctx),
+            Expr::Unary(unary) => self.resolve_unary(unary, ctx, expected_type),
             Expr::Assign(assign) => self.resolve_assign(assign, ctx),
             Expr::Call(call) => self.resolve_call(call, ctx, expected_type),
             Expr::MethodCall(method_call) => {
@@ -63,7 +63,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
             Expr::If(if_expr) => self.resolve_if_expr(if_expr, ctx, expected_type),
             Expr::Match(match_expr) => self.resolve_match_expr(match_expr, ctx, expected_type),
-            Expr::Closure(closure) => self.resolve_closure(closure, ctx),
+            Expr::Closure(closure) => self.resolve_closure(closure, ctx, expected_type),
             Expr::TemplateString(template) => self.resolve_template_string(template, ctx),
             Expr::Cast(cast) => self.resolve_cast(cast, ctx),
             Expr::StructLiteral(struct_lit) => {
