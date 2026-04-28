@@ -245,6 +245,7 @@ fn substitute_operations(
                 params: new_params,
                 return_type: ctx.substitute(op.return_type, type_table),
                 span: op.span,
+                cm_name: op.cm_name.clone(),
             }
         })
         .collect()

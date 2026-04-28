@@ -251,11 +251,25 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 .as_ref()
                 .map(|ty| scope.resolve_type(ty))
                 .unwrap_or(TypeTable::UNIT);
+            // Extract `#[cm("...")]` attribute payload, if any, so the
+            // dispatch synthesis can map raw resource call sites back
+            // to the right per-monomorphisation wrapper. Mirrors the
+            // resolver's existing per-call extraction in
+            // `lookup_resource_static_cm`: takes the bare attribute
+            // string without splitting on `#`. None for effect ops
+            // and for resource methods that lack the attribute.
+            let cm_name = method
+                .attrs
+                .iter()
+                .find(|a| a.name == "cm")
+                .and_then(|a| a.args.first())
+                .map(|a| a.as_str().to_string());
             ops.push(TirEffectOp {
                 name: method.name.clone(),
                 params,
                 return_type,
                 span: method.span,
+                cm_name,
             });
         }
         ops

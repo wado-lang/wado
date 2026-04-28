@@ -3250,6 +3250,13 @@ pub struct TirEffectOp {
     pub params: Vec<TirParam>,
     pub return_type: TypeId,
     pub span: Span,
+    /// CM canonical name from `#[cm("...")]` on the resource method
+    /// declaration (e.g. `"stream-write"`, `"future-read"`). `None` for
+    /// effect operations and for resource methods that don't carry a
+    /// CM attribute. The dispatch synthesis uses this to map raw
+    /// resource call sites — which carry `cm_name` on their
+    /// `MethodInfo` — back to the right per-monomorphisation wrapper.
+    pub cm_name: Option<String>,
 }
 
 /// Resource declaration captured in TIR for effect propagation.
