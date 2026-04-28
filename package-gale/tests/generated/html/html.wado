@@ -2186,13 +2186,13 @@ fn scan_html_content(tokens: &Array<Token>, pos: i32) -> i32 {
         pos = scan_html_chardata(tokens, pos);
         if pos < 0 { pos = sp; }
     }
-    while pos < tokens.len() && tokens[pos].kind matches { TK_TAG_OPEN | TK_SCRIPTLET | TK_SCRIPT_OPEN | TK_STYLE_OPEN | TK_CDATA | TK_HTML_COMMENT | TK_HTML_CONDITIONAL_COMMENT } {
+    while pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) {
         let sp = pos;
         sg_2_done: {
             sg_2: {
                 let gp_3 = pos;
                 let sgk_3 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
-                if sgk_3 matches { TK_TAG_OPEN | TK_SCRIPTLET | TK_SCRIPT_OPEN | TK_STYLE_OPEN | TK_CDATA | TK_HTML_COMMENT | TK_HTML_CONDITIONAL_COMMENT } {
+                if _gale_kind_set_0(sgk_3) {
                     sg_3: {
                         pos = gp_3;
                         sg_3_0: {
@@ -2610,7 +2610,7 @@ fn parse_html_content(p: &mut Parser) -> Result<HtmlContentNode, ParseError> {
             let mut pos: i32 = p.pos;
             let gp_7 = pos;
             let sgk_7 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
-            if sgk_7 matches { TK_TAG_OPEN | TK_SCRIPTLET | TK_SCRIPT_OPEN | TK_STYLE_OPEN | TK_CDATA | TK_HTML_COMMENT | TK_HTML_CONDITIONAL_COMMENT } {
+            if _gale_kind_set_0(sgk_7) {
                 sg_7: {
                     pos = gp_7;
                     sg_7_0: {
@@ -2996,5 +2996,10 @@ pub fn to_tree(node: &HtmlDocumentNode) -> CstNode {
     let mut recorder = TreeRecorder::new();
     walk_htmlDocument(&mut recorder, node);
     return recorder.build();
+}
+
+
+fn _gale_kind_set_0(k: i32) -> bool {
+    return k matches { TK_CDATA | TK_HTML_COMMENT | TK_HTML_CONDITIONAL_COMMENT | TK_SCRIPTLET | TK_SCRIPT_OPEN | TK_STYLE_OPEN | TK_TAG_OPEN };
 }
 

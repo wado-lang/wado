@@ -4255,7 +4255,7 @@ fn scan_mode_spec(tokens: &Array<Token>, pos: i32) -> i32 {
 
 fn scan_rules(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    while pos < tokens.len() && tokens[pos].kind matches { TK_PUBLIC | TK_PRIVATE | TK_PROTECTED | TK_FRAGMENT | TK_RULE_REF | TK_TOKEN_REF } {
+    while pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) {
         let sp = pos;
         pos = scan_rule_spec(tokens, pos);
         if pos < 0 { pos = sp; break; }
@@ -4308,7 +4308,7 @@ fn scan_rule_spec(tokens: &Array<Token>, pos: i32) -> i32 {
 
 fn scan_parser_rule_spec(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos < tokens.len() && tokens[pos].kind matches { TK_PUBLIC | TK_PRIVATE | TK_PROTECTED | TK_FRAGMENT } {
+    if pos < tokens.len() && _gale_kind_set_1(tokens[pos].kind) {
         let sp = pos;
         pos = scan_rule_modifiers(tokens, pos);
         if pos < 0 { pos = sp; }
@@ -4473,7 +4473,7 @@ fn scan_rule_modifiers(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_rule_modifier(tokens, pos);
     if pos < 0 { return -1; }
-    while pos < tokens.len() && tokens[pos].kind matches { TK_PUBLIC | TK_PRIVATE | TK_PROTECTED | TK_FRAGMENT } {
+    while pos < tokens.len() && _gale_kind_set_1(tokens[pos].kind) {
         let sp = pos;
         pos = scan_rule_modifier(tokens, pos);
         if pos < 0 { pos = sp; break; }
@@ -4483,7 +4483,7 @@ fn scan_rule_modifiers(tokens: &Array<Token>, pos: i32) -> i32 {
 }
 
 fn scan_rule_modifier(tokens: &Array<Token>, pos: i32) -> i32 {
-    if pos < tokens.len() && tokens[pos].kind matches { TK_PUBLIC | TK_PRIVATE | TK_PROTECTED | TK_FRAGMENT } {
+    if pos < tokens.len() && _gale_kind_set_1(tokens[pos].kind) {
         return pos + 1;
     }
     return -1;
@@ -4621,12 +4621,12 @@ fn scan_lexer_elements(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
-        if alt_kind matches { TK_STRING_LITERAL | TK_TOKEN_REF | TK_NOT | TK_LEXER_CHAR_SET | TK_DOT | TK_LPAREN | TK_ACTION } {
+        if _gale_kind_set_2(alt_kind) {
             pos = start;
             try_0: {
                 pos = scan_lexer_element(tokens, pos);
                 if pos < 0 { break try_0; }
-                while pos < tokens.len() && tokens[pos].kind matches { TK_STRING_LITERAL | TK_TOKEN_REF | TK_NOT | TK_LEXER_CHAR_SET | TK_DOT | TK_LPAREN | TK_ACTION } {
+                while pos < tokens.len() && _gale_kind_set_2(tokens[pos].kind) {
                     let sp = pos;
                     pos = scan_lexer_element(tokens, pos);
                     if pos < 0 { pos = sp; break; }
@@ -4851,7 +4851,7 @@ fn scan_alternative(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
-        if alt_kind matches { TK_LT | TK_RULE_REF | TK_TOKEN_REF | TK_STRING_LITERAL | TK_NOT | TK_DOT | TK_LPAREN | TK_ACTION } {
+        if _gale_kind_set_3(alt_kind) {
             pos = start;
             try_0: {
                 if pos < tokens.len() && tokens[pos].kind == TK_LT {
@@ -6228,7 +6228,7 @@ fn parse_rule_spec_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
 fn parse_rule_spec(p: &mut Parser) -> Result<RuleSpecNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
-    if kind matches { TK_FRAGMENT | TK_TOKEN_REF | TK_PUBLIC | TK_PRIVATE | TK_PROTECTED | TK_RULE_REF } {
+    if _gale_kind_set_0(kind) {
         if p.peek_kind() == TK_FRAGMENT {
             if p.peek_at(1) == TK_TOKEN_REF {
                 return parse_rule_spec_bt_1(p);
@@ -6250,7 +6250,7 @@ fn parse_rule_spec(p: &mut Parser) -> Result<RuleSpecNode, ParseError> {
 
 fn parse_parser_rule_spec(p: &mut Parser) -> Result<ParserRuleSpecNode, ParseError> {
     let start = p.peek().span.start;
-    let rule_modifiers: Option<RuleModifiersNode> = if p.peek_kind() matches { TK_PUBLIC | TK_PRIVATE | TK_PROTECTED | TK_FRAGMENT } {
+    let rule_modifiers: Option<RuleModifiersNode> = if _gale_kind_set_1(p.peek_kind()) {
         let rule_modifiers = parse_rule_modifiers(p)?;
         Option::<RuleModifiersNode>::Some(rule_modifiers)
     } else {
@@ -6692,7 +6692,7 @@ fn parse_lexer_alt(p: &mut Parser) -> Result<LexerAltNode, ParseError> {
 fn parse_lexer_elements(p: &mut Parser) -> Result<LexerElementsNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
-    if kind matches { TK_STRING_LITERAL | TK_TOKEN_REF | TK_NOT | TK_LEXER_CHAR_SET | TK_DOT | TK_LPAREN | TK_ACTION } {
+    if _gale_kind_set_2(kind) {
         let mut lexer_element_list: Array<LexerElementNode> = [];
         let mut _plus_first = true;
         loop {
@@ -6980,7 +6980,7 @@ fn parse_alt_list(p: &mut Parser) -> Result<AltListNode, ParseError> {
 fn parse_alternative(p: &mut Parser) -> Result<AlternativeNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
-    if kind matches { TK_LT | TK_RULE_REF | TK_TOKEN_REF | TK_STRING_LITERAL | TK_NOT | TK_DOT | TK_LPAREN | TK_ACTION } {
+    if _gale_kind_set_3(kind) {
         let element_options: Option<ElementOptionsNode> = if p.peek_kind() == TK_LT {
             let element_options = parse_element_options(p)?;
             Option::<ElementOptionsNode>::Some(element_options)
@@ -9158,5 +9158,22 @@ pub fn to_tree(node: &GrammarSpecNode) -> CstNode {
     let mut recorder = TreeRecorder::new();
     walk_grammarSpec(&mut recorder, node);
     return recorder.build();
+}
+
+
+fn _gale_kind_set_0(k: i32) -> bool {
+    return k matches { TK_FRAGMENT | TK_PRIVATE | TK_PROTECTED | TK_PUBLIC | TK_RULE_REF | TK_TOKEN_REF };
+}
+
+fn _gale_kind_set_1(k: i32) -> bool {
+    return k matches { TK_FRAGMENT | TK_PRIVATE | TK_PROTECTED | TK_PUBLIC };
+}
+
+fn _gale_kind_set_2(k: i32) -> bool {
+    return k matches { TK_ACTION | TK_DOT | TK_LEXER_CHAR_SET | TK_LPAREN | TK_NOT | TK_STRING_LITERAL | TK_TOKEN_REF };
+}
+
+fn _gale_kind_set_3(k: i32) -> bool {
+    return k matches { TK_ACTION | TK_DOT | TK_LPAREN | TK_LT | TK_NOT | TK_RULE_REF | TK_STRING_LITERAL | TK_TOKEN_REF };
 }
 
