@@ -5,17 +5,6 @@
 // before reaching the provider), then triggers the handshake. The mock
 // provider matches `server_name == "mock.example"` and resolves the
 // `Connector::connect` future with `Err(simulated handshake error)`.
-//
-// Status: `#![TODO]` because of an unrelated codegen bug —
-// `import_resource_using_interfaces` (codegen/component.rs:~3134) only treats
-// `Type::Named(R)` as a borrow self-param and panics on `Type::Reference(R)`,
-// which is the AST shape produced by `self: &Connector`. HTTP resources skirt
-// this path (excluded at `if interface_info.package == "http"`); TLS doesn't,
-// so calling `Connector::send` / `Connector::receive` panics codegen with
-// "unsupported Wado type for CM primitive: Reference(Named({Connector}))".
-// Once that branch unwraps `Type::Reference` for the borrow check, this
-// fixture should pass and the `#![TODO]` attribute must be removed.
-#![TODO]
 use { println, Stdout } from "core:cli";
 use { Connector, Error } from "wasi:tls";
 

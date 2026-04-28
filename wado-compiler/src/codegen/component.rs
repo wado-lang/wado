@@ -3131,7 +3131,14 @@ fn import_resource_using_interfaces(
                     .params
                     .iter()
                     .map(|(_wado_name, cm_name, ty)| {
-                        let val = if let Type::Named(named) = ty
+                        // `self: &Resource` is the canonical Wado-side form for
+                        // a borrow self-param. Unwrap `Type::Reference` so the
+                        // borrow handle matches both `Resource` and `&Resource`.
+                        let borrow_check_ty = match ty {
+                            Type::Reference(inner) => inner.as_ref(),
+                            _ => ty,
+                        };
+                        let val = if let Type::Named(named) = borrow_check_ty
                             && let Some(&idx) = borrow_resource_type_indices.get(&named.name)
                             && cm_name == "self"
                         {
