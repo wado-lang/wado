@@ -1,50 +1,49 @@
-// Min repro for the CM-variant `Result<unit, V>` multi-value codegen bug.
+// Regression fixture for bug 2: `Result<unit, V>` over a CM-bound
+// variant must compile cleanly under `wado compile`, regardless of
+// whether the entry filename is given as a relative or absolute path.
 //
-// Symptom (only via `wado compile`, NOT via this e2e harness):
+// Before the fix, two distinct `Result<unit, ErrorCode>` instances —
+// one with `wasi:filesystem`'s `pub variant ErrorCode`, one with
+// `wasi:cli`'s `pub enum ErrorCode` — collapsed onto the same WIR fq
+// because `mangle_type_name` returned `"ErrorCode"` for both,
+// independent of the declaring module. `register_mono_variants` then
+// kept whichever instance hit `iter_type_ids` first, and with the
+// FLAT/Enum-form `Err` payload winning the `Err(e) => return
+// Result::Err(e)` arm pushed a `(ref ErrorCode_struct)` where the
+// case struct expected an `i32` — wasm validation panicked:
 //
 //     Internal compiler error: WIR pipeline generated invalid core Wasm module
 //     Validation error: type mismatch: expected i32, found (ref $type)
 //
-// Where the bug actually lives:
+// The chosen winner was non-deterministic w.r.t. the entry filename
+// because `iter_type_ids` is IndexMap-insertion-order, so the same
+// source could compile cleanly via the e2e harness (absolute path)
+// and panic via `wado compile path/to/file.wado` (relative path).
 //
-// 1.  In `register_mono_variants` (`wir_build/types.rs`) the case-struct of
-//     `Result<(), ErrorCode>::Err` ends up with a payload `WirField` of type
-//     `i32` instead of `(ref ErrorCode_struct)`. The body keeps emitting
-//     `struct.get` against a sibling boxed type so it pushes a `(ref 5)`
-//     where the just-registered case struct expects an `i32`.
-// 2.  The choice between "FLAT i32 payload" and "BOXED (ref 5) payload"
-//     depends on whether the compiler can resolve the ErrorCode WIR type
-//     by the time it walks `Result<(), ErrorCode>` — when ErrorCode hasn't
-//     been registered yet, `type_id_to_wir_type` returns `AbstractRef`,
-//     the variant gets postponed, and a *later* iteration accidentally
-//     re-resolves the payload via a different (CM-flat) path.
-// 3.  The trigger is non-deterministic w.r.t. the entry filename. With
-//     the entry filename given as an absolute path
-//     (`/home/user/.../result_unit_cm_variant_passthrough.wado`) the
-//     monomorph-registration order resolves cleanly and the BOXED layout
-//     wins. With a relative path
-//     (`wado-compiler/tests/fixtures/result_unit_cm_variant_passthrough.wado`)
-//     the FLAT layout wins and the wasm fails validation.
+// The fix lives in `tir.rs::TypeTable::mangle_type_arg_for_generic`
+// and threads through `wir_build::register_struct` /
+// `wir_build::register_mono_variants` /
+// `wir_build::pattern_match::translate_variant_construct` so that the
+// generic-instance fq embeds the type-arg's declaring module for the
+// kinds (`Variant`, `Enum`, `Resource`, `Newtype`, `Flags`) where the
+// simple name alone is not unique. `register_struct` additionally
+// registers the qualified-args mangle as an alias so monomorphizer-
+// produced `tir_struct.name` (still unqualified) and the WIR-layer
+// generic-instance lookup (now qualified) both resolve.
 //
-// This e2e harness always passes an absolute fixture path to the compiler,
-// so it cannot reproduce the bug by itself. To reproduce manually, run
-// (from the repository root) — note the **relative** entry path:
+// Manual reproduction recipe before the fix (kept for archaeology):
 //
-//     cargo run --bin wado -- compile -O0 \\
-//         wado-compiler/tests/fixtures/result_unit_cm_variant_passthrough.wado \\
+//     cargo run --bin wado -- compile -O0 \
+//         wado-compiler/tests/fixtures/result_unit_cm_variant_passthrough.wado \
 //         -o /tmp/x.wasm
-//
 //   →   Validation error: type mismatch: expected i32, found (ref $type)
 //
-//     cargo run --bin wado -- compile -O0 \\
-//         /home/user/wado/wado-compiler/tests/fixtures/result_unit_cm_variant_passthrough.wado \\
+//     cargo run --bin wado -- compile -O0 \
+//         /home/user/wado/wado-compiler/tests/fixtures/result_unit_cm_variant_passthrough.wado \
 //         -o /tmp/x.wasm
-//
 //   →   Generated: /tmp/x.wasm
 //
-// To compare the two outputs and confirm the divergence, set
-// `WADO_KEEP_WASM_DIR=/tmp/wado-keep` while running this e2e fixture and
-// `wat`-diff against the buggy CLI output.
+// Both invocations should now succeed identically.
 
 use { Stdout } from "core:cli";
 use { Preopens, Descriptor, DescriptorFlags, PathFlags, OpenFlags, Filesize } from "wasi:filesystem";

@@ -322,7 +322,7 @@ fn register_struct(
             },
             fields,
             meta: WirMeta {
-                module_source: Some(effective_module),
+                module_source: Some(effective_module.clone()),
                 ..WirMeta::default()
             },
             generic_origin,
@@ -330,7 +330,29 @@ fn register_struct(
         }),
     );
 
-    ctx.struct_type_map.insert(struct_name, type_id);
+    ctx.struct_type_map
+        .insert(struct_name.clone(), type_id.clone());
+
+    // Also register under the qualified-args mangle so that lookups
+    // through `mangle_type_name(GenericInstance)` (which threads
+    // `mangle_type_arg_for_generic` through its args, see bug-2 fix)
+    // resolve to this same struct. The monomorphizer's
+    // `instantiation_name` keeps producing the unqualified form so that
+    // method dispatch / `current_impl_struct_name` keep working; this
+    // alias bridges the two name forms in the WIR layer only.
+    if let Some(ref mono) = tir_struct.monomorph_info {
+        let qualified_args: Vec<String> = mono
+            .impl_type_args
+            .iter()
+            .map(|t| type_table.mangle_type_arg_for_generic(*t))
+            .collect();
+        let qualified_name =
+            crate::name::mangle_generic_name(&mono.generic_name, &qualified_args);
+        if qualified_name != tir_struct.name {
+            let qualified_sn = StructName::new(effective_module, qualified_name);
+            ctx.struct_type_map.entry(qualified_sn).or_insert(type_id);
+        }
+    }
 }
 
 /// Register a single variant type.
@@ -793,9 +815,15 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
                         continue;
                     }
 
+                    // Use module-qualified type-arg names so that two
+                    // distinct types with the same simple name (e.g.
+                    // `wasi:filesystem` `pub variant ErrorCode` vs
+                    // `wasi:cli` `pub enum ErrorCode`) produce distinct
+                    // generic-instance fqs and therefore distinct WIR
+                    // type registrations.
                     let type_arg_names: Vec<String> = type_args
                         .iter()
-                        .map(|t| type_table.mangle_type_name(*t))
+                        .map(|t| type_table.mangle_type_arg_for_generic(*t))
                         .collect();
                     let mangled = crate::name::mangle_generic_name(name, &type_arg_names);
                     let fq = format!("{module_source}//{mangled}");
@@ -853,12 +881,14 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
                                                 {
                                                     let idx = *index as usize;
                                                     if idx < type_args.len() {
-                                                        type_table.mangle_type_name(type_args[idx])
+                                                        type_table.mangle_type_arg_for_generic(
+                                                            type_args[idx],
+                                                        )
                                                     } else {
-                                                        variant_tt.mangle_type_name(*arg)
+                                                        variant_tt.mangle_type_arg_for_generic(*arg)
                                                     }
                                                 } else {
-                                                    variant_tt.mangle_type_name(*arg)
+                                                    variant_tt.mangle_type_arg_for_generic(*arg)
                                                 }
                                             })
                                             .collect();
@@ -866,7 +896,11 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
                                             inner_name,
                                             &sub_arg_names,
                                         );
-                                        // Find the concrete TypeId in the consumer's type table
+                                        // Find the concrete TypeId in the consumer's type table.
+                                        // `mangle_type_name` of a GenericInstance after the bug-2
+                                        // fix recursively qualifies its type args via
+                                        // `mangle_type_arg_for_generic`, matching the
+                                        // qualified `mangled` name we just built.
                                         let concrete_id = type_table.iter_type_ids().find(|tid| {
                                             type_table.mangle_type_name(*tid) == mangled
                                         });
