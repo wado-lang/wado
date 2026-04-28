@@ -174,54 +174,13 @@ Grammars with actions/predicates (ANTLR4, Rust, TypeScript) contain `{...}` acti
 
 ### Layer 3: ANTLR4 Descriptor Compatibility Tests (`tests/antlr4_descriptor_*_test.wado`)
 
-These are systematically generated from the upstream `antlr4` runtime
-testsuite at `vendor/antlr4/runtime-testsuite/resources/.../descriptors/`.
-For every `<Category>/<Name>.txt` we emit a parse-only Wado test that
-asserts Gale's `g4::parse` accepts the descriptor's `[grammar]` text.
-
-This is intentionally a **manually re-run** flow, not part of CI. The
-generated tests live in the repo and run under the normal
-`wado test package-gale/tests/...` harness; the script only re-emits
-them when you ask.
-
-To regenerate:
-
-```sh
-# First time only (required):
-git submodule update --init --recommend-shallow vendor/antlr4
-
-# Default categories (Phase 1: Sets, LexerExec, ParseTrees):
-package-gale/scripts/extract-antlr4-descriptors.sh
-
-# A specific subset:
-package-gale/scripts/extract-antlr4-descriptors.sh ParserExec LeftRecursion
-
-# Every descriptor category:
-package-gale/scripts/extract-antlr4-descriptors.sh all
-```
-
-Triage state lives in `tests/antlr4_descriptors_status.toml` with
-three-way values: passes by default, `[todo]` to mark a known Gale gap
-(emits `#[TODO]` so the gap is tracked but doesn't block CI), and
-`[skip]` to suppress emission entirely (target-language-only tests).
-
-The Wado script (`scripts/extract_antlr4_descriptors.wado`) is
-self-contained — no `wado.toml`, no kiln invocations — and ports
-`RuntimeTestDescriptorParser.parse` directly. The shell wrapper
-(`scripts/extract-antlr4-descriptors.sh`) is a thin convenience that
-resolves the category list (default Phase 1 set, or `all`) and
-forwards to the Wado script.
-
-When triaging a new failure:
-
-1. Read the descriptor's `.txt` next to the upstream copy to confirm
-   it's a real ANTLR4-accepted grammar (vs. an artefact of the
-   StringTemplate substitution that the upstream test runner does
-   before compilation — those should be `[skip]`).
-2. Add an entry to `antlr4_descriptors_status.toml` under `[todo]` with
-   a one-line reason. Re-run the wrapper so the generated test picks
-   up the `#[TODO]`.
-3. File the underlying gap in `TODO.md` if it's worth fixing.
+A separate, long-lived effort that imports ANTLR4's upstream
+runtime-testsuite descriptors as parse-only Wado tests. Tracked in
+[`antlr4-compatibility.md`](./antlr4-compatibility.md) — read that
+for the stages, the descriptor pipeline, the regeneration commands,
+and the triage workflow. The doc remains the single source of truth
+even after the contract is fully met; the entry here is just a
+pointer.
 
 ## Inlined Runtime
 

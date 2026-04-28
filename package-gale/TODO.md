@@ -68,37 +68,6 @@ approaches below, in increasing order of implementation cost:
 
 (none currently)
 
-## ANTLR4 Descriptor Compatibility — TODOs
-
-The `tests/antlr4_descriptor_*_test.wado` files are systematically
-generated from the upstream `antlr4` runtime testsuite (see
-[AGENTS.md §"Layer 3"](./AGENTS.md)). Phase 1 covered Sets, LexerExec,
-and ParseTrees — 76/83 pass; the 7 marked `#[TODO]` in
-`tests/antlr4_descriptors_status.toml` correspond to:
-
-- **`Sets/UnicodeEscaped*` (4 descriptors).** Real-world ANTLR4
-  grammars use `\u{...}` for explicit unicode escapes in string
-  literals; these descriptors instead use the upstream testsuite's
-  double-backslash form (`'\\u{1F600}'`) which Gale's lexer treats as
-  a literal `\u{1F600}` text run. Fix the testsuite-form unwrap (or
-  declare the form out of scope and `[skip]` them).
-- **`LexerExec/NonGreedyOptional`.** Gale's parser only wires up the
-  `*?` and `+?` non-greedy operators; `??` (non-greedy optional) is
-  not recognised. Add the trailing-`?` consumption to the parser's
-  optional path and surface it through `RepeatElement::non_greedy`.
-- **`ParseTrees/AltNum`, `ParseTrees/TokenAndRuleContextString`.**
-  Both descriptors include grammar-level StringTemplate `<...>`
-  directives that the upstream test runner substitutes per-target
-  before compilation. They are not real ANTLR4 grammars on their own.
-  Either pre-substitute (probably out of scope) or move them to
-  `[skip]` with that rationale.
-
-Phase 2/3 plan: extend the extractor's default category set to
-ParserExec, LeftRecursion, SemPredEvalLexer/Parser, Composite{Lexers,
-Parsers}, FullContextParsing, ParserErrors, LexerErrors. Each new
-category will likely surface a fresh batch of TODOs; record them here
-as the corresponding status.toml entries land.
-
 ## Future Work: Actions and `superClass` (low priority)
 
 Gale currently skips the contents of `{ ... }` action blocks and semantic
