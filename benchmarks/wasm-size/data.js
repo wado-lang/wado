@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777408125658,
+  "lastUpdate": 1777413920059,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -17525,6 +17525,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/4e37d9b1d5a62f8b8ae6d63ed27586c341b39352"
         },
         "date": 1777408125370,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8774,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18518,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 1522768,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a13c9b008ee15858dc5ccd6f5697dc5156f299fe",
+          "message": "Merge pull request #955 from wado-lang/claude/fix-optimizer-effect-handler-ed6Kg\n\nfix(opt): enumerate WithHandler / Resume / TemplateString in catch-all walkers",
+          "timestamp": "2026-04-29T06:59:52+09:00",
+          "tree_id": "fcea4ea3f7b8eb28f6ccca43a1aea453c73d9e1b",
+          "url": "https://github.com/wado-lang/wado/commit/a13c9b008ee15858dc5ccd6f5697dc5156f299fe"
+        },
+        "date": 1777413919740,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
