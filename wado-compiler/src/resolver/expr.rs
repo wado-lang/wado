@@ -1457,7 +1457,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
             arms.iter()
                 .map(|a| a.body.type_id)
                 .find(|&t| t != TypeTable::NEVER && !tt.contains_unknown(t))
-                .or_else(|| arms.iter().map(|a| a.body.type_id).find(|&t| t != TypeTable::NEVER))
+                .or_else(|| {
+                    arms.iter()
+                        .map(|a| a.body.type_id)
+                        .find(|&t| t != TypeTable::NEVER)
+                })
                 .unwrap_or_else(|| {
                     // All arms return `never` — the match itself is `never`.
                     arms.first()

@@ -889,14 +889,20 @@ fn keep_wasm_artifacts(dir: &str, fixture_name: &str, opt_name: &str, wasm: &[u8
     let stem = fixture_name.strip_suffix(".wado").unwrap_or(fixture_name);
     let wasm_path = dir_path.join(format!("{stem}.{opt_name}.wasm"));
     if let Err(e) = std::fs::write(&wasm_path, wasm) {
-        eprintln!("[{test_id}] WADO_KEEP_WASM_DIR: cannot write {}: {e}", wasm_path.display());
+        eprintln!(
+            "[{test_id}] WADO_KEEP_WASM_DIR: cannot write {}: {e}",
+            wasm_path.display()
+        );
         return;
     }
     let wat_path = dir_path.join(format!("{stem}.{opt_name}.wat"));
     match wasmprinter::print_bytes(wasm) {
         Ok(text) => {
             if let Err(e) = std::fs::write(&wat_path, text) {
-                eprintln!("[{test_id}] WADO_KEEP_WASM_DIR: cannot write {}: {e}", wat_path.display());
+                eprintln!(
+                    "[{test_id}] WADO_KEEP_WASM_DIR: cannot write {}: {e}",
+                    wat_path.display()
+                );
             }
         }
         Err(e) => {
