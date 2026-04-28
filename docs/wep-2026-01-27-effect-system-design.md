@@ -50,7 +50,7 @@ fn bad() {
 
 ### Generic Effects
 
-Use `<effect E>` to declare a generic effect parameter. `E` can represent multiple effects.
+Use `<effect E>` to declare a generic effect parameter. `E` represents an unknown set of effects, inferred at each call site as the **union** of effects from all function-typed arguments.
 
 ```wado
 fn wrapper<effect E>(f: fn() with E) with E {
@@ -60,9 +60,45 @@ fn wrapper<effect E>(f: fn() with E) with E {
 fn map<T, U, effect E>(arr: Array<T>, f: fn(T) -> U with E) -> Array<U> with E {
     // ...
 }
+
+fn run_both<effect E>(f: fn() with E, g: fn() with E) with E {
+    f();
+    g();
+}
+
+run_both(
+    || { println("stdout"); },     // Stdout
+    || { eprintln("stderr"); },    // Stderr
+);  // E is inferred as Stdout ∪ Stderr; caller needs both
 ```
 
 Effects are types. No bounds needed.
+
+#### Single Effect Parameter Per Function
+
+A function may declare **at most one** `<effect E>` parameter. Multiple effect parameters (`<effect E1, effect E2>`) are rejected at compile time (`effect_polymorphism_multi_param_error.wado`).
+
+The single-parameter form covers higher-order combinators (`map`, `fold`, `for_each`, `wrapper`, `run_both`) without effect-set subtyping or row polymorphism, because callbacks with different effect sets are unioned into one inferred `E`.
+
+The pattern that single-`E` cannot express is **effect subtraction** — a generic combinator that handles one abstract effect and propagates another:
+
+```wado
+// Hypothetical multi-param form (currently rejected):
+fn handle_one<effect E1, effect E2>(
+    f: fn() with E1, E2,
+    h: impl E1,
+) with E2 {
+    with E1 => h do { f(); }
+}
+```
+
+Wado defers multi-effect parameters because:
+
+1. The built-in `with E => h do { ... }` syntax handles the concrete-effect case inline at the use site, removing the main motivation for generic handler combinators in user code.
+2. Inference shifts from "union all callable effects into one variable" to constraint solving over multiple variables, which interacts non-trivially with signature-resource inference and effect propagation.
+3. No production code in scope today (`core:*`, `wasi:*`, examples) needs effect subtraction.
+
+This is a forward-compatible restriction: existing single-`E` code continues to work unchanged if multi-effect parameters are introduced later (e.g. for `core:test` runners or dynamic middleware composition).
 
 ### Closure Types
 
