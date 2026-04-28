@@ -611,9 +611,7 @@ impl BoxLowerer {
                 }
             }
             TirStmtKind::Loop { body } => Self::remap_locals_in_block(body, remap),
-            TirStmtKind::Break {
-                value: Some(v), ..
-            } => Self::remap_locals_in_expr(v, remap),
+            TirStmtKind::Break { value: Some(v), .. } => Self::remap_locals_in_expr(v, remap),
             TirStmtKind::Break { value: None, .. } | TirStmtKind::Continue => {}
             TirStmtKind::LabeledBlock { block, .. } => Self::remap_locals_in_block(block, remap),
             TirStmtKind::IfLet {
