@@ -7432,7 +7432,88 @@ fn rewrite_cm_methods_in_expr(expr: &mut TirExpr, tt: &TypeTable, entry_source: 
         TirExprKind::Block(block) => {
             rewrite_cm_methods_in_block(block, tt, entry_source);
         }
-        _ => {}
+        // CM resource method calls inside `with E => h do { ... }` and
+        // its handler binding expressions need the same rewriting as
+        // calls in plain bodies — otherwise gap-2/3 dispatch wrappers
+        // never see a `__cm_*` shape and the un-rewritten MethodCall
+        // (with `cm_name` still set) reaches WIR build, which panics
+        // in `try_translate_canonical_method` for resource ops the
+        // canonical translator no longer handles.
+        TirExprKind::WithHandler { bindings, body, .. } => {
+            for binding in bindings {
+                rewrite_cm_methods_in_expr(&mut binding.handler, tt, entry_source);
+            }
+            rewrite_cm_methods_in_block(body, tt, entry_source);
+        }
+        TirExprKind::Resume { value } => {
+            rewrite_cm_methods_in_expr(value, tt, entry_source);
+        }
+        TirExprKind::Closure { body, .. } => {
+            rewrite_cm_methods_in_expr(body, tt, entry_source);
+        }
+        TirExprKind::IndirectCall { callee, args } => {
+            rewrite_cm_methods_in_expr(callee, tt, entry_source);
+            for arg in args.iter_mut() {
+                rewrite_cm_methods_in_expr(arg, tt, entry_source);
+            }
+        }
+        TirExprKind::CmRawCall { args, .. } => {
+            for arg in args.iter_mut() {
+                rewrite_cm_methods_in_expr(arg, tt, entry_source);
+            }
+        }
+        TirExprKind::GlobalVarSet { value, .. } => {
+            rewrite_cm_methods_in_expr(value, tt, entry_source);
+        }
+        TirExprKind::LabeledBlock { block, .. } => {
+            rewrite_cm_methods_in_block(block, tt, entry_source);
+        }
+        TirExprKind::TupleSpread { expr: inner }
+        | TirExprKind::TupleZip { expr: inner }
+        | TirExprKind::TypePackExpansion {
+            call_expr: inner, ..
+        }
+        | TirExprKind::VariantTag { expr: inner }
+        | TirExprKind::VariantTest { expr: inner, .. }
+        | TirExprKind::VariantPayload { expr: inner, .. }
+        | TirExprKind::ClosureToCanonical {
+            functor: inner, ..
+        } => {
+            rewrite_cm_methods_in_expr(inner, tt, entry_source);
+        }
+        TirExprKind::Switch {
+            scrutinee,
+            arms,
+            default,
+            ..
+        } => {
+            rewrite_cm_methods_in_expr(scrutinee, tt, entry_source);
+            for arm in arms.iter_mut() {
+                rewrite_cm_methods_in_block(arm, tt, entry_source);
+            }
+            rewrite_cm_methods_in_block(default, tt, entry_source);
+        }
+        TirExprKind::TemplateString { parts } => {
+            for part in parts.iter_mut() {
+                if let crate::tir::TirTemplatePart::Interpolation { expr, .. } = part {
+                    rewrite_cm_methods_in_expr(expr, tt, entry_source);
+                }
+            }
+        }
+        // Leaf-like: no nested expressions to recurse into.
+        TirExprKind::IntLiteral { .. }
+        | TirExprKind::FloatLiteral { .. }
+        | TirExprKind::BoolLiteral(_)
+        | TirExprKind::CharLiteral(_)
+        | TirExprKind::StringLiteral(_)
+        | TirExprKind::BytesLiteral(_)
+        | TirExprKind::Null
+        | TirExprKind::Unit
+        | TirExprKind::Local { .. }
+        | TirExprKind::FuncRef { .. }
+        | TirExprKind::GlobalVarGet { .. }
+        | TirExprKind::Capture { .. }
+        | TirExprKind::EnumConstruct { .. } => {}
     }
 
     // Now check if this expression is a CM resource method call
