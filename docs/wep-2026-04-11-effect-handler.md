@@ -235,11 +235,11 @@ Status: Draft
       from inside the handler body. Passes under `-O0`, `-O1`,
       `-O2`, `-O3`, `-Os`.
 
-- [ ] Generic-resource handler dispatch — bundled handlers
+- [x] Generic-resource handler dispatch — bundled handlers
       for `Stream<T>`, `StreamWritable<T>`, `Future<T>`,
-      `FutureWritable<T>`. Four cross-cutting gaps stand
+      `FutureWritable<T>`. Four cross-cutting gaps stood
       between non-generic resource dispatch (above) and the
-      WEP's MockCM design; gap 1 is done, gaps 2–4 remain.
+      WEP's MockCM design; all four are now closed.
 
       1. **(done)** Decl-index lookups must walk through the
          bare base trait name. The resolver records
@@ -297,19 +297,49 @@ Status: Draft
          (`op_read: fn(&Stream<u8>, i32) -> Array<u8>`), and
          the closure body forwards the receiver to the user
          impl method.
-      4. **(open)** Stream/Future call sites bypass the
-         `__cm_binding__<R>_<op>` adapter shape that today's
-         call-site rewriter intercepts. They lower instead to
-         `CmRawCall { local_name: "stream-..." }` (e.g.
-         `stream-drop-readable`), to internal binding functions
-         (`__cm_stream_read_u8`, `__cm_stream_write_u8`), or to
-         WIR translate-phase intrinsics (`stream-new`,
-         `future-new`). The dispatch synthesis must recognise
-         and rewrite all three shapes for handlers to intercept
-         Stream/Future at all.
+      4. **(done)** Call sites for Stream/Future ops route
+         through the per-monomorphisation dispatch wrapper
+         instead of bypassing it. Closed by three coordinated
+         changes: (a) the dispatch synthesis runs in two
+         halves — `synthesize_pre_cm_binding` (wrappers,
+         globals, structs, *and* call-site rewriting) before
+         `cm_binding`, and `synthesize_post_check`
+         (`WithHandler` desugaring) after `effect_check`. (b)
+         The pre-cm_binding pass walks every TIR call site and
+         rewrites resource calls — both instance-method shape
+         (`tx.write(payload)` with `method_info.cm_name` set)
+         and static shape (`Stream::<u8>::new()`) — to invoke
+         the matching `__effect_dispatch__<R><args>__<op>`
+         wrapper, narrowing by the receiver's resource
+         instantiation type-args. (c) The wrapper's else-branch
+         fallback emits the same pre-cm_binding placeholder
+         shape that user code emits — `MethodCall`/`Call` with
+         `method_info.cm_name` set and (for static methods) a
+         `MonomorphInfo { impl_type_args }` carrying the
+         instantiation's type args so WIR-build's
+         payload-parameterised canonical translator (e.g.
+         `future-new:s32` vs the trailers default) picks the
+         right import. cm_binding rewrites both user calls and
+         wrapper fallbacks uniformly, so handler-installed and
+         no-handler paths agree on the post-cm_binding shape.
+         Two ancillary fixes also landed: the cm_binding
+         resource-method walker now descends into `WithHandler`
+         / `Closure` / `IndirectCall` / `CmRawCall` /
+         `LabeledBlock` / variant test-payload-tag /
+         tuple-spread/zip / template-string-interpolation /
+         switch arms (a pre-existing visitor-completeness gap
+         that this work surfaced); and `TirExprKind::Closure`
+         now carries its own `address_taken_locals` set
+         (populated by the resolver's closure-scope
+         `FunctionContext`, empty for synthesised closures), so
+         when the `lower::boxing` pass descends into a closure
+         body it boxes against the closure's own scope rather
+         than the parent function's, fixing a latent
+         scope-confusion that could erroneously box a closure's
+         primitive parameter when its index coincided with an
+         address-taken primitive parent local.
 
-      End-to-end fixtures (TDD red, will flip green when the
-      remaining gaps close):
+      End-to-end fixtures (now green at `-O0`–`-Os`):
 
       - `effect_handler_resource_stream.wado` — bundled handler
         on a `MockStream` that implements both `Stream<u8>` and
