@@ -585,7 +585,7 @@ impl FunctionTranslator<'_, '_> {
             } => {
                 let type_arg_names: Vec<String> = type_args
                     .iter()
-                    .map(|t| self.type_table.mangle_type_name(*t))
+                    .map(|t| self.type_table.mangle_type_arg_for_generic(*t))
                     .collect();
                 let mangled = crate::name::mangle_generic_name(name, &type_arg_names);
                 self.variant_case_indexer(&mangled, module_source)
@@ -683,7 +683,7 @@ impl FunctionTranslator<'_, '_> {
                     } => {
                         let type_arg_names: Vec<String> = type_args
                             .iter()
-                            .map(|t| self.type_table.mangle_type_name(*t))
+                            .map(|t| self.type_table.mangle_type_arg_for_generic(*t))
                             .collect();
                         (
                             crate::name::mangle_generic_name(name, &type_arg_names),
@@ -935,7 +935,7 @@ impl FunctionTranslator<'_, '_> {
                     } => {
                         let type_arg_names: Vec<String> = type_args
                             .iter()
-                            .map(|t| self.type_table.mangle_type_name(*t))
+                            .map(|t| self.type_table.mangle_type_arg_for_generic(*t))
                             .collect();
                         (
                             crate::name::mangle_generic_name(name, &type_arg_names),
@@ -1303,7 +1303,7 @@ impl FunctionTranslator<'_, '_> {
             } => {
                 let type_arg_names: Vec<String> = type_args
                     .iter()
-                    .map(|t| self.type_table.mangle_type_name(*t))
+                    .map(|t| self.type_table.mangle_type_arg_for_generic(*t))
                     .collect();
                 (
                     crate::name::mangle_generic_name(name, &type_arg_names),
@@ -1368,7 +1368,7 @@ impl FunctionTranslator<'_, '_> {
             } => {
                 let type_arg_names: Vec<String> = type_args
                     .iter()
-                    .map(|t| self.type_table.mangle_type_name(*t))
+                    .map(|t| self.type_table.mangle_type_arg_for_generic(*t))
                     .collect();
                 (
                     crate::name::mangle_generic_name(name, &type_arg_names),
@@ -1425,7 +1425,7 @@ impl FunctionTranslator<'_, '_> {
             } => {
                 let type_arg_names: Vec<String> = type_args
                     .iter()
-                    .map(|t| self.type_table.mangle_type_name(*t))
+                    .map(|t| self.type_table.mangle_type_arg_for_generic(*t))
                     .collect();
                 (
                     crate::name::mangle_generic_name(name, &type_arg_names),
@@ -1525,7 +1525,7 @@ impl FunctionTranslator<'_, '_> {
             } => {
                 let type_arg_names: Vec<String> = type_args
                     .iter()
-                    .map(|t| self.type_table.mangle_type_name(*t))
+                    .map(|t| self.type_table.mangle_type_arg_for_generic(*t))
                     .collect();
                 (
                     crate::name::mangle_generic_name(name, &type_arg_names),

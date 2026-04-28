@@ -1941,6 +1941,84 @@ impl TypeTable {
         format_type_name(info)
     }
 
+    /// Mangle `id` for use as a type argument inside a generic instance's
+    /// or monomorphized entity's identity name (e.g. as the `T` in
+    /// `Result<unit, T>` or `Box<T>`).
+    ///
+    /// Unlike [`Self::mangle_type_name`], this *always* qualifies named
+    /// user-defined types whose simple name alone is not unique across
+    /// the type table — `Variant`, `Enum`, `Resource`, `Newtype`, and
+    /// `Flags` — by prefixing their declaring `ModuleSource`. Without
+    /// this, two distinct types from different modules sharing a simple
+    /// name (e.g. `wasi:filesystem`'s `pub variant ErrorCode` and
+    /// `wasi:cli`'s `pub enum ErrorCode`) collapse onto the same generic-
+    /// instance / monomorph identity at the WIR layer, causing
+    /// `register_mono_variants` to register only the first instantiation
+    /// it encounters and the later one's case-struct payload to silently
+    /// inherit the wrong representation.
+    ///
+    /// `Struct` is intentionally *not* qualified here: same-named structs
+    /// from different modules already get distinct
+    /// `StructName(ModuleSource, name)` map keys at the WIR layer, and
+    /// the monomorphizer's `instantiation_name` builds names with the
+    /// unqualified mangle. Threading qualified `Struct` names through
+    /// would require a lockstep update of every struct-identity map and
+    /// is out of scope for the bug-2 fix.
+    ///
+    /// Standalone uses (e.g. `mangle_type_name(ErrorCode)` outside a
+    /// generic instance, or method-dispatch `base_struct_name`) keep the
+    /// short name so that `wasi_registry`, `LocalMethodName`, and
+    /// `ModuleSource::effect_name` keys remain unchanged.
+    ///
+    /// User-facing display (`TypeTable::type_name`) is independent and
+    /// is unaffected by this function.
+    pub fn mangle_type_arg_for_generic(&self, id: TypeId) -> String {
+        match self.get(id) {
+            ResolvedType::Variant {
+                name,
+                module_source,
+                ..
+            }
+            | ResolvedType::Enum {
+                name,
+                module_source,
+                ..
+            }
+            | ResolvedType::Resource {
+                name,
+                module_source,
+                ..
+            }
+            | ResolvedType::Newtype {
+                name,
+                module_source,
+                ..
+            }
+            | ResolvedType::Flags {
+                name,
+                module_source,
+                ..
+            } => format!("{module_source}/{name}"),
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                self.mangle_type_arg_for_generic(*inner)
+            }
+            // GenericInstance / Struct / primitives / arrays / functions
+            // delegate to `mangle_type_name`. For `GenericInstance`, that
+            // already recursively qualifies *its* type arguments through
+            // this same function — see `get_type_name_info`.
+            _ => self.mangle_type_name(id),
+        }
+    }
+
+    /// Module-qualifying analogue of
+    /// [`Self::mangle_type_name_resolving_newtypes`]. Used by the few WIR
+    /// fq lookup sites that consult the newtype-resolved form
+    /// (`wir_build/context.rs`).
+    pub fn mangle_type_arg_for_generic_resolving_newtypes(&self, id: TypeId) -> String {
+        let resolved = self.resolve_newtype_base(id);
+        self.mangle_type_arg_for_generic(resolved)
+    }
+
     /// Return the base type name without type arguments.
     ///
     /// For `GenericInstance { name: "Option", type_args: [String] }` → `"Option"`.
@@ -2028,7 +2106,7 @@ impl TypeTable {
             } => {
                 let args: Vec<String> = type_args
                     .iter()
-                    .map(|t| self.mangle_type_name(*t))
+                    .map(|t| self.mangle_type_arg_for_generic(*t))
                     .collect();
                 TypeNameInfo::Generic {
                     name: name.clone(),
@@ -2055,7 +2133,7 @@ impl TypeTable {
             } => {
                 let args: Vec<String> = type_args
                     .iter()
-                    .map(|t| self.mangle_type_name(*t))
+                    .map(|t| self.mangle_type_arg_for_generic(*t))
                     .collect();
                 TypeNameInfo::Generic {
                     name: name.clone(),

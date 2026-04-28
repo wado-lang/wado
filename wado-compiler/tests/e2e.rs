@@ -738,6 +738,19 @@ fn run_normal_test(
         panic!("[{test_id}] compilation failed: {e}");
     });
 
+    // Optional: dump the compiled wasm (and a wat next to it) so the
+    // bytes the e2e runner produces can be diffed against `wado compile`.
+    // Set `WADO_KEEP_WASM_DIR=/tmp/wado-debug` (directory will be created
+    // if missing). Filenames are `<fixture_name>.<opt>.{wasm,wat}`.
+    if let Ok(dir) = std::env::var("WADO_KEEP_WASM_DIR") {
+        let fixture_name = fixture_path
+            .file_name()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "unknown".to_string());
+        let opt_name = common::opt_level_name(opt_level);
+        keep_wasm_artifacts(&dir, &fixture_name, opt_name, &compile_result.wasm, test_id);
+    }
+
     // Dispatch to the appropriate runner based on world
     if let Some(http_spec) = &spec.http_service {
         match run_http_request(
@@ -861,6 +874,41 @@ fn fixture_test_os(path: &Path, content: &str) -> Result<(), Box<dyn std::error:
     }
     run_fixture_test_with_opt(path, content, OptLevel::Os);
     Ok(())
+}
+
+/// Write the compiled wasm (and a wat decoded from it) under `dir` so it can
+/// be inspected and diffed against `wado compile`. Activated by setting the
+/// `WADO_KEEP_WASM_DIR` environment variable. Failures are reported via
+/// `eprintln!` and never block the test.
+fn keep_wasm_artifacts(dir: &str, fixture_name: &str, opt_name: &str, wasm: &[u8], test_id: &str) {
+    let dir_path = std::path::Path::new(dir);
+    if let Err(e) = std::fs::create_dir_all(dir_path) {
+        eprintln!("[{test_id}] WADO_KEEP_WASM_DIR: cannot create '{dir}': {e}");
+        return;
+    }
+    let stem = fixture_name.strip_suffix(".wado").unwrap_or(fixture_name);
+    let wasm_path = dir_path.join(format!("{stem}.{opt_name}.wasm"));
+    if let Err(e) = std::fs::write(&wasm_path, wasm) {
+        eprintln!(
+            "[{test_id}] WADO_KEEP_WASM_DIR: cannot write {}: {e}",
+            wasm_path.display()
+        );
+        return;
+    }
+    let wat_path = dir_path.join(format!("{stem}.{opt_name}.wat"));
+    match wasmprinter::print_bytes(wasm) {
+        Ok(text) => {
+            if let Err(e) = std::fs::write(&wat_path, text) {
+                eprintln!(
+                    "[{test_id}] WADO_KEEP_WASM_DIR: cannot write {}: {e}",
+                    wat_path.display()
+                );
+            }
+        }
+        Err(e) => {
+            eprintln!("[{test_id}] WADO_KEEP_WASM_DIR: wasmprinter failed: {e}");
+        }
+    }
 }
 
 datatest_mini::harness! {

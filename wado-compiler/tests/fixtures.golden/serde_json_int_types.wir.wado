@@ -75,47 +75,47 @@ struct core:prelude/types.wado//Option<f64>::Some {  // TypeId(13)
     payload_0: f64,
 }
 
-variant core:prelude/types.wado//Result<i32,IntErrorKind> {  // TypeId(14)
+variant core:prelude/types.wado//Result<i32,core:prelude/intparse.wado/IntErrorKind> {  // TypeId(14)
     Ok(i32),
     Err(i32),
 }
 
-struct core:prelude/types.wado//Result<i32,IntErrorKind>::Ok {  // TypeId(15)
+struct core:prelude/types.wado//Result<i32,core:prelude/intparse.wado/IntErrorKind>::Ok {  // TypeId(15)
     discriminant: i32,
     payload_0: i32,
 }
 
-struct core:prelude/types.wado//Result<i32,IntErrorKind>::Err {  // TypeId(16)
+struct core:prelude/types.wado//Result<i32,core:prelude/intparse.wado/IntErrorKind>::Err {  // TypeId(16)
     discriminant: i32,
     payload_0: i32,
 }
 
-variant core:prelude/types.wado//Result<Tuple<bool,i32>,IntErrorKind> {  // TypeId(17)
+variant core:prelude/types.wado//Result<Tuple<bool,i32>,core:prelude/intparse.wado/IntErrorKind> {  // TypeId(17)
     Ok(ref "tuple//[bool, i32]"),
     Err(i32),
 }
 
-struct core:prelude/types.wado//Result<Tuple<bool,i32>,IntErrorKind>::Ok {  // TypeId(18)
+struct core:prelude/types.wado//Result<Tuple<bool,i32>,core:prelude/intparse.wado/IntErrorKind>::Ok {  // TypeId(18)
     discriminant: i32,
     payload_0: ref "tuple//[bool, i32]",
 }
 
-struct core:prelude/types.wado//Result<Tuple<bool,i32>,IntErrorKind>::Err {  // TypeId(19)
+struct core:prelude/types.wado//Result<Tuple<bool,i32>,core:prelude/intparse.wado/IntErrorKind>::Err {  // TypeId(19)
     discriminant: i32,
     payload_0: i32,
 }
 
-variant core:prelude/types.wado//Result<u64,IntErrorKind> {  // TypeId(20)
+variant core:prelude/types.wado//Result<u64,core:prelude/intparse.wado/IntErrorKind> {  // TypeId(20)
     Ok(u64),
     Err(i32),
 }
 
-struct core:prelude/types.wado//Result<u64,IntErrorKind>::Ok {  // TypeId(21)
+struct core:prelude/types.wado//Result<u64,core:prelude/intparse.wado/IntErrorKind>::Ok {  // TypeId(21)
     discriminant: i32,
     payload_0: u64,
 }
 
-struct core:prelude/types.wado//Result<u64,IntErrorKind>::Err {  // TypeId(22)
+struct core:prelude/types.wado//Result<u64,core:prelude/intparse.wado/IntErrorKind>::Err {  // TypeId(22)
     discriminant: i32,
     payload_0: i32,
 }
@@ -311,11 +311,11 @@ type "functype//core:prelude/fpfmt.wado/parse_text" = fn(ref "core:prelude/strin
 
 type "functype//core:prelude/intparse.wado/digit_value" = fn(u8) -> i32;  // TypeId(86)
 
-type "functype//core:prelude/intparse.wado/parse_u64_digits" = fn(ref "core:prelude/string.wado//String", i32, i32, u32) -> ref "core:prelude/types.wado//Result<u64,IntErrorKind>";  // TypeId(87)
+type "functype//core:prelude/intparse.wado/parse_u64_digits" = fn(ref "core:prelude/string.wado//String", i32, i32, u32) -> ref "core:prelude/types.wado//Result<u64,core:prelude/intparse.wado/IntErrorKind>";  // TypeId(87)
 
-type "functype//core:prelude/intparse.wado/parse_signed_prefix" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/types.wado//Result<Tuple<bool,i32>,IntErrorKind>";  // TypeId(88)
+type "functype//core:prelude/intparse.wado/parse_signed_prefix" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/types.wado//Result<Tuple<bool,i32>,core:prelude/intparse.wado/IntErrorKind>";  // TypeId(88)
 
-type "functype//core:prelude/intparse.wado/parse_unsigned_prefix" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/types.wado//Result<i32,IntErrorKind>";  // TypeId(89)
+type "functype//core:prelude/intparse.wado/parse_unsigned_prefix" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/types.wado//Result<i32,core:prelude/intparse.wado/IntErrorKind>";  // TypeId(89)
 
 type "functype//core:prelude/intparse.wado/parse_i64_radix" = fn(ref "core:prelude/string.wado//String", u32, i64, u64) -> ref "core:prelude/types.wado//Result<i64,ParseIntError>";  // TypeId(90)
 
@@ -1823,7 +1823,7 @@ fn "core:prelude/intparse.wado/parse_u64_digits"(s, start, end, radix) {
     let d: i32;
     let d64: u64;
     if start >= end {
-        return struct.new "core:prelude/types.wado//Result<u64,IntErrorKind>::Err" { discriminant: 1, payload_0: 0 };
+        return struct.new "core:prelude/types.wado//Result<u64,core:prelude/intparse.wado/IntErrorKind>::Err" { discriminant: 1, payload_0: 0 };
     }
     r = builtin::i64_extend_i32_u(radix);
     max_before_mul = -1_i64 /u r;
@@ -1843,7 +1843,7 @@ fn "core:prelude/intparse.wado/parse_u64_digits"(s, start, end, radix) {
                 } else {
                     d >= radix;
                 }) {
-                    return struct.new "core:prelude/types.wado//Result<u64,IntErrorKind>::Err" { discriminant: 1, payload_0: 1 };
+                    return struct.new "core:prelude/types.wado//Result<u64,core:prelude/intparse.wado/IntErrorKind>::Err" { discriminant: 1, payload_0: 1 };
                 }
                 d64 = builtin::i64_extend_i32_s(d);
                 if (if acc >u max_before_mul -> i32 {
@@ -1853,7 +1853,7 @@ fn "core:prelude/intparse.wado/parse_u64_digits"(s, start, end, radix) {
                 } else {
                     0;
                 }) {
-                    return struct.new "core:prelude/types.wado//Result<u64,IntErrorKind>::Err" { discriminant: 1, payload_0: 2 };
+                    return struct.new "core:prelude/types.wado//Result<u64,core:prelude/intparse.wado/IntErrorKind>::Err" { discriminant: 1, payload_0: 2 };
                 }
                 acc = (acc * r) + d64;
                 i = i + 1;
@@ -1861,7 +1861,7 @@ fn "core:prelude/intparse.wado/parse_u64_digits"(s, start, end, radix) {
             };
         };
     };
-    return struct.new "core:prelude/types.wado//Result<u64,IntErrorKind>::Ok" { discriminant: 0, payload_0: acc };
+    return struct.new "core:prelude/types.wado//Result<u64,core:prelude/intparse.wado/IntErrorKind>::Ok" { discriminant: 0, payload_0: acc };
 }
 
 fn "core:prelude/intparse.wado/parse_signed_prefix"(s) {
@@ -1872,7 +1872,7 @@ fn "core:prelude/intparse.wado/parse_signed_prefix"(s) {
     let start: i32;
     len = s.used;
     if len == 0 {
-        return struct.new "core:prelude/types.wado//Result<Tuple<bool,i32>,IntErrorKind>::Err" { discriminant: 1, payload_0: 0 };
+        return struct.new "core:prelude/types.wado//Result<Tuple<bool,i32>,core:prelude/intparse.wado/IntErrorKind>::Err" { discriminant: 1, payload_0: 0 };
     }
     first = builtin::array_get_u8(s.repr, 0);
     is_negative = first == 45;
@@ -1886,10 +1886,10 @@ fn "core:prelude/intparse.wado/parse_signed_prefix"(s) {
     } else {
         0;
     }) {
-        return struct.new "core:prelude/types.wado//Result<Tuple<bool,i32>,IntErrorKind>::Err" { discriminant: 1, payload_0: 1 };
+        return struct.new "core:prelude/types.wado//Result<Tuple<bool,i32>,core:prelude/intparse.wado/IntErrorKind>::Err" { discriminant: 1, payload_0: 1 };
     }
     start = select i32(has_sign, 1, 0);
-    return struct.new "core:prelude/types.wado//Result<Tuple<bool,i32>,IntErrorKind>::Ok" { discriminant: 0, payload_0: struct.new "tuple//[bool, i32]" { 0: is_negative, 1: start } };
+    return struct.new "core:prelude/types.wado//Result<Tuple<bool,i32>,core:prelude/intparse.wado/IntErrorKind>::Ok" { discriminant: 0, payload_0: struct.new "tuple//[bool, i32]" { 0: is_negative, 1: start } };
 }
 
 fn "core:prelude/intparse.wado/parse_unsigned_prefix"(s) {
@@ -1897,16 +1897,16 @@ fn "core:prelude/intparse.wado/parse_unsigned_prefix"(s) {
     let first: u8;
     len = s.used;
     if len == 0 {
-        return struct.new "core:prelude/types.wado//Result<i32,IntErrorKind>::Err" { discriminant: 1, payload_0: 0 };
+        return struct.new "core:prelude/types.wado//Result<i32,core:prelude/intparse.wado/IntErrorKind>::Err" { discriminant: 1, payload_0: 0 };
     }
     first = builtin::array_get_u8(s.repr, 0);
     if first == 43 {
         if len == 1 {
-            return struct.new "core:prelude/types.wado//Result<i32,IntErrorKind>::Err" { discriminant: 1, payload_0: 1 };
+            return struct.new "core:prelude/types.wado//Result<i32,core:prelude/intparse.wado/IntErrorKind>::Err" { discriminant: 1, payload_0: 1 };
         }
-        return struct.new "core:prelude/types.wado//Result<i32,IntErrorKind>::Ok" { discriminant: 0, payload_0: 1 };
+        return struct.new "core:prelude/types.wado//Result<i32,core:prelude/intparse.wado/IntErrorKind>::Ok" { discriminant: 0, payload_0: 1 };
     }
-    return struct.new "core:prelude/types.wado//Result<i32,IntErrorKind>::Ok" { discriminant: 0, payload_0: 0 };
+    return struct.new "core:prelude/types.wado//Result<i32,core:prelude/intparse.wado/IntErrorKind>::Ok" { discriminant: 0, payload_0: 0 };
 }
 
 fn "core:prelude/intparse.wado/parse_i64_radix"(s, radix, max, min_abs) {
@@ -1928,16 +1928,16 @@ fn "core:prelude/intparse.wado/parse_i64_radix"(s, radix, max, min_abs) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("from_str_radix: radix must be in 2..=36"), used: 39 });
         unreachable;
     }
-    let __match_scrut_0: ref "core:prelude/types.wado//Result<Tuple<bool,i32>,IntErrorKind>";
+    let __match_scrut_0: ref "core:prelude/types.wado//Result<Tuple<bool,i32>,core:prelude/intparse.wado/IntErrorKind>";
     __match_scrut_0 = "core:prelude/intparse.wado/parse_signed_prefix"(s);
-    __pattern_temp_0 = (if ref.test "core:prelude/types.wado//Result<Tuple<bool,i32>,IntErrorKind>::Ok"(__match_scrut_0) -> ref "tuple//[bool, i32]" {
-        let __cast_2: ref "core:prelude/types.wado//Result<Tuple<bool,i32>,IntErrorKind>::Ok";
-        __cast_2 = ref.cast "core:prelude/types.wado//Result<Tuple<bool,i32>,IntErrorKind>::Ok"(__match_scrut_0);
+    __pattern_temp_0 = (if ref.test "core:prelude/types.wado//Result<Tuple<bool,i32>,core:prelude/intparse.wado/IntErrorKind>::Ok"(__match_scrut_0) -> ref "tuple//[bool, i32]" {
+        let __cast_2: ref "core:prelude/types.wado//Result<Tuple<bool,i32>,core:prelude/intparse.wado/IntErrorKind>::Ok";
+        __cast_2 = ref.cast "core:prelude/types.wado//Result<Tuple<bool,i32>,core:prelude/intparse.wado/IntErrorKind>::Ok"(__match_scrut_0);
         __local_4 = __cast_2.payload_0;
         __local_4;
     } else {
-        let __cast_1: ref "core:prelude/types.wado//Result<Tuple<bool,i32>,IntErrorKind>::Err";
-        __cast_1 = ref.cast "core:prelude/types.wado//Result<Tuple<bool,i32>,IntErrorKind>::Err"(__match_scrut_0);
+        let __cast_1: ref "core:prelude/types.wado//Result<Tuple<bool,i32>,core:prelude/intparse.wado/IntErrorKind>::Err";
+        __cast_1 = ref.cast "core:prelude/types.wado//Result<Tuple<bool,i32>,core:prelude/intparse.wado/IntErrorKind>::Err"(__match_scrut_0);
         __local_5 = __cast_1.payload_0;
         return struct.new "core:prelude/types.wado//Result<i64,ParseIntError>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/intparse.wado//ParseIntError" { kind: __local_5 } };
         unreachable;
@@ -1945,9 +1945,9 @@ fn "core:prelude/intparse.wado/parse_i64_radix"(s, radix, max, min_abs) {
     });
     is_negative = __pattern_temp_0.0;
     start = __pattern_temp_0.1;
-    return let __match_scrut_1: ref "core:prelude/types.wado//Result<u64,IntErrorKind>", __match_scrut_1 = "core:prelude/intparse.wado/parse_u64_digits"(s, start, s.used, radix), (if ref.test "core:prelude/types.wado//Result<u64,IntErrorKind>::Ok"(__match_scrut_1) -> ref "core:prelude/types.wado//Result<i64,ParseIntError>" {
-        let __cast_4: ref "core:prelude/types.wado//Result<u64,IntErrorKind>::Ok";
-        __cast_4 = ref.cast "core:prelude/types.wado//Result<u64,IntErrorKind>::Ok"(__match_scrut_1);
+    return let __match_scrut_1: ref "core:prelude/types.wado//Result<u64,core:prelude/intparse.wado/IntErrorKind>", __match_scrut_1 = "core:prelude/intparse.wado/parse_u64_digits"(s, start, s.used, radix), (if ref.test "core:prelude/types.wado//Result<u64,core:prelude/intparse.wado/IntErrorKind>::Ok"(__match_scrut_1) -> ref "core:prelude/types.wado//Result<i64,ParseIntError>" {
+        let __cast_4: ref "core:prelude/types.wado//Result<u64,core:prelude/intparse.wado/IntErrorKind>::Ok";
+        __cast_4 = ref.cast "core:prelude/types.wado//Result<u64,core:prelude/intparse.wado/IntErrorKind>::Ok"(__match_scrut_1);
         __local_8 = __cast_4.payload_0;
         if is_negative -> ref "core:prelude/types.wado//Result<i64,ParseIntError>" {
             if __local_8 >u min_abs -> ref "core:prelude/types.wado//Result<i64,ParseIntError>" {
@@ -1969,8 +1969,8 @@ fn "core:prelude/intparse.wado/parse_i64_radix"(s, radix, max, min_abs) {
             struct.new "core:prelude/types.wado//Result<i64,ParseIntError>::Ok" { discriminant: 0, payload_0: __local_8 };
         }
     } else {
-        let __cast_3: ref "core:prelude/types.wado//Result<u64,IntErrorKind>::Err";
-        __cast_3 = ref.cast "core:prelude/types.wado//Result<u64,IntErrorKind>::Err"(__match_scrut_1);
+        let __cast_3: ref "core:prelude/types.wado//Result<u64,core:prelude/intparse.wado/IntErrorKind>::Err";
+        __cast_3 = ref.cast "core:prelude/types.wado//Result<u64,core:prelude/intparse.wado/IntErrorKind>::Err"(__match_scrut_1);
         __local_9 = __cast_3.payload_0;
         __local_10 = (if (if is_negative -> i32 {
             __local_9 == 2;
@@ -2000,24 +2000,24 @@ fn "core:prelude/intparse.wado/parse_u64_radix"(s, radix, max) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("from_str_radix: radix must be in 2..=36"), used: 39 });
         unreachable;
     }
-    let __match_scrut_0: ref "core:prelude/types.wado//Result<i32,IntErrorKind>";
+    let __match_scrut_0: ref "core:prelude/types.wado//Result<i32,core:prelude/intparse.wado/IntErrorKind>";
     __match_scrut_0 = "core:prelude/intparse.wado/parse_unsigned_prefix"(s);
-    start = (if ref.test "core:prelude/types.wado//Result<i32,IntErrorKind>::Ok"(__match_scrut_0) -> i32 {
-        let __cast_2: ref "core:prelude/types.wado//Result<i32,IntErrorKind>::Ok";
-        __cast_2 = ref.cast "core:prelude/types.wado//Result<i32,IntErrorKind>::Ok"(__match_scrut_0);
+    start = (if ref.test "core:prelude/types.wado//Result<i32,core:prelude/intparse.wado/IntErrorKind>::Ok"(__match_scrut_0) -> i32 {
+        let __cast_2: ref "core:prelude/types.wado//Result<i32,core:prelude/intparse.wado/IntErrorKind>::Ok";
+        __cast_2 = ref.cast "core:prelude/types.wado//Result<i32,core:prelude/intparse.wado/IntErrorKind>::Ok"(__match_scrut_0);
         __local_3 = __cast_2.payload_0;
         __local_3;
     } else {
-        let __cast_1: ref "core:prelude/types.wado//Result<i32,IntErrorKind>::Err";
-        __cast_1 = ref.cast "core:prelude/types.wado//Result<i32,IntErrorKind>::Err"(__match_scrut_0);
+        let __cast_1: ref "core:prelude/types.wado//Result<i32,core:prelude/intparse.wado/IntErrorKind>::Err";
+        __cast_1 = ref.cast "core:prelude/types.wado//Result<i32,core:prelude/intparse.wado/IntErrorKind>::Err"(__match_scrut_0);
         __local_4 = __cast_1.payload_0;
         return struct.new "core:prelude/types.wado//Result<u64,ParseIntError>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/intparse.wado//ParseIntError" { kind: __local_4 } };
         unreachable;
         unreachable;
     });
-    return let __match_scrut_1: ref "core:prelude/types.wado//Result<u64,IntErrorKind>", __match_scrut_1 = "core:prelude/intparse.wado/parse_u64_digits"(s, start, s.used, radix), (if ref.test "core:prelude/types.wado//Result<u64,IntErrorKind>::Ok"(__match_scrut_1) -> ref "core:prelude/types.wado//Result<u64,ParseIntError>" {
-        let __cast_4: ref "core:prelude/types.wado//Result<u64,IntErrorKind>::Ok";
-        __cast_4 = ref.cast "core:prelude/types.wado//Result<u64,IntErrorKind>::Ok"(__match_scrut_1);
+    return let __match_scrut_1: ref "core:prelude/types.wado//Result<u64,core:prelude/intparse.wado/IntErrorKind>", __match_scrut_1 = "core:prelude/intparse.wado/parse_u64_digits"(s, start, s.used, radix), (if ref.test "core:prelude/types.wado//Result<u64,core:prelude/intparse.wado/IntErrorKind>::Ok"(__match_scrut_1) -> ref "core:prelude/types.wado//Result<u64,ParseIntError>" {
+        let __cast_4: ref "core:prelude/types.wado//Result<u64,core:prelude/intparse.wado/IntErrorKind>::Ok";
+        __cast_4 = ref.cast "core:prelude/types.wado//Result<u64,core:prelude/intparse.wado/IntErrorKind>::Ok"(__match_scrut_1);
         __local_6 = __cast_4.payload_0;
         if __local_6 >u max -> ref "core:prelude/types.wado//Result<u64,ParseIntError>" {
             struct.new "core:prelude/types.wado//Result<u64,ParseIntError>::Err" { discriminant: 1, payload_0: ref.as_non_null(__inline_ParseIntError__new_3: block -> ref "core:prelude/intparse.wado//ParseIntError" {
@@ -2029,8 +2029,8 @@ fn "core:prelude/intparse.wado/parse_u64_radix"(s, radix, max) {
             struct.new "core:prelude/types.wado//Result<u64,ParseIntError>::Ok" { discriminant: 0, payload_0: __local_6 };
         }
     } else {
-        let __cast_3: ref "core:prelude/types.wado//Result<u64,IntErrorKind>::Err";
-        __cast_3 = ref.cast "core:prelude/types.wado//Result<u64,IntErrorKind>::Err"(__match_scrut_1);
+        let __cast_3: ref "core:prelude/types.wado//Result<u64,core:prelude/intparse.wado/IntErrorKind>::Err";
+        __cast_3 = ref.cast "core:prelude/types.wado//Result<u64,core:prelude/intparse.wado/IntErrorKind>::Err"(__match_scrut_1);
         __local_7 = __cast_3.payload_0;
         struct.new "core:prelude/types.wado//Result<u64,ParseIntError>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/intparse.wado//ParseIntError" { kind: __local_7 } };
     });

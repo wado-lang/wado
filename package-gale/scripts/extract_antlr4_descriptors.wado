@@ -1,0 +1,652 @@
+#!/usr/bin/env wado
+//! Extract ANTLR4 runtime-testsuite descriptors into Wado parse-only tests.
+//!
+//! Source:  vendor/antlr4/runtime-testsuite/resources/org/antlr/v4/test/runtime/descriptors/
+//! Outputs:
+//!   package-gale/tests/antlr4-compat/grammars/<Category>/<Name>.g4
+//!   package-gale/tests/antlr4-compat/<category>_test.wado
+//!
+//! Triage data lives in package-gale/tests/antlr4-compat/status.toml:
+//!   [todo]
+//!   "LexerExec/CharSetWithMissingEscapeChar" = "Gale rejects malformed escape"
+//!   [skip]
+//!   "Listeners/SomeJavaSpecific" = "target-language only"
+//!
+//! The script never initializes the antlr4 submodule itself. If the source
+//! directory is missing it errors out with instructions and exits non-zero.
+//!
+//! Usage (from the repository root):
+//!   wado run package-gale/scripts/extract_antlr4_descriptors.wado [Category ...]
+//!   wado run package-gale/scripts/extract_antlr4_descriptors.wado all
+//!
+//! Default categories (Phase 1): Sets, LexerExec, ParseTrees.
+
+use { args, println, eprintln, Stdout, Stderr, Environment } from "core:cli";
+use {
+    Preopens,
+    Descriptor,
+    DescriptorType,
+    DescriptorFlags,
+    PathFlags,
+    OpenFlags,
+    DirectoryEntry,
+    Filesize,
+} from "wasi:filesystem";
+use { ErrorCode } from "wasi:filesystem/types.wado";
+use { CodeWriter } from "../src/wadopoet.wado";
+
+// ===== Constants =====
+
+fn descriptors_root() -> String {
+    return "vendor/antlr4/runtime-testsuite/resources/org/antlr/v4/test/runtime/descriptors";
+}
+
+/// Root of the generated artefacts (everything compat-related lives here).
+fn compat_root_dir() -> String {
+    return "package-gale/tests/antlr4-compat";
+}
+
+/// Subdirectory holding the extracted `.g4` files (`<Category>/<Name>.g4`).
+fn grammars_subdir() -> String {
+    return "grammars";
+}
+
+/// Path to the triage file relative to repo root.
+fn status_file_path() -> String {
+    return "package-gale/tests/antlr4-compat/status.toml";
+}
+
+fn default_categories() -> Array<String> {
+    return ["Sets", "LexerExec", "ParseTrees"];
+}
+
+/// `#![generated(by = ...)]` attribute string written at the top of every
+/// generated test file. The `by` value is the canonical path of the
+/// generator script (relative to repo root) per the Wado convention used
+/// by `wado-from-idl` etc.
+fn generator_attr() -> String {
+    return "#![generated(by = \"package-gale/scripts/extract_antlr4_descriptors.wado\")]";
+}
+
+// ===== Descriptor format =====
+
+fn is_known_section(name: &String) -> bool {
+    return match *name {
+        "notes" | "type" | "grammar" | "slaveGrammar" | "start"
+        | "input" | "output" | "errors" | "flags" | "skip" => true,
+        _ => false,
+    };
+}
+
+struct DescriptorPair {
+    name: String,
+    value: String,  // raw collected value, before post-processing
+}
+
+struct ParsedDescriptor {
+    grammar: String,
+    slave_grammars: Array<String>,
+}
+
+/// Mirrors `RuntimeTestDescriptorParser.parse` — section detection plus the
+/// triple-quote / trailing-newline post-processing applied to each value.
+/// We only return the fields we care about (grammar text + slave grammars).
+fn parse_descriptor_text(text: &String) -> ParsedDescriptor {
+    let mut pairs: Array<DescriptorPair> = [];
+    let mut current_name: String = "";
+    let mut have_current = false;
+    let mut current_value = String::with_capacity(256);
+
+    for let line of text.lines() {
+        let section_name = section_header_of(&line);
+        match section_name {
+            Some(name) => {
+                if have_current {
+                    pairs.push(DescriptorPair {
+                        name: current_name,
+                        value: current_value,
+                    });
+                }
+                current_name = name;
+                have_current = true;
+                current_value = String::with_capacity(256);
+            },
+            None => {
+                current_value.push_str(line);
+                current_value.push('\n');
+            },
+        }
+    }
+    if have_current {
+        pairs.push(DescriptorPair {
+            name: current_name,
+            value: current_value,
+        });
+    }
+
+    let mut grammar: String = "";
+    let mut slaves: Array<String> = [];
+    for let p of pairs {
+        let processed = post_process(&p.value);
+        match p.name {
+            "grammar" => { grammar = processed; },
+            "slaveGrammar" => { slaves.push(processed); },
+            _ => {},
+        }
+    }
+    return ParsedDescriptor { grammar, slave_grammars: slaves };
+}
+
+/// If `line` is a known `[section]` header, return the section name.
+fn section_header_of(line: &String) -> Option<String> {
+    if line.len() <= 2 {
+        return null;
+    }
+    if !line.starts_with("[") {
+        return null;
+    }
+    let last_idx = line.len() - 1;
+    if line.get_byte(last_idx) != 0x5D {  // ']'
+        return null;
+    }
+    let candidate = line.substr_bytes(1, last_idx);
+    if !is_known_section(&candidate) {
+        return null;
+    }
+    return Option::Some(candidate);
+}
+
+/// Apply the same trim / triple-quote / trailing-newline rules as
+/// RuntimeTestDescriptorParser.parse.
+fn post_process(raw: &String) -> String {
+    let trimmed = raw.trim();
+    if trimmed.starts_with("\"\"\"") {
+        return trimmed.replace("\"\"\"", "");
+    }
+    if trimmed.contains("\n") {
+        let mut s = String::with_capacity(trimmed.len() + 1);
+        s.push_str(trimmed);
+        s.push('\n');
+        return s;
+    }
+    return trimmed;
+}
+
+// ===== Status file =====
+
+variant Triage {
+    Pass,
+    Todo(String),  // reason
+    Skip(String),  // reason
+}
+
+struct TriageMap {
+    /// Entries keyed by `"Category/Name"` (no `.txt` suffix).
+    entries: Array<TriageEntry>,
+}
+
+struct TriageEntry {
+    key: String,
+    triage: Triage,
+}
+
+impl TriageMap {
+    pub fn new() -> TriageMap {
+        return TriageMap { entries: [] };
+    }
+
+    pub fn lookup(&self, key: &String) -> Triage {
+        for let e of &self.entries {
+            if e.key == *key {
+                return e.triage;
+            }
+        }
+        return Triage::Pass;
+    }
+}
+
+/// Parse the status file. Tolerant of missing file (returns empty map).
+/// Format is intentionally a strict subset of TOML:
+///
+///   # comments
+///   [todo]
+///   "Category/Name" = "reason text"
+///   [skip]
+///   "Category/Name" = "reason text"
+fn load_triage_map(content: &Option<String>) -> TriageMap {
+    let mut out = TriageMap::new();
+    let text = match content {
+        Some(t) => t,
+        None => return out,
+    };
+    let mut section: String = "";
+    for let raw_line of text.lines() {
+        let line = raw_line.trim();
+        if line.is_empty() || line.starts_with("#") {
+            continue;
+        }
+        if line.starts_with("[") && line.ends_with("]") {
+            section = line.substr_bytes(1, line.len() - 1);
+            continue;
+        }
+        // Expect `"key" = "value"`
+        let eq_idx = match line.find("=") {
+            Some(i) => i,
+            None => { continue; },
+        };
+        let triage = match section {
+            "todo" => Triage::Todo(unquote(&line.substr_bytes(eq_idx + 1, line.len()).trim())),
+            "skip" => Triage::Skip(unquote(&line.substr_bytes(eq_idx + 1, line.len()).trim())),
+            _ => { continue; },
+        };
+        let key = unquote(&line.substr_bytes(0, eq_idx).trim());
+        out.entries.push(TriageEntry { key, triage });
+    }
+    return out;
+}
+
+fn unquote(s: &String) -> String {
+    if s.len() >= 2 && s.starts_with("\"") && s.ends_with("\"") {
+        return s.substr_bytes(1, s.len() - 1);
+    }
+    return *s;
+}
+
+// ===== File system helpers =====
+
+fn read_file_to_string(dir: &Descriptor, path: &String) -> Result<String, ErrorCode> {
+    let opened = match dir.open_at(
+        PathFlags::none(),
+        *path,
+        OpenFlags::none(),
+        DescriptorFlags::Read,
+    ).wait() {
+        Ok(file) => file,
+        Err(e) => return Result::Err(e),
+    };
+    let [stream, done] = opened.read_via_stream(0 as Filesize);
+    let mut bytes: Array<u8> = [];
+    loop {
+        let chunk = stream.read(8192);
+        if chunk.len() == 0 {
+            break;
+        }
+        for let b of chunk {
+            bytes.push(b);
+        }
+    }
+    stream.drop();
+    done.drop();
+    return match String::from_utf8(bytes) {
+        Ok(s) => Result::Ok(s),
+        Err(_) => Result::Err(ErrorCode::IllegalByteSequence),
+    };
+}
+
+fn write_file_string(dir: &Descriptor, path: &String, content: &String) -> Result<(), ErrorCode> {
+    let file = match dir.open_at(
+        PathFlags::none(),
+        *path,
+        OpenFlags::Create | OpenFlags::Truncate,
+        DescriptorFlags::Read | DescriptorFlags::Write,
+    ).wait() {
+        Ok(f) => f,
+        Err(e) => return Result::Err(e),
+    };
+    let bytes: Array<u8> = content.bytes().collect();
+    let [rx, tx] = Stream::<u8>::new();
+    let sub = file.write_via_stream(rx, 0 as Filesize);
+    tx.write(bytes);
+    tx.drop();
+    sub.drop();
+    return Result::Ok(());
+}
+
+fn ensure_dir(parent: &Descriptor, name: &String) -> Result<Descriptor, ErrorCode> {
+    // Ignore "exists" — we just want the directory to be present.
+    let _ = parent.create_directory_at(*name).wait();
+    return parent.open_at(
+        PathFlags::none(),
+        *name,
+        OpenFlags::Directory,
+        DescriptorFlags::Read | DescriptorFlags::MutateDirectory,
+    ).wait();
+}
+
+fn open_dir(parent: &Descriptor, name: &String, mutate: bool) -> Result<Descriptor, ErrorCode> {
+    let flags = if mutate {
+        DescriptorFlags::Read | DescriptorFlags::MutateDirectory
+    } else {
+        DescriptorFlags::Read
+    };
+    return parent.open_at(
+        PathFlags::none(),
+        *name,
+        OpenFlags::Directory,
+        flags,
+    ).wait();
+}
+
+fn list_files_with_suffix(dir: &Descriptor, suffix: &String) -> Array<String> {
+    let mut out: Array<String> = [];
+    let [stream, done] = dir.read_directory();
+    loop {
+        let chunk = stream.read(64);
+        if chunk.len() == 0 {
+            break;
+        }
+        for let e of chunk {
+            if e.type matches { RegularFile } && e.name.ends_with(*suffix) {
+                out.push(e.name);
+            }
+        }
+    }
+    stream.drop();
+    done.drop();
+    out.sort();
+    return out;
+}
+
+fn list_subdirs(dir: &Descriptor) -> Array<String> {
+    let mut out: Array<String> = [];
+    let [stream, done] = dir.read_directory();
+    loop {
+        let chunk = stream.read(64);
+        if chunk.len() == 0 {
+            break;
+        }
+        for let e of chunk {
+            if e.type matches { Directory } {
+                out.push(e.name);
+            }
+        }
+    }
+    stream.drop();
+    done.drop();
+    out.sort();
+    return out;
+}
+
+// ===== Test file emission =====
+
+fn category_to_snake(name: &String) -> String {
+    // CamelCase → snake_case
+    let mut out = String::with_capacity(name.len() + 4);
+    let mut first = true;
+    for let c of name.chars() {
+        if c.is_ascii_uppercase() {
+            if !first {
+                out.push('_');
+            }
+            out.push(c.to_ascii_lowercase());
+        } else {
+            out.push(c);
+        }
+        first = false;
+    }
+    return out;
+}
+
+/// Escape a string so it can sit between Wado `"..."` quotes.
+fn escape_for_wado_str(s: &String) -> String {
+    let mut out = String::with_capacity(s.len());
+    for let c of s.chars() {
+        match c {
+            '\\' => { out.push_str("\\\\"); },
+            '"'  => { out.push_str("\\\""); },
+            _    => { out.push(c); },
+        }
+    }
+    return out;
+}
+
+struct DescriptorEntry {
+    /// e.g. "Sets/CharSetLiteral"
+    key: String,
+    /// e.g. "CharSetLiteral"
+    name: String,
+    /// e.g. "Sets"
+    category: String,
+    /// e.g. "Sets/CharSetLiteral.g4" (relative to `grammars/`).
+    g4_relpath: String,
+    /// Slave grammars (relative paths; empty for non-composite descriptors).
+    slave_relpaths: Array<String>,
+    triage: Triage,
+}
+
+fn emit_test_file_for_category(category: &String, entries: &Array<DescriptorEntry>) -> String {
+    let mut w = CodeWriter::new();
+    w.line(&generator_attr());
+    w.line(&"// Do not edit by hand — re-run the generator to regenerate.");
+    w.line(&"//");
+    w.line(&`// Source category: {*category} (ANTLR4 runtime-testsuite).`);
+    w.line(&"// Triage data: package-gale/tests/antlr4-compat/status.toml");
+    w.blank();
+    w.line(&"use { parse } from \"../../src/g4/parser.wado\";");
+    w.blank();
+    for let e of entries {
+        match &e.triage {
+            Skip(_) => { continue; },
+            Todo(reason) => {
+                w.line(&"#[TODO]");
+                w.line(&`// triage: {escape_for_wado_str(reason)}`);
+            },
+            Pass => {},
+        }
+        w.begin(&`test "{*category}/{e.name}"`);
+        w.line(&`let input = #include_str("./grammars/{e.g4_relpath}");`);
+        for let slave of &e.slave_relpaths {
+            w.line(&`let _slave = #include_str("./grammars/{*slave}");`);
+        }
+        w.line(&"let result = parse(input);");
+        w.line(&"if let Err(err) = &result {");
+        w.indent();
+        // Single-quoted Wado string keeps `{...}` literal so the
+        // backticks land in the generated file unmolested.
+        w.line(&"panic(`parse failed: {err.message} at {err.span.start}..{err.span.end}`);");
+        w.dedent();
+        w.line(&"}");
+        w.end();
+        w.blank();
+    }
+    return w.to_string();
+}
+
+// ===== Main =====
+
+struct CliArgs {
+    want_all: bool,
+    categories: Array<String>,
+}
+
+fn parse_cli_args(arguments: Array<String>) -> CliArgs {
+    let mut want_all = false;
+    let mut categories: Array<String> = [];
+    for let a of arguments {
+        match a {
+            "all" => { want_all = true; },
+            _ => {
+                if !a.starts_with("-") {
+                    categories.push(a);
+                }
+            },
+        }
+    }
+    if !want_all && categories.is_empty() {
+        categories = default_categories();
+    }
+    return CliArgs { want_all, categories };
+}
+
+export fn run() with Stdout, Stderr, Environment, Preopens {
+    let cli = parse_cli_args(args());
+    let want_all = cli.want_all;
+    let mut categories = cli.categories;
+
+    let dirs = Preopens::get_directories();
+    if dirs.len() == 0 {
+        eprintln("extract: no preopened directories available (run via `wado run`)");
+        return;
+    }
+    let root = dirs[0].0;
+
+    // Open the antlr4 descriptors source. If missing, error out — never auto-init.
+    let src_root = match open_dir(&root, &descriptors_root(), false) {
+        Ok(d) => d,
+        Err(_) => {
+            eprintln(`extract: cannot open '{descriptors_root()}'`);
+            eprintln("extract: the antlr4 submodule appears to be missing.");
+            eprintln("extract: run: git submodule update --init --recommend-shallow vendor/antlr4");
+            eprintln("extract: (this script never auto-initializes submodules)");
+            return;
+        },
+    };
+
+    if want_all {
+        categories = list_subdirs(&src_root);
+    }
+
+    println(`extract: source root  = {descriptors_root()}`);
+    println(`extract: target dir   = {compat_root_dir()}`);
+    println(`extract: status file  = {status_file_path()}`);
+    let mut categories_str = String::with_capacity(64);
+    for let mut i = 0; i < categories.len(); i += 1 {
+        if i > 0 {
+            categories_str.push_str(", ");
+        }
+        categories_str.push_str(categories[i]);
+    }
+    println(`extract: categories   = {categories_str}`);
+
+    // Open the package-gale tests directory (mutable: we will create files there).
+    let tests_dir = match open_dir(&root, &"package-gale/tests", true) {
+        Ok(d) => d,
+        Err(_) => {
+            eprintln("extract: cannot open 'package-gale/tests' for writing");
+            return;
+        },
+    };
+
+    // Ensure the compat root exists — everything we generate is rooted here.
+    let compat_dir = match ensure_dir(&tests_dir, &"antlr4-compat") {
+        Ok(d) => d,
+        Err(_) => {
+            eprintln("extract: cannot create or open antlr4-compat/");
+            return;
+        },
+    };
+
+    // Load triage map (optional). The status file lives under compat_dir
+    // so all compat artefacts stay together; we read it via the repo root
+    // descriptor to keep a single canonical path.
+    let status_text = match read_file_to_string(&root, &status_file_path()) {
+        Ok(s) => Option::Some(s),
+        Err(_) => null,
+    };
+    let triage_map = load_triage_map(&status_text);
+
+    let grammars_dir = match ensure_dir(&compat_dir, &grammars_subdir()) {
+        Ok(d) => d,
+        Err(_) => {
+            eprintln("extract: cannot create or open antlr4-compat/grammars/");
+            return;
+        },
+    };
+
+    let mut total_emitted = 0;
+    let mut total_todo = 0;
+    let mut total_skip = 0;
+
+    for let category of &categories {
+        let cat_src_dir = match open_dir(&src_root, category, false) {
+            Ok(d) => d,
+            Err(_) => {
+                eprintln(`extract: missing category '{*category}', skipping`);
+                continue;
+            },
+        };
+        let cat_out_dir = match ensure_dir(&grammars_dir, category) {
+            Ok(d) => d,
+            Err(_) => {
+                eprintln(`extract: cannot create category dir '{*category}', skipping`);
+                continue;
+            },
+        };
+
+        let txt_files = list_files_with_suffix(&cat_src_dir, &".txt");
+        let mut entries: Array<DescriptorEntry> = [];
+
+        for let txt_name of &txt_files {
+            // Strip ".txt" → descriptor name.
+            let base = txt_name.substr_bytes(0, txt_name.len() - 4);
+            let key = `{*category}/{base}`;
+
+            let triage = triage_map.lookup(&key);
+            if let Skip(reason) = &triage {
+                println(`  skip:  {key} — {*reason}`);
+                total_skip += 1;
+                continue;
+            }
+
+            let raw = match read_file_to_string(&cat_src_dir, txt_name) {
+                Ok(s) => s,
+                Err(_) => {
+                    eprintln(`extract: cannot read {key}`);
+                    continue;
+                },
+            };
+
+            let parsed = parse_descriptor_text(&raw);
+            if parsed.grammar.is_empty() {
+                eprintln(`extract: {key} has no [grammar] section, skipping`);
+                continue;
+            }
+
+            // Write the main grammar.
+            let g4_filename = `{base}.g4`;
+            if let Err(_) = write_file_string(&cat_out_dir, &g4_filename, &parsed.grammar) {
+                eprintln(`extract: cannot write {key}.g4`);
+                continue;
+            }
+
+            // Write slave grammars if present.
+            let mut slave_relpaths: Array<String> = [];
+            for let mut i = 0; i < parsed.slave_grammars.len(); i += 1 {
+                let slave_name = `{base}.slave{i + 1}.g4`;
+                if let Err(_) = write_file_string(&cat_out_dir, &slave_name, &parsed.slave_grammars[i]) {
+                    eprintln(`extract: cannot write {key} slave {i}`);
+                    continue;
+                }
+                slave_relpaths.push(`{*category}/{slave_name}`);
+            }
+
+            if let Todo(_) = &triage {
+                total_todo += 1;
+            }
+            total_emitted += 1;
+
+            entries.push(DescriptorEntry {
+                key,
+                name: base,
+                category: *category,
+                g4_relpath: `{*category}/{g4_filename}`,
+                slave_relpaths,
+                triage,
+            });
+        }
+
+        // Emit the per-category test file.
+        let test_src = emit_test_file_for_category(category, &entries);
+        let test_filename = `{category_to_snake(category)}_test.wado`;
+        if let Err(_) = write_file_string(&compat_dir, &test_filename, &test_src) {
+            eprintln(`extract: cannot write {test_filename}`);
+            continue;
+        }
+        println(`  wrote: antlr4-compat/{test_filename} ({entries.len()} tests)`);
+    }
+
+    println("");
+    println(`extract: emitted {total_emitted} descriptor(s) across {categories.len()} categor(ies)`);
+    println(`extract:   {total_todo} marked #[TODO]`);
+    println(`extract:   {total_skip} skipped`);
+}

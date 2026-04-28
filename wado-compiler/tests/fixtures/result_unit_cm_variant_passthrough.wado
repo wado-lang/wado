@@ -1,0 +1,85 @@
+// Regression fixture for bug 2: `Result<unit, V>` over a CM-bound
+// variant must compile cleanly under `wado compile`, regardless of
+// whether the entry filename is given as a relative or absolute path.
+//
+// Before the fix, two distinct `Result<unit, ErrorCode>` instances —
+// one with `wasi:filesystem`'s `pub variant ErrorCode`, one with
+// `wasi:cli`'s `pub enum ErrorCode` — collapsed onto the same WIR fq
+// because `mangle_type_name` returned `"ErrorCode"` for both,
+// independent of the declaring module. `register_mono_variants` then
+// kept whichever instance hit `iter_type_ids` first, and with the
+// FLAT/Enum-form `Err` payload winning the `Err(e) => return
+// Result::Err(e)` arm pushed a `(ref ErrorCode_struct)` where the
+// case struct expected an `i32` — wasm validation panicked:
+//
+//     Internal compiler error: WIR pipeline generated invalid core Wasm module
+//     Validation error: type mismatch: expected i32, found (ref $type)
+//
+// The chosen winner was non-deterministic w.r.t. the entry filename
+// because `iter_type_ids` is IndexMap-insertion-order, so the same
+// source could compile cleanly via the e2e harness (absolute path)
+// and panic via `wado compile path/to/file.wado` (relative path).
+//
+// The fix lives in `tir.rs::TypeTable::mangle_type_arg_for_generic`
+// and threads through `wir_build::register_struct` /
+// `wir_build::register_mono_variants` /
+// `wir_build::pattern_match::translate_variant_construct` so that the
+// generic-instance fq embeds the type-arg's declaring module for the
+// kinds (`Variant`, `Enum`, `Resource`, `Newtype`, `Flags`) where the
+// simple name alone is not unique. `register_struct` additionally
+// registers the qualified-args mangle as an alias so monomorphizer-
+// produced `tir_struct.name` (still unqualified) and the WIR-layer
+// generic-instance lookup (now qualified) both resolve.
+//
+// Manual reproduction recipe before the fix (kept for archaeology):
+//
+//     cargo run --bin wado -- compile -O0 \
+//         wado-compiler/tests/fixtures/result_unit_cm_variant_passthrough.wado \
+//         -o /tmp/x.wasm
+//   →   Validation error: type mismatch: expected i32, found (ref $type)
+//
+//     cargo run --bin wado -- compile -O0 \
+//         /home/user/wado/wado-compiler/tests/fixtures/result_unit_cm_variant_passthrough.wado \
+//         -o /tmp/x.wasm
+//   →   Generated: /tmp/x.wasm
+//
+// Both invocations should now succeed identically.
+
+use { Stdout } from "core:cli";
+use { Preopens, Descriptor, DescriptorFlags, PathFlags, OpenFlags, Filesize } from "wasi:filesystem";
+use { ErrorCode } from "wasi:filesystem/types.wado";
+
+fn write_helper(dir: &Descriptor, path: &String, content: &String) -> Result<(), ErrorCode> {
+    let opened = dir.open_at(
+        PathFlags::none(),
+        *path,
+        OpenFlags::Create | OpenFlags::Truncate,
+        DescriptorFlags::Read | DescriptorFlags::Write,
+    ).wait();
+    match opened {
+        Err(e) => return Result::Err(e),
+        Ok(file) => {
+            let bytes: Array<u8> = content.bytes().collect();
+            let [rx, tx] = Stream::<u8>::new();
+            let sub = file.write_via_stream(rx, 0 as Filesize);
+            tx.write(bytes);
+            tx.drop();
+            sub.drop();
+            return Result::Ok(());
+        },
+    }
+}
+
+export fn run() with Stdout, Preopens {
+    let dirs = Preopens::get_directories();
+    if dirs.len() == 0 {
+        return;
+    }
+    let result = write_helper(&dirs[0].0, &"never_actually_opened.txt", &"hello");
+    if let Err(_) = result {
+        return;
+    }
+}
+
+__DATA__
+{"stdout": ""}

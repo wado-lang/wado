@@ -32,17 +32,17 @@ struct wasi:sockets/types.wado//ErrorCode::Other {  // TypeId(3)
     payload_0: ref null "core:prelude/string.wado//String",
 }
 
-variant core:prelude/types.wado//Result<TcpSocket,ErrorCode> {  // TypeId(4)
+variant core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode> {  // TypeId(4)
     Ok(i32),
     Err(ref "wasi:sockets/types.wado//ErrorCode"),
 }
 
-struct core:prelude/types.wado//Result<TcpSocket,ErrorCode>::Ok {  // TypeId(5)
+struct core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>::Ok {  // TypeId(5)
     discriminant: i32,
     payload_0: i32,
 }
 
-struct core:prelude/types.wado//Result<TcpSocket,ErrorCode>::Err {  // TypeId(6)
+struct core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>::Err {  // TypeId(6)
     discriminant: i32,
     payload_0: ref "wasi:sockets/types.wado//ErrorCode",
 }
@@ -69,7 +69,7 @@ type "functype//wasi/wasi:sockets/TcpSocket::create" = fn(i32, i32);  // TypeId(
 
 type "functype//wado-compiler/tests/fixtures/resource-method-static.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(17)
 
-type "functype//wado-compiler/tests/fixtures/resource-method-static.wado/__cm_binding__TcpSocket_create" = fn(i32) -> ref "core:prelude/types.wado//Result<TcpSocket,ErrorCode>";  // TypeId(18)
+type "functype//wado-compiler/tests/fixtures/resource-method-static.wado/__cm_binding__TcpSocket_create" = fn(i32) -> ref "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>";  // TypeId(18)
 
 type "functype//wado-compiler/tests/fixtures/resource-method-static.wado/__cm_export__run" = fn();  // TypeId(19)
 
@@ -114,7 +114,7 @@ fn "wado-compiler/tests/fixtures/resource-method-static.wado/__cm_binding__Stdou
 fn "wado-compiler/tests/fixtures/resource-method-static.wado/__cm_binding__TcpSocket_create"(address_family) with TcpSocket {
     let __outptr: i32;
     let __disc_2: i32;
-    let __result_val: ref "core:prelude/types.wado//Result<TcpSocket,ErrorCode>";
+    let __result_val: ref "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>";
     let __vdisc: i32;
     let __vresult: ref "wasi:sockets/types.wado//ErrorCode";
     let __disc_6: i32;
@@ -127,7 +127,7 @@ fn "wado-compiler/tests/fixtures/resource-method-static.wado/__cm_binding__TcpSo
     __disc_2 = builtin::load_u8(__outptr);
     __result_val = ref.null none;
     if __disc_2 == 0 {
-        __result_val = struct.new "core:prelude/types.wado//Result<TcpSocket,ErrorCode>::Ok" { discriminant: 0, payload_0: builtin::load_i32(__outptr + 4) };
+        __result_val = struct.new "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: builtin::load_i32(__outptr + 4) };
     } else {
         __vdisc = builtin::load_u8(__outptr + 4);
         __vresult = ref.null none;
@@ -174,7 +174,7 @@ fn "wado-compiler/tests/fixtures/resource-method-static.wado/__cm_binding__TcpSo
             }
             __vresult = struct.new "wasi:sockets/types.wado//ErrorCode::Other" { discriminant: 14, payload_0: __option_result };
         }
-        __result_val = struct.new "core:prelude/types.wado//Result<TcpSocket,ErrorCode>::Err" { discriminant: 1, payload_0: __vresult };
+        __result_val = struct.new "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>::Err" { discriminant: 1, payload_0: __vresult };
     }
     drop("mem/realloc"(__outptr, 20, 4, 0));
     return __result_val;

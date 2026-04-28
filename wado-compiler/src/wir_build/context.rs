@@ -521,10 +521,13 @@ impl<'a> WirContext<'a> {
                             nullable: false,
                         }
                     } else {
-                        // Resolve newtypes in type_args and retry
+                        // Resolve newtypes in type_args and retry. Use the
+                        // module-qualifying mangle so the registered key
+                        // (also computed with `mangle_type_arg_for_generic`
+                        // by `register_mono_variants`) lines up.
                         let resolved_args: Vec<String> = type_args
                             .iter()
-                            .map(|t| type_table.mangle_type_name_resolving_newtypes(*t))
+                            .map(|t| type_table.mangle_type_arg_for_generic_resolving_newtypes(*t))
                             .collect();
                         let resolved_mangled =
                             crate::name::mangle_generic_name(name, &resolved_args);

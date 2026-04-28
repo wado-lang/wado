@@ -1,0 +1,2 @@
+lexer grammar L;
+STRING : '!' ('!!' | .)+? '!';

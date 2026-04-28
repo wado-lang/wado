@@ -1,0 +1,5 @@
+grammar T;
+a : LETTERS* 'd' {<InputText():writeln()>} ;
+// These are actually not escaped -- Java passes the
+// raw unescaped Unicode values to the grammar compiler.
+LETTERS : ('a'|'à'..'å');
