@@ -48,6 +48,7 @@ The target world is indicated by the top-level key in the JSON:
 | `wir_expect:Ox`       | `string[]`           | Patterns that must appear in WIR at `-Ox` (substring match) |
 | `wir_not_expect:Ox`   | `string[]`           | Patterns that must NOT appear in WIR at `-Ox`               |
 | `outgoing_mocks`      | `object`             | Mock responses for outgoing HTTP requests (see below)       |
+| `tls_mocks`           | `object`             | Mock responses for `wasi:tls` handshakes (see below)        |
 
 HTTP sub-fields (inside `"wasi:http/service": {...}`):
 
@@ -72,6 +73,15 @@ Keys are URL patterns matched against the request URI (exact match on full URI o
 | `status`  | `number`             | HTTP status code (default: 200)         |
 | `body`    | `string`             | Response body as UTF-8 (default: empty) |
 | `headers` | `[string, string][]` | Response headers                        |
+
+TLS mock sub-fields (inside each entry of `"tls_mocks": {...}`):
+
+Keys are matched against the `server_name` argument the guest passes to `Connector::connect`. Unmatched server names fail the handshake with a clear error so tests cannot silently reach the real network. Empty `tls_mocks` is the default and behaves as "no server name allowed."
+
+| Field   | Type     | Description                                                                |
+| ------- | -------- | -------------------------------------------------------------------------- |
+| `recv`  | `string` | Cleartext bytes delivered to the guest's `Connector::receive` stream       |
+| `error` | `string` | If set, fails the handshake with this message (`Connector::connect → Err`) |
 
 #### Examples
 

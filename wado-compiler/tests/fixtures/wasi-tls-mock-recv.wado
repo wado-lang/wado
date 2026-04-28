@@ -1,0 +1,55 @@
+// Test: the e2e harness's `tls_mocks` mechanism delivers canned cleartext to
+// the guest's `Connector::receive` stream.
+//
+// Wires up dummy ciphertext streams (so the host's `connect()` reaches the
+// provider), triggers a successful handshake against `mock.example`, then
+// drains the cleartext stream returned by `receive` and prints what arrived.
+// The mock provider seeds the read side of its `MockTlsStream` with the
+// `recv` field from the spec — once the guest has read all of it the stream
+// EOFs.
+use { println, Stdout } from "core:cli";
+use { Connector, Error } from "wasi:tls";
+
+export fn run() with Stdout, Connector, Error {
+    let conn = Connector::new();
+
+    // Send path: empty cleartext (we send nothing in this test).
+    let [data_rx, data_tx] = Stream::<u8>::new();
+    let [_tls_tx, _send_done] = conn.send(data_rx);
+    data_tx.drop();
+
+    // Receive path: empty ciphertext input — the mock TLS stream's read side
+    // is preloaded by the host with the spec's `recv` bytes, so the guest
+    // observes them as decrypted cleartext on `tls_rx`.
+    let [cipher_rx, cipher_tx] = Stream::<u8>::new();
+    let [tls_rx, _recv_done] = conn.receive(cipher_rx);
+    cipher_tx.drop();
+
+    match Connector::connect(conn, "mock.example").wait() {
+        Ok(_) => {},
+        Err(e) => panic(`unexpected handshake failure: {e.to_debug_string()}`),
+    }
+
+    let mut received: Array<u8> = [];
+    loop {
+        let chunk = tls_rx.read(4096);
+        if chunk.len() == 0 {
+            break;
+        }
+        received.extend(&chunk);
+    }
+    tls_rx.drop();
+
+    match String::from_utf8(received) {
+        Ok(s) => println(s),
+        Err(_) => panic("recv was not valid UTF-8"),
+    }
+}
+
+__DATA__
+{
+    "stdout": "hello from mocked TLS\n",
+    "tls_mocks": {
+        "mock.example": { "recv": "hello from mocked TLS" }
+    }
+}

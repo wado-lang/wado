@@ -18,7 +18,10 @@ use wasmtime::{Config, Engine, Store};
 use wasmtime_wasi::{DirPerms, FilePerms, WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
 use wasmtime_wasi_http::WasiHttpCtx;
 use wasmtime_wasi_http::p3::{WasiHttpCtxView, WasiHttpHooks, WasiHttpView};
-use wasmtime_wasi_tls::{WasiTlsCtx, WasiTlsCtxBuilder, WasiTlsCtxView, WasiTlsView};
+use wasmtime_wasi_tls::{
+    Error as WasiTlsError, TlsProvider, TlsStream, TlsTransport, WasiTlsCtx, WasiTlsCtxBuilder,
+    WasiTlsCtxView, WasiTlsView,
+};
 
 /// Install the rustls process-level `CryptoProvider` exactly once. See the
 /// matching helper in `wado-cli/src/runtime.rs` for the rationale; the test
@@ -397,6 +400,138 @@ impl WasiHttpHooks for TestHttpCtx {
     }
 }
 
+/// Mock spec for a single `wasi:tls` handshake.
+///
+/// Keys in `tls_mocks` are matched against the `server_name` argument the
+/// guest passes to `Connector::connect(this, server_name)`.
+#[derive(Debug, Clone, serde::Deserialize, Default)]
+pub struct TlsMockResponse {
+    /// Cleartext bytes the mock delivers to the guest's `Connector::receive`
+    /// stream as if they were decrypted from the server. Read-side closes
+    /// (EOFs) once exhausted. Default: empty.
+    #[serde(default)]
+    pub recv: String,
+
+    /// If set, the handshake fails with this error message and the guest's
+    /// `Connector::connect()` future resolves to `Err`.
+    #[serde(default)]
+    pub error: Option<String>,
+}
+
+/// In-memory `TlsStream` used by `MockTlsProvider`.
+///
+/// Reads drain `recv_buf` (canned cleartext from the spec) and EOF once empty.
+/// Writes are captured into `sent` so tests could later assert on what the
+/// guest sent — currently we only need the read side, but the buffer is kept
+/// in case fixtures want to inspect it via a host hook in the future.
+struct MockTlsStream {
+    recv_buf: std::io::Cursor<Vec<u8>>,
+    sent: Vec<u8>,
+}
+
+impl MockTlsStream {
+    fn new(recv: Vec<u8>) -> Self {
+        Self {
+            recv_buf: std::io::Cursor::new(recv),
+            sent: Vec::new(),
+        }
+    }
+}
+
+impl tokio::io::AsyncRead for MockTlsStream {
+    fn poll_read(
+        mut self: std::pin::Pin<&mut Self>,
+        _cx: &mut std::task::Context<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        let remaining = self.recv_buf.get_ref().len() as u64 - self.recv_buf.position();
+        if remaining == 0 {
+            return std::task::Poll::Ready(Ok(())); // EOF
+        }
+        let want = buf.remaining().min(remaining as usize);
+        let pos = self.recv_buf.position() as usize;
+        let slice = &self.recv_buf.get_ref()[pos..pos + want];
+        buf.put_slice(slice);
+        self.recv_buf.set_position((pos + want) as u64);
+        std::task::Poll::Ready(Ok(()))
+    }
+}
+
+impl tokio::io::AsyncWrite for MockTlsStream {
+    fn poll_write(
+        mut self: std::pin::Pin<&mut Self>,
+        _cx: &mut std::task::Context<'_>,
+        buf: &[u8],
+    ) -> std::task::Poll<std::io::Result<usize>> {
+        self.sent.extend_from_slice(buf);
+        std::task::Poll::Ready(Ok(buf.len()))
+    }
+
+    fn poll_flush(
+        self: std::pin::Pin<&mut Self>,
+        _cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        std::task::Poll::Ready(Ok(()))
+    }
+
+    fn poll_shutdown(
+        self: std::pin::Pin<&mut Self>,
+        _cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        std::task::Poll::Ready(Ok(()))
+    }
+}
+
+impl TlsStream for MockTlsStream {}
+
+/// `TlsProvider` that returns canned in-memory streams keyed by `server_name`.
+///
+/// Mirrors the `TestHttpCtx` convention: any handshake whose `server_name` is
+/// not in the mock table fails closed with a clear error so tests can't
+/// silently reach the real network.
+pub struct MockTlsProvider {
+    mocks: indexmap::IndexMap<String, TlsMockResponse>,
+}
+
+impl MockTlsProvider {
+    pub fn new(mocks: indexmap::IndexMap<String, TlsMockResponse>) -> Self {
+        Self { mocks }
+    }
+}
+
+impl TlsProvider for MockTlsProvider {
+    fn connect(
+        &self,
+        server_name: String,
+        _transport: Box<dyn TlsTransport>,
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<Box<dyn TlsStream>, WasiTlsError>> + Send>>
+    {
+        let mock = self.mocks.get(&server_name).cloned();
+        Box::pin(async move {
+            match mock {
+                Some(spec) => {
+                    if let Some(err) = spec.error {
+                        return Err(WasiTlsError::msg(err));
+                    }
+                    Ok(Box::new(MockTlsStream::new(spec.recv.into_bytes())) as Box<dyn TlsStream>)
+                }
+                None => Err(WasiTlsError::msg(format!(
+                    "no TLS mock configured for server '{server_name}'"
+                ))),
+            }
+        })
+    }
+}
+
+/// Build a `WasiTlsCtx` whose provider is the mock provider seeded with `mocks`.
+/// Always installs the rustls crypto provider first (idempotent).
+pub fn build_tls_ctx(mocks: indexmap::IndexMap<String, TlsMockResponse>) -> WasiTlsCtx {
+    install_rustls_provider_for_tests();
+    WasiTlsCtxBuilder::new()
+        .provider(Box::new(MockTlsProvider::new(mocks)))
+        .build()
+}
+
 /// Unified WASI state for all test worlds (CLI, test, HTTP service)
 pub struct WasiState {
     pub ctx: WasiCtx,
@@ -440,27 +575,25 @@ impl WasiState {
         stdout: wasmtime_wasi::p2::pipe::MemoryOutputPipe,
         stderr: wasmtime_wasi::p2::pipe::MemoryOutputPipe,
     ) -> Self {
-        install_rustls_provider_for_tests();
         let ctx = WasiCtxBuilder::new().stdout(stdout).stderr(stderr).build();
         Self {
             ctx,
             table: ResourceTable::new(),
             http_ctx: WasiHttpCtx::new(),
             http_hooks: TestHttpCtx::new(),
-            tls_ctx: WasiTlsCtxBuilder::new().build(),
+            tls_ctx: build_tls_ctx(indexmap::IndexMap::new()),
         }
     }
 
     /// Create a basic state (no I/O capture)
     pub fn new() -> Self {
-        install_rustls_provider_for_tests();
         let ctx = WasiCtxBuilder::new().build();
         Self {
             ctx,
             table: ResourceTable::new(),
             http_ctx: WasiHttpCtx::new(),
             http_hooks: TestHttpCtx::new(),
-            tls_ctx: WasiTlsCtxBuilder::new().build(),
+            tls_ctx: build_tls_ctx(indexmap::IndexMap::new()),
         }
     }
 }
@@ -664,15 +797,22 @@ pub fn run_wasm_with_options(
     dirs: &[(String, String)],
     stdin_data: Option<&str>,
 ) -> anyhow::Result<WasmRunResult> {
-    run_wasm_with_full_options(wasm, dirs, stdin_data, indexmap::IndexMap::new())
+    run_wasm_with_full_options(
+        wasm,
+        dirs,
+        stdin_data,
+        indexmap::IndexMap::new(),
+        indexmap::IndexMap::new(),
+    )
 }
 
-/// Run a compiled Wasm component with full options including outgoing HTTP mocks.
+/// Run a compiled Wasm component with full options including outgoing HTTP and TLS mocks.
 pub fn run_wasm_with_full_options(
     wasm: Vec<u8>,
     dirs: &[(String, String)],
     stdin_data: Option<&str>,
     outgoing_mocks: indexmap::IndexMap<String, OutgoingMockResponse>,
+    tls_mocks: indexmap::IndexMap<String, TlsMockResponse>,
 ) -> anyhow::Result<WasmRunResult> {
     use wasmtime::component::Component;
     use wasmtime_wasi::p2::pipe::{MemoryInputPipe, MemoryOutputPipe};
@@ -701,7 +841,6 @@ pub fn run_wasm_with_full_options(
             builder.preopened_dir(host_path, guest_path, DirPerms::all(), FilePerms::all())?;
         }
         let ctx = builder.build();
-        install_rustls_provider_for_tests();
         let state = WasiState {
             ctx,
             table: ResourceTable::new(),
@@ -709,7 +848,7 @@ pub fn run_wasm_with_full_options(
             http_hooks: TestHttpCtx {
                 mocks: outgoing_mocks,
             },
-            tls_ctx: WasiTlsCtxBuilder::new().build(),
+            tls_ctx: build_tls_ctx(tls_mocks),
         };
         let mut store = Store::new(engine, state);
         // Set epoch deadline for timeout enforcement

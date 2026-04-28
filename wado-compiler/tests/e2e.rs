@@ -180,6 +180,13 @@ struct TestSpec {
     #[serde(default)]
     outgoing_mocks: indexmap::IndexMap<String, common::OutgoingMockResponse>,
 
+    /// Mock responses for `wasi:tls` handshakes (keyed by `server_name`).
+    /// Any `Connector::connect(_, server_name)` is matched against these
+    /// entries. Unmatched server names fail the handshake with a clear error
+    /// so tests cannot silently reach the real network.
+    #[serde(default)]
+    tls_mocks: indexmap::IndexMap<String, common::TlsMockResponse>,
+
     // --- WIR pattern expectations (per optimization level) ---
     /// Patterns that must appear in WIR output at -O0
     #[serde(rename = "wir_expect:O0", default)]
@@ -315,14 +322,21 @@ fn run_http_request(
     wasm: Vec<u8>,
     req_spec: &HttpRequestSpec,
     outgoing_mocks: indexmap::IndexMap<String, common::OutgoingMockResponse>,
+    tls_mocks: indexmap::IndexMap<String, common::TlsMockResponse>,
 ) -> anyhow::Result<HttpTestResult> {
-    http_runtime().block_on(run_http_request_async(wasm, req_spec, outgoing_mocks))
+    http_runtime().block_on(run_http_request_async(
+        wasm,
+        req_spec,
+        outgoing_mocks,
+        tls_mocks,
+    ))
 }
 
 async fn run_http_request_async(
     wasm: Vec<u8>,
     req_spec: &HttpRequestSpec,
     outgoing_mocks: indexmap::IndexMap<String, common::OutgoingMockResponse>,
+    tls_mocks: indexmap::IndexMap<String, common::TlsMockResponse>,
 ) -> anyhow::Result<HttpTestResult> {
     let engine = common::engine();
     let component = Component::new(engine, &wasm)
@@ -330,7 +344,6 @@ async fn run_http_request_async(
 
     let linker = common::linker(engine)?;
 
-    common::install_rustls_provider_for_tests();
     let state = common::WasiState {
         ctx: WasiCtxBuilder::new().build(),
         table: ResourceTable::new(),
@@ -338,7 +351,7 @@ async fn run_http_request_async(
         http_hooks: common::TestHttpCtx {
             mocks: outgoing_mocks,
         },
-        tls_ctx: wasmtime_wasi_tls::WasiTlsCtxBuilder::new().build(),
+        tls_ctx: common::build_tls_ctx(tls_mocks),
     };
     let mut store = Store::new(engine, state);
     // Set epoch deadline for timeout enforcement (HTTP tests use 5s default)
@@ -479,6 +492,7 @@ fn run_test_world(
     wasm: &[u8],
     test_id: &str,
     outgoing_mocks: indexmap::IndexMap<String, common::OutgoingMockResponse>,
+    tls_mocks: indexmap::IndexMap<String, common::TlsMockResponse>,
 ) -> anyhow::Result<common::WasmRunResult> {
     use wasmtime_wasi::p2::pipe::MemoryOutputPipe;
 
@@ -519,6 +533,7 @@ fn run_test_world(
 
             let mut state = common::WasiState::new_with_pipes(stdout_pipe, stderr_pipe);
             state.http_hooks.mocks = outgoing_mocks.clone();
+            state.tls_ctx = common::build_tls_ctx(tls_mocks.clone());
             let mut store = Store::new(engine, state);
             // Parse per-test timeout from export name (e.g., "test-tm2000-0-slow")
             // and set epoch deadline for timeout enforcement
@@ -757,6 +772,7 @@ fn run_normal_test(
             compile_result.wasm,
             &http_spec.request,
             spec.outgoing_mocks.clone(),
+            spec.tls_mocks.clone(),
         ) {
             Ok(result) => {
                 assert!(
@@ -774,10 +790,15 @@ fn run_normal_test(
             }
         }
     } else if spec.test_world.is_some() {
-        let result = run_test_world(&compile_result.wasm, test_id, spec.outgoing_mocks.clone())
-            .unwrap_or_else(|e| {
-                panic!("[{test_id}] test world error: {e:?}");
-            });
+        let result = run_test_world(
+            &compile_result.wasm,
+            test_id,
+            spec.outgoing_mocks.clone(),
+            spec.tls_mocks.clone(),
+        )
+        .unwrap_or_else(|e| {
+            panic!("[{test_id}] test world error: {e:?}");
+        });
         verify_result(&result, spec, test_id);
     } else {
         // Default: wasi:cli/command
@@ -791,6 +812,7 @@ fn run_normal_test(
             &dirs,
             spec.stdin.as_deref(),
             spec.outgoing_mocks.clone(),
+            spec.tls_mocks.clone(),
         )
         .unwrap_or_else(|e| {
             panic!("[{test_id}] runtime error: {e}");

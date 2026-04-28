@@ -1,0 +1,34 @@
+// Test: the e2e harness's `tls_mocks` mechanism delivers a canned handshake
+// error to the guest.
+//
+// Sets up dummy ciphertext streams (so the host's `connect()` doesn't bail out
+// before reaching the provider), then triggers the handshake. The mock
+// provider matches `server_name == "mock.example"` and resolves the
+// `Connector::connect` future with `Err(simulated handshake error)`.
+use { println, Stdout } from "core:cli";
+use { Connector, Error } from "wasi:tls";
+
+export fn run() with Stdout, Connector, Error {
+    let conn = Connector::new();
+
+    let [data_rx, data_tx] = Stream::<u8>::new();
+    let [_tls_tx, _send_done] = conn.send(data_rx);
+    data_tx.drop();
+
+    let [cipher_rx, cipher_tx] = Stream::<u8>::new();
+    let [_tls_rx, _recv_done] = conn.receive(cipher_rx);
+    cipher_tx.drop();
+
+    match Connector::connect(conn, "mock.example").wait() {
+        Ok(_) => println("connected"),
+        Err(e) => println(`failed: {e.to_debug_string()}`),
+    }
+}
+
+__DATA__
+{
+    "stdout": "failed: simulated handshake error\n",
+    "tls_mocks": {
+        "mock.example": { "error": "simulated handshake error" }
+    }
+}
