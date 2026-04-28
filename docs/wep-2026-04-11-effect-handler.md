@@ -199,13 +199,7 @@ Status: Draft
         wrappers unchanged because cm_binding already rewrites
         resource static / instance method calls to plain
         `Call { __cm_binding__<R>_<op> }` shape.
-      - Synthesised handler closures rename `self`-named op
-        params (resources use `fn op(self: &R, ...)` by
-        convention) to `__op_self` so the closure-lowering's
-        synthesised `self: &__Closure` env doesn't shadow the
-        explicit receiver during downstream name-based lookups.
-
-      Adjacent fix that the resource path forced into view:
+      Adjacent fixes that the resource path forced into view:
 
       - `TypeTable::retain` now closes the kept set under
         `redirects`. After `erase_newtypes_and_flags`, `get(id)`
@@ -217,6 +211,21 @@ Status: Draft
         ID into the reachable set without having a separate
         reference to its base, so the latent retain-vs-redirect
         gap surfaced here.
+      - `wir_build` now disambiguates duplicate parameter names
+        before producing `WirFunction::param_names` /
+        `FunctionTranslator::local_name`. Codegen looks up locals
+        by name (`current_locals` is keyed by name in
+        `codegen::emit::resolve_local`), so two parameters
+        sharing a name would clobber each other's entry and
+        silently mis-resolve. Resource methods declared as
+        `fn op(self: &R, ...)` push that case into view: the
+        synthesised closure's `__call` ends up with a
+        `self: &__Closure` env at index 0 and a `self: &R`
+        explicit param at index 1, both named `self`. The fix
+        suffixes every colliding param with its local index so
+        the names round-trip uniquely; non-param locals that
+        merely shadow a param keep the original suffix-the-Let
+        behaviour.
 
       End-to-end fixture:
       `effect_handler_resource_fields.wado` — installs a

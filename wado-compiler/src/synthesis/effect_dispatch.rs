@@ -1891,28 +1891,10 @@ fn build_handler_op_closure(
 
     // Closure params (mirror the op's params; closure-local indices
     // start fresh at 0).
-    //
-    // Resource methods are declared as `fn op(self: &R, ...)` — the
-    // first explicit param is conventionally named `self` to mark the
-    // receiver. The closure-lowering pass synthesises a `self: &Closure`
-    // parameter at local 0 of the generated `__call` method, so
-    // forwarding the source name `self` here would create two distinct
-    // locals both named `self` in the lowered closure, breaking
-    // downstream phases that consult parameter names. Rename to
-    // `__op_self` for the closure binding while preserving the resource
-    // op's original parameter list (used by the wrapper / dispatch
-    // struct field type) untouched.
-    let rename_param = |name: &str| -> String {
-        if name == "self" {
-            "__op_self".to_string()
-        } else {
-            name.to_string()
-        }
-    };
     let closure_params: Vec<(String, TypeId)> = op
         .params
         .iter()
-        .map(|p| (rename_param(&p.name), p.type_id))
+        .map(|p| (p.name.clone(), p.type_id))
         .collect();
     let arg_call_args: Vec<CallArg> = op
         .params
@@ -1923,7 +1905,7 @@ fn build_handler_op_closure(
                 TirExpr::new(
                     TirExprKind::Local {
                         index: i as u32,
-                        name: rename_param(&p.name),
+                        name: p.name.clone(),
                     },
                     p.type_id,
                     span,
