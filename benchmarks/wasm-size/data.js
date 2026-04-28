@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777339153776,
+  "lastUpdate": 1777372557184,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -17281,6 +17281,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 1524496,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "46c2fd850f64f6c03d285eba6352435d20c9534e",
+          "message": "Merge pull request #949 from wado-lang/claude/investigate-wado-dce-GDnoP\n\nopt: reach two stuck-DCE cases + unify GC/mem-module DCE",
+          "timestamp": "2026-04-28T19:30:43+09:00",
+          "tree_id": "b0298f3972b0fb2b737e33d07e7bc7b92a790831",
+          "url": "https://github.com/wado-lang/wado/commit/46c2fd850f64f6c03d285eba6352435d20c9534e"
+        },
+        "date": 1777372556865,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8774,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18518,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 1522768,
             "unit": "bytes"
           }
         ]
