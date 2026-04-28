@@ -65,6 +65,18 @@ pub struct Package {
     /// by the resolver, which synthesises Wado declarations from each
     /// asset's exports.
     pub wasm_assets: IndexMap<String, crate::loader::WasmAsset>,
+
+    /// Per-instantiation effect-dispatch plans, populated by the early
+    /// `synthesis::effect_dispatch::synthesize_pre_cm_binding` half and
+    /// consumed by the late `synthesize_post_check` half (which lowers
+    /// `WithHandler` against them). Carrying the plans through the
+    /// `Package` avoids re-deriving the same `(struct_type_id,
+    /// global_name, wrapper_names, …)` triple from existing TIR
+    /// declarations between the two halves.
+    pub dispatch_plans: IndexMap<
+        crate::synthesis::effect_dispatch::InstantiationKey,
+        crate::synthesis::effect_dispatch::DispatchPlan,
+    >,
 }
 
 impl Package {
@@ -99,6 +111,8 @@ impl Package {
             task_return_flat_params: None,
             // Wasm assets loaded from `use _ from "<path>" with { type: ... }`
             wasm_assets: IndexMap::default(),
+            // Effect-dispatch plans flow from pre-cm_binding to post-check
+            dispatch_plans: IndexMap::default(),
         }
     }
 

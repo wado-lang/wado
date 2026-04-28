@@ -63,7 +63,6 @@ use crate::tir::{
 /// the declaration: `EffectMeta` carries the **template** operation list
 /// (with type-params unsubstituted) and is shared across every
 /// instantiation that needs the same template.
-#[allow(dead_code)]
 type EffectKey = (ModuleSource, String);
 
 /// Canonical identity of a per-monomorphisation dispatch instantiation:
@@ -76,11 +75,9 @@ type EffectKey = (ModuleSource, String);
 /// distinct argument tuple gets its own dispatch struct / global / wrapper
 /// triple, with the resource declaration's operation types substituted at
 /// the type-param indices recorded by the resource decl.
-#[allow(dead_code)]
-type InstantiationKey = (ModuleSource, String, Vec<TypeId>);
+pub type InstantiationKey = (ModuleSource, String, Vec<TypeId>);
 
 /// Metadata for a single effect or resource, indexed by `EffectKey`.
-#[allow(dead_code)]
 #[derive(Debug, Clone)]
 struct EffectMeta {
     /// The operation declarations (in source order) — copied so later
@@ -104,7 +101,6 @@ struct EffectMeta {
 /// `__cm_binding__<R>_<op>` adapters — so they share a single index. The
 /// `is_resource` flag distinguishes the kinds where it matters (currently
 /// only the wrapper's declared `effects` list).
-#[allow(dead_code)]
 fn build_effect_index(project: &Package) -> IndexMap<EffectKey, EffectMeta> {
     let mut out: IndexMap<EffectKey, EffectMeta> = IndexMap::default();
     for (module_source, module) in &project.tir_modules {
@@ -145,7 +141,6 @@ fn build_effect_index(project: &Package) -> IndexMap<EffectKey, EffectMeta> {
 /// triple off each `HandlerImplKey` directly — no name-only matching
 /// against `effect_index` — so two effects sharing a name across modules
 /// cannot be conflated.
-#[allow(dead_code)]
 fn identify_active_effects(
     impl_index: &IndexMap<HandlerImplKey, HandlerImplInfo>,
 ) -> IndexSet<InstantiationKey> {
@@ -163,33 +158,36 @@ fn identify_active_effects(
 /// A `DispatchPlan` is built once per active effect by
 /// `synthesize_dispatch_infrastructure` and consumed by the lowering
 /// (`lower_with_handler`) and call-site rewriting
-/// (`rewrite_call_sites_to_wrappers`) passes.
-#[allow(dead_code)]
+/// (`rewrite_call_sites_to_wrappers`) passes. The map of plans is
+/// stashed on `Package::dispatch_plans` between the early
+/// (`synthesize_pre_cm_binding`) and late (`synthesize_post_check`)
+/// halves of the synthesis split so the late phase doesn't re-derive
+/// the same `(struct_type_id, global_name, …)` triple.
 #[derive(Debug, Clone)]
-struct DispatchPlan {
+pub struct DispatchPlan {
     /// `TypeId` of the synthesised `__Dispatch_<E>` struct.
-    struct_type_id: TypeId,
+    pub struct_type_id: TypeId,
     /// `TypeId` of `Option<&__Dispatch_<E>>` — the global's runtime type
     /// and the type of `outer` / dispatch wrapper-saved values.
-    nullable_ref_type_id: TypeId,
+    pub nullable_ref_type_id: TypeId,
     /// `TypeId` of `&__Dispatch_<E>` — handed to `Option::Some` when
     /// installing a fresh dispatch record.
-    inner_ref_type_id: TypeId,
+    pub inner_ref_type_id: TypeId,
     /// Name of the synthesised `__effect_<E>` mutable global.
-    global_name: String,
+    pub global_name: String,
     /// Operation name → dispatch wrapper function name
     /// (`__effect_dispatch__<E>__<op>`).
-    wrapper_names: IndexMap<String, String>,
+    pub wrapper_names: IndexMap<String, String>,
     /// Operation name → dispatch struct field name (`op_<op>`).
-    field_names: IndexMap<String, String>,
+    pub field_names: IndexMap<String, String>,
     /// Operation name → field type (`fn(<op_params>) -> <op_ret>`).
-    field_types: IndexMap<String, TypeId>,
+    pub field_types: IndexMap<String, TypeId>,
     /// Operation name → 0-based field index in `__Dispatch_<E>`. The
     /// `outer` field always sits at index 0; ops start at 1.
-    field_indices: IndexMap<String, u32>,
+    pub field_indices: IndexMap<String, u32>,
     /// Cached operation declarations (cloned from `EffectMeta`) so the
     /// wrapper / closure synth doesn't have to walk back to the index.
-    operations: Vec<TirEffectOp>,
+    pub operations: Vec<TirEffectOp>,
 }
 
 /// Build the mangled instantiation label for naming dispatch
@@ -275,7 +273,6 @@ fn substitute_operations(
 ///
 /// All synthesised dispatch infrastructure lives in the entry module,
 /// mirroring `cm_binding`'s placement of WASI binding adapters.
-#[allow(dead_code)]
 fn synthesize_dispatch_struct(
     project: &mut Package,
     entry_source: &ModuleSource,
@@ -303,8 +300,8 @@ fn synthesize_dispatch_struct(
     {
         let mut tt = tt_rc.borrow_mut();
         label = instantiation_label(base_name, type_args, &tt);
-        struct_name = format!("__Dispatch_{label}");
-        global_name = format!("__effect_{label}");
+        struct_name = crate::name::dispatch_struct_name(&label);
+        global_name = crate::name::dispatch_global_name(&label);
         struct_type_id = tt.make_struct(struct_name.clone(), entry_source.clone());
         inner_ref_type_id = tt.make_ref(struct_type_id);
         nullable_ref_type_id = tt.make_option(inner_ref_type_id);
@@ -336,7 +333,7 @@ fn synthesize_dispatch_struct(
     let mut field_indices: IndexMap<String, u32> = IndexMap::default();
 
     for (i, op) in meta.operations.iter().enumerate() {
-        let field_name = format!("op_{}", op.name);
+        let field_name = crate::name::dispatch_field_name(&op.name);
         let field_type = op_field_types[i];
         let field_index = (i + 1) as u32;
         fields.push(TirField {
@@ -352,7 +349,7 @@ fn synthesize_dispatch_struct(
         });
         wrapper_names.insert(
             op.name.clone(),
-            format!("__effect_dispatch__{}__{}", label, op.name),
+            crate::name::dispatch_wrapper_name(&label, &op.name),
         );
         field_names.insert(op.name.clone(), field_name);
         field_types.insert(op.name.clone(), field_type);
@@ -392,7 +389,6 @@ fn synthesize_dispatch_struct(
 /// narrowing `global.get` results with `ref.as_non_null` since `None`
 /// reads must round-trip cleanly to express "no handler installed"
 /// at runtime.
-#[allow(dead_code)]
 fn synthesize_dispatch_global(
     project: &mut Package,
     entry_source: &ModuleSource,
@@ -447,7 +443,6 @@ fn synthesize_dispatch_global(
 /// The outer-scope restore before the closure call implements algebraic
 /// effect forwarding: a handler method can call `<E>::<op>` again to
 /// delegate to the outer handler chain without infinite recursion.
-#[allow(dead_code)]
 fn synthesize_dispatch_wrappers(
     project: &mut Package,
     entry_source: &ModuleSource,
@@ -458,7 +453,6 @@ fn synthesize_dispatch_wrappers(
     let (effect_module, base_name, type_args) = key;
     let effect_module = effect_module.clone();
     let base_name = base_name.clone();
-    let is_wasi = matches!(effect_module, ModuleSource::Wasi { .. });
     let is_resource = meta.is_resource;
     let entry_module = project
         .tir_modules
@@ -475,7 +469,6 @@ fn synthesize_dispatch_wrappers(
             type_args,
             op,
             plan,
-            is_wasi,
             is_resource,
             &type_table,
         );
@@ -483,7 +476,6 @@ fn synthesize_dispatch_wrappers(
     }
 }
 
-#[allow(dead_code)]
 fn build_dispatch_wrapper_function(
     entry_source: &ModuleSource,
     effect_module: &ModuleSource,
@@ -492,7 +484,6 @@ fn build_dispatch_wrapper_function(
     type_args: &[TypeId],
     op: &TirEffectOp,
     plan: &DispatchPlan,
-    is_wasi: bool,
     is_resource: bool,
     type_table: &std::rc::Rc<std::cell::RefCell<TypeTable>>,
 ) -> TirFunction {
@@ -715,8 +706,17 @@ fn build_dispatch_wrapper_function(
     // programs never reach the wrapper fallback for such effects
     // because effect-check requires a handler at every call site, but
     // we still emit the placeholder for consistency.
+    // Routing key is `op.cm_name`:
+    //   * resource ops always carry a `#[cm("...")]` attribute (the
+    //     resolver records its payload on `TirEffectOp.cm_name`), and
+    //     `is_resource` is set when the dispatch instantiation comes from
+    //     a `pub resource ...` decl rather than a `pub effect ...` decl;
+    //   * WASI effect ops always carry `#[cm("...")]` too (every WASI
+    //     interface method is a CM canonical operation in our stdlib);
+    //   * user-defined effect ops carry no `#[cm("...")]` and are
+    //     unreachable here in well-typed programs (effect-check insists
+    //     on a handler at every call site).
     let mut else_stmts: Vec<TirStmt> = Vec::new();
-    let _ = is_wasi; // routing now driven by cm_name presence
     if is_resource {
         let placeholder_call = build_resource_fallback_call(
             entry_source,
@@ -736,8 +736,8 @@ fn build_dispatch_wrapper_function(
             },
             span,
         ));
-    } else if op.cm_name.is_some() || is_wasi {
-        // WASI effect call: emit the user-effect Call form
+    } else if op.cm_name.is_some() {
+        // WASI / cm-tagged effect call: emit the user-effect Call form
         // (`Effect::op(args)`) so cm_binding's effect-call collector
         // and rewriter pick it up exactly as it would a hand-written
         // effect call.
@@ -965,6 +965,13 @@ fn build_resource_fallback_call(
     // user calls; the wrapper fallback must do the same so its
     // post-cm_binding shape is indistinguishable from a hand-written
     // `Future::<i32>::new()` call site.
+    //
+    // `method_type_args` stays empty: `ast::EffectMethod` carries no
+    // type-parameter list, so resource / effect operations cannot
+    // themselves be generic — only the resource type can. The `T` in
+    // `Stream<T>::read(self, max) -> Array<T>` is the resource's type
+    // parameter, already substituted by `substitute_operations` and
+    // captured in `impl_type_args`.
     let monomorph_info = if type_args.is_empty() {
         None
     } else {
@@ -1040,7 +1047,6 @@ struct DispatchEnv<'a> {
 /// outer function's. Closure-scope `local_types` is dropped on pop
 /// because the lower phase rebuilds each closure's local table from
 /// `Let` statements anyway.
-#[allow(dead_code)]
 struct LowerCtx {
     /// Stack of local-allocation scopes — one entry per active function
     /// or closure body. Top of stack is the innermost scope.
@@ -1058,7 +1064,6 @@ struct LowerCtx {
 /// counter only — the lower phase rebuilds each closure functor's
 /// local table from the body's `Let` statements, so we don't need to
 /// track types here.
-#[allow(dead_code)]
 enum LocalScope {
     Function {
         next_local: u32,
@@ -1069,7 +1074,6 @@ enum LocalScope {
     },
 }
 
-#[allow(dead_code)]
 impl LowerCtx {
     fn alloc_local(&mut self, ty: TypeId) -> u32 {
         let scope = self.scopes.last_mut().expect("at least one scope");
@@ -1098,7 +1102,6 @@ impl LowerCtx {
 /// block (save → build closures + dispatch struct → install global →
 /// body → restore global). See [`desugar_with_handler`] for the shape
 /// of the produced block.
-#[allow(dead_code)]
 fn lower_with_handler_dispatch_in_modules(
     project: &mut Package,
     plans: &IndexMap<InstantiationKey, DispatchPlan>,
@@ -1124,7 +1127,6 @@ fn lower_with_handler_dispatch_in_modules(
     }
 }
 
-#[allow(dead_code)]
 fn lower_with_handler_dispatch_in_func(func: &mut TirFunction, env: &DispatchEnv) {
     if let Some(body) = &mut func.body {
         let local_types = std::mem::take(&mut func.local_types);
@@ -1150,14 +1152,12 @@ fn lower_with_handler_dispatch_in_func(func: &mut TirFunction, env: &DispatchEnv
     }
 }
 
-#[allow(dead_code)]
 fn lower_dispatch_in_block(block: &mut TirBlock, env: &DispatchEnv, ctx: &mut LowerCtx) {
     for stmt in &mut block.stmts {
         lower_dispatch_in_stmt(stmt, env, ctx);
     }
 }
 
-#[allow(dead_code)]
 fn lower_dispatch_in_stmt(stmt: &mut TirStmt, env: &DispatchEnv, ctx: &mut LowerCtx) {
     match &mut stmt.kind {
         TirStmtKind::Let { value, .. }
@@ -1205,7 +1205,6 @@ fn lower_dispatch_in_stmt(stmt: &mut TirStmt, env: &DispatchEnv, ctx: &mut Lower
     }
 }
 
-#[allow(dead_code)]
 fn lower_dispatch_in_expr(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCtx) {
     // `WithHandler` requires custom recursion: its handler-binding
     // expressions and body must be desugared before this node so any
@@ -1224,7 +1223,6 @@ fn lower_dispatch_in_expr(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut Lower
     walk_dispatch_children(expr, env, ctx);
 }
 
-#[allow(dead_code)]
 fn walk_dispatch_children(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCtx) {
     match &mut expr.kind {
         TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
@@ -1385,7 +1383,6 @@ fn walk_dispatch_children(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut Lower
 ///
 /// The walk does **not** descend into nested closures; their locals
 /// live in a different scope.
-#[allow(dead_code)]
 fn max_local_index_in_expr(expr: &TirExpr) -> u32 {
     use crate::tir_visitor::TirRefVisitor;
     let mut visitor = MaxLocalIndex(0);
@@ -1493,7 +1490,6 @@ impl crate::tir_visitor::TirRefVisitor for MaxLocalIndex {
 /// handler type doesn't match any synthesised plan are skipped (a
 /// no-op for that binding) — the resolver / effect-check should have
 /// caught such cases earlier.
-#[allow(dead_code)]
 fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCtx) {
     let span = expr.span;
     let result_type = expr.type_id;
@@ -1691,7 +1687,7 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
         let struct_lit = TirExpr::new(
             TirExprKind::StructLiteral {
                 struct_type: plan.struct_type_id,
-                struct_name: format!("__Dispatch_{label}"),
+                struct_name: crate::name::dispatch_struct_name(&label),
                 fields: struct_fields,
             },
             plan.struct_type_id,
@@ -1819,7 +1815,6 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
 /// `with` only injects its own restores; nesting composes by
 /// successive splice — innermost first, outermost last — which yields
 /// the correct reverse-install order at every exit point.
-#[allow(dead_code)]
 struct RestoreInjector<'a, 'b> {
     /// The restore statements to splice in front of every exit, in
     /// the exact order they should appear (reverse install order —
@@ -1839,7 +1834,6 @@ struct RestoreInjector<'a, 'b> {
     ctx: &'b mut LowerCtx,
 }
 
-#[allow(dead_code)]
 impl<'a, 'b> RestoreInjector<'a, 'b> {
     fn new(restore_seq: &'a [TirStmt], ctx: &'b mut LowerCtx) -> Self {
         Self {
@@ -2142,7 +2136,6 @@ impl<'a, 'b> RestoreInjector<'a, 'b> {
 /// `Resolver::resolve_method` registered, since the resolver mangles
 /// `trait_type` via `get_type_name_full` (preserving the type args for
 /// distinct-instantiation symbol names).
-#[allow(dead_code)]
 fn build_handler_op_closure(
     op: &TirEffectOp,
     effect_label: &str,
@@ -2256,7 +2249,6 @@ fn build_handler_op_closure(
 /// the closure is well-typed at `fn(<op_params>) -> <op_ret>`. The
 /// stub captures nothing, mirroring the WEP's "trap stub funcref" for
 /// wildcard-handled operations.
-#[allow(dead_code)]
 fn build_trap_closure(
     op: &TirEffectOp,
     type_table: &std::rc::Rc<std::cell::RefCell<TypeTable>>,
@@ -2317,7 +2309,6 @@ fn build_trap_closure(
 /// short-circuit the wrapper's fallback. (cm_binding adapters
 /// (`__cm_binding__*`) don't exist yet at this phase, so they need
 /// no carve-out.)
-#[allow(dead_code)]
 fn rewrite_call_sites_to_wrappers(
     project: &mut Package,
     plans: &IndexMap<InstantiationKey, DispatchPlan>,
@@ -2495,14 +2486,12 @@ fn extract_resource_instantiation(
     }
 }
 
-#[allow(dead_code)]
 fn rewrite_calls_in_block(block: &mut TirBlock, ctx: &RewriteCtx<'_>) {
     for stmt in &mut block.stmts {
         rewrite_calls_in_stmt(stmt, ctx);
     }
 }
 
-#[allow(dead_code)]
 fn rewrite_calls_in_stmt(stmt: &mut TirStmt, ctx: &RewriteCtx<'_>) {
     match &mut stmt.kind {
         TirStmtKind::Let { value, .. }
@@ -2552,7 +2541,6 @@ fn rewrite_calls_in_stmt(stmt: &mut TirStmt, ctx: &RewriteCtx<'_>) {
     }
 }
 
-#[allow(dead_code)]
 fn rewrite_calls_in_expr(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
     // Recurse into children first.
     rewrite_call_children(expr, ctx);
@@ -2677,7 +2665,6 @@ fn wrapper_call(
     )
 }
 
-#[allow(dead_code)]
 fn rewrite_call_children(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
     match &mut expr.kind {
         TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
@@ -2884,6 +2871,10 @@ pub fn synthesize_pre_cm_binding(mut project: Package) -> Result<Package, String
 
     let plans = synthesize_dispatch_infrastructure(&mut project, &effect_index, &active_effects);
     rewrite_call_sites_to_wrappers(&mut project, &plans);
+    // Hand the plans off to `synthesize_post_check` via the project so
+    // the late half doesn't re-derive the same struct / global / wrapper
+    // triple from existing declarations.
+    project.dispatch_plans = plans;
     Ok(project)
 }
 
@@ -2894,97 +2885,19 @@ pub fn synthesize_pre_cm_binding(mut project: Package) -> Result<Package, String
 /// stores-check uses it to track reference flow through handler
 /// installs.
 ///
-/// Re-derives the `(effect_index, impl_index, plans)` triple that
-/// `synthesize_pre_cm_binding` built. The triple is a deterministic
-/// function of the `tir_modules` impl/effect/resource declarations,
-/// which haven't changed since the early phase, so re-building gives
-/// the same plans without needing to thread them through `Package`.
+/// Consumes the `dispatch_plans` populated by
+/// `synthesize_pre_cm_binding`; nothing in `effect_check` or
+/// `stores_check` mutates the plans, so we can take them straight off
+/// the `Package` without re-deriving.
 pub fn synthesize_post_check(mut project: Package) -> Result<Package, String> {
-    let effect_index = build_effect_index(&project);
-    let impl_index = build_handler_impl_index(&project, &effect_index);
-    let active_effects = identify_active_effects(&impl_index);
-    if active_effects.is_empty() {
+    let plans = std::mem::take(&mut project.dispatch_plans);
+    if plans.is_empty() {
         return Ok(project);
     }
-    let plans = rebuild_plans(&project, &active_effects);
+    let effect_index = build_effect_index(&project);
+    let impl_index = build_handler_impl_index(&project, &effect_index);
     lower_with_handler_dispatch_in_modules(&mut project, &plans, &impl_index);
     Ok(project)
-}
-
-/// Re-derive the per-instantiation `DispatchPlan` map without
-/// re-emitting any TIR. The wrappers / structs / globals were already
-/// synthesised by `synthesize_pre_cm_binding`; here we just walk the
-/// entry module's existing declarations to recover the `TypeId`s and
-/// op metadata that `desugar_with_handler` needs to build the dispatch
-/// struct literal at each `with` site.
-fn rebuild_plans(
-    project: &Package,
-    active_instantiations: &IndexSet<InstantiationKey>,
-) -> IndexMap<InstantiationKey, DispatchPlan> {
-    let entry_source = project.entry_module_source.clone();
-    let entry_module = project
-        .tir_modules
-        .get(&entry_source)
-        .expect("entry module must exist");
-    let type_table_rc = entry_module.type_table.clone();
-    // The template operations live on the per-decl entries; rebuild
-    // them substituted per active instantiation, just like the early
-    // phase did.
-    let effect_index = build_effect_index(project);
-    let mut plans: IndexMap<InstantiationKey, DispatchPlan> = IndexMap::default();
-    for key in active_instantiations {
-        let (module, base_name, type_args) = key;
-        let template = effect_index
-            .get(&(module.clone(), base_name.clone()))
-            .expect("active instantiation must have a declaration template in the effect index");
-        let operations = substitute_operations(
-            &template.operations,
-            type_args,
-            &mut type_table_rc.borrow_mut(),
-        );
-        let label = instantiation_label(base_name, type_args, &type_table_rc.borrow());
-        let struct_name = format!("__Dispatch_{label}");
-        let global_name = format!("__effect_{label}");
-        let struct_type_id = type_table_rc
-            .borrow()
-            .find_struct_type(&struct_name, &entry_source)
-            .expect("dispatch struct synthesised by synthesize_pre_cm_binding");
-        let mut tt = type_table_rc.borrow_mut();
-        let inner_ref_type_id = tt.make_ref(struct_type_id);
-        let nullable_ref_type_id = tt.make_option(inner_ref_type_id);
-        let mut wrapper_names: IndexMap<String, String> = IndexMap::default();
-        let mut field_names: IndexMap<String, String> = IndexMap::default();
-        let mut field_types: IndexMap<String, TypeId> = IndexMap::default();
-        let mut field_indices: IndexMap<String, u32> = IndexMap::default();
-        for (i, op) in operations.iter().enumerate() {
-            let field_name = format!("op_{}", op.name);
-            let field_index = (i + 1) as u32;
-            let param_types: Vec<TypeId> = op.params.iter().map(|p| p.type_id).collect();
-            let op_func_type = tt.make_function(param_types, op.return_type, vec![], vec![]);
-            wrapper_names.insert(
-                op.name.clone(),
-                format!("__effect_dispatch__{}__{}", label, op.name),
-            );
-            field_names.insert(op.name.clone(), field_name);
-            field_types.insert(op.name.clone(), op_func_type);
-            field_indices.insert(op.name.clone(), field_index);
-        }
-        plans.insert(
-            key.clone(),
-            DispatchPlan {
-                struct_type_id,
-                nullable_ref_type_id,
-                inner_ref_type_id,
-                global_name,
-                wrapper_names,
-                field_names,
-                field_types,
-                field_indices,
-                operations,
-            },
-        );
-    }
-    plans
 }
 
 /// Orchestrates per-monomorphisation dispatch infrastructure synthesis.
