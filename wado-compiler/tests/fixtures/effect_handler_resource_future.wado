@@ -1,19 +1,15 @@
-// TDD red: bundled-form handler for Future<i32> + FutureWritable<i32>.
+// Bundled-form handler for `Future<i32>` + `FutureWritable<i32>`,
+// per WEP-2026-04-11-effect-handler.md.
 //
-// Per WEP-2026-04-11-effect-handler.md, a single handler value can
-// implement both ends of a CM future at a concrete instantiation,
-// and the bundled handler form `with &mut h do` installs both at
-// once. This fixture concentrates on a buffered Future<i32> mock
-// — the writable end stores the value, the readable end returns
-// `Some(value)` once written and `None` otherwise.
-//
-// Status: Gaps 1 (base-trait-name lookup), 2 (per-monomorph
-// dispatch infra), and 3 (`&self` receiver in the wrapper
-// signature) are closed in this branch. One gap remains before this
-// fixture flips green. The next failure mirrors the Stream
-// fixture's: `tx.write(42)` lowers through the CM canonical-method
-// translator (`future-write`), which today's dispatch call-site
-// rewriter doesn't intercept. Gap 4 closes this.
+// `MockFuture` implements both ends of the CM future pair against a
+// single shared `stored` slot; the bundled `with &mut f do` form
+// installs both handlers at once for the duration of the `do` block.
+// Inside the block, `Future::<i32>::new()` / `tx.write(value)` /
+// `rx.read()` / `tx.drop()` / `rx.drop()` all dispatch through the
+// per-monomorphisation `__effect_dispatch__Future<i32>__*` /
+// `__effect_dispatch__FutureWritable<i32>__*` wrappers into
+// `MockFuture`'s methods rather than the CM canonical
+// `future-{new,read,write,drop-*}` intrinsics.
 
 use { println, Stdout } from "core:cli";
 

@@ -1,29 +1,15 @@
-// TDD red: bundled-form handler for Stream<u8> + StreamWritable<u8>.
+// Bundled-form handler for `Stream<u8>` + `StreamWritable<u8>`, per
+// WEP-2026-04-11-effect-handler.md.
 //
-// Per WEP-2026-04-11-effect-handler.md, a single MockCM-style struct
-// can implement both ends of the CM stream pair, and the bundled
-// handler form `with &mut s do` installs both at once.
-//
-// Status: Gaps 1 (base-trait-name lookup), 2 (per-monomorph
-// dispatch infra), and 3 (`&self` receiver in the wrapper signature)
-// are closed in this branch. One gap remains before this fixture
-// flips green; see WEP-2026-04-11 for the full list. The current
-// failure surfaces in WIR build at the `tx.write(payload)` call
-// site:
-//
-//   panic at wado-compiler/src/wir_build/canonical_abi.rs:187:
-//     [WIR] unhandled canonical method: stream-write
-//
-// — i.e. the synthesised `__effect_dispatch__Stream<u8>__write`
-// wrapper exists with the right `(self: &StreamWritable<u8>, data:
-// Array<u8>)` signature, but the user call `tx.write(payload)`
-// lowers through the CM canonical-method translator
-// (`stream-write`) rather than the `__cm_binding__Stream_write`
-// adapter shape that today's dispatch call-site rewriter
-// intercepts. Gap 4 closes this: the dispatch synthesis must
-// recognise and rewrite `CmRawCall { local_name: "stream-..." }`
-// and `__cm_stream_*` internal binding calls in addition to the
-// existing `__cm_binding__<R>_<op>` form.
+// `MockStream` implements both ends of the CM stream pair against a
+// single shared `log` buffer; the bundled `with &mut s do` form
+// installs both handlers at once for the duration of the `do` block.
+// Inside the block, `Stream::<u8>::new()` / `tx.write(payload)` /
+// `rx.read(...)` / `tx.drop()` / `rx.drop()` all dispatch through
+// the per-monomorphisation `__effect_dispatch__Stream<u8>__*` /
+// `__effect_dispatch__StreamWritable<u8>__*` wrappers into
+// `MockStream`'s methods rather than the CM canonical
+// `stream-{new,read,write,drop-*}` intrinsics.
 
 use { println, Stdout } from "core:cli";
 

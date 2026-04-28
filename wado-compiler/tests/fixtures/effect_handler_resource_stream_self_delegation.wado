@@ -1,0 +1,106 @@
+// Self-delegation across nested handlers for the *generic* resource
+// `Stream<u8>` / `StreamWritable<u8>`, mirroring the non-generic
+// effect-level self-delegation in `effect_handler_self_delegation.wado`.
+//
+// The inner handler's body calls back into `Stream::<u8>::read(this, …)`
+// / `StreamWritable::<u8>::write(this, …)`, which the per-monomorphisation
+// dispatch wrapper restores the outer dispatch chain for *before*
+// invoking the closure. The recursive call therefore lands on the outer
+// `BaseStream` handler, not back in `LoggingStream`.
+//
+// Verifies:
+// - per-monomorphisation `outer` save/restore is wired for generic
+//   resources (each `__effect_dispatch__Stream<u8>__op` wrapper restores
+//   its own `__effect_Stream<u8>` global before calling the closure)
+// - the bundled `with &mut h do` form composes across nested handler
+//   pairs without leaking inner-handler state to outer-handler calls
+
+use { println, Stdout } from "core:cli";
+
+struct BaseStream {
+    buf: Array<u8>,
+}
+
+impl Stream<u8> for BaseStream {
+    fn new(&mut self) -> [Stream<u8>, StreamWritable<u8>] {
+        let id: i32 = 0;
+        resume [id as Stream<u8>, id as StreamWritable<u8>]
+    }
+    fn read(&mut self, this: &Stream<u8>, max: i32) -> Array<u8> {
+        let _ = this;
+        let _ = max;
+        let snapshot = self.buf;
+        self.buf = [];
+        resume snapshot
+    }
+    fn drop(&mut self, this: &Stream<u8>) {
+        let _ = this;
+        resume ()
+    }
+    ..
+}
+
+impl StreamWritable<u8> for BaseStream {
+    fn write(&mut self, this: &StreamWritable<u8>, data: Array<u8>) {
+        let _ = this;
+        for let b of data {
+            self.buf.push(b);
+        }
+        resume ()
+    }
+    fn drop(&mut self, this: &StreamWritable<u8>) {
+        let _ = this;
+        resume ()
+    }
+    ..
+}
+
+// Counts every read / write that flows through it and forwards to
+// the outer handler. The `Stream::<u8>::read(this, …)` call inside
+// `read` is self-delegation: the dispatch wrapper restores the outer
+// chain (BaseStream) before invoking this closure, so the recursive
+// call sees BaseStream, not LoggingStream.
+struct LoggingStream {
+    reads: i32,
+    writes: i32,
+}
+
+impl Stream<u8> for LoggingStream {
+    fn read(&mut self, this: &Stream<u8>, max: i32) -> Array<u8> {
+        self.reads += 1;
+        let inner = this.read(max);   // -> BaseStream via outer handler
+        resume inner
+    }
+    ..
+}
+
+impl StreamWritable<u8> for LoggingStream {
+    fn write(&mut self, this: &StreamWritable<u8>, data: Array<u8>) {
+        self.writes += 1;
+        this.write(data);             // -> BaseStream via outer handler
+        resume ()
+    }
+    ..
+}
+
+export fn run() with Stdout {
+    let mut base = BaseStream { buf: [] };
+    let mut logger = LoggingStream { reads: 0, writes: 0 };
+    with &mut base do {
+        let [rx, tx] = Stream::<u8>::new();
+        with &mut logger do {
+            let payload: Array<u8> = [104 as u8, 105 as u8]; // "hi"
+            tx.write(payload);
+            let got = rx.read(16);
+            assert got.len() == 2;
+            assert got[0] == 104 as u8;
+            assert got[1] == 105 as u8;
+        }
+        tx.drop();
+        rx.drop();
+    }
+    println(`reads={logger.reads} writes={logger.writes} buf_len={base.buf.len()}`);
+}
+
+__DATA__
+{"stdout_contains": ["reads=1 writes=1 buf_len=0"]}
