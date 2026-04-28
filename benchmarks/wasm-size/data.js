@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777333118180,
+  "lastUpdate": 1777339153776,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -17217,6 +17217,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/e14fc87d59c4a0bcb213d4caa2c2c01daeb61b16"
         },
         "date": 1777333117892,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8982,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19030,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 1524496,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "369f8801160058035d26df02fee93ed9fd6c3e43",
+          "message": "Merge pull request #948 from wado-lang/claude/kiln-drop-output-hash\n\nkiln(M9): drop generator-cache from wado.lock; metadata.json + wado check",
+          "timestamp": "2026-04-28T10:13:46+09:00",
+          "tree_id": "ad2ba6d5e393d364531614920b0366303422ade6",
+          "url": "https://github.com/wado-lang/wado/commit/369f8801160058035d26df02fee93ed9fd6c3e43"
+        },
+        "date": 1777339153466,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
