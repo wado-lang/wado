@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777417761837,
+  "lastUpdate": 1777419403192,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -17613,6 +17613,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/bd79c8252bbbb2e4d560737ec45edbe33be6c7c6"
         },
         "date": 1777417761513,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8774,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18518,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 1281621,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c42ece019eaa7843beb08b4306820fad52ea1835",
+          "message": "Merge pull request #957 from wado-lang/claude/extend-wasi-test-mocks-DzNh9\n\ntest(e2e): add wasi:tls mock provider for fixtures",
+          "timestamp": "2026-04-29T08:30:55+09:00",
+          "tree_id": "d5c463650ff5e0fae7e92c9761a0176e3d28d699",
+          "url": "https://github.com/wado-lang/wado/commit/c42ece019eaa7843beb08b4306820fad52ea1835"
+        },
+        "date": 1777419402861,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
