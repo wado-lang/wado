@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777382600704,
+  "lastUpdate": 1777389451769,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -17393,6 +17393,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/9c04d52a39a3c5f34b8ea8bb3b19ee1e4efe9278"
         },
         "date": 1777382600394,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8774,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18518,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 1522768,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c5216629d6c61089c5dae27d3c83d340bdc42a9c",
+          "message": "Merge pull request #953 from wado-lang/claude/analyze-effect-system-dWzKZ\n\ndocs(effect-system): tighten WEPs + clearer diagnostic for generic-E handler",
+          "timestamp": "2026-04-29T00:11:06+09:00",
+          "tree_id": "64a8ef9a6f0b0d935925512939bdba91a0c97154",
+          "url": "https://github.com/wado-lang/wado/commit/c5216629d6c61089c5dae27d3c83d340bdc42a9c"
+        },
+        "date": 1777389451449,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
