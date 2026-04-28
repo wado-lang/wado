@@ -4,37 +4,25 @@
 // can implement both ends of the CM stream pair, and the bundled
 // handler form `with &mut s do` installs both at once.
 //
-// Until generic-resource handler dispatch lands, this test is
-// expected to fail. The implementation gaps tracked in the WEP are:
+// Status: Gap 1 (resolver / `build_handler_impl_index` keyed by base
+// trait name) is closed in this branch. Three gaps remain before
+// this fixture flips green; see WEP-2026-04-11 for the full list.
+// The current failure surfaces in WIR build:
 //
-//   1. The resolver records `MethodInfo::trait_name` as the full
-//      mangled form (e.g. "Stream<u8>") for generic-resource impls,
-//      but `resource_decl_index` and the dispatch-synthesis
-//      `build_handler_impl_index` look it up by bare base name
-//      ("Stream"). The lookup misses, `resume` is rejected by the
-//      resolver, and the WithHandler reaches `lower_pre_boxing` un-
-//      desugared.
-//   2. Generic resources need per-monomorphisation dispatch
-//      infrastructure: one `__Dispatch_Stream__u8` /
-//      `__effect_Stream__u8` / `__effect_dispatch__Stream__u8__op`
-//      triple per type-arg combination, with the resource's
-//      operations' types substituted for that combination.
-//   3. `Stream<T>` operations declared with the `&self` shorthand
-//      have their receiver param filtered out by
-//      `Resolver::resolve_effect_ops`, so the synthesised wrapper
-//      signature today doesn't include the receiver — needed to
-//      forward to `cm_stream_*` / `CmRawCall`.
-//   4. Stream/Future call sites bypass the `__cm_binding__<R>_<op>`
-//      adapter shape that today's call-site rewriter intercepts —
-//      they lower instead to `CmRawCall { local_name: "stream-..." }`,
-//      to internal binding functions like `__cm_stream_read_u8` /
-//      `__cm_stream_write_u8`, or to WIR translate-phase intrinsics
-//      (`stream-new`, `future-new`). The dispatch synthesis must
-//      recognise and rewrite all three shapes for handlers to
-//      intercept Stream/Future at all.
+//   panic at wado-compiler/src/wir_build/calls.rs:1885:
+//     [WIR] translate_closure_to_canonical: canonical closure type
+//     not registered for signature
+//     "() -> (Ref { type_id: tuple//[Stream<u8>, StreamWritable<u8>],
+//                   nullable: false })"
 //
-// Once those four gaps are closed, drop the `compile_error` field
-// below and assert the buffered round-trip via `bytes_buffered=0`.
+// — i.e. the synthesised dispatch closure references the resource
+// instantiation's tuple type, but the dispatch struct / globals /
+// wrappers were emitted for the bare base resource (`Stream`) so the
+// canonical closure type isn't registered for the per-monomorph
+// signature. Closing the per-monomorph dispatch gap (synth
+// `__Dispatch_Stream__u8` etc., substituting the resource's
+// operation types per type-arg combination) resolves this and is
+// the next step.
 
 use { println, Stdout } from "core:cli";
 
@@ -98,4 +86,4 @@ export fn run() with Stdout {
 }
 
 __DATA__
-{"compile_error": "`resume` is only valid inside an effect handler method body"}
+{"stdout_contains": ["bytes_buffered=0"]}

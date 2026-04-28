@@ -237,35 +237,50 @@ Status: Draft
 
 - [ ] Generic-resource handler dispatch — bundled handlers
       for `Stream<T>`, `StreamWritable<T>`, `Future<T>`,
-      `FutureWritable<T>`. Four cross-cutting gaps remain
+      `FutureWritable<T>`. Four cross-cutting gaps stand
       between non-generic resource dispatch (above) and the
-      WEP's MockCM design:
+      WEP's MockCM design; gap 1 is done, gaps 2–4 remain.
 
-      1. The resolver records `MethodInfo::trait_name` as the
-         full mangled form (e.g. "Stream<u8>") for generic-
-         resource impls so distinct instantiations get distinct
-         method names. The decl indices, however, are keyed by
-         the bare base name ("Stream"), so today's
-         `resource_decl_index` lookup in
-         `Resolver::resolve_method` and the
-         `build_handler_impl_index` lookup in
-         `synthesis::effect_dispatch` both miss — the resolver
-         then rejects `resume` on every method body, and the
-         dispatch synthesis leaves the `WithHandler`
-         un-desugared.
-      2. Generic resources need **per-monomorphisation**
-         dispatch infrastructure: one `__Dispatch_Stream__u8`
-         struct + `__effect_Stream__u8` global + per-op wrapper
-         triple per type-arg combination, with the resource's
-         operation types substituted for that combination.
-      3. `Stream<T>` / `Future<T>` operations declared with the
-         `&self` shorthand have their receiver param filtered
-         out by `Resolver::resolve_effect_ops`, so the
-         synthesised wrapper signature does not include the
-         receiver. The wrapper must take the resource handle as
-         its first argument to forward to `cm_stream_*` /
-         `cm_future_*` / `CmRawCall`.
-      4. Stream/Future call sites bypass the
+      1. **(done)** Decl-index lookups must walk through the
+         bare base trait name. The resolver records
+         `MethodInfo::trait_name` as the full mangled form
+         (e.g. "Stream<u8>") for generic-resource impls so
+         distinct instantiations get distinct method names; the
+         `resource_decl_index` / `effect_decl_index`, however,
+         are keyed by the bare base name ("Stream"). Closed by
+         adding a `base_trait_name` field on `LocalMethodName`
+         that mirrors the existing `base_struct_name` (derived
+         in `name.rs` via `split_base_name`, the canonical
+         inverse of `mangle_ref_aware`), threading it through
+         every constructor, and switching the
+         `Resolver::resolve_method` / `lower_resume_in_handler_methods`
+         / `build_handler_impl_index` lookups to consult the
+         base form. Resolver-side `resume` gating now accepts
+         `impl Stream<u8> for MockCM`, and the dispatch
+         synthesis enters the `WithHandler` desugaring path.
+      2. **(open)** Generic resources need
+         **per-monomorphisation** dispatch infrastructure: one
+         `__Dispatch_Stream__u8` struct + `__effect_Stream__u8`
+         global + per-op wrapper triple per type-arg
+         combination, with the resource's operation types
+         substituted for that combination. Today's synthesis
+         emits only one set keyed by the base name, which makes
+         the wrapper closures reference the bare-resource type
+         signature (`fn() -> [Stream<T>, StreamWritable<T>]`).
+         The `Stream<u8>` instantiation's tuple closure type
+         then never gets registered, surfacing as
+         `[WIR] translate_closure_to_canonical: canonical
+         closure type not registered for signature
+         "() -> (Ref { type_id: tuple//[Stream<u8>, ...] })"`.
+      3. **(open)** `Stream<T>` / `Future<T>` operations
+         declared with the `&self` shorthand have their
+         receiver param filtered out by
+         `Resolver::resolve_effect_ops`, so the synthesised
+         wrapper signature does not include the receiver. The
+         wrapper must take the resource handle as its first
+         argument to forward to `cm_stream_*` / `cm_future_*` /
+         `CmRawCall`.
+      4. **(open)** Stream/Future call sites bypass the
          `__cm_binding__<R>_<op>` adapter shape that today's
          call-site rewriter intercepts. They lower instead to
          `CmRawCall { local_name: "stream-..." }` (e.g.
@@ -276,8 +291,8 @@ Status: Draft
          and rewrite all three shapes for handlers to intercept
          Stream/Future at all.
 
-      End-to-end fixtures (TDD red, locked via `compile_error`
-      against the current resolver diagnostic):
+      End-to-end fixtures (TDD red, will flip green when the
+      remaining gaps close):
 
       - `effect_handler_resource_stream.wado` — bundled handler
         on a `MockStream` that implements both `Stream<u8>` and
@@ -287,10 +302,6 @@ Status: Draft
         on a `MockFuture` that implements both `Future<i32>`
         and `FutureWritable<i32>` and round-trips a value
         through a stored slot.
-
-      Once the four gaps above are closed, drop the
-      `compile_error` field on each fixture and the assertions
-      / `stdout_contains` will take over.
 
 - [ ] `MockCM` and handler bundling helpers in `core:test`.
       Once generic-resource dispatch (above) lands, the WEP's

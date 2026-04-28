@@ -731,6 +731,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
         scope.trait_ctx.type_params.clear();
         let mut type_param_list = Vec::new();
 
+        // Bare base trait name (e.g. `"Stream"` for an `impl Stream<u8>`).
+        // Distinct from `trait_name`, which is the full mangled form
+        // (`"Stream<u8>"`) used to make per-instantiation method names
+        // unique. Effect / resource / trait decl indices are keyed by the
+        // base name, so handler-method gating and dispatch synthesis must
+        // resolve through this form rather than the mangled one.
+        let base_trait_name: Option<String> = trait_type.map(|t| scope.get_type_name(t));
+
         // First, collect type params from impl block's generic type (e.g., impl Box<T>)
         // Also build impl_type_params for the TirFunction
         // For ref-type impls (e.g., impl Trait for &Container<T>), unwrap the reference first.
@@ -937,7 +945,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // share the handler-method semantics with effects: an
         // `impl Fields for CountingFields` method is a one-shot handler
         // body just like `impl Counter for BaseCounter`.
-        if let Some(name) = trait_name
+        //
+        // Decl indices are keyed by the base trait name, so for generic
+        // resources (`impl Stream<u8> for MockCM`) the bare-name form
+        // (`Stream`) is what the lookup needs — `trait_name` itself is the
+        // full mangled form (`Stream<u8>`) and would miss the index.
+        if let Some(name) = base_trait_name.as_deref()
             && (scope.trait_env.effect_decl_index.contains_key(name)
                 || scope.trait_env.resource_decl_index.contains_key(name))
         {
@@ -1071,6 +1084,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 struct_name: struct_name.to_string(),
                 base_struct_name: struct_name.to_string(),
                 trait_name: trait_name.map(String::from),
+                base_trait_name: base_trait_name.clone(),
                 method_name: func.name.clone(),
                 method_type_args: vec![],
                 is_type_param_receiver: false,

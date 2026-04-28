@@ -769,8 +769,16 @@ pub struct LocalMethodName {
     /// The base struct name without type args (e.g., "Point")
     /// This is preserved during monomorphization for lookup purposes.
     pub base_struct_name: String,
-    /// The trait name if this is a trait method (e.g., "Display")
+    /// The trait/effect/resource name, possibly with type args
+    /// (e.g., `"Display"`, `"Stream<u8>"`).
     pub trait_name: Option<String>,
+    /// The base trait name without type args (e.g., "Display", "Stream").
+    /// Mirrors `base_struct_name`: kept alongside `trait_name` so generic
+    /// trait/resource impls (`impl Stream<u8> for MockCM`) round-trip a
+    /// distinct mangled `trait_name` for codegen while still resolving
+    /// against the bare-name decl indices used by trait/effect/resource
+    /// dispatch.
+    pub base_trait_name: Option<String>,
     /// The method name (e.g., "sum" or "fmt")
     pub method_name: String,
     /// Method-level type args (e.g., ["i64"] for transform<i64>)
@@ -788,20 +796,47 @@ pub struct LocalMethodName {
     pub cm_name: Option<String>,
 }
 
+/// Derive the bare base name from a possibly-mangled type/trait name.
+///
+/// `mangle_ref_aware` and friends produce names like `Stream<u8>` or
+/// `From<i32>` by appending the type-arg list to the base name; the
+/// reverse — recovering the base by truncating at the first `<` — is
+/// the canonical inverse and lives here so other components stay
+/// agnostic to name-format details (per the wado-compiler CLAUDE
+/// rules: "Use utilities in name.rs to handle name mangling and
+/// monomorphization. Other components must not know the details of
+/// name formats.").
+fn split_base_name(name: &str) -> &str {
+    match name.find('<') {
+        Some(i) => &name[..i],
+        None => name,
+    }
+}
+
 impl LocalMethodName {
     /// Create a new `LocalMethodName` directly from components.
     ///
     /// IMPORTANT: `struct_name` must be the base struct name WITHOUT type parameters.
     /// Use `with_type_args()` or `with_struct_type_args()` to add type parameters.
+    ///
+    /// `trait_name` may be either the bare base form (`"Display"`) or a
+    /// pre-mangled form (`"Stream<u8>"`); `base_trait_name` is derived by
+    /// truncating at the first `<`. Pass the form your caller already has;
+    /// `with_trait_type_args` is available when type args need to be
+    /// applied separately.
     #[must_use]
     pub fn new(struct_name: String, trait_name: Option<String>, method_name: String) -> Self {
         debug_assert!(
             !struct_name.contains('<'),
             "LocalMethodName::new() expects base struct name without type params, got: {struct_name}"
         );
+        let base_trait_name = trait_name
+            .as_deref()
+            .map(|n| split_base_name(n).to_string());
         Self {
             base_struct_name: struct_name.clone(),
             struct_name,
+            base_trait_name,
             trait_name,
             method_name,
             method_type_args: vec![],
@@ -814,7 +849,8 @@ impl LocalMethodName {
     /// Create a new `LocalMethodName` with all components including method type args.
     ///
     /// IMPORTANT: `struct_name` must be the base struct name WITHOUT type parameters.
-    /// Use `with_type_args()` to add struct type parameters.
+    /// `trait_name` may be either bare or pre-mangled — see `new` for the
+    /// derivation rule for `base_trait_name`.
     #[must_use]
     pub fn with_method_type_args(
         struct_name: String,
@@ -826,9 +862,13 @@ impl LocalMethodName {
             !struct_name.contains('<'),
             "LocalMethodName::with_method_type_args() expects base struct name without type params, got: {struct_name}"
         );
+        let base_trait_name = trait_name
+            .as_deref()
+            .map(|n| split_base_name(n).to_string());
         Self {
             base_struct_name: struct_name.clone(),
             struct_name,
+            base_trait_name,
             trait_name,
             method_name,
             method_type_args,
@@ -842,7 +882,8 @@ impl LocalMethodName {
     ///
     /// `impl_type_args` are applied to the struct name (e.g., "Array" + ["i32"] → "Array<i32>").
     /// `method_type_args` are stored separately (not embedded in `method_name`).
-    /// `base_struct_name` is preserved (not changed by type args).
+    /// `base_struct_name` and `base_trait_name` are preserved (not changed
+    /// by type args).
     #[must_use]
     pub fn with_type_args(&self, impl_type_args: &[String], method_type_args: &[String]) -> Self {
         let mangled_struct = if impl_type_args.is_empty() {
@@ -854,6 +895,7 @@ impl LocalMethodName {
             struct_name: mangled_struct,
             base_struct_name: self.base_struct_name.clone(),
             trait_name: self.trait_name.clone(),
+            base_trait_name: self.base_trait_name.clone(),
             method_name: self.method_name.clone(),
             method_type_args: method_type_args.to_vec(),
             is_type_param_receiver: self.is_type_param_receiver,
@@ -869,6 +911,33 @@ impl LocalMethodName {
         self.with_type_args(type_args, &[])
     }
 
+    /// Create a version with the trait name mangled with type args.
+    ///
+    /// `trait_type_args` are applied to the trait name (e.g.,
+    /// `"Stream"` + `["u8"]` → `"Stream<u8>"`). `base_trait_name` is
+    /// preserved so dispatch synthesis / decl-index lookups continue to
+    /// resolve against the bare trait declaration.
+    ///
+    /// Panics if `self.trait_name` is `None` — type args on an inherent
+    /// method don't have a trait to mangle.
+    #[must_use]
+    pub fn with_trait_type_args(&self, trait_type_args: &[String]) -> Self {
+        let base = self
+            .base_trait_name
+            .clone()
+            .expect("with_trait_type_args() requires a trait name");
+        let mangled = if trait_type_args.is_empty() {
+            base.clone()
+        } else {
+            mangle_ref_aware(&base, trait_type_args)
+        };
+        Self {
+            trait_name: Some(mangled),
+            base_trait_name: Some(base),
+            ..self.clone()
+        }
+    }
+
     /// Create a version with the struct name directly substituted (not wrapped with type args).
     /// Used when the struct name is a type parameter (e.g., `T^Ord::cmp` → `i32^Ord::cmp`).
     ///
@@ -880,6 +949,7 @@ impl LocalMethodName {
             struct_name: new_name.to_string(),
             base_struct_name: base_name.to_string(),
             trait_name: self.trait_name.clone(),
+            base_trait_name: self.base_trait_name.clone(),
             method_name: self.method_name.clone(),
             method_type_args: self.method_type_args.clone(),
             is_type_param_receiver: false,

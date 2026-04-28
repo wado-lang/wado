@@ -2524,18 +2524,26 @@ fn build_handler_impl_index(
             let Some(method_info) = &func.method_info else {
                 continue;
             };
-            let Some(trait_name) = &method_info.trait_name else {
+            // The decl indices are keyed by the bare base trait name, so
+            // generic-resource impls (`impl Stream<u8> for MockCM`) must
+            // resolve through `base_trait_name` rather than the mangled
+            // `trait_name` ("Stream<u8>"). The HandlerImplKey then keys
+            // by base name as well, since the dispatch infrastructure
+            // synthesised at this layer is per-effect / per-resource (one
+            // per declaration); per-monomorph specialisation for generic
+            // resources is layered on top in a separate pass.
+            let Some(base_trait_name) = &method_info.base_trait_name else {
                 continue;
             };
-            let Some(effect_module) = effect_module_for_name.get(trait_name) else {
-                // Not an effect — skip (the trait_name is from a regular
-                // user trait or auto-derived prelude trait).
+            let Some(effect_module) = effect_module_for_name.get(base_trait_name) else {
+                // Not an effect / resource — skip (the trait_name is from
+                // a regular user trait or auto-derived prelude trait).
                 continue;
             };
             let key: HandlerImplKey = (
                 method_info.struct_name.clone(),
                 effect_module.clone(),
-                trait_name.clone(),
+                base_trait_name.clone(),
             );
             let entry = out.entry(key).or_insert_with(|| HandlerImplInfo {
                 impl_module: module_source.clone(),
@@ -2591,10 +2599,14 @@ fn lower_resume_in_handler_methods(project: &mut Package) {
             let Some(method_info) = &func.method_info else {
                 continue;
             };
-            let Some(trait_name) = &method_info.trait_name else {
+            // `handler_names` is keyed by the bare effect / resource
+            // declaration name; generic-resource impls carry the full
+            // mangled form in `trait_name` ("Stream<u8>") and resolve
+            // against the index via `base_trait_name` ("Stream").
+            let Some(base_trait_name) = &method_info.base_trait_name else {
                 continue;
             };
-            if !handler_names.contains(trait_name) {
+            if !handler_names.contains(base_trait_name) {
                 continue;
             }
             if let Some(body) = &mut func.body {

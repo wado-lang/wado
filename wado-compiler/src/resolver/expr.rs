@@ -3228,6 +3228,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         struct_name: target_name.clone(),
                         base_struct_name: target_name,
                         trait_name: Some(from_trait),
+                        base_trait_name: Some("From".to_string()),
                         method_name: "from".to_string(),
                         method_type_args: vec![],
                         is_type_param_receiver: false,
