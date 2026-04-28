@@ -208,11 +208,9 @@ three-way values: passes by default, `[todo]` to mark a known Gale gap
 The Wado script (`scripts/extract_antlr4_descriptors.wado`) is
 self-contained — no `wado.toml`, no kiln invocations — and ports
 `RuntimeTestDescriptorParser.parse` directly. The shell wrapper
-(`scripts/extract-antlr4-descriptors.sh`) pre-creates the per-category
-output directories because the Wado script avoids
-`create_directory_at` until the underlying CM-variant multi-value
-codegen bug is fixed (see
-`wado-compiler/tests/fixtures/result_unit_cm_variant_passthrough.wado`).
+(`scripts/extract-antlr4-descriptors.sh`) is a thin convenience that
+resolves the category list (default Phase 1 set, or `all`) and
+forwards to the Wado script.
 
 When triaging a new failure:
 

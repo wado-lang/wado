@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Wrapper around package-gale/scripts/extract_antlr4_descriptors.wado.
 #
-# Pre-creates the per-category output directories (the Wado script avoids
-# `create_directory_at` until the underlying compiler bug is fixed — see
-# `wado-compiler/tests/fixtures/result_unit_cm_variant_passthrough.wado`).
+# Resolves the category list (default = Phase 1 set, or "all" to walk
+# every category) and forwards to the Wado script. The Wado script
+# itself creates the output directories and emits the .g4/.wado files.
 #
 # Usage (from anywhere):
 #   package-gale/scripts/extract-antlr4-descriptors.sh [Category ...]
@@ -20,15 +20,6 @@ DEFAULT_CATEGORIES=(Sets LexerExec ParseTrees)
 DESCRIPTORS_ROOT="vendor/antlr4/runtime-testsuite/resources/org/antlr/v4/test/runtime/descriptors"
 
 cd "$REPO_ROOT"
-
-# `wado compile` lowers some `Result<unit, CmVariant>` shapes incorrectly
-# when the entry filename is given as a relative path (see
-# `wado-compiler/tests/fixtures/result_unit_cm_variant_passthrough.wado`
-# for the underlying compiler bug). The Wado script avoids those shapes
-# directly, but the entry file itself must still be passed as an
-# absolute path or `cargo run --bin wado -- run` will hit the same
-# path-dependent monomorph-registration order on the script's WIR.
-SCRIPT_ABS="$REPO_ROOT/package-gale/scripts/extract_antlr4_descriptors.wado"
 
 if [ ! -d "$DESCRIPTORS_ROOT" ]; then
     echo "extract: cannot find $DESCRIPTORS_ROOT" >&2
@@ -49,13 +40,7 @@ else
     categories=("$@")
 fi
 
-# mkdir -p the output dirs the Wado script will write into.
-mkdir -p package-gale/tests/antlr4_descriptors
-for cat in "${categories[@]}"; do
-    mkdir -p "package-gale/tests/antlr4_descriptors/$cat"
-done
-
 # Forward to the Wado script. `wado run` opens the cwd as the only preopen,
 # so all paths are interpreted relative to $REPO_ROOT.
 exec cargo run --quiet --bin wado -- run \
-    "$SCRIPT_ABS" -- "${categories[@]}"
+    package-gale/scripts/extract_antlr4_descriptors.wado -- "${categories[@]}"

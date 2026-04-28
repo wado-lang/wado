@@ -279,32 +279,36 @@ fn read_file_to_string(dir: &Descriptor, path: &String) -> Result<String, ErrorC
     }
 }
 
-/// Returns `true` on success. Errors are reported to stderr.
-///
-/// Returning `Result<(), ErrorCode>` instead would trigger a `wado compile`
-/// codegen bug — `Result<flat, flat>` (here `() + ErrorCode-as-i32`) gets
-/// the multi-value flat ABI, and the `Err(e) => return Result::Err(e)` arm
-/// emits a `struct.new` that pushes a boxed variant ref where an i32
-/// discriminant is expected. See
-/// `wado-compiler/tests/fixtures/result_unit_cm_variant_passthrough.wado`.
-fn write_file_string(dir: &Descriptor, path: &String, content: &String) -> bool with Stderr {
+fn write_file_string(dir: &Descriptor, path: &String, content: &String) -> Result<(), ErrorCode> {
     let opened = dir.open_at(
         PathFlags::none(),
         *path,
         OpenFlags::Create | OpenFlags::Truncate,
         DescriptorFlags::Read | DescriptorFlags::Write,
     ).wait();
-    if let Ok(file) = opened {
-        let bytes: Array<u8> = content.bytes().collect();
-        let [rx, tx] = Stream::<u8>::new();
-        let sub = file.write_via_stream(rx, 0 as Filesize);
-        tx.write(bytes);
-        tx.drop();
-        sub.drop();
-        return true;
+    match opened {
+        Err(e) => return Result::Err(e),
+        Ok(file) => {
+            let bytes: Array<u8> = content.bytes().collect();
+            let [rx, tx] = Stream::<u8>::new();
+            let sub = file.write_via_stream(rx, 0 as Filesize);
+            tx.write(bytes);
+            tx.drop();
+            sub.drop();
+            return Result::Ok(());
+        },
     }
-    eprintln(`extract: cannot open '{*path}' for writing`);
-    return false;
+}
+
+fn ensure_dir(parent: &Descriptor, name: &String) -> Result<Descriptor, ErrorCode> {
+    // Ignore "exists" — we just want the directory to be present.
+    let _ = parent.create_directory_at(*name).wait();
+    return parent.open_at(
+        PathFlags::none(),
+        *name,
+        OpenFlags::Directory,
+        DescriptorFlags::Read | DescriptorFlags::MutateDirectory,
+    ).wait();
 }
 
 fn open_dir(parent: &Descriptor, name: &String, mutate: bool) -> Result<Descriptor, ErrorCode> {
@@ -538,18 +542,11 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
     };
     let triage_map = load_triage_map(&status_text);
 
-    // Open the output root. The wrapper script (`extract-antlr4-descriptors.sh`)
-    // is responsible for `mkdir -p` of the per-category directories before
-    // invoking us — we never call `create_directory_at` here, since the CM
-    // monomorphization of `wait()` over `Result<(), ErrorCode>` triggers a
-    // codegen bug under `wado compile`. See
-    // `wado-compiler/tests/fixtures/result_unit_cm_variant_passthrough.wado`.
-    let antlr_dir = match open_dir(&tests_dir, &"antlr4_descriptors", true) {
+    // Ensure the output root exists.
+    let antlr_dir = match ensure_dir(&tests_dir, &"antlr4_descriptors") {
         Ok(d) => d,
         Err(_) => {
-            eprintln("extract: cannot open package-gale/tests/antlr4_descriptors/");
-            eprintln("extract: did you run the script via package-gale/scripts/extract-antlr4-descriptors.sh?");
-            eprintln("extract: that wrapper is responsible for mkdir of per-category dirs");
+            eprintln("extract: cannot create or open antlr4_descriptors/");
             return;
         },
     };
@@ -566,11 +563,10 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
                 continue;
             },
         };
-        let cat_out_dir = match open_dir(&antlr_dir, category, true) {
+        let cat_out_dir = match ensure_dir(&antlr_dir, category) {
             Ok(d) => d,
             Err(_) => {
-                eprintln(`extract: cannot open output dir '{*category}'/, skipping`);
-                eprintln(`extract: pre-create it via the wrapper script`);
+                eprintln(`extract: cannot create category dir '{*category}', skipping`);
                 continue;
             },
         };
@@ -606,7 +602,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
 
             // Write the main grammar.
             let g4_filename = `{base}.g4`;
-            if !write_file_string(&cat_out_dir, &g4_filename, &parsed.grammar) {
+            if let Err(_) = write_file_string(&cat_out_dir, &g4_filename, &parsed.grammar) {
                 eprintln(`extract: cannot write {key}.g4`);
                 continue;
             }
@@ -615,7 +611,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
             let mut slave_relpaths: Array<String> = [];
             for let mut i = 0; i < parsed.slave_grammars.len(); i += 1 {
                 let slave_name = `{base}.slave{i + 1}.g4`;
-                if !write_file_string(&cat_out_dir, &slave_name, &parsed.slave_grammars[i]) {
+                if let Err(_) = write_file_string(&cat_out_dir, &slave_name, &parsed.slave_grammars[i]) {
                     eprintln(`extract: cannot write {key} slave {i}`);
                     continue;
                 }
@@ -640,7 +636,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
         // Emit the per-category test file.
         let test_src = emit_test_file_for_category(category, &entries);
         let test_filename = `antlr4_descriptor_{category_to_snake(category)}_test.wado`;
-        if !write_file_string(&tests_dir, &test_filename, &test_src) {
+        if let Err(_) = write_file_string(&tests_dir, &test_filename, &test_src) {
             eprintln(`extract: cannot write {test_filename}`);
             continue;
         }
