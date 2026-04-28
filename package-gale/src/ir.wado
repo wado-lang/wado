@@ -698,79 +698,71 @@ fn find_or_add_channel(channels: &mut Array<String>, name: &String) -> i32 {
 /// Walk every parser rule in `grammar` and fill any `snake_name` / `field_name`
 /// caches that were left empty (e.g. by struct-literal construction in tests).
 /// IR nodes built via the smart constructors already have these populated, so
-/// the only cost on the production path is one `is_empty()` check per node.
+/// the production path only pays one `is_empty()` check per node — no array
+/// rebuilds, no element re-wrapping. Mutates in place via `&mut` ref-bind
+/// patterns, available since the boxing-pass param-shadow fix.
 pub fn normalize_caches(grammar: &mut Grammar) {
     for let mut ri = 0; ri < grammar.parser_rules.len(); ri += 1 {
-        if grammar.parser_rules[ri].snake_name.is_empty() {
-            grammar.parser_rules[ri].snake_name = to_snake_case(&grammar.parser_rules[ri].name);
+        let rule = &mut grammar.parser_rules[ri];
+        if rule.snake_name.is_empty() {
+            rule.snake_name = to_snake_case(&rule.name);
         }
-        if grammar.parser_rules[ri].field_name.is_empty() {
-            grammar.parser_rules[ri].field_name = escape_ident(&grammar.parser_rules[ri].snake_name);
+        if rule.field_name.is_empty() {
+            rule.field_name = escape_ident(&rule.snake_name);
         }
-        let mut new_alts: Array<Alternative> = [];
-        for let alt of grammar.parser_rules[ri].alternatives {
-            let mut new_elements: Array<Element> = [];
-            for let elem of alt.elements {
-                new_elements.push(normalize_element_owned(elem));
+        for let mut ai = 0; ai < rule.alternatives.len(); ai += 1 {
+            let alt = &mut rule.alternatives[ai];
+            for let mut ei = 0; ei < alt.elements.len(); ei += 1 {
+                normalize_element(&mut alt.elements[ei]);
             }
-            new_alts.push(Alternative { label: alt.label, options: alt.options, elements: new_elements });
         }
-        grammar.parser_rules[ri].alternatives = new_alts;
     }
 }
 
-fn normalize_element_owned(elem: Element) -> Element {
+fn normalize_element(elem: &mut Element) {
     if let RuleRef(r) = elem {
-        let snake = if r.snake_name.is_empty() { to_snake_case(&r.name) } else { r.snake_name };
-        let field = if r.field_name.is_empty() { escape_ident(&snake) } else { r.field_name };
-        return Element::RuleRef(RuleRefElement {
-            name: r.name,
-            options: r.options,
-            snake_name: snake,
-            field_name: field,
-        });
+        if r.snake_name.is_empty() {
+            r.snake_name = to_snake_case(&r.name);
+        }
+        if r.field_name.is_empty() {
+            r.field_name = escape_ident(&r.snake_name);
+        }
+        return;
     }
     if let TokenRef(t) = elem {
-        let lower = if t.lower_name.is_empty() { to_lower(&t.name) } else { t.lower_name };
-        let field = if t.field_name.is_empty() { escape_ident(&lower) } else { t.field_name };
-        return Element::TokenRef(TokenRefElement {
-            name: t.name,
-            options: t.options,
-            lower_name: lower,
-            field_name: field,
-        });
+        if t.lower_name.is_empty() {
+            t.lower_name = to_lower(&t.name);
+        }
+        if t.field_name.is_empty() {
+            t.field_name = escape_ident(&t.lower_name);
+        }
+        return;
     }
     if let Label(lab) = elem {
-        let snake = if lab.snake_name.is_empty() { to_snake_case(&lab.name) } else { lab.snake_name };
-        let field = if lab.field_name.is_empty() { escape_ident(&snake) } else { lab.field_name };
-        return Element::Label(LabelElement {
-            name: lab.name,
-            list: lab.list,
-            element: normalize_element_owned(lab.element),
-            snake_name: snake,
-            field_name: field,
-        });
+        if lab.snake_name.is_empty() {
+            lab.snake_name = to_snake_case(&lab.name);
+        }
+        if lab.field_name.is_empty() {
+            lab.field_name = escape_ident(&lab.snake_name);
+        }
+        normalize_element(&mut lab.element);
+        return;
     }
     if let Repeat(rep) = elem {
-        return Element::Repeat(RepeatElement {
-            kind: rep.kind,
-            element: normalize_element_owned(rep.element),
-            non_greedy: rep.non_greedy,
-        });
+        normalize_element(&mut rep.element);
+        return;
     }
     if let Group(g) = elem {
-        let mut new_alts: Array<Alternative> = [];
-        for let alt of g.alternatives {
-            let mut new_elements: Array<Element> = [];
-            for let e of alt.elements {
-                new_elements.push(normalize_element_owned(e));
+        for let mut ai = 0; ai < g.alternatives.len(); ai += 1 {
+            let alt = &mut g.alternatives[ai];
+            for let mut ei = 0; ei < alt.elements.len(); ei += 1 {
+                normalize_element(&mut alt.elements[ei]);
             }
-            new_alts.push(Alternative { label: alt.label, options: alt.options, elements: new_elements });
         }
-        return Element::Group(GroupElement { alternatives: new_alts, options: g.options });
+        return;
     }
     if let Not(n) = elem {
-        return Element::Not(NotElement { element: normalize_element_owned(n.element) });
+        normalize_element(&mut n.element);
+        return;
     }
-    return elem;
 }

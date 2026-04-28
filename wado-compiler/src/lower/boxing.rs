@@ -577,6 +577,13 @@ impl BoxLowerer {
         // "this local was ever address-taken in source" signal that
         // survives optimizer iterations even after the syntactic `&x`
         // markers in the body have been inlined/elided.
+        //
+        // Persist the effective set so shadow locals introduced for boxed
+        // parameters appear here in place of the original param indices —
+        // alias analyses seeded from `func.address_taken_locals` would
+        // otherwise miss the new shadows (the body's `&local.value` reads
+        // happen on the shadow, not the param).
+        func.address_taken_locals = effective_address_taken;
     }
 
     /// Rewrite every `Local { index }` reference in `block` according to
