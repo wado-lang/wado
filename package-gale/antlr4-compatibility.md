@@ -147,13 +147,13 @@ to emit Wado source, plus `core:cli` and `wasi:filesystem` for I/O.
 All compat-related artefacts (extracted grammars, generated tests,
 triage state) live under `package-gale/tests/antlr4-compat/`:
 
-| Path                                      | Role                                                             |
-| ----------------------------------------- | ---------------------------------------------------------------- |
-| `scripts/extract_antlr4_descriptors.wado` | Extractor (single-file Wado script)                              |
-| `scripts/extract-antlr4-descriptors.sh`   | Wrapper resolving the category list and forwarding to `wado run` |
-| `tests/antlr4-compat/grammars/`           | Generated `.g4` files (committed)                                |
-| `tests/antlr4-compat/<category>_test.wado` | Generated tests (committed; each carries `#![generated(by=…)]`) |
-| `tests/antlr4-compat/status.toml`         | Manually maintained triage state                                 |
+| Path                                       | Role                                                             |
+| ------------------------------------------ | ---------------------------------------------------------------- |
+| `scripts/extract_antlr4_descriptors.wado`  | Extractor (single-file Wado script)                              |
+| `scripts/extract-antlr4-descriptors.sh`    | Wrapper resolving the category list and forwarding to `wado run` |
+| `tests/antlr4-compat/grammars/`            | Generated `.g4` files (committed)                                |
+| `tests/antlr4-compat/<category>_test.wado` | Generated tests (committed; each carries `#![generated(by=…)]`)  |
+| `tests/antlr4-compat/status.toml`          | Manually maintained triage state                                 |
 
 ### Triage states (`status.toml`)
 
