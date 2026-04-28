@@ -75,6 +75,36 @@ Considered alternatives:
    - Pros: every declaration is self-describing; cross-declaration consistency is enforced by the compiler, so "broken state compiles" cannot happen — `extends` mismatches are rejected, and declared backing is the single source of truth.
    - Cons: more boilerplate per declaration. In practice, ~all `#[cm(...)]`-bearing resources are emitted by `wado-from-idl`, so the cost falls on one tool, not on humans.
 
+### Syntax
+
+```wado
+pub resource Child extends Parent { ... }
+```
+
+The `extends Parent` clause slots between the resource name (and any generic parameter list) and the body. It is optional; resources without `extends` behave as today.
+
+```wado
+#[cm("web:dom#EventTarget", type=externref)]
+pub resource EventTarget { ... }
+
+#[cm("web:dom#Node", type=externref)]
+pub resource Node extends EventTarget { ... }
+
+#[cm("web:dom#Element", type=externref)]
+pub resource Element extends Node { ... }
+```
+
+Rules:
+
+- `extends` introduces a new keyword. Existing identifiers named `extends` (none in the standard library) become reserved.
+- Only one parent type is permitted (single inheritance). The parent must be a `resource`, not a trait, struct, or enum.
+- The parent expression may include generic arguments: `resource ListOf<T> extends Iter<T> { ... }`. Generic arity does not have to match between child and parent.
+- `extends` is permitted only when both the declaring resource and its parent declare `type=externref` in `#[cm(...)]`. A backing mismatch is a compile error (per the representation section above).
+- Visibility is independent: a `pub resource X extends Y` is permitted whether `Y` is `pub` or module-private, **provided `Y` is visible at every use site of `X`**. The compiler enforces this; it is not a special rule for `extends`.
+- Cycles are rejected (`A extends B`, `B extends A`).
+
+`extends` does not appear in any other position. There is no `extends` clause on `struct`, `trait`, `enum`, `variant`, `flags`, `effect`, or function declarations in this WEP. (A separate WEP could later introduce trait supertraits with a different syntax, e.g., `:`.)
+
 ### No cross-representation conversion in v1
 
 An `externref`-backed resource and an `i32`-backed resource are **distinct types from Wado's perspective**, even if they happen to point to the same host concept. There is no implicit conversion, and no `as`-cast, between them in v1.
