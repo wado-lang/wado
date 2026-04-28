@@ -504,11 +504,8 @@ impl TlsProvider for MockTlsProvider {
         &self,
         server_name: String,
         _transport: Box<dyn TlsTransport>,
-    ) -> std::pin::Pin<
-        Box<
-            dyn Future<Output = Result<Box<dyn TlsStream>, WasiTlsError>> + Send,
-        >,
-    > {
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<Box<dyn TlsStream>, WasiTlsError>> + Send>>
+    {
         let mock = self.mocks.get(&server_name).cloned();
         Box::pin(async move {
             match mock {

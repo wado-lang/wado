@@ -78,9 +78,9 @@ TLS mock sub-fields (inside each entry of `"tls_mocks": {...}`):
 
 Keys are matched against the `server_name` argument the guest passes to `Connector::connect`. Unmatched server names fail the handshake with a clear error so tests cannot silently reach the real network. Empty `tls_mocks` is the default and behaves as "no server name allowed."
 
-| Field   | Type     | Description                                                               |
-| ------- | -------- | ------------------------------------------------------------------------- |
-| `recv`  | `string` | Cleartext bytes delivered to the guest's `Connector::receive` stream      |
+| Field   | Type     | Description                                                                |
+| ------- | -------- | -------------------------------------------------------------------------- |
+| `recv`  | `string` | Cleartext bytes delivered to the guest's `Connector::receive` stream       |
 | `error` | `string` | If set, fails the handshake with this message (`Connector::connect → Err`) |
 
 #### Examples
