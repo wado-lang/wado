@@ -372,6 +372,14 @@ fn expr_modifies_any(expr: &TirExpr, locals: &IndexSet<u32>) -> bool {
         TirExprKind::Index {
             expr: inner, index, ..
         } => expr_modifies_any(inner, locals) || expr_modifies_any(index, locals),
+        TirExprKind::TemplateString { .. } => {
+            unreachable!("TemplateString should be expanded before this phase")
+        }
+        TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+            unreachable!(
+                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
+            )
+        }
         _ => false,
     }
 }
@@ -456,6 +464,14 @@ fn expr_contains(expr: &TirExpr, key: &CseKey) -> bool {
         TirExprKind::Index {
             expr: inner, index, ..
         } => expr_contains(inner, key) || expr_contains(index, key),
+        TirExprKind::TemplateString { .. } => {
+            unreachable!("TemplateString should be expanded before this phase")
+        }
+        TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+            unreachable!(
+                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
+            )
+        }
         _ => false,
     }
 }
@@ -633,6 +649,14 @@ fn replace_in_expr(expr: &mut TirExpr, key: &CseKey, replacement: &TirExprKind, 
             for arg in args {
                 replace_in_expr(arg, key, replacement, type_id);
             }
+        }
+        TirExprKind::TemplateString { .. } => {
+            unreachable!("TemplateString should be expanded before this phase")
+        }
+        TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+            unreachable!(
+                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
+            )
         }
         _ => {}
     }

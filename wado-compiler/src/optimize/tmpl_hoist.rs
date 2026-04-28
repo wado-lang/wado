@@ -782,6 +782,14 @@ fn transform_expr(
                 type_table,
             );
         }
+        TirExprKind::TemplateString { .. } => {
+            unreachable!("TemplateString should be expanded before this phase")
+        }
+        TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+            unreachable!(
+                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
+            )
+        }
         _ => {}
     }
 }
@@ -1511,6 +1519,14 @@ fn rename_local_in_expr(expr: &mut TirExpr, old_index: u32, new_index: u32, new_
         }
         TirExprKind::Block(block) => {
             rename_local_in_block(block, old_index, new_index, new_name);
+        }
+        TirExprKind::TemplateString { .. } => {
+            unreachable!("TemplateString should be expanded before this phase")
+        }
+        TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+            unreachable!(
+                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
+            )
         }
         _ => {}
     }

@@ -280,7 +280,26 @@ fn analyze_expr(expr: &TirExpr, usage: &mut IndexMap<u32, LocalUsage>, type_tabl
             }
             analyze_block(default, usage, type_table);
         }
-        _ => {}
+        TirExprKind::IntLiteral { .. }
+        | TirExprKind::FloatLiteral { .. }
+        | TirExprKind::BoolLiteral(_)
+        | TirExprKind::CharLiteral(_)
+        | TirExprKind::StringLiteral(_)
+        | TirExprKind::BytesLiteral(_)
+        | TirExprKind::Null
+        | TirExprKind::Unit
+        | TirExprKind::FuncRef { .. }
+        | TirExprKind::GlobalVarGet { .. }
+        | TirExprKind::Capture { .. }
+        | TirExprKind::EnumConstruct { .. } => {}
+        TirExprKind::TemplateString { .. } => {
+            unreachable!("TemplateString should be expanded before this phase")
+        }
+        TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+            unreachable!(
+                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
+            )
+        }
     }
 }
 
@@ -596,9 +615,14 @@ fn strip_in_expr(
         | TirExprKind::FuncRef { .. }
         | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
-        | TirExprKind::EnumConstruct { .. }
-        | TirExprKind::TemplateString { .. }
-        | TirExprKind::WithHandler { .. }
-        | TirExprKind::Resume { .. } => {}
+        | TirExprKind::EnumConstruct { .. } => {}
+        TirExprKind::TemplateString { .. } => {
+            unreachable!("TemplateString should be expanded before this phase")
+        }
+        TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+            unreachable!(
+                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
+            )
+        }
     }
 }
