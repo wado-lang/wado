@@ -122,10 +122,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let mut resolved_effects = self.resolve_effects(&[effect_name], &effect_ids);
         let effect = resolved_effects.pop();
 
-        // The name must point at an actual effect declaration, not a
-        // regular trait or arbitrary identifier. Param effects (generic
-        // `<effect E>`) are also rejected for installation: you cannot
-        // install a handler for a polymorphic effect parameter.
+        // The name must point at an actual effect or resource
+        // declaration, not a regular trait or arbitrary identifier. Both
+        // kinds are installable as handlers (see WEP 2026-04-11): the
+        // `with` clause keeps the same syntax, only the dispatch wrapper
+        // shape differs (resources don't declare themselves as effects on
+        // the wrapper). Param effects (generic `<effect E>`) are still
+        // rejected for installation: you cannot install a handler for a
+        // polymorphic effect parameter.
         if let Some(eff) = &effect {
             match eff {
                 EffectRef::Concrete {
@@ -137,7 +141,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         .effect_decl_index
                         .get(name)
                         .is_some_and(|(decl_module, _)| decl_module == module_source);
-                    if !is_known_effect {
+                    let is_known_resource = self
+                        .trait_env
+                        .resource_decl_index
+                        .get(name)
+                        .is_some_and(|(decl_module, _)| decl_module == module_source);
+                    if !is_known_effect && !is_known_resource {
                         let _ = self.logger.error(TypeError::NotAnEffect {
                             name: name.clone(),
                             span: effect_ty.span(),
@@ -293,8 +302,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
     }
 
     /// Walk every `impl Trait for <type_name>` block in scope and return
-    /// the `(effect_name, effect_defining_module)` pair for each impl
-    /// whose `trait_type` resolves to an effect declaration.
+    /// the `(name, defining_module)` pair for each impl whose `trait_type`
+    /// resolves to an effect *or* resource declaration. Both kinds are
+    /// installable as handlers (see WEP 2026-04-11), so the bundled
+    /// `with h do` form expands to one binding per impl regardless of
+    /// kind.
     ///
     /// Discovery order: `trait_env.impl_index` entries first (loaded
     /// modules), then any extra impls in the current module's items
@@ -311,10 +323,23 @@ impl<H: CompilerHost> Resolver<'_, H> {
             crate::hashmap::IndexSet::default();
 
         let mut try_record = |trait_name: String, effects: &mut Vec<(String, ModuleSource)>| {
-            if let Some((effect_module, _)) = self.trait_env.effect_decl_index.get(&trait_name)
-                && seen.insert((effect_module.clone(), trait_name.clone()))
+            // Accept either an effect or a resource declaration. The
+            // dispatch synthesis pass treats both uniformly.
+            let decl_module = self
+                .trait_env
+                .effect_decl_index
+                .get(&trait_name)
+                .map(|(m, _)| m.clone())
+                .or_else(|| {
+                    self.trait_env
+                        .resource_decl_index
+                        .get(&trait_name)
+                        .map(|(m, _)| m.clone())
+                });
+            if let Some(decl_module) = decl_module
+                && seen.insert((decl_module.clone(), trait_name.clone()))
             {
-                effects.push((trait_name, effect_module.clone()));
+                effects.push((trait_name, decl_module));
             }
         };
 

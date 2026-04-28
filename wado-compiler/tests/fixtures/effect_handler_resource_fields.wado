@@ -1,31 +1,23 @@
-// TDD red: handlers for wasi:http resources (Fields).
+// Resource handler dispatch on a real CM resource.
 //
-// Per WEP-2026-04-11-effect-handler.md (Implementation Status):
-//   "[ ] Today the dispatch synthesis only routes user-declared
-//        `effect E` decls; resources (`resource Stream<T>`) live on a
-//        separate track ... requires extending `build_effect_index` /
-//        `build_handler_impl_index` to walk resources too, plus
-//        teaching the call-site rewriter to intercept resource method
-//        calls (`stream.read(max)`) the way it currently intercepts
-//        effect-op calls (`Effect::op(args)`)."
+// Per WEP-2026-04-11-effect-handler.md, resources participate in the
+// dispatch protocol identically to effects: `with R => h do { ... }`
+// installs a handler whose `impl R for T` methods intercept calls to
+// `R::<op>` (static) and `r.<op>(...)` (instance), with self-delegation
+// reaching the outer handler chain.
 //
-// This fixture exercises the missing path on a real CM resource:
-//   1. Static-method dispatch through a handler:
-//      `Fields::new()` inside the `with` body must reach the user
-//      handler's `new` rather than the wasi:http CM adapter directly.
-//   2. Instance-method dispatch through a handler:
-//      `f.has(name)` must reach the handler's `has`, not the resource
-//      method's CM adapter.
-//   3. Self-delegation to the outer (real) handler:
-//      The handler bodies call `Fields::new()` / `this.has(name)`,
-//      which Phase 4's outer-chain restoration must route to the
-//      wasmtime-provided implementation, exactly as for user-declared
-//      effects (see effect_handler_self_delegation.wado).
+// This fixture locks the three pieces together on `wasi:http`'s
+// `Fields` resource:
 //
-// Until resource handler dispatch lands, this test is expected to fail
-// (compile-time or assertion-time). Once implemented, both globals
-// will read 1 and 2 respectively because the handler intercepts each
-// call before delegating.
+//   1. Static-method dispatch — `Fields::new()` inside the `with` body
+//      reaches the user handler's `new` rather than the WASI CM
+//      adapter directly.
+//   2. Instance-method dispatch — `f.has(name)` reaches the handler's
+//      `has`, not the resource method's CM adapter.
+//   3. Self-delegation — the handler bodies' `Fields::new()` /
+//      `this.has(name)` route to the wasmtime-provided implementation,
+//      exactly as for user-declared effects (see
+//      effect_handler_self_delegation.wado).
 
 use { Request, Response, ErrorCode, Fields, FieldName, Trailers } from "wasi:http";
 

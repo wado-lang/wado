@@ -932,10 +932,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let display_name = MethodName::format_local(struct_name, None, &func.name);
         let mut ctx = FunctionContext::new(return_type, display_name);
         // Mark this context as a handler method body when the surrounding
-        // impl block targets an effect declaration. `resume` is only valid
-        // inside such bodies (see WEP 2026-04-11).
+        // impl block targets an effect or resource declaration. `resume`
+        // is only valid inside such bodies (see WEP 2026-04-11). Resources
+        // share the handler-method semantics with effects: an
+        // `impl Fields for CountingFields` method is a one-shot handler
+        // body just like `impl Counter for BaseCounter`.
         if let Some(name) = trait_name
-            && scope.trait_env.effect_decl_index.contains_key(name)
+            && (scope.trait_env.effect_decl_index.contains_key(name)
+                || scope.trait_env.resource_decl_index.contains_key(name))
         {
             ctx.in_handler_method = true;
         }

@@ -820,11 +820,33 @@ impl TypeTable {
     /// This physically removes entries from the backing `IndexMap`s so that
     /// subsequent iterations (e.g. WIR type registration) no longer see them.
     /// The intern map and secondary indices are rebuilt to stay consistent.
+    ///
+    /// `retain` preserves the invariant that `self.get(id)` does not panic
+    /// for any surviving `id`. After `erase_newtypes_and_flags`, `get(id)`
+    /// follows `self.redirects` to a canonical TypeId; if the redirect's
+    /// target were removed, `get(id)` would panic on a surviving id.
+    /// To keep the invariant, the kept set is implicitly extended with
+    /// the redirect targets of every kept id, and stale redirect entries
+    /// (whose source or target did not survive) are dropped.
     pub fn retain(&mut self, keep: &IndexSet<TypeId>) {
-        self.types.retain(|id, _| keep.contains(id));
+        // Implicit closure under `redirects`: every kept id whose `get`
+        // result lives at a different id must keep that target alive too.
+        let mut effective_keep: IndexSet<TypeId> = keep.clone();
+        for &id in keep {
+            if let Some(&target) = self.redirects.get(&id) {
+                effective_keep.insert(target);
+            }
+        }
+
+        self.types.retain(|id, _| effective_keep.contains(id));
+        // A redirect entry is meaningful only when both endpoints survive.
+        self.redirects
+            .retain(|id, target| effective_keep.contains(id) && effective_keep.contains(target));
         // Retain SymbolKey indices to surviving TypeIds only.
-        self.symbol_by_type.retain(|id, _| keep.contains(id));
-        self.type_by_symbol.retain(|_, id| keep.contains(id));
+        self.symbol_by_type
+            .retain(|id, _| effective_keep.contains(id));
+        self.type_by_symbol
+            .retain(|_, id| effective_keep.contains(id));
         // Rebuild intern map from the surviving entries.
         self.intern_map.clear();
         self.struct_name_index.clear();

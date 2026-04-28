@@ -52,24 +52,43 @@ use crate::tir::{
     TirStmtKind, TirStruct, TirStructField, TirTemplatePart, TypeId, TypeTable,
 };
 
-/// Canonical identity of an effect: `(defining_module, name)`.
+/// Canonical identity of an effect or resource: `(defining_module, name)`.
 ///
-/// Two effects in distinct modules that happen to share a name (rare in
-/// practice but possible) compare unequal. Mirrors the resolver's
+/// Two declarations in distinct modules that happen to share a name (rare
+/// in practice but possible) compare unequal. Mirrors the resolver's
 /// canonicalisation of `EffectRef::Concrete { name, module_source }`.
+/// The same key shape is reused for resources because they participate in
+/// the dispatch protocol identically (see WEP 2026-04-11): the call-site
+/// rewriter, the dispatch struct/global/wrappers, and the `with`-block
+/// desugaring don't need to distinguish them.
 #[allow(dead_code)]
 type EffectKey = (ModuleSource, String);
 
-/// Metadata for a single effect, indexed by `EffectKey`.
+/// Metadata for a single effect or resource, indexed by `EffectKey`.
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
 struct EffectMeta {
     /// The operation declarations (in source order) — copied so later
-    /// passes don't have to walk the module tree again.
+    /// passes don't have to walk the module tree again. `TirResource`
+    /// reuses `Vec<TirEffectOp>` so this field is identical for both
+    /// kinds.
     operations: Vec<TirEffectOp>,
+    /// `true` when this entry comes from a `pub resource R { ... }`
+    /// declaration rather than a `pub effect E { ... }`. Resources are
+    /// not effects in Wado's effect system: their dispatch wrapper must
+    /// declare `effects: vec![]` to match the cm_binding adapter and to
+    /// avoid teaching downstream effect-tracking phases (DCE, codegen
+    /// `used_wasi_*`) that "Fields" is a side effect of the wrapper.
+    is_resource: bool,
 }
 
-/// Walk every TIR module and build an `EffectKey -> EffectMeta` index.
+/// Walk every TIR module and build an `EffectKey -> EffectMeta` index
+/// covering both `effect` and `resource` declarations. Resources participate
+/// in the dispatch protocol identically to effects — same operation list,
+/// same wrapper synthesis, same call-site rewriting against
+/// `__cm_binding__<R>_<op>` adapters — so they share a single index. The
+/// `is_resource` flag distinguishes the kinds where it matters (currently
+/// only the wrapper's declared `effects` list).
 #[allow(dead_code)]
 fn build_effect_index(project: &Package) -> IndexMap<EffectKey, EffectMeta> {
     let mut out: IndexMap<EffectKey, EffectMeta> = IndexMap::default();
@@ -79,6 +98,16 @@ fn build_effect_index(project: &Package) -> IndexMap<EffectKey, EffectMeta> {
                 (module_source.clone(), effect.name.clone()),
                 EffectMeta {
                     operations: effect.operations.clone(),
+                    is_resource: false,
+                },
+            );
+        }
+        for resource in &module.resources {
+            out.insert(
+                (module_source.clone(), resource.name.clone()),
+                EffectMeta {
+                    operations: resource.operations.clone(),
+                    is_resource: true,
                 },
             );
         }
@@ -340,11 +369,13 @@ fn synthesize_dispatch_wrappers(
     project: &mut Package,
     entry_source: &ModuleSource,
     key: &EffectKey,
+    meta: &EffectMeta,
     plan: &DispatchPlan,
 ) {
     let effect_module = key.0.clone();
     let effect_name = key.1.clone();
     let is_wasi = matches!(effect_module, ModuleSource::Wasi { .. });
+    let is_resource = meta.is_resource;
     let entry_module = project
         .tir_modules
         .get_mut(entry_source)
@@ -358,6 +389,7 @@ fn synthesize_dispatch_wrappers(
             op,
             plan,
             is_wasi,
+            is_resource,
             &type_table,
         );
         entry_module.add_function(wrapper);
@@ -372,6 +404,7 @@ fn build_dispatch_wrapper_function(
     op: &TirEffectOp,
     plan: &DispatchPlan,
     is_wasi: bool,
+    is_resource: bool,
     type_table: &std::rc::Rc<std::cell::RefCell<TypeTable>>,
 ) -> TirFunction {
     let span = synth_span();
@@ -683,9 +716,9 @@ fn build_dispatch_wrapper_function(
         params,
         return_type,
         task_return_type: None,
-        // The wrapper is the implementation of `<E>::<op>`. It declares
-        // effect `E` for two reasons:
+        // The wrapper is the implementation of `<E>::<op>`.
         //
+        // For effects, declare effect `E` on the wrapper for two reasons:
         // - For WASI effects, the fallback path (no handler installed)
         //   calls the existing `__cm_binding__<E>_<op>` adapter, which
         //   carries effect `E` itself. Declaring `E` on the wrapper
@@ -696,14 +729,27 @@ fn build_dispatch_wrapper_function(
         //   `E` is still the honest type — the wrapper *implements* `E`,
         //   even if its body never propagates the effect further.
         //
+        // For resources, the wrapper carries no effects: resource
+        // declarations are not effects in Wado's effect system, so a
+        // call site like `Fields::new()` does not require a `with` clause
+        // on the caller, and the matching `__cm_binding__<R>_<op>`
+        // adapter declares `effects: vec![]` for the same reason.
+        // Mirroring that here keeps the dispatch wrapper observably
+        // equivalent to the cm_binding adapter from the effect-check
+        // and codegen perspectives.
+        //
         // Effect-check has already run by this point, so this declaration
         // is documentation rather than an obligation; downstream passes
         // that re-walk effects (codegen export tables, `used_wasi_*`
         // tracking) get the right answer.
-        effects: vec![EffectRef::Concrete {
-            name: effect_name.to_string(),
-            module_source: effect_module.clone(),
-        }],
+        effects: if is_resource {
+            vec![]
+        } else {
+            vec![EffectRef::Concrete {
+                name: effect_name.to_string(),
+                module_source: effect_module.clone(),
+            }]
+        },
         stores: vec![],
         body: Some(body),
         span,
@@ -1845,10 +1891,28 @@ fn build_handler_op_closure(
 
     // Closure params (mirror the op's params; closure-local indices
     // start fresh at 0).
+    //
+    // Resource methods are declared as `fn op(self: &R, ...)` — the
+    // first explicit param is conventionally named `self` to mark the
+    // receiver. The closure-lowering pass synthesises a `self: &Closure`
+    // parameter at local 0 of the generated `__call` method, so
+    // forwarding the source name `self` here would create two distinct
+    // locals both named `self` in the lowered closure, breaking
+    // downstream phases that consult parameter names. Rename to
+    // `__op_self` for the closure binding while preserving the resource
+    // op's original parameter list (used by the wrapper / dispatch
+    // struct field type) untouched.
+    let rename_param = |name: &str| -> String {
+        if name == "self" {
+            "__op_self".to_string()
+        } else {
+            name.to_string()
+        }
+    };
     let closure_params: Vec<(String, TypeId)> = op
         .params
         .iter()
-        .map(|p| (p.name.clone(), p.type_id))
+        .map(|p| (rename_param(&p.name), p.type_id))
         .collect();
     let arg_call_args: Vec<CallArg> = op
         .params
@@ -1859,7 +1923,7 @@ fn build_handler_op_closure(
                 TirExpr::new(
                     TirExprKind::Local {
                         index: i as u32,
-                        name: p.name.clone(),
+                        name: rename_param(&p.name),
                     },
                     p.type_id,
                     span,
@@ -2408,7 +2472,10 @@ fn synthesize_dispatch_infrastructure(
         synthesize_dispatch_global(project, &entry_source, plan);
     }
     for (key, plan) in &plans {
-        synthesize_dispatch_wrappers(project, &entry_source, key, plan);
+        let meta = effect_index
+            .get(key)
+            .expect("active effect must have an entry in the effect index");
+        synthesize_dispatch_wrappers(project, &entry_source, key, meta, plan);
     }
     plans
 }
@@ -2511,22 +2578,28 @@ fn deref_type(tt: &TypeTable, type_id: TypeId) -> TypeId {
     }
 }
 
-/// Walk every method in every `impl Effect for T` block (where `Effect` is
-/// an actual effect declaration) and rewrite `Resume { value }` to
-/// `Return { value }`. Per the WEP MVP, `resume` has no post-resume
-/// continuation, so it is semantically identical to `return`.
+/// Walk every method in every `impl Effect for T` or `impl Resource for T`
+/// block and rewrite `Resume { value }` to `Return { value }`. Per the WEP
+/// MVP, `resume` has no post-resume continuation, so it is semantically
+/// identical to `return`. Resource impl methods share the handler-method
+/// shape with effect impl methods (see WEP 2026-04-11: resources
+/// participate in the same dispatch protocol).
 ///
 /// The resolver flattens impl-block methods into `TirModule.functions`
 /// and tags each with `method_info: { struct_name, trait_name, ... }`.
 /// We use the `trait_name` to recognise handler methods.
 fn lower_resume_in_handler_methods(project: &mut Package) {
-    // Collect bare names of every effect declaration so we can recognise
-    // candidate impl blocks. A name collision between an effect and a
-    // regular trait would already be a resolver error.
-    let mut effect_names: IndexSet<String> = IndexSet::default();
+    // Collect bare names of every effect and resource declaration so we
+    // can recognise candidate impl blocks. A name collision between an
+    // effect/resource and a regular trait would already be a resolver
+    // error.
+    let mut handler_names: IndexSet<String> = IndexSet::default();
     for module in project.tir_modules.values() {
         for effect in &module.effects {
-            effect_names.insert(effect.name.clone());
+            handler_names.insert(effect.name.clone());
+        }
+        for resource in &module.resources {
+            handler_names.insert(resource.name.clone());
         }
     }
 
@@ -2539,7 +2612,7 @@ fn lower_resume_in_handler_methods(project: &mut Package) {
             let Some(trait_name) = &method_info.trait_name else {
                 continue;
             };
-            if !effect_names.contains(trait_name) {
+            if !handler_names.contains(trait_name) {
                 continue;
             }
             if let Some(body) = &mut func.body {

@@ -165,21 +165,77 @@ Status: Draft
       - `effect_handler_bundled_type_param_rejected.wado` —
         negative; bundled on a generic type parameter is rejected
         with the new diagnostic.
-- [ ] `MockCM` and handler bundling helpers in `core:test`. Today
-      the dispatch synthesis only routes user-declared `effect E`
-      decls; resources (`resource Stream<T>`) live on a separate
-      track (CM binding adapters, instance-method dispatch). The
-      WEP's `MockCM` example — `impl Stream<u8> for MockCM` —
-      requires extending `build_effect_index` /
-      `build_handler_impl_index` to walk resources too, plus
-      teaching the call-site rewriter to intercept resource
-      method calls (`stream.read(max)`) the way it currently
-      intercepts effect-op calls (`Effect::op(args)`). That
-      cross-cutting work is tracked here as a follow-up; the
-      bundled-handler front-end in this commit already produces
-      correct `TirHandlerBinding`s for any decl reachable via
-      `effect_decl_index`, so once resources participate in that
-      index the bundled path picks them up unchanged.
+- [x] Resource handler dispatch. Resources participate in the
+      dispatch protocol identically to effects: `with R => h do`
+      installs a handler whose `impl R for T` methods are
+      one-shot handler bodies (`resume` is valid),
+      `R::<op>(args)` and `r.<op>(args)` call sites are
+      rewritten through the dispatch wrapper, and the handler
+      body sees the outer scope so `R::<op>` from inside an
+      `impl R for T` method delegates to the outer
+      (wasmtime-provided) implementation.
+
+      Implementation:
+
+      - `TraitEnv::resource_decl_index` mirrors
+        `effect_decl_index`. The resolver accepts either index
+        in `with X => h do` and `impl X for T` — the
+        `NotAnEffect` diagnostic message names both kinds, and
+        `in_handler_method` is set for resource impls so
+        `resume` is gated correctly.
+      - `synthesis::effect_dispatch::build_effect_index` walks
+        both `module.effects` and `module.resources` into the
+        same `EffectKey -> EffectMeta` index. `EffectMeta`
+        carries an `is_resource` flag; the dispatch-wrapper
+        synthesis uses it to leave the wrapper's `effects: vec![]`
+        for resources (matching the cm_binding adapter — resources
+        are not effects in Wado's effect system).
+      - `lower_resume_in_handler_methods` recognises both effect
+        and resource impl methods.
+      - The bundled-handler form (`with &mut h do`) walks
+        `trait_env.impl_index` for the type and accepts impls
+        whose trait name is in either the effect or resource
+        index; existing call-site rewriting picks up the
+        wrappers unchanged because cm_binding already rewrites
+        resource static / instance method calls to plain
+        `Call { __cm_binding__<R>_<op> }` shape.
+      - Synthesised handler closures rename `self`-named op
+        params (resources use `fn op(self: &R, ...)` by
+        convention) to `__op_self` so the closure-lowering's
+        synthesised `self: &__Closure` env doesn't shadow the
+        explicit receiver during downstream name-based lookups.
+
+      Adjacent fix that the resource path forced into view:
+
+      - `TypeTable::retain` now closes the kept set under
+        `redirects`. After `erase_newtypes_and_flags`, `get(id)`
+        follows redirects to a canonical TypeId; a kept Newtype
+        whose post-erasure target was DCE'd would panic with
+        "TypeId not found". Resources' Newtype aliases
+        (`FieldName = String`, `FieldValue = Array<u8>`) are the
+        first user of this code path that pulls the Newtype's
+        ID into the reachable set without having a separate
+        reference to its base, so the latent retain-vs-redirect
+        gap surfaced here.
+
+      End-to-end fixture:
+      `effect_handler_resource_fields.wado` — installs a
+      counting handler for `wasi:http`'s `Fields`, intercepts
+      `Fields::new()` and `f.has(name)` inside `with`, and
+      delegates each call back to the real WASI implementation
+      from inside the handler body. Passes under `-O0`, `-O1`,
+      `-O2`, `-O3`, `-Os`.
+
+- [ ] `MockCM` and handler bundling helpers in `core:test`.
+      Resource dispatch (above) gives `impl Stream<u8> for
+      MockCM` the routing infrastructure it needs; what remains
+      is the buffered Stream/Future implementation in
+      `core:test::MockCM` itself and the helper APIs around it
+      (see `Buffered CM Handlers (MockCM)` below). Generic
+      resources (`Stream<T>`, `Future<T>`) require the dispatch
+      wrapper to be synthesised per monomorphisation, which is
+      not yet done — the current implementation handles
+      non-generic resources only.
 
 ## Phase 3 implementation plan
 
