@@ -154,10 +154,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     }
                 }
                 EffectRef::Param { name } => {
-                    let _ = self.logger.error(TypeError::NotAnEffect {
-                        name: name.clone(),
-                        span: effect_ty.span(),
-                    });
+                    let _ = self
+                        .logger
+                        .error(TypeError::GenericEffectParamNotInstallable {
+                            name: name.clone(),
+                            span: effect_ty.span(),
+                        });
                 }
             }
         }
