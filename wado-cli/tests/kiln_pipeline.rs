@@ -10,12 +10,13 @@ use std::sync::Mutex;
 
 use indexmap::IndexMap;
 use wado_cli::kiln_driver::{GeneratorProvider, PipelineOutcome, ProviderError, run_pipeline};
+use wado_cli::kiln_metadata;
 use wado_compiler::compiler_host::{
     CompilerHost, Diagnostic, GeneratorOutputFile, GeneratorReadRecord, GeneratorRequest,
     GeneratorResponse, GeneratorRunnerError, SourceError,
 };
 use wado_compiler::kiln::{DeclSite, GeneratorModule, Invocation, InvocationPath};
-use wado_manifest::{LockFile, Manifest};
+use wado_manifest::Manifest;
 
 struct StubProvider {
     bytes: Vec<u8>,
@@ -199,15 +200,20 @@ fn end_to_end_two_generators_execute_cache_and_reuse() {
     assert!(tmp.path().join("build/kiln/kiln-alpha/alpha.wado").exists());
     assert!(tmp.path().join("build/kiln/kiln-beta/beta.wado").exists());
 
-    let lock_text = std::fs::read_to_string(tmp.path().join("wado.lock")).unwrap();
-    let lock: LockFile = lock_text.parse().unwrap();
-    assert_eq!(lock.generator_cache.len(), 2);
-    let names: Vec<&str> = lock
-        .generator_cache
-        .iter()
-        .map(|e| e.invocation.as_str())
-        .collect();
-    assert_eq!(names, vec!["kiln-alpha", "kiln-beta"]);
+    let alpha_meta = kiln_metadata::load(tmp.path(), "kiln-alpha")
+        .unwrap()
+        .expect("kiln-alpha metadata.json should be written after run");
+    let beta_meta = kiln_metadata::load(tmp.path(), "kiln-beta")
+        .unwrap()
+        .expect("kiln-beta metadata.json should be written after run");
+    assert_eq!(alpha_meta.invocation, "kiln-alpha");
+    assert_eq!(beta_meta.invocation, "kiln-beta");
+
+    // wado.lock must NOT be written by the kiln pipeline anymore (M9).
+    assert!(
+        !tmp.path().join("wado.lock").exists(),
+        "kiln pipeline must no longer touch wado.lock"
+    );
 
     let host2 = StubHost::new(
         &[
@@ -225,7 +231,7 @@ fn end_to_end_two_generators_execute_cache_and_reuse() {
 }
 
 #[test]
-fn lockfile_entries_follow_invocation_declaration_order() {
+fn each_invocation_writes_its_own_metadata_file() {
     let tmp = tempfile::tempdir().unwrap();
     let m = empty_manifest();
 
@@ -266,22 +272,16 @@ fn lockfile_entries_follow_invocation_declaration_order() {
     let provider = StubProvider::new(b"component-bytes".to_vec());
     run(&m, tmp.path(), &host, &provider, vec![z_inv, a_inv, m_inv]);
 
-    let lock_text = std::fs::read_to_string(tmp.path().join("wado.lock")).unwrap();
-    let lock: LockFile = lock_text.parse().unwrap();
-    let names: Vec<&str> = lock
-        .generator_cache
-        .iter()
-        .map(|e| e.invocation.as_str())
-        .collect();
-    assert_eq!(
-        names,
-        vec!["kiln-zebra", "kiln-alpha", "kiln-mango"],
-        "lockfile must follow invocation declaration order, not alphabetical"
+    for id in ["kiln-zebra", "kiln-alpha", "kiln-mango"] {
+        let m = kiln_metadata::load(tmp.path(), id)
+            .unwrap()
+            .unwrap_or_else(|| panic!("missing metadata.json for {id}"));
+        assert_eq!(m.invocation, id);
+    }
+    assert!(
+        !tmp.path().join("wado.lock").exists(),
+        "kiln pipeline must no longer touch wado.lock"
     );
-    let z_pos = lock_text.find("invocation = \"kiln-zebra\"").unwrap();
-    let a_pos = lock_text.find("invocation = \"kiln-alpha\"").unwrap();
-    let m_pos = lock_text.find("invocation = \"kiln-mango\"").unwrap();
-    assert!(z_pos < a_pos && a_pos < m_pos);
 }
 
 #[test]
