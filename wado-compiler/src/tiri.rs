@@ -626,6 +626,16 @@ impl<'a> Interpreter<'a> {
         if arms.iter().any(|a| a.guard.is_some()) {
             return false;
         }
+        // The match must be provably exhaustive — otherwise an unmatched
+        // scrutinee value would trap (the lowering inserts an
+        // Unreachable fallback), and rewriting the whole expression to
+        // a literal would silently drop that trap. Wado's resolver
+        // skips exhaustiveness checks for some scrutinee types
+        // (struct, string, tuple, …); without an unguarded catch-all
+        // we cannot prove the fallback is unreachable.
+        if !is_provably_exhaustive(arms) {
+            return false;
+        }
         let mut common: Option<Value> = None;
         for arm in arms {
             let Lattice::Const(v) = self.expr_to_lattice(&arm.body) else {
@@ -788,6 +798,7 @@ impl<'a> Interpreter<'a> {
             // arm we can't rule out) until we hit a definite Yes (or
             // run out of arms).
             let mut candidates = Vec::<Lattice>::new();
+            let mut yes_found = false;
             for arm in arms {
                 let pm = if arm.guard.is_some() {
                     // A guard's outcome depends on bindings we don't
@@ -815,15 +826,32 @@ impl<'a> Interpreter<'a> {
                         // in the join and stop — no later arm is
                         // reachable past a guaranteed match.
                         candidates.push(body_lat);
+                        yes_found = true;
                         break;
                     }
                     PatternMatch::Unknown => candidates.push(body_lat),
                 }
             }
+            // Without a proven Yes, the runtime may fall through every
+            // arm and trap on the lowering's Unreachable fallback. The
+            // SCCP value lattice over only the arm bodies would silently
+            // drop that observable trap when a caller (e.g. the `if`
+            // both-arms-equal collapse) acts on the resulting `Const`.
+            // Bail to NonConst so downstream rewrites stay safe.
+            if !yes_found {
+                return Lattice::NonConst;
+            }
             join_all(&candidates)
         } else {
-            // Non-const scrutinee: every arm body is reachable. Promote
-            // Unevaluated → NonConst before joining.
+            // Non-const scrutinee: every arm body is reachable. The
+            // implicit Unreachable fallback is reachable too unless the
+            // match is provably exhaustive — without an unguarded
+            // catch-all (or pattern set covering the type's domain) we
+            // cannot prove the trap is dead, and a `Const(v)` lattice
+            // here would let other passes drop it. Stay conservative.
+            if !is_provably_exhaustive(arms) {
+                return Lattice::NonConst;
+            }
             let mut acc = Lattice::Unevaluated;
             for arm in arms {
                 let body_lat = arm_lattice_for_feasible_join(self.expr_to_lattice(&arm.body));
@@ -889,15 +917,14 @@ impl<'a> Interpreter<'a> {
                 inclusive,
                 is_unsigned,
             } => match value {
-                Value::Int { value: v, prim } => {
-                    if let Some(decided) =
-                        range_matches_int(*v, *prim, *start, *end, *inclusive, *is_unsigned)
-                    {
-                        bool_to_match(decided)
-                    } else {
-                        PatternMatch::Unknown
-                    }
-                }
+                Value::Int { value: v, prim } => bool_to_match(range_matches_int(
+                    *v,
+                    *prim,
+                    *start,
+                    *end,
+                    *inclusive,
+                    *is_unsigned,
+                )),
                 Value::Char(c) => {
                     let cp = i128::from(u32::from(*c));
                     bool_to_match(if *inclusive {
@@ -1032,6 +1059,27 @@ fn bool_to_match(b: bool) -> PatternMatch {
     }
 }
 
+/// Conservatively decide whether a `match`'s arm set is exhaustive
+/// — i.e. whether the lowering's implicit `Unreachable` fallback is
+/// provably dead. Mirrors the resolver's [`is_catch_all_pattern`]
+/// rule: at least one unguarded `Wildcard` / `Binding` arm (or an
+/// `Or` pattern containing one) is sufficient. Variant-set / range-set
+/// coverage proofs are deferred until tiri models those pattern shapes
+/// structurally; treating them as non-exhaustive here is the safe
+/// answer (it costs an optimization, not correctness).
+fn is_provably_exhaustive(arms: &[TirMatchArm]) -> bool {
+    arms.iter()
+        .any(|a| a.guard.is_none() && pattern_is_catch_all(&a.pattern))
+}
+
+fn pattern_is_catch_all(pat: &TirPattern) -> bool {
+    match pat {
+        TirPattern::Wildcard | TirPattern::Binding { .. } => true,
+        TirPattern::Or(alts) => alts.iter().any(pattern_is_catch_all),
+        _ => false,
+    }
+}
+
 /// Join a slice of lattice values via [`Lattice::join`]. Empty input
 /// returns [`Lattice::Unevaluated`] (the join's identity).
 fn join_all(lats: &[Lattice]) -> Lattice {
@@ -1084,10 +1132,10 @@ fn int_value_as_i128(value: u64, prim: PrimitiveType) -> Option<i128> {
 }
 
 /// Decide whether a (raw bits, prim) integer falls inside a range
-/// pattern. Returns `Some(true/false)` when decidable, `None` when
-/// the range bounds are outside the prim's representable signed
-/// range and the bits cannot be safely compared (the engine then
-/// answers `Unknown`).
+/// pattern. Returns `false` for non-integer prims and for negative
+/// signed values against an unsigned-typed range (which by
+/// construction starts at zero or higher); otherwise returns the
+/// usual half-open / closed range membership test in i128 space.
 fn range_matches_int(
     value: u64,
     prim: PrimitiveType,
@@ -1095,9 +1143,9 @@ fn range_matches_int(
     end: i128,
     inclusive: bool,
     is_unsigned_pat: bool,
-) -> Option<bool> {
+) -> bool {
     if !is_int_prim(prim) {
-        return Some(false);
+        return false;
     }
     let v: i128 = if is_unsigned_pat || !is_signed_int(prim) {
         // Treat the value as unsigned. For a signed prim with negative
@@ -1109,7 +1157,7 @@ fn range_matches_int(
             if signed < 0 {
                 // The pattern is unsigned; a negative scrutinee can't
                 // be in `[start, end]` when start ≥ 0.
-                return Some(false);
+                return false;
             }
             signed
         } else {
@@ -1118,11 +1166,11 @@ fn range_matches_int(
     } else {
         i128::from(value as i64)
     };
-    Some(if inclusive {
+    if inclusive {
         v >= start && v <= end
     } else {
         v >= start && v < end
-    })
+    }
 }
 
 /// Adjust a block's raw lattice value before feeding it into an

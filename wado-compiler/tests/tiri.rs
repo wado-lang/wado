@@ -2744,3 +2744,167 @@ fn match_const_scrut_with_only_or_pattern_arms_picks_first() {
         }),
     );
 }
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Stage 2.5 — exhaustiveness gate (review feedback)
+//
+// Without an unguarded catch-all the lowering inserts an `Unreachable`
+// fallback for unmatched scrutinee values. Wado's resolver enforces
+// match exhaustiveness for `bool` / `enum` / `variant` / range-covered
+// `int`, but explicitly skips it for `struct` / `string` / `tuple` / …
+// The engine must not collapse a non-exhaustive match to a literal
+// (it would erase the trap), nor return a `Const(_)` lattice for one
+// (a downstream `if` collapse could erase the trap on its behalf).
+// ──────────────────────────────────────────────────────────────────────────────
+
+fn binding_pat(name: &str, local_index: u32, type_id: TypeId) -> TirPattern {
+    TirPattern::Binding {
+        name: name.to_string(),
+        local_index,
+        type_id,
+    }
+}
+
+#[test]
+fn match_nonconst_scrut_non_exhaustive_all_arms_equal_does_not_rewrite() {
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    let mut expr = match_expr(
+        local_expr(0, TypeTable::I32),
+        vec![
+            arm(lit_pat_i128(1), int_lit(7, TypeTable::I32, "7")),
+            arm(lit_pat_i128(2), int_lit(7, TypeTable::I32, "7")),
+        ],
+        TypeTable::I32,
+    );
+    assert!(!interp.reduce_local(&mut expr));
+    assert!(matches!(expr.kind, TirExprKind::Match { .. }));
+}
+
+#[test]
+fn match_nonconst_scrut_non_exhaustive_lattice_is_nonconst() {
+    let table = TypeTable::new();
+    let expr = match_expr(
+        local_expr(0, TypeTable::I32),
+        vec![
+            arm(lit_pat_i128(1), int_lit(7, TypeTable::I32, "7")),
+            arm(lit_pat_i128(2), int_lit(7, TypeTable::I32, "7")),
+        ],
+        TypeTable::I32,
+    );
+    assert_eq!(
+        Interpreter::new(&table).reduce_to_lattice(&expr),
+        Lattice::NonConst,
+    );
+}
+
+#[test]
+fn match_nonconst_scrut_exhaustive_wildcard_collapses() {
+    // Sanity: with an unguarded wildcard the match IS exhaustive,
+    // so the gate lets the all-arms-equal collapse fire.
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    let mut expr = match_expr(
+        local_expr(0, TypeTable::I32),
+        vec![
+            arm(lit_pat_i128(1), int_lit(7, TypeTable::I32, "7")),
+            arm(TirPattern::Wildcard, int_lit(7, TypeTable::I32, "7")),
+        ],
+        TypeTable::I32,
+    );
+    assert!(interp.reduce_local(&mut expr));
+    let TirExprKind::IntLiteral { value, .. } = expr.kind else {
+        panic!("expected IntLiteral");
+    };
+    assert_eq!(value, 7);
+}
+
+#[test]
+fn match_const_scrut_only_unknown_arms_lattice_is_nonconst() {
+    // Const scrutinee, but the only arm has an Unknown pattern (Tuple
+    // here, since Phase A doesn't model tuple patterns). No definite
+    // Yes is found, so the runtime may fall through to the trap. The
+    // lattice must report `NonConst` — *not* `Const(99)` — even
+    // though the only candidate body is `Const(99)`.
+    let table = TypeTable::new();
+    let expr = match_expr(
+        int_lit(1, TypeTable::I32, "1"),
+        vec![arm(
+            TirPattern::Tuple(vec![], false),
+            int_lit(99, TypeTable::I32, "99"),
+        )],
+        TypeTable::I32,
+    );
+    assert_eq!(
+        Interpreter::new(&table).reduce_to_lattice(&expr),
+        Lattice::NonConst,
+    );
+}
+
+#[test]
+fn match_nonconst_scrut_or_pattern_with_embedded_wildcard_is_exhaustive() {
+    // `Or([1, _])` contains an unguarded wildcard alternative; the
+    // engine should recognize it as a catch-all and let the
+    // collapse fire.
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    let mut expr = match_expr(
+        local_expr(0, TypeTable::I32),
+        vec![arm(
+            TirPattern::Or(vec![lit_pat_i128(1), TirPattern::Wildcard]),
+            int_lit(7, TypeTable::I32, "7"),
+        )],
+        TypeTable::I32,
+    );
+    assert!(interp.reduce_local(&mut expr));
+    let TirExprKind::IntLiteral { value, .. } = expr.kind else {
+        panic!("expected IntLiteral");
+    };
+    assert_eq!(value, 7);
+}
+
+#[test]
+fn match_nonconst_scrut_binding_pattern_counts_as_exhaustive() {
+    // A `Binding` pattern always matches and captures the value —
+    // a catch-all by another name.
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    let mut expr = match_expr(
+        local_expr(0, TypeTable::I32),
+        vec![
+            arm(lit_pat_i128(1), int_lit(7, TypeTable::I32, "7")),
+            arm(
+                binding_pat("x", 1, TypeTable::I32),
+                int_lit(7, TypeTable::I32, "7"),
+            ),
+        ],
+        TypeTable::I32,
+    );
+    assert!(interp.reduce_local(&mut expr));
+    let TirExprKind::IntLiteral { value, .. } = expr.kind else {
+        panic!("expected IntLiteral");
+    };
+    assert_eq!(value, 7);
+}
+
+#[test]
+fn match_nonconst_scrut_guarded_wildcard_does_not_count_as_exhaustive() {
+    // A guarded catch-all is NOT exhaustive — if the guard fails,
+    // control falls through to the implicit trap.
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    let mut expr = match_expr(
+        local_expr(0, TypeTable::I32),
+        vec![
+            arm(lit_pat_i128(1), int_lit(7, TypeTable::I32, "7")),
+            arm_with_guard(
+                TirPattern::Wildcard,
+                local_expr(1, TypeTable::BOOL),
+                int_lit(7, TypeTable::I32, "7"),
+            ),
+        ],
+        TypeTable::I32,
+    );
+    assert!(!interp.reduce_local(&mut expr));
+    assert!(matches!(expr.kind, TirExprKind::Match { .. }));
+}

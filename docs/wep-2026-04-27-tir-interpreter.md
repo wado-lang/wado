@@ -198,8 +198,21 @@ scalar / payload-free matching today without committing to a heap-aware
       is preserved.
       2. **All-arms-equal collapse**: when the scrutinee is non-constant
       but speculatable (same `is_speculatable` gate as the `if`
-      rule), every arm has no guard, and every arm body reduces to
-      the same `Const(v)`, rewrite the whole match to that literal.
+      rule), every arm has no guard, every arm body reduces to the
+      same `Const(v)`, **and the match is provably exhaustive**
+      (`is_provably_exhaustive`: an unguarded `Wildcard` / `Binding`
+      arm, or an `Or` containing one), rewrite the whole match to
+      that literal. Without the exhaustiveness gate the rewrite
+      would drop the lowering's implicit `Unreachable` fallback
+      trap — Wado's resolver checks exhaustiveness for
+      `bool` / `enum` / `variant` / range-covered `int` but skips
+      `struct` / `string` / `tuple`, so the gate is load-bearing.
+- [x] `match_lattice` applies the same exhaustiveness gate before
+      returning a non-`NonConst` lattice for a non-const scrutinee,
+      and bails to `NonConst` when no definite-`Yes` arm is found
+      under a const scrutinee. Without these, an enclosing `if`
+      both-arms-equal collapse would pick up the `Const(v)` and
+      erase the trap on the lattice's behalf.
 - [x] `reduce_in_place` recurses into the scrutinee, every arm guard,
       and every arm body so the visitor-driven path sees fully-folded
       operands at each match node.
