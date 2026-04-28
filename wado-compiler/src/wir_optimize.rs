@@ -41,7 +41,7 @@ use crate::compiler_host::SpanEmitter;
 use crate::optimize::OptLevel;
 use crate::wir::WirPackage;
 
-pub use dce::{dce_unreachable_functions, dce_unreachable_types};
+pub use dce::{compact_dead_items, dce_unreachable_types, mark_unreachable_defined_functions};
 
 use array::{
     collapse_array_push_sequences, promote_constant_arrays_to_data, split_large_array_literals,
