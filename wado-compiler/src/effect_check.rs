@@ -437,6 +437,16 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
             return Ok(());
         }
 
+        // Skip dispatch wrapper functions - they are synthesised dispatch
+        // infrastructure that internally calls cm_binding adapters /
+        // canonical intrinsics, which carry their own effects. The
+        // wrapper's caller doesn't need to declare those effects because
+        // the wrapper itself satisfies them; mirroring the `is_cm_binding`
+        // skip above keeps the call-site analysis honest.
+        if func.is_dispatch_wrapper {
+            return Ok(());
+        }
+
         // `#[ambient]` functions intentionally bypass the effect system so
         // logging / panic / unreachable work anywhere. Their bodies perform
         // resource operations (Stream::new, Future::drop) that would otherwise

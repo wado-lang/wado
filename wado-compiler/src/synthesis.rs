@@ -54,6 +54,21 @@ pub fn synthesize(project: Package) -> Result<Package, String> {
         template::expand_templates(module, &tt);
     }
 
+    // Effect-dispatch wrapper synthesis + call-site rewriting must
+    // run BEFORE cm_binding so that user resource calls (like
+    // `tx.write(payload)` on a `StreamWritable<u8>`) get intercepted
+    // at their pre-cm_binding shape — `MethodCall`/`Call` with
+    // `func.method_info.cm_name` set — and routed to the per-
+    // monomorphisation dispatch wrapper. The wrapper bodies' fallback
+    // paths emit the same cm_name-tagged placeholder shape that user
+    // code emits, so cm_binding rewrites both uniformly afterward
+    // (turning `stream-write` placeholders into `cm_stream_write_u8`
+    // internal calls, etc.). The `WithHandler` desugaring stays late
+    // (in `compile_after_load`'s phase 8c) because effect-check needs
+    // the original `WithHandler` shape to know which effects are
+    // satisfied locally.
+    let project = effect_dispatch::synthesize_pre_cm_binding(project)?;
+
     let project = cm_binding::generate_adapters(project)?;
     Ok(project)
 }
