@@ -235,16 +235,70 @@ Status: Draft
       from inside the handler body. Passes under `-O0`, `-O1`,
       `-O2`, `-O3`, `-Os`.
 
+- [ ] Generic-resource handler dispatch — bundled handlers
+      for `Stream<T>`, `StreamWritable<T>`, `Future<T>`,
+      `FutureWritable<T>`. Four cross-cutting gaps remain
+      between non-generic resource dispatch (above) and the
+      WEP's MockCM design:
+
+      1. The resolver records `MethodInfo::trait_name` as the
+         full mangled form (e.g. "Stream<u8>") for generic-
+         resource impls so distinct instantiations get distinct
+         method names. The decl indices, however, are keyed by
+         the bare base name ("Stream"), so today's
+         `resource_decl_index` lookup in
+         `Resolver::resolve_method` and the
+         `build_handler_impl_index` lookup in
+         `synthesis::effect_dispatch` both miss — the resolver
+         then rejects `resume` on every method body, and the
+         dispatch synthesis leaves the `WithHandler`
+         un-desugared.
+      2. Generic resources need **per-monomorphisation**
+         dispatch infrastructure: one `__Dispatch_Stream__u8`
+         struct + `__effect_Stream__u8` global + per-op wrapper
+         triple per type-arg combination, with the resource's
+         operation types substituted for that combination.
+      3. `Stream<T>` / `Future<T>` operations declared with the
+         `&self` shorthand have their receiver param filtered
+         out by `Resolver::resolve_effect_ops`, so the
+         synthesised wrapper signature does not include the
+         receiver. The wrapper must take the resource handle as
+         its first argument to forward to `cm_stream_*` /
+         `cm_future_*` / `CmRawCall`.
+      4. Stream/Future call sites bypass the
+         `__cm_binding__<R>_<op>` adapter shape that today's
+         call-site rewriter intercepts. They lower instead to
+         `CmRawCall { local_name: "stream-..." }` (e.g.
+         `stream-drop-readable`), to internal binding functions
+         (`__cm_stream_read_u8`, `__cm_stream_write_u8`), or to
+         WIR translate-phase intrinsics (`stream-new`,
+         `future-new`). The dispatch synthesis must recognise
+         and rewrite all three shapes for handlers to intercept
+         Stream/Future at all.
+
+      End-to-end fixtures (TDD red, locked via `compile_error`
+      against the current resolver diagnostic):
+
+      - `effect_handler_resource_stream.wado` — bundled handler
+        on a `MockStream` that implements both `Stream<u8>` and
+        `StreamWritable<u8>` and round-trips bytes through a
+        local buffer.
+      - `effect_handler_resource_future.wado` — bundled handler
+        on a `MockFuture` that implements both `Future<i32>`
+        and `FutureWritable<i32>` and round-trips a value
+        through a stored slot.
+
+      Once the four gaps above are closed, drop the
+      `compile_error` field on each fixture and the assertions
+      / `stdout_contains` will take over.
+
 - [ ] `MockCM` and handler bundling helpers in `core:test`.
-      Resource dispatch (above) gives `impl Stream<u8> for
-      MockCM` the routing infrastructure it needs; what remains
-      is the buffered Stream/Future implementation in
-      `core:test::MockCM` itself and the helper APIs around it
-      (see `Buffered CM Handlers (MockCM)` below). Generic
-      resources (`Stream<T>`, `Future<T>`) require the dispatch
-      wrapper to be synthesised per monomorphisation, which is
-      not yet done — the current implementation handles
-      non-generic resources only.
+      Once generic-resource dispatch (above) lands, the WEP's
+      `MockCM` example becomes the canonical buffered Stream /
+      Future handler. `core:test::MockCM` would package those
+      impls (along with helpers like `MockStdout::drain()`) into
+      a reusable test fixture per the `Buffered CM Handlers
+      (MockCM)` section below.
 
 ## Phase 3 implementation plan
 

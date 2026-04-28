@@ -1,0 +1,104 @@
+// TDD red: bundled-form handler for Future<i32> + FutureWritable<i32>.
+//
+// Per WEP-2026-04-11-effect-handler.md, a single handler value can
+// implement both ends of a CM future at a concrete instantiation,
+// and the bundled handler form `with &mut h do` installs both at
+// once. This fixture concentrates on a buffered Future<i32> mock
+// — the writable end stores the value, the readable end returns
+// `Some(value)` once written and `None` otherwise.
+//
+// Until generic-resource handler dispatch lands, this test is
+// expected to fail. The implementation gaps tracked in the WEP are:
+//
+//   1. The resolver records `MethodInfo::trait_name` as the full
+//      mangled form (e.g. "Future<i32>") for generic-resource impls,
+//      but `resource_decl_index` and the dispatch-synthesis
+//      `build_handler_impl_index` look it up by bare base name
+//      ("Future"). The lookup misses, `resume` is rejected by the
+//      resolver, and the WithHandler reaches `lower_pre_boxing` un-
+//      desugared.
+//   2. Generic resources need per-monomorphisation dispatch
+//      infrastructure: one `__Dispatch_Future__i32` /
+//      `__effect_Future__i32` / `__effect_dispatch__Future__i32__op`
+//      triple per type-arg combination, with the resource's
+//      operations' types substituted for that combination.
+//   3. `Future<T>` operations declared with the `&self` shorthand
+//      have their receiver param filtered out by
+//      `Resolver::resolve_effect_ops`, so the synthesised wrapper
+//      signature today doesn't include the receiver — needed to
+//      forward to `cm_future_*` / `CmRawCall`.
+//   4. Future call sites bypass the `__cm_binding__<R>_<op>` adapter
+//      shape that today's call-site rewriter intercepts — they lower
+//      instead to `CmRawCall { local_name: "future-..." }`, to
+//      internal binding functions, or to WIR translate-phase
+//      intrinsics (`future-new`). The dispatch synthesis must
+//      recognise and rewrite all three shapes for handlers to
+//      intercept Future at all.
+//
+// Once those four gaps are closed, drop the `compile_error` field
+// below and assert the buffered round-trip via `value_read=42`.
+
+use { println, Stdout } from "core:cli";
+
+struct MockFuture {
+    stored: Option<i32>,
+    write_count: i32,
+    read_count: i32,
+}
+
+impl Future<i32> for MockFuture {
+    fn new(&mut self) -> [Future<i32>, FutureWritable<i32>] {
+        // Hand out a fake handle pair. Both ends share the
+        // MockFuture's `stored` slot, so a write through the
+        // FutureWritable end is observed by a read on the Future
+        // end without a concurrent runtime task.
+        let id: i32 = 0;
+        resume [id as Future<i32>, id as FutureWritable<i32>]
+    }
+    fn read(&mut self, this: &Future<i32>) -> Option<i32> {
+        let _ = this;
+        self.read_count += 1;
+        resume self.stored
+    }
+    fn drop(&mut self, this: &Future<i32>) {
+        let _ = this;
+        resume ()
+    }
+    ..
+}
+
+impl FutureWritable<i32> for MockFuture {
+    fn write(&mut self, this: &FutureWritable<i32>, value: i32) {
+        let _ = this;
+        self.stored = Option::Some(value);
+        self.write_count += 1;
+        resume ()
+    }
+    fn drop(&mut self, this: &FutureWritable<i32>) {
+        let _ = this;
+        resume ()
+    }
+    ..
+}
+
+export fn run() with Stdout {
+    let mut f = MockFuture {
+        stored: null,
+        write_count: 0,
+        read_count: 0,
+    };
+    with &mut f do {
+        let [rx, tx] = Future::<i32>::new();
+        tx.write(42);
+        let value = rx.read();
+        assert value matches { Some(42) };
+        tx.drop();
+        rx.drop();
+    }
+    assert f.write_count == 1;
+    assert f.read_count == 1;
+    println(`writes={f.write_count} reads={f.read_count}`);
+}
+
+__DATA__
+{"compile_error": "`resume` is only valid inside an effect handler method body"}
