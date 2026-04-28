@@ -472,6 +472,7 @@ fn synthesize_dispatch_wrappers(
             &effect_module,
             &base_name,
             &label,
+            type_args,
             op,
             plan,
             is_wasi,
@@ -488,6 +489,7 @@ fn build_dispatch_wrapper_function(
     effect_module: &ModuleSource,
     base_name: &str,
     label: &str,
+    type_args: &[TypeId],
     op: &TirEffectOp,
     plan: &DispatchPlan,
     is_wasi: bool,
@@ -721,6 +723,7 @@ fn build_dispatch_wrapper_function(
             effect_module,
             base_name,
             label,
+            type_args,
             op,
             &arg_exprs,
             &type_table.borrow(),
@@ -926,6 +929,7 @@ fn build_resource_fallback_call(
     effect_module: &ModuleSource,
     base_name: &str,
     label: &str,
+    type_args: &[TypeId],
     op: &TirEffectOp,
     arg_exprs: &[TirExpr],
     type_table: &TypeTable,
@@ -952,10 +956,30 @@ fn build_resource_fallback_call(
     method_info.struct_name = label.to_string();
     method_info.cm_name = Some(cm_name);
 
+    // Carry the resource instantiation's type args as the call's
+    // `monomorph_info.impl_type_args`. WIR-build's canonical-method
+    // translator (e.g. `cm_future_payload_from_monomorph` for
+    // `future-new`) reads these to pick the right payload-parameterised
+    // canonical import (`future-new:s32` vs the trailers default). The
+    // resolver attaches `monomorph_info` for the same reason on real
+    // user calls; the wrapper fallback must do the same so its
+    // post-cm_binding shape is indistinguishable from a hand-written
+    // `Future::<i32>::new()` call site.
+    let monomorph_info = if type_args.is_empty() {
+        None
+    } else {
+        Some(crate::tir::MonomorphInfo {
+            generic_name: base_name.to_string(),
+            impl_type_args: type_args.to_vec(),
+            method_type_args: vec![],
+            is_blanket: false,
+        })
+    };
+
     let func_ref = FunctionRef {
         module_source: effect_module.clone(),
         name: mangled_method_name,
-        monomorph_info: None,
+        monomorph_info,
         method_info: Some(method_info),
     };
 
