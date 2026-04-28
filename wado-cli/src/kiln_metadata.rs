@@ -68,10 +68,7 @@ pub fn metadata_path(manifest_root: &Path, invocation_id: &str) -> PathBuf {
 /// schema bumps do not require any manual intervention from the user.
 ///
 /// Returns `Err` only on real I/O failure or syntactically broken JSON.
-pub fn load(
-    manifest_root: &Path,
-    invocation_id: &str,
-) -> Result<Option<Metadata>, MetadataError> {
+pub fn load(manifest_root: &Path, invocation_id: &str) -> Result<Option<Metadata>, MetadataError> {
     let path = metadata_path(manifest_root, invocation_id);
     let content = match std::fs::read_to_string(&path) {
         Ok(s) => s,
@@ -106,9 +103,10 @@ pub fn save(
             source,
         })?;
     }
-    let json = serde_json::to_string_pretty(metadata).map_err(|source| MetadataError::Serialize {
-        source: source.to_string(),
-    })?;
+    let json =
+        serde_json::to_string_pretty(metadata).map_err(|source| MetadataError::Serialize {
+            source: source.to_string(),
+        })?;
     std::fs::write(&path, json).map_err(|source| MetadataError::Io { path, source })
 }
 
@@ -136,7 +134,11 @@ impl std::fmt::Display for MetadataError {
                 path.display()
             ),
             MetadataError::Parse { path, source } => {
-                write!(f, "kiln metadata: parse error at {}: {source}", path.display())
+                write!(
+                    f,
+                    "kiln metadata: parse error at {}: {source}",
+                    path.display()
+                )
             }
             MetadataError::Serialize { source } => {
                 write!(f, "kiln metadata: serialize error: {source}")

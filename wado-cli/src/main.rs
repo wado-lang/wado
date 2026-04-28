@@ -152,8 +152,7 @@ async fn async_main() {
                         wado_cli::compile::run(opts).await;
                     }
                     Cmd::Check => {
-                        let opts =
-                            wado_cli::check::parse_args(parser).unwrap_or_else(|e| e.exit());
+                        let opts = wado_cli::check::parse_args(parser).unwrap_or_else(|e| e.exit());
                         wado_cli::check::run(opts).await;
                     }
                     Cmd::Run => {

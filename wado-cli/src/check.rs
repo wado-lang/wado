@@ -173,13 +173,9 @@ pub async fn run(opts: CheckOptions) {
         invocations: outcome.invocations.clone(),
         ..Default::default()
     };
-    let compile_result = wado_compiler::compile_with_options(
-        &source,
-        &host,
-        Some(&opts.input),
-        compiler_options,
-    )
-    .await;
+    let compile_result =
+        wado_compiler::compile_with_options(&source, &host, Some(&opts.input), compiler_options)
+            .await;
 
     let has_compile_errors = host.has_errors() || compile_result.is_err();
     let has_kiln_warnings = host

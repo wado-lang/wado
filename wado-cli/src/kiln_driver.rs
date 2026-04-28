@@ -40,7 +40,7 @@ use wado_compiler::kiln::{
 use wado_manifest::Manifest;
 
 use crate::kiln_metadata::{
-    self, FileHash as MetaFileHash, Metadata, METADATA_VERSION, OutputEntry as MetaOutputEntry,
+    self, FileHash as MetaFileHash, METADATA_VERSION, Metadata, OutputEntry as MetaOutputEntry,
 };
 
 /// Outcome of plan construction.
@@ -965,8 +965,7 @@ where
                     .insert(&decl_file, invocation.from.as_str(), &uri);
             }
             if executed
-                && let Err(source) =
-                    kiln_metadata::save(manifest_root, &invocation_name, &metadata)
+                && let Err(source) = kiln_metadata::save(manifest_root, &invocation_name, &metadata)
             {
                 return Err(PipelineError::MetadataSave {
                     invocation: invocation_name.clone(),
@@ -1669,8 +1668,7 @@ mod tests {
                 response,
                 &[("schema.proto", b"p"), ("dep.proto", b"d")],
             );
-            let entry =
-                build_metadata("proto", &sample_invocation(), &run, "sha256:o".to_string());
+            let entry = build_metadata("proto", &sample_invocation(), &run, "sha256:o".to_string());
             assert_eq!(entry.reads.len(), 2);
             assert_eq!(entry.reads[0].path, "a.proto");
             assert_eq!(entry.reads[1].path, "z.proto");
@@ -1692,8 +1690,7 @@ mod tests {
                 response,
                 &[("schema.proto", b"p"), ("dep.proto", b"d")],
             );
-            let entry =
-                build_metadata("proto", &sample_invocation(), &run, "sha256:o".to_string());
+            let entry = build_metadata("proto", &sample_invocation(), &run, "sha256:o".to_string());
             let host = HashOnlyHost::new(&[("schema.proto", b"p"), ("dep.proto", b"d")]);
             let hit = runtime().block_on(async {
                 cache_matches(&entry, &sample_invocation(), tmp.path(), &host).await
@@ -1713,8 +1710,7 @@ mod tests {
                 response,
                 &[("schema.proto", b"p"), ("dep.proto", b"d")],
             );
-            let entry =
-                build_metadata("proto", &sample_invocation(), &run, "sha256:o".to_string());
+            let entry = build_metadata("proto", &sample_invocation(), &run, "sha256:o".to_string());
             let host = HashOnlyHost::new(&[("schema.proto", b"different"), ("dep.proto", b"d")]);
             let hit = runtime().block_on(async {
                 cache_matches(&entry, &sample_invocation(), tmp.path(), &host).await
@@ -1738,8 +1734,7 @@ mod tests {
                 response,
                 &[("schema.proto", b"p"), ("dep.proto", b"d")],
             );
-            let entry =
-                build_metadata("proto", &sample_invocation(), &run, "sha256:o".to_string());
+            let entry = build_metadata("proto", &sample_invocation(), &run, "sha256:o".to_string());
             std::fs::remove_file(tmp.path().join("build/kiln/proto/lib.wado")).unwrap();
             let host = HashOnlyHost::new(&[("schema.proto", b"p"), ("dep.proto", b"d")]);
             let hit = runtime().block_on(async {
@@ -1764,8 +1759,7 @@ mod tests {
                 response,
                 &[("schema.proto", b"p"), ("dep.proto", b"d")],
             );
-            let entry =
-                build_metadata("proto", &sample_invocation(), &run, "sha256:o".to_string());
+            let entry = build_metadata("proto", &sample_invocation(), &run, "sha256:o".to_string());
             // Hand-edit the generated file after generation.
             std::fs::write(
                 tmp.path().join("build/kiln/proto/lib.wado"),
@@ -1798,8 +1792,7 @@ mod tests {
                 response,
                 &[("schema.proto", b"p"), ("dep.proto", b"d")],
             );
-            let entry =
-                build_metadata("proto", &sample_invocation(), &run, "sha256:o".to_string());
+            let entry = build_metadata("proto", &sample_invocation(), &run, "sha256:o".to_string());
             let host = HashOnlyHost::new(&[
                 ("schema.proto", b"p"),
                 ("dep.proto", b"d"),
