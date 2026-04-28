@@ -667,7 +667,7 @@ impl BoxLowerer {
             | TirExprKind::VariantPayload { expr: inner, .. }
             | TirExprKind::VariantTest { expr: inner, .. }
             | TirExprKind::ClosureToCanonical { functor: inner, .. } => {
-                Self::remap_locals_in_expr(inner, remap)
+                Self::remap_locals_in_expr(inner, remap);
             }
             TirExprKind::Index { expr: e, index, .. } => {
                 Self::remap_locals_in_expr(e, remap);
