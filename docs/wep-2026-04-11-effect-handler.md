@@ -165,21 +165,198 @@ Status: Draft
       - `effect_handler_bundled_type_param_rejected.wado` —
         negative; bundled on a generic type parameter is rejected
         with the new diagnostic.
-- [ ] `MockCM` and handler bundling helpers in `core:test`. Today
-      the dispatch synthesis only routes user-declared `effect E`
-      decls; resources (`resource Stream<T>`) live on a separate
-      track (CM binding adapters, instance-method dispatch). The
-      WEP's `MockCM` example — `impl Stream<u8> for MockCM` —
-      requires extending `build_effect_index` /
-      `build_handler_impl_index` to walk resources too, plus
-      teaching the call-site rewriter to intercept resource
-      method calls (`stream.read(max)`) the way it currently
-      intercepts effect-op calls (`Effect::op(args)`). That
-      cross-cutting work is tracked here as a follow-up; the
-      bundled-handler front-end in this commit already produces
-      correct `TirHandlerBinding`s for any decl reachable via
-      `effect_decl_index`, so once resources participate in that
-      index the bundled path picks them up unchanged.
+- [x] Resource handler dispatch. Resources participate in the
+      dispatch protocol identically to effects: `with R => h do`
+      installs a handler whose `impl R for T` methods are
+      one-shot handler bodies (`resume` is valid),
+      `R::<op>(args)` and `r.<op>(args)` call sites are
+      rewritten through the dispatch wrapper, and the handler
+      body sees the outer scope so `R::<op>` from inside an
+      `impl R for T` method delegates to the outer
+      (wasmtime-provided) implementation.
+
+      Implementation:
+
+      - `TraitEnv::resource_decl_index` mirrors
+        `effect_decl_index`. The resolver accepts either index
+        in `with X => h do` and `impl X for T` — the
+        `NotAnEffect` diagnostic message names both kinds, and
+        `in_handler_method` is set for resource impls so
+        `resume` is gated correctly.
+      - `synthesis::effect_dispatch::build_effect_index` walks
+        both `module.effects` and `module.resources` into the
+        same `EffectKey -> EffectMeta` index. `EffectMeta`
+        carries an `is_resource` flag; the dispatch-wrapper
+        synthesis uses it to leave the wrapper's `effects: vec![]`
+        for resources (matching the cm_binding adapter — resources
+        are not effects in Wado's effect system).
+      - `lower_resume_in_handler_methods` recognises both effect
+        and resource impl methods.
+      - The bundled-handler form (`with &mut h do`) walks
+        `trait_env.impl_index` for the type and accepts impls
+        whose trait name is in either the effect or resource
+        index; existing call-site rewriting picks up the
+        wrappers unchanged because cm_binding already rewrites
+        resource static / instance method calls to plain
+        `Call { __cm_binding__<R>_<op> }` shape.
+      Adjacent fixes that the resource path forced into view:
+
+      - `TypeTable::retain` now closes the kept set under
+        `redirects`. After `erase_newtypes_and_flags`, `get(id)`
+        follows redirects to a canonical TypeId; a kept Newtype
+        whose post-erasure target was DCE'd would panic with
+        "TypeId not found". Resources' Newtype aliases
+        (`FieldName = String`, `FieldValue = Array<u8>`) are the
+        first user of this code path that pulls the Newtype's
+        ID into the reachable set without having a separate
+        reference to its base, so the latent retain-vs-redirect
+        gap surfaced here.
+      - `wir_build` now disambiguates duplicate parameter names
+        before producing `WirFunction::param_names` /
+        `FunctionTranslator::local_name`. Codegen looks up locals
+        by name (`current_locals` is keyed by name in
+        `codegen::emit::resolve_local`), so two parameters
+        sharing a name would clobber each other's entry and
+        silently mis-resolve. Resource methods declared as
+        `fn op(self: &R, ...)` push that case into view: the
+        synthesised closure's `__call` ends up with a
+        `self: &__Closure` env at index 0 and a `self: &R`
+        explicit param at index 1, both named `self`. The fix
+        suffixes every colliding param with its local index so
+        the names round-trip uniquely; non-param locals that
+        merely shadow a param keep the original suffix-the-Let
+        behaviour.
+
+      End-to-end fixture:
+      `effect_handler_resource_fields.wado` — installs a
+      counting handler for `wasi:http`'s `Fields`, intercepts
+      `Fields::new()` and `f.has(name)` inside `with`, and
+      delegates each call back to the real WASI implementation
+      from inside the handler body. Passes under `-O0`, `-O1`,
+      `-O2`, `-O3`, `-Os`.
+
+- [x] Generic-resource handler dispatch — bundled handlers
+      for `Stream<T>`, `StreamWritable<T>`, `Future<T>`,
+      `FutureWritable<T>`. Four cross-cutting gaps stood
+      between non-generic resource dispatch (above) and the
+      WEP's MockCM design; all four are now closed.
+
+      1. **(done)** Decl-index lookups must walk through the
+         bare base trait name. The resolver records
+         `MethodInfo::trait_name` as the full mangled form
+         (e.g. "Stream<u8>") for generic-resource impls so
+         distinct instantiations get distinct method names; the
+         `resource_decl_index` / `effect_decl_index`, however,
+         are keyed by the bare base name ("Stream"). Closed by
+         adding a `base_trait_name` field on `LocalMethodName`
+         that mirrors the existing `base_struct_name` (derived
+         in `name.rs` via `split_base_name`, the canonical
+         inverse of `mangle_ref_aware`), threading it through
+         every constructor, and switching the
+         `Resolver::resolve_method` / `lower_resume_in_handler_methods`
+         / `build_handler_impl_index` lookups to consult the
+         base form. Resolver-side `resume` gating now accepts
+         `impl Stream<u8> for MockCM`, and the dispatch
+         synthesis enters the `WithHandler` desugaring path.
+      2. **(done)** Per-monomorphisation dispatch
+         infrastructure. The resource decl's operation list is
+         now a *template* (with type-params unsubstituted)
+         shared across instantiations; each user impl block
+         records its `trait_type_args: Vec<TypeId>` on
+         `LocalMethodName` and `TirHandlerBinding`, which the
+         dispatch synthesis reads to mint distinct
+         `(module, base, type_args)` `InstantiationKey`s.
+         `synthesize_dispatch_infrastructure` substitutes the
+         template through `SubstitutionContext` against each
+         active instantiation's args and emits one
+         `__Dispatch_Stream<u8>` struct + `__effect_Stream<u8>`
+         global + `__effect_dispatch__Stream<u8>__op` wrapper
+         triple per pair, with concrete operation types. The
+         WIR `canonical closure type not registered` panic that
+         this gap surfaced no longer fires; Stream/Future
+         fixtures advance past WIR closure registration to the
+         next-gap call-site rewriting failure.
+      3. **(done)** `&self` / `&mut self` shorthand carries
+         the resource receiver into operation signatures.
+         `Resolver::resolve_effect_ops` now takes an optional
+         `(name, module)` and, when supplied, constructs the
+         resource's `Self` type (`Resource` for non-generic,
+         `GenericResource { name, module, type_args }` for
+         generic — referencing the resource's own
+         `TypeParam`s so gap-2 substitution still specialises
+         per instantiation). Methods declared with `&self` /
+         `&mut self` get the receiver synthesised as a real
+         `TirEffectOp` parameter at index 0 (named `self`,
+         typed `&Self` or `&mut Self`). Effect decls keep the
+         existing filter behaviour. Verified via
+         `dump --tir-monomorphized`: each per-instantiation
+         dispatch wrapper (e.g.
+         `__effect_dispatch__Stream<u8>__read(self: &Stream<u8>,
+         max: i32) -> Array<u8>`) now carries the receiver,
+         `__Dispatch_<R><args>` op-closure fields match
+         (`op_read: fn(&Stream<u8>, i32) -> Array<u8>`), and
+         the closure body forwards the receiver to the user
+         impl method.
+      4. **(done)** Call sites for Stream/Future ops route
+         through the per-monomorphisation dispatch wrapper
+         instead of bypassing it. Closed by three coordinated
+         changes: (a) the dispatch synthesis runs in two
+         halves — `synthesize_pre_cm_binding` (wrappers,
+         globals, structs, *and* call-site rewriting) before
+         `cm_binding`, and `synthesize_post_check`
+         (`WithHandler` desugaring) after `effect_check`. (b)
+         The pre-cm_binding pass walks every TIR call site and
+         rewrites resource calls — both instance-method shape
+         (`tx.write(payload)` with `method_info.cm_name` set)
+         and static shape (`Stream::<u8>::new()`) — to invoke
+         the matching `__effect_dispatch__<R><args>__<op>`
+         wrapper, narrowing by the receiver's resource
+         instantiation type-args. (c) The wrapper's else-branch
+         fallback emits the same pre-cm_binding placeholder
+         shape that user code emits — `MethodCall`/`Call` with
+         `method_info.cm_name` set and (for static methods) a
+         `MonomorphInfo { impl_type_args }` carrying the
+         instantiation's type args so WIR-build's
+         payload-parameterised canonical translator (e.g.
+         `future-new:s32` vs the trailers default) picks the
+         right import. cm_binding rewrites both user calls and
+         wrapper fallbacks uniformly, so handler-installed and
+         no-handler paths agree on the post-cm_binding shape.
+         Two ancillary fixes also landed: the cm_binding
+         resource-method walker now descends into `WithHandler`
+         / `Closure` / `IndirectCall` / `CmRawCall` /
+         `LabeledBlock` / variant test-payload-tag /
+         tuple-spread/zip / template-string-interpolation /
+         switch arms (a pre-existing visitor-completeness gap
+         that this work surfaced); and `TirExprKind::Closure`
+         now carries its own `address_taken_locals` set
+         (populated by the resolver's closure-scope
+         `FunctionContext`, empty for synthesised closures), so
+         when the `lower::boxing` pass descends into a closure
+         body it boxes against the closure's own scope rather
+         than the parent function's, fixing a latent
+         scope-confusion that could erroneously box a closure's
+         primitive parameter when its index coincided with an
+         address-taken primitive parent local.
+
+      End-to-end fixtures (now green at `-O0`–`-Os`):
+
+      - `effect_handler_resource_stream.wado` — bundled handler
+        on a `MockStream` that implements both `Stream<u8>` and
+        `StreamWritable<u8>` and round-trips bytes through a
+        local buffer.
+      - `effect_handler_resource_future.wado` — bundled handler
+        on a `MockFuture` that implements both `Future<i32>`
+        and `FutureWritable<i32>` and round-trips a value
+        through a stored slot.
+
+- [ ] `MockCM` and handler bundling helpers in `core:test`.
+      Once generic-resource dispatch (above) lands, the WEP's
+      `MockCM` example becomes the canonical buffered Stream /
+      Future handler. `core:test::MockCM` would package those
+      impls (along with helpers like `MockStdout::drain()`) into
+      a reusable test fixture per the `Buffered CM Handlers
+      (MockCM)` section below.
 
 ## Phase 3 implementation plan
 

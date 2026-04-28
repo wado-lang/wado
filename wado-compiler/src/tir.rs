@@ -820,11 +820,33 @@ impl TypeTable {
     /// This physically removes entries from the backing `IndexMap`s so that
     /// subsequent iterations (e.g. WIR type registration) no longer see them.
     /// The intern map and secondary indices are rebuilt to stay consistent.
+    ///
+    /// `retain` preserves the invariant that `self.get(id)` does not panic
+    /// for any surviving `id`. After `erase_newtypes_and_flags`, `get(id)`
+    /// follows `self.redirects` to a canonical `TypeId`; if the redirect's
+    /// target were removed, `get(id)` would panic on a surviving id.
+    /// To keep the invariant, the kept set is implicitly extended with
+    /// the redirect targets of every kept id, and stale redirect entries
+    /// (whose source or target did not survive) are dropped.
     pub fn retain(&mut self, keep: &IndexSet<TypeId>) {
-        self.types.retain(|id, _| keep.contains(id));
+        // Implicit closure under `redirects`: every kept id whose `get`
+        // result lives at a different id must keep that target alive too.
+        let mut effective_keep: IndexSet<TypeId> = keep.clone();
+        for &id in keep {
+            if let Some(&target) = self.redirects.get(&id) {
+                effective_keep.insert(target);
+            }
+        }
+
+        self.types.retain(|id, _| effective_keep.contains(id));
+        // A redirect entry is meaningful only when both endpoints survive.
+        self.redirects
+            .retain(|id, target| effective_keep.contains(id) && effective_keep.contains(target));
         // Retain SymbolKey indices to surviving TypeIds only.
-        self.symbol_by_type.retain(|id, _| keep.contains(id));
-        self.type_by_symbol.retain(|_, id| keep.contains(id));
+        self.symbol_by_type
+            .retain(|id, _| effective_keep.contains(id));
+        self.type_by_symbol
+            .retain(|_, id| effective_keep.contains(id));
         // Rebuild intern map from the surviving entries.
         self.intern_map.clear();
         self.struct_name_index.clear();
@@ -2398,6 +2420,14 @@ pub enum TirExprKind {
         functor_id: Option<u32>,
         /// Pre-desugar source text for inspect output.
         source_text: Option<String>,
+        /// Closure-scope address-taken locals, captured from the
+        /// closure's resolution `FunctionContext`. The boxing pass uses
+        /// this when descending into the closure body — the body's
+        /// `Local { index: N }` references closure locals, not the
+        /// parent function's, so the parent's set would mis-box. Empty
+        /// for synthesised closures (e.g. effect-handler dispatch),
+        /// which never take addresses.
+        address_taken_locals: crate::hashmap::IndexSet<u32>,
     },
 
     /// Indirect call through a callable value (closure or funcref)
@@ -2541,6 +2571,15 @@ pub struct TirHandlerBinding {
     /// concrete `EffectRef`. `None` only appears transiently when an
     /// upstream diagnostic prevented resolution.
     pub effect: Option<EffectRef>,
+    /// Concrete `TypeId`s of the trait / resource type arguments at this
+    /// installation site (e.g. `[u8]` for `with Stream<u8> => &mut s do`,
+    /// or as derived from the impl block in a bundled `with &mut s do`
+    /// where `MockCM` implements `Stream<u8>`). Empty for non-generic
+    /// effects / resources. The dispatch synthesis projects this together
+    /// with `effect.module_source` and `effect.name` into the
+    /// `InstantiationKey` it uses to look up the per-monomorphisation
+    /// dispatch infrastructure.
+    pub trait_type_args: Vec<TypeId>,
     /// Handler value expression (e.g., `&mut mock`).
     pub handler: TirExpr,
     /// The concrete struct type (after deref) implementing the effect.
@@ -3219,6 +3258,13 @@ pub struct TirEffectOp {
     pub params: Vec<TirParam>,
     pub return_type: TypeId,
     pub span: Span,
+    /// CM canonical name from `#[cm("...")]` on the resource method
+    /// declaration (e.g. `"stream-write"`, `"future-read"`). `None` for
+    /// effect operations and for resource methods that don't carry a
+    /// CM attribute. The dispatch synthesis uses this to map raw
+    /// resource call sites — which carry `cm_name` on their
+    /// `MethodInfo` — back to the right per-monomorphisation wrapper.
+    pub cm_name: Option<String>,
 }
 
 /// Resource declaration captured in TIR for effect propagation.

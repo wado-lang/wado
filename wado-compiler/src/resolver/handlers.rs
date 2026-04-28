@@ -122,10 +122,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let mut resolved_effects = self.resolve_effects(&[effect_name], &effect_ids);
         let effect = resolved_effects.pop();
 
-        // The name must point at an actual effect declaration, not a
-        // regular trait or arbitrary identifier. Param effects (generic
-        // `<effect E>`) are also rejected for installation: you cannot
-        // install a handler for a polymorphic effect parameter.
+        // The name must point at an actual effect or resource
+        // declaration, not a regular trait or arbitrary identifier. Both
+        // kinds are installable as handlers (see WEP 2026-04-11): the
+        // `with` clause keeps the same syntax, only the dispatch wrapper
+        // shape differs (resources don't declare themselves as effects on
+        // the wrapper). Param effects (generic `<effect E>`) are still
+        // rejected for installation: you cannot install a handler for a
+        // polymorphic effect parameter.
         if let Some(eff) = &effect {
             match eff {
                 EffectRef::Concrete {
@@ -137,7 +141,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         .effect_decl_index
                         .get(name)
                         .is_some_and(|(decl_module, _)| decl_module == module_source);
-                    if !is_known_effect {
+                    let is_known_resource = self
+                        .trait_env
+                        .resource_decl_index
+                        .get(name)
+                        .is_some_and(|(decl_module, _)| decl_module == module_source);
+                    if !is_known_effect && !is_known_resource {
                         let _ = self.logger.error(TypeError::NotAnEffect {
                             name: name.clone(),
                             span: effect_ty.span(),
@@ -179,8 +188,23 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
         }
 
+        // Trait/resource type args at this `with E => h do` site (e.g.
+        // `[u8]` for `with Stream<u8> => &mut s do`). Resolved from the
+        // effect type's AST; non-generic effects produce `vec![]`. The
+        // dispatch synthesis projects this together with the bare base
+        // name into the per-monomorphisation `InstantiationKey`.
+        let trait_type_args: Vec<TypeId> = match effect_ty {
+            ast::Type::Generic(generic) => generic
+                .args
+                .iter()
+                .map(|arg| self.resolve_type(arg))
+                .collect(),
+            _ => Vec::new(),
+        };
+
         TirHandlerBinding {
             effect,
+            trait_type_args,
             handler,
             handler_type,
             span: binding.span,
@@ -279,22 +303,32 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         effects
             .into_iter()
-            .map(|(effect_name, effect_module)| TirHandlerBinding {
-                effect: Some(EffectRef::Concrete {
-                    name: effect_name,
-                    module_source: effect_module,
-                }),
-                handler: handler.clone(),
-                handler_type,
-                span: binding.span,
-                bundle_group: Some(bundle_group),
-            })
+            .map(
+                |(effect_name, effect_module, type_args)| TirHandlerBinding {
+                    effect: Some(EffectRef::Concrete {
+                        name: effect_name,
+                        module_source: effect_module,
+                    }),
+                    trait_type_args: type_args,
+                    handler: handler.clone(),
+                    handler_type,
+                    span: binding.span,
+                    bundle_group: Some(bundle_group),
+                },
+            )
             .collect()
     }
 
     /// Walk every `impl Trait for <type_name>` block in scope and return
-    /// the `(effect_name, effect_defining_module)` pair for each impl
-    /// whose `trait_type` resolves to an effect declaration.
+    /// the `(base_trait_name, defining_module, trait_type_args)` triple
+    /// for each impl whose `trait_type` resolves to an effect *or*
+    /// resource declaration. Both kinds are installable as handlers
+    /// (see WEP 2026-04-11), so the bundled `with h do` form expands to
+    /// one binding per impl regardless of kind. The `trait_type_args`
+    /// component carries the impl's instantiation (`[u8]` for
+    /// `impl Stream<u8> for MockCM`, `[]` for non-generic impls) so the
+    /// dispatch synthesis can route each binding to the right
+    /// per-monomorphisation infrastructure.
     ///
     /// Discovery order: `trait_env.impl_index` entries first (loaded
     /// modules), then any extra impls in the current module's items
@@ -302,49 +336,83 @@ impl<H: CompilerHost> Resolver<'_, H> {
     /// matches the original module-walk order, which gives users a
     /// stable, predictable install order for bundled handlers.
     ///
-    /// Duplicates are filtered: an effect that appears more than once
-    /// (e.g. via re-export aliasing) is installed only once.
-    fn collect_effect_impls_for_type(&self, type_name: &str) -> Vec<(String, ModuleSource)> {
+    /// Duplicates are filtered by `(decl_module, base_name,
+    /// trait_type_args)` — distinct instantiations of the same generic
+    /// resource (`impl Stream<u8>` vs `impl Stream<i32>`) install
+    /// separately; pure aliasing duplicates collapse.
+    fn collect_effect_impls_for_type(
+        &mut self,
+        type_name: &str,
+    ) -> Vec<(String, ModuleSource, Vec<TypeId>)> {
         use crate::ast::Item;
-        let mut effects: Vec<(String, ModuleSource)> = Vec::new();
-        let mut seen: crate::hashmap::IndexSet<(ModuleSource, String)> =
+        let mut out: Vec<(String, ModuleSource, Vec<TypeId>)> = Vec::new();
+        let mut seen: crate::hashmap::IndexSet<(ModuleSource, String, Vec<TypeId>)> =
             crate::hashmap::IndexSet::default();
 
-        let mut try_record = |trait_name: String, effects: &mut Vec<(String, ModuleSource)>| {
-            if let Some((effect_module, _)) = self.trait_env.effect_decl_index.get(&trait_name)
-                && seen.insert((effect_module.clone(), trait_name.clone()))
-            {
-                effects.push((trait_name, effect_module.clone()));
-            }
-        };
-
+        // Collect the impl `trait_type` ASTs first so subsequent
+        // `resolve_type` calls (which need `&mut self`) don't fight the
+        // borrows on `trait_env.impl_index` / `loaded_modules` /
+        // `current_module_items`.
+        let mut trait_types: Vec<ast::Type> = Vec::new();
         if let Some(entries) = self.trait_env.impl_index.get(type_name) {
             for (module_src, item_idx) in entries {
                 let module = &self.loaded_modules[module_src];
                 if let Item::Impl(impl_block) = &module.items[*item_idx]
                     && let Some(trait_type) = &impl_block.trait_type
                 {
-                    let trait_name = self.get_type_name(trait_type);
-                    try_record(trait_name, &mut effects);
+                    trait_types.push(trait_type.clone());
                 }
             }
         }
-
-        // Impls declared in the current module aren't always reachable via
-        // `impl_index` (the index is built before the current module is
-        // fully resolved in some pipelines), so walk them too. Mirrors
-        // `find_trait_impl_for_type`.
+        // Impls declared in the current module aren't always reachable
+        // via `impl_index` (the index is built before the current
+        // module is fully resolved in some pipelines), so walk them
+        // too. Mirrors `find_trait_impl_for_type`.
         for item in self.current_module_items {
             if let Item::Impl(impl_block) = item
                 && let Some(trait_type) = &impl_block.trait_type
                 && Self::get_type_name_static(&impl_block.ty) == type_name
             {
-                let trait_name = self.get_type_name(trait_type);
-                try_record(trait_name, &mut effects);
+                trait_types.push(trait_type.clone());
             }
         }
 
-        effects
+        for trait_type in &trait_types {
+            let base_trait_name = self.get_type_name(trait_type);
+            // Accept either an effect or a resource declaration. The
+            // dispatch synthesis pass treats both uniformly.
+            let decl_module = self
+                .trait_env
+                .effect_decl_index
+                .get(&base_trait_name)
+                .map(|(m, _)| m.clone())
+                .or_else(|| {
+                    self.trait_env
+                        .resource_decl_index
+                        .get(&base_trait_name)
+                        .map(|(m, _)| m.clone())
+                });
+            let Some(decl_module) = decl_module else {
+                continue;
+            };
+            let type_args: Vec<TypeId> = match trait_type {
+                ast::Type::Generic(generic) => generic
+                    .args
+                    .iter()
+                    .map(|arg| self.resolve_type(arg))
+                    .collect(),
+                _ => Vec::new(),
+            };
+            if seen.insert((
+                decl_module.clone(),
+                base_trait_name.clone(),
+                type_args.clone(),
+            )) {
+                out.push((base_trait_name, decl_module, type_args));
+            }
+        }
+
+        out
     }
 
     /// Strip a single leading `&` / `&mut` layer to reach the type that the

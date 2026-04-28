@@ -449,6 +449,7 @@ impl ClosureLowerer {
                     captures: Vec::new(),
                     functor_id: None,
                     source_text: None,
+                    address_taken_locals: crate::hashmap::IndexSet::default(),
                 };
                 expr.type_id = func_type;
             }
@@ -2933,6 +2934,8 @@ impl ClosureLowerer {
                 struct_name: info.struct_name.clone(),
                 base_struct_name: info.base_struct_name.clone(),
                 trait_name: info.trait_name.clone(),
+                base_trait_name: info.base_trait_name.clone(),
+                trait_type_args: info.trait_type_args.clone(),
                 method_name: specialized_method_name.clone(),
                 method_type_args: Vec::new(), // Type args are now in method_name
                 is_type_param_receiver: info.is_type_param_receiver,
@@ -3414,6 +3417,7 @@ impl ClosureLowerer {
                 captures,
                 functor_id,
                 source_text,
+                address_taken_locals,
             } => TirExpr::new(
                 TirExprKind::Closure {
                     params: params.clone(),
@@ -3421,6 +3425,7 @@ impl ClosureLowerer {
                     captures: captures.clone(),
                     functor_id: *functor_id,
                     source_text: source_text.clone(),
+                    address_taken_locals: address_taken_locals.clone(),
                 },
                 expr.type_id,
                 expr.span,
@@ -4101,6 +4106,8 @@ impl ClosureLowerer {
                 struct_name: info.struct_name.clone(),
                 base_struct_name: info.base_struct_name.clone(),
                 trait_name: info.trait_name.clone(),
+                base_trait_name: info.base_trait_name.clone(),
+                trait_type_args: info.trait_type_args.clone(),
                 method_name: format!("{}{}", info.full_method_name(), functor_suffix),
                 method_type_args: Vec::new(), // Type args are now in method_name
                 is_type_param_receiver: info.is_type_param_receiver,

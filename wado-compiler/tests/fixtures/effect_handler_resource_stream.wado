@@ -1,0 +1,76 @@
+// Bundled-form handler for `Stream<u8>` + `StreamWritable<u8>`, per
+// WEP-2026-04-11-effect-handler.md.
+//
+// `MockStream` implements both ends of the CM stream pair against a
+// single shared `log` buffer; the bundled `with &mut s do` form
+// installs both handlers at once for the duration of the `do` block.
+// Inside the block, `Stream::<u8>::new()` / `tx.write(payload)` /
+// `rx.read(...)` / `tx.drop()` / `rx.drop()` all dispatch through
+// the per-monomorphisation `__effect_dispatch__Stream<u8>__*` /
+// `__effect_dispatch__StreamWritable<u8>__*` wrappers into
+// `MockStream`'s methods rather than the CM canonical
+// `stream-{new,read,write,drop-*}` intrinsics.
+
+use { println, Stdout } from "core:cli";
+
+struct MockStream {
+    log: Array<u8>,
+}
+
+impl Stream<u8> for MockStream {
+    fn new(&mut self) -> [Stream<u8>, StreamWritable<u8>] {
+        // Hand out a fake handle pair. Both ends of this single
+        // stream share the MockStream's `log` buffer, so the
+        // writable end's writes are observed by the readable end's
+        // reads — buffered semantics, unlike wasmtime's unbuffered
+        // canonical streams.
+        let id: i32 = 0;
+        resume [id as Stream<u8>, id as StreamWritable<u8>]
+    }
+    fn read(&mut self, this: &Stream<u8>, max: i32) -> Array<u8> {
+        let _ = this;
+        let _ = max;
+        let snapshot = self.log;
+        self.log = [];
+        resume snapshot
+    }
+    fn drop(&mut self, this: &Stream<u8>) {
+        let _ = this;
+        resume ()
+    }
+    ..
+}
+
+impl StreamWritable<u8> for MockStream {
+    fn write(&mut self, this: &StreamWritable<u8>, data: Array<u8>) {
+        let _ = this;
+        for let b of data {
+            self.log.push(b);
+        }
+        resume ()
+    }
+    fn drop(&mut self, this: &StreamWritable<u8>) {
+        let _ = this;
+        resume ()
+    }
+    ..
+}
+
+export fn run() with Stdout {
+    let mut s = MockStream { log: [] };
+    with &mut s do {
+        let [rx, tx] = Stream::<u8>::new();
+        let payload: Array<u8> = [104 as u8, 105 as u8]; // "hi"
+        tx.write(payload);
+        let got = rx.read(16);
+        assert got.len() == 2;
+        assert got[0] == 104 as u8;
+        assert got[1] == 105 as u8;
+        tx.drop();
+        rx.drop();
+    }
+    println(`bytes_buffered={s.log.len()}`);
+}
+
+__DATA__
+{"stdout_contains": ["bytes_buffered=0"]}
