@@ -1,6 +1,7 @@
 use { Alternative, Element, Visibility } from "./ir.wado";
 use { CodeWriter } from "./wadopoet.wado";
 use { TreeSet } from "core:collections";
+pub use { escape_ident, to_pascal_case, to_snake_case, to_lower } from "./ident.wado";
 
 /// Emit a `// rule visibility: <name> (ignored by codegen, matches ANTLR4)`
 /// comment for a rule whose .g4 source carried a `public` / `private` /
@@ -19,74 +20,6 @@ pub fn gen_visibility_comment(w: &mut CodeWriter, visibility: &Visibility) {
         return;
     }
     w.line(&`// rule visibility: {label} (ignored by codegen, matches ANTLR4)`);
-}
-
-fn is_wado_reserved(name: &String) -> bool {
-    return match *name {
-        // Control flow
-        "if" | "else" | "while" | "for" | "loop" | "break" | "continue" | "return" | "match" | "matches" => true,
-        // Declarations
-        "fn" | "let" | "global" | "const" | "struct" | "enum" | "variant" | "impl" | "trait" => true,
-        "type" | "use" | "from" | "pub" | "import" | "export" | "test" => true,
-        // Modifiers
-        "as" | "with" | "mut" | "async" | "move" | "unique" | "in" | "of" | "stores" => true,
-        // Other keywords
-        "assert" | "effect" | "handler" | "reactive" | "resource" | "world" => true,
-        // Constants
-        "true" | "false" | "null" | "self" => true,
-        // Built-in types
-        "i8" | "i16" | "i32" | "i64" | "u8" | "u16" | "u32" | "u64" | "f32" | "f64" => true,
-        "bool" | "char" | "String" | "Array" | "Option" | "Result" | "Fn" => true,
-        // Other
-        "scope" | "task" | "flags" | "panic" | "unreachable" => true,
-        _ => false,
-    };
-}
-
-/// Escape an identifier that would collide with a Wado reserved word by appending '_'.
-pub fn escape_ident(name: &String) -> String {
-    if is_wado_reserved(name) {
-        return `{*name}_`;
-    }
-    return *name;
-}
-
-pub fn to_pascal_case(name: &String) -> String {
-    let mut result = String::with_capacity(name.len());
-    let mut capitalize_next = true;
-    for let c of name.chars() {
-        if c == '_' {
-            capitalize_next = true;
-        } else if capitalize_next {
-            result.push(c.to_ascii_uppercase());
-            capitalize_next = false;
-        } else {
-            result.push(c);
-        }
-    }
-    return result;
-}
-
-pub fn to_snake_case(name: &String) -> String {
-    let mut result = String::with_capacity(name.len() + 4);
-    let mut prev_lower = false;
-    for let c of name.chars() {
-        if c.is_ascii_uppercase() {
-            if prev_lower {
-                result.push('_');
-            }
-            result.push(c.to_ascii_lowercase());
-            prev_lower = false;
-        } else {
-            result.push(c);
-            prev_lower = c.is_ascii_lowercase();
-        }
-    }
-    return result;
-}
-
-pub fn to_lower(name: &String) -> String {
-    return name.to_ascii_lowercase();
 }
 
 fn escape_control(c: char) -> Option<String> {
@@ -225,7 +158,7 @@ fn char_hex_name(c: char) -> String {
 /// derive a readable name from it so multi-element alternatives can dedup.
 pub fn not_element_field_name(inner: &Element) -> String {
     return match *inner {
-        TokenRef(t) => `not_{to_lower(&t.name)}`,
+        TokenRef(t) => `not_{t.lower_name}`,
         Literal(l) => `not_{literal_field_name(&l.text)}`,
         _ => "not_set",
     };
@@ -311,7 +244,7 @@ pub fn group_field_base_name(alts: &Array<Alternative>) -> String {
             result.push_str("_or_");
         }
         if let RuleRef(r) = &alts[i].elements[0] {
-            result.push_str(to_snake_case(&r.name));
+            result.push_str(r.snake_name);
         }
     }
     return result;
@@ -451,11 +384,11 @@ pub fn general_group_alt_struct_name(rule_name: &String, group_index: i32, alt_i
 /// Get a field name for the elements in a single-alt group's element.
 fn element_base_name(elem: &Element) -> String {
     return match elem {
-        RuleRef(r) => escape_ident(&to_snake_case(&r.name)),
-        TokenRef(t) => escape_ident(&to_lower(&t.name)),
+        RuleRef(r) => r.field_name,
+        TokenRef(t) => t.field_name,
         Literal(l) => literal_field_name(&l.text),
         Repeat(rep) => element_base_name(&rep.element),
-        Label(lab) => escape_ident(&to_snake_case(&lab.name)),
+        Label(lab) => lab.field_name,
         _ => "item",
     };
 }

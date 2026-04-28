@@ -9,12 +9,10 @@ use {
     NotElement,
     RepeatKind,
     LexerRule,
+    normalize_caches,
 } from "./ir.wado";
 use {
     to_pascal_case,
-    to_snake_case,
-    to_lower,
-    escape_ident,
     rule_type_name,
     literal_field_name,
     not_element_field_name,
@@ -48,7 +46,13 @@ pub struct GenerateOptions {
     pub highlight: bool,
 }
 
-pub fn generate(grammar: &Grammar, options: &GenerateOptions) -> String {
+pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> String {
+    // Fill in `snake_name` / `field_name` caches on every name-bearing IR
+    // node before any codegen pass touches the grammar. Production IR built
+    // through `RuleRefElement::with_options` etc. already has these set —
+    // `normalize_caches` is a one-time `is_empty()` sweep and a fallback
+    // for IR constructed with struct-literal syntax (e.g. unit tests).
+    normalize_caches(grammar);
     let mut w = CodeWriter::new();
     gen_header(&mut w, grammar);
     gen_grammar_metadata(&mut w, grammar);
@@ -431,16 +435,14 @@ fn increment_name_count(counts: &mut Array<[String, i32]>, name: &String) {
 
 fn element_to_field(elem: &Element, rule_name: &String, group_counter: &mut i32) -> Option<Field> {
     if let RuleRef(r) = elem {
-        let name = &r.name;
         return Option::<Field>::Some(Field {
-            name: escape_ident(&to_snake_case(name)),
-            type_str: rule_type_name(name),
+            name: r.field_name,
+            type_str: rule_type_name(&r.name),
         });
     }
     if let TokenRef(t) = elem {
-        let name = &t.name;
         return Option::<Field>::Some(Field {
-            name: escape_ident(&to_lower(name)),
+            name: t.field_name,
             type_str: "Token",
         });
     }
@@ -494,12 +496,12 @@ fn element_to_field(elem: &Element, rule_name: &String, group_counter: &mut i32)
                 // `items+=item` — the field is an Array<ItemNode>, regardless
                 // of whether this Label is wrapped in a Repeat.
                 return Option::<Field>::Some(Field {
-                    name: escape_ident(&to_snake_case(&lab.name)),
+                    name: lab.field_name,
                     type_str: `Array<{inner.type_str}>`,
                 });
             }
             return Option::<Field>::Some(Field {
-                name: escape_ident(&to_snake_case(&lab.name)),
+                name: lab.field_name,
                 type_str: inner.type_str,
             });
         }

@@ -1,4 +1,5 @@
 use { Span, ParseError } from "./runtime.wado";
+use { escape_ident, to_snake_case, to_lower } from "./ident.wado";
 
 /// OptionValue is the typed right-hand side of an ANTLR4 `key = value` option
 /// entry. ANTLR4 options can be a bare identifier, a dotted qualified name,
@@ -252,6 +253,28 @@ pub struct ParserRule {
     /// Rule-level options from `options { ... }` prequel blocks.
     pub options: Array<GrammarOption>,
     pub alternatives: Array<Alternative>,
+    /// Cached `to_snake_case(name)` — used as the fragment in
+    /// `parse_X` / `scan_X` function names. Populated by `ParserRule::new`
+    /// so codegen never recomputes `to_snake_case` for the same rule name.
+    /// Empty until populated; `normalize_caches` fills any leftover empties.
+    pub snake_name: String = "",
+    /// Cached `escape_ident(snake_name)` — used as the standalone field name
+    /// when the rule itself appears as a field (e.g. the LR self-ref slot in
+    /// the precedence-climbing helper struct).
+    pub field_name: String = "",
+}
+
+impl ParserRule {
+    pub fn new(
+        name: String,
+        visibility: Visibility,
+        options: Array<GrammarOption>,
+        alternatives: Array<Alternative>,
+    ) -> ParserRule {
+        let snake_name = to_snake_case(&name);
+        let field_name = escape_ident(&snake_name);
+        return ParserRule { name, visibility, options, alternatives, snake_name, field_name };
+    }
 }
 
 /// Alternative is one branch of a parser rule, optionally labeled.
@@ -299,22 +322,44 @@ pub variant Element {
 pub struct RuleRefElement {
     pub name: String,
     pub options: Array<GrammarOption>,
+    /// Cached `to_snake_case(name)` — fragment in `scan_X` / `parse_X`.
+    /// Empty by default; populated eagerly by `with_options` or lazily by
+    /// `normalize_caches` on the path through `generate()`.
+    pub snake_name: String = "",
+    /// Cached `escape_ident(snake_name)` — standalone field name in CST structs.
+    pub field_name: String = "",
 }
 
 impl RuleRefElement {
     pub fn new(name: String) -> RuleRefElement {
-        return RuleRefElement { name, options: [] };
+        return RuleRefElement::with_options(name, []);
+    }
+
+    pub fn with_options(name: String, options: Array<GrammarOption>) -> RuleRefElement {
+        let snake_name = to_snake_case(&name);
+        let field_name = escape_ident(&snake_name);
+        return RuleRefElement { name, options, snake_name, field_name };
     }
 }
 
 pub struct TokenRefElement {
     pub name: String,
     pub options: Array<GrammarOption>,
+    /// Cached `to_lower(name)` — used in token field/identifier names.
+    pub lower_name: String = "",
+    /// Cached `escape_ident(lower_name)` — standalone field name in CST structs.
+    pub field_name: String = "",
 }
 
 impl TokenRefElement {
     pub fn new(name: String) -> TokenRefElement {
-        return TokenRefElement { name, options: [] };
+        return TokenRefElement::with_options(name, []);
+    }
+
+    pub fn with_options(name: String, options: Array<GrammarOption>) -> TokenRefElement {
+        let lower_name = to_lower(&name);
+        let field_name = escape_ident(&lower_name);
+        return TokenRefElement { name, options, lower_name, field_name };
     }
 }
 
@@ -361,6 +406,18 @@ pub struct LabelElement {
     /// `=` for single-value labels, `+=` for list labels.
     pub list: bool,
     pub element: Element,
+    /// Cached `to_snake_case(name)`.
+    pub snake_name: String = "",
+    /// Cached `escape_ident(snake_name)` — standalone field name in CST structs.
+    pub field_name: String = "",
+}
+
+impl LabelElement {
+    pub fn new(name: String, list: bool, element: Element) -> LabelElement {
+        let snake_name = to_snake_case(&name);
+        let field_name = escape_ident(&snake_name);
+        return LabelElement { name, list, element, snake_name, field_name };
+    }
 }
 
 pub struct NotElement {
@@ -636,4 +693,88 @@ fn find_or_add_channel(channels: &mut Array<String>, name: &String) -> i32 {
     }
     channels.push(*name);
     return channels.len() - 1 + 2;
+}
+
+/// Walk every parser rule in `grammar` and fill any `snake_name` / `field_name`
+/// caches that were left empty (e.g. by struct-literal construction in tests).
+/// IR nodes built via the smart constructors already have these populated, so
+/// the only cost on the production path is one `is_empty()` check per node.
+pub fn normalize_caches(grammar: &mut Grammar) {
+    for let mut ri = 0; ri < grammar.parser_rules.len(); ri += 1 {
+        if grammar.parser_rules[ri].snake_name.is_empty() {
+            grammar.parser_rules[ri].snake_name = to_snake_case(&grammar.parser_rules[ri].name);
+        }
+        if grammar.parser_rules[ri].field_name.is_empty() {
+            grammar.parser_rules[ri].field_name = escape_ident(&grammar.parser_rules[ri].snake_name);
+        }
+        let mut new_alts: Array<Alternative> = [];
+        for let alt of grammar.parser_rules[ri].alternatives {
+            let mut new_elements: Array<Element> = [];
+            for let elem of alt.elements {
+                new_elements.push(normalize_element_owned(elem));
+            }
+            new_alts.push(Alternative { label: alt.label, options: alt.options, elements: new_elements });
+        }
+        grammar.parser_rules[ri].alternatives = new_alts;
+    }
+}
+
+fn normalize_element_owned(elem: Element) -> Element {
+    // NOTE: pattern-matching with `if let X(y) = &elem` triggers a compiler
+    // codegen bug when the payload struct has a defaulted field
+    // (see fixtures/default_field_variant_payload_ref_match.wado), so we
+    // move-bind here even though it forces re-wrapping in every branch.
+    if let RuleRef(r) = elem {
+        let snake = if r.snake_name.is_empty() { to_snake_case(&r.name) } else { r.snake_name };
+        let field = if r.field_name.is_empty() { escape_ident(&snake) } else { r.field_name };
+        return Element::RuleRef(RuleRefElement {
+            name: r.name,
+            options: r.options,
+            snake_name: snake,
+            field_name: field,
+        });
+    }
+    if let TokenRef(t) = elem {
+        let lower = if t.lower_name.is_empty() { to_lower(&t.name) } else { t.lower_name };
+        let field = if t.field_name.is_empty() { escape_ident(&lower) } else { t.field_name };
+        return Element::TokenRef(TokenRefElement {
+            name: t.name,
+            options: t.options,
+            lower_name: lower,
+            field_name: field,
+        });
+    }
+    if let Label(lab) = elem {
+        let snake = if lab.snake_name.is_empty() { to_snake_case(&lab.name) } else { lab.snake_name };
+        let field = if lab.field_name.is_empty() { escape_ident(&snake) } else { lab.field_name };
+        return Element::Label(LabelElement {
+            name: lab.name,
+            list: lab.list,
+            element: normalize_element_owned(lab.element),
+            snake_name: snake,
+            field_name: field,
+        });
+    }
+    if let Repeat(rep) = elem {
+        return Element::Repeat(RepeatElement {
+            kind: rep.kind,
+            element: normalize_element_owned(rep.element),
+            non_greedy: rep.non_greedy,
+        });
+    }
+    if let Group(g) = elem {
+        let mut new_alts: Array<Alternative> = [];
+        for let alt of g.alternatives {
+            let mut new_elements: Array<Element> = [];
+            for let e of alt.elements {
+                new_elements.push(normalize_element_owned(e));
+            }
+            new_alts.push(Alternative { label: alt.label, options: alt.options, elements: new_elements });
+        }
+        return Element::Group(GroupElement { alternatives: new_alts, options: g.options });
+    }
+    if let Not(n) = elem {
+        return Element::Not(NotElement { element: normalize_element_owned(n.element) });
+    }
+    return elem;
 }

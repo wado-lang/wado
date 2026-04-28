@@ -15,10 +15,7 @@ use {
     OptionValue,
 } from "./ir.wado";
 use {
-    to_lower,
-    to_snake_case,
     to_pascal_case,
-    escape_ident,
     rule_type_name,
     literal_field_name,
     not_element_field_name,
@@ -1249,7 +1246,7 @@ fn gen_scan_functions(w: &mut CodeWriter, grammar: &Grammar, ctx: &mut GenContex
 }
 
 fn gen_scan_function(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext) {
-    let fn_name = `scan_{to_snake_case(&rule.name)}`;
+    let fn_name = `scan_{rule.snake_name}`;
 
     let mut lr_indices: Array<i32> = [];
     let mut non_lr_indices: Array<i32> = [];
@@ -1351,7 +1348,7 @@ fn single_token_first(elem: &Element) -> String {
 ///     loop with token-kind dispatch and second-token overlap resolution.
 ///     Callers without a precedence context omit min_prec and get 0.
 fn gen_scan_lr_functions(w: &mut CodeWriter, rule: &ParserRule, lr_indices: &Array<i32>, non_lr_indices: &Array<i32>, ctx: &mut GenContext) {
-    let fn_name = `scan_{to_snake_case(&rule.name)}`;
+    let fn_name = `scan_{rule.snake_name}`;
     let atom_name = `{fn_name}_atom`;
 
     // scan_X_atom: tries each non-LR alt (first-match, same shape as before).
@@ -1404,7 +1401,7 @@ fn gen_scan_lr_functions(w: &mut CodeWriter, rule: &ParserRule, lr_indices: &Arr
 /// recursive calls compile to `scan_X(tokens, pos, prec)` with the same
 /// precedence value the parse side uses (via `compute_lr_self_ref_prec`).
 fn gen_scan_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, lr_indices: &Array<i32>, ctx: &mut GenContext) {
-    let fn_name = `scan_{to_snake_case(&rule.name)}`;
+    let fn_name = `scan_{rule.snake_name}`;
     let total_lr = lr_indices.len();
     let lr_suffix_first_tokens = collect_lr_suffix_first_tokens(rule, lr_indices, ctx);
 
@@ -1475,7 +1472,7 @@ fn gen_scan_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, lr_indices:
 /// `suffix_kind` and `result = fn(p, ...)?` replaced by `pos = fn(tokens, pos);
 /// if pos < 0 { return -1; }`.
 fn gen_scan_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, lr_indices: &Array<i32>, ctx: &mut GenContext) {
-    let fn_name = `scan_{to_snake_case(&rule.name)}`;
+    let fn_name = `scan_{rule.snake_name}`;
     let d = compute_lr_dispatch_data(rule, lr_indices, ctx);
 
     w.begin("loop");
@@ -2095,7 +2092,7 @@ fn gen_scan_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, fa
         return;
     }
     if let RuleRef(r) = elem {
-        let fn_name = `scan_{to_snake_case(&r.name)}`;
+        let fn_name = `scan_{r.snake_name}`;
         w.line(`pos = {fn_name}(tokens, pos);`);
         w.line(`if pos < 0 \{ {*fail_stmt} \}`);
         return;
@@ -2139,7 +2136,7 @@ fn gen_scan_element_assign(w: &mut CodeWriter, elem: &Element, ctx: &mut GenCont
         return;
     }
     if let RuleRef(r) = elem {
-        let fn_name = `scan_{to_snake_case(&r.name)}`;
+        let fn_name = `scan_{r.snake_name}`;
         w.line(`pos = {fn_name}(tokens, pos);`);
         return;
     }
@@ -2345,7 +2342,7 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext) {
     ctx.current_rule_name = rule.name;
     ctx.group_counter = 0;
     let type_name = rule_type_name(&rule.name);
-    let fn_name = `parse_{to_snake_case(&rule.name)}`;
+    let fn_name = `parse_{rule.snake_name}`;
     gen_visibility_comment(w, &rule.visibility);
 
     // Precompute the starting group counter for each alternative.
@@ -2683,7 +2680,7 @@ fn is_ruleref_optional(elem: &Element) -> bool {
 fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
     if let TokenRef(t) = elem {
         let const_name = `TK_{t.name}`;
-        let field_name = dedup_name(&escape_ident(&to_lower(&t.name)), name_counts);
+        let field_name = dedup_name(&t.field_name, name_counts);
         w.line(`let {field_name} = p.expect({const_name})?;`);
         return;
     }
@@ -2695,8 +2692,8 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_co
         return;
     }
     if let RuleRef(r) = elem {
-        let fn_name = `parse_{to_snake_case(&r.name)}`;
-        let field_name = dedup_name(&escape_ident(&to_snake_case(&r.name)), name_counts);
+        let fn_name = `parse_{r.snake_name}`;
+        let field_name = dedup_name(&r.field_name, name_counts);
         w.line(`let {field_name} = {fn_name}(p)?;`);
         return;
     }
@@ -2734,7 +2731,7 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_co
             // Bare list label: allocate the array, parse the inner element
             // once, and push. Repeats wrap this via gen_repeat below.
             let inner_info = element_field_info(&lab.element, ctx);
-            let lab_name = dedup_name(&escape_ident(&to_snake_case(&lab.name)), name_counts);
+            let lab_name = dedup_name(&lab.field_name, name_counts);
             w.line(`let mut {lab_name}: Array<{inner_info.1}> = [];`);
             let mut nc: Array<[String, i32]> = [];
             gen_element(w, &lab.element, ctx, &mut nc);
@@ -2744,7 +2741,7 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_co
         // Scalar label `name = element`: parse the inner element into a
         // private binding, then re-bind it under the label name so the
         // struct initializer (which uses the label name) resolves.
-        let lab_name = dedup_name(&escape_ident(&to_snake_case(&lab.name)), name_counts);
+        let lab_name = dedup_name(&lab.field_name, name_counts);
         let inner_info = element_field_info(&lab.element, ctx);
         let mut nc: Array<[String, i32]> = [];
         gen_element(w, &lab.element, ctx, &mut nc);
@@ -2772,7 +2769,7 @@ fn gen_repeat(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext, nam
     if is_list_label(inner) {
         if let Label(lab) = inner {
             let inner_info = element_field_info(&lab.element, ctx);
-            let lab_name = dedup_name(&escape_ident(&to_snake_case(&lab.name)), name_counts);
+            let lab_name = dedup_name(&lab.field_name, name_counts);
             w.line(`let mut {lab_name}: Array<{inner_info.1}> = [];`);
             if let Star = rep.kind {
                 if scannable {
@@ -3563,7 +3560,7 @@ fn gen_element_failable(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext
         return;
     }
     if let RuleRef(r) = elem {
-        let fn_name = `parse_{to_snake_case(&r.name)}`;
+        let fn_name = `parse_{r.snake_name}`;
         let r_var = dedup_name(&"opt_r", name_counts);
         w.line(`let {r_var} = {fn_name}(p);`);
         w.line(`if let Err(_) = {r_var} \{ p.pos = {saved_var}; break {label}; \}`);
@@ -3866,7 +3863,7 @@ fn gen_storable_optional_with_backtrack(w: &mut CodeWriter, inner: &Element, ctx
 fn gen_element_failable_named(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, saved_var: &String, label: &String, name_counts: &mut Array<[String, i32]>) {
     if let TokenRef(tr) = elem {
         let const_name = `TK_{tr.name}`;
-        let field_name = dedup_name(&escape_ident(&to_lower(&tr.name)), name_counts);
+        let field_name = dedup_name(&tr.field_name, name_counts);
         let r_var = dedup_name(&"_bt_r", name_counts);
         w.line(`let {r_var} = p.expect({const_name});`);
         w.line(`if let Err(_) = {r_var} \{ p.pos = {saved_var}; break {label}; \}`);
@@ -3884,8 +3881,8 @@ fn gen_element_failable_named(w: &mut CodeWriter, elem: &Element, ctx: &mut GenC
         return;
     }
     if let RuleRef(rr) = elem {
-        let fn_name = `parse_{to_snake_case(&rr.name)}`;
-        let field_name = dedup_name(&escape_ident(&to_snake_case(&rr.name)), name_counts);
+        let fn_name = `parse_{rr.snake_name}`;
+        let field_name = dedup_name(&rr.field_name, name_counts);
         let r_var = dedup_name(&"_bt_r", name_counts);
         w.line(`let {r_var} = {fn_name}(p);`);
         w.line(`if let Err(_) = {r_var} \{ p.pos = {saved_var}; break {label}; \}`);
@@ -4023,7 +4020,7 @@ fn list_label_info(elem: &Element, ctx: &mut GenContext) -> Option<[String, Stri
         if lab.list {
             let inner = element_field_info(&lab.element, ctx);
             return Option::<[String, String, String, String]>::Some([
-                escape_ident(&to_snake_case(&lab.name)),
+                lab.field_name,
                 `Array<{inner.1}>`,
                 inner.1,
                 inner.0,
@@ -4035,13 +4032,13 @@ fn list_label_info(elem: &Element, ctx: &mut GenContext) -> Option<[String, Stri
 
 fn element_field_info(elem: &Element, ctx: &mut GenContext) -> [String, String] {
     if let TokenRef(t) = elem {
-        return [escape_ident(&to_lower(&t.name)), "Token"];
+        return [t.field_name, "Token"];
     }
     if let Literal(l) = elem {
         return [literal_field_name(&l.text), "Token"];
     }
     if let RuleRef(r) = elem {
-        return [escape_ident(&to_snake_case(&r.name)), rule_type_name(&r.name)];
+        return [r.field_name, rule_type_name(&r.name)];
     }
     if let Wildcard(_) = elem {
         return ["wildcard", "Token"];
@@ -4052,7 +4049,7 @@ fn element_field_info(elem: &Element, ctx: &mut GenContext) -> [String, String] 
     if let Label(lab) = elem {
         if lab.list {
             let inner = element_field_info(&lab.element, ctx);
-            return [escape_ident(&to_snake_case(&lab.name)), `Array<{inner.1}>`];
+            return [lab.field_name, `Array<{inner.1}>`];
         }
         return element_field_info(&lab.element, ctx);
     }
@@ -4086,7 +4083,7 @@ fn gen_field_assignments(w: &mut CodeWriter, elements: &Array<Element>, ctx: &mu
 
 fn gen_field_assignment(w: &mut CodeWriter, elem: &Element, name_counts: &mut Array<[String, i32]>, ctx: &mut GenContext) {
     if let TokenRef(t) = elem {
-        let field_name = dedup_name(&escape_ident(&to_lower(&t.name)), name_counts);
+        let field_name = dedup_name(&t.field_name, name_counts);
         w.line(`{field_name},`);
         return;
     }
@@ -4096,7 +4093,7 @@ fn gen_field_assignment(w: &mut CodeWriter, elem: &Element, name_counts: &mut Ar
         return;
     }
     if let RuleRef(r) = elem {
-        let field_name = dedup_name(&escape_ident(&to_snake_case(&r.name)), name_counts);
+        let field_name = dedup_name(&r.field_name, name_counts);
         w.line(`{field_name},`);
         return;
     }
@@ -4134,7 +4131,7 @@ fn gen_field_assignment(w: &mut CodeWriter, elem: &Element, name_counts: &mut Ar
     }
     if let Label(lab) = elem {
         if has_field(&lab.element) {
-            let field_name = escape_ident(&to_snake_case(&lab.name));
+            let field_name = lab.field_name;
             dedup_name(&field_name, name_counts);
             w.line(`{field_name},`);
         }
@@ -4167,7 +4164,7 @@ fn gen_field_assignment(w: &mut CodeWriter, elem: &Element, name_counts: &mut Ar
 /// This advances the dedup counter so subsequent elements get correct suffixes.
 fn replay_element_names(elem: &Element, name_counts: &mut Array<[String, i32]>, ctx: &mut GenContext) {
     if let TokenRef(t) = elem {
-        dedup_name(&escape_ident(&to_lower(&t.name)), name_counts);
+        dedup_name(&t.field_name, name_counts);
         return;
     }
     if let Literal(l) = elem {
@@ -4175,7 +4172,7 @@ fn replay_element_names(elem: &Element, name_counts: &mut Array<[String, i32]>, 
         return;
     }
     if let RuleRef(r) = elem {
-        dedup_name(&escape_ident(&to_snake_case(&r.name)), name_counts);
+        dedup_name(&r.field_name, name_counts);
         return;
     }
     if let Wildcard(_) = elem {
@@ -4205,7 +4202,7 @@ fn replay_element_names(elem: &Element, name_counts: &mut Array<[String, i32]>, 
     }
     if let Label(lab) = elem {
         if has_field(&lab.element) {
-            dedup_name(&escape_ident(&to_snake_case(&lab.name)), name_counts);
+            dedup_name(&lab.field_name, name_counts);
         }
         return;
     }
@@ -4293,8 +4290,8 @@ fn gen_consume_group_store(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &
         // Simple case: no overlapping FIRST sets
         for let mut i = 0; i < alts.len(); i += 1 {
             if let RuleRef(r) = &alts[i].elements[0] {
-                let fn_name = `parse_{to_snake_case(&r.name)}`;
-                let local_var = to_snake_case(&r.name);
+                let fn_name = `parse_{r.snake_name}`;
+                let local_var = r.snake_name;
                 let case_name = group_case_name(&alts[i]);
 
                 if i == 0 {
@@ -4336,8 +4333,8 @@ fn gen_consume_group_store(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &
             if group.len() == 1 {
                 let alt_idx = group[0];
                 if let RuleRef(r) = &alts[alt_idx].elements[0] {
-                    let fn_name = `parse_{to_snake_case(&r.name)}`;
-                    let local_var = to_snake_case(&r.name);
+                    let fn_name = `parse_{r.snake_name}`;
+                    let local_var = r.snake_name;
                     let case_name = group_case_name(&alts[alt_idx]);
                     w.line(`let {local_var} = {fn_name}(p)?;`);
                     w.line(`{opt_var} = Option::<{type_name}>::Some({type_name}::{case_name}({local_var}));`);
@@ -4418,9 +4415,9 @@ fn gen_rule_ref_group_scan_dispatch(w: &mut CodeWriter, sorted_group: &Array<i32
         let alt_idx = sorted_group[k];
         let is_last = k == last;
         if let RuleRef(r) = &alts[alt_idx].elements[0] {
-            let fn_name = `parse_{to_snake_case(&r.name)}`;
+            let fn_name = `parse_{r.snake_name}`;
             let case_name = group_case_name(&alts[alt_idx]);
-            let local_var = to_snake_case(&r.name);
+            let local_var = r.snake_name;
 
             if k == 0 && !is_last {
                 w.begin(`if {winner_var} == {k}`);
@@ -4447,12 +4444,12 @@ fn gen_rule_ref_group_backtrack(w: &mut CodeWriter, sorted_group: &Array<i32>, a
         let alt_idx = sorted_group[k];
         let is_last = k == sorted_group.len() - 1;
         if let RuleRef(r) = &alts[alt_idx].elements[0] {
-            let fn_name = `parse_{to_snake_case(&r.name)}`;
+            let fn_name = `parse_{r.snake_name}`;
             let case_name = group_case_name(&alts[alt_idx]);
 
             if is_last {
                 w.begin(`if !{done}`);
-                let local_var = to_snake_case(&r.name);
+                let local_var = r.snake_name;
                 w.line(`let {local_var} = {fn_name}(p)?;`);
                 w.line(`{*opt_var} = Option::<{type_name}>::Some({type_name}::{case_name}({local_var}));`);
                 w.end();
@@ -4512,8 +4509,8 @@ fn gen_consume_group_store_optional(w: &mut CodeWriter, alts: &Array<Alternative
         if group.len() == 1 {
             let alt_idx = group[0];
             if let RuleRef(r) = &alts[alt_idx].elements[0] {
-                let fn_name = `parse_{to_snake_case(&r.name)}`;
-                let local_var = to_snake_case(&r.name);
+                let fn_name = `parse_{r.snake_name}`;
+                let local_var = r.snake_name;
                 let case_name = group_case_name(&alts[alt_idx]);
                 w.line(`let {local_var} = {fn_name}(p)?;`);
                 w.line(`{inner_var} = Option::<{type_name}>::Some({type_name}::{case_name}({local_var}));`);
@@ -5214,7 +5211,7 @@ fn compute_lr_self_ref_prec(alt: &Alternative, ei: i32, last_self_ref_idx: i32, 
 }
 
 fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &String, lr_indices: &Array<i32>, ctx: &mut GenContext) {
-    let fn_name = `parse_{to_snake_case(&rule.name)}`;
+    let fn_name = `parse_{rule.snake_name}`;
     let case_names = case_names_for_rule(&rule.alternatives);
     let total_lr = lr_indices.len();
     let lr_suffix_first_tokens = collect_lr_suffix_first_tokens(rule, lr_indices, ctx);
@@ -5250,7 +5247,7 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
         f.emit_begin(w);
 
         let mut name_counts: Array<[String, i32]> = [];
-        dedup_name(&escape_ident(&to_snake_case(&rule.name)), &mut name_counts);
+        dedup_name(&rule.field_name, &mut name_counts);
 
         ctx.group_counter = ctx.alt_gc_starts[lr_idx];
         let gc_lr = ctx.group_counter;
@@ -5261,7 +5258,7 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
             let elem = &alt.elements[ei];
             if let RuleRef(rr) = elem {
                 if rr.name == rule.name {
-                    let field_name = dedup_name(&escape_ident(&to_snake_case(&rr.name)), &mut name_counts);
+                    let field_name = dedup_name(&rr.field_name, &mut name_counts);
                     let prec = compute_lr_self_ref_prec(
                         alt,
                         ei,
@@ -5271,8 +5268,8 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
                     );
                     w.line(`let {field_name} = {fn_name}(p, {prec})?;`);
                 } else {
-                    let elem_fn = `parse_{to_snake_case(&rr.name)}`;
-                    let field_name = dedup_name(&escape_ident(&to_snake_case(&rr.name)), &mut name_counts);
+                    let elem_fn = `parse_{rr.snake_name}`;
+                    let field_name = dedup_name(&rr.field_name, &mut name_counts);
                     w.line(`let {field_name} = {elem_fn}(p)?;`);
                 }
             } else if let Group(grp) = elem {
@@ -5292,14 +5289,14 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
             }
         }
 
-        let first_field = escape_ident(&to_snake_case(&rule.name));
+        let first_field = rule.field_name;
         w.line(`return Result::<{type_name}, ParseError>::Ok({type_name}::{case_names[lr_idx]}({sname} \{`);
         w.indent();
         w.line("span: Span::new(start, p.last_end()),");
         w.line(`{first_field}: left,`);
         ctx.group_counter = gc_lr;
         let mut field_counts: Array<[String, i32]> = [];
-        dedup_name(&escape_ident(&to_snake_case(&rule.name)), &mut field_counts);
+        dedup_name(&rule.field_name, &mut field_counts);
         for let mut ei = 1; ei < alt.elements.len(); ei += 1 {
             gen_field_assignment(w, &alt.elements[ei], &mut field_counts, ctx);
         }
@@ -5535,7 +5532,7 @@ fn compute_lr_dispatch_data(rule: &ParserRule, lr_indices: &Array<i32>, ctx: &mu
 }
 
 fn gen_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, type_name: &String, lr_indices: &Array<i32>, ctx: &mut GenContext, use_prec: bool) {
-    let fn_name = `parse_{to_snake_case(&rule.name)}`;
+    let fn_name = `parse_{rule.snake_name}`;
     let d = compute_lr_dispatch_data(rule, lr_indices, ctx);
 
     w.begin("loop");
@@ -5820,7 +5817,7 @@ fn unwrap_label(elem: &Element) -> &Element with stores[elem] {
 
 fn gen_multi_alt_body_bt(w: &mut CodeWriter, rule: &ParserRule, type_name: &String, ctx: &mut GenContext, groups: &Array<Array<i32>>, first_sets: &Array<Array<String>>, non_lr_indices: &Array<i32>) {
     let case_names = case_names_for_rule(&rule.alternatives);
-    let fn_name = `parse_{to_snake_case(&rule.name)}`;
+    let fn_name = `parse_{rule.snake_name}`;
     w.line("let kind = p.peek_kind();");
 
     for let mut g = 0; g < groups.len(); g += 1 {
@@ -5878,7 +5875,7 @@ fn gen_parse_entry(w: &mut CodeWriter, parser_rules: &Array<ParserRule>) {
     }
     let root = &parser_rules[0];
     let type_name = rule_type_name(&root.name);
-    let fn_name = `parse_{to_snake_case(&root.name)}`;
+    let fn_name = `parse_{root.snake_name}`;
     let mut f = FnSpec::new("parse");
     f.set_pub();
     f.add_param("input", "&String");

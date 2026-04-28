@@ -68,7 +68,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
         };
     }
 
-    let grammar = merge_grammars(grammars);
+    let mut grammar = merge_grammars(grammars);
 
     match check_references(&grammar) {
         Ok(_) => {},
@@ -80,7 +80,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
     };
 
     let gen_opts = GenerateOptions { highlight: req.options.highlight };
-    let wado_source = codegen_generate(&grammar, &gen_opts);
+    let wado_source = codegen_generate(&mut grammar, &gen_opts);
 
     // Kiln entry module name mirrors Gale's CLI convention: snake-case
     // the grammar name. Reuses `gen_util::to_snake_case` so the filename

@@ -1,8 +1,5 @@
 use { Grammar, ParserRule, Alternative, Element, RepeatElement, LabelElement, RepeatKind } from "./ir.wado";
 use {
-    to_snake_case,
-    to_lower,
-    escape_ident,
     to_pascal_case,
     rule_type_name,
     literal_field_name,
@@ -240,14 +237,14 @@ fn collect_walk_fields(elements: &Array<Element>, rule_name: &String, group_coun
 fn element_to_walk_field(elem: &Element, rule_name: &String, group_counter: &mut i32) -> Option<WalkField> {
     if let RuleRef(r) = elem {
         return Option::Some(WalkField {
-            name: escape_ident(&to_snake_case(&r.name)),
+            name: r.field_name,
             action: WalkAction::WalkRule(r.name),
             wrapper: WalkWrapper::Direct,
         });
     }
     if let TokenRef(t) = elem {
         return Option::Some(WalkField {
-            name: escape_ident(&to_lower(&t.name)),
+            name: t.field_name,
             action: WalkAction::VisitToken,
             wrapper: WalkWrapper::Direct,
         });
@@ -304,7 +301,7 @@ fn element_to_walk_field(elem: &Element, rule_name: &String, group_counter: &mut
         if let Some(inner) = element_to_walk_field(&lab.element, rule_name, group_counter) {
             let wrapper = if lab.list { WalkWrapper::ArrayWrap } else { inner.wrapper };
             return Option::Some(WalkField {
-                name: escape_ident(&to_snake_case(&lab.name)),
+                name: lab.field_name,
                 action: inner.action,
                 wrapper,
             });
