@@ -1,0 +1,45 @@
+// Test: the e2e harness's `tls_mocks` mechanism delivers a canned handshake
+// error to the guest.
+//
+// Sets up dummy ciphertext streams (so the host's `connect()` doesn't bail out
+// before reaching the provider), then triggers the handshake. The mock
+// provider matches `server_name == "mock.example"` and resolves the
+// `Connector::connect` future with `Err(simulated handshake error)`.
+//
+// Status: `#![TODO]` because of an unrelated codegen bug —
+// `import_resource_using_interfaces` (codegen/component.rs:~3134) only treats
+// `Type::Named(R)` as a borrow self-param and panics on `Type::Reference(R)`,
+// which is the AST shape produced by `self: &Connector`. HTTP resources skirt
+// this path (excluded at `if interface_info.package == "http"`); TLS doesn't,
+// so calling `Connector::send` / `Connector::receive` panics codegen with
+// "unsupported Wado type for CM primitive: Reference(Named({Connector}))".
+// Once that branch unwraps `Type::Reference` for the borrow check, this
+// fixture should pass and the `#![TODO]` attribute must be removed.
+#![TODO]
+use { println, Stdout } from "core:cli";
+use { Connector, Error } from "wasi:tls";
+
+export fn run() with Stdout, Connector, Error {
+    let conn = Connector::new();
+
+    let [data_rx, data_tx] = Stream::<u8>::new();
+    let [_tls_tx, _send_done] = conn.send(data_rx);
+    data_tx.drop();
+
+    let [cipher_rx, cipher_tx] = Stream::<u8>::new();
+    let [_tls_rx, _recv_done] = conn.receive(cipher_rx);
+    cipher_tx.drop();
+
+    match Connector::connect(conn, "mock.example").wait() {
+        Ok(_) => println("connected"),
+        Err(e) => println(`failed: {e.to_debug_string()}`),
+    }
+}
+
+__DATA__
+{
+    "stdout": "failed: simulated handshake error\n",
+    "tls_mocks": {
+        "mock.example": { "error": "simulated handshake error" }
+    }
+}
