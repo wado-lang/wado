@@ -1345,8 +1345,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
             Condition::Expr(expr) => {
                 let condition = self.resolve_expr(expr, ctx, Some(TypeTable::BOOL));
-                let then_block = self.resolve_block(&if_expr.then_block, ctx, expected_type);
-                let else_block = if_expr
+                let mut then_block = self.resolve_block(&if_expr.then_block, ctx, expected_type);
+                let mut else_block = if_expr
                     .else_block
                     .as_ref()
                     .map(|b| self.resolve_block(b, ctx, expected_type));
@@ -1361,11 +1361,23 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
                     // `never` is the bottom type: a branch returning `never` is compatible
                     // with any type, so the result type comes from the non-never branch.
+                    //
+                    // We also let `Option<UNKNOWN>` (typically a bare `null` literal whose
+                    // inner type could not be inferred) defer to the sibling branch's
+                    // resolved type. The unresolved branch's tail is patched below.
+                    let tt = self.type_table.borrow();
+                    let then_unknown = tt.contains_unknown(then_type);
+                    let else_unknown = tt.contains_unknown(else_type);
+                    drop(tt);
                     if then_type == else_type {
                         then_type
                     } else if then_type == TypeTable::NEVER {
                         else_type
                     } else if else_type == TypeTable::NEVER {
+                        then_type
+                    } else if then_unknown && !else_unknown {
+                        else_type
+                    } else if else_unknown && !then_unknown {
                         then_type
                     } else if else_block.is_none() {
                         if then_type != TypeTable::UNIT {
@@ -1388,6 +1400,18 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         then_type
                     }
                 };
+
+                // Patch unresolved `null` tails in either branch using the determined
+                // result type — see `patch_unresolved_null` for the rationale.
+                {
+                    let tt = self.type_table.borrow();
+                    if !tt.contains_unknown(type_id) {
+                        patch_unresolved_null_in_block(&mut then_block, type_id, &tt);
+                        if let Some(eb) = else_block.as_mut() {
+                            patch_unresolved_null_in_block(eb, type_id, &tt);
+                        }
+                    }
+                }
 
                 TirExpr::new(
                     TirExprKind::If {
@@ -1412,7 +1436,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let scrutinee = self.resolve_expr(&match_expr.expr, ctx, None);
         let scrutinee_type = scrutinee.type_id;
 
-        let arms: Vec<TirMatchArm> = match_expr
+        let mut arms: Vec<TirMatchArm> = match_expr
             .arms
             .iter()
             .map(|arm| self.resolve_match_arm(arm, scrutinee_type, ctx, expected_type))
@@ -1423,9 +1447,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let type_id = expected_type.unwrap_or_else(|| {
             // Skip `never`-typed arms: `never` is the bottom type and is compatible
             // with any type, so the match result type is determined by the non-never arms.
+            //
+            // Also skip arms whose type still contains UNKNOWN — typically a bare
+            // `null` literal whose `Option<...>` inner could not be inferred from
+            // the arm body alone. A sibling arm with a fully-resolved type
+            // (e.g. `Option::Some(s)` where `s: String`) wins; we then patch the
+            // unresolved `null` arm bodies below.
+            let tt = self.type_table.borrow();
             arms.iter()
                 .map(|a| a.body.type_id)
-                .find(|&t| t != TypeTable::NEVER)
+                .find(|&t| t != TypeTable::NEVER && !tt.contains_unknown(t))
+                .or_else(|| arms.iter().map(|a| a.body.type_id).find(|&t| t != TypeTable::NEVER))
                 .unwrap_or_else(|| {
                     // All arms return `never` — the match itself is `never`.
                     arms.first()
@@ -1433,6 +1465,18 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         .unwrap_or(TypeTable::UNIT)
                 })
         });
+
+        // Patch `null`-bodied arms whose `Option<???>` inner could not be inferred.
+        // If the match's overall type is fully resolved we know the inner type;
+        // rewrite the `Null`'s `type_id` so WIR translation can see it.
+        {
+            let tt = self.type_table.borrow();
+            if !tt.contains_unknown(type_id) {
+                for arm in &mut arms {
+                    patch_unresolved_null(&mut arm.body, type_id, &tt);
+                }
+            }
+        }
 
         TirExpr::new(
             TirExprKind::Match {
@@ -3501,5 +3545,80 @@ impl<H: CompilerHost> Resolver<'_, H> {
             struct_type,
             range.span,
         )
+    }
+}
+
+/// Recursively patch any `Null` literals inside `expr` whose `Option<???>`
+/// inner is still UNKNOWN, rewriting them to use `target_type`.
+///
+/// `Literal::Null` initially resolves to `Option<UNKNOWN>` (see
+/// `resolve_literal`). When a `null` literal sits in a match arm or `if`
+/// branch, its concrete inner type is determined by a sibling arm — but
+/// that information isn't propagated back during arm resolution. Once the
+/// match/if's overall result type is known we walk the arm bodies and
+/// rewrite the unresolved `Null`'s `type_id` so WIR translation sees a
+/// fully-resolved `Option<T>`.
+///
+/// Only the tail/result positions are walked; nested expressions whose
+/// value is discarded (e.g. inside an arbitrary call argument) are not
+/// affected — they would have been forced to a known type by their own
+/// surrounding context anyway.
+fn patch_unresolved_null(expr: &mut TirExpr, target_type: TypeId, type_table: &TypeTable) {
+    if matches!(expr.kind, TirExprKind::Null) && type_table.contains_unknown(expr.type_id) {
+        expr.type_id = target_type;
+        return;
+    }
+    match &mut expr.kind {
+        TirExprKind::Block(block) => {
+            patch_unresolved_null_in_block(block, target_type, type_table);
+        }
+        TirExprKind::If {
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            patch_unresolved_null_in_block(then_branch, target_type, type_table);
+            if let Some(eb) = else_branch {
+                patch_unresolved_null_in_block(eb, target_type, type_table);
+            }
+        }
+        TirExprKind::Match { arms, .. } => {
+            for arm in arms {
+                patch_unresolved_null(&mut arm.body, target_type, type_table);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn patch_unresolved_null_in_block(
+    block: &mut TirBlock,
+    target_type: TypeId,
+    type_table: &TypeTable,
+) {
+    let Some(last) = block.stmts.last_mut() else {
+        return;
+    };
+    match &mut last.kind {
+        TirStmtKind::Expr(e) => {
+            patch_unresolved_null(e, target_type, type_table);
+        }
+        TirStmtKind::If {
+            then_block,
+            else_block: Some(eb),
+            ..
+        } => {
+            patch_unresolved_null_in_block(then_block, target_type, type_table);
+            patch_unresolved_null_in_block(eb, target_type, type_table);
+        }
+        TirStmtKind::IfLet {
+            then_block,
+            else_block: Some(eb),
+            ..
+        } => {
+            patch_unresolved_null_in_block(then_block, target_type, type_table);
+            patch_unresolved_null_in_block(eb, target_type, type_table);
+        }
+        _ => {}
     }
 }

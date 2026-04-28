@@ -1,0 +1,68 @@
+// Min repro: `null` in one match arm whose other arm constructs `Option::Some(s: T)`.
+// The match's result type must unify to `Option<T>`, and `null` must coerce to
+// `Option::<T>::None`.
+//
+// Before fix: panicked at wado-compiler/src/wir_build/translate.rs:918:
+//   [WIR] Null with unresolved Option inner type (type_id=...)
+//
+// The other-arm `Option::Some(s)` is a variant payload struct whose fields are
+// being translated when the panic fires from inside `translate_match`.
+
+fn make_ok() -> Result<String, ()> {
+    return Result::Ok("hello");
+}
+
+fn make_err() -> Result<String, ()> {
+    return Result::Err(());
+}
+
+test "null arm infers Option inner from Some-arm payload" {
+    let some_value = match make_ok() {
+        Ok(s) => Option::Some(s),
+        Err(_) => null,
+    };
+    assert some_value matches { Some(v) && v == "hello" };
+
+    let none_value = match make_err() {
+        Ok(s) => Option::Some(s),
+        Err(_) => null,
+    };
+    assert none_value matches { None };
+}
+
+test "null arm at the front: reversed order still infers" {
+    // The Some arm appears second — the result type computation must skip
+    // the leading `null` arm whose type is Option<UNKNOWN>.
+    let v = match make_err() {
+        Err(_) => null,
+        Ok(s) => Option::Some(s),
+    };
+    assert v matches { None };
+}
+
+test "null inside block-bodied arm" {
+    // The arm body is a block whose tail expression is `null`. The patch
+    // must walk into the block and patch the trailing literal.
+    let v = match make_err() {
+        Ok(s) => Option::Some(s),
+        Err(_) => {
+            null
+        },
+    };
+    assert v matches { None };
+}
+
+test "null in if branch alongside Option::Some" {
+    // Same shape as the match cases, but for if/else: type inference must
+    // patch the unresolved `null` after the result type is known.
+    let cond = true;
+    let v = if cond {
+        null
+    } else {
+        Option::Some("x")
+    };
+    assert v matches { None };
+}
+
+__DATA__
+{"test": {}}
