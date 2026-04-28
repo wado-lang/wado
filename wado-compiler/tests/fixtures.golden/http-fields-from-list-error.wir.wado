@@ -357,21 +357,9 @@ type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref 
 
 type "functype//core:prelude/string.wado/String::from_utf8<Array<u8>>" = fn(ref "core:prelude//Array<u8>") -> ref "core:prelude/types.wado//Result<String,String>";  // TypeId(82)
 
-<<<<<<< HEAD
-type "functype//core:prelude/array.wado/Array<Tuple<wasi:http/types.wado/FieldName,wasi:http/types.wado/FieldValue>>::push" = fn(ref "core:prelude//Array<Tuple<String,Array<u8>>>", ref "tuple//[String, Array<u8>]");  // TypeId(83)
-||||||| e14fc87
-type "functype//core:prelude/array.wado/Array<Tuple<FieldName,FieldValue>>::push" = fn(ref "core:prelude//Array<Tuple<String,Array<u8>>>", ref "tuple//[String, Array<u8>]");  // TypeId(83)
-=======
 type "functype//core:prelude/array.wado/Array<u8>::push" = fn(ref "core:prelude//Array<u8>", u8);  // TypeId(83)
->>>>>>> origin/main
 
-<<<<<<< HEAD
-type "functype//core:prelude/array.wado/Array<Tuple<wasi:http/types.wado/FieldName,wasi:http/types.wado/FieldValue>>::grow" = fn(ref "core:prelude//Array<Tuple<String,Array<u8>>>");  // TypeId(84)
-||||||| e14fc87
-type "functype//core:prelude/array.wado/Array<Tuple<FieldName,FieldValue>>::grow" = fn(ref "core:prelude//Array<Tuple<String,Array<u8>>>");  // TypeId(84)
-=======
 type "functype//core:prelude/array.wado/Array<u8>::grow" = fn(ref "core:prelude//Array<u8>");  // TypeId(84)
->>>>>>> origin/main
 
 type "functype//wasi/future-new" = fn() -> i64;  // TypeId(85)
 
@@ -1703,96 +1691,6 @@ fn "core:prelude/array.wado/ArrayIter<u8>^Iterator::next"(self) {
     return 0, item;
 }
 
-<<<<<<< HEAD
-fn "core:prelude/array.wado/Array<Tuple<wasi:http/types.wado/FieldName,wasi:http/types.wado/FieldValue>>::push"(self, value) {
-    let used: i32;
-    used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<Tuple<wasi:http/types.wado/FieldName,wasi:http/types.wado/FieldValue>>::grow"(self);
-    }
-    builtin::array_set<ref "tuple//[String, Array<u8>]">(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn "core:prelude/array.wado/Array<Tuple<wasi:http/types.wado/FieldName,wasi:http/types.wado/FieldValue>>::grow"(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref builtin::array<Tuple<String,Array<u8>>>;
-    let old_repr: ref builtin::array<Tuple<String,Array<u8>>>;
-    let used: i32;
-    let i: i32;
-    let __local_7: i32;
-    capacity = builtin::array_len(self.repr);
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_7 = capacity * 2;
-        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-        unreachable;
-    };
-    new_repr = builtin::array_new<ref "tuple//[String, Array<u8>]">(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_0: block {
-        i = 0;
-        block {
-            l140: loop {
-                if i >= used {
-                    break __for_0;
-                }
-                builtin::array_set<ref "tuple//[String, Array<u8>]">(new_repr, i, builtin::array_get<ref "tuple//[String, Array<u8>]">(old_repr, i));
-                i = i + 1;
-                continue l140;
-            };
-        };
-    };
-    self.repr = new_repr;
-}
-
-||||||| e14fc87
-fn "core:prelude/array.wado/Array<Tuple<FieldName,FieldValue>>::push"(self, value) {
-    let used: i32;
-    used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<Tuple<FieldName,FieldValue>>::grow"(self);
-    }
-    builtin::array_set<ref "tuple//[String, Array<u8>]">(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn "core:prelude/array.wado/Array<Tuple<FieldName,FieldValue>>::grow"(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref builtin::array<Tuple<String,Array<u8>>>;
-    let old_repr: ref builtin::array<Tuple<String,Array<u8>>>;
-    let used: i32;
-    let i: i32;
-    let __local_7: i32;
-    capacity = builtin::array_len(self.repr);
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_7 = capacity * 2;
-        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-        unreachable;
-    };
-    new_repr = builtin::array_new<ref "tuple//[String, Array<u8>]">(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_0: block {
-        i = 0;
-        block {
-            l140: loop {
-                if i >= used {
-                    break __for_0;
-                }
-                builtin::array_set<ref "tuple//[String, Array<u8>]">(new_repr, i, builtin::array_get<ref "tuple//[String, Array<u8>]">(old_repr, i));
-                i = i + 1;
-                continue l140;
-            };
-        };
-    };
-    self.repr = new_repr;
-}
-
-=======
->>>>>>> origin/main
 fn "core:prelude/array.wado/Array<u8>::push"(self, value) {
     let used: i32;
     used = self.used;
