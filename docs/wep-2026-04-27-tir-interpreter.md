@@ -111,9 +111,10 @@ Status: deferred to Stage 3.
 
 ### Stage 2 — `if` reduction
 
-Status: done. `match` reduction is excluded from Stage 2; payload-aware
-variant matching is its own Stage (TBD), since the lattice work is more
-involved than scalar `if`.
+Status: done. `match` reduction is split into its own Stage 2.5 below;
+payload-aware variant matching is deferred to Phase B/C of that stage,
+since the lattice work for variant payloads is more involved than scalar
+`if`.
 
 - [x] `Lattice::join` (SCCP join over the chain
       `Unevaluated ⊑ Const(v) ⊑ NonConst`):
@@ -160,6 +161,91 @@ involved than scalar `if`.
       both-arms-equal collapse, the structurally-unequal-arms negative
       case, the Unevaluated-arm regression, and the stmt-form splice
       (true / false-no-else / non-const-untouched).
+
+### Stage 2.5 — `match` reduction
+
+Status: Phase A done. Phases B and C are scoped but not implemented.
+
+Match reduction is split into three phases by pattern shape, in
+increasing order of representation cost. The split lets us land
+scalar / payload-free matching today without committing to a heap-aware
+[`Value`] type that the WEP otherwise reserves for Stage 4+.
+
+#### Phase A — payload-free patterns (done)
+
+- [x] `Interpreter::match_lattice` — for a constant scrutinee, walk
+      arms in source order; the first definite-`Yes` arm contributes
+      its body's lattice (chosen-arm, infeasible-edge for later arms).
+      An earlier `Unknown` arm (unmodelled pattern, guarded arm,
+      unanalyzable `ConstantValue`) cannot be ruled out, so every arm
+      from that point on participates in the join. Non-constant
+      scrutinee → join all arm bodies, with `Unevaluated → NonConst`
+      promotion (same fix as the `if` non-const-condition path).
+- [x] `Interpreter::pattern_matches` — three-state
+      `PatternMatch { Yes, No, Unknown }`. Phase A handles `Wildcard`,
+      `Literal(I128 | U128 | Bool | Char)`, `Or`, `Range` (signed and
+      unsigned, integer and char), and `ConstantValue` whose inner
+      expression reduces to a primitive `Value`. `Binding`, `Tuple`,
+      `Variant`, `Enum`, `Struct`, and string / null literal patterns
+      report `Unknown` so they never wrongly commit a match (`Yes`)
+      and never wrongly drop a later arm (`No`).
+- [x] `rewrite_match_expr` — two rewrites:
+      1. **Const scrutinee**: replace the `Match` with
+      `Block { stmts: [Expr(arm.body)] }` for the first definite-`Yes`
+      arm (mirrors the `if true` → `Block(then_branch)` shape so the
+      outer visitor walks the residual normally). Bails on any
+      earlier `Unknown` so the original trap-on-no-match behaviour
+      is preserved.
+      2. **All-arms-equal collapse**: when the scrutinee is non-constant
+      but speculatable (same `is_speculatable` gate as the `if`
+      rule), every arm has no guard, and every arm body reduces to
+      the same `Const(v)`, rewrite the whole match to that literal.
+- [x] `reduce_in_place` recurses into the scrutinee, every arm guard,
+      and every arm body so the visitor-driven path sees fully-folded
+      operands at each match node.
+- [x] Unit tests at `wado-compiler/tests/tiri.rs` cover: literal-arm
+      first-match selection, wildcard fallthrough, char and range
+      patterns (inclusive / exclusive bounds, signed / unsigned mix,
+      char codepoint ordering), or-patterns (match / no-match / mixed),
+      `ConstantValue` (definite Yes / No / Unknown), guard handling
+      (no-fold under const scrut, no-pickup of later arm), unmodelled
+      patterns (Tuple → Unknown → Match left intact),
+      Unevaluated-arm regression under non-constant scrutinee,
+      env-resolved local scrutinee, first-match wins on overlap, and
+      visitor-driven `reduce_local` rewrites. Single e2e fixture
+      `tiri_match_const_fold.wado` checks observable end-to-end fold
+      (constant-scrutinee match's chosen arm body survives at -O2,
+      non-chosen arms are gone).
+
+#### Phase B — definite-no enum / variant tag pruning (deferred)
+
+- [ ] Extend `pattern_matches` to handle `Enum { case_index }`
+      patterns when the scrutinee is structurally an `EnumConstruct`
+      (no [`Value`] enrichment needed — peek the TIR shape at match
+      time). Same trick for `Variant { variant_name }` against a
+      `VariantConstruct` scrutinee.
+- [ ] Lets the engine drop arms that are definitely infeasible
+      (`match Color::Red { Color::Green => …, … }`) without committing
+      to a full payload model. Useful for inlining `Option::unwrap` and
+      similar "scrutinee constructed locally" idioms.
+
+#### Phase C — payload-aware variant matching (deferred)
+
+- [ ] Add `Value::Enum { case_index, type_id }` (or equivalent) and
+      `Value::Variant { tag, payload: Box<Value> }`, opening
+      [`Value`] to a heap-aware shape. This crosses the "primitive
+      only" line currently held through Stages 1-3, so it should be
+      gated on a real consumer (Stage 3 inlining producing residual
+      matches over `Option<i32>`).
+- [ ] Add `Binding` pattern handling: introduce the bound name as a
+      `Const(payload)` entry in a child `env` while reducing the arm
+      body, then unbind on exit. Mirrors how Rust's MIR const-eval
+      handles variant scrutinees.
+- [ ] At this point `value_to_expr_kind` needs a fallible variant
+      that can report "not representable as a primitive literal" when
+      asked to materialize an `Enum` / `Variant` value back into TIR
+      (we don't always have the case_name handy). The all-arms-equal
+      collapse skips those cases.
 
 ### Stage 3 — pure call inlining (in-process)
 
@@ -242,6 +328,13 @@ codegen.
 - `const_folding.rs` shrinks to a thin glue file, and stays that way.
 - `tiri` may eventually subsume `const_propagation`, `const_branch_prune`,
   and parts of `inline` — to be evaluated when each stage lands.
+- Stage 2.5's match-fold is observable in the TIR optimize phase even
+  though `lower_patterns` runs before `optimize`: not every match is
+  desugared by `lower_patterns` (some shapes survive to optimize
+  intact), and Stage 3's pure-call inlining will produce fresh match
+  expressions when inlining `Option` / `Result` accessors. Phase A
+  handles both paths today; Phase B/C extend coverage as those
+  scenarios materialize.
 - `wasmtime` is **not** linked by `wado-compiler` (the crate must build
   for `wasm32-unknown-unknown`). The wasm-CTFE backend instead routes
   through `CompilerHost`, just like Kiln generator execution does today.
