@@ -21,6 +21,15 @@ DESCRIPTORS_ROOT="vendor/antlr4/runtime-testsuite/resources/org/antlr/v4/test/ru
 
 cd "$REPO_ROOT"
 
+# `wado compile` lowers some `Result<unit, CmVariant>` shapes incorrectly
+# when the entry filename is given as a relative path (see
+# `wado-compiler/tests/fixtures/result_unit_cm_variant_passthrough.wado`
+# for the underlying compiler bug). The Wado script avoids those shapes
+# directly, but the entry file itself must still be passed as an
+# absolute path or `cargo run --bin wado -- run` will hit the same
+# path-dependent monomorph-registration order on the script's WIR.
+SCRIPT_ABS="$REPO_ROOT/package-gale/scripts/extract_antlr4_descriptors.wado"
+
 if [ ! -d "$DESCRIPTORS_ROOT" ]; then
     echo "extract: cannot find $DESCRIPTORS_ROOT" >&2
     echo "extract: the antlr4 submodule appears to be missing." >&2
@@ -49,4 +58,4 @@ done
 # Forward to the Wado script. `wado run` opens the cwd as the only preopen,
 # so all paths are interpreted relative to $REPO_ROOT.
 exec cargo run --quiet --bin wado -- run \
-    package-gale/scripts/extract_antlr4_descriptors.wado -- "${categories[@]}"
+    "$SCRIPT_ABS" -- "${categories[@]}"

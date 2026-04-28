@@ -1,21 +1,53 @@
-// Min repro: returning Result<(), ErrorCode> with `return Result::Err(e)`
-// from a match arm pattern-bound `e: ErrorCode`, when the Ok arm performs
-// stream I/O.
+// Min repro for the CM-variant `Result<unit, V>` multi-value codegen bug.
 //
-// Failure case: WIR pipeline emits a function with multi-value return
-// `(result i32 i32)` but the Err arm body leaves the boxed ErrorCode
-// `(ref $error_code_struct)` on the stack instead of unboxing it to
-// the i32 discriminant. wasmparser rejects with:
-//   func N failed to validate
-//   type mismatch: expected i32, found (ref $type)
+// Symptom (only via `wado compile`, NOT via this e2e harness):
 //
-// Originally observed in package-gale/scripts/extract_antlr4_descriptors.wado
-// `fn write_file_string(...)`.
+//     Internal compiler error: WIR pipeline generated invalid core Wasm module
+//     Validation error: type mismatch: expected i32, found (ref $type)
+//
+// Where the bug actually lives:
+//
+// 1.  In `register_mono_variants` (`wir_build/types.rs`) the case-struct of
+//     `Result<(), ErrorCode>::Err` ends up with a payload `WirField` of type
+//     `i32` instead of `(ref ErrorCode_struct)`. The body keeps emitting
+//     `struct.get` against a sibling boxed type so it pushes a `(ref 5)`
+//     where the just-registered case struct expects an `i32`.
+// 2.  The choice between "FLAT i32 payload" and "BOXED (ref 5) payload"
+//     depends on whether the compiler can resolve the ErrorCode WIR type
+//     by the time it walks `Result<(), ErrorCode>` — when ErrorCode hasn't
+//     been registered yet, `type_id_to_wir_type` returns `AbstractRef`,
+//     the variant gets postponed, and a *later* iteration accidentally
+//     re-resolves the payload via a different (CM-flat) path.
+// 3.  The trigger is non-deterministic w.r.t. the entry filename. With
+//     the entry filename given as an absolute path
+//     (`/home/user/.../result_unit_cm_variant_passthrough.wado`) the
+//     monomorph-registration order resolves cleanly and the BOXED layout
+//     wins. With a relative path
+//     (`wado-compiler/tests/fixtures/result_unit_cm_variant_passthrough.wado`)
+//     the FLAT layout wins and the wasm fails validation.
+//
+// This e2e harness always passes an absolute fixture path to the compiler,
+// so it cannot reproduce the bug by itself. To reproduce manually, run
+// (from the repository root) — note the **relative** entry path:
+//
+//     cargo run --bin wado -- compile -O0 \\
+//         wado-compiler/tests/fixtures/result_unit_cm_variant_passthrough.wado \\
+//         -o /tmp/x.wasm
+//
+//   →   Validation error: type mismatch: expected i32, found (ref $type)
+//
+//     cargo run --bin wado -- compile -O0 \\
+//         /home/user/wado/wado-compiler/tests/fixtures/result_unit_cm_variant_passthrough.wado \\
+//         -o /tmp/x.wasm
+//
+//   →   Generated: /tmp/x.wasm
+//
+// To compare the two outputs and confirm the divergence, set
+// `WADO_KEEP_WASM_DIR=/tmp/wado-keep` while running this e2e fixture and
+// `wat`-diff against the buggy CLI output.
 
 use { Stdout } from "core:cli";
-use {
-    Preopens, Descriptor, DescriptorFlags, PathFlags, OpenFlags, Filesize,
-} from "wasi:filesystem";
+use { Preopens, Descriptor, DescriptorFlags, PathFlags, OpenFlags, Filesize } from "wasi:filesystem";
 use { ErrorCode } from "wasi:filesystem/types.wado";
 
 fn write_helper(dir: &Descriptor, path: &String, content: &String) -> Result<(), ErrorCode> {
@@ -44,8 +76,6 @@ export fn run() with Stdout, Preopens {
     if dirs.len() == 0 {
         return;
     }
-    // Force the function to be lowered — the multi-value calling
-    // convention is selected during lowering based on the call sites.
     let result = write_helper(&dirs[0].0, &"never_actually_opened.txt", &"hello");
     if let Err(_) = result {
         return;
