@@ -29,7 +29,7 @@ The optimizer runs after lowering and before Wasm emission. `optimize.rs` orches
 1. Early DCE — remove unreachable functions/types/globals (all levels).
 2. Fixed-point iteration loop (skipped at `-O0`):
    1. Container SROA
-   2. Value-Copy Elision (pre-inline)
+   2. Value-Copy Elision
    3. Function Inlining
    4. LabeledBlock Fusion
    5. Reference Elimination
@@ -44,7 +44,6 @@ The optimizer runs after lowering and before Wasm emission. `optimize.rs` orches
    14. Loop-Invariant Code Motion
    15. Condition Implication
    16. Template String Buffer Hoisting
-   17. Value-Copy Elision (post-pass)
 3. Hot Field Scalarization — runs once after the loop converges.
 4. Final DCE — clean up code made dead by optimizations.
 5. Select Lowering — post-optimization rewrite (all levels).
@@ -64,10 +63,7 @@ E2E: [opt_inline.wado](../wado-compiler/tests/fixtures/opt_inline.wado), [opt_in
 
 Strips the synthesized `$value_copy$T<id>(arg)` wrapper from `let x = $value_copy$T(arg)` (and the equivalent `Assign`) bindings whose target is observably read-only — when the source root that `arg` reads from is not assigned, field-mutated, or captured for the rest of the function, eliding the wrapper aliases storage in a way that's externally indistinguishable from the freshly-allocated copy.
 
-The pass runs twice per fixed-point iteration:
-
-- Pre-inline. The inliner expands every reachable `$value_copy$T` body into a labeled block, after which the `Call($value_copy$T, [arg])` shape the elider matches on no longer exists. Running before `tir/inline` is what lets the elider strip wrappers around `match make()? { Ok(v) => v, Err(e) => return Err(e) }`-style `?` desugarings — without the pre-inline pass, the wrappers in every `parse_*` `?` site would survive through codegen.
-- Post-pass. Re-runs at the end of each iteration to pick up wrappers newly exposed by the iteration's other passes (SROA, copy propagation, branch pruning, …) before the next iteration's inline runs.
+Runs once per fixed-point iteration, before `tir/inline`. The inliner expands every reachable `$value_copy$T` body into a labeled block, after which the `Call($value_copy$T, [arg])` shape the elider matches on no longer exists; running before inline is what lets the elider strip wrappers around `match make()? { Ok(v) => v, Err(e) => return Err(e) }`-style `?` desugarings (without the pre-inline ordering, the wrappers in every `parse_*` `?` site would survive through codegen). The only way a fresh wrapper `Call` shape can appear after lowering is for the inliner to expand a function whose body still contains a wrapper — those are caught by the next iteration's run, and if the loop converges (no pass returned `changed`) the inliner did nothing this round so no new wrappers were introduced.
 
 The strip walker descends through every TIR expression that can syntactically embed a `TirBlock` (`If`, `Match`, `Switch`, `Block`, `LabeledBlock`, calls, struct/tuple/variant literals, …) so wrappers nested inside `let x = if cond { let y = $value_copy$T(...); ... } else { ... };` patterns — common in `parse_*` rule bodies — are reached.
 
