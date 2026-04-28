@@ -2563,6 +2563,15 @@ pub struct TirHandlerBinding {
     /// concrete `EffectRef`. `None` only appears transiently when an
     /// upstream diagnostic prevented resolution.
     pub effect: Option<EffectRef>,
+    /// Concrete `TypeId`s of the trait / resource type arguments at this
+    /// installation site (e.g. `[u8]` for `with Stream<u8> => &mut s do`,
+    /// or as derived from the impl block in a bundled `with &mut s do`
+    /// where `MockCM` implements `Stream<u8>`). Empty for non-generic
+    /// effects / resources. The dispatch synthesis projects this together
+    /// with `effect.module_source` and `effect.name` into the
+    /// `InstantiationKey` it uses to look up the per-monomorphisation
+    /// dispatch infrastructure.
+    pub trait_type_args: Vec<TypeId>,
     /// Handler value expression (e.g., `&mut mock`).
     pub handler: TirExpr,
     /// The concrete struct type (after deref) implementing the effect.

@@ -258,20 +258,24 @@ Status: Draft
          base form. Resolver-side `resume` gating now accepts
          `impl Stream<u8> for MockCM`, and the dispatch
          synthesis enters the `WithHandler` desugaring path.
-      2. **(open)** Generic resources need
-         **per-monomorphisation** dispatch infrastructure: one
-         `__Dispatch_Stream__u8` struct + `__effect_Stream__u8`
-         global + per-op wrapper triple per type-arg
-         combination, with the resource's operation types
-         substituted for that combination. Today's synthesis
-         emits only one set keyed by the base name, which makes
-         the wrapper closures reference the bare-resource type
-         signature (`fn() -> [Stream<T>, StreamWritable<T>]`).
-         The `Stream<u8>` instantiation's tuple closure type
-         then never gets registered, surfacing as
-         `[WIR] translate_closure_to_canonical: canonical
-         closure type not registered for signature
-         "() -> (Ref { type_id: tuple//[Stream<u8>, ...] })"`.
+      2. **(done)** Per-monomorphisation dispatch
+         infrastructure. The resource decl's operation list is
+         now a *template* (with type-params unsubstituted)
+         shared across instantiations; each user impl block
+         records its `trait_type_args: Vec<TypeId>` on
+         `LocalMethodName` and `TirHandlerBinding`, which the
+         dispatch synthesis reads to mint distinct
+         `(module, base, type_args)` `InstantiationKey`s.
+         `synthesize_dispatch_infrastructure` substitutes the
+         template through `SubstitutionContext` against each
+         active instantiation's args and emits one
+         `__Dispatch_Stream<u8>` struct + `__effect_Stream<u8>`
+         global + `__effect_dispatch__Stream<u8>__op` wrapper
+         triple per pair, with concrete operation types. The
+         WIR `canonical closure type not registered` panic that
+         this gap surfaced no longer fires; Stream/Future
+         fixtures advance past WIR closure registration to the
+         next-gap call-site rewriting failure.
       3. **(open)** `Stream<T>` / `Future<T>` operations
          declared with the `&self` shorthand have their
          receiver param filtered out by

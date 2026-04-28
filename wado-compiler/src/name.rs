@@ -779,6 +779,16 @@ pub struct LocalMethodName {
     /// against the bare-name decl indices used by trait/effect/resource
     /// dispatch.
     pub base_trait_name: Option<String>,
+    /// Concrete `TypeId`s of the trait / resource type arguments at this
+    /// impl site (e.g. `[u8]` for `impl Stream<u8> for MockCM`). Empty
+    /// for non-generic traits / effects, and for the bare base form
+    /// recorded outside of impl-block method context. The dispatch
+    /// synthesis consumes this to produce **per-monomorphisation**
+    /// dispatch infrastructure: each unique `(base_trait, trait_type_args)`
+    /// pair gets its own `__Dispatch_<R>__<args>` struct + global +
+    /// per-op wrappers, with the resource's operation types substituted
+    /// for that combination.
+    pub trait_type_args: Vec<crate::tir::TypeId>,
     /// The method name (e.g., "sum" or "fmt")
     pub method_name: String,
     /// Method-level type args (e.g., ["i64"] for transform<i64>)
@@ -838,6 +848,7 @@ impl LocalMethodName {
             struct_name,
             base_trait_name,
             trait_name,
+            trait_type_args: Vec::new(),
             method_name,
             method_type_args: vec![],
             is_type_param_receiver: false,
@@ -870,6 +881,7 @@ impl LocalMethodName {
             struct_name,
             base_trait_name,
             trait_name,
+            trait_type_args: Vec::new(),
             method_name,
             method_type_args,
             is_type_param_receiver: false,
@@ -896,6 +908,7 @@ impl LocalMethodName {
             base_struct_name: self.base_struct_name.clone(),
             trait_name: self.trait_name.clone(),
             base_trait_name: self.base_trait_name.clone(),
+            trait_type_args: self.trait_type_args.clone(),
             method_name: self.method_name.clone(),
             method_type_args: method_type_args.to_vec(),
             is_type_param_receiver: self.is_type_param_receiver,
@@ -950,6 +963,7 @@ impl LocalMethodName {
             base_struct_name: base_name.to_string(),
             trait_name: self.trait_name.clone(),
             base_trait_name: self.base_trait_name.clone(),
+            trait_type_args: self.trait_type_args.clone(),
             method_name: self.method_name.clone(),
             method_type_args: self.method_type_args.clone(),
             is_type_param_receiver: false,

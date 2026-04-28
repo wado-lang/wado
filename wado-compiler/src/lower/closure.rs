@@ -2934,6 +2934,7 @@ impl ClosureLowerer {
                 base_struct_name: info.base_struct_name.clone(),
                 trait_name: info.trait_name.clone(),
                 base_trait_name: info.base_trait_name.clone(),
+                trait_type_args: info.trait_type_args.clone(),
                 method_name: specialized_method_name.clone(),
                 method_type_args: Vec::new(), // Type args are now in method_name
                 is_type_param_receiver: info.is_type_param_receiver,
@@ -4103,6 +4104,7 @@ impl ClosureLowerer {
                 base_struct_name: info.base_struct_name.clone(),
                 trait_name: info.trait_name.clone(),
                 base_trait_name: info.base_trait_name.clone(),
+                trait_type_args: info.trait_type_args.clone(),
                 method_name: format!("{}{}", info.full_method_name(), functor_suffix),
                 method_type_args: Vec::new(), // Type args are now in method_name
                 is_type_param_receiver: info.is_type_param_receiver,

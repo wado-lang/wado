@@ -922,6 +922,21 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let old_self_type = scope.trait_ctx.self_type;
         scope.trait_ctx.self_type = Some(scope.resolve_type(impl_type));
 
+        // Concrete `TypeId`s of the trait/resource type arguments at this
+        // impl site (e.g. `[u8]` for `impl Stream<u8> for MockCM`). Resolved
+        // here — after impl-block + method-level type params are in scope —
+        // so that generic impls (`impl<T> Stream<T>`) round-trip the right
+        // `TypeParam` TypeId. Used by the dispatch synthesis to key
+        // per-monomorphisation infrastructure off `(base_trait, trait_type_args)`.
+        let trait_type_args: Vec<TypeId> = match trait_type {
+            Some(ast::Type::Generic(generic)) => generic
+                .args
+                .iter()
+                .map(|arg| scope.resolve_type(arg))
+                .collect(),
+            _ => Vec::new(),
+        };
+
         // Resolve return type
         let return_type = func
             .return_type
@@ -1085,6 +1100,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 base_struct_name: struct_name.to_string(),
                 trait_name: trait_name.map(String::from),
                 base_trait_name: base_trait_name.clone(),
+                trait_type_args: trait_type_args.clone(),
                 method_name: func.name.clone(),
                 method_type_args: vec![],
                 is_type_param_receiver: false,

@@ -7,14 +7,13 @@
 // — the writable end stores the value, the readable end returns
 // `Some(value)` once written and `None` otherwise.
 //
-// Status: Gap 1 (resolver / `build_handler_impl_index` keyed by base
-// trait name) is closed in this branch. Three gaps remain before
-// this fixture flips green; see WEP-2026-04-11 for the full list.
-// The next failure point is the same per-monomorph dispatch gap that
-// `effect_handler_resource_stream.wado` documents — the synthesised
-// dispatch closure references the resource instantiation's tuple
-// type but the dispatch struct / globals / wrappers were emitted for
-// the bare base resource, so canonical closure registration misses.
+// Status: Gaps 1 (base-trait-name lookup) and 2 (per-monomorph
+// dispatch infra) are closed in this branch. Two gaps remain before
+// this fixture flips green. The next failure mirrors the Stream
+// fixture's: `tx.write(42)` lowers through the CM canonical-method
+// translator (`future-write`), which today's dispatch call-site
+// rewriter doesn't intercept. Gap 4 closes this; gap 3 (`&self`
+// receiver filtered out of the wrapper signature) is also open.
 
 use { println, Stdout } from "core:cli";
 
