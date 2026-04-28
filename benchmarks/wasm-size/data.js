@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777389451769,
+  "lastUpdate": 1777408085270,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -17437,6 +17437,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c5216629d6c61089c5dae27d3c83d340bdc42a9c"
         },
         "date": 1777389451449,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8774,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18518,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 1522768,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "fa32e880949fb0c9c8542a8d2dfc8d46e7e28660",
+          "message": "Merge pull request #954 from wado-lang/claude/tiri-planning-1Tzix\n\nfeat(tiri): Stage 2.5 — match-fold for payload-free patterns",
+          "timestamp": "2026-04-29T05:22:38+09:00",
+          "tree_id": "c056d2458b7be231b049d57a157a3a8dcaab0d34",
+          "url": "https://github.com/wado-lang/wado/commit/fa32e880949fb0c9c8542a8d2dfc8d46e7e28660"
+        },
+        "date": 1777408084959,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
