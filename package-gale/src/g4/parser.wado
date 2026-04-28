@@ -816,12 +816,9 @@ impl G4Parser {
         let alternatives = self.parse_alternatives()?;
         self.current_rule = "";
         self.expect(G4Token::Semicolon)?;
-        return Result::<ParserRule, ParseError>::Ok(ParserRule {
-            name,
-            visibility: Visibility::Default,
-            options,
-            alternatives,
-        });
+        return Result::<ParserRule, ParseError>::Ok(
+            ParserRule::new(name, Visibility::Default, options, alternatives),
+        );
     }
 
     /// Consume the optional rule prequel:
@@ -999,7 +996,7 @@ impl G4Parser {
                 self.advance();
                 let inner = self.parse_atom()?;
                 return Result::<Element, ParseError>::Ok(
-                    Element::Label(LabelElement { name, list, element: inner }),
+                    Element::Label(LabelElement::new(name, list, inner)),
                 );
             }
             // Optional rule arguments: `ruleref[arg, arg]`. The CharClass
@@ -1020,7 +1017,7 @@ impl G4Parser {
                     span: name_span,
                 });
                 return Result::<Element, ParseError>::Ok(
-                    Element::TokenRef(TokenRefElement { name, options }),
+                    Element::TokenRef(TokenRefElement::with_options(name, options)),
                 );
             }
             self.pending_refs.push(PendingRef {
@@ -1030,7 +1027,7 @@ impl G4Parser {
                 span: name_span,
             });
             return Result::<Element, ParseError>::Ok(
-                Element::RuleRef(RuleRefElement { name, options }),
+                Element::RuleRef(RuleRefElement::with_options(name, options)),
             );
         }
         if self.is_kind(G4Token::StringLit) {

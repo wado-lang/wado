@@ -27,7 +27,7 @@ use { parse } from "./g4/parser.wado";
 global DEFAULT_OPTIONS: GenerateOptions = GenerateOptions { highlight: false };
 
 test "generate header" {
-    let grammar = Grammar {
+    let mut grammar = Grammar {
         name: "Test",
         kind: GrammarKind::Combined,
         parser_rules: [],
@@ -39,7 +39,7 @@ test "generate header" {
         pending_refs: [],
         source_files: [],
     };
-    let output = generate(&grammar, &DEFAULT_OPTIONS);
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS);
     assert output.len() > 0;
     // Grammar was constructed with no source_files, so gen_header falls back
     // to `{name}.g4`.
@@ -50,7 +50,7 @@ test "generate header" {
 }
 
 test "generate header with multiple source files" {
-    let grammar = Grammar {
+    let mut grammar = Grammar {
         name: "Html",
         kind: GrammarKind::Combined,
         parser_rules: [],
@@ -62,7 +62,7 @@ test "generate header with multiple source files" {
         pending_refs: [],
         source_files: ["HtmlLexer.g4", "HtmlParser.g4"],
     };
-    let output = generate(&grammar, &DEFAULT_OPTIONS);
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS);
     let header = `#![generated(by = "gale", sources = ["HtmlLexer.g4", "HtmlParser.g4"])]`;
     for let mut i = 0; i < header.len(); i += 1 {
         assert output.get_byte(i) == header.get_byte(i);
@@ -70,7 +70,7 @@ test "generate header with multiple source files" {
 }
 
 test "generate token kind" {
-    let grammar = Grammar {
+    let mut grammar = Grammar {
         name: "Test",
         kind: GrammarKind::Combined,
         parser_rules: [],
@@ -86,7 +86,7 @@ test "generate token kind" {
         pending_refs: [],
         source_files: [],
     };
-    let output = generate(&grammar, &DEFAULT_OPTIONS);
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS);
     assert str_contains(&output, "pub enum TokenKind {");
     assert str_contains(&output, "    NUMBER,");
     assert str_contains(&output, "    WS,");
@@ -96,7 +96,7 @@ test "generate token kind" {
 }
 
 test "generate single-alt struct" {
-    let grammar = Grammar {
+    let mut grammar = Grammar {
         name: "Test",
         kind: GrammarKind::Combined,
         parser_rules: [
@@ -124,7 +124,7 @@ test "generate single-alt struct" {
         pending_refs: [],
         source_files: [],
     };
-    let output = generate(&grammar, &DEFAULT_OPTIONS);
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS);
     assert str_contains(&output, "pub struct JsonNode {");
     assert str_contains(&output, "    pub span: Span,");
     assert str_contains(&output, "    pub value: ValueNode,");
@@ -132,7 +132,7 @@ test "generate single-alt struct" {
 }
 
 test "generate multi-alt variant with labels" {
-    let grammar = Grammar {
+    let mut grammar = Grammar {
         name: "Test",
         kind: GrammarKind::Combined,
         parser_rules: [
@@ -166,7 +166,7 @@ test "generate multi-alt variant with labels" {
         pending_refs: [],
         source_files: [],
     };
-    let output = generate(&grammar, &DEFAULT_OPTIONS);
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS);
     assert str_contains(&output, "pub variant ExprNode {");
     assert str_contains(&output, "    BinOp(ExprBinOp),");
     assert str_contains(&output, "    Pass(ExprPass),");
@@ -178,7 +178,7 @@ test "generate multi-alt variant with labels" {
 }
 
 test "generate multi-alt variant without labels" {
-    let grammar = Grammar {
+    let mut grammar = Grammar {
         name: "Test",
         kind: GrammarKind::Combined,
         parser_rules: [
@@ -208,7 +208,7 @@ test "generate multi-alt variant without labels" {
         pending_refs: [],
         source_files: [],
     };
-    let output = generate(&grammar, &DEFAULT_OPTIONS);
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS);
     assert str_contains(&output, "pub variant ItemNode {");
     assert str_contains(&output, "    Alt0(ItemAlt0),");
     assert str_contains(&output, "    Alt1(ItemAlt1),");
@@ -217,7 +217,7 @@ test "generate multi-alt variant without labels" {
 }
 
 test "generate repeat fields" {
-    let grammar = Grammar {
+    let mut grammar = Grammar {
         name: "Test",
         kind: GrammarKind::Combined,
         parser_rules: [
@@ -253,13 +253,13 @@ test "generate repeat fields" {
         pending_refs: [],
         source_files: [],
     };
-    let output = generate(&grammar, &DEFAULT_OPTIONS);
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS);
     assert str_contains(&output, "    pub item_list: Array<ItemNode>,");
     assert str_contains(&output, "    pub comma: Option<Token>,");
 }
 
 test "generate duplicate field names" {
-    let grammar = Grammar {
+    let mut grammar = Grammar {
         name: "Test",
         kind: GrammarKind::Combined,
         parser_rules: [
@@ -288,13 +288,13 @@ test "generate duplicate field names" {
         pending_refs: [],
         source_files: [],
     };
-    let output = generate(&grammar, &DEFAULT_OPTIONS);
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS);
     assert str_contains(&output, "    pub item: ItemNode,");
     assert str_contains(&output, "    pub item_2: ItemNode,");
 }
 
 test "generate group variant type for repeated group" {
-    let grammar = Grammar {
+    let mut grammar = Grammar {
         name: "Test",
         kind: GrammarKind::Combined,
         parser_rules: [
@@ -333,7 +333,7 @@ test "generate group variant type for repeated group" {
         pending_refs: [],
         source_files: [],
     };
-    let output = generate(&grammar, &DEFAULT_OPTIONS);
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS);
     assert str_contains(&output, "pub variant StmtOrErrorGroup {");
     assert str_contains(&output, "    Stmt(StmtNode),");
     assert str_contains(&output, "    Error(ErrorNode),");
@@ -341,7 +341,7 @@ test "generate group variant type for repeated group" {
 }
 
 test "generate wildcard element" {
-    let grammar = Grammar {
+    let mut grammar = Grammar {
         name: "Test",
         kind: GrammarKind::Combined,
         parser_rules: [
@@ -369,14 +369,14 @@ test "generate wildcard element" {
         pending_refs: [],
         source_files: [],
     };
-    let output = generate(&grammar, &DEFAULT_OPTIONS);
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS);
     assert str_contains(&output, "pub struct AnyNode {");
     assert str_contains(&output, "    pub wildcard: Token,");
     assert str_contains(&output, "let wildcard = p.match_any()?;");
 }
 
 test "generate parser not element" {
-    let grammar = Grammar {
+    let mut grammar = Grammar {
         name: "Test",
         kind: GrammarKind::Combined,
         parser_rules: [
@@ -404,14 +404,14 @@ test "generate parser not element" {
         pending_refs: [],
         source_files: [],
     };
-    let output = generate(&grammar, &DEFAULT_OPTIONS);
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS);
     assert str_contains(&output, "pub struct ExceptCommaNode {");
     assert str_contains(&output, "    pub not_comma: Token,");
     assert str_contains(&output, "let not_comma = p.match_not([TK_COMMA])?;");
 }
 
 test "generate list label field" {
-    let grammar = Grammar {
+    let mut grammar = Grammar {
         name: "Test",
         kind: GrammarKind::Combined,
         parser_rules: [
@@ -447,12 +447,12 @@ test "generate list label field" {
         pending_refs: [],
         source_files: [],
     };
-    let output = generate(&grammar, &DEFAULT_OPTIONS);
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS);
     assert str_contains(&output, "    pub items: Array<ItemNode>,");
 }
 
 test "generate standalone group as optional field" {
-    let grammar = Grammar {
+    let mut grammar = Grammar {
         name: "Test",
         kind: GrammarKind::Combined,
         parser_rules: [
@@ -487,7 +487,7 @@ test "generate standalone group as optional field" {
         pending_refs: [],
         source_files: [],
     };
-    let output = generate(&grammar, &DEFAULT_OPTIONS);
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS);
     assert str_contains(&output, "pub variant FooOrBarGroup {");
     assert str_contains(&output, "    Foo(FooNode),");
     assert str_contains(&output, "    Bar(BarNode),");
@@ -495,7 +495,7 @@ test "generate standalone group as optional field" {
 }
 
 test "generate lexer set_mode" {
-    let grammar = Grammar {
+    let mut grammar = Grammar {
         name: "Test",
         kind: GrammarKind::Combined,
         parser_rules: [],
@@ -540,14 +540,14 @@ test "generate lexer set_mode" {
         pending_refs: [],
         source_files: [],
     };
-    let output = generate(&grammar, &DEFAULT_OPTIONS);
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS);
     assert str_contains(&output, "best_set_mode");
     assert str_contains(&output, "best_set_mode = 1");
     assert str_contains(&output, "current_mode = best_set_mode");
 }
 
 test "generate lexer more" {
-    let grammar = Grammar {
+    let mut grammar = Grammar {
         name: "Test",
         kind: GrammarKind::Combined,
         parser_rules: [],
@@ -576,14 +576,14 @@ test "generate lexer more" {
         pending_refs: [],
         source_files: [],
     };
-    let output = generate(&grammar, &DEFAULT_OPTIONS);
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS);
     assert str_contains(&output, "best_more");
     assert str_contains(&output, "more_start");
     assert str_contains(&output, "best_more = true");
 }
 
 test "generate lexer type_override" {
-    let grammar = Grammar {
+    let mut grammar = Grammar {
         name: "Test",
         kind: GrammarKind::Combined,
         parser_rules: [],
@@ -628,7 +628,7 @@ test "generate lexer type_override" {
         pending_refs: [],
         source_files: [],
     };
-    let output = generate(&grammar, &DEFAULT_OPTIONS);
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS);
     // IF rule should produce tokens tagged as TK_ID (not TK_IF).
     assert str_contains(&output, "best_kind = TK_ID");
     // TK_IF should still exist as a token kind (not renamed), because
@@ -637,7 +637,7 @@ test "generate lexer type_override" {
 }
 
 test "generate lexer channel" {
-    let grammar = Grammar {
+    let mut grammar = Grammar {
         name: "Test",
         kind: GrammarKind::Combined,
         parser_rules: [],
@@ -666,7 +666,7 @@ test "generate lexer channel" {
         pending_refs: [],
         source_files: [],
     };
-    let output = generate(&grammar, &DEFAULT_OPTIONS);
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS);
     assert str_contains(&output, "best_channel");
     assert str_contains(&output, "best_channel = 2");
     // Non-default channels must be routed to trivia, not tokens — ANTLR4
@@ -682,7 +682,7 @@ test "generate lexer hidden channel routes to trivia" {
     let input = "lexer grammar Test;
 WS : [ \\t]+ -> channel(HIDDEN) ;
 ID : [a-z]+ ;";
-    let grammar = parse_grammar(input, "test.g4");
+    let mut grammar = parse_grammar(input, "test.g4");
     // Parser-side contract: HIDDEN channel must not degrade to skip.
     for let r of &grammar.lexer_rules {
         if r.name == "WS" {
@@ -693,7 +693,7 @@ ID : [a-z]+ ;";
     // Generator-side contract: the emitted dispatch must route `best_channel
     // != 0` matches to trivia via `Token::with_channel`, not to the tokens
     // stream.
-    let output = generate(&grammar, &DEFAULT_OPTIONS);
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS);
     assert str_contains(&output, "else if best_channel != 0");
     assert str_contains(&output, "trivia.push(Token::with_channel(");
 }
@@ -707,8 +707,8 @@ expr : expr '**' expr | NUMBER ;
 NUMBER : [0-9]+ ;
 WS : [ \\t\\r\\n]+ -> skip ;
 ";
-    let grammar = parse_grammar(input, "test.g4");
-    let output = generate(&grammar, &DEFAULT_OPTIONS);
+    let mut grammar = parse_grammar(input, "test.g4");
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS);
     assert str_contains(&output, "parse_expr(p, 2)"), "left-assoc '**' alt should recurse with own_prec+1 (=2)";
 }
 
@@ -720,8 +720,8 @@ expr : <assoc=right> expr '**' expr | NUMBER ;
 NUMBER : [0-9]+ ;
 WS : [ \\t\\r\\n]+ -> skip ;
 ";
-    let grammar = parse_grammar(input, "test.g4");
-    let output = generate(&grammar, &DEFAULT_OPTIONS);
+    let mut grammar = parse_grammar(input, "test.g4");
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS);
     assert str_contains(&output, "parse_expr(p, 1)"), "right-assoc '**' alt should recurse with own_prec (=1)";
     // And the scan-side mirror must be kept in sync.
     assert str_contains(&output, "scan_expr(tokens, pos, 1)"), "scan-side must mirror the right-assoc precedence";
@@ -738,8 +738,8 @@ test "caseInsensitive grammar option makes literal match CI" {
 options { caseInsensitive = true; }
 IF : 'if' ;
 WS : [ \\t]+ -> skip ;";
-    let grammar = parse_grammar(input, "test.g4");
-    let output = generate(&grammar, &DEFAULT_OPTIONS);
+    let mut grammar = parse_grammar(input, "test.g4");
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS);
     // A case-insensitive 'i' must use the branchless CI comparison helper.
     assert str_contains(&output, "!chars[pos].eq_ignore_ascii_case(&'i')"), `ci literal should fold 'i' → [iI]:\n{output}`;
     assert str_contains(&output, "!chars[pos].eq_ignore_ascii_case(&'f')"), `ci literal should fold 'f' → [fF]:\n{output}`;
@@ -749,8 +749,8 @@ test "caseInsensitive grammar option makes char-range match CI" {
     let input = "lexer grammar Test;
 options { caseInsensitive = true; }
 ID : [a-z]+ ;";
-    let grammar = parse_grammar(input, "test.g4");
-    let output = generate(&grammar, &DEFAULT_OPTIONS);
+    let mut grammar = parse_grammar(input, "test.g4");
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS);
     // A case-insensitive [a-z] must also accept [A-Z].
     assert str_contains(&output, "'A' <= chars[pos] <= 'Z'"), `ci char range should fold [a-z] → [a-zA-Z]:\n{output}`;
 }
@@ -761,8 +761,8 @@ options { caseInsensitive = true; }
 IF : 'if' ;
 STRICT options { caseInsensitive = false; } : 'x' ;
 WS : [ \\t]+ -> skip ;";
-    let grammar = parse_grammar(input, "test.g4");
-    let output = generate(&grammar, &DEFAULT_OPTIONS);
+    let mut grammar = parse_grammar(input, "test.g4");
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS);
     // IF still CI.
     assert str_contains(&output, "!chars[pos].eq_ignore_ascii_case(&'i')"), `IF must remain CI (grammar-level):\n{output}`;
     // STRICT must emit plain equality for 'x' (no CI fold). The keyword
@@ -775,8 +775,8 @@ test "lexer rule caseInsensitive=true enables CI when grammar-level absent" {
     let input = "lexer grammar Test;
 KW options { caseInsensitive = true; } : 'go' ;
 ID : [a-z]+ ;";
-    let grammar = parse_grammar(input, "test.g4");
-    let output = generate(&grammar, &DEFAULT_OPTIONS);
+    let mut grammar = parse_grammar(input, "test.g4");
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS);
     assert str_contains(&output, "!chars[pos].eq_ignore_ascii_case(&'g')"), `rule-level caseInsensitive=true should fold 'g' → [gG]:\n{output}`;
     // ID is not CI; its range must stay [a-z] without a mirrored [A-Z].
     assert !str_contains(&output, "'A' <= chars[pos] <= 'Z'"), `ID has no CI; [a-z] must not be mirrored to [A-Z]:\n{output}`;
@@ -794,8 +794,8 @@ tokens { VIRTUAL_TOK }
 rule : ID ;
 ID : [a-z]+ ;
 WS : [ \\t]+ -> skip ;";
-    let grammar = parse_grammar(input, "test.g4");
-    let output = generate(&grammar, &DEFAULT_OPTIONS);
+    let mut grammar = parse_grammar(input, "test.g4");
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS);
     assert str_contains(&output, "    VIRTUAL_TOK,  // virtual"), `TokenKind member must be marked virtual:\n{output}`;
     assert str_contains(&output, "global TK_VIRTUAL_TOK: i32 = ") && str_contains(&output, ";  // virtual"), `TK_VIRTUAL_TOK constant must be marked virtual:\n{output}`;
     assert str_contains(&output, "TK_VIRTUAL_TOK => \"VIRTUAL_TOK\",  // virtual"), `token_kind_name arm must be marked virtual:\n{output}`;
@@ -807,8 +807,8 @@ test "caseInsensitive does not fold non-letters" {
 options { caseInsensitive = true; }
 DIGITS : [0-9]+ ;
 SEMI : ';' ;";
-    let grammar = parse_grammar(input, "test.g4");
-    let output = generate(&grammar, &DEFAULT_OPTIONS);
+    let mut grammar = parse_grammar(input, "test.g4");
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS);
     // Digit range must not be duplicated.
     assert str_contains(&output, "'0' <= chars[pos] <= '9'");
     // Non-letter literal must not be duplicated — plain mismatch form.
@@ -817,7 +817,7 @@ SEMI : ';' ;";
 }
 
 test "metadata comment lists grammar-level options" {
-    let grammar = Grammar {
+    let mut grammar = Grammar {
         name: "Test",
         kind: GrammarKind::Combined,
         parser_rules: [],
@@ -834,7 +834,7 @@ test "metadata comment lists grammar-level options" {
         pending_refs: [],
         source_files: [],
     };
-    let output = generate(&grammar, &DEFAULT_OPTIONS);
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS);
     assert str_contains(&output, "// Grammar metadata from source .g4 prequels:"), `missing metadata header:\n{output}`;
     assert str_contains(&output, "//   option language = Python"), `missing language option:\n{output}`;
     assert str_contains(&output, "//   option superClass = my.pkg.BaseParser"), `missing superClass option:\n{output}`;
@@ -843,7 +843,7 @@ test "metadata comment lists grammar-level options" {
 }
 
 test "metadata comment formats string and int option values" {
-    let grammar = Grammar {
+    let mut grammar = Grammar {
         name: "Test",
         kind: GrammarKind::Combined,
         parser_rules: [],
@@ -859,14 +859,14 @@ test "metadata comment formats string and int option values" {
         pending_refs: [],
         source_files: [],
     };
-    let output = generate(&grammar, &DEFAULT_OPTIONS);
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS);
     assert str_contains(&output, "//   option tokenVocab = \"foo.g4\""), `missing quoted string option:\n{output}`;
     assert str_contains(&output, "//   option k = 3"), `missing int option:\n{output}`;
     assert str_contains(&output, "//   option init = { ... }"), `action body should be elided:\n{output}`;
 }
 
 test "metadata comment lists named actions" {
-    let grammar = Grammar {
+    let mut grammar = Grammar {
         name: "Test",
         kind: GrammarKind::Combined,
         parser_rules: [],
@@ -882,7 +882,7 @@ test "metadata comment lists named actions" {
         pending_refs: [],
         source_files: [],
     };
-    let output = generate(&grammar, &DEFAULT_OPTIONS);
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS);
     assert str_contains(&output, "// Grammar metadata from source .g4 prequels:"), `missing metadata header:\n{output}`;
     assert str_contains(&output, "//   @header"), `missing @header action marker:\n{output}`;
     assert str_contains(&output, "//   @parser::members"), `missing @parser::members action marker:\n{output}`;
@@ -890,7 +890,7 @@ test "metadata comment lists named actions" {
 }
 
 test "metadata block omitted when no options and no named actions" {
-    let grammar = Grammar {
+    let mut grammar = Grammar {
         name: "Test",
         kind: GrammarKind::Combined,
         parser_rules: [],
@@ -902,12 +902,12 @@ test "metadata block omitted when no options and no named actions" {
         pending_refs: [],
         source_files: [],
     };
-    let output = generate(&grammar, &DEFAULT_OPTIONS);
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS);
     assert !str_contains(&output, "// Grammar metadata from source .g4 prequels:"), `metadata header should be omitted when empty:\n{output}`;
 }
 
 test "visibility comment emitted on non-default parser rule" {
-    let grammar = Grammar {
+    let mut grammar = Grammar {
         name: "Test",
         kind: GrammarKind::Combined,
         parser_rules: [
@@ -944,7 +944,7 @@ test "visibility comment emitted on non-default parser rule" {
         pending_refs: [],
         source_files: [],
     };
-    let output = generate(&grammar, &DEFAULT_OPTIONS);
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS);
     assert str_contains(&output, "// rule visibility: public (ignored by codegen, matches ANTLR4)"), `expected visibility comment for Public rule:\n{output}`;
     // Default visibility must not add any comment.
     assert !str_contains(&output, "// rule visibility: default"), `Default visibility must not emit a comment:\n{output}`;
@@ -953,7 +953,7 @@ test "visibility comment emitted on non-default parser rule" {
 test "visibility comment emitted on non-default lexer rule" {
     let mut id_rule = LexerRule::new("ID", false, false, []);
     id_rule.visibility = Visibility::Protected;
-    let grammar = Grammar {
+    let mut grammar = Grammar {
         name: "Test",
         kind: GrammarKind::Combined,
         parser_rules: [],
@@ -965,7 +965,7 @@ test "visibility comment emitted on non-default lexer rule" {
         pending_refs: [],
         source_files: [],
     };
-    let output = generate(&grammar, &DEFAULT_OPTIONS);
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS);
     assert str_contains(&output, "// rule visibility: protected (ignored by codegen, matches ANTLR4)"), `expected visibility comment for Protected lexer rule:\n{output}`;
 }
 

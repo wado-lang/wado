@@ -39,11 +39,11 @@ test "Grammar construction" {
 }
 
 test "ParserRule with alternatives" {
-    let rule = ParserRule {
-        name: "value",
-        visibility: Visibility::Default,
-        options: [],
-        alternatives: [
+    let rule = ParserRule::new(
+        "value",
+        Visibility::Default,
+        [],
+        [
             Alternative { label: Option::<String>::Some("Str"), options: [], elements: [
                 Element::TokenRef(TokenRefElement::new("STRING")),
             ] },
@@ -52,7 +52,7 @@ test "ParserRule with alternatives" {
             ] },
             Alternative { label: null, options: [], elements: [Element::Literal(LiteralElement::new("true"))] },
         ],
-    };
+    );
     assert rule.name == "value";
     assert rule.alternatives.len() == 3;
     if let Some(label) = rule.alternatives[0].label {
@@ -71,11 +71,11 @@ test "Element variants" {
         element: Element::TokenRef(TokenRefElement::new("INT")),
         non_greedy: false,
     });
-    let label = Element::Label(LabelElement {
-        name: "op",
-        list: false,
-        element: Element::Literal(LiteralElement::new("+")),
-    });
+    let label = Element::Label(LabelElement::new(
+        "op",
+        false,
+        Element::Literal(LiteralElement::new("+")),
+    ));
 
     if let RuleRef(r) = rule_ref {
         assert r.name == "expr";
