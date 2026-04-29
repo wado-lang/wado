@@ -1686,7 +1686,7 @@ impl FunctionTranslator<'_, '_> {
                 // generator that calls `println` shouldn't compile past the
                 // import-refusal check anyway, but belt-and-suspenders is
                 // cheap at the builtin boundary.
-                if self.ctx.package.is_kiln_generator_world() {
+                if self.ctx.package.world_imports_effect("KilnHost") {
                     // `unreachable` is stack-polymorphic — it satisfies
                     // the declared i32 return of the stderr/stdout
                     // write-via-stream builtin without further work.

@@ -63,7 +63,7 @@ pub fn unwrap_async_call_if_async(is_async: bool, declared: &Option<Type>) -> Op
 /// Returns true if `ty` is the Wado unit type. Recognises both surface
 /// syntaxes that the parser may emit: the empty tuple `[]` and the
 /// named form `()`.
-fn is_unit_type(ty: &Type) -> bool {
+pub fn is_unit_type(ty: &Type) -> bool {
     match ty {
         Type::Tuple(elems) => elems.is_empty(),
         Type::Named(named) => matches!(named.name.as_str(), "()" | "Unit" | "unit"),

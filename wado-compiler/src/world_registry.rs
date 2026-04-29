@@ -8,7 +8,7 @@
 
 use crate::hashmap::IndexMap;
 
-use crate::ast::{Type, WorldDecl, WorldExport};
+use crate::ast::{Type, WorldDecl, WorldExport, WorldImport};
 
 /// Well-known world name for the test world.
 ///
@@ -67,6 +67,33 @@ impl WorldExportInfo {
     }
 }
 
+/// Information about a world's imported effect (a single `import Effect { ... }`
+/// block in a Wado world declaration).
+///
+/// Mirrors the [`crate::ast::WorldImport`] AST node but lives outside the AST
+/// graph so codegen can ask "does this world import `KilnHost`?" without
+/// re-parsing the world declaration. The `effect_name` is the locally-bound
+/// name (the one written in `import Foo { ... }`); resolving it to a CM
+/// interface FQ requires the [`crate::component_model::WasiRegistry`] and is
+/// done lazily by the consumer.
+#[derive(Debug, Clone)]
+pub struct WorldImportInfo {
+    /// Imported effect name (e.g., `"Stdout"`, `"Types"`, `"KilnHost"`).
+    pub effect_name: String,
+    /// Functions / methods picked from the effect.
+    pub functions: Vec<String>,
+}
+
+impl WorldImportInfo {
+    /// Create from a parsed [`WorldImport`].
+    pub fn from_ast(import: &WorldImport) -> Self {
+        Self {
+            effect_name: import.effect_name.clone(),
+            functions: import.functions.clone(),
+        }
+    }
+}
+
 /// Information about a world definition
 #[derive(Debug, Clone)]
 pub struct WorldInfo {
@@ -74,6 +101,8 @@ pub struct WorldInfo {
     pub fq_name: String,
     /// Exported functions
     pub exports: Vec<WorldExportInfo>,
+    /// Imported effects (one entry per `import Effect { ... }` block).
+    pub imports: Vec<WorldImportInfo>,
 }
 
 impl WorldInfo {
@@ -119,12 +148,28 @@ impl WorldInfo {
     pub fn namespace_prefix(&self) -> &str {
         fq_name_namespace_prefix(&self.fq_name)
     }
+
+    /// True when this world has an `import {effect_name} { ... }` block.
+    ///
+    /// The check is by locally-bound effect name (the identifier written in
+    /// the world declaration), which is unique within a world's imports.
+    /// Codegen uses this to drive world-shape decisions from data — e.g.
+    /// `imports_effect("KilnHost")` is true for the kiln generator world and
+    /// any future world that imports the same effect, replacing string
+    /// matches against `target_world == "core:kiln/generator"`.
+    pub fn imports_effect(&self, effect_name: &str) -> bool {
+        self.imports.iter().any(|i| i.effect_name == effect_name)
+    }
 }
 
-/// Extract the package segment of a world `fq_name` (`"wasi:http/service"`
-/// → `"http"`; `"core:kiln/generator"` → `"kiln"`). Returns `""` when
-/// the name has no `scheme:package/interface` shape.
-fn fq_name_package(fq_name: &str) -> &str {
+/// Extract the package segment of a CM-style fully-qualified name
+/// (`"wasi:http/service"` → `"http"`; `"core:kiln/generator"` →
+/// `"kiln"`). Returns `""` when the name has no `scheme:package/...` shape.
+///
+/// Works for both world `fq_name`s (`wasi:http/service`) and interface FQs
+/// (`wasi:http/types`) — the parsing only cares about the `scheme:pkg/...`
+/// prefix and ignores whatever follows the `/`.
+pub fn fq_name_package(fq_name: &str) -> &str {
     let Some((_, rest)) = fq_name.split_once(':') else {
         return "";
     };
@@ -205,10 +250,16 @@ impl WorldRegistry {
             .iter()
             .map(WorldExportInfo::from_ast)
             .collect();
+        let imports = world
+            .imports
+            .iter()
+            .map(WorldImportInfo::from_ast)
+            .collect();
 
         let info = WorldInfo {
             fq_name: fq_name.clone(),
             exports,
+            imports,
         };
 
         self.worlds.insert(fq_name, info);
@@ -356,6 +407,7 @@ mod tests {
         WorldInfo {
             fq_name: fq.to_string(),
             exports: Vec::new(),
+            imports: Vec::new(),
         }
     }
 
@@ -398,5 +450,29 @@ mod tests {
         let w = world_info("orphan/x");
         assert_eq!(w.package(), "");
         assert_eq!(w.namespace_prefix(), "");
+    }
+
+    #[test]
+    fn test_imports_populated_from_stdlib() {
+        // Real-world check: the kiln Generator world declares
+        // `import KilnHost { ... }` in `lib/core/kiln/worlds.wado`, so the
+        // populated registry must surface that import. The cli Command world
+        // imports several effects (Stdout, Stdin, Environment, ...).
+        let (_registry, world_registry) = crate::component_model::WasiRegistry::build_from_stdlib();
+
+        let kiln = world_registry
+            .get("core:kiln/generator")
+            .expect("kiln world registered");
+        assert!(
+            kiln.imports_effect("KilnHost"),
+            "kiln Generator imports KilnHost — expected by step-2c codegen gating"
+        );
+        assert!(!kiln.imports_effect("Stdout"));
+
+        let cli = world_registry
+            .get("wasi:cli/command")
+            .expect("cli world registered");
+        assert!(cli.imports_effect("Stdout"));
+        assert!(!cli.imports_effect("KilnHost"));
     }
 }

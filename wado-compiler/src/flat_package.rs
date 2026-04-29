@@ -105,13 +105,21 @@ impl FlatPackage {
         self.target_world == world_registry::TEST_WORLD
     }
 
-    /// Check if the project targets the Kiln generator well-known world
-    /// (`core:kiln/generator`). The codegen path uses this to emit the
-    /// kiln-specific CM record/variant types and to point the
-    /// `task-return` canon at the `result<response, error>` shape
-    /// required by the generator's export signature.
-    pub fn is_kiln_generator_world(&self) -> bool {
-        self.target_world == "core:kiln/generator"
+    /// Check whether the active world declares an
+    /// `import {effect_name} { ... }` block.
+    ///
+    /// Drives world-shape decisions in codegen / lowering / DCE that used to
+    /// hinge on `target_world == "core:kiln/generator"` string matches —
+    /// `imports_effect("KilnHost")` is true for the kiln generator world and
+    /// any future world that imports the same effect, so adding a new
+    /// generator-shaped world no longer needs new branches.
+    ///
+    /// Returns `false` for the synthetic test world and for unknown worlds
+    /// (both have no entry in the registry).
+    pub fn world_imports_effect(&self, effect_name: &str) -> bool {
+        self.world_registry
+            .get(&self.target_world)
+            .is_some_and(|w| w.imports_effect(effect_name))
     }
 
     /// Look up a variant by `(module_source, name)`.
