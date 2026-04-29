@@ -102,7 +102,7 @@ Rules:
 
 - `extends` introduces a new keyword. Existing identifiers named `extends` (none in the standard library) become reserved.
 - Only one parent type is permitted (single inheritance). The parent must be a `resource`, not a trait, struct, or enum.
-- The parent expression may include generic arguments: `resource ListOf<T> extends Iter<T> { ... }`. Generic arity does not have to match between child and parent.
+- The parent expression may include generic arguments: `resource Child<T> extends Parent<T> { ... }`. Generic arity does not have to match between child and parent.
 - `extends` is permitted only when both the declaring resource and its parent declare `type="extern-ref"` in `#[cm(...)]`. A backing mismatch is a compile error (per the representation section above).
 - Visibility is independent: a `pub resource X extends Y` is permitted whether `Y` is `pub` or module-private, **provided `Y` is visible at every use site of `X`**. The compiler enforces this; it is not a special rule for `extends`.
 - Cycles are rejected (`A extends B`, `B extends A`).
@@ -130,21 +130,15 @@ Given `Child <: Parent`:
 | `&Child`        | `&Child <: &Parent`             | Read-only view; every method available on `&Parent` is available on `&Child`. |
 | `&mut Child`    | **invariant** in the resource type | A `&mut Parent` permits writing back any `Parent` (e.g., `*r = other_parent`); allowing `&mut Child <: &mut Parent` would let an arbitrary `Parent` be assigned where `Child` is required. |
 
-Concretely, the following are accepted (implicit upcast at the call site):
+Resource handles have value semantics, so the common case is plain value passing — implicit upcast happens at the call site:
 
 ```wado
-fn read_node(n: &Node) -> u16 { return n.node_type(); }
+fn read_node(n: Node) -> u16 { return n.node_type(); }
 let el: Element = ...;
-read_node(&el);              // OK: &Element <: &Node
+read_node(el);               // OK: Element flows where Node is expected
 ```
 
-The following is rejected:
-
-```wado
-fn replace_node(n: &mut Node) { *n = some_node(); }
-let mut el: Element = ...;
-replace_node(&mut el);       // ERROR: &mut Element ≮: &mut Node
-```
+The `&T` covariance rule applies when references are used, but `&` on resources is rare outside method receivers (`&self`), so the table entry is more formal than practical. `&mut T` invariance is the technical guard against `*r = parent_value` installing a non-`Child` value through a child reference; with `&mut self` not appearing on resources in this WEP's scope (see the Downcast sidebar), the rule rarely surfaces in resource code but remains in force for any `&mut T` slot.
 
 #### Function types
 
@@ -226,7 +220,7 @@ Method resolution is **fully static**. There is no virtual dispatch, no vtable, 
 
 #### Core algorithm
 
-For `recv.foo(args)` where `recv: &Recv` (or `&mut Recv` / `Recv`):
+For `recv.foo(args)`:
 
 1. Walk the `extends` chain starting at `Recv`, collecting all `fn foo` declarations on each ancestor.
 2. Walk the in-scope trait impls applicable to `Recv`, collecting all `fn foo` declarations.
@@ -387,8 +381,8 @@ Failed casts return `None`. There is no panic, no effect, no exception. Callers 
 
 For each `externref`-backed resource type `T`, the compiler emits a CM-imported predicate:
 
-```
-is-T: func(externref) -> bool
+```wit
+is-T: func(r: extern-ref) -> bool
 ```
 
 This is a per-type import, not a generic `is-instance(externref, type-id)` form. The per-type approach keeps the CM signature shape obvious and avoids inventing a type-id encoding.
@@ -422,8 +416,8 @@ Every `externref`-backed resource auto-derives `Eq`. Two handles compare equal i
 
 `Eq` lowers to a host import:
 
-```
-is-same: func(externref, externref) -> bool
+```wit
+is-same: func(a: extern-ref, b: extern-ref) -> bool
 ```
 
 Cross-type comparison falls out of subtyping. `el == html_input` is well-typed when one operand is upcast to the other's static type; the host predicate compares the underlying refs and returns the right answer.
@@ -434,10 +428,10 @@ Cross-type comparison falls out of subtyping. `el == html_input` is well-typed w
 
 For resources, the auto-derived implementations of `Inspect` (`{x:?}`), `InspectAlt` (`{x:#?}`), and `Display` (`{x}`) call host-imported formatters:
 
-```
-inspect:     func(externref) -> string
-inspect-alt: func(externref) -> string
-display:     func(externref) -> string
+```wit
+inspect:     func(r: extern-ref) -> string
+inspect-alt: func(r: extern-ref) -> string
+display:     func(r: extern-ref) -> string
 ```
 
 These are the **one place** where dynamic-type information leaks into Wado output: the host inspects the runtime type of the underlying object and renders accordingly, so `{n:?}` on a `Node` value that is actually an `HTMLInputElement` prints the input element. This matches the intuition that debug output is most valuable when it reflects what's really there.
