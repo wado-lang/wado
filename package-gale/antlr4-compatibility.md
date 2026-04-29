@@ -274,19 +274,27 @@ Once a Gale gap is fixed:
 
 ### Phase 1 (landed) — Sets, LexerExec, ParseTrees
 
-- 83 descriptors extracted, 76 pass, 7 marked `#[TODO]`.
+- 83 descriptors processed, 81 pass, 2 in `[skip]`, 0 marked `#[TODO]`.
 
-The 7 `#[TODO]` items are real Gale gaps:
+The two skipped descriptors (`ParseTrees/AltNum` and
+`ParseTrees/TokenAndRuleContextString`) carry grammar-level `<…>`
+StringTemplate directives that the upstream test runner substitutes
+per target before `antlr4` ever sees the `.g4`. They are not
+self-contained grammars and cannot be promoted to a parse-only test.
 
-| Category / Descriptor                            | Gap                                                                                                                  |
-| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
-| `Sets/UnicodeEscapedBMPRangeSet`                 | Testsuite double-backslash unicode escape (`'\\u{…}'`) is not unwrapped before ANTLR-style parsing                   |
-| `Sets/UnicodeEscapedSMPRangeSet`                 | Same — supplementary plane variant                                                                                   |
-| `Sets/UnicodeEscapedSMPRangeSetMismatch`         | Same                                                                                                                 |
-| `Sets/UnicodeNegatedSMPSetIncludesBMPCodePoints` | Same                                                                                                                 |
-| `LexerExec/NonGreedyOptional`                    | Parser does not recognise `??` non-greedy optional on a single element (`*?` and `+?` are handled)                   |
-| `ParseTrees/AltNum`                              | Grammar-level `<…>` StringTemplate directive that the upstream test runner substitutes per target before compilation |
-| `ParseTrees/TokenAndRuleContextString`           | Same shape as above                                                                                                  |
+Two structural fixes were needed to close Phase 1:
+
+- The descriptor extractor now applies StringTemplate-equivalent
+  text-mode unescape (`\\` → `\`, `\<` → `<`, `\>` → `>`) to the
+  `[grammar]` / `[slaveGrammar]` blocks. This mirrors the
+  `new ST(group, descriptor.grammar)` step in the upstream
+  `RuntimeTests.prepareGrammars`, so descriptors written for the Java
+  testsuite (e.g. `'\\u{1F600}'..'\\u{1F943}'`) reach the g4 parser
+  in the form `antlr4` would actually receive.
+- The g4 parser's postfix handler now accepts `??` (non-greedy
+  optional) on a single element, matching the existing handling of
+  `*?` and `+?`. See `parse_postfix` / `parse_lexer_postfix` in
+  `src/g4/parser.wado`.
 
 ### Phase 2 (planned) — `ParserExec`, `LeftRecursion`, `SemPred*`, `Composite*`, `FullContextParsing`, `*Errors`
 

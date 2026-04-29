@@ -1,3 +1,3 @@
 lexer grammar L;
-DASHBRACK : [\\-\]]+ {<writeln("\"DASHBRACK\"")>} ;
+DASHBRACK : [\-\]]+ {<writeln("\"DASHBRACK\"")>} ;
 WS : [ \n]+ -> skip ;

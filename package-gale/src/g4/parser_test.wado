@@ -1513,6 +1513,36 @@ INT : [0-9]+ ;";
     assert g.parser_rules.len() == 1;
 }
 
+test "parser rule with non-greedy optional ?? on rule ref" {
+    let input = "grammar Test;
+a : 'x' b ?? ;
+b : 'y' ;";
+    let g = parse(input).unwrap();
+    let elems = &g.parser_rules[0].alternatives[0].elements;
+    assert elems.len() == 2;
+    if let Repeat(r) = &elems[1] {
+        assert r.kind == RepeatKind::Optional;
+        assert r.non_greedy == true, "expected ?? to mark Optional repeat as non_greedy";
+    } else {
+        panic("expected Repeat at index 1");
+    }
+}
+
+test "lexer rule with non-greedy optional ?? on rule ref" {
+    let input = "lexer grammar L;
+CMT : '//' .*? '\\n' CMT?? ;";
+    let g = parse(input).unwrap();
+    let body = &g.lexer_rules[0].body;
+    let elems = &body[0].elements;
+    let last_idx = elems.len() - 1;
+    if let Repeat(r) = elems[last_idx] {
+        assert r.kind == RepeatKind::Optional;
+        assert r.non_greedy == true, "expected ?? to mark Optional lexer repeat as non_greedy";
+    } else {
+        panic("expected last lexer element to be a Repeat");
+    }
+}
+
 fn assert_option_ident(opt: &GrammarOption, expected: String) {
     if let Ident(v) = &opt.value {
         assert *v == expected, `option '{opt.name}': expected Ident('{expected}'), got Ident('{*v}')`;

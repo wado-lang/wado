@@ -129,12 +129,45 @@ fn parse_descriptor_text(text: &String) -> ParsedDescriptor {
     for let p of pairs {
         let processed = post_process(&p.value);
         match p.name {
-            "grammar" => { grammar = processed; },
-            "slaveGrammar" => { slaves.push(processed); },
+            "grammar" => { grammar = unescape_st_text(&processed); },
+            "slaveGrammar" => { slaves.push(unescape_st_text(&processed)); },
             _ => {},
         }
     }
     return ParsedDescriptor { grammar, slave_grammars: slaves };
+}
+
+/// Mirror StringTemplate's text-mode escape handling for the descriptor's
+/// `[grammar]` / `[slaveGrammar]` blocks. The upstream test runner wraps
+/// the descriptor text in `new ST(group, descriptor.grammar)` with `<` /
+/// `>` delimiters before handing it to `antlr4`, so any literal that needs
+/// to survive ST as `\` must be written as `\\` in the descriptor (and any
+/// literal `<` / `>` as `\<` / `\>`). Without this step, descriptors like
+/// `LETTERS : ('a'|'\\u00E0'..'\\u00E5')` reach the g4 parser with a
+/// 6-char string `à` that cannot serve as a range bound.
+///
+/// We deliberately leave non-delimiter backslash sequences (`\n`, `\u…`,
+/// `\t`, …) intact: ST's text mode does not interpret them, so passing
+/// them through preserves the upstream-equivalent input for the g4 lexer.
+fn unescape_st_text(s: &String) -> String {
+    let mut out = String::with_capacity(s.len());
+    let chars: Array<char> = s.chars().collect();
+    let n = chars.len();
+    let mut i = 0;
+    while i < n {
+        let c = chars[i];
+        if c == '\\' && i + 1 < n {
+            let next = chars[i + 1];
+            if next == '\\' || next == '<' || next == '>' {
+                out.push(next);
+                i += 2;
+                continue;
+            }
+        }
+        out.push(c);
+        i += 1;
+    }
+    return out;
 }
 
 /// If `line` is a known `[section]` header, return the section name.

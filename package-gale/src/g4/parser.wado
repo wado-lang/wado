@@ -1153,8 +1153,14 @@ impl G4Parser {
         }
         if self.is_kind(G4Token::Question) {
             self.advance();
+            let ng = if self.is_kind(G4Token::Question) {
+                self.advance();
+                true;
+            } else {
+                false;
+            };
             return Result::<Element, ParseError>::Ok(
-                Element::Repeat(RepeatElement { kind: RepeatKind::Optional, element: elem, non_greedy: false }),
+                Element::Repeat(RepeatElement { kind: RepeatKind::Optional, element: elem, non_greedy: ng }),
             );
         }
         return Result::<Element, ParseError>::Ok(elem);
@@ -1423,9 +1429,15 @@ impl G4Parser {
         }
         if self.is_kind(G4Token::Question) {
             self.advance();
+            let ng = if self.is_kind(G4Token::Question) {
+                self.advance();
+                true;
+            } else {
+                false;
+            };
             return Result::<LexerElement, ParseError>::Ok(
                 LexerElement::Repeat(
-                    LexerRepeatElement { kind: RepeatKind::Optional, element: elem, non_greedy: false },
+                    LexerRepeatElement { kind: RepeatKind::Optional, element: elem, non_greedy: ng },
                 ),
             );
         }

@@ -1,6 +1,6 @@
 lexer grammar L;
-Backslash : '\\\\';
+Backslash : '\\';
 Slash : '/';
-Vee : '\\\\/';
-Wedge : '/\\\\';
+Vee : '\\/';
+Wedge : '/\\';
 WS : [ \t] -> skip;
