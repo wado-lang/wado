@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777448153786,
+  "lastUpdate": 1777449989951,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -17877,6 +17877,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/2ea469ff34a8b9c22f67194d448678098b366f7c"
         },
         "date": 1777448153476,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8774,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18518,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 515704,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "00b55508ea0a7caaa48303ef145c58053bf045d4",
+          "message": "Merge pull request #963 from wado-lang/claude/antlr4-parser-compatibility-tELFi\n\nfeat(gale): close Phase 1 ANTLR4 descriptor compatibility",
+          "timestamp": "2026-04-29T17:00:45+09:00",
+          "tree_id": "2042af0d5a3f3d4ba5c7cf953ff2d8728ba34ed7",
+          "url": "https://github.com/wado-lang/wado/commit/00b55508ea0a7caaa48303ef145c58053bf045d4"
+        },
+        "date": 1777449989645,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
