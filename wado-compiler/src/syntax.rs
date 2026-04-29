@@ -73,16 +73,17 @@ impl SyntaxDefinition {
             keywords: KeywordCategories {
                 control: vec![
                     "if", "else", "while", "for", "loop", "break", "continue", "return", "match",
-                    "task",
+                    "task", "handler", "do", "resume",
                 ],
                 storage_type: vec![
                     "fn", "let", "global", "const", "struct", "enum", "variant", "flags", "impl",
-                    "trait", "type",
+                    "trait", "type", "resource", "world", "effect",
                 ],
-                storage_modifier: vec!["pub", "export", "mut", "async", "move", "unique", "stores"],
+                storage_modifier: vec![
+                    "pub", "export", "mut", "async", "move", "unique", "stores", "reactive",
+                ],
                 other: vec![
-                    "use", "from", "import", "test", "as", "with", "in", "of", "assert", "effect",
-                    "handler", "reactive", "resource", "world",
+                    "use", "from", "import", "test", "as", "with", "in", "of", "assert",
                 ],
             },
             operators: OperatorCategories {
@@ -114,7 +115,7 @@ impl SyntaxDefinition {
                 "Array",
                 "Option",
                 "Result",
-                "Fn",
+                "Default",
                 "Eq",
                 "Ord",
                 "Ordering",
@@ -183,7 +184,7 @@ mod tests {
         // Contextual keywords: these are in SyntaxDefinition for highlighting
         // but are parsed as identifiers by the lexer and handled specially by the parser
         // (e.g. `test` for test blocks, `task` for `task return` statements)
-        let contextual_keywords = ["test", "task"];
+        let contextual_keywords = ["test", "task", "do", "resume"];
         // Keyword-shaped operators: lexer keywords exposed via OperatorCategories
         // rather than KeywordCategories (e.g. `matches`, the binary pattern-test op)
         let operator_keywords = ["matches"];
