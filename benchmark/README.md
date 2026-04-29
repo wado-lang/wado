@@ -97,10 +97,10 @@ Parse 81 SQL statements (13 KB) x 100 iterations. Gale-generated parser vs sqlpa
 
 Highlight 81 SQL statements (13 KB) x 100 iterations. Gale-generated highlighter vs tree-sitter.
 
-| Implementation              |     Time | vs best |
-| --------------------------- | -------: | ------: |
-| tree-sitter (Rust native)   |   584 ms |   1.00x |
-| **Wado** (Gale)             | 5,110 ms |   8.75x |
+| Implementation            |     Time | vs best |
+| ------------------------- | -------: | ------: |
+| tree-sitter (Rust native) |   584 ms |   1.00x |
+| **Wado** (Gale)           | 5,110 ms |   8.75x |
 
 ## Running
 
