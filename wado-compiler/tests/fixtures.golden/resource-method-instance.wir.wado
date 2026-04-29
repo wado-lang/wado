@@ -133,9 +133,9 @@ fn "wado-compiler/tests/fixtures/resource-method-instance.wado/__cm_binding__Tcp
     let __vresult: ref "wasi:sockets/types.wado//ErrorCode";
     let __disc_6: i32;
     let __option_result: ref null "core:prelude/string.wado//String";
-    let __local_8: i32;
-    let __local_9: i32;
-    let __local_10: ref builtin::array<u8>;
+    let ptr: i32;
+    let len_9: i32;
+    let arr: ref builtin::array<u8>;
     __outptr = "mem/realloc"(0, 0, 4, 20);
     "wasi/wasi:sockets/TcpSocket::create"(address_family, __outptr);
     __disc_2 = builtin::load_u8(__outptr);
@@ -178,10 +178,10 @@ fn "wado-compiler/tests/fixtures/resource-method-instance.wado/__cm_binding__Tcp
             __option_result = ref.null none;
             if __disc_6 != 0 {
                 __option_result = ref.as_non_null(__inline_memory_to_gc_string_0: block -> ref "core:prelude/string.wado//String" {
-                    __local_8 = builtin::load_i32(((__outptr + 4) + 4) + 4);
-                    __local_9 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4);
-                    __local_10 = "core:internal/memory_to_gc_array"(__local_8, __local_9);
-                    break __inline_memory_to_gc_string_0: struct.new "core:prelude/string.wado//String" { repr: __local_10, used: __local_9 };
+                    ptr = builtin::load_i32(((__outptr + 4) + 4) + 4);
+                    len_9 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4);
+                    arr = "core:internal/memory_to_gc_array"(ptr, len_9);
+                    break __inline_memory_to_gc_string_0: struct.new "core:prelude/string.wado//String" { repr: arr, used: len_9 };
                     unreachable;
                 });
                 drop("mem/realloc"(builtin::load_i32(((__outptr + 4) + 4) + 4), builtin::load_i32((((__outptr + 4) + 4) + 4) + 4), 1, 0));

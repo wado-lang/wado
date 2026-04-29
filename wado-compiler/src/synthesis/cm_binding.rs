@@ -417,13 +417,7 @@ fn synthesize_lift_inner(
                 synthesize_lift_option_inner(&g.args[0], addr, next_local, stmts, locals, ctx)
             }
             "Result" if g.args.len() == 2 => synthesize_lift_result_inner(
-                &g.args[0],
-                &g.args[1],
-                addr,
-                next_local,
-                stmts,
-                locals,
-                ctx,
+                &g.args[0], &g.args[1], addr, next_local, stmts, locals, ctx,
             ),
             // Own<T>, Borrow<T>, Stream<T>, Future<T> are i32 handles
             _ => builtin_call("i32_load", vec![addr], TypeTable::I32),
@@ -431,9 +425,7 @@ fn synthesize_lift_inner(
         Type::Tuple(elems) if elems.is_empty() => {
             TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span())
         }
-        Type::Tuple(elems) => {
-            synthesize_lift_tuple(elems, addr, next_local, stmts, locals, ctx)
-        }
+        Type::Tuple(elems) => synthesize_lift_tuple(elems, addr, next_local, stmts, locals, ctx),
         Type::Reference(_) | Type::MutReference(_) => {
             builtin_call("i32_load", vec![addr], TypeTable::I32)
         }
@@ -565,14 +557,8 @@ fn try_lift_wasi_struct(
         } else {
             binary_add(addr.clone(), i32_const(offsets[i] as i32))
         };
-        let lifted_field = synthesize_lift_inner(
-            field_ty,
-            field_addr,
-            next_local,
-            stmts,
-            locals,
-            Some(ctx),
-        );
+        let lifted_field =
+            synthesize_lift_inner(field_ty, field_addr, next_local, stmts, locals, Some(ctx));
         let lifted_field = materialize_if_needed(lifted_field, next_local, stmts, locals);
         let field_name = &wado_fields[i];
         tir_fields.push(crate::tir::TirStructField {
@@ -2998,13 +2984,7 @@ fn synthesize_adapter(
                         type_table,
                     )
                 } else {
-                    synthesize_lower(
-                        elem_type,
-                        elem_ref,
-                        addr_ref,
-                        &mut next_local,
-                        &mut locals,
-                    )
+                    synthesize_lower(elem_type, elem_ref, addr_ref, &mut next_local, &mut locals)
                 };
                 loop_body.extend(lower_stmts);
                 // __i += 1
@@ -3498,8 +3478,7 @@ fn synthesize_adapter(
         // Materialize the lifted value into a local before freeing if it
         // contains a bare memory load (e.g., i32.load from the outptr buffer).
         // Complex types are already materialized into locals by synthesize_lift.
-        let lifted =
-            materialize_if_needed(lifted, &mut next_local, &mut body_stmts, &mut locals);
+        let lifted = materialize_if_needed(lifted, &mut next_local, &mut body_stmts, &mut locals);
 
         // Free the outptr
         body_stmts.push(expr_stmt(builtin_call(
@@ -3568,14 +3547,8 @@ fn synthesize_adapter(
 
     let body = block(body_stmts);
 
-    let binding = make_binding_function(
-        name,
-        params,
-        adapter_return_type,
-        body,
-        next_local,
-        locals,
-    );
+    let binding =
+        make_binding_function(name, params, adapter_return_type, body, next_local, locals);
     // Resources and effects are unified at the effect-system level: every
     // operation on `<E>` (whether `<E>` is declared as `effect` or `resource`)
     // requires the caller to hold `with <E>`. The binding for a CM-imported
@@ -9653,13 +9626,7 @@ mod tests {
         let mut stmts = Vec::new();
         let mut locals = Vec::new();
         let own_ty = cm_abi::generic_type("Own", vec![named_type("Fields")]);
-        let expr = synthesize_lift(
-            &own_ty,
-            i32_const(100),
-            &mut 0,
-            &mut stmts,
-            &mut locals,
-        );
+        let expr = synthesize_lift(&own_ty, i32_const(100), &mut 0, &mut stmts, &mut locals);
         assert!(matches!(expr.kind, TirExprKind::Call { .. }));
         assert_eq!(expr.type_id, TypeTable::I32);
     }

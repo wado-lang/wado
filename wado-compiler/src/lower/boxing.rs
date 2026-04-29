@@ -327,12 +327,7 @@ impl BoxLowerer {
             } => {
                 self.expand_deref_assigns_in_block(then_block, local_count, locals, type_table);
                 if let Some(else_block) = else_block {
-                    self.expand_deref_assigns_in_block(
-                        else_block,
-                        local_count,
-                        locals,
-                        type_table,
-                    );
+                    self.expand_deref_assigns_in_block(else_block, local_count, locals, type_table);
                 }
             }
             TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
@@ -345,12 +340,7 @@ impl BoxLowerer {
             } => {
                 self.expand_deref_assigns_in_block(then_block, local_count, locals, type_table);
                 if let Some(else_block) = else_block {
-                    self.expand_deref_assigns_in_block(
-                        else_block,
-                        local_count,
-                        locals,
-                        type_table,
-                    );
+                    self.expand_deref_assigns_in_block(else_block, local_count, locals, type_table);
                 }
             }
             _ => {}

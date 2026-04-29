@@ -68,18 +68,18 @@ fn "core:internal/cm_waitable_set_wait"(ws) {
 }
 
 fn "core:prelude/types.wado/AsyncCall<unit>::wait"(self) {
-    let handle: i32;
+    let handle_1: i32;
     let raw: i32;
-    let ws: i32;
-    let __local_6: i32;
-    handle = self.__cm_packed >> 4;
-    if handle != 0 {
-        raw = handle;
-        ws = "wasi/waitable-set-new"();
+    let ws_3: i32;
+    let handle_6: i32;
+    handle_1 = self.__cm_packed >> 4;
+    if handle_1 != 0 {
+        raw = handle_1;
+        ws_3 = "wasi/waitable-set-new"();
         drop(__inline_cm_waitable_join_0: block -> i32 {
-            __local_6 = raw;
-            "wasi/waitable-join"(__local_6, ws);
-            break __inline_cm_waitable_join_0: __local_6;
+            handle_6 = raw;
+            "wasi/waitable-join"(handle_6, ws_3);
+            break __inline_cm_waitable_join_0: handle_6;
             unreachable;
         });
         b1: block {
@@ -87,7 +87,7 @@ fn "core:prelude/types.wado/AsyncCall<unit>::wait"(self) {
                 let __sroa_event_code: i32;
                 let __sroa_event_handle: i32;
                 let __sroa_event_payload: u32;
-                multivalue_bind [__sroa_event_code, __sroa_event_handle, __sroa_event_payload] = "core:internal/cm_waitable_set_wait"(ws);
+                multivalue_bind [__sroa_event_code, __sroa_event_handle, __sroa_event_payload] = "core:internal/cm_waitable_set_wait"(ws_3);
                 if __sroa_event_payload == 2 {
                     break b1;
                 }
@@ -95,7 +95,7 @@ fn "core:prelude/types.wado/AsyncCall<unit>::wait"(self) {
             };
         };
         "wasi/subtask-drop"(raw);
-        "wasi/waitable-set-drop"(ws);
+        "wasi/waitable-set-drop"(ws_3);
     }
     drop("mem/realloc"(self.__cm_outptr, self.__cm_size, self.__cm_align, 0));
     return nop;

@@ -278,8 +278,8 @@ fn "wado-compiler/tests/fixtures/http-response-headers.wado/handle"() {
     let trailers_future: i32;
     let trailers_tx: i32;
     let headers: i32;
-    let __local_4: ref "core:prelude//Array<u8>";
-    let value: ref "core:prelude//Array<u8>";
+    let __b_4: ref "core:prelude//Array<u8>";
+    let value_5: ref "core:prelude//Array<u8>";
     let response: i32;
     let __task_ret: ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";
     let __tv_1: i32;
@@ -420,12 +420,12 @@ fn "wado-compiler/tests/fixtures/http-response-headers.wado/handle"() {
     trailers_future = builtin::i32_wrap_i64(__pair_temp_1);
     trailers_tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     headers = "wado-compiler/tests/fixtures/http-response-headers.wado/__cm_binding__Fields_new"();
-    value = __seq_lit: block -> ref "core:prelude//Array<u8>" {
-        __local_4 = struct.new "core:prelude//Array<u8>" { repr: array.new_fixed<u8>(104, 101, 108, 108, 111), used: 5 };
-        break __seq_lit: __local_4;
+    value_5 = __seq_lit: block -> ref "core:prelude//Array<u8>" {
+        __b_4 = struct.new "core:prelude//Array<u8>" { repr: array.new_fixed<u8>(104, 101, 108, 108, 111), used: 5 };
+        break __seq_lit: __b_4;
         unreachable;
     };
-    drop("wado-compiler/tests/fixtures/http-response-headers.wado/__cm_binding__Fields_append"(headers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-wado"), used: 6 }, value));
+    drop("wado-compiler/tests/fixtures/http-response-headers.wado/__cm_binding__Fields_append"(headers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-wado"), used: 6 }, value_5));
     let __sroa___pattern_temp_1_0: i32;
     let __sroa___pattern_temp_1_1: i32;
     multivalue_bind [__sroa___pattern_temp_1_0, __sroa___pattern_temp_1_1] = "wado-compiler/tests/fixtures/http-response-headers.wado/__cm_binding__Response_new"(headers, struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, trailers_future);
@@ -768,16 +768,16 @@ fn "wado-compiler/tests/fixtures/http-response-headers.wado/__cm_binding__Fields
     let __vresult: ref "wasi:http/types.wado//HeaderError";
     let __disc_10: i32;
     let __option_result: ref null "core:prelude/string.wado//String";
-    let __local_13: ref builtin::array<u8>;
-    let __local_14: i32;
-    let __local_17: i32;
-    let __local_18: i32;
-    let __local_19: ref builtin::array<u8>;
+    let data: ref builtin::array<u8>;
+    let len_14: i32;
+    let ptr: i32;
+    let len_18: i32;
+    let arr_19: ref builtin::array<u8>;
     __name_packed = "core:internal/cm_lower_string"(name);
     __value_packed = __inline_cm_lower_array_u8_0: block -> i64 {
-        __local_13 = value.repr;
-        __local_14 = value.used;
-        break __inline_cm_lower_array_u8_0: "core:internal/cm_lower_list_u8"(__local_13, __local_14);
+        data = value.repr;
+        len_14 = value.used;
+        break __inline_cm_lower_array_u8_0: "core:internal/cm_lower_list_u8"(data, len_14);
         unreachable;
     };
     __outptr = "mem/realloc"(0, 0, 4, 20);
@@ -802,10 +802,10 @@ fn "wado-compiler/tests/fixtures/http-response-headers.wado/__cm_binding__Fields
             __option_result = ref.null none;
             if __disc_10 != 0 {
                 __option_result = ref.as_non_null(__inline_memory_to_gc_string_3: block -> ref "core:prelude/string.wado//String" {
-                    __local_17 = builtin::load_i32(((__outptr + 4) + 4) + 4);
-                    __local_18 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4);
-                    __local_19 = "core:internal/memory_to_gc_array"(__local_17, __local_18);
-                    break __inline_memory_to_gc_string_3: struct.new "core:prelude/string.wado//String" { repr: __local_19, used: __local_18 };
+                    ptr = builtin::load_i32(((__outptr + 4) + 4) + 4);
+                    len_18 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4);
+                    arr_19 = "core:internal/memory_to_gc_array"(ptr, len_18);
+                    break __inline_memory_to_gc_string_3: struct.new "core:prelude/string.wado//String" { repr: arr_19, used: len_18 };
                     unreachable;
                 });
                 drop("mem/realloc"(builtin::load_i32(((__outptr + 4) + 4) + 4), builtin::load_i32((((__outptr + 4) + 4) + 4) + 4), 1, 0));

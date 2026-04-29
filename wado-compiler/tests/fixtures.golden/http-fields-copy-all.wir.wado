@@ -360,9 +360,9 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 
 fn "wado-compiler/tests/fixtures/http-fields-copy-all.wado/handle"() {
     let fields: i32;
-    let __local_2: ref "core:prelude//Array<u8>";
+    let __b_2: ref "core:prelude//Array<u8>";
     let v1: ref "core:prelude//Array<u8>";
-    let __local_4: ref "core:prelude//Array<u8>";
+    let __b_4: ref "core:prelude//Array<u8>";
     let v2: ref "core:prelude//Array<u8>";
     let all: ref "core:prelude//Array<Tuple<String,Array<u8>>>";
     let __v0: i32;
@@ -506,17 +506,17 @@ fn "wado-compiler/tests/fixtures/http-fields-copy-all.wado/handle"() {
     let __packed_163: i64;
     let __ptr_164: i32;
     let __len_165: i32;
-    let __local_183: ref "core:prelude/format.wado//Formatter";
-    let __local_188: ref "core:prelude/format.wado//Formatter";
+    let f_183: ref "core:prelude/format.wado//Formatter";
+    let f_188: ref "core:prelude/format.wado//Formatter";
     fields = "wado-compiler/tests/fixtures/http-fields-copy-all.wado/__cm_binding__Fields_new"();
     v1 = __seq_lit: block -> ref "core:prelude//Array<u8>" {
-        __local_2 = struct.new "core:prelude//Array<u8>" { repr: array.new_fixed<u8>(97), used: 1 };
-        break __seq_lit: __local_2;
+        __b_2 = struct.new "core:prelude//Array<u8>" { repr: array.new_fixed<u8>(97), used: 1 };
+        break __seq_lit: __b_2;
         unreachable;
     };
     v2 = __seq_lit: block -> ref "core:prelude//Array<u8>" {
-        __local_4 = struct.new "core:prelude//Array<u8>" { repr: array.new_fixed<u8>(98), used: 1 };
-        break __seq_lit: __local_4;
+        __b_4 = struct.new "core:prelude//Array<u8>" { repr: array.new_fixed<u8>(98), used: 1 };
+        break __seq_lit: __b_4;
         unreachable;
     };
     drop("wado-compiler/tests/fixtures/http-fields-copy-all.wado/__cm_binding__Fields_append"(fields, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-first"), used: 7 }, v1));
@@ -541,15 +541,15 @@ fn "wado-compiler/tests/fixtures/http-fields-copy-all.wado/handle"() {
             "core:prelude/string.wado/String::push_str"(__local_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http-fields-copy-all.wado"), used: 54 });
             "core:prelude/string.wado/String::push"(__local_13, 58);
             __local_14 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_13 };
-            __local_183 = __local_14;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(15, __local_183);
+            f_183 = __local_14;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(15, f_183);
             "core:prelude/string.wado/String::push_str"(__local_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: all.len() == 2
 "), used: 27 });
             "core:prelude/string.wado/String::push_str"(__local_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("all.len(): "), used: 11 });
             __local_14 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_13 };
-            __local_188 = __local_14;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(__v0, __local_188);
+            f_188 = __local_14;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(__v0, f_188);
             "core:prelude/string.wado/String::push"(__local_13, 10);
             break __tmpl: __local_13;
             unreachable;
@@ -902,16 +902,16 @@ fn "wado-compiler/tests/fixtures/http-fields-copy-all.wado/__cm_binding__Fields_
     let __vresult: ref "wasi:http/types.wado//HeaderError";
     let __disc_10: i32;
     let __option_result: ref null "core:prelude/string.wado//String";
-    let __local_13: ref builtin::array<u8>;
-    let __local_14: i32;
-    let __local_17: i32;
-    let __local_18: i32;
-    let __local_19: ref builtin::array<u8>;
+    let data: ref builtin::array<u8>;
+    let len_14: i32;
+    let ptr: i32;
+    let len_18: i32;
+    let arr_19: ref builtin::array<u8>;
     __name_packed = "core:internal/cm_lower_string"(name);
     __value_packed = __inline_cm_lower_array_u8_0: block -> i64 {
-        __local_13 = value.repr;
-        __local_14 = value.used;
-        break __inline_cm_lower_array_u8_0: "core:internal/cm_lower_list_u8"(__local_13, __local_14);
+        data = value.repr;
+        len_14 = value.used;
+        break __inline_cm_lower_array_u8_0: "core:internal/cm_lower_list_u8"(data, len_14);
         unreachable;
     };
     __outptr = "mem/realloc"(0, 0, 4, 20);
@@ -936,10 +936,10 @@ fn "wado-compiler/tests/fixtures/http-fields-copy-all.wado/__cm_binding__Fields_
             __option_result = ref.null none;
             if __disc_10 != 0 {
                 __option_result = ref.as_non_null(__inline_memory_to_gc_string_3: block -> ref "core:prelude/string.wado//String" {
-                    __local_17 = builtin::load_i32(((__outptr + 4) + 4) + 4);
-                    __local_18 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4);
-                    __local_19 = "core:internal/memory_to_gc_array"(__local_17, __local_18);
-                    break __inline_memory_to_gc_string_3: struct.new "core:prelude/string.wado//String" { repr: __local_19, used: __local_18 };
+                    ptr = builtin::load_i32(((__outptr + 4) + 4) + 4);
+                    len_18 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4);
+                    arr_19 = "core:internal/memory_to_gc_array"(ptr, len_18);
+                    break __inline_memory_to_gc_string_3: struct.new "core:prelude/string.wado//String" { repr: arr_19, used: len_18 };
                     unreachable;
                 });
                 drop("mem/realloc"(builtin::load_i32(((__outptr + 4) + 4) + 4), builtin::load_i32((((__outptr + 4) + 4) + 4) + 4), 1, 0));
@@ -965,9 +965,9 @@ fn "wado-compiler/tests/fixtures/http-fields-copy-all.wado/__cm_binding__Fields_
     let __result_10: ref "core:prelude//Array<u8>";
     let __i_11: i32;
     let __elem_addr_12: i32;
-    let __local_14: i32;
-    let __local_15: i32;
-    let __local_16: ref builtin::array<u8>;
+    let ptr: i32;
+    let len_15: i32;
+    let arr: ref builtin::array<u8>;
     __outptr = "mem/realloc"(0, 0, 4, 8);
     "wasi/wasi:http/Fields::copy_all"(self, __outptr);
     __base_2 = builtin::load_i32(__outptr);
@@ -981,10 +981,10 @@ fn "wado-compiler/tests/fixtures/http-fields-copy-all.wado/__cm_binding__Fields_
             }
             __elem_addr_6 = __base_2 + (__i_5 * 16);
             __lifted_result_7 = __inline_memory_to_gc_string_1: block -> ref "core:prelude/string.wado//String" {
-                __local_14 = builtin::load_i32(__elem_addr_6 + 0);
-                __local_15 = builtin::load_i32((__elem_addr_6 + 0) + 4);
-                __local_16 = "core:internal/memory_to_gc_array"(__local_14, __local_15);
-                break __inline_memory_to_gc_string_1: struct.new "core:prelude/string.wado//String" { repr: __local_16, used: __local_15 };
+                ptr = builtin::load_i32(__elem_addr_6 + 0);
+                len_15 = builtin::load_i32((__elem_addr_6 + 0) + 4);
+                arr = "core:internal/memory_to_gc_array"(ptr, len_15);
+                break __inline_memory_to_gc_string_1: struct.new "core:prelude/string.wado//String" { repr: arr, used: len_15 };
                 unreachable;
             };
             __base_8 = builtin::load_i32(__elem_addr_6 + 8);
@@ -1214,7 +1214,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     let abs_val: i64;
     let digit_count: i32;
     let offset: i32;
-    let __local_6: ref "core:prelude/string.wado//String";
+    let self_6: ref "core:prelude/string.wado//String";
     is_negative = self < 0;
     abs_val = (if is_negative -> i64 {
         0_i64 - builtin::i64_extend_i32_s(self);
@@ -1224,8 +1224,8 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     digit_count = "core:prelude/primitive.wado/count_digits_i64"(abs_val);
     offset = "core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
     "core:prelude/primitive.wado/write_decimal_digits"(__inline_String__internal_raw_bytes_0: block -> ref builtin::array<u8> {
-        __local_6 = f.buf;
-        break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        self_6 = f.buf;
+        break __inline_String__internal_raw_bytes_0: self_6.repr;
         unreachable;
     }, offset, abs_val, digit_count);
 }
@@ -1234,19 +1234,19 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref builtin::array<u8>;
-    let __local_5: i32;
-    let __local_7: i32;
+    let a_5: i32;
+    let a_7: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
     new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_5 = __inline_i32_max_1: block -> i32 {
-            __local_7 = capacity * 2;
-            break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+        a_5 = __inline_i32_max_1: block -> i32 {
+            a_7 = capacity * 2;
+            break __inline_i32_max_1: select i32(a_7 > min_capacity, a_7, min_capacity);
             unreachable;
         };
-        break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        break __inline_i32_max_0: select i32(a_5 > 8, a_5, 8);
         unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
@@ -1426,11 +1426,11 @@ fn "core:prelude/array.wado/Array<Tuple<String,Array<u8>>>::grow"(self) {
     let old_repr: ref builtin::array<Tuple<String,Array<u8>>>;
     let used: i32;
     let i: i32;
-    let __local_7: i32;
+    let a: i32;
     capacity = builtin::array_len(self.repr);
     new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_7 = capacity * 2;
-        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+        a = capacity * 2;
+        break __inline_i32_max_0: select i32(a > 4, a, 4);
         unreachable;
     };
     new_repr = builtin::array_new<ref "tuple//[String, Array<u8>]">(new_capacity);
@@ -1469,11 +1469,11 @@ fn "core:prelude/array.wado/Array<u8>::grow"(self) {
     let old_repr: ref builtin::array<u8>;
     let used: i32;
     let i: i32;
-    let __local_7: i32;
+    let a: i32;
     capacity = builtin::array_len(self.repr);
     new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_7 = capacity * 2;
-        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+        a = capacity * 2;
+        break __inline_i32_max_0: select i32(a > 4, a, 4);
         unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);

@@ -19,8 +19,8 @@ use crate::token::Span;
 
 use super::common::{
     alloc_local, block, break_stmt, cast, deref_expr, expr_stmt, field_access, i32_const, if_stmt,
-    let_mut_stmt, local_ref, loop_stmt, null_expr, option_none, option_some, param_local,
-    ref_expr, return_stmt, string_lit, synth_span,
+    let_mut_stmt, local_ref, loop_stmt, null_expr, option_none, option_some, param_local, ref_expr,
+    return_stmt, string_lit, synth_span,
 };
 
 fn apply_rename_all(s: &str, strategy: &str) -> String {
@@ -936,8 +936,7 @@ fn generate_struct_deserialize(
             field_result_types[i],
             span,
         );
-        let val_result_local =
-            alloc_local(&mut next_local, &mut locals, field_result_types[i]);
+        let val_result_local = alloc_local(&mut next_local, &mut locals, field_result_types[i]);
         let val_ok_local = alloc_local(&mut next_local, &mut locals, *type_id);
 
         let assign_block = block(vec![
@@ -1479,7 +1478,10 @@ fn generate_enum_serialize(
 
     drop(tt);
 
-    let locals = vec![param_local("self", ref_self_type, false), param_local("s", mut_ref_s, false)];
+    let locals = vec![
+        param_local("self", ref_self_type, false),
+        param_local("s", mut_ref_s, false),
+    ];
     let next_local: u32 = 2;
 
     // Build match arms: one per enum case calling serialize_unit_variant
@@ -2020,7 +2022,10 @@ fn generate_variant_serialize(
 
     drop(tt);
 
-    let mut locals = vec![param_local("self", ref_self_type, false), param_local("s", mut_ref_s, false)];
+    let mut locals = vec![
+        param_local("self", ref_self_type, false),
+        param_local("s", mut_ref_s, false),
+    ];
     let mut next_local: u32 = 2;
 
     // Build match arms
@@ -2412,8 +2417,7 @@ fn generate_variant_deserialize(
             disc_then_stmts.push(if_stmt(condition, if_body, None));
         } else {
             let payload_local = alloc_local(&mut next_local, &mut locals, *payload_type);
-            let p_result_local =
-                alloc_local(&mut next_local, &mut locals, payload_result_types[i]);
+            let p_result_local = alloc_local(&mut next_local, &mut locals, payload_result_types[i]);
 
             let payload_call = type_param_method_call(
                 local_ref(va_local, "va", mut_ref_va),
@@ -2595,8 +2599,7 @@ fn generate_variant_deserialize(
             name_then_stmts.push(if_stmt(condition, if_body, None));
         } else {
             let payload_local = alloc_local(&mut next_local, &mut locals, *payload_type);
-            let p_result_local =
-                alloc_local(&mut next_local, &mut locals, payload_result_types[i]);
+            let p_result_local = alloc_local(&mut next_local, &mut locals, payload_result_types[i]);
 
             let payload_call = type_param_method_call(
                 local_ref(va_local, "va", mut_ref_va),
@@ -2873,7 +2876,10 @@ fn generate_flags_serialize(
 
     drop(tt);
 
-    let mut locals = vec![param_local("self", ref_self_type, false), param_local("s", mut_ref_s, false)];
+    let mut locals = vec![
+        param_local("self", ref_self_type, false),
+        param_local("s", mut_ref_s, false),
+    ];
     let mut next_local: u32 = 2;
     let count_local = alloc_local(&mut next_local, &mut locals, TypeTable::I32);
     let result_tmp = alloc_local(&mut next_local, &mut locals, result_seq_err);
@@ -3110,8 +3116,7 @@ fn generate_flags_deserialize(
     let result_seq_local = alloc_local(&mut next_local, &mut locals, result_seq_err);
     let seq_local = alloc_local(&mut next_local, &mut locals, seq_access_type);
     let bits_local = alloc_local(&mut next_local, &mut locals, TypeTable::U32);
-    let elem_result_local =
-        alloc_local(&mut next_local, &mut locals, result_option_string_err);
+    let elem_result_local = alloc_local(&mut next_local, &mut locals, result_option_string_err);
     let elem_local = alloc_local(&mut next_local, &mut locals, option_string);
     let name_local = alloc_local(&mut next_local, &mut locals, string_type);
 

@@ -232,12 +232,8 @@ pub(super) fn lower_patterns(
             let local_count = func.local_count;
             let locals = std::mem::take(&mut func.locals);
 
-            let mut lowerer = PatternLowerer::new(
-                local_count,
-                locals,
-                &variant_case_map,
-                &struct_fields_map,
-            );
+            let mut lowerer =
+                PatternLowerer::new(local_count, locals, &variant_case_map, &struct_fields_map);
             lowerer.lower_block(&mut body, &type_table);
 
             // Put the values back

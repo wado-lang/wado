@@ -1315,11 +1315,7 @@ impl ClosureLowerer {
                     // Extend vector if needed to accommodate sparse indices
                     while locals.len() <= *idx as usize {
                         let placeholder_idx = locals.len() as u32;
-                        locals.push(TirLocal::synth(
-                            placeholder_idx,
-                            TypeTable::UNKNOWN,
-                            false,
-                        ));
+                        locals.push(TirLocal::synth(placeholder_idx, TypeTable::UNKNOWN, false));
                     }
                     locals[*idx as usize] = TirLocal::synth(*idx, *type_id, false);
                 }

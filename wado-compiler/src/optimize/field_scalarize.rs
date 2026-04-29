@@ -1553,13 +1553,7 @@ fn replace_in_block(
                 let mut extended = enclosing_labels.clone();
                 extended.insert(label.clone());
                 replace_in_block(
-                    inner,
-                    candidates,
-                    locals,
-                    type_table,
-                    cache,
-                    &extended,
-                    loop_depth,
+                    inner, candidates, locals, type_table, cache, &extended, loop_depth,
                 );
                 new_stmts.push(stmt);
                 continue;

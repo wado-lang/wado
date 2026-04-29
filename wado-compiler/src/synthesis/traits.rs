@@ -908,7 +908,10 @@ fn generate_enum_inspect_fn(
         params,
         TypeTable::UNIT,
         body,
-        vec![param_local("self", ref_enum_type, false), param_local("f", fmt_type, false)],
+        vec![
+            param_local("self", ref_enum_type, false),
+            param_local("f", fmt_type, false),
+        ],
     )
 }
 
@@ -1062,7 +1065,10 @@ fn generate_struct_inspect_fn(
         params,
         TypeTable::UNIT,
         body,
-        vec![param_local("self", ref_struct_type, false), param_local("f", fmt_type, false)],
+        vec![
+            param_local("self", ref_struct_type, false),
+            param_local("f", fmt_type, false),
+        ],
     )
 }
 
@@ -1228,7 +1234,10 @@ fn generate_generic_struct_inspect_fn(
         body: Some(body),
         span,
         local_count,
-        locals: vec![param_local("self", ref_struct_type, false), param_local("f", fmt_type, false)],
+        locals: vec![
+            param_local("self", ref_struct_type, false),
+            param_local("f", fmt_type, false),
+        ],
         address_taken_locals: IndexSet::default(),
         stores_aliased_locals: IndexSet::default(),
         is_cm_binding: false,
@@ -1391,7 +1400,10 @@ fn generate_variant_inspect_fn(
         params,
         TypeTable::UNIT,
         body,
-        vec![param_local("self", ref_variant_type, false), param_local("f", fmt_type, false)],
+        vec![
+            param_local("self", ref_variant_type, false),
+            param_local("f", fmt_type, false),
+        ],
     )
 }
 
@@ -1552,7 +1564,10 @@ fn generate_generic_variant_inspect_fn(
         body: Some(body),
         span,
         local_count: 2,
-        locals: vec![param_local("self", ref_variant_type, false), param_local("f", fmt_type, false)],
+        locals: vec![
+            param_local("self", ref_variant_type, false),
+            param_local("f", fmt_type, false),
+        ],
         address_taken_locals: IndexSet::default(),
         stores_aliased_locals: IndexSet::default(),
         is_cm_binding: false,
@@ -1648,7 +1663,10 @@ fn generate_newtype_inspect_fn(
         inspect_params(ref_newtype_type, fmt_type, span),
         TypeTable::UNIT,
         TirBlock::new(stmts, span),
-        vec![param_local("self", ref_newtype_type, false), param_local("f", fmt_type, false)],
+        vec![
+            param_local("self", ref_newtype_type, false),
+            param_local("f", fmt_type, false),
+        ],
     )
 }
 
@@ -1863,7 +1881,10 @@ fn generate_flags_inspect_fn(
         inspect_params(ref_flags_type, fmt_type, *span),
         TypeTable::UNIT,
         body,
-        vec![param_local("self", ref_flags_type, false), param_local("f", fmt_type, false)],
+        vec![
+            param_local("self", ref_flags_type, false),
+            param_local("f", fmt_type, false),
+        ],
     )
 }
 
@@ -1903,7 +1924,10 @@ fn generate_fn_inspect_fn(
         inspect_params(ref_fn_type, fmt_type, span),
         TypeTable::UNIT,
         body,
-        vec![param_local("self", ref_fn_type, false), param_local("f", fmt_type, false)],
+        vec![
+            param_local("self", ref_fn_type, false),
+            param_local("f", fmt_type, false),
+        ],
     )
 }
 
@@ -1944,7 +1968,10 @@ fn generate_opaque_inspect_fn(
         inspect_params(ref_type, fmt_type, span),
         TypeTable::UNIT,
         body,
-        vec![param_local("self", ref_type, false), param_local("f", fmt_type, false)],
+        vec![
+            param_local("self", ref_type, false),
+            param_local("f", fmt_type, false),
+        ],
     )
 }
 
@@ -2306,7 +2333,10 @@ fn generate_struct_inspect_alt_fn(
         inspect_params(ref_struct_type, fmt_type, span),
         TypeTable::UNIT,
         body,
-        vec![param_local("self", ref_struct_type, false), param_local("f", fmt_type, false)],
+        vec![
+            param_local("self", ref_struct_type, false),
+            param_local("f", fmt_type, false),
+        ],
     )
 }
 
@@ -2366,7 +2396,10 @@ fn generate_generic_struct_inspect_alt_fn(
         body: Some(body),
         span,
         local_count: 2,
-        locals: vec![param_local("self", ref_struct_type, false), param_local("f", fmt_type, false)],
+        locals: vec![
+            param_local("self", ref_struct_type, false),
+            param_local("f", fmt_type, false),
+        ],
         address_taken_locals: IndexSet::default(),
         stores_aliased_locals: IndexSet::default(),
         is_cm_binding: false,
@@ -2511,7 +2544,10 @@ fn generate_variant_inspect_alt_fn(
         inspect_params(ref_variant_type, fmt_type, span),
         TypeTable::UNIT,
         body,
-        vec![param_local("self", ref_variant_type, false), param_local("f", fmt_type, false)],
+        vec![
+            param_local("self", ref_variant_type, false),
+            param_local("f", fmt_type, false),
+        ],
     )
 }
 
@@ -2566,7 +2602,10 @@ fn generate_generic_variant_inspect_alt_fn(
         body: Some(body),
         span,
         local_count: 2,
-        locals: vec![param_local("self", ref_variant_type, false), param_local("f", fmt_type, false)],
+        locals: vec![
+            param_local("self", ref_variant_type, false),
+            param_local("f", fmt_type, false),
+        ],
         address_taken_locals: IndexSet::default(),
         stores_aliased_locals: IndexSet::default(),
         is_cm_binding: false,
@@ -3142,7 +3181,10 @@ fn generate_display_fallback(
         body: Some(body),
         span,
         local_count: 2,
-        locals: vec![param_local("self", ref_type, false), param_local("f", fmt_type, false)],
+        locals: vec![
+            param_local("self", ref_type, false),
+            param_local("f", fmt_type, false),
+        ],
         address_taken_locals: IndexSet::default(),
         stores_aliased_locals: IndexSet::default(),
         is_cm_binding: false,
@@ -3734,7 +3776,10 @@ fn generate_enum_eq_fn(
         params,
         TypeTable::BOOL,
         body,
-        vec![param_local("self", ref_enum_type, false), param_local("other", ref_enum_type, false)],
+        vec![
+            param_local("self", ref_enum_type, false),
+            param_local("other", ref_enum_type, false),
+        ],
     )
 }
 
@@ -4260,7 +4305,10 @@ fn generate_struct_eq_fn(
         params,
         TypeTable::BOOL,
         body,
-        vec![param_local("self", ref_struct_type, false), param_local("other", ref_struct_type, false)],
+        vec![
+            param_local("self", ref_struct_type, false),
+            param_local("other", ref_struct_type, false),
+        ],
     )
 }
 
@@ -4615,7 +4663,10 @@ fn generate_generic_struct_eq_fn(
         body: Some(body),
         span,
         local_count: 2,
-        locals: vec![param_local("self", ref_struct_type, false), param_local("other", ref_struct_type, false)],
+        locals: vec![
+            param_local("self", ref_struct_type, false),
+            param_local("other", ref_struct_type, false),
+        ],
         address_taken_locals: IndexSet::default(),
         stores_aliased_locals: IndexSet::default(),
         is_cm_binding: false,
@@ -4706,7 +4757,10 @@ fn generate_variant_eq_fn(
         params,
         TypeTable::BOOL,
         body,
-        vec![param_local("self", ref_variant_type, false), param_local("other", ref_variant_type, false)],
+        vec![
+            param_local("self", ref_variant_type, false),
+            param_local("other", ref_variant_type, false),
+        ],
     )
 }
 
@@ -4802,7 +4856,10 @@ fn generate_generic_variant_eq_fn(
         body: Some(body),
         span,
         local_count: 2,
-        locals: vec![param_local("self", ref_variant_type, false), param_local("other", ref_variant_type, false)],
+        locals: vec![
+            param_local("self", ref_variant_type, false),
+            param_local("other", ref_variant_type, false),
+        ],
         address_taken_locals: IndexSet::default(),
         stores_aliased_locals: IndexSet::default(),
         is_cm_binding: false,

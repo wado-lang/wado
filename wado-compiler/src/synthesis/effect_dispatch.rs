@@ -49,8 +49,8 @@ use crate::synthesis::common::{alloc_local, option_some, ref_expr, synth_span};
 use crate::tir::{
     CallArg, EffectRef, FunctionKind, FunctionRef, InlineHint, SubstitutionContext, TirBlock,
     TirCapture, TirEffectOp, TirExpr, TirExprKind, TirField, TirFunction, TirGlobal, TirLocal,
-    TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirTemplatePart,
-    TypeId, TypeTable,
+    TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirTemplatePart, TypeId,
+    TypeTable,
 };
 
 /// Canonical identity of an effect or resource **declaration**:

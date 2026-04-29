@@ -45,12 +45,7 @@ fn cse_function(func: &mut TirFunction) -> bool {
         return false;
     };
     let mut changed = false;
-    cse_in_block(
-        body,
-        &mut func.local_count,
-        &mut func.locals,
-        &mut changed,
-    );
+    cse_in_block(body, &mut func.local_count, &mut func.locals, &mut changed);
     changed
 }
 
@@ -156,11 +151,7 @@ fn key_locals(key: &CseKey, locals: &mut IndexSet<u32>) {
 /// Apply CSE to a loop body. Looks for a pure binary subexpression that appears
 /// in the loop guard and again in the loop body, with no modification to operands
 /// between occurrences.
-fn cse_loop_body(
-    body: &mut TirBlock,
-    local_count: &mut u32,
-    locals: &mut Vec<TirLocal>,
-) -> bool {
+fn cse_loop_body(body: &mut TirBlock, local_count: &mut u32, locals: &mut Vec<TirLocal>) -> bool {
     // Pattern: first stmt is `if !(cond) { break; }` — extract subexprs from cond
     if body.stmts.is_empty() {
         return false;

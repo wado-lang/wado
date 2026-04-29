@@ -211,23 +211,13 @@ fn fuse_in_expr(expr: &mut TirExpr, local_count: &mut u32, locals: &mut Vec<TirL
     match &mut expr.kind {
         TirExprKind::LabeledBlock { block, .. } => {
             // Expression-level labeled block: its terminal value is consumed.
-            let changed = fuse_in_block(
-                block,
-                /* yields_value */ true,
-                local_count,
-                locals,
-            );
+            let changed = fuse_in_block(block, /* yields_value */ true, local_count, locals);
             // Then check if this became a trivial single-break block
             try_inline_trivial_labeled_block(expr) || changed
         }
         TirExprKind::Block(block) => {
             // Expression-level block: terminal value is consumed.
-            fuse_in_block(
-                block,
-                /* yields_value */ true,
-                local_count,
-                locals,
-            )
+            fuse_in_block(block, /* yields_value */ true, local_count, locals)
         }
         TirExprKind::If {
             condition,
@@ -243,8 +233,7 @@ fn fuse_in_expr(expr: &mut TirExpr, local_count: &mut u32, locals: &mut Vec<TirL
             changed
         }
         TirExprKind::Binary { left, right, .. } => {
-            fuse_in_expr(left, local_count, locals)
-                | fuse_in_expr(right, local_count, locals)
+            fuse_in_expr(left, local_count, locals) | fuse_in_expr(right, local_count, locals)
         }
         TirExprKind::Unary { expr: inner, .. }
         | TirExprKind::Cast { expr: inner, .. }
@@ -255,8 +244,7 @@ fn fuse_in_expr(expr: &mut TirExpr, local_count: &mut u32, locals: &mut Vec<TirL
             fuse_in_expr(inner, local_count, locals)
         }
         TirExprKind::Assign { target, value } => {
-            fuse_in_expr(target, local_count, locals)
-                | fuse_in_expr(value, local_count, locals)
+            fuse_in_expr(target, local_count, locals) | fuse_in_expr(value, local_count, locals)
         }
         TirExprKind::Call { args, .. } => {
             let mut changed = false;
@@ -287,8 +275,7 @@ fn fuse_in_expr(expr: &mut TirExpr, local_count: &mut u32, locals: &mut Vec<TirL
             changed
         }
         TirExprKind::Index { expr: inner, index } => {
-            fuse_in_expr(inner, local_count, locals)
-                | fuse_in_expr(index, local_count, locals)
+            fuse_in_expr(inner, local_count, locals) | fuse_in_expr(index, local_count, locals)
         }
         TirExprKind::StructLiteral { fields, .. } => {
             let mut changed = false;

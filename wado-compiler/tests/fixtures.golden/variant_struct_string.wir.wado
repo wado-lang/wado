@@ -71,26 +71,26 @@ fn "wado-compiler/tests/fixtures/variant_struct_string.wado/__cm_binding__Stdout
 }
 
 fn "wado-compiler/tests/fixtures/variant_struct_string.wado/__cm_export__run"() {
-    let s: ref "core:prelude/string.wado//String";
-    let __local_4: ref "core:prelude/string.wado//String";
+    let s_2: ref "core:prelude/string.wado//String";
+    let s_4: ref "core:prelude/string.wado//String";
     let __sroa_opts_align: ref "./variant_struct_string_module.wado//Align";
     __sroa_opts_align = struct.new "./variant_struct_string_module.wado//Align" { 1 };
-    s = __inline_format_str_6: block -> ref "core:prelude/string.wado//String" {
-        __local_4 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
-        break __inline_format_str_6: __local_4;
+    s_2 = __inline_format_str_6: block -> ref "core:prelude/string.wado//String" {
+        s_4 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
+        break __inline_format_str_6: s_4;
         let __match_scrut_0: ref "./variant_struct_string_module.wado//Align";
         __match_scrut_0 = __sroa_opts_align;
         if __match_scrut_0.discriminant == 0 -> ref "core:prelude/string.wado//String" {
-            __local_4;
+            s_4;
         } else if __match_scrut_0.discriminant == 1 -> ref "core:prelude/string.wado//String" {
-            __local_4;
+            s_4;
         } else {
-            __local_4;
+            s_4;
         }
         break __inline_format_str_6;
         unreachable;
     };
-    "core:cli/println"(s);
+    "core:cli/println"(s_2);
     "wasi/task-return"(0);
 }
 

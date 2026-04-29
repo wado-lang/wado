@@ -1259,13 +1259,7 @@ fn transform_tmpl_block(
     // Each distinct Formatter is hoisted to its own local before the loop.
     let fmt_candidates = extract_fmt_candidates(block, buf_local_index, type_table);
     if !fmt_candidates.is_empty() {
-        transform_fmts_in_tmpl_block(
-            block,
-            &fmt_candidates,
-            hoist_stmts,
-            local_count,
-            locals,
-        );
+        transform_fmts_in_tmpl_block(block, &fmt_candidates, hoist_stmts, local_count, locals);
     }
 }
 
