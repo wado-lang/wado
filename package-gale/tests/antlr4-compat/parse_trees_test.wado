@@ -6,16 +6,6 @@
 
 use { parse } from "../../src/g4/parser.wado";
 
-#[TODO]
-// triage: descriptor uses StringTemplate <...> directives at grammar level that the ANTLR4 testsuite substitutes per-target before compilation
-test "ParseTrees/AltNum" {
-    let input = #include_str("./grammars/ParseTrees/AltNum.g4");
-    let result = parse(input);
-    if let Err(err) = &result {
-        panic(`parse failed: {err.message} at {err.span.start}..{err.span.end}`);
-    }
-}
-
 test "ParseTrees/ExtraToken" {
     let input = #include_str("./grammars/ParseTrees/ExtraToken.g4");
     let result = parse(input);
@@ -58,16 +48,6 @@ test "ParseTrees/Sync" {
 
 test "ParseTrees/Token2" {
     let input = #include_str("./grammars/ParseTrees/Token2.g4");
-    let result = parse(input);
-    if let Err(err) = &result {
-        panic(`parse failed: {err.message} at {err.span.start}..{err.span.end}`);
-    }
-}
-
-#[TODO]
-// triage: descriptor uses StringTemplate <...> directives at grammar level that the ANTLR4 testsuite substitutes per-target before compilation
-test "ParseTrees/TokenAndRuleContextString" {
-    let input = #include_str("./grammars/ParseTrees/TokenAndRuleContextString.g4");
     let result = parse(input);
     if let Err(err) = &result {
         panic(`parse failed: {err.message} at {err.span.start}..{err.span.end}`);
