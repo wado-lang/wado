@@ -3038,7 +3038,7 @@ impl<'a> PatternLowerer<'a> {
                     self.lower_expr(arg, type_table);
                 }
             }
-            TirExprKind::Closure { body, .. } => {
+            TirExprKind::Closure { params, body, .. } => {
                 // Closures have their own local-index namespace — the resolver
                 // builds each closure's `FunctionContext` with a fresh
                 // `next_local: 0`, so the body's `Local`/`Let` indices are
@@ -3051,7 +3051,7 @@ impl<'a> PatternLowerer<'a> {
                 // closure body whose `LocalSet` targets the wrong slot.
                 let saved_count = self.local_count;
                 let saved_types = std::mem::take(&mut self.local_types);
-                let (closure_count, closure_types) = collect_closure_locals(body);
+                let (closure_count, closure_types) = collect_closure_locals(params, body);
                 self.local_count = closure_count;
                 self.local_types = closure_types;
 
@@ -3127,22 +3127,34 @@ impl TypeTableExt for TypeTable {
 }
 
 /// Reconstruct a closure body's `(local_count, local_types)` from its
-/// existing local declarations and pattern bindings.
+/// parameters, existing local declarations, and pattern bindings.
 ///
-/// The resolver gives each closure its own local-index namespace starting at
-/// `0`, but the resulting `next_local` is not stored on the `Closure`
-/// expression — the remaining record of the closure-scoped locals is the
-/// set of `TirStmtKind::Let` nodes plus any `TirPattern::Binding` indices
-/// inside the body, including bindings introduced by pattern-bearing
-/// statements such as `IfLet` and `LetDestructure` and by `Match` arms.
-/// Pattern lowering uses this to initialize a fresh
-/// `(local_count, local_types)` before descending into the closure body so
-/// any temp it allocates picks up a closure-scoped index.
-fn collect_closure_locals(body: &TirExpr) -> (u32, Vec<TypeId>) {
+/// The resolver gives each closure its own local-index namespace starting
+/// at `0`. Closure parameters occupy indices `0..params.len()`, then any
+/// `TirStmtKind::Let` and `TirPattern::Binding` inside the body claim
+/// higher indices. Bindings live in pattern-bearing statements (`IfLet`,
+/// `LetDestructure`) and `Match` arms in addition to plain `Let`. The
+/// `next_local` counter that produced these indices is not stored on the
+/// `Closure` expression, so we rebuild it by seeding from the parameters
+/// and walking the body for any further declarations.
+///
+/// Pattern lowering uses the resulting `(local_count, local_types)` to
+/// initialize a fresh allocator before descending into the closure body
+/// so any temp it allocates picks up a closure-scoped index that does not
+/// collide with parameters or existing locals.
+fn collect_closure_locals(
+    params: &[(String, TypeId)],
+    body: &TirExpr,
+) -> (u32, Vec<TypeId>) {
     let mut state = ClosureLocalCollector {
         max_index: None,
         types: Vec::new(),
     };
+    // Closure params occupy indices 0..params.len(); seed them so any
+    // temps the lowerer allocates land at indices >= params.len().
+    for (i, (_, type_id)) in params.iter().enumerate() {
+        state.record(i as u32, *type_id);
+    }
     state.visit_expr(body);
     let count = state.max_index.map_or(0, |m| m + 1);
     (count, state.types)
