@@ -18,6 +18,10 @@ CM has no inheritance. Whatever Wado decides at the language level has to be low
 
 ## Decision
 
+### Guiding principle
+
+Every design choice in this WEP picks the **strictest sound default** and leaves room to relax based on real-world usage. Loosening a rule later (accepting a previously rejected program) is a non-breaking change; tightening would break existing code, so the strict end is the only safe starting point. This applies uniformly to subtyping variance, method resolution, downcast targets, trait/inherent collisions, and any other point of friction. Individual rules do not restate the principle.
+
 ### Representation: keep both, pilot externref through Tide
 
 Wado will support **two resource representations** for the foreseeable future:
@@ -194,7 +198,7 @@ let node_box: Box<Node> = el_box;          // ERROR: Box<Element> ≮: Box<Node>
 let node_box: Box<Node> = Box { value: el_box.value };  // OK: upcast at field site
 ```
 
-In practice variance only constrains user code when `T` is itself a resource that participates in an `extends` hierarchy. For non-resource `T` (primitives, unrelated structs, etc.) there is no subtyping to propagate, so the rule has no observable effect. A future WEP can revisit this if a clear need emerges; v1 commits to the simpler rule.
+In practice variance only constrains user code when `T` is itself a resource that participates in an `extends` hierarchy. For non-resource `T` (primitives, unrelated structs, etc.) there is no subtyping to propagate, so the rule has no observable effect.
 
 #### Where coercion fires
 
@@ -217,8 +221,6 @@ Implicit upcast does **not** fire at:
 A `match` on a value of type `Parent` cannot match the concrete `Child` arm by structure alone — that's a downcast, not subtyping (covered in a later section). Pattern matching against an `extends`-related type requires explicit `downcast::<Child>()` first.
 
 ### Method resolution
-
-Guiding principle: **maximum strictness and soundness up front; revisit based on real-world use cases.** Every rule in this section errs on the side of rejecting ambiguous or surprising programs. Loosening these rules later (allowing a default, picking a winner) is a non-breaking change; tightening would break existing code, so we start tight.
 
 Method resolution is **fully static**. There is no virtual dispatch, no vtable, no late binding. The compiler walks the `extends` chain at compile time, picks one declaration, and emits a direct CM-level method call.
 
@@ -266,8 +268,6 @@ Identified::id(&el);  // OK: invoke the trait method
 ```
 
 Reason: silently picking either side has a known failure mode. "Resource-first" silently shadows trait impls when a parent later grows a method; "trait-first" silently rebinds existing call sites when an `impl` is added. Hard error rejects both refactor hazards. Disambiguation only costs at the colliding call site, and the WebIDL/mixin pattern is curated to avoid such collisions in the first place.
-
-If real-world usage reveals a clear preferred default, this WEP can be revisited; relaxing strictness is non-breaking, while either silent default is breaking to flip later.
 
 ##### (3) Static methods do not inherit
 
@@ -317,8 +317,6 @@ el.private_helper();            // ERROR: private_helper is visible only in dom.
 Reason: `extends` is a type-level relation, not a name-space merge. Inheriting visibility from the child would let the child silently re-export private parent internals.
 
 ### Downcast
-
-Same principle as method resolution: **start at maximum strictness; relax based on real usage.** Every rule below is the strictest sound choice; loosening is non-breaking.
 
 #### Signature
 
@@ -379,7 +377,7 @@ fn try_cast<T>(el: &Element) -> Option<T> {
 }
 ```
 
-is rejected. Allowing generic `T` requires a subtype-bound syntax (`T <: Element`) which is out of scope for this WEP. If a real use case for generic narrowing emerges, a follow-up WEP can introduce the bound and lift this restriction.
+is rejected. Allowing generic `T` requires a subtype-bound syntax (`T <: Element`) which is out of scope for this WEP.
 
 #### Failure mode
 
