@@ -52,6 +52,7 @@ adler = { version = "1" }
 toml = { version = "1", default-features = false, features = ["parse", "display", "serde", "preserve_order"] }
 libc = { version = "0.2" }
 sha2 = { version = "0.11", default-features = false }
+dprint-plugin-markdown = { version = "=0.20.0" }
 
 
 [profile.dev]
@@ -70,6 +71,16 @@ opt-level = 1
 
 [profile.dev.package.wado-dev-tools]
 opt-level = 1
+
+# dprint-core has `debug_assert!`s that fire on inputs that produce
+# valid output (e.g. multi-line code spans). The published `dprint` CLI
+# is built in release where these are stripped; we mirror that here so
+# `wado-dev-tools format-md` works in dev profile too.
+[profile.dev.package.dprint-core]
+debug-assertions = false
+
+[profile.dev.package.dprint-plugin-markdown]
+debug-assertions = false
 
 # Optimize Cranelift in dev/test builds for faster E2E tests.
 # Cranelift compiles Wasm→native for every test; without this it runs in debug mode.
