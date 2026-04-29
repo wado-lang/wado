@@ -38,8 +38,9 @@ for (const opt of OPT_LEVELS) {
   benchmarks.push({ name: `fts (${label})`, unit: 'ms', value: parseMs(output) });
 
   output = runBench('zlib/zlib_bench.wado', opt);
-  benchmarks.push({ name: `zlib/compress (${label})`, unit: 'ms', value: parseMs(output, /Compress: ([\d.]+) ms/) });
-  benchmarks.push({ name: `zlib/decompress (${label})`, unit: 'ms', value: parseMs(output, /Decompress: ([\d.]+) ms/) });
+  // core:benchmark prints labelled phases as `  <label>: <total> ms total   <per>` ms/iter`.
+  benchmarks.push({ name: `zlib/compress (${label})`, unit: 'ms', value: parseMs(output, /compress: ([\d.]+) ms total/) });
+  benchmarks.push({ name: `zlib/decompress (${label})`, unit: 'ms', value: parseMs(output, /decompress: ([\d.]+) ms total/) });
 
   output = runBench('json_twitter/json_twitter.wado', opt);
   benchmarks.push({ name: `json/twitter (${label})`, unit: 'ms', value: parseMs(output) });
