@@ -118,8 +118,10 @@ fn resolve_imports(
     // `unreachable` at the WIR level and never need the matching WASI
     // function registered as "used" — skip the usage registration so
     // the component doesn't transitively import `wasi:cli/stderr` or
-    // `wasi:cli/stdout`.
-    if !project.is_kiln_generator_world() {
+    // `wasi:cli/stdout`. Gate on `import KilnHost` so the rule fires
+    // for any kiln-generator-shaped world, not just the canonical
+    // `core:kiln/generator`.
+    if !project.world_imports_effect("KilnHost") {
         if reachable.iter().any(|func_id| {
             matches!(func_id, FunctionId::Free(f) if is_builtin_func(f) && {
                 let name = f.name.strip_prefix("builtin::").unwrap_or(&f.name);

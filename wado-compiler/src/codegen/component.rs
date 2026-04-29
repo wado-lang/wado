@@ -48,8 +48,11 @@ pub fn build_component(
     // The generator's single export `generate(raw: raw-request) ->
     // result<response, error>` plus its task-return canon need these
     // types defined before `emit_canonical_intrinsics` and
-    // `emit_world_exports` run.
-    if project.is_kiln_generator_world() {
+    // `emit_world_exports` run. Gate on the world's `import KilnHost`
+    // declaration so any kiln-generator-shaped world picks this path up
+    // — the previous form matched `target_world == "core:kiln/generator"`
+    // by string and missed future generator worlds.
+    if project.world_imports_effect("KilnHost") {
         emit_kiln_world_types(&mut builder, &mut ctx);
     }
 
