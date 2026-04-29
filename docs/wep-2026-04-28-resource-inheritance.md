@@ -216,6 +216,104 @@ Implicit upcast does **not** fire at:
 
 A `match` on a value of type `Parent` cannot match the concrete `Child` arm by structure alone — that's a downcast, not subtyping (covered in a later section). Pattern matching against an `extends`-related type requires explicit `downcast::<Child>()` first.
 
+### Method resolution
+
+Method resolution is **fully static**. There is no virtual dispatch, no vtable, no late binding. The compiler walks the `extends` chain at compile time, picks one declaration, and emits a direct CM-level method call.
+
+#### Core algorithm
+
+For `recv.foo(args)` where `recv: &Recv` (or `&mut Recv` / `Recv`):
+
+1. Walk the `extends` chain starting at `Recv`, collecting all `fn foo` declarations on each ancestor.
+2. Walk the in-scope trait impls applicable to `Recv`, collecting all `fn foo` declarations.
+3. Combine the two sets:
+   - Empty → `no method 'foo'` error.
+   - Exactly one declaration → resolve to it. Insert an implicit upcast on `recv` to that declaration's owning type.
+   - Two or more declarations → **ambiguity error**. The user must disambiguate.
+4. Emit the CM-level call to the resolved method on the resolved owning type, passing the upcast `recv`.
+
+Implicit upcast in step 3 is a type-level operation only; with `externref` backing it lowers to a no-op at the wasm level.
+
+#### Resolved corner cases
+
+The five subtle cases below have explicit rules. All of them are validated at compile time; none of them rely on runtime checks.
+
+##### (1) Override is forbidden
+
+A child resource cannot redeclare a method with the same name as any method reachable through its `extends` chain. Doing so is a hard error.
+
+```wado
+pub resource Node    extends EventTarget { fn clone(&self) -> Node; }
+pub resource Element extends Node        { fn clone(&self) -> Element; }  // ERROR: Element redeclares Node::clone
+```
+
+Reason: with no override, resolution stays purely static and `Self` semantics (see (4)) stay simple. WebIDL specifications avoid name collisions across an inheritance chain by convention, so this rule is rarely felt by the binding generator.
+
+##### (2) Trait-vs-inherited collisions are an error
+
+When the same method name is reachable through both the `extends` chain and a visible trait impl, the call is ambiguous and must be disambiguated explicitly:
+
+```wado
+pub resource Element extends Node { fn id(&self) -> String; }
+trait Identified { fn id(&self) -> String; }
+impl Identified for Element { ... }
+
+el.id();              // ERROR: ambiguous — Element::id vs Identified::id
+Element::id(&el);     // OK: invoke the inherent method
+Identified::id(&el);  // OK: invoke the trait method
+```
+
+Reason: silently picking either side has a known failure mode. "Resource-first" silently shadows trait impls when a parent later grows a method; "trait-first" silently rebinds existing call sites when an `impl` is added. Hard error rejects both refactor hazards. Disambiguation only costs at the colliding call site, and the WebIDL/mixin pattern is curated to avoid such collisions in the first place.
+
+If real-world usage reveals a clear preferred default, this WEP can be revisited; relaxing strictness is non-breaking, while either silent default is breaking to flip later.
+
+##### (3) Static methods do not inherit
+
+Resource-level static methods (no `&self` / `&mut self` parameter) belong to their declaring resource only. They are not reachable through subtypes.
+
+```wado
+pub resource Node    { fn create() -> Node; }
+pub resource Element extends Node { ... }
+
+Node::create();      // OK
+Element::create();   // ERROR: no static method 'create' on Element
+```
+
+Reason: static methods correspond to a specific CM resource type's constructor / factory. Inheriting them would let a child name invoke the parent's factory, returning the parent type — confusing and not what the host implements.
+
+##### (4) `Self` is fixed at the declaration site
+
+Inside a method body, `Self` resolves to the resource that declares the method, not the dynamic / call-site type.
+
+```wado
+pub resource Node {
+    fn next(&self) -> Self;   // Self == Node, always
+}
+
+let el: Element = ...;
+let n: Node = el.next();      // return type is Node
+```
+
+Reason: with override forbidden (rule 1), there is no mechanism for a child to narrow `Self`. Treating `Self` as call-site-typed would require either a covariant override or a runtime cast — both rejected by other rules in this WEP. If a child needs a more specific result type, it declares a separate method with a different name.
+
+##### (5) Visibility is judged at the declaring module
+
+A method's visibility (`pub` or module-private) is evaluated against the **module that declares it**, not the module that declares the receiver's type.
+
+```wado
+// in dom.wado
+pub resource Node {
+    fn private_helper(&self);   // module-private to dom.wado
+}
+pub resource Element extends Node { ... }
+
+// in user.wado
+let el: Element = ...;
+el.private_helper();            // ERROR: private_helper is visible only in dom.wado
+```
+
+Reason: `extends` is a type-level relation, not a name-space merge. Inheriting visibility from the child would let the child silently re-export private parent internals.
+
 ## Consequences
 
 ### Implementation Roadmap
