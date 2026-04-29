@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777459057267,
+  "lastUpdate": 1777464074208,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -18141,6 +18141,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/72c05b690ee3d2a2fda78995eb52df1b829567df"
         },
         "date": 1777459056952,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1775,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8776,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18520,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 515706,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "beff83db80e57c0fb2ffc00904243f38dff9e479",
+          "message": "Merge pull request #969 from wado-lang/gfx/cheatsheet\n\nchore: update cheatsheet.md & syntax.rs",
+          "timestamp": "2026-04-29T20:56:05+09:00",
+          "tree_id": "a32883932bfed1d6d14dfd1851887af9e8426aec",
+          "url": "https://github.com/wado-lang/wado/commit/beff83db80e57c0fb2ffc00904243f38dff9e479"
+        },
+        "date": 1777464073865,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
