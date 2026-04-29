@@ -64,8 +64,10 @@ struct FnParamSpecKey {
 /// - A specialized version of the callee is generated with functor struct params
 /// - The call is updated to use the specialized function with `StructLiteral` args
 pub(super) struct ClosureLowerer {
-    /// Counter for generating unique closure IDs
-    closure_counter: u32,
+    /// Sequential ID assigned to each `Closure` node during the pre-pass.
+    /// Each Closure's `functor_id` is set once and read by all later passes;
+    /// no counter is re-walked in lockstep with the AST.
+    next_closure_id: u32,
     /// Module source for generated items
     module_source: ModuleSource,
     /// Collected closures during first pass
@@ -89,7 +91,7 @@ pub(super) struct ClosureLowerer {
 impl ClosureLowerer {
     pub(super) fn new(module_source: &ModuleSource) -> Self {
         Self {
-            closure_counter: 0,
+            next_closure_id: 0,
             module_source: module_source.clone(),
             collected_closures: Vec::new(),
             functor_infos: Vec::new(),
@@ -108,35 +110,42 @@ impl ClosureLowerer {
         // need to become Closure nodes so the existing closure pipeline handles them.
         self.convert_func_refs_to_closures(module);
 
-        // First pass: collect all closures
-        // Reset counter for consistent ordering
-        self.closure_counter = 0;
+        // Phase 1: collect all closures and assign each a stable `functor_id`.
+        //
+        // The ID is written onto the `Closure` expression node itself, so every
+        // later pass reads it directly off the AST. This avoids fragile
+        // counter walks that have to re-traverse the module in lockstep with
+        // the original collection order — counters break the moment we
+        // introduce additional walks (e.g. the generated `__call` methods) or
+        // skip a sub-tree.
+        self.next_closure_id = 0;
         self.collected_closures.clear();
 
         let func_refs: Vec<_> = module.functions.clone();
         for func_rc in &func_refs {
-            let func = func_rc.borrow();
-            if let Some(body) = &func.body {
+            let mut func = func_rc.borrow_mut();
+            if let Some(body) = &mut func.body {
                 self.collect_closures_in_block(body);
             }
         }
 
         // Also collect from impl methods
-        for impl_block in &module.impls {
-            for method in &impl_block.methods {
-                if let Some(body) = &method.body {
+        for impl_block in &mut module.impls {
+            for method in &mut impl_block.methods {
+                if let Some(body) = &mut method.body {
                     self.collect_closures_in_block(body);
                 }
             }
         }
 
-        // Generate functor structs and __call methods
+        // Generate functor structs and __call methods. Each `__call` body is
+        // a clone of the closure body taken AFTER `collect_closures_in_block`
+        // assigned IDs to nested closures, so those clones carry the same
+        // stable functor IDs as the originals.
         self.generate_functor_items(&mut module.type_table.borrow_mut());
 
-        // Second pass: analyze which closures are safe to transform
-        // Safe: stored in a local and called directly
-        // Unsafe: passed as argument to a function (requires monomorphization, see WEP)
-        self.closure_counter = 0;
+        // Phase 2: analyse which closures are safe to specialise. Reads
+        // `functor_id` directly off the Closure node — no counter.
         for func_rc in &func_refs {
             let func = func_rc.borrow();
             if let Some(body) = &func.body {
@@ -144,8 +153,6 @@ impl ClosureLowerer {
                 self.analyze_closure_safety_block(body);
             }
         }
-
-        // Also analyze impl methods
         for impl_block in &module.impls {
             for method in &impl_block.methods {
                 if let Some(body) = &method.body {
@@ -155,42 +162,51 @@ impl ClosureLowerer {
             }
         }
 
-        // Phase 2.5: Generate specialized functions for fn-param monomorphization
-        // For closures passed as fn-type arguments, generate specialized callees
+        // Phase 2.5: Generate specialized functions for fn-param monomorphization.
+        // For closures passed as fn-type arguments, generate specialized callees.
         self.generate_fn_param_specializations(
             &func_refs,
             &module.impls,
             &mut module.type_table.borrow_mut(),
         );
 
-        // Third pass: transform closures to struct literals and IndirectCall to MethodCall
-        self.closure_counter = 0;
-
-        for func_rc in &func_refs {
+        // Phase 3: transform closures to struct literals and IndirectCall to MethodCall.
+        //
+        // We walk the generated `__call` methods alongside the original
+        // module functions: a nested closure's body lives in its parent
+        // closure's __call method (cloned in by `transform_closure_body`),
+        // and that copy must be lowered too. Each function uses a fresh
+        // `local_to_closure` map (keyed by per-function local indices).
+        // `transform_expr` deliberately does NOT recurse into Closure
+        // bodies — those are visited via the corresponding __call method.
+        let lowered_funcs: Vec<_> = func_refs
+            .iter()
+            .cloned()
+            .chain(self.generated_functions.iter().cloned())
+            .collect();
+        for func_rc in &lowered_funcs {
             let mut func = func_rc.borrow_mut();
             if let Some(body) = &mut func.body {
                 self.local_to_closure.clear();
                 self.transform_block(body, &mut module.type_table.borrow_mut());
             }
-            // Update local_types after transformation
             self.update_local_types(&mut func);
         }
-
-        // Also transform impl methods
         for impl_block in &mut module.impls {
             for method in &mut impl_block.methods {
                 if let Some(body) = &mut method.body {
                     self.local_to_closure.clear();
                     self.transform_block(body, &mut module.type_table.borrow_mut());
                 }
-                // Update local_types after transformation
                 self.update_local_types(method);
             }
         }
 
-        // Fourth pass: transform remaining Closure nodes to ClosureToCanonical
-        // These are closures that weren't specialized (fn-param stored in struct field)
-        for func_rc in &func_refs {
+        // Phase 4: transform any remaining Closure nodes to ClosureToCanonical.
+        // These are closures that weren't specialised (fn-param stored in
+        // struct field). Walks the same set as phase 3 so cloned bodies in
+        // `__call` methods are also covered.
+        for func_rc in &lowered_funcs {
             let mut func = func_rc.borrow_mut();
             if let Some(body) = &mut func.body {
                 self.transform_remaining_closures_block(body);
@@ -442,7 +458,9 @@ impl ClosureLowerer {
                 let func_type =
                     type_table.make_function(param_types, sig.return_type, Vec::new(), Vec::new());
 
-                // Replace the FuncRef with a Closure
+                // Replace the FuncRef with a Closure. The synthetic body
+                // is a single `Call` that forwards to the named function;
+                // the closure's local namespace is exactly its parameters.
                 expr.kind = TirExprKind::Closure {
                     params: closure_params,
                     body: Box::new(body),
@@ -450,6 +468,7 @@ impl ClosureLowerer {
                     functor_id: None,
                     source_text: None,
                     address_taken_locals: crate::hashmap::IndexSet::default(),
+                    body_locals: Vec::new(),
                 };
                 expr.type_id = func_type;
             }
@@ -652,23 +671,26 @@ impl ClosureLowerer {
         }
     }
 
-    fn collect_closures_in_block(&mut self, block: &TirBlock) {
-        for stmt in &block.stmts {
+    fn collect_closures_in_block(&mut self, block: &mut TirBlock) {
+        for stmt in &mut block.stmts {
             self.collect_closures_in_stmt(stmt);
         }
     }
 
-    fn collect_closures_in_stmt(&mut self, stmt: &TirStmt) {
-        match &stmt.kind {
+    fn collect_closures_in_stmt(&mut self, stmt: &mut TirStmt) {
+        match &mut stmt.kind {
             TirStmtKind::Let { value, .. } => {
                 self.collect_closures_in_expr(value);
             }
             TirStmtKind::Expr(expr) | TirStmtKind::Return { value: Some(expr) } => {
                 self.collect_closures_in_expr(expr);
             }
-            TirStmtKind::Return { value: None }
-            | TirStmtKind::Break { .. }
-            | TirStmtKind::Continue => {}
+            TirStmtKind::Return { value: None } | TirStmtKind::Continue => {}
+            TirStmtKind::Break { value, .. } => {
+                if let Some(value) = value {
+                    self.collect_closures_in_expr(value);
+                }
+            }
             TirStmtKind::If {
                 condition,
                 then_block,
@@ -707,30 +729,37 @@ impl ClosureLowerer {
         }
     }
 
-    fn collect_closures_in_expr(&mut self, expr: &TirExpr) {
-        match &expr.kind {
+    fn collect_closures_in_expr(&mut self, expr: &mut TirExpr) {
+        match &mut expr.kind {
             TirExprKind::Closure {
                 params,
                 body,
                 captures,
+                functor_id,
                 ..
             } => {
-                // Assign ID and collect this closure
-                let closure_id = self.closure_counter;
-                self.closure_counter += 1;
+                // Assign a stable functor_id to this Closure node. Every
+                // later pass reads the ID off the node directly.
+                let closure_id = self.next_closure_id;
+                self.next_closure_id += 1;
+                *functor_id = Some(closure_id);
 
+                // Recurse into the body FIRST so nested closures get IDs
+                // assigned before we clone the body into `__call`. The
+                // clone then carries the same IDs as the original.
+                self.collect_closures_in_expr(body);
+
+                let func_type_id = expr.type_id;
+                let span = expr.span;
                 self.collected_closures.push(CollectedClosure {
                     id: closure_id,
                     params: params.clone(),
                     body: (**body).clone(),
                     captures: captures.clone(),
                     return_type: body.type_id,
-                    func_type_id: expr.type_id,
-                    span: expr.span,
+                    func_type_id,
+                    span,
                 });
-
-                // Recursively collect nested closures in the body
-                self.collect_closures_in_expr(body);
             }
             TirExprKind::Binary { left, right, .. } => {
                 self.collect_closures_in_expr(left);
@@ -748,7 +777,7 @@ impl ClosureLowerer {
             }
             TirExprKind::Call { args, .. } => {
                 for arg in args {
-                    self.collect_closures_in_expr(&arg.expr);
+                    self.collect_closures_in_expr(&mut arg.expr);
                 }
             }
             TirExprKind::CmRawCall { args, .. } => {
@@ -759,7 +788,7 @@ impl ClosureLowerer {
             TirExprKind::MethodCall { receiver, args, .. } => {
                 self.collect_closures_in_expr(receiver);
                 for arg in args {
-                    self.collect_closures_in_expr(&arg.expr);
+                    self.collect_closures_in_expr(&mut arg.expr);
                 }
             }
             TirExprKind::Block(block) => {
@@ -778,7 +807,7 @@ impl ClosureLowerer {
             }
             TirExprKind::StructLiteral { fields, .. } => {
                 for field in fields {
-                    self.collect_closures_in_expr(&field.value);
+                    self.collect_closures_in_expr(&mut field.value);
                 }
             }
             TirExprKind::TupleLiteral { elements } => {
@@ -800,10 +829,10 @@ impl ClosureLowerer {
             } => {
                 self.collect_closures_in_expr(scrutinee);
                 for arm in arms {
-                    if let Some(guard) = &arm.guard {
+                    if let Some(guard) = &mut arm.guard {
                         self.collect_closures_in_expr(guard);
                     }
-                    self.collect_closures_in_expr(&arm.body);
+                    self.collect_closures_in_expr(&mut arm.body);
                 }
             }
             TirExprKind::IndirectCall { callee, args } => {
@@ -881,12 +910,18 @@ impl ClosureLowerer {
             TirStmtKind::Let {
                 local_index, value, ..
             } => {
-                // If this local stores a closure, track it
-                if matches!(value.kind, TirExprKind::Closure { .. }) {
-                    let closure_id = self.closure_counter;
-                    self.local_to_closure.insert(*local_index, closure_id);
+                // If this local stores a closure, track it. The closure's
+                // ID was assigned during the collect pass and lives on the
+                // node; reading it here keeps every pass in sync without a
+                // separate counter.
+                if let TirExprKind::Closure {
+                    functor_id: Some(closure_id),
+                    ..
+                } = &value.kind
+                {
+                    self.local_to_closure.insert(*local_index, *closure_id);
                     // Initially mark as safe; will be removed if passed as argument
-                    self.specializable.insert(closure_id);
+                    self.specializable.insert(*closure_id);
                 }
                 // Analyze the value expression
                 self.analyze_closure_safety_expr(value, false);
@@ -894,9 +929,12 @@ impl ClosureLowerer {
             TirStmtKind::Expr(expr) | TirStmtKind::Return { value: Some(expr) } => {
                 self.analyze_closure_safety_expr(expr, false);
             }
-            TirStmtKind::Return { value: None }
-            | TirStmtKind::Break { .. }
-            | TirStmtKind::Continue => {}
+            TirStmtKind::Return { value: None } | TirStmtKind::Continue => {}
+            TirStmtKind::Break { value, .. } => {
+                if let Some(value) = value {
+                    self.analyze_closure_safety_expr(value, false);
+                }
+            }
             TirStmtKind::If {
                 condition,
                 then_block,
@@ -939,18 +977,34 @@ impl ClosureLowerer {
     /// `in_arg_position` is true when this expression is being passed as an argument
     fn analyze_closure_safety_expr(&mut self, expr: &TirExpr, in_arg_position: bool) {
         match &expr.kind {
-            TirExprKind::Closure { body, .. } => {
-                // Count this closure
-                let closure_id = self.closure_counter;
-                self.closure_counter += 1;
-
+            TirExprKind::Closure {
+                body,
+                functor_id: Some(closure_id),
+                ..
+            } => {
                 // If a closure appears directly as an argument, it's not safe to transform
                 if in_arg_position {
-                    self.specializable.swap_remove(&closure_id);
+                    self.specializable.swap_remove(closure_id);
                 }
 
-                // Recursively analyze the body
+                // The closure body uses a fresh local-index namespace
+                // starting at 0, so `local_to_closure` entries from the
+                // outer scope must not leak in: a `let inner = ||..`
+                // inside this body would otherwise insert at an index
+                // that collides with an outer-scope local. Save/restore
+                // the map across the descent so each closure scope is
+                // isolated.
+                let saved = std::mem::take(&mut self.local_to_closure);
                 self.analyze_closure_safety_expr(body, false);
+                self.local_to_closure = saved;
+            }
+            TirExprKind::Closure {
+                functor_id: None, ..
+            } => {
+                unreachable!(
+                    "Closure node missing functor_id; the collect pass should assign it (span: {:?}, kind: {:?})",
+                    expr.span, &expr.kind
+                )
             }
             TirExprKind::Local { index, .. } => {
                 // If a local that holds a closure is passed as an argument, mark it unsafe
@@ -1101,7 +1155,20 @@ impl ClosureLowerer {
     }
 
     fn generate_functor_items(&mut self, type_table: &mut TypeTable) {
-        for collected in &self.collected_closures.clone() {
+        // The collect pass pushes nested closures before their parents (it
+        // recurses into the body before pushing the outer, so the cloned
+        // body carries the nested IDs). Sort by id so `functor_infos[id]`
+        // is the functor for the closure with that id — every later pass
+        // uses index-by-id lookups.
+        //
+        // Move out of `self.collected_closures` to avoid cloning the bodies:
+        // the loop body needs `&mut self` to push to `generated_structs` and
+        // `functor_infos`, but the borrow checker would otherwise see one
+        // long borrow over `collected_closures`. The list isn't read again
+        // after this pass, so we drop it at the end.
+        let mut collected_closures = std::mem::take(&mut self.collected_closures);
+        collected_closures.sort_by_key(|c| c.id);
+        for collected in &collected_closures {
             // Extract the actual return type from the closure's function type
             // This is more reliable than body.type_id for closures with block bodies
             let return_type = match type_table.get(collected.func_type_id) {
@@ -1315,9 +1382,12 @@ impl ClosureLowerer {
             TirStmtKind::Expr(expr) | TirStmtKind::Return { value: Some(expr) } => {
                 Self::collect_locals_from_expr(expr, locals);
             }
-            TirStmtKind::Return { value: None }
-            | TirStmtKind::Break { .. }
-            | TirStmtKind::Continue => {}
+            TirStmtKind::Return { value: None } | TirStmtKind::Continue => {}
+            TirStmtKind::Break { value, .. } => {
+                if let Some(value) = value {
+                    Self::collect_locals_from_expr(value, locals);
+                }
+            }
             TirStmtKind::If {
                 condition,
                 then_block,
@@ -1445,6 +1515,29 @@ impl ClosureLowerer {
             }
             TirExprKind::LabeledBlock { block, .. } => {
                 Self::collect_locals_from_block(block, locals);
+            }
+            TirExprKind::Switch {
+                scrutinee,
+                arms,
+                default,
+                ..
+            } => {
+                Self::collect_locals_from_expr(scrutinee, locals);
+                for arm in arms {
+                    Self::collect_locals_from_block(arm, locals);
+                }
+                Self::collect_locals_from_block(default, locals);
+            }
+            TirExprKind::VariantTag { expr: inner }
+            | TirExprKind::VariantTest { expr: inner, .. }
+            | TirExprKind::VariantPayload { expr: inner, .. } => {
+                Self::collect_locals_from_expr(inner, locals);
+            }
+            TirExprKind::ClosureToCanonical { functor, .. } => {
+                Self::collect_locals_from_expr(functor, locals);
+            }
+            TirExprKind::GlobalVarSet { value, .. } => {
+                Self::collect_locals_from_expr(value, locals);
             }
             // Terminals - no locals to collect
             _ => {}
@@ -1806,7 +1899,7 @@ impl ClosureLowerer {
                     expr.span,
                 )
             }
-            TirExprKind::TupleSpread { expr: inner } | TirExprKind::TupleZip { expr: inner } => {
+            TirExprKind::TupleSpread { expr: inner } => {
                 let new_inner = self.transform_closure_body(
                     inner,
                     captures,
@@ -1816,6 +1909,22 @@ impl ClosureLowerer {
                 );
                 TirExpr::new(
                     TirExprKind::TupleSpread {
+                        expr: Box::new(new_inner),
+                    },
+                    expr.type_id,
+                    expr.span,
+                )
+            }
+            TirExprKind::TupleZip { expr: inner } => {
+                let new_inner = self.transform_closure_body(
+                    inner,
+                    captures,
+                    struct_type_id,
+                    self_ref_type,
+                    span,
+                );
+                TirExpr::new(
+                    TirExprKind::TupleZip {
                         expr: Box::new(new_inner),
                     },
                     expr.type_id,
@@ -1842,6 +1951,255 @@ impl ClosureLowerer {
                     expr.span,
                 )
             }
+            TirExprKind::CmRawCall { local_name, args } => {
+                let new_args = args
+                    .iter()
+                    .map(|a| {
+                        self.transform_closure_body(
+                            a,
+                            captures,
+                            struct_type_id,
+                            self_ref_type,
+                            span,
+                        )
+                    })
+                    .collect();
+                TirExpr::new(
+                    TirExprKind::CmRawCall {
+                        local_name: local_name.clone(),
+                        args: new_args,
+                    },
+                    expr.type_id,
+                    expr.span,
+                )
+            }
+            TirExprKind::IndirectCall { callee, args } => {
+                let new_callee = self.transform_closure_body(
+                    callee,
+                    captures,
+                    struct_type_id,
+                    self_ref_type,
+                    span,
+                );
+                let new_args = args
+                    .iter()
+                    .map(|a| {
+                        self.transform_closure_body(
+                            a,
+                            captures,
+                            struct_type_id,
+                            self_ref_type,
+                            span,
+                        )
+                    })
+                    .collect();
+                TirExpr::new(
+                    TirExprKind::IndirectCall {
+                        callee: Box::new(new_callee),
+                        args: new_args,
+                    },
+                    expr.type_id,
+                    expr.span,
+                )
+            }
+            TirExprKind::ClosureToCanonical {
+                functor,
+                functor_id,
+                target_fn_type,
+                closure_module,
+            } => TirExpr::new(
+                TirExprKind::ClosureToCanonical {
+                    functor: Box::new(self.transform_closure_body(
+                        functor,
+                        captures,
+                        struct_type_id,
+                        self_ref_type,
+                        span,
+                    )),
+                    functor_id: *functor_id,
+                    target_fn_type: *target_fn_type,
+                    closure_module: closure_module.clone(),
+                },
+                expr.type_id,
+                expr.span,
+            ),
+            TirExprKind::Match {
+                expr: scrutinee,
+                arms,
+            } => {
+                let new_scrutinee = self.transform_closure_body(
+                    scrutinee,
+                    captures,
+                    struct_type_id,
+                    self_ref_type,
+                    span,
+                );
+                let new_arms = arms
+                    .iter()
+                    .map(|arm| TirMatchArm {
+                        pattern: self.transform_closure_body_pattern(&arm.pattern),
+                        guard: arm.guard.as_ref().map(|g| {
+                            self.transform_closure_body(
+                                g,
+                                captures,
+                                struct_type_id,
+                                self_ref_type,
+                                span,
+                            )
+                        }),
+                        body: self.transform_closure_body(
+                            &arm.body,
+                            captures,
+                            struct_type_id,
+                            self_ref_type,
+                            span,
+                        ),
+                        span: arm.span,
+                    })
+                    .collect();
+                TirExpr::new(
+                    TirExprKind::Match {
+                        expr: Box::new(new_scrutinee),
+                        arms: new_arms,
+                    },
+                    expr.type_id,
+                    expr.span,
+                )
+            }
+            TirExprKind::Switch {
+                scrutinee,
+                min_value,
+                arms,
+                default,
+            } => {
+                let new_scrutinee = self.transform_closure_body(
+                    scrutinee,
+                    captures,
+                    struct_type_id,
+                    self_ref_type,
+                    span,
+                );
+                let new_arms = arms
+                    .iter()
+                    .map(|arm| {
+                        self.transform_closure_body_block(
+                            arm,
+                            captures,
+                            struct_type_id,
+                            self_ref_type,
+                        )
+                    })
+                    .collect();
+                let new_default = self.transform_closure_body_block(
+                    default,
+                    captures,
+                    struct_type_id,
+                    self_ref_type,
+                );
+                TirExpr::new(
+                    TirExprKind::Switch {
+                        scrutinee: Box::new(new_scrutinee),
+                        min_value: *min_value,
+                        arms: new_arms,
+                        default: new_default,
+                    },
+                    expr.type_id,
+                    expr.span,
+                )
+            }
+            TirExprKind::VariantConstruct {
+                variant_type,
+                case_index,
+                case_name,
+                payload,
+            } => TirExpr::new(
+                TirExprKind::VariantConstruct {
+                    variant_type: *variant_type,
+                    case_index: *case_index,
+                    case_name: case_name.clone(),
+                    payload: payload.as_ref().map(|p| {
+                        Box::new(self.transform_closure_body(
+                            p,
+                            captures,
+                            struct_type_id,
+                            self_ref_type,
+                            span,
+                        ))
+                    }),
+                },
+                expr.type_id,
+                expr.span,
+            ),
+            TirExprKind::VariantTag { expr: inner } => TirExpr::new(
+                TirExprKind::VariantTag {
+                    expr: Box::new(self.transform_closure_body(
+                        inner,
+                        captures,
+                        struct_type_id,
+                        self_ref_type,
+                        span,
+                    )),
+                },
+                expr.type_id,
+                expr.span,
+            ),
+            TirExprKind::VariantTest {
+                expr: inner,
+                case_index,
+                case_name,
+            } => TirExpr::new(
+                TirExprKind::VariantTest {
+                    expr: Box::new(self.transform_closure_body(
+                        inner,
+                        captures,
+                        struct_type_id,
+                        self_ref_type,
+                        span,
+                    )),
+                    case_index: *case_index,
+                    case_name: case_name.clone(),
+                },
+                expr.type_id,
+                expr.span,
+            ),
+            TirExprKind::VariantPayload {
+                expr: inner,
+                case_index,
+                payload_type,
+            } => TirExpr::new(
+                TirExprKind::VariantPayload {
+                    expr: Box::new(self.transform_closure_body(
+                        inner,
+                        captures,
+                        struct_type_id,
+                        self_ref_type,
+                        span,
+                    )),
+                    case_index: *case_index,
+                    payload_type: *payload_type,
+                },
+                expr.type_id,
+                expr.span,
+            ),
+            TirExprKind::GlobalVarSet {
+                module_source,
+                name,
+                value,
+            } => TirExpr::new(
+                TirExprKind::GlobalVarSet {
+                    module_source: module_source.clone(),
+                    name: name.clone(),
+                    value: Box::new(self.transform_closure_body(
+                        value,
+                        captures,
+                        struct_type_id,
+                        self_ref_type,
+                        span,
+                    )),
+                },
+                expr.type_id,
+                expr.span,
+            ),
             // Terminals that don't need transformation
             TirExprKind::IntLiteral { .. }
             | TirExprKind::FloatLiteral { .. }
@@ -1852,10 +2210,36 @@ impl ClosureLowerer {
             | TirExprKind::Null
             | TirExprKind::Unit
             | TirExprKind::FuncRef { .. }
+            | TirExprKind::GlobalVarGet { .. }
             | TirExprKind::EnumConstruct { .. } => expr.clone(),
-            // For remaining expression types, clone as-is
-            // (IndirectCall, Closure, etc. - rare in closure bodies)
-            _ => expr.clone(),
+            // Nested closures are a separate scope: their body uses its
+            // own local-index namespace and gets its own `__call` method
+            // generated in `generate_functor_items`. Don't recurse into
+            // the body or shift its locals here. Cloning preserves the
+            // `Closure` expression so the third pass
+            // (`transform_block`) can later rewrite it into a struct
+            // literal or `ClosureToCanonical`.
+            //
+            // Note: the nested closure's `captures[*].outer_index`
+            // references locals in *this* closure's pre-shift scope,
+            // not in the synthesized `__call`. Because nested-closure
+            // construction sites are themselves rewritten by the third
+            // pass to read capture values via the shifted local map,
+            // the outer-index field is treated as a logical reference
+            // to the source-level local rather than a raw shifted
+            // index — so we leave it alone here.
+            TirExprKind::Closure { .. } => expr.clone(),
+            // Constructs that are desugared / lowered before this pass.
+            // Reaching them here would silently drop sub-expressions (and any
+            // captured locals inside them), so make the failure explicit.
+            TirExprKind::TemplateString { .. }
+            | TirExprKind::WithHandler { .. }
+            | TirExprKind::Resume { .. } => {
+                unreachable!(
+                    "[lower/closure] unexpected expr kind in closure body during transform_closure_body at {:?}: {:?} — should be lowered earlier",
+                    expr.span, &expr.kind
+                )
+            }
         }
     }
 
@@ -2126,11 +2510,10 @@ impl ClosureLowerer {
             }
         }
 
-        // Collect specialization requests by scanning all function bodies
+        // Collect specialization requests by scanning all function bodies.
+        // Each Closure node already carries its `functor_id` from the
+        // collect pass, so we don't need a separate counter.
         let mut spec_requests: Vec<(FnParamSpecKey, Rc<RefCell<TirFunction>>)> = Vec::new();
-
-        // Reset closure counter for this pass
-        self.closure_counter = 0;
 
         for func_rc in func_refs {
             let func = func_rc.borrow();
@@ -2204,9 +2587,10 @@ impl ClosureLowerer {
             TirStmtKind::Expr(expr) | TirStmtKind::Return { value: Some(expr) } => {
                 self.fn_param_in_struct_field_expr(expr, fn_param_indices)
             }
-            TirStmtKind::Return { value: None }
-            | TirStmtKind::Break { .. }
-            | TirStmtKind::Continue => false,
+            TirStmtKind::Return { value: None } | TirStmtKind::Continue => false,
+            TirStmtKind::Break { value, .. } => value
+                .as_ref()
+                .is_some_and(|v| self.fn_param_in_struct_field_expr(v, fn_param_indices)),
             TirStmtKind::If {
                 condition,
                 then_block,
@@ -2415,9 +2799,12 @@ impl ClosureLowerer {
             TirStmtKind::Expr(expr) | TirStmtKind::Return { value: Some(expr) } => {
                 self.collect_fn_param_specs_expr(expr, func_by_name, type_table, requests);
             }
-            TirStmtKind::Return { value: None }
-            | TirStmtKind::Break { .. }
-            | TirStmtKind::Continue => {}
+            TirStmtKind::Return { value: None } | TirStmtKind::Continue => {}
+            TirStmtKind::Break { value, .. } => {
+                if let Some(value) = value {
+                    self.collect_fn_param_specs_expr(value, func_by_name, type_table, requests);
+                }
+            }
             TirStmtKind::If {
                 condition,
                 then_block,
@@ -2465,9 +2852,9 @@ impl ClosureLowerer {
     ) {
         match &expr.kind {
             TirExprKind::Closure { body, .. } => {
-                // Count this closure to keep counter in sync
-                self.closure_counter += 1;
-                // Recursively scan the body
+                // Recursively scan the body. The Closure's own functor_id
+                // is read directly off the node by `create_fn_param_spec_key`
+                // when it appears in argument position.
                 self.collect_fn_param_specs_expr(body, func_by_name, type_table, requests);
             }
             // Check for calls with closure arguments
@@ -2661,7 +3048,8 @@ impl ClosureLowerer {
     }
 
     /// Create a fn-param specialization key if there are closure arguments to fn-type parameters.
-    /// Uses the current `closure_counter` to determine functor IDs for closure args.
+    /// Reads each closure's `functor_id` directly off its `Closure` node — the
+    /// IDs were assigned by the collect pass.
     fn create_fn_param_spec_key(
         &mut self,
         callee_name: &str,
@@ -2671,21 +3059,16 @@ impl ClosureLowerer {
     ) -> Option<FnParamSpecKey> {
         let mut functor_types = Vec::new();
 
-        // Track the closure counter as we scan args in order
-        let mut local_counter = self.closure_counter;
-
         for (i, (param, arg)) in params.iter().zip(args.iter()).enumerate() {
-            // Count closures in this arg to keep counter in sync
-            let closure_id = self.count_closures_and_get_first_id(&arg.expr, &mut local_counter);
-
             // Check if param is a function type and arg is a direct closure
             if let ResolvedType::Function { .. } = type_table.get(param.type_id)
-                && matches!(&arg.expr.kind, TirExprKind::Closure { .. })
+                && let TirExprKind::Closure {
+                    functor_id: Some(closure_id),
+                    ..
+                } = &arg.expr.kind
+                && let Some(functor) = self.functor_infos.get(*closure_id as usize)
             {
-                // closure_id is the ID of this closure (before we counted it)
-                if let Some(functor) = self.functor_infos.get(closure_id as usize) {
-                    functor_types.push((i as u32, functor.struct_type_id));
-                }
+                functor_types.push((i as u32, functor.struct_type_id));
             }
         }
 
@@ -2697,163 +3080,6 @@ impl ClosureLowerer {
             callee_name: callee_name.to_string(),
             functor_types,
         })
-    }
-
-    /// Count closures in an expression and return the ID of the first closure (if any).
-    /// Updates the counter in place.
-    fn count_closures_and_get_first_id(&self, expr: &TirExpr, counter: &mut u32) -> u32 {
-        let first_id = *counter;
-        self.count_closures_in_expr(expr, counter);
-        first_id
-    }
-
-    /// Count closures in an expression, updating the counter.
-    fn count_closures_in_expr(&self, expr: &TirExpr, counter: &mut u32) {
-        match &expr.kind {
-            TirExprKind::Closure { body, .. } => {
-                *counter += 1;
-                self.count_closures_in_expr(body, counter);
-            }
-            TirExprKind::Binary { left, right, .. } => {
-                self.count_closures_in_expr(left, counter);
-                self.count_closures_in_expr(right, counter);
-            }
-            TirExprKind::Unary { expr: inner, .. }
-            | TirExprKind::Cast { expr: inner, .. }
-            | TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::TupleSpread { expr: inner }
-            | TirExprKind::TupleZip { expr: inner }
-            | TirExprKind::TypePackExpansion {
-                call_expr: inner, ..
-            } => {
-                self.count_closures_in_expr(inner, counter);
-            }
-            TirExprKind::Call { args, .. } => {
-                for arg in args {
-                    self.count_closures_in_expr(&arg.expr, counter);
-                }
-            }
-            TirExprKind::CmRawCall { args, .. } => {
-                for arg in args {
-                    self.count_closures_in_expr(arg, counter);
-                }
-            }
-            TirExprKind::MethodCall { receiver, args, .. } => {
-                self.count_closures_in_expr(receiver, counter);
-                for arg in args {
-                    self.count_closures_in_expr(&arg.expr, counter);
-                }
-            }
-            TirExprKind::IndirectCall { callee, args } => {
-                self.count_closures_in_expr(callee, counter);
-                for arg in args {
-                    self.count_closures_in_expr(arg, counter);
-                }
-            }
-            TirExprKind::Block(block) => {
-                self.count_closures_in_block(block, counter);
-            }
-            TirExprKind::If {
-                condition,
-                then_branch,
-                else_branch,
-            } => {
-                self.count_closures_in_expr(condition, counter);
-                self.count_closures_in_block(then_branch, counter);
-                if let Some(else_blk) = else_branch {
-                    self.count_closures_in_block(else_blk, counter);
-                }
-            }
-            TirExprKind::StructLiteral { fields, .. } => {
-                for field in fields {
-                    self.count_closures_in_expr(&field.value, counter);
-                }
-            }
-            TirExprKind::TupleLiteral { elements } => {
-                for elem in elements {
-                    self.count_closures_in_expr(elem, counter);
-                }
-            }
-            TirExprKind::Index { expr: array, index } => {
-                self.count_closures_in_expr(array, counter);
-                self.count_closures_in_expr(index, counter);
-            }
-            TirExprKind::Assign { target, value } => {
-                self.count_closures_in_expr(target, counter);
-                self.count_closures_in_expr(value, counter);
-            }
-            TirExprKind::Match {
-                expr: scrutinee,
-                arms,
-            } => {
-                self.count_closures_in_expr(scrutinee, counter);
-                for arm in arms {
-                    if let Some(guard) = &arm.guard {
-                        self.count_closures_in_expr(guard, counter);
-                    }
-                    self.count_closures_in_expr(&arm.body, counter);
-                }
-            }
-            TirExprKind::VariantConstruct { payload, .. } => {
-                if let Some(payload_expr) = payload {
-                    self.count_closures_in_expr(payload_expr, counter);
-                }
-            }
-            TirExprKind::LabeledBlock { block, .. } => {
-                self.count_closures_in_block(block, counter);
-            }
-            // Terminals
-            _ => {}
-        }
-    }
-
-    fn count_closures_in_block(&self, block: &TirBlock, counter: &mut u32) {
-        for stmt in &block.stmts {
-            self.count_closures_in_stmt(stmt, counter);
-        }
-    }
-
-    fn count_closures_in_stmt(&self, stmt: &TirStmt, counter: &mut u32) {
-        match &stmt.kind {
-            TirStmtKind::Let { value, .. } => {
-                self.count_closures_in_expr(value, counter);
-            }
-            TirStmtKind::Expr(expr) | TirStmtKind::Return { value: Some(expr) } => {
-                self.count_closures_in_expr(expr, counter);
-            }
-            TirStmtKind::If {
-                condition,
-                then_block,
-                else_block,
-            } => {
-                self.count_closures_in_expr(condition, counter);
-                self.count_closures_in_block(then_block, counter);
-                if let Some(else_blk) = else_block {
-                    self.count_closures_in_block(else_blk, counter);
-                }
-            }
-            TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-                self.count_closures_in_block(body, counter);
-            }
-            TirStmtKind::IfLet {
-                scrutinee,
-                then_block,
-                else_block,
-                ..
-            } => {
-                self.count_closures_in_expr(scrutinee, counter);
-                self.count_closures_in_block(then_block, counter);
-                if let Some(else_blk) = else_block {
-                    self.count_closures_in_block(else_blk, counter);
-                }
-            }
-            TirStmtKind::Break { value, .. } => {
-                if let Some(v) = value {
-                    self.count_closures_in_expr(v, counter);
-                }
-            }
-            _ => {}
-        }
     }
 
     /// Generate a specialized function where fn-type params become functor struct types
@@ -3418,6 +3644,7 @@ impl ClosureLowerer {
                 functor_id,
                 source_text,
                 address_taken_locals,
+                body_locals,
             } => TirExpr::new(
                 TirExprKind::Closure {
                     params: params.clone(),
@@ -3426,6 +3653,7 @@ impl ClosureLowerer {
                     functor_id: *functor_id,
                     source_text: source_text.clone(),
                     address_taken_locals: address_taken_locals.clone(),
+                    body_locals: body_locals.clone(),
                 },
                 expr.type_id,
                 expr.span,
@@ -3460,15 +3688,20 @@ impl ClosureLowerer {
                 expr.type_id,
                 expr.span,
             ),
-            TirExprKind::TupleSpread { expr: inner } | TirExprKind::TupleZip { expr: inner } => {
-                TirExpr::new(
-                    TirExprKind::TupleSpread {
-                        expr: Box::new(self.specialize_expr(inner, param_to_functor, type_table)),
-                    },
-                    expr.type_id,
-                    expr.span,
-                )
-            }
+            TirExprKind::TupleSpread { expr: inner } => TirExpr::new(
+                TirExprKind::TupleSpread {
+                    expr: Box::new(self.specialize_expr(inner, param_to_functor, type_table)),
+                },
+                expr.type_id,
+                expr.span,
+            ),
+            TirExprKind::TupleZip { expr: inner } => TirExpr::new(
+                TirExprKind::TupleZip {
+                    expr: Box::new(self.specialize_expr(inner, param_to_functor, type_table)),
+                },
+                expr.type_id,
+                expr.span,
+            ),
             TirExprKind::TypePackExpansion {
                 call_expr: inner,
                 pack_type_id,
@@ -3697,12 +3930,15 @@ impl ClosureLowerer {
                 type_id,
                 ..
             } => {
-                // Track if this local stores a closure
-                let was_closure = matches!(value.kind, TirExprKind::Closure { .. });
-                let closure_id = if was_closure {
-                    let id = self.closure_counter;
-                    self.local_to_closure.insert(*local_index, id);
-                    Some(id)
+                // Track if this local stores a closure (read the stable ID
+                // off the Closure node).
+                let closure_id = if let TirExprKind::Closure {
+                    functor_id: Some(id),
+                    ..
+                } = &value.kind
+                {
+                    self.local_to_closure.insert(*local_index, *id);
+                    Some(*id)
                 } else {
                     None
                 };
@@ -3721,9 +3957,12 @@ impl ClosureLowerer {
             TirStmtKind::Expr(expr) | TirStmtKind::Return { value: Some(expr) } => {
                 self.transform_expr(expr, type_table);
             }
-            TirStmtKind::Return { value: None }
-            | TirStmtKind::Break { .. }
-            | TirStmtKind::Continue => {}
+            TirStmtKind::Return { value: None } | TirStmtKind::Continue => {}
+            TirStmtKind::Break { value, .. } => {
+                if let Some(value) = value {
+                    self.transform_expr(value, type_table);
+                }
+            }
             TirStmtKind::If {
                 condition,
                 then_block,
@@ -3765,17 +4004,30 @@ impl ClosureLowerer {
     fn transform_expr(&mut self, expr: &mut TirExpr, type_table: &mut TypeTable) {
         match &mut expr.kind {
             TirExprKind::Closure {
-                body,
                 captures,
                 functor_id,
                 ..
             } => {
-                // Get the current closure ID
-                let closure_id = self.closure_counter;
-                self.closure_counter += 1;
+                // The closure's ID was assigned in the collect pass and
+                // lives on the node. Reading it here means we don't have
+                // to keep a counter in sync with traversal order — which
+                // would break the moment we walk a different set of
+                // functions (e.g. the generated `__call` methods).
+                let closure_id = functor_id.unwrap_or_else(|| {
+                    panic!(
+                        "Closure node missing functor_id; the collect pass should assign it (span: {:?})",
+                        expr.span,
+                    )
+                });
 
-                // Transform nested closures in the body
-                self.transform_expr(body, type_table);
+                // Don't recurse into the body. The body lives in *this*
+                // closure's local-index namespace, not the function we
+                // are walking, so descending here would corrupt
+                // `local_to_closure` (used by `update_local_types` and
+                // by IndirectCall→MethodCall rewriting). The closure's
+                // body lives independently in the generated `__call`
+                // method, which `lower_module` walks alongside the
+                // original module functions in this same pass.
 
                 // Specializable closures: transform to StructLiteral (stored in local, called directly)
                 // Non-specializable closures: set functor_id and leave as Closure for fn-param specialization
@@ -3814,11 +4066,12 @@ impl ClosureLowerer {
                         fields,
                     };
                     expr.type_id = functor.ref_type_id;
-                } else {
-                    // For non-specializable closures (passed as arguments), set the functor_id
-                    // so that try_transform_fn_param_call can look up the corresponding ClosureFunctor
-                    *functor_id = Some(closure_id);
                 }
+                // For non-specializable closures (passed as arguments), the
+                // node's pre-assigned `functor_id` already points at the
+                // corresponding ClosureFunctor — `try_transform_fn_param_call`
+                // and the phase-4 `ClosureToCanonical` rewrite both read it
+                // off the node directly.
             }
             TirExprKind::IndirectCall { callee, args } => {
                 // Transform callee and args first
@@ -4149,9 +4402,12 @@ impl ClosureLowerer {
             TirStmtKind::Return { value: Some(expr) } => {
                 self.transform_remaining_closures_expr(expr);
             }
-            TirStmtKind::Return { value: None }
-            | TirStmtKind::Break { .. }
-            | TirStmtKind::Continue => {}
+            TirStmtKind::Return { value: None } | TirStmtKind::Continue => {}
+            TirStmtKind::Break { value, .. } => {
+                if let Some(value) = value {
+                    self.transform_remaining_closures_expr(value);
+                }
+            }
             TirStmtKind::If {
                 condition,
                 then_block,
@@ -4195,11 +4451,12 @@ impl ClosureLowerer {
             TirExprKind::Closure {
                 captures,
                 functor_id: Some(closure_id),
-                body,
                 ..
             } => {
-                // Transform nested closures first
-                self.transform_remaining_closures_expr(body);
+                // Don't recurse into the body — it lives in this closure's
+                // local-index namespace. Its own clone in the generated
+                // `__call` method is walked by `lower_module` in this same
+                // pass (see the `lowered_funcs` set).
 
                 // This closure wasn't specialized, transform to ClosureToCanonical
                 if let Some(functor) = self.functor_infos.get(*closure_id as usize) {

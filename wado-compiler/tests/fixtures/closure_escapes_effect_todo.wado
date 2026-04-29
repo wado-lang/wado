@@ -1,0 +1,48 @@
+#![TODO]
+// TODO: closure escape leaks effects out of the type system.
+//
+// `inner` is a closure whose body invokes `println` (which requires
+// `Stdout`), yet its declared type is `fn()` with no effects. Today the
+// compiler accepts this without error and `pure_caller(f: fn())` ends up
+// calling `println` even though it never declared `with Stdout`.
+//
+// Why it slips through:
+//   * `effect_check.rs::TirExprKind::Closure` walks the body under the
+//     enclosing function's `current_effects`, not under the closure's own
+//     declared effects, so the `println` call passes (run() has Stdout).
+//   * `resolver/closure.rs` synthesizes the closure type with empty
+//     effects on purpose — adopting the contextual annotation's effects
+//     would feed `EffectRef::Param` placeholders back into call-site
+//     effect-param inference (see `effect_propagation_effect_param`).
+//   * Indirect-call effect checks read the callee's *type* effects, which
+//     are empty here, so `pure_caller` doesn't need to declare anything.
+//
+// To close this hole we need either:
+//   (a) Body-effect inference at resolve time: walk the closure body and
+//       attach the inferred effect set to the synthesized fn type, then
+//       have the let / argument coercion paths reject widening from
+//       a non-empty effect set to an empty one.
+//   (b) effect_check swaps `current_effects` to the closure's declared
+//       effects (propagation-expanded) when entering the body. Needs a
+//       flag on `TirExprKind::Closure` to distinguish "explicitly empty
+//       annotation" from "no annotation" so unannotated closures keep
+//       inheriting outer effects.
+//
+// When fixed the call below should be rejected with an error mentioning
+// `Stdout` (the leaked effect).
+
+use { println, Stdout } from "core:cli";
+
+fn pure_caller(f: fn()) {
+    f();
+}
+
+export fn run() with Stdout {
+    let inner: fn() = || {
+        println("this println needs Stdout but inner's type does not carry it");
+    };
+    pure_caller(inner);
+}
+
+__DATA__
+{"compile_error": "Stdout"}

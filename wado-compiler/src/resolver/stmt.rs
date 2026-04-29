@@ -13,6 +13,7 @@ use crate::tir::{
 use crate::token::Span;
 
 use super::Resolver;
+use super::typecheck::{TypeCheckResult, check_assignable};
 use super::types::{FunctionContext, TypeError};
 use super::util;
 
@@ -307,7 +308,49 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .is_some_and(|inner| inner == TypeTable::UNKNOWN)
                     && type_table.as_option(type_id).is_some()
             };
-            if !is_null_to_option {
+            // Function-type compatibility is structural over params and return,
+            // ignoring effects (see `typecheck::check_assignable` rule 7). This
+            // lets `let c: fn() with Stdout = || { ... }` accept a closure with
+            // a synthesized `fn() with []` type without a spurious mismatch,
+            // while still rejecting genuine signature mismatches such as a
+            // closure with the wrong arity or parameter types. `check_assignable`
+            // returns `Deferred` whenever either side contains a type param
+            // (rule 3), so for generic signatures like `fn(T) -> T` we fall back
+            // to a direct `TypeId` comparison of params and return — that
+            // accepts identical generic shapes that differ only in effects
+            // without admitting any type-param-to-concrete mismatches.
+            let is_compatible_fn_type = {
+                let type_table = self.type_table.borrow();
+                if let (
+                    ResolvedType::Function {
+                        params: actual_params,
+                        return_type: actual_return,
+                        ..
+                    },
+                    ResolvedType::Function {
+                        params: expected_params,
+                        return_type: expected_return,
+                        ..
+                    },
+                ) = (type_table.get(value.type_id), type_table.get(type_id))
+                {
+                    match check_assignable(value.type_id, type_id, &type_table) {
+                        TypeCheckResult::Compatible => true,
+                        TypeCheckResult::Deferred => {
+                            actual_params.len() == expected_params.len()
+                                && actual_params
+                                    .iter()
+                                    .zip(expected_params.iter())
+                                    .all(|(a, e)| a == e)
+                                && actual_return == expected_return
+                        }
+                        TypeCheckResult::Incompatible => false,
+                    }
+                } else {
+                    false
+                }
+            };
+            if !is_null_to_option && !is_compatible_fn_type {
                 let _ = self.logger.error(TypeError::TypeMismatch {
                     expected: self.type_table.borrow().type_name(type_id),
                     found: self.type_table.borrow().type_name(value.type_id),

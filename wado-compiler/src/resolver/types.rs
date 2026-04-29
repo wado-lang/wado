@@ -953,8 +953,13 @@ pub(super) struct FunctionContext {
     /// The type that `task return` must accept (= the declared return type annotation).
     /// `Some(type_id)` only for async functions.
     pub(super) task_return_type: Option<TypeId>,
-    /// Local variable types in order (for Wasm local declarations)
-    pub(super) local_types: Vec<TypeId>,
+    /// Local-variable metadata (name, type, mutability) in declaration
+    /// order. The single source of truth for the function/closure's
+    /// local namespace — `add_local` pushes here, and consumers that
+    /// need a `Vec<TypeId>` (e.g. `TirFunction::local_types`,
+    /// `TirGlobal::local_types`) project `locals.iter().map(|l| l.type_id)`
+    /// at the point of emission.
+    pub(super) locals: Vec<crate::tir::TirLocal>,
     /// Local indices that have their address taken (&x or &mut x)
     pub(super) address_taken_locals: IndexSet<u32>,
     /// Outer context locals for closure capture detection (name -> `LocalVar` snapshot)
@@ -992,7 +997,7 @@ impl FunctionContext {
             return_type,
             is_async: false,
             task_return_type: None,
-            local_types: Vec::new(),
+            locals: Vec::new(),
             address_taken_locals: IndexSet::default(),
             outer_locals: IndexMap::default(),
             captured_vars: IndexMap::default(),
@@ -1043,7 +1048,7 @@ impl FunctionContext {
             return_type,
             is_async: false, // Closures are never async
             task_return_type: None,
-            local_types: Vec::new(),
+            locals: Vec::new(),
             address_taken_locals: IndexSet::default(),
             outer_locals,
             captured_vars: IndexMap::default(),
@@ -1086,7 +1091,11 @@ impl FunctionContext {
     ) -> u32 {
         let index = self.next_local;
         self.next_local += 1;
-        self.local_types.push(type_id);
+        self.locals.push(crate::tir::TirLocal {
+            name: name.clone(),
+            type_id,
+            is_mut,
+        });
 
         let scope = self.scopes.last_mut().unwrap();
         scope.insert(

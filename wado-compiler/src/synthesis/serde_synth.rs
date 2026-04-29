@@ -820,6 +820,9 @@ fn generate_struct_deserialize(
             functor_id: None,
             source_text: None,
             address_taken_locals: crate::hashmap::IndexSet::default(),
+            // Synthetic deserialiser-lookup stub; the body is a single
+            // `Call` expression with no let-bindings of its own.
+            body_locals: Vec::new(),
         },
         lookup_fn_type,
         span,

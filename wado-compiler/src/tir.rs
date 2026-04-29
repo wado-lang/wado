@@ -2506,6 +2506,17 @@ pub enum TirExprKind {
         /// for synthesised closures (e.g. effect-handler dispatch),
         /// which never take addresses.
         address_taken_locals: crate::hashmap::IndexSet<u32>,
+        /// Body-level let-bindings inside the closure, in declaration
+        /// order. Indices `0..params.len()` belong to the closure's
+        /// parameters (whose info lives in `params`); these body locals
+        /// occupy `params.len()..params.len()+body_locals.len()` in the
+        /// closure's local-index namespace.
+        ///
+        /// Captured at resolve time from the closure's `FunctionContext`
+        /// so pattern lowering can seed a closure-scoped allocator
+        /// without re-walking the body. Synthetic closures created by
+        /// `synthesis/` have an empty `body_locals`.
+        body_locals: Vec<TirLocal>,
     },
 
     /// Indirect call through a callable value (closure or funcref)
@@ -3165,6 +3176,30 @@ impl TirFunction {
     pub fn is_value_copy(&self) -> bool {
         matches!(self.kind, FunctionKind::ValueCopy { .. })
     }
+}
+
+/// A resolved local-slot entry in a function or closure scope, identified
+/// by its declaration / order in the surrounding local environment.
+///
+/// `FunctionContext::add_local` records every local — source-level
+/// parameters, `let` bindings, destructure bindings, and resolver-generated
+/// temporaries — as a `TirLocal`. The single source of truth for the local
+/// namespace is `FunctionContext::locals: Vec<TirLocal>`; from there:
+///
+/// * Closure resolution copies the body's slice
+///   (`locals[params.len()..]`) onto `TirExprKind::Closure { body_locals,
+///   .. }` so pattern lowering can seed a closure-scoped allocator
+///   without re-walking the body.
+/// * Function-level state (`TirFunction::local_types`,
+///   `TirGlobal::local_types`) currently keeps only `Vec<TypeId>`;
+///   promoting those to `Vec<TirLocal>` is a separate refactor.
+#[derive(Debug, Clone)]
+pub struct TirLocal {
+    /// Source-level name of the binding (or a synthesised `__name` for
+    /// resolver-generated temporaries that have no surface syntax).
+    pub name: String,
+    pub type_id: TypeId,
+    pub is_mut: bool,
 }
 
 #[derive(Debug, Clone)]

@@ -1,0 +1,25 @@
+// Regression: pattern-lowering temps inside a closure body must not
+// collide with the closure's parameter locals.
+//
+// `lower_patterns` allocates a fresh local for the scrutinee even when
+// the pattern binds nothing (e.g. `Some(_)`). `collect_closure_locals`
+// previously seeded `local_count` only from the body's `Let` / pattern
+// `Binding` indices, so a closure whose body has parameters but no
+// further locals (only refutable patterns that bind nothing) would
+// start the allocator at `0` — colliding with parameter local `0` and
+// producing wrong codegen for the closure.
+
+fn nothing() {}
+
+test "pattern temp does not collide with closure params" {
+    let opt: Option<i32> = Option::Some(1);
+    let check = |a: i32, b: i32| {
+        if let Some(_) = opt {
+            nothing();
+        }
+    };
+    check(1, 2);
+}
+
+__DATA__
+{"test": {}}
