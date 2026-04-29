@@ -969,8 +969,12 @@ impl FunctionTranslator<'_, '_> {
             }
 
             TirExprKind::Local { index, .. } => {
-                // Unit-type locals have no Wasm representation
-                if expr.type_id == TypeTable::UNIT {
+                // Unit and Never locals have no Wasm representation. For Unit
+                // there is nothing to push. For Never the local declaration
+                // was skipped (its initializer diverges); the surrounding
+                // `translate_expr` wrapper appends `Unreachable` so the local
+                // value never materializes — emit a placeholder `Nop`.
+                if expr.type_id == TypeTable::UNIT || expr.type_id == TypeTable::NEVER {
                     WirInstr::Nop
                 } else {
                     self.local_get(*index)

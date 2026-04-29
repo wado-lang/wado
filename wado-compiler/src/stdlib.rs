@@ -44,6 +44,7 @@ pub const CORE_PRELUDE_RANGE: &str = include_str!("../lib/core/prelude/range.wad
 pub const CORE_COLLECTIONS: &str = include_str!("../lib/core/collections.wado");
 pub const CORE_ZLIB: &str = include_str!("../lib/core/zlib.wado");
 pub const CORE_BASE64: &str = include_str!("../lib/core/base64.wado");
+pub const CORE_BENCHMARK: &str = include_str!("../lib/core/benchmark.wado");
 pub const CORE_SERDE: &str = include_str!("../lib/core/serde.wado");
 pub const CORE_JSON: &str = include_str!("../lib/core/json.wado");
 pub const CORE_JSON_NSD: &str = include_str!("../lib/core/json_nsd.wado");
@@ -208,6 +209,7 @@ pub fn get_stdlib_module(import_path: &str) -> Option<&'static str> {
         "core:builtin" => Some(CORE_BUILTIN),
         "core:zlib" => Some(CORE_ZLIB),
         "core:base64" => Some(CORE_BASE64),
+        "core:benchmark" => Some(CORE_BENCHMARK),
         "core:serde" => Some(CORE_SERDE),
         "core:json" => Some(CORE_JSON),
         "core:json_nsd" => Some(CORE_JSON_NSD),
