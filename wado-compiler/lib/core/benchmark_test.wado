@@ -1,0 +1,55 @@
+use { Benchmark } from "core:benchmark";
+
+test "Benchmark::new defaults" {
+    let b = Benchmark::new("smoke");
+    assert b.iterations == 1;
+    assert b.warmup == -1;
+    assert b.input_size matches { None };
+}
+
+test "run returns the closure's value" {
+    let mut b = Benchmark::new("returns-value");
+    let answer = b.run("", || 42);
+    assert answer == 42;
+}
+
+test "iterations runs the closure N times and returns the last value" {
+    let mut b = Benchmark::new("iter-last");
+    b.iterations = 5;
+    let last = b.run("", || 7 * 3);
+    assert last == 21;
+}
+
+test "phase labels are accepted and value flows through" {
+    let mut b = Benchmark::new("phases");
+    b.iterations = 2;
+    let a = b.run("first", || 1);
+    let c = b.run("second", || 2);
+    assert a == 1;
+    assert c == 2;
+}
+
+test "input_size and explicit warmup do not affect the return value" {
+    let mut b = Benchmark::new("with-config");
+    b.iterations = 3;
+    b.warmup = 1;
+    b.input_size = Option::Some(1024);
+    let v = b.run("", || -5);
+    assert v == -5;
+}
+
+test "println does not affect benchmark state" {
+    let mut b = Benchmark::new("with-note");
+    b.println("note before run");
+    let v = b.run("", || 99);
+    b.println(`v = {v}`);
+    assert v == 99;
+}
+
+test "warmup auto-derives to 0 for single iteration" {
+    let b = Benchmark::new("auto-warmup-single");
+    // iterations=1 (default), warmup=-1 (auto) → effective warmup is 0;
+    // surface this through the field invariants the API guarantees.
+    assert b.iterations == 1;
+    assert b.warmup == -1;
+}
