@@ -72,10 +72,15 @@ opt-level = 1
 [profile.dev.package.wado-dev-tools]
 opt-level = 1
 
-# dprint-core has `debug_assert!`s that fire on inputs that produce
-# valid output (e.g. multi-line code spans). The published `dprint` CLI
-# is built in release where these are stripped; we mirror that here so
-# `wado-dev-tools format-md` works in dev profile too.
+# Upstream bug, unavoidable from our side: dprint-plugin-markdown
+# (0.20.0 and 0.21.1 both confirmed) hands multi-line inline code
+# spans (e.g. a backtick fragment that wraps across two source lines)
+# straight to dprint-core's printer, which then trips a `debug_assert!`
+# at dprint-core/src/formatting/printer.rs:623 — "Found a newline in
+# the string." The bundled `dprint` CLI is shipped in release, where
+# `debug_assert!`s are stripped, so the bug never surfaces there. We
+# mirror that here so `wado-dev-tools format-md` works in dev too.
+# Remove these stanzas once the upstream is fixed.
 [profile.dev.package.dprint-core]
 debug-assertions = false
 
