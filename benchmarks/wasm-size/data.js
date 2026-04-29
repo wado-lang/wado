@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777457744696,
+  "lastUpdate": 1777459057267,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -18097,6 +18097,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/28f4bc97473d25b4204a38eb9355b822e437c028"
         },
         "date": 1777457744395,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1775,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8776,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18520,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 515706,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "72c05b690ee3d2a2fda78995eb52df1b829567df",
+          "message": "Merge pull request #968 from wado-lang/gfx/tidy-workflow\n\nci: split integrity into Tidy workflow with auto-commit",
+          "timestamp": "2026-04-29T19:32:26+09:00",
+          "tree_id": "a400f999edcda926a789af3a9216e7115af0949b",
+          "url": "https://github.com/wado-lang/wado/commit/72c05b690ee3d2a2fda78995eb52df1b829567df"
+        },
+        "date": 1777459056952,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
