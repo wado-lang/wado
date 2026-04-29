@@ -197,20 +197,21 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
         let type_table = pending_body.type_table.borrow();
 
         if let Some(ref body) = tir_func.body {
-            // Build local-name map. Prefer `tir_func.locals` (populated by
-            // resolver/lower/synthesis); fall back to walking `Let` stmts
-            // for legacy paths that haven't filled in `locals` yet.
+            // Build local-name map: params first, then `Let` statement
+            // names (which carry the most descriptive identifiers — `?`
+            // temps, hoisted-buf names, and so on). `tir_func.locals`
+            // backfills entries that no `Let` shadows, covering parameter
+            // slots without a body Let, slots created in expression
+            // contexts the walker doesn't recurse into, and pre-lower
+            // function bodies that haven't been desugared yet.
             let mut local_names = IndexMap::default();
             for param in &tir_func.params {
                 local_names.insert(param.local_index, param.name.clone());
             }
-            if tir_func.locals.is_empty() {
-                collect_let_names(&mut local_names, &body.stmts);
-            } else {
-                for (idx, local) in tir_func.locals.iter().enumerate() {
-                    let key = u32::try_from(idx).unwrap();
-                    local_names.entry(key).or_insert_with(|| local.name.clone());
-                }
+            collect_let_names(&mut local_names, &body.stmts);
+            for (idx, local) in tir_func.locals.iter().enumerate() {
+                let key = u32::try_from(idx).unwrap();
+                local_names.entry(key).or_insert_with(|| local.name.clone());
             }
 
             // Translate inside a nested block so the translator (and its reborrow of ctx)

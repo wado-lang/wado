@@ -1310,8 +1310,11 @@ fn transform_fmts_in_tmpl_block(
     for (pos, candidate) in sorted_candidates.iter().enumerate() {
         let fmt_local_index = *local_count;
         *local_count += 1;
+        // Match the WIR-visible name used in the corresponding `Let`
+        // statement built below — wir_build resolves locals by name now,
+        // so the `TirLocal` and `Let` must agree.
         locals.push(TirLocal {
-            name: format!("__tmpl_fmt_{fmt_local_index}"),
+            name: format!("__fmt_buf_{fmt_local_index}"),
             type_id: candidate.formatter_type,
             is_mut: true,
         });

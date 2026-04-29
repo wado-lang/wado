@@ -1085,10 +1085,16 @@ fn perform_fusion(
         unreachable!()
     };
 
-    // Allocate a fresh local for the payload value.
+    // Allocate a fresh local for the payload value. The pasted-in `Let`
+    // statements created below name the slot `__fused_payload_N`; mirror
+    // that on the `TirLocal` so wir_build's local-name lookup matches.
     let payload_local = *local_count;
     *local_count += 1;
-    locals.push(TirLocal::synth(payload_local, info.payload_type, false));
+    locals.push(TirLocal {
+        name: format!("__fused_payload_{payload_local}"),
+        type_id: info.payload_type,
+        is_mut: false,
+    });
 
     let fused_label = format!("__fused_{}", info.label);
 
