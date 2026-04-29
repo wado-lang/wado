@@ -1,5 +1,6 @@
 mod compiler_host;
 mod data_section;
+mod format_md;
 mod pipeline;
 mod template;
 
@@ -8,6 +9,7 @@ use wado_compiler::OptLevel;
 enum Command {
     GoldenDump,
     Wasm2Wat,
+    FormatMd,
 }
 
 fn main() {
@@ -18,6 +20,7 @@ fn main() {
     let mut phase = pipeline::Phase::Wir;
     let mut opt_level = OptLevel::O2;
     let mut skip_empty = false;
+    let mut check = false;
     let mut positional_args: Vec<String> = Vec::new();
 
     while let Some(arg) = parser.next().expect("failed to parse args") {
@@ -52,11 +55,15 @@ fn main() {
             lexopt::Arg::Long("skip-empty") => {
                 skip_empty = true;
             }
+            lexopt::Arg::Long("check") => {
+                check = true;
+            }
             lexopt::Arg::Value(val) if command.is_none() => {
                 let cmd = val.to_string_lossy();
                 command = Some(match cmd.as_ref() {
                     "golden-dump" => Command::GoldenDump,
                     "wasm2wat" => Command::Wasm2Wat,
+                    "format-md" => Command::FormatMd,
                     _ => panic!("unknown command: {cmd}"),
                 });
             }
@@ -67,7 +74,7 @@ fn main() {
         }
     }
 
-    match command.expect("command is required (golden-dump, wasm2wat)") {
+    match command.expect("command is required (golden-dump, wasm2wat, format-md)") {
         Command::GoldenDump => {
             let in_template = in_template.expect("--in is required");
             let out_template = out_template.expect("--out is required");
@@ -85,6 +92,12 @@ fn main() {
                 .print(&wasm, &mut wasmprinter::PrintFmtWrite(&mut wat))
                 .expect("failed to print wasm");
             print!("{wat}");
+        }
+        Command::FormatMd => {
+            let ok = format_md::run(&positional_args, check);
+            if !ok {
+                std::process::exit(1);
+            }
         }
     }
 }

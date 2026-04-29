@@ -52,16 +52,16 @@ Wado's core principles demand determinism:
 
 **Rationale**:
 
-| Criterion             | Rust `libm`                                         | musl libm               | fdlibm                    |
-| --------------------- | --------------------------------------------------- | ----------------------- | ------------------------- |
+| Criterion             | Rust `libm`                                         | musl libm               | fdlibm                     |
+| --------------------- | --------------------------------------------------- | ----------------------- | -------------------------- |
 | **License**           | ✅ MIT/Apache-2.0                                   | ✅ MIT                  | ⚠️ Permissive (verify)     |
-| **Language**          | ✅ Pure Rust                                        | ❌ C (requires clang)   | ❌ C                      |
-| **Wasm compilation**  | ✅ Native (cargo → wasm32-unknown-unknown)          | ⚠️ Requires wasi-sdk     | ⚠️ Requires wasi-sdk       |
-| **no_std support**    | ✅ Yes (no libc/WASI dependencies)                  | ❌ No                   | ❌ No                     |
+| **Language**          | ✅ Pure Rust                                        | ❌ C (requires clang)   | ❌ C                       |
+| **Wasm compilation**  | ✅ Native (cargo → wasm32-unknown-unknown)          | ⚠️ Requires wasi-sdk    | ⚠️ Requires wasi-sdk       |
+| **no_std support**    | ✅ Yes (no libc/WASI dependencies)                  | ❌ No                   | ❌ No                      |
 | **Upstream**          | ✅ Based on musl, actively maintained               | ✅ High quality         | ⚠️ Less active maintenance |
-| **Rust integration**  | ✅ Native Cargo dependency                          | ⚠️ FFI required          | ⚠️ FFI required            |
-| **Production usage**  | ✅ Used in Rust `no_std` ecosystem (embedded, Wasm) | ✅ Alpine Linux default | ✅ Java StrictMath, V8    |
-| **Compiler affinity** | ✅ Wado compiler is Rust-based                      | ⚠️ Neutral               | ⚠️ Neutral                 |
+| **Rust integration**  | ✅ Native Cargo dependency                          | ⚠️ FFI required         | ⚠️ FFI required            |
+| **Production usage**  | ✅ Used in Rust `no_std` ecosystem (embedded, Wasm) | ✅ Alpine Linux default | ✅ Java StrictMath, V8     |
+| **Compiler affinity** | ✅ Wado compiler is Rust-based                      | ⚠️ Neutral              | ⚠️ Neutral                 |
 
 ### Integration Architecture
 

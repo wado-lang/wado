@@ -52,6 +52,7 @@ adler = { version = "1" }
 toml = { version = "1", default-features = false, features = ["parse", "display", "serde", "preserve_order"] }
 libc = { version = "0.2" }
 sha2 = { version = "0.11", default-features = false }
+dprint-plugin-markdown = { version = "0.21" }
 
 
 [profile.dev]
@@ -70,6 +71,21 @@ opt-level = 1
 
 [profile.dev.package.wado-dev-tools]
 opt-level = 1
+
+# Upstream bug, unavoidable from our side: dprint-plugin-markdown
+# (0.20.0 and 0.21.1 both confirmed) hands multi-line inline code
+# spans (e.g. a backtick fragment that wraps across two source lines)
+# straight to dprint-core's printer, which then trips a `debug_assert!`
+# at dprint-core/src/formatting/printer.rs:623 — "Found a newline in
+# the string." The bundled `dprint` CLI is shipped in release, where
+# `debug_assert!`s are stripped, so the bug never surfaces there. We
+# mirror that here so `wado-dev-tools format-md` works in dev too.
+# Remove these stanzas once the upstream is fixed.
+[profile.dev.package.dprint-core]
+debug-assertions = false
+
+[profile.dev.package.dprint-plugin-markdown]
+debug-assertions = false
 
 # Optimize Cranelift in dev/test builds for faster E2E tests.
 # Cranelift compiles Wasm→native for every test; without this it runs in debug mode.

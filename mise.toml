@@ -5,8 +5,9 @@
 [tools]
 # Rust toolchain - mise respects rust-toolchain.toml automatically
 
-# dprint - fast code formatter
-dprint = "latest"
+# Markdown formatting is provided by `wado-dev-tools format-md`, which
+# embeds the dprint markdown plugin as a Cargo dependency. No external
+# dprint CLI is required.
 
 # WebAssembly runtime with WASI P3 support (synced by sync-vendor.sh)
 wasmtime = "44"
@@ -148,7 +149,7 @@ run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
 cargo fmt --all
-dprint fmt
+cargo run -p wado-dev-tools --quiet -- format-md
 """
 
 [tasks.format-wado]
