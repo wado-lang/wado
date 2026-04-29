@@ -1446,6 +1446,29 @@ impl ClosureLowerer {
             TirExprKind::LabeledBlock { block, .. } => {
                 Self::collect_locals_from_block(block, locals);
             }
+            TirExprKind::Switch {
+                scrutinee,
+                arms,
+                default,
+                ..
+            } => {
+                Self::collect_locals_from_expr(scrutinee, locals);
+                for arm in arms {
+                    Self::collect_locals_from_block(arm, locals);
+                }
+                Self::collect_locals_from_block(default, locals);
+            }
+            TirExprKind::VariantTag { expr: inner }
+            | TirExprKind::VariantTest { expr: inner, .. }
+            | TirExprKind::VariantPayload { expr: inner, .. } => {
+                Self::collect_locals_from_expr(inner, locals);
+            }
+            TirExprKind::ClosureToCanonical { functor, .. } => {
+                Self::collect_locals_from_expr(functor, locals);
+            }
+            TirExprKind::GlobalVarSet { value, .. } => {
+                Self::collect_locals_from_expr(value, locals);
+            }
             // Terminals - no locals to collect
             _ => {}
         }

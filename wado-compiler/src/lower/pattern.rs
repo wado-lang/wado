@@ -3229,7 +3229,12 @@ impl ClosureLocalCollector {
             TirStmtKind::TaskReturn { value } => {
                 self.visit_expr(value);
             }
-            TirStmtKind::VariadicForOf { .. } => {}
+            TirStmtKind::VariadicForOf { .. } => {
+                unreachable!(
+                    "TirStmtKind::VariadicForOf should have been expanded during monomorphization \
+                     before closure local collection"
+                )
+            }
         }
     }
 
