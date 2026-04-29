@@ -3038,7 +3038,12 @@ impl<'a> PatternLowerer<'a> {
                     self.lower_expr(arg, type_table);
                 }
             }
-            TirExprKind::Closure { params, body, .. } => {
+            TirExprKind::Closure {
+                body,
+                local_count,
+                local_types,
+                ..
+            } => {
                 // Closures have their own local-index namespace — the resolver
                 // builds each closure's `FunctionContext` with a fresh
                 // `next_local: 0`, so the body's `Local`/`Let` indices are
@@ -3049,17 +3054,20 @@ impl<'a> PatternLowerer<'a> {
                 // `local_types` table where the temp's outer-scoped index
                 // collides with a real closure-scoped local, producing a
                 // closure body whose `LocalSet` targets the wrong slot.
+                //
+                // The closure node carries the resolver's `next_local` /
+                // `local_types`, so we just swap them in here. Any new locals
+                // pattern lowering allocates while descending into the body
+                // will be re-collected by the closure functor lowering pass
+                // via `collect_locals_from_block`, so we discard the updated
+                // state on the way out.
                 let saved_count = self.local_count;
                 let saved_types = std::mem::take(&mut self.local_types);
-                let (closure_count, closure_types) = collect_closure_locals(params, body);
-                self.local_count = closure_count;
-                self.local_types = closure_types;
+                self.local_count = *local_count;
+                self.local_types = local_types.clone();
 
                 self.lower_expr(body, type_table);
 
-                // The closure's local-state is consumed by the closure
-                // functor lowering pass that runs later; no need to merge it
-                // back into the outer function's state.
                 self.local_count = saved_count;
                 self.local_types = saved_types;
             }
@@ -3123,291 +3131,5 @@ impl TypeTableExt for TypeTable {
             .get(index as usize)
             .copied()
             .unwrap_or(TypeTable::UNKNOWN)
-    }
-}
-
-/// Reconstruct a closure body's `(local_count, local_types)` from its
-/// parameters, existing local declarations, and pattern bindings.
-///
-/// The resolver gives each closure its own local-index namespace starting
-/// at `0`. Closure parameters occupy indices `0..params.len()`, then any
-/// `TirStmtKind::Let` and `TirPattern::Binding` inside the body claim
-/// higher indices. Bindings live in pattern-bearing statements (`IfLet`,
-/// `LetDestructure`) and `Match` arms in addition to plain `Let`. The
-/// `next_local` counter that produced these indices is not stored on the
-/// `Closure` expression, so we rebuild it by seeding from the parameters
-/// and walking the body for any further declarations.
-///
-/// Pattern lowering uses the resulting `(local_count, local_types)` to
-/// initialize a fresh allocator before descending into the closure body
-/// so any temp it allocates picks up a closure-scoped index that does not
-/// collide with parameters or existing locals.
-fn collect_closure_locals(params: &[(String, TypeId)], body: &TirExpr) -> (u32, Vec<TypeId>) {
-    let mut state = ClosureLocalCollector {
-        max_index: None,
-        types: Vec::new(),
-    };
-    // Closure params occupy indices 0..params.len(); seed them so any
-    // temps the lowerer allocates land at indices >= params.len().
-    for (i, (_, type_id)) in params.iter().enumerate() {
-        state.record(i as u32, *type_id);
-    }
-    state.visit_expr(body);
-    let count = state.max_index.map_or(0, |m| m + 1);
-    (count, state.types)
-}
-
-struct ClosureLocalCollector {
-    max_index: Option<u32>,
-    types: Vec<TypeId>,
-}
-
-impl ClosureLocalCollector {
-    fn record(&mut self, index: u32, type_id: TypeId) {
-        let needed = (index as usize) + 1;
-        if self.types.len() < needed {
-            self.types.resize(needed, TypeTable::UNKNOWN);
-        }
-        self.types[index as usize] = type_id;
-        self.max_index = Some(self.max_index.map_or(index, |m| m.max(index)));
-    }
-
-    fn visit_block(&mut self, block: &TirBlock) {
-        for stmt in &block.stmts {
-            self.visit_stmt(stmt);
-        }
-    }
-
-    fn visit_stmt(&mut self, stmt: &TirStmt) {
-        match &stmt.kind {
-            TirStmtKind::Let {
-                local_index,
-                type_id,
-                value,
-                ..
-            } => {
-                self.record(*local_index, *type_id);
-                self.visit_expr(value);
-            }
-            TirStmtKind::Expr(expr) | TirStmtKind::Return { value: Some(expr) } => {
-                self.visit_expr(expr);
-            }
-            TirStmtKind::Return { value: None } | TirStmtKind::Continue => {}
-            TirStmtKind::Break { value, .. } => {
-                if let Some(value) = value {
-                    self.visit_expr(value);
-                }
-            }
-            TirStmtKind::If {
-                condition,
-                then_block,
-                else_block,
-            } => {
-                self.visit_expr(condition);
-                self.visit_block(then_block);
-                if let Some(else_blk) = else_block {
-                    self.visit_block(else_blk);
-                }
-            }
-            TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-                self.visit_block(body);
-            }
-            TirStmtKind::IfLet {
-                scrutinee,
-                pattern,
-                then_block,
-                else_block,
-            } => {
-                self.visit_expr(scrutinee);
-                self.visit_pattern(pattern);
-                self.visit_block(then_block);
-                if let Some(else_blk) = else_block {
-                    self.visit_block(else_blk);
-                }
-            }
-            TirStmtKind::LetDestructure { pattern, value, .. } => {
-                self.visit_pattern(pattern);
-                self.visit_expr(value);
-            }
-            TirStmtKind::TaskReturn { value } => {
-                self.visit_expr(value);
-            }
-            TirStmtKind::VariadicForOf { .. } => {
-                unreachable!(
-                    "TirStmtKind::VariadicForOf should have been expanded during monomorphization \
-                     before closure local collection"
-                )
-            }
-        }
-    }
-
-    fn visit_pattern(&mut self, pattern: &TirPattern) {
-        match pattern {
-            TirPattern::Binding {
-                local_index,
-                type_id,
-                ..
-            } => {
-                self.record(*local_index, *type_id);
-            }
-            TirPattern::Tuple(sub_patterns, _) => {
-                for p in sub_patterns {
-                    self.visit_pattern(p);
-                }
-            }
-            TirPattern::Variant { bindings, .. } => {
-                for p in bindings {
-                    self.visit_pattern(p);
-                }
-            }
-            TirPattern::Struct { fields, .. } => {
-                for f in fields {
-                    self.visit_pattern(&f.pattern);
-                }
-            }
-            TirPattern::Or(alternatives) => {
-                for p in alternatives {
-                    self.visit_pattern(p);
-                }
-            }
-            TirPattern::ConstantValue { expr } => {
-                self.visit_expr(expr);
-            }
-            TirPattern::Wildcard
-            | TirPattern::Literal(_)
-            | TirPattern::Enum { .. }
-            | TirPattern::Range { .. } => {}
-        }
-    }
-
-    fn visit_expr(&mut self, expr: &TirExpr) {
-        match &expr.kind {
-            TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
-                self.visit_block(block);
-            }
-            TirExprKind::If {
-                condition,
-                then_branch,
-                else_branch,
-            } => {
-                self.visit_expr(condition);
-                self.visit_block(then_branch);
-                if let Some(else_blk) = else_branch {
-                    self.visit_block(else_blk);
-                }
-            }
-            TirExprKind::Match {
-                expr: scrutinee,
-                arms,
-            } => {
-                self.visit_expr(scrutinee);
-                for arm in arms {
-                    self.visit_pattern(&arm.pattern);
-                    if let Some(g) = &arm.guard {
-                        self.visit_expr(g);
-                    }
-                    self.visit_expr(&arm.body);
-                }
-            }
-            TirExprKind::Switch {
-                scrutinee,
-                arms,
-                default,
-                ..
-            } => {
-                self.visit_expr(scrutinee);
-                for arm in arms {
-                    self.visit_block(arm);
-                }
-                self.visit_block(default);
-            }
-            TirExprKind::Binary { left, right, .. } => {
-                self.visit_expr(left);
-                self.visit_expr(right);
-            }
-            TirExprKind::Unary { expr: inner, .. }
-            | TirExprKind::Cast { expr: inner, .. }
-            | TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::TupleSpread { expr: inner }
-            | TirExprKind::TupleZip { expr: inner }
-            | TirExprKind::TypePackExpansion {
-                call_expr: inner, ..
-            }
-            | TirExprKind::VariantTag { expr: inner }
-            | TirExprKind::VariantTest { expr: inner, .. }
-            | TirExprKind::VariantPayload { expr: inner, .. } => {
-                self.visit_expr(inner);
-            }
-            TirExprKind::Assign { target, value } => {
-                self.visit_expr(target);
-                self.visit_expr(value);
-            }
-            TirExprKind::Index { expr: array, index } => {
-                self.visit_expr(array);
-                self.visit_expr(index);
-            }
-            TirExprKind::Call { args, .. } => {
-                for a in args {
-                    self.visit_expr(&a.expr);
-                }
-            }
-            TirExprKind::MethodCall { receiver, args, .. } => {
-                self.visit_expr(receiver);
-                for a in args {
-                    self.visit_expr(&a.expr);
-                }
-            }
-            TirExprKind::CmRawCall { args, .. } => {
-                for a in args {
-                    self.visit_expr(a);
-                }
-            }
-            TirExprKind::IndirectCall { callee, args } => {
-                self.visit_expr(callee);
-                for a in args {
-                    self.visit_expr(a);
-                }
-            }
-            TirExprKind::ClosureToCanonical { functor, .. } => {
-                self.visit_expr(functor);
-            }
-            TirExprKind::StructLiteral { fields, .. } => {
-                for f in fields {
-                    self.visit_expr(&f.value);
-                }
-            }
-            TirExprKind::TupleLiteral { elements } => {
-                for e in elements {
-                    self.visit_expr(e);
-                }
-            }
-            TirExprKind::VariantConstruct { payload, .. } => {
-                if let Some(p) = payload {
-                    self.visit_expr(p);
-                }
-            }
-            TirExprKind::GlobalVarSet { value, .. } => {
-                self.visit_expr(value);
-            }
-            // Nested closures define a fresh inner namespace: don't descend.
-            TirExprKind::Closure { .. } => {}
-            // Terminals / bookkeeping with no sub-expressions of interest.
-            TirExprKind::IntLiteral { .. }
-            | TirExprKind::FloatLiteral { .. }
-            | TirExprKind::BoolLiteral(_)
-            | TirExprKind::CharLiteral(_)
-            | TirExprKind::StringLiteral(_)
-            | TirExprKind::BytesLiteral(_)
-            | TirExprKind::Null
-            | TirExprKind::Unit
-            | TirExprKind::Local { .. }
-            | TirExprKind::FuncRef { .. }
-            | TirExprKind::GlobalVarGet { .. }
-            | TirExprKind::Capture { .. }
-            | TirExprKind::EnumConstruct { .. }
-            | TirExprKind::TemplateString { .. }
-            | TirExprKind::WithHandler { .. }
-            | TirExprKind::Resume { .. } => {}
-        }
     }
 }

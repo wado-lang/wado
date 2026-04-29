@@ -2219,6 +2219,8 @@ fn build_handler_op_closure(
             .borrow_mut()
             .make_function(param_types, op.return_type, vec![], vec![]);
 
+    let param_count = closure_params.len() as u32;
+    let param_types: Vec<TypeId> = closure_params.iter().map(|(_, t)| *t).collect();
     TirExpr::new(
         TirExprKind::Closure {
             params: closure_params,
@@ -2227,6 +2229,8 @@ fn build_handler_op_closure(
             functor_id: None,
             source_text: None,
             address_taken_locals: crate::hashmap::IndexSet::default(),
+            local_count: param_count,
+            local_types: param_types,
         },
         func_type,
         span,
@@ -2275,7 +2279,8 @@ fn build_trap_closure(
     let func_type =
         type_table
             .borrow_mut()
-            .make_function(param_types, op.return_type, vec![], vec![]);
+            .make_function(param_types.clone(), op.return_type, vec![], vec![]);
+    let param_count = closure_params.len() as u32;
     TirExpr::new(
         TirExprKind::Closure {
             params: closure_params,
@@ -2284,6 +2289,8 @@ fn build_trap_closure(
             functor_id: None,
             source_text: None,
             address_taken_locals: crate::hashmap::IndexSet::default(),
+            local_count: param_count,
+            local_types: param_types,
         },
         func_type,
         span,

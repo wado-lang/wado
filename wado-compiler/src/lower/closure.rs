@@ -455,10 +455,17 @@ impl ClosureLowerer {
 
                 // Build the function type
                 let param_types: Vec<TypeId> = closure_params.iter().map(|(_, t)| *t).collect();
-                let func_type =
-                    type_table.make_function(param_types, sig.return_type, Vec::new(), Vec::new());
+                let func_type = type_table.make_function(
+                    param_types.clone(),
+                    sig.return_type,
+                    Vec::new(),
+                    Vec::new(),
+                );
 
-                // Replace the FuncRef with a Closure
+                // Replace the FuncRef with a Closure. The synthetic body
+                // only references the param locals, so the closure's
+                // local namespace is exactly its parameter list.
+                let param_count = closure_params.len() as u32;
                 expr.kind = TirExprKind::Closure {
                     params: closure_params,
                     body: Box::new(body),
@@ -466,6 +473,8 @@ impl ClosureLowerer {
                     functor_id: None,
                     source_text: None,
                     address_taken_locals: crate::hashmap::IndexSet::default(),
+                    local_count: param_count,
+                    local_types: param_types,
                 };
                 expr.type_id = func_type;
             }
@@ -682,9 +691,12 @@ impl ClosureLowerer {
             TirStmtKind::Expr(expr) | TirStmtKind::Return { value: Some(expr) } => {
                 self.collect_closures_in_expr(expr);
             }
-            TirStmtKind::Return { value: None }
-            | TirStmtKind::Break { .. }
-            | TirStmtKind::Continue => {}
+            TirStmtKind::Return { value: None } | TirStmtKind::Continue => {}
+            TirStmtKind::Break { value, .. } => {
+                if let Some(value) = value {
+                    self.collect_closures_in_expr(value);
+                }
+            }
             TirStmtKind::If {
                 condition,
                 then_block,
@@ -923,9 +935,12 @@ impl ClosureLowerer {
             TirStmtKind::Expr(expr) | TirStmtKind::Return { value: Some(expr) } => {
                 self.analyze_closure_safety_expr(expr, false);
             }
-            TirStmtKind::Return { value: None }
-            | TirStmtKind::Break { .. }
-            | TirStmtKind::Continue => {}
+            TirStmtKind::Return { value: None } | TirStmtKind::Continue => {}
+            TirStmtKind::Break { value, .. } => {
+                if let Some(value) = value {
+                    self.analyze_closure_safety_expr(value, false);
+                }
+            }
             TirStmtKind::If {
                 condition,
                 then_block,
@@ -978,8 +993,16 @@ impl ClosureLowerer {
                     self.specializable.swap_remove(closure_id);
                 }
 
-                // Recursively analyze the body
+                // The closure body uses a fresh local-index namespace
+                // starting at 0, so `local_to_closure` entries from the
+                // outer scope must not leak in: a `let inner = ||..`
+                // inside this body would otherwise insert at an index
+                // that collides with an outer-scope local. Save/restore
+                // the map across the descent so each closure scope is
+                // isolated.
+                let saved = std::mem::take(&mut self.local_to_closure);
                 self.analyze_closure_safety_expr(body, false);
+                self.local_to_closure = saved;
             }
             TirExprKind::Closure {
                 functor_id: None, ..
@@ -2567,9 +2590,10 @@ impl ClosureLowerer {
             TirStmtKind::Expr(expr) | TirStmtKind::Return { value: Some(expr) } => {
                 self.fn_param_in_struct_field_expr(expr, fn_param_indices)
             }
-            TirStmtKind::Return { value: None }
-            | TirStmtKind::Break { .. }
-            | TirStmtKind::Continue => false,
+            TirStmtKind::Return { value: None } | TirStmtKind::Continue => false,
+            TirStmtKind::Break { value, .. } => value
+                .as_ref()
+                .is_some_and(|v| self.fn_param_in_struct_field_expr(v, fn_param_indices)),
             TirStmtKind::If {
                 condition,
                 then_block,
@@ -2778,9 +2802,12 @@ impl ClosureLowerer {
             TirStmtKind::Expr(expr) | TirStmtKind::Return { value: Some(expr) } => {
                 self.collect_fn_param_specs_expr(expr, func_by_name, type_table, requests);
             }
-            TirStmtKind::Return { value: None }
-            | TirStmtKind::Break { .. }
-            | TirStmtKind::Continue => {}
+            TirStmtKind::Return { value: None } | TirStmtKind::Continue => {}
+            TirStmtKind::Break { value, .. } => {
+                if let Some(value) = value {
+                    self.collect_fn_param_specs_expr(value, func_by_name, type_table, requests);
+                }
+            }
             TirStmtKind::If {
                 condition,
                 then_block,
@@ -3620,6 +3647,8 @@ impl ClosureLowerer {
                 functor_id,
                 source_text,
                 address_taken_locals,
+                local_count,
+                local_types,
             } => TirExpr::new(
                 TirExprKind::Closure {
                     params: params.clone(),
@@ -3628,6 +3657,8 @@ impl ClosureLowerer {
                     functor_id: *functor_id,
                     source_text: source_text.clone(),
                     address_taken_locals: address_taken_locals.clone(),
+                    local_count: *local_count,
+                    local_types: local_types.clone(),
                 },
                 expr.type_id,
                 expr.span,
@@ -3931,9 +3962,12 @@ impl ClosureLowerer {
             TirStmtKind::Expr(expr) | TirStmtKind::Return { value: Some(expr) } => {
                 self.transform_expr(expr, type_table);
             }
-            TirStmtKind::Return { value: None }
-            | TirStmtKind::Break { .. }
-            | TirStmtKind::Continue => {}
+            TirStmtKind::Return { value: None } | TirStmtKind::Continue => {}
+            TirStmtKind::Break { value, .. } => {
+                if let Some(value) = value {
+                    self.transform_expr(value, type_table);
+                }
+            }
             TirStmtKind::If {
                 condition,
                 then_block,
@@ -4369,9 +4403,12 @@ impl ClosureLowerer {
             TirStmtKind::Return { value: Some(expr) } => {
                 self.transform_remaining_closures_expr(expr);
             }
-            TirStmtKind::Return { value: None }
-            | TirStmtKind::Break { .. }
-            | TirStmtKind::Continue => {}
+            TirStmtKind::Return { value: None } | TirStmtKind::Continue => {}
+            TirStmtKind::Break { value, .. } => {
+                if let Some(value) = value {
+                    self.transform_remaining_closures_expr(value);
+                }
+            }
             TirStmtKind::If {
                 condition,
                 then_block,

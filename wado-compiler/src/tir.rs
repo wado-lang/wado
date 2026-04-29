@@ -2506,6 +2506,14 @@ pub enum TirExprKind {
         /// for synthesised closures (e.g. effect-handler dispatch),
         /// which never take addresses.
         address_taken_locals: crate::hashmap::IndexSet<u32>,
+        /// Closure-scope local count (i.e. resolver's `next_local` for this
+        /// closure). Captured at resolve time so pattern lowering can seed
+        /// its per-closure state without re-walking the body.
+        local_count: u32,
+        /// Closure-scope local types, indexed by local index. Same purpose
+        /// as `local_count` — captured from the closure's resolution
+        /// `FunctionContext`.
+        local_types: Vec<TypeId>,
     },
 
     /// Indirect call through a callable value (closure or funcref)

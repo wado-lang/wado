@@ -820,6 +820,8 @@ fn generate_struct_deserialize(
             functor_id: None,
             source_text: None,
             address_taken_locals: crate::hashmap::IndexSet::default(),
+            local_count: 3,
+            local_types: vec![ref_string_type, TypeTable::I32, TypeTable::I32],
         },
         lookup_fn_type,
         span,

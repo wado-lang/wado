@@ -205,6 +205,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 functor_id: None,
                 source_text: closure.source_text.clone(),
                 address_taken_locals: closure_ctx.address_taken_locals,
+                local_count: closure_ctx.next_local,
+                local_types: closure_ctx.local_types,
             },
             func_type,
             closure.span,
@@ -322,6 +324,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 functor_id: None, // Assigned during lowering
                 source_text: closure.source_text.clone(),
                 address_taken_locals: closure_ctx.address_taken_locals,
+                local_count: closure_ctx.next_local,
+                local_types: closure_ctx.local_types,
             },
             func_type,
             closure.span,

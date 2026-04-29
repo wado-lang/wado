@@ -1892,6 +1892,8 @@ fn remap_expr_inner(
             functor_id,
             source_text,
             address_taken_locals,
+            local_count,
+            local_types,
         } => TirExprKind::Closure {
             params: params.clone(),
             // Closures have their own return scope — don't propagate label
@@ -1900,6 +1902,8 @@ fn remap_expr_inner(
             functor_id: *functor_id,
             source_text: source_text.clone(),
             address_taken_locals: address_taken_locals.clone(),
+            local_count: *local_count,
+            local_types: local_types.clone(),
         },
         TirExprKind::IndirectCall { callee, args } => TirExprKind::IndirectCall {
             callee: re_box(callee),
