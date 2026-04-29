@@ -181,7 +181,20 @@ A handful of types are "produce-only" with respect to their type parameter: ther
 | `Stream<T>`         | covariant       | Same shape as `Future<T>`, repeated.                             |
 | `StreamWritable<T>` | contravariant   | Same as `FutureWritable<T>`.                                     |
 
-These exceptions are tied to specific stdlib types whose API surface the compiler knows. They do **not** generalize to user-defined generics. Every user-defined generic — `struct MyBox<T>`, `resource MyContainer<T>`, `variant MyEither<L, R>`, etc. — is **invariant** in each of its type parameters, regardless of how the parameter is used inside the body. There is no variance annotation, and no auto-variance inference. A future WEP can revisit this if a clear need emerges; v1 commits to the simpler rule.
+These exceptions are tied to specific stdlib types whose API surface the compiler knows. They do **not** generalize to user-defined generics. Every user-defined generic — `struct MyBox<T>`, `resource MyContainer<T>`, `variant MyEither<L, R>`, etc. — is **invariant** in each of its type parameters, regardless of how the parameter is used inside the body. There is no variance annotation, and no auto-variance inference.
+
+Concretely, given `Element extends Node`:
+
+```wado
+struct Box<T> { value: T }
+
+let el: Element = ...;
+let el_box: Box<Element> = Box { value: el };
+let node_box: Box<Node> = el_box;          // ERROR: Box<Element> ≮: Box<Node>
+let node_box: Box<Node> = Box { value: el_box.value };  // OK: upcast at field site
+```
+
+In practice variance only constrains user code when `T` is itself a resource that participates in an `extends` hierarchy. For non-resource `T` (primitives, unrelated structs, etc.) there is no subtyping to propagate, so the rule has no observable effect. A future WEP can revisit this if a clear need emerges; v1 commits to the simpler rule.
 
 #### Where coercion fires
 
