@@ -90,8 +90,8 @@ Parse 81 SQL statements (13 KB) x 100 iterations. Gale-generated parser vs sqlpa
 
 | Implementation             |     Time | vs best |
 | -------------------------- | -------: | ------: |
-| sqlparser-rs (Rust native) |   200 ms |   1.00x |
-| **Wado** (Gale)            | 1,373 ms |   6.87x |
+| sqlparser-rs (Rust native) |   203 ms |   1.00x |
+| **Wado** (Gale)            | 1,117 ms |   5.50x |
 
 ## Syntax Highlight
 
@@ -100,7 +100,7 @@ Highlight 81 SQL statements (13 KB) x 100 iterations. Gale-generated highlighter
 | Implementation            |     Time | vs best |
 | ------------------------- | -------: | ------: |
 | tree-sitter (Rust native) |   584 ms |   1.00x |
-| **Wado** (Gale)           | 5,110 ms |   8.75x |
+| **Wado** (Gale)           | 4,713 ms |   8.07x |
 
 ## Running
 
