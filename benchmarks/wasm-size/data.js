@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777435444799,
+  "lastUpdate": 1777441481111,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -17745,6 +17745,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/f6b631687eb095a894c8451cb43742c10ba6311e"
         },
         "date": 1777435444479,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8774,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18518,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 1281621,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c23733f29e2d46377ea6dfee324ccc291a1341a4",
+          "message": "Merge pull request #958 from wado-lang/claude/fix-effect-propagation-test-QIopD\n\nfix(closure): contextual types, stable functor IDs, scope hygiene",
+          "timestamp": "2026-04-29T14:39:09+09:00",
+          "tree_id": "0f2d81dcf75788b8038cc47d17fa9b019215150d",
+          "url": "https://github.com/wado-lang/wado/commit/c23733f29e2d46377ea6dfee324ccc291a1341a4"
+        },
+        "date": 1777441480791,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
