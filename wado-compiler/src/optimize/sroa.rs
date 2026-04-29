@@ -28,8 +28,8 @@ use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
 use crate::name::ModuleSource;
 use crate::tir::{
-    FunctionRef, TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TirStructField,
-    TirUnaryOp, TypeId, TypeTable,
+    FunctionRef, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirStmt, TirStmtKind,
+    TirStructField, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::token::Span;
@@ -159,8 +159,15 @@ fn sroa_in_function(
             let new_index = base + i as u32;
             field_local_map.insert((candidate.local_index, i as u32), new_index);
             let new_name = format!("__sroa_{}_{}", candidate.local_name, field_name);
-            field_info_map.insert((candidate.local_index, i as u32), (new_name, *field_type));
-            func.local_types.push(*field_type);
+            field_info_map.insert(
+                (candidate.local_index, i as u32),
+                (new_name.clone(), *field_type),
+            );
+            func.locals.push(TirLocal {
+                name: new_name,
+                type_id: *field_type,
+                is_mut: candidate.is_mut,
+            });
         }
         func.local_count += candidate.fields.len() as u32;
     }

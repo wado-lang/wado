@@ -8,8 +8,8 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
 use crate::tir::{
-    ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirPattern, TirStmt, TirStmtKind,
-    TirUnaryOp, TypeId, TypeTable,
+    ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirPattern, TirStmt,
+    TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
 
 /// Tracks which variables and fields are modified within a loop.
@@ -98,10 +98,10 @@ fn licm_function(func: &mut TirFunction, type_table: &TypeTable) -> bool {
         return false;
     };
     let mut local_count = func.local_count;
-    let mut local_types = func.local_types.clone();
-    let changed = licm_block(body, &mut local_count, &mut local_types, type_table);
+    let mut locals = func.locals.clone();
+    let changed = licm_block(body, &mut local_count, &mut locals, type_table);
     func.local_count = local_count;
-    func.local_types = local_types;
+    func.locals = locals;
     changed
 }
 
@@ -109,7 +109,7 @@ fn licm_function(func: &mut TirFunction, type_table: &TypeTable) -> bool {
 fn licm_block(
     block: &mut TirBlock,
     local_count: &mut u32,
-    local_types: &mut Vec<TypeId>,
+    locals: &mut Vec<TirLocal>,
     type_table: &TypeTable,
 ) -> bool {
     let mut changed = false;
@@ -120,7 +120,7 @@ fn licm_block(
             TirStmtKind::Loop { body } => {
                 // Apply LICM to the loop body
                 let empty_set = IndexSet::default();
-                let hoist_stmts = licm_loop(body, local_count, local_types, type_table, &empty_set);
+                let hoist_stmts = licm_loop(body, local_count, locals, type_table, &empty_set);
 
                 if !hoist_stmts.is_empty() {
                     changed = true;
@@ -136,14 +136,14 @@ fn licm_block(
                 ..
             } => {
                 // Recurse into if branches
-                changed |= licm_block(then_block, local_count, local_types, type_table);
+                changed |= licm_block(then_block, local_count, locals, type_table);
                 if let Some(eb) = else_block {
-                    changed |= licm_block(eb, local_count, local_types, type_table);
+                    changed |= licm_block(eb, local_count, locals, type_table);
                 }
                 new_stmts.push(stmt);
             }
             TirStmtKind::LabeledBlock { block: inner, .. } => {
-                changed |= licm_block(inner, local_count, local_types, type_table);
+                changed |= licm_block(inner, local_count, locals, type_table);
                 new_stmts.push(stmt);
             }
             TirStmtKind::IfLet {
@@ -151,9 +151,9 @@ fn licm_block(
                 else_block,
                 ..
             } => {
-                changed |= licm_block(then_block, local_count, local_types, type_table);
+                changed |= licm_block(then_block, local_count, locals, type_table);
                 if let Some(eb) = else_block {
-                    changed |= licm_block(eb, local_count, local_types, type_table);
+                    changed |= licm_block(eb, local_count, locals, type_table);
                 }
                 new_stmts.push(stmt);
             }
@@ -174,7 +174,7 @@ fn licm_block(
 fn licm_loop(
     loop_body: &mut TirBlock,
     local_count: &mut u32,
-    local_types: &mut Vec<TypeId>,
+    locals: &mut Vec<TirLocal>,
     type_table: &TypeTable,
     extra_modified: &IndexSet<u32>,
 ) -> Vec<TirStmt> {
@@ -214,8 +214,8 @@ fn licm_loop(
         // Step 4: Create hoisting statements
         for candidate in &candidates {
             // Get the type of the original local to build the field access expression
-            let local_type_id = if (candidate.local_index as usize) < local_types.len() {
-                local_types[candidate.local_index as usize]
+            let local_type_id = if (candidate.local_index as usize) < locals.len() {
+                locals[candidate.local_index as usize].type_id
             } else {
                 // Fallback: use the candidate's type_id
                 candidate.type_id
@@ -240,12 +240,13 @@ fn licm_loop(
             );
 
             // Create let statement for the hoisted value
+            let hoist_name = format!(
+                "_licm_{}_{}",
+                candidate.field_name, candidate.new_local_index
+            );
             let hoist_stmt = TirStmt::new(
                 TirStmtKind::Let {
-                    name: format!(
-                        "_licm_{}_{}",
-                        candidate.field_name, candidate.new_local_index
-                    ),
+                    name: hoist_name.clone(),
                     local_index: candidate.new_local_index,
                     is_mut: false,
                     is_reactive: false,
@@ -257,8 +258,12 @@ fn licm_loop(
             );
             all_hoist_stmts.push(hoist_stmt);
 
-            // Add the type to local_types
-            local_types.push(candidate.type_id);
+            // Add the local entry mirroring the let above
+            locals.push(TirLocal {
+                name: hoist_name,
+                type_id: candidate.type_id,
+                is_mut: false,
+            });
         }
 
         // Update local count
@@ -269,7 +274,7 @@ fn licm_loop(
     }
 
     // Also need to handle nested loops - apply LICM recursively
-    licm_block(loop_body, local_count, local_types, type_table);
+    licm_block(loop_body, local_count, locals, type_table);
 
     all_hoist_stmts
 }

@@ -12,7 +12,10 @@ use crate::wir::{CanonicalIntrinsic, WirInstr, WirName, WirType, WirTypeDef, Wir
 
 use super::context::WirContext;
 
-/// Recursively collect variable names from Let statements.
+/// Recursively collect variable names from Let statements. Used as a
+/// fallback only for `TirFunction`s whose `locals` table is empty (e.g.
+/// pre-lower library functions); the resolver / synthesis sites populate
+/// `locals` directly so the normal path consults `tir_func.locals[idx].name`.
 fn collect_let_names(names: &mut IndexMap<u32, String>, stmts: &[TirStmt]) {
     for stmt in stmts {
         match &stmt.kind {
@@ -194,13 +197,21 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
         let type_table = pending_body.type_table.borrow();
 
         if let Some(ref body) = tir_func.body {
-            // Build local name map from params
+            // Build local-name map. Prefer `tir_func.locals` (populated by
+            // resolver/lower/synthesis); fall back to walking `Let` stmts
+            // for legacy paths that haven't filled in `locals` yet.
             let mut local_names = IndexMap::default();
             for param in &tir_func.params {
                 local_names.insert(param.local_index, param.name.clone());
             }
-            // Pre-scan Let statements to collect variable names
-            collect_let_names(&mut local_names, &body.stmts);
+            if tir_func.locals.is_empty() {
+                collect_let_names(&mut local_names, &body.stmts);
+            } else {
+                for (idx, local) in tir_func.locals.iter().enumerate() {
+                    let key = u32::try_from(idx).unwrap();
+                    local_names.entry(key).or_insert_with(|| local.name.clone());
+                }
+            }
 
             // Translate inside a nested block so the translator (and its reborrow of ctx)
             // is dropped before we write back to ctx.functions below.
@@ -320,11 +331,12 @@ impl FunctionTranslator<'_, '_> {
         if (index as usize) < param_count {
             let type_id = self.tir_func.params[index as usize].type_id;
             self.wir_type(type_id)
-        } else if !self.tir_func.local_types.is_empty() {
-            // local_types is indexed absolutely (entries 0..param_count are params,
-            // entries param_count.. are non-param locals), matching DeclareLocal generation.
-            if let Some(&type_id) = self.tir_func.local_types.get(index as usize) {
-                self.wir_type(type_id)
+        } else if !self.tir_func.locals.is_empty() {
+            // `locals` is indexed absolutely (entries 0..param_count are
+            // params, entries param_count.. are non-param locals), matching
+            // DeclareLocal generation.
+            if let Some(local) = self.tir_func.locals.get(index as usize) {
+                self.wir_type(local.type_id)
             } else {
                 WirType::I32
             }
@@ -441,20 +453,20 @@ impl FunctionTranslator<'_, '_> {
         let mut instrs = Vec::new();
 
         // Declare local variables.
-        // `local_types` may only contain body locals (not params) or it may be empty
+        // `locals` may only contain body locals (not params) or it may be empty
         // for functions that haven't been through the lower phase's local allocation.
         // Fall back to scanning Let statements to discover locals.
         let param_count = self.tir_func.params.len();
-        if self.tir_func.local_types.is_empty() {
+        if self.tir_func.locals.is_empty() {
             // Scan block for Let declarations to discover local types
             self.declare_locals_from_stmts(&mut instrs, &block.stmts);
         } else {
-            for (i, &local_type_id) in self.tir_func.local_types.iter().enumerate() {
+            for (i, local) in self.tir_func.locals.iter().enumerate() {
                 // Skip entries that correspond to params (they're already declared)
                 if i < param_count {
                     continue;
                 }
-                let wir_type = self.ctx.type_id_to_wir_type(self.type_table, local_type_id);
+                let wir_type = self.ctx.type_id_to_wir_type(self.type_table, local.type_id);
                 // Skip unit-type locals (unit has no Wasm representation)
                 if matches!(wir_type, WirType::Unit) {
                     continue;

@@ -8,7 +8,9 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::name::{LocalMethodName, MethodName};
-use crate::synthesis::common::{block, local_ref, make_synthetic_method, return_stmt, synth_span};
+use crate::synthesis::common::{
+    block, local_ref, make_synthetic_method, param_local, return_stmt, synth_span,
+};
 use crate::tir::{
     SynthesisRequest, TirExpr, TirExprKind, TirFunction, TirModule, TirParam, TypeTable,
 };
@@ -108,7 +110,7 @@ fn generate_variant_from(
     );
 
     let body = block(vec![return_stmt(Some(variant_construct))]);
-    let local_types = vec![from_type];
+    let locals = vec![param_local("value", from_type, false)];
 
     let from_trait_with_arg = format!("From<{from_type_name}>");
     let method_info = LocalMethodName::new(
@@ -132,6 +134,6 @@ fn generate_variant_from(
         }],
         variant_type,
         body,
-        local_types,
+        locals,
     ))
 }

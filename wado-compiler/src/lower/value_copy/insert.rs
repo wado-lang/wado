@@ -28,7 +28,18 @@ pub fn insert_value_copy_calls(project: &mut FlatPackage) {
     let type_table = project.type_table.clone();
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
-        let immutable_locals = collect_immutable_locals(func.body.as_ref());
+        // The inserter consults `is_mut` per local index to decide whether a
+        // binding can safely alias an immutable source; reading from
+        // `func.locals` directly avoids re-walking the body to rediscover
+        // mutability information that the resolver / synthesis already
+        // recorded.
+        let immutable_locals: IndexSet<u32> = func
+            .locals
+            .iter()
+            .enumerate()
+            .filter(|(_, l)| !l.is_mut)
+            .map(|(i, _)| u32::try_from(i).unwrap())
+            .collect();
         let mut visitor = ValueCopyInserter {
             type_table: type_table.clone(),
             immutable_locals,
@@ -36,44 +47,6 @@ pub fn insert_value_copy_calls(project: &mut FlatPackage) {
         if let Some(ref mut body) = func.body {
             visitor.visit_block(body);
         }
-    }
-}
-
-fn collect_immutable_locals(body: Option<&TirBlock>) -> IndexSet<u32> {
-    let mut out = IndexSet::default();
-    if let Some(body) = body {
-        collect_immutable_in_block(body, &mut out);
-    }
-    out
-}
-
-fn collect_immutable_in_block(block: &TirBlock, out: &mut IndexSet<u32>) {
-    for stmt in &block.stmts {
-        collect_immutable_in_stmt(stmt, out);
-    }
-}
-
-fn collect_immutable_in_stmt(stmt: &TirStmt, out: &mut IndexSet<u32>) {
-    match &stmt.kind {
-        TirStmtKind::Let {
-            local_index,
-            is_mut,
-            ..
-        } if !*is_mut => {
-            out.insert(*local_index);
-        }
-        TirStmtKind::If {
-            then_block,
-            else_block,
-            ..
-        } => {
-            collect_immutable_in_block(then_block, out);
-            if let Some(eb) = else_block {
-                collect_immutable_in_block(eb, out);
-            }
-        }
-        TirStmtKind::Loop { body } => collect_immutable_in_block(body, out),
-        _ => {}
     }
 }
 

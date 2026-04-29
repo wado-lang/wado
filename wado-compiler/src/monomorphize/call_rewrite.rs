@@ -4,7 +4,7 @@ use crate::name::LocalMethodName;
 use crate::name::MethodName;
 use crate::tir::{
     CallArg, FunctionRef, InstantiationKey, MonomorphInfo, ResolvedType, TirBlock, TirExpr,
-    TirExprKind, TirModule, TirStmt, TirStmtKind, TypeId, TypeTable,
+    TirExprKind, TirLocal, TirModule, TirStmt, TirStmtKind, TypeId, TypeTable,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 
@@ -24,10 +24,10 @@ impl Monomorphizer {
             let mut func = func_rc.borrow_mut();
             if let Some(mut body) = func.body.take() {
                 rewriter.visit_block(&mut body);
-                // Sync local_types with Let statement types
-                Self::sync_local_types_from_lets(&body, &mut func.local_types);
-                // Update all Local expression types based on local_types
-                Self::update_local_expr_types(&mut body, &func.local_types);
+                // Sync `locals` types with Let statement types
+                Self::sync_local_types_from_lets(&body, &mut func.locals);
+                // Update all Local expression types based on `locals`
+                Self::update_local_expr_types(&mut body, &func.locals);
                 func.body = Some(body);
             }
         }
@@ -38,13 +38,13 @@ impl Monomorphizer {
         }
     }
 
-    /// Sync `local_types` array from Let statements that may have been updated.
+    /// Sync `locals` types with the let statements they were derived from.
     ///
     /// Only walks into statement-level blocks (If/Loop/LabeledBlock/IfLet), not
     /// into expression blocks, since closures have their own local scope.
-    fn sync_local_types_from_lets(block: &TirBlock, local_types: &mut [TypeId]) {
+    fn sync_local_types_from_lets(block: &TirBlock, locals: &mut [TirLocal]) {
         struct SyncVisitor<'a> {
-            local_types: &'a mut [TypeId],
+            locals: &'a mut [TirLocal],
         }
         impl TirRefVisitor for SyncVisitor<'_> {
             fn visit_stmt(&mut self, stmt: &TirStmt) {
@@ -53,9 +53,9 @@ impl Monomorphizer {
                     type_id,
                     ..
                 } = &stmt.kind
-                    && let Some(local_type) = self.local_types.get_mut(*local_index as usize)
+                    && let Some(local) = self.locals.get_mut(*local_index as usize)
                 {
-                    *local_type = *type_id;
+                    local.type_id = *type_id;
                 }
                 self.walk_stmt(stmt);
             }
@@ -63,29 +63,29 @@ impl Monomorphizer {
                 // Don't recurse into expressions — only statement-level blocks matter
             }
         }
-        SyncVisitor { local_types }.visit_block(block);
+        SyncVisitor { locals }.visit_block(block);
     }
 
-    /// Update all Local expression types based on `local_types` array
-    fn update_local_expr_types(block: &mut TirBlock, local_types: &[TypeId]) {
+    /// Update all Local expression types based on the function's `locals`.
+    fn update_local_expr_types(block: &mut TirBlock, locals: &[TirLocal]) {
         struct LocalTypeUpdater<'a> {
-            local_types: &'a [TypeId],
+            locals: &'a [TirLocal],
         }
         impl TirMutVisitor for LocalTypeUpdater<'_> {
             fn visit_expr(&mut self, expr: &mut TirExpr) {
                 if let TirExprKind::Local { index, .. } = &expr.kind
-                    && let Some(&local_type) = self.local_types.get(*index as usize)
+                    && let Some(local) = self.locals.get(*index as usize)
                 {
-                    expr.type_id = local_type;
+                    expr.type_id = local.type_id;
                 }
-                // Closures have their own local scope, don't update with parent's local_types
+                // Closures have their own local scope, don't update with parent's locals
                 if matches!(expr.kind, TirExprKind::Closure { .. }) {
                     return;
                 }
                 self.walk_expr(expr);
             }
         }
-        LocalTypeUpdater { local_types }.visit_block(block);
+        LocalTypeUpdater { locals }.visit_block(block);
     }
     fn rewrite_call_expr(&self, expr: &mut TirExpr, type_table: &TypeTable) {
         if let TirExprKind::Call {

@@ -3019,9 +3019,10 @@ pub struct TirGlobal {
     /// codegen leaves the read result nullable so a `None` value reads
     /// back as `ref.null` instead of trapping in `ref.as_non_null`.
     pub lazy_init: bool,
-    /// Local variable types used by the initializer expression.
-    /// Populated when the initializer is non-trivial (e.g., `SequenceLiteralBuilder` coercion).
-    pub local_types: Vec<TypeId>,
+    /// Per-local metadata for the initializer expression. Populated when
+    /// the initializer is non-trivial (e.g., `SequenceLiteralBuilder`
+    /// coercion). Indexed by local index, like `TirFunction::locals`.
+    pub locals: Vec<TirLocal>,
 }
 
 #[derive(Debug, Clone)]
@@ -3060,7 +3061,13 @@ pub struct TirFunction {
     pub body: Option<TirBlock>,
     pub span: Span,
     pub local_count: u32,
-    pub local_types: Vec<TypeId>,
+    /// Per-local metadata — `name`, `type_id`, `is_mut` — indexed by Wasm
+    /// local index. Entries `0..params.len()` shadow the corresponding
+    /// `params[i]` (for uniform absolute indexing); body let-bindings and
+    /// resolver/optimizer-allocated temporaries occupy `params.len()..`.
+    /// `local_count == locals.len()` post-resolve; passes that grow the
+    /// local set must keep the two in sync.
+    pub locals: Vec<TirLocal>,
     /// Local indices that have their address taken (&x or &mut x).
     /// For mutable primitives, these locals are stored in box structs.
     pub address_taken_locals: IndexSet<u32>,
@@ -3178,21 +3185,22 @@ impl TirFunction {
     }
 }
 
-/// A resolved local-slot entry in a function or closure scope, identified
-/// by its declaration / order in the surrounding local environment.
+/// A resolved local-slot entry in a function, global initializer, or
+/// closure scope, identified by its declaration / order in the surrounding
+/// local environment.
 ///
 /// `FunctionContext::add_local` records every local — source-level
 /// parameters, `let` bindings, destructure bindings, and resolver-generated
 /// temporaries — as a `TirLocal`. The single source of truth for the local
-/// namespace is `FunctionContext::locals: Vec<TirLocal>`; from there:
+/// namespace is `FunctionContext::locals: Vec<TirLocal>`; from there it is
+/// projected onto:
 ///
-/// * Closure resolution copies the body's slice
-///   (`locals[params.len()..]`) onto `TirExprKind::Closure { body_locals,
-///   .. }` so pattern lowering can seed a closure-scoped allocator
-///   without re-walking the body.
-/// * Function-level state (`TirFunction::local_types`,
-///   `TirGlobal::local_types`) currently keeps only `Vec<TypeId>`;
-///   promoting those to `Vec<TirLocal>` is a separate refactor.
+/// * `TirFunction::locals` and `TirGlobal::locals` — the function/global's
+///   absolute local table, keyed by Wasm local index.
+/// * `TirExprKind::Closure { body_locals, .. }` — the closure's
+///   body-level let-bindings (params live in `params` so they aren't
+///   duplicated). Pattern lowering reconstructs the closure-scope local
+///   table from `params + body_locals` while descending in.
 #[derive(Debug, Clone)]
 pub struct TirLocal {
     /// Source-level name of the binding (or a synthesised `__name` for
@@ -3200,6 +3208,19 @@ pub struct TirLocal {
     pub name: String,
     pub type_id: TypeId,
     pub is_mut: bool,
+}
+
+impl TirLocal {
+    /// Build a `TirLocal` for a synthesised slot whose name follows the
+    /// `__local_N` convention used by `wir_build` when no source-level
+    /// name is available.
+    pub fn synth(index: u32, type_id: TypeId, is_mut: bool) -> Self {
+        Self {
+            name: format!("__local_{index}"),
+            type_id,
+            is_mut,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

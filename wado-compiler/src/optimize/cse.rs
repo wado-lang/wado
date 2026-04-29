@@ -26,7 +26,8 @@
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
 use crate::tir::{
-    TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TypeId,
+    TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirStmt, TirStmtKind,
+    TypeId,
 };
 use crate::token::Span;
 
@@ -47,7 +48,7 @@ fn cse_function(func: &mut TirFunction) -> bool {
     cse_in_block(
         body,
         &mut func.local_count,
-        &mut func.local_types,
+        &mut func.locals,
         &mut changed,
     );
     changed
@@ -56,48 +57,48 @@ fn cse_function(func: &mut TirFunction) -> bool {
 fn cse_in_block(
     block: &mut TirBlock,
     local_count: &mut u32,
-    local_types: &mut Vec<TypeId>,
+    locals: &mut Vec<TirLocal>,
     changed: &mut bool,
 ) {
     for stmt in &mut block.stmts {
-        cse_in_stmt(stmt, local_count, local_types, changed);
+        cse_in_stmt(stmt, local_count, locals, changed);
     }
 }
 
 fn cse_in_stmt(
     stmt: &mut TirStmt,
     local_count: &mut u32,
-    local_types: &mut Vec<TypeId>,
+    locals: &mut Vec<TirLocal>,
     changed: &mut bool,
 ) {
     match &mut stmt.kind {
         TirStmtKind::Loop { body } => {
             // First recurse into inner loops
-            cse_in_block(body, local_count, local_types, changed);
+            cse_in_block(body, local_count, locals, changed);
             // Then apply CSE to this loop body
-            *changed |= cse_loop_body(body, local_count, local_types);
+            *changed |= cse_loop_body(body, local_count, locals);
         }
         TirStmtKind::If {
             then_block,
             else_block,
             ..
         } => {
-            cse_in_block(then_block, local_count, local_types, changed);
+            cse_in_block(then_block, local_count, locals, changed);
             if let Some(eb) = else_block {
-                cse_in_block(eb, local_count, local_types, changed);
+                cse_in_block(eb, local_count, locals, changed);
             }
         }
         TirStmtKind::LabeledBlock { block, .. } => {
-            cse_in_block(block, local_count, local_types, changed);
+            cse_in_block(block, local_count, locals, changed);
         }
         TirStmtKind::IfLet {
             then_block,
             else_block,
             ..
         } => {
-            cse_in_block(then_block, local_count, local_types, changed);
+            cse_in_block(then_block, local_count, locals, changed);
             if let Some(eb) = else_block {
-                cse_in_block(eb, local_count, local_types, changed);
+                cse_in_block(eb, local_count, locals, changed);
             }
         }
         _ => {}
@@ -158,7 +159,7 @@ fn key_locals(key: &CseKey, locals: &mut IndexSet<u32>) {
 fn cse_loop_body(
     body: &mut TirBlock,
     local_count: &mut u32,
-    local_types: &mut Vec<TypeId>,
+    locals: &mut Vec<TirLocal>,
 ) -> bool {
     // Pattern: first stmt is `if !(cond) { break; }` — extract subexprs from cond
     if body.stmts.is_empty() {
@@ -207,9 +208,12 @@ fn cse_loop_body(
             // Create a new local for the CSE'd expression
             let cse_local_idx = *local_count;
             *local_count += 1;
-            local_types.push(*type_id);
-
             let cse_local_name = format!("__cse_{cse_local_idx}");
+            locals.push(TirLocal {
+                name: cse_local_name.clone(),
+                type_id: *type_id,
+                is_mut: false,
+            });
 
             // Build the Let statement for the CSE local (clone the expression from guard)
             let cse_expr = extract_matching_expr(guard_expr, key).unwrap();

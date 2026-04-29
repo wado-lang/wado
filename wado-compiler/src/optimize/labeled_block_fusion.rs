@@ -39,7 +39,9 @@
 //! (copy propagation, DCE) clean up the remaining `break '__fused_L;` bookkeeping.
 
 use crate::flat_package::FlatPackage;
-use crate::tir::{TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TypeId};
+use crate::tir::{
+    TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirStmt, TirStmtKind, TypeId,
+};
 use crate::tir_visitor::expr_has_break_to;
 
 pub fn fuse_labeled_blocks(project: &mut FlatPackage) -> bool {
@@ -61,7 +63,7 @@ fn fuse_in_function(func: &mut TirFunction) -> bool {
         body,
         /* yields_value */ false,
         &mut func.local_count,
-        &mut func.local_types,
+        &mut func.locals,
     )
 }
 
@@ -74,7 +76,7 @@ fn fuse_in_block(
     block: &mut TirBlock,
     yields_value: bool,
     local_count: &mut u32,
-    local_types: &mut Vec<TypeId>,
+    locals: &mut Vec<TirLocal>,
 ) -> bool {
     // Recurse first into any nested blocks/stmts.
     let mut changed = false;
@@ -84,10 +86,10 @@ fn fuse_in_block(
         // block's terminal value. All earlier statements are in statement
         // position and may always be fused.
         let stmt_yields_value = yields_value && i == last_idx;
-        changed |= fuse_in_stmt(stmt, stmt_yields_value, local_count, local_types);
+        changed |= fuse_in_stmt(stmt, stmt_yields_value, local_count, locals);
     }
     // Then look for adjacent (Let+LabeledBlock, If+VariantTest) pairs at this level.
-    changed |= fuse_adjacent_pairs(block, yields_value, local_count, local_types);
+    changed |= fuse_adjacent_pairs(block, yields_value, local_count, locals);
     changed
 }
 
@@ -95,32 +97,32 @@ fn fuse_in_stmt(
     stmt: &mut TirStmt,
     yields_value: bool,
     local_count: &mut u32,
-    local_types: &mut Vec<TypeId>,
+    locals: &mut Vec<TirLocal>,
 ) -> bool {
     match &mut stmt.kind {
-        TirStmtKind::Let { value, .. } => fuse_in_expr(value, local_count, local_types),
-        TirStmtKind::Expr(expr) => fuse_in_expr(expr, local_count, local_types),
+        TirStmtKind::Let { value, .. } => fuse_in_expr(value, local_count, locals),
+        TirStmtKind::Expr(expr) => fuse_in_expr(expr, local_count, locals),
         TirStmtKind::If {
             condition,
             then_block,
             else_block,
         } => {
-            let mut changed = fuse_in_expr(condition, local_count, local_types);
+            let mut changed = fuse_in_expr(condition, local_count, locals);
             // The branches' tail values become this If's value, which becomes the
             // enclosing block's value when `yields_value` is true.
-            changed |= fuse_in_block(then_block, yields_value, local_count, local_types);
+            changed |= fuse_in_block(then_block, yields_value, local_count, locals);
             if let Some(eb) = else_block {
-                changed |= fuse_in_block(eb, yields_value, local_count, local_types);
+                changed |= fuse_in_block(eb, yields_value, local_count, locals);
             }
             changed
         }
         TirStmtKind::Loop { body } => {
             // Loop bodies don't fall through with a value.
-            fuse_in_block(body, false, local_count, local_types)
+            fuse_in_block(body, false, local_count, locals)
         }
         TirStmtKind::LabeledBlock { block: body, .. } => {
             // A statement-level labeled block discards its value.
-            fuse_in_block(body, false, local_count, local_types)
+            fuse_in_block(body, false, local_count, locals)
         }
         TirStmtKind::IfLet {
             scrutinee,
@@ -128,28 +130,28 @@ fn fuse_in_stmt(
             else_block,
             ..
         } => {
-            let mut changed = fuse_in_expr(scrutinee, local_count, local_types);
-            changed |= fuse_in_block(then_block, yields_value, local_count, local_types);
+            let mut changed = fuse_in_expr(scrutinee, local_count, locals);
+            changed |= fuse_in_block(then_block, yields_value, local_count, locals);
             if let Some(eb) = else_block {
-                changed |= fuse_in_block(eb, yields_value, local_count, local_types);
+                changed |= fuse_in_block(eb, yields_value, local_count, locals);
             }
             changed
         }
         TirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
-                fuse_in_expr(v, local_count, local_types)
+                fuse_in_expr(v, local_count, locals)
             } else {
                 false
             }
         }
         TirStmtKind::Return { value } => {
             if let Some(v) = value {
-                fuse_in_expr(v, local_count, local_types)
+                fuse_in_expr(v, local_count, locals)
             } else {
                 false
             }
         }
-        TirStmtKind::LetDestructure { value, .. } => fuse_in_expr(value, local_count, local_types),
+        TirStmtKind::LetDestructure { value, .. } => fuse_in_expr(value, local_count, locals),
         TirStmtKind::Continue
         | TirStmtKind::TaskReturn { .. }
         | TirStmtKind::VariadicForOf { .. } => false,
@@ -205,7 +207,7 @@ fn try_inline_trivial_labeled_block(expr: &mut TirExpr) -> bool {
     true
 }
 
-fn fuse_in_expr(expr: &mut TirExpr, local_count: &mut u32, local_types: &mut Vec<TypeId>) -> bool {
+fn fuse_in_expr(expr: &mut TirExpr, local_count: &mut u32, locals: &mut Vec<TirLocal>) -> bool {
     match &mut expr.kind {
         TirExprKind::LabeledBlock { block, .. } => {
             // Expression-level labeled block: its terminal value is consumed.
@@ -213,7 +215,7 @@ fn fuse_in_expr(expr: &mut TirExpr, local_count: &mut u32, local_types: &mut Vec
                 block,
                 /* yields_value */ true,
                 local_count,
-                local_types,
+                locals,
             );
             // Then check if this became a trivial single-break block
             try_inline_trivial_labeled_block(expr) || changed
@@ -224,7 +226,7 @@ fn fuse_in_expr(expr: &mut TirExpr, local_count: &mut u32, local_types: &mut Vec
                 block,
                 /* yields_value */ true,
                 local_count,
-                local_types,
+                locals,
             )
         }
         TirExprKind::If {
@@ -232,17 +234,17 @@ fn fuse_in_expr(expr: &mut TirExpr, local_count: &mut u32, local_types: &mut Vec
             then_branch,
             else_branch,
         } => {
-            let mut changed = fuse_in_expr(condition, local_count, local_types);
+            let mut changed = fuse_in_expr(condition, local_count, locals);
             // If-expression branches contribute the if's value.
-            changed |= fuse_in_block(then_branch, true, local_count, local_types);
+            changed |= fuse_in_block(then_branch, true, local_count, locals);
             if let Some(eb) = else_branch {
-                changed |= fuse_in_block(eb, true, local_count, local_types);
+                changed |= fuse_in_block(eb, true, local_count, locals);
             }
             changed
         }
         TirExprKind::Binary { left, right, .. } => {
-            fuse_in_expr(left, local_count, local_types)
-                | fuse_in_expr(right, local_count, local_types)
+            fuse_in_expr(left, local_count, locals)
+                | fuse_in_expr(right, local_count, locals)
         }
         TirExprKind::Unary { expr: inner, .. }
         | TirExprKind::Cast { expr: inner, .. }
@@ -250,99 +252,99 @@ fn fuse_in_expr(expr: &mut TirExpr, local_count: &mut u32, local_types: &mut Vec
         | TirExprKind::VariantTag { expr: inner }
         | TirExprKind::VariantTest { expr: inner, .. }
         | TirExprKind::VariantPayload { expr: inner, .. } => {
-            fuse_in_expr(inner, local_count, local_types)
+            fuse_in_expr(inner, local_count, locals)
         }
         TirExprKind::Assign { target, value } => {
-            fuse_in_expr(target, local_count, local_types)
-                | fuse_in_expr(value, local_count, local_types)
+            fuse_in_expr(target, local_count, locals)
+                | fuse_in_expr(value, local_count, locals)
         }
         TirExprKind::Call { args, .. } => {
             let mut changed = false;
             for arg in args {
-                changed |= fuse_in_expr(&mut arg.expr, local_count, local_types);
+                changed |= fuse_in_expr(&mut arg.expr, local_count, locals);
             }
             changed
         }
         TirExprKind::CmRawCall { args, .. } => {
             let mut changed = false;
             for arg in args {
-                changed |= fuse_in_expr(arg, local_count, local_types);
+                changed |= fuse_in_expr(arg, local_count, locals);
             }
             changed
         }
         TirExprKind::MethodCall { receiver, args, .. } => {
-            let mut changed = fuse_in_expr(receiver, local_count, local_types);
+            let mut changed = fuse_in_expr(receiver, local_count, locals);
             for arg in args {
-                changed |= fuse_in_expr(&mut arg.expr, local_count, local_types);
+                changed |= fuse_in_expr(&mut arg.expr, local_count, locals);
             }
             changed
         }
         TirExprKind::IndirectCall { callee, args } => {
-            let mut changed = fuse_in_expr(callee, local_count, local_types);
+            let mut changed = fuse_in_expr(callee, local_count, locals);
             for arg in args {
-                changed |= fuse_in_expr(arg, local_count, local_types);
+                changed |= fuse_in_expr(arg, local_count, locals);
             }
             changed
         }
         TirExprKind::Index { expr: inner, index } => {
-            fuse_in_expr(inner, local_count, local_types)
-                | fuse_in_expr(index, local_count, local_types)
+            fuse_in_expr(inner, local_count, locals)
+                | fuse_in_expr(index, local_count, locals)
         }
         TirExprKind::StructLiteral { fields, .. } => {
             let mut changed = false;
             for f in fields {
-                changed |= fuse_in_expr(&mut f.value, local_count, local_types);
+                changed |= fuse_in_expr(&mut f.value, local_count, locals);
             }
             changed
         }
         TirExprKind::TupleLiteral { elements } => {
             let mut changed = false;
             for e in elements {
-                changed |= fuse_in_expr(e, local_count, local_types);
+                changed |= fuse_in_expr(e, local_count, locals);
             }
             changed
         }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {
-                fuse_in_expr(p, local_count, local_types)
+                fuse_in_expr(p, local_count, locals)
             } else {
                 false
             }
         }
         TirExprKind::ClosureToCanonical { functor, .. } => {
-            fuse_in_expr(functor, local_count, local_types)
+            fuse_in_expr(functor, local_count, locals)
         }
-        TirExprKind::GlobalVarSet { value, .. } => fuse_in_expr(value, local_count, local_types),
+        TirExprKind::GlobalVarSet { value, .. } => fuse_in_expr(value, local_count, locals),
         TirExprKind::TupleSpread { expr: inner }
         | TirExprKind::TupleZip { expr: inner }
         | TirExprKind::TypePackExpansion {
             call_expr: inner, ..
-        } => fuse_in_expr(inner, local_count, local_types),
+        } => fuse_in_expr(inner, local_count, locals),
         TirExprKind::Switch {
             scrutinee,
             arms,
             default,
             ..
         } => {
-            let mut changed = fuse_in_expr(scrutinee, local_count, local_types);
+            let mut changed = fuse_in_expr(scrutinee, local_count, locals);
             // Switch is an expression: each arm contributes the switch's value.
             for arm in arms {
-                changed |= fuse_in_block(arm, true, local_count, local_types);
+                changed |= fuse_in_block(arm, true, local_count, locals);
             }
-            changed |= fuse_in_block(default, true, local_count, local_types);
+            changed |= fuse_in_block(default, true, local_count, locals);
             changed
         }
         TirExprKind::Match { expr, arms } => {
-            let mut changed = fuse_in_expr(expr, local_count, local_types);
+            let mut changed = fuse_in_expr(expr, local_count, locals);
             for arm in arms {
-                changed |= fuse_in_expr(&mut arm.body, local_count, local_types);
+                changed |= fuse_in_expr(&mut arm.body, local_count, locals);
                 if let Some(guard) = &mut arm.guard {
-                    changed |= fuse_in_expr(guard, local_count, local_types);
+                    changed |= fuse_in_expr(guard, local_count, locals);
                 }
             }
             changed
         }
-        TirExprKind::Closure { body, .. } => fuse_in_expr(body, local_count, local_types),
+        TirExprKind::Closure { body, .. } => fuse_in_expr(body, local_count, locals),
         // Leaf nodes
         TirExprKind::Local { .. }
         | TirExprKind::FuncRef { .. }
@@ -379,7 +381,7 @@ fn fuse_adjacent_pairs(
     block: &mut TirBlock,
     yields_value: bool,
     local_count: &mut u32,
-    local_types: &mut Vec<TypeId>,
+    locals: &mut Vec<TirLocal>,
 ) -> bool {
     let stmts = std::mem::take(&mut block.stmts);
     let mut new_stmts = Vec::with_capacity(stmts.len());
@@ -405,7 +407,7 @@ fn fuse_adjacent_pairs(
                 new_stmts.push(if_stmt);
                 continue;
             }
-            let fused = perform_fusion(let_stmt, if_stmt, info, local_count, local_types);
+            let fused = perform_fusion(let_stmt, if_stmt, info, local_count, locals);
             new_stmts.extend(fused);
             changed = true;
         } else {
@@ -1055,7 +1057,7 @@ fn perform_fusion(
     if_stmt: TirStmt,
     info: FusionInfo,
     local_count: &mut u32,
-    local_types: &mut Vec<TypeId>,
+    locals: &mut Vec<TirLocal>,
 ) -> Vec<TirStmt> {
     let span = let_stmt.span;
 
@@ -1086,7 +1088,7 @@ fn perform_fusion(
     // Allocate a fresh local for the payload value.
     let payload_local = *local_count;
     *local_count += 1;
-    local_types.push(info.payload_type);
+    locals.push(TirLocal::synth(payload_local, info.payload_type, false));
 
     let fused_label = format!("__fused_{}", info.label);
 

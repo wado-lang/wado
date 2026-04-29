@@ -48,9 +48,9 @@ use crate::package::Package;
 use crate::synthesis::common::{alloc_local, option_some, ref_expr, synth_span};
 use crate::tir::{
     CallArg, EffectRef, FunctionKind, FunctionRef, InlineHint, SubstitutionContext, TirBlock,
-    TirCapture, TirEffectOp, TirExpr, TirExprKind, TirField, TirFunction, TirGlobal, TirParam,
-    TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirTemplatePart, TypeId,
-    TypeTable,
+    TirCapture, TirEffectOp, TirExpr, TirExprKind, TirField, TirFunction, TirGlobal, TirLocal,
+    TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirTemplatePart,
+    TypeId, TypeTable,
 };
 
 /// Canonical identity of an effect or resource **declaration**:
@@ -407,7 +407,7 @@ fn synthesize_dispatch_global(
         span,
         is_nullable: true,
         lazy_init: false,
-        local_types: Vec::new(),
+        locals: Vec::new(),
     };
     let entry_module = project
         .tir_modules
@@ -501,10 +501,16 @@ fn build_dispatch_wrapper_function(
 
     // Allocate locals: params, then __saved, __d (if-let binding), __result.
     let mut params: Vec<TirParam> = Vec::with_capacity(op.params.len());
-    let mut local_types: Vec<TypeId> = Vec::new();
+    let mut locals: Vec<TirLocal> = Vec::new();
     let mut next_local: u32 = 0;
     for p in &op.params {
-        let local_index = alloc_local(&mut next_local, &mut local_types, p.type_id);
+        let local_index = crate::synthesis::common::alloc_named_local(
+            &mut next_local,
+            &mut locals,
+            Some(p.name.clone()),
+            p.type_id,
+            false,
+        );
         params.push(TirParam {
             name: p.name.clone(),
             type_id: p.type_id,
@@ -514,12 +520,12 @@ fn build_dispatch_wrapper_function(
             span,
         });
     }
-    let saved_local = alloc_local(&mut next_local, &mut local_types, nullable_ref_type_id);
-    let d_local = alloc_local(&mut next_local, &mut local_types, inner_ref_type_id);
+    let saved_local = alloc_local(&mut next_local, &mut locals, nullable_ref_type_id);
+    let d_local = alloc_local(&mut next_local, &mut locals, inner_ref_type_id);
     let result_local = if return_type == TypeTable::UNIT {
         None
     } else {
-        Some(alloc_local(&mut next_local, &mut local_types, return_type))
+        Some(alloc_local(&mut next_local, &mut locals, return_type))
     };
 
     let arg_exprs: Vec<TirExpr> = params
@@ -896,7 +902,7 @@ fn build_dispatch_wrapper_function(
         body: Some(body),
         span,
         local_count: next_local,
-        local_types,
+        locals,
         address_taken_locals: IndexSet::default(),
         stores_aliased_locals: IndexSet::default(),
         is_cm_binding: false,
@@ -1042,7 +1048,7 @@ struct DispatchEnv<'a> {
 /// When the walker descends into a `TirExprKind::Closure` body, it
 /// pushes a fresh closure-local scope so any nested `WithHandler` is
 /// desugared into the closure's local-index space rather than the
-/// outer function's. Closure-scope `local_types` is dropped on pop
+/// outer function's. Closure-scope `locals` is dropped on pop
 /// because the lower phase rebuilds each closure's local table from
 /// `Let` statements anyway.
 struct LowerCtx {
@@ -1054,8 +1060,8 @@ struct LowerCtx {
 /// One frame on `LowerCtx.scopes`.
 ///
 /// The outermost frame is always a `Function` scope and owns the
-/// caller's `local_types` vector — fresh locals are appended there and
-/// the vector is moved back into `TirFunction.local_types` on exit.
+/// caller's `locals` vector — fresh locals are appended there and
+/// the vector is moved back into `TirFunction.locals` on exit.
 ///
 /// Each `Closure` frame, pushed when the walker descends into a
 /// `TirExprKind::Closure` body, owns a closure-local `next_local`
@@ -1065,7 +1071,7 @@ struct LowerCtx {
 enum LocalScope {
     Function {
         next_local: u32,
-        local_types: Vec<TypeId>,
+        locals: Vec<TirLocal>,
     },
     Closure {
         next_local: u32,
@@ -1076,13 +1082,14 @@ impl LowerCtx {
     fn alloc_local(&mut self, ty: TypeId) -> u32 {
         let scope = self.scopes.last_mut().expect("at least one scope");
         match scope {
-            LocalScope::Function {
-                next_local,
-                local_types,
-            } => {
+            LocalScope::Function { next_local, locals } => {
                 let idx = *next_local;
                 *next_local += 1;
-                local_types.push(ty);
+                locals.push(TirLocal {
+                    name: format!("__local_{idx}"),
+                    type_id: ty,
+                    is_mut: false,
+                });
                 idx
             }
             LocalScope::Closure { next_local } => {
@@ -1127,21 +1134,18 @@ fn lower_with_handler_dispatch_in_modules(
 
 fn lower_with_handler_dispatch_in_func(func: &mut TirFunction, env: &DispatchEnv) {
     if let Some(body) = &mut func.body {
-        let local_types = std::mem::take(&mut func.local_types);
+        let locals = std::mem::take(&mut func.locals);
         let mut ctx = LowerCtx {
             scopes: vec![LocalScope::Function {
                 next_local: func.local_count,
-                local_types,
+                locals,
             }],
         };
         lower_dispatch_in_block(body, env, &mut ctx);
         match ctx.scopes.pop().expect("function scope") {
-            LocalScope::Function {
-                next_local,
-                local_types,
-            } => {
+            LocalScope::Function { next_local, locals } => {
                 func.local_count = next_local;
-                func.local_types = local_types;
+                func.locals = locals;
             }
             LocalScope::Closure { .. } => {
                 unreachable!("outermost scope must be a function frame")
