@@ -470,6 +470,103 @@ let n: Option<Node> = r.map(|el| el);      // OK: upcast applies inside the clos
 
 Coming from languages where `Option` is covariant (Scala, Kotlin's nullable types, etc.), this is the most likely surprise. The same rule applies to `Result<T, E>` in both type parameters and to every other generic container. The `.map(...)` workaround is short and does not allocate.
 
+### Lowering
+
+How `extends` and the operations on it lower from Wado to WIT/CM, and from WIT/CM to wasm. The recurring pattern is **erasure at the CM layer**: extends-related Wado types collapse to a single CM resource type, with method namespacing carrying the only distinction the host needs.
+
+#### Three layers
+
+| Layer  | Identity                                                          |
+| ------ | ----------------------------------------------------------------- |
+| Wado   | each type in the `extends` chain is distinct (`Element ≠ Node`)   |
+| WIT/CM | one resource type, `extern-ref`                                   |
+| Wasm   | the corresponding GC reference, `externref`                       |
+
+This is the same erasure pattern as [Newtype Semantics](./wep-2026-01-29-newtype-semantics.md): the Wado type system holds the structure, the wasm output knows nothing about it. extends differs from newtype only in that **method namespacing is preserved at the WIT layer** — methods are imported under per-Wado-type WIT interfaces, even though the receiver type is universal.
+
+#### Universal receiver at the WIT layer
+
+A single CM resource type:
+
+```wit
+resource extern-ref;
+```
+
+Every extends-related Wado type is the same `extern-ref` once it crosses the boundary. There is no `event-target` resource, no `node` resource, no `element` resource at the CM level — only the methods are split.
+
+This eliminates a class of CM-GC requirements we would otherwise depend on (the spec accepting "the same externref valid under multiple resource types"). The single-type model needs nothing beyond standard `extern-ref`.
+
+#### Method imports
+
+Methods are grouped into WIT interfaces named after their declaring Wado type. The receiver argument is `extern-ref`:
+
+```wit
+interface event-target {
+    add-event-listener: func(self: extern-ref, type: string,
+                             callback: option<extern-ref>,
+                             options: option<extern-ref>);
+}
+interface node {
+    append-child: func(self: extern-ref, child: extern-ref) -> extern-ref;
+    text-content: func(self: extern-ref) -> option<string>;
+}
+interface element {
+    get-attribute: func(self: extern-ref, name: string) -> option<string>;
+}
+interface mouse-event {
+    button: func(self: extern-ref) -> s16;
+}
+interface html-button-element {
+    name: func(self: extern-ref) -> string;
+    set-name: func(self: extern-ref, value: string);
+}
+```
+
+Same-named methods on unrelated Wado types (e.g., a hypothetical `mouse-event.button` vs `html-button-element.button`) do not collide because the WIT interface namespace separates them.
+
+#### Built-in predicates and formatters
+
+`downcast`, `Eq`, `Inspect`, `InspectAlt`, and `Display` lower to flat CM imports over `extern-ref`:
+
+```wit
+interface lang {
+    // one per extends-participating Wado type
+    is-event-target: func(r: extern-ref) -> bool;
+    is-node:         func(r: extern-ref) -> bool;
+    is-element:      func(r: extern-ref) -> bool;
+    // ...
+
+    // universal
+    is-same:     func(a: extern-ref, b: extern-ref) -> bool;
+    inspect:     func(r: extern-ref) -> string;
+    inspect-alt: func(r: extern-ref) -> string;
+    display:     func(r: extern-ref) -> string;
+}
+```
+
+The `is-T` predicates scale O(N) with the number of extends-participating types. `is-same`, `inspect`, `inspect-alt`, `display` are universal — one each, regardless of N.
+
+#### Operation lowering at a glance
+
+| Wado operation                                | WIT/CM lowering                                                   |
+| --------------------------------------------- | ----------------------------------------------------------------- |
+| `let n: Node = el;` (implicit upcast)         | identity                                                          |
+| `el.foo()` resolving to `Node::foo`           | call `node.foo(el, ...)`                                          |
+| `el.downcast::<HtmlInputElement>()`           | call `is-html-input-element(el)`, branch into `Option::Some(el)` or `Option::None` |
+| `a == b` for `a, b: ExternRef`-backed         | call `is-same(a, b)`                                              |
+| `` `{x:?}` ``                                 | call `inspect(x)`                                                 |
+| `` `{x}` ``                                   | call `display(x)`                                                 |
+
+Upcast and the receiver argument of inherited methods are wasm-level no-ops; the same `externref` value flows through unchanged.
+
+#### Interaction with WIT bundling
+
+`extends` is Wado-only metadata. The bundled WIT ([WIT Bundling](./wep-2026-03-21-wit-bundling.md)) emitted with the component contains only the flat per-Wado-type interfaces above; nothing about the inheritance relation appears. Other-language consumers of the bundled WIT see a flat method surface and do not need to understand `extends` to call any method.
+
+#### Lifecycle
+
+`extern-ref`-backed resources follow CM-GC's standard lifecycle for externref-backed resources. extends does not introduce a Wado-specific drop protocol, and the same underlying `externref` is GC-collected exactly once regardless of how many Wado static types referenced it.
+
 ## Consequences
 
 ### Implementation Roadmap
