@@ -82,21 +82,6 @@ pub enum CmExportType {
     HandlerResult,
 }
 
-impl CmExportType {
-    /// True if lifting this CM type out of linear memory requires the
-    /// canon `realloc` option.
-    ///
-    /// Records / lists / strings / own-handles all need `realloc` so the
-    /// canon can materialise the payload into the guest module's linear
-    /// memory. `Unit` and primitive variants don't allocate, and would be
-    /// rejected by `wasm-tools` if they shipped a `realloc` option.
-    /// Currently every [`Self::Named`] in a stdlib world ABI is a record or
-    /// resource; the conservative answer is "any non-Unit type needs realloc".
-    pub fn needs_realloc(&self) -> bool {
-        !matches!(self, CmExportType::Unit)
-    }
-}
-
 /// A test function to export from the component.
 #[derive(Debug, Clone)]
 pub struct TestExportPlan {
@@ -497,21 +482,5 @@ mod tests {
             }
             other => panic!("expected Named, got {other:?}"),
         }
-    }
-
-    #[test]
-    fn test_needs_realloc() {
-        // Unit needs no realloc; the canon would be rejected by wasm-tools
-        // if it shipped one with no lifting work.
-        assert!(!CmExportType::Unit.needs_realloc());
-        // Named records / resources are lifted into linear memory.
-        assert!(
-            CmExportType::Named {
-                interface_fq: "wasi:http/types".to_string(),
-                cm_name: "request".to_string(),
-            }
-            .needs_realloc()
-        );
-        assert!(CmExportType::HandlerResult.needs_realloc());
     }
 }

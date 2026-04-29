@@ -1604,20 +1604,16 @@ fn emit_world_exports(
         }
 
         ctx.register_comp_func(&export.name);
-        let mut lift_opts = vec![
+        // `realloc` is always supplied to the canon. The Wado runtime always
+        // exports a `realloc` (the chosen allocator), and wasm-tools accepts
+        // the option even on canons whose lift code never calls back into it
+        // (verified by running the full e2e suite, including param-free CLI
+        // `run` and `Result<(), ()>` exports).
+        let lift_opts = vec![
             CanonicalOption::Async,
             CanonicalOption::Memory(ctx.memory_idx()),
+            CanonicalOption::Realloc(ctx.core_func_idx("realloc")),
         ];
-        // `realloc` is required iff the canon has any non-Unit param to
-        // materialise into linear memory. `wasm-tools` rejects `realloc`
-        // on a canon with no lifting work to do.
-        let needs_realloc = export
-            .cm_params
-            .iter()
-            .any(|(_, cm_ty)| cm_ty.needs_realloc());
-        if needs_realloc {
-            lift_opts.push(CanonicalOption::Realloc(ctx.core_func_idx("realloc")));
-        }
         builder.lift_func(
             Some(&export.name),
             ctx.core_func_idx(&core_name),
