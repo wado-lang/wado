@@ -316,6 +316,104 @@ el.private_helper();            // ERROR: private_helper is visible only in dom.
 
 Reason: `extends` is a type-level relation, not a name-space merge. Inheriting visibility from the child would let the child silently re-export private parent internals.
 
+### Downcast
+
+Same principle as method resolution: **start at maximum strictness; relax based on real usage.** Every rule below is the strictest sound choice; loosening is non-breaking.
+
+#### Signature
+
+`downcast` is a **method** synthesized by the compiler on every `externref`-backed resource type:
+
+```wado
+fn downcast<T>(&self) -> Option<T>;
+```
+
+It returns the source value re-typed as `T` if the host confirms the runtime type matches, otherwise `None`. The receiver `&self` is borrowed; the result is returned by value (a fresh handle to the same underlying host object).
+
+```wado
+let el: Element = ...;
+if let Some(input) = el.downcast::<HtmlInputElement>() {
+    input.value();             // OK: input has the full HtmlInputElement API
+    input.set_attribute(...);  // OK: inherited from Element
+}
+el.tag_name();                 // el is still valid
+```
+
+#### Why method form, not a free function
+
+Considered: a free `downcast::<T>(v: V) -> Option<T>` in the prelude. Rejected because the source-side `V` would have to be a generic type parameter constrained by `T <: V`, which forces a generic-bound syntax for subtyping (`T <: V`) into v1. The method form keeps the source as `Self`, so the compiler only checks "is the user-supplied `T` a strict subtype of `Self`?" — no new bound syntax, no new generic machinery.
+
+Consistency with Tide WEP examples (`el.downcast::<T>()`) and method-chain ergonomics are secondary but reinforcing reasons.
+
+#### Why value-returning, not `Option<&T>`
+
+In Wado, resource handles are themselves immutable values (their mutations all happen on the host side via `&self` methods — see the sidebar below). They have value semantics, no lifetimes, no borrow checker. Returning `Option<T>` rather than `Option<&T>` is the honest signature: the result is a new handle pointing at the same host object, and the source remains valid in parallel. There is no borrow to track.
+
+There is no `downcast_mut`. Resources do not have `&mut self` methods (see sidebar), so a `&mut`-flavoured downcast has no API to feed.
+
+##### Sidebar: resource handles are immutable
+
+Across the language, every `resource` method takes `&self`. The Wado-side handle (an `externref`) carries no mutable state of its own; all observable mutation occurs in the host object referenced by that handle and is invoked through ordinary `&self` host calls. There is no language-level rule preventing someone from writing `fn foo(&mut self)` on a resource today, but in this WEP's scope (`externref`-backed resources participating in `extends`) the pattern does not arise. A future WEP can decide whether to forbid `&mut self` on resources outright.
+
+#### Allowed targets
+
+The static type checker enforces, at the call site:
+
+| Relation between `Self` and `T` | Status               |
+| ------------------------------- | -------------------- |
+| `T` is a strict subtype of `Self` | OK (the only valid case) |
+| `T == Self`                     | compile error (trivial cast — use the value directly) |
+| `Self <: T` (i.e., `T` is an ancestor) | compile error (use implicit upcast) |
+| `T` and `Self` share an ancestor but neither extends the other (sibling) | compile error (statically cannot succeed) |
+| `T` and `Self` are unrelated    | compile error                              |
+
+Both `Self` and `T` must declare `type=externref` in `#[cm(...)]`. The check is redundant given the v1 gating (`extends` requires `externref`), but the compiler validates it defensively.
+
+#### Generic targets are forbidden in v1
+
+`T` must be a concrete type at the call site. A function like:
+
+```wado
+fn try_cast<T>(el: &Element) -> Option<T> {
+    return el.downcast::<T>();   // ERROR in v1
+}
+```
+
+is rejected. Allowing generic `T` requires a subtype-bound syntax (`T <: Element`) which is out of scope for this WEP. If a real use case for generic narrowing emerges, a follow-up WEP can introduce the bound and lift this restriction.
+
+#### Failure mode
+
+Failed casts return `None`. There is no panic, no effect, no exception. Callers handle the `Option<T>` like any other.
+
+#### Host runtime contract
+
+For each `externref`-backed resource type `T`, the compiler emits a CM-imported predicate:
+
+```
+is-T: func(externref) -> bool
+```
+
+This is a per-type import, not a generic `is-instance(externref, type-id)` form. The per-type approach keeps the CM signature shape obvious and avoids inventing a type-id encoding.
+
+The host (e.g., the jco-style JS glue Tide ships with the bindings) implements `is-T` with the natural runtime check — `value instanceof T` for browser bindings. `r.downcast::<T>()` lowers to:
+
+```
+let v = self.0;                         // unwrap the externref
+if is-T(v) { Option::Some(T(v)) } else { Option::None }
+```
+
+The number of `is-T` imports scales with the number of `extends`-participating resource types. For the full Tide-generated WebIDL surface this is on the order of hundreds of imports, which is well within CM limits and existing wasm-bindgen practice.
+
+#### No syntactic sugar in v1
+
+Considered and rejected for v1:
+
+- `el as? HtmlInputElement` (Swift-style operator)
+- `match el { as HtmlInputElement(input) => ... }` (TypeScript-style pattern)
+- `r.try_into::<T>()` (alias)
+
+Sugar can land in a follow-up WEP once the bare method form is in real use and the right ergonomic shape is clear.
+
 ## Consequences
 
 ### Implementation Roadmap
