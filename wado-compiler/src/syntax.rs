@@ -73,16 +73,17 @@ impl SyntaxDefinition {
             keywords: KeywordCategories {
                 control: vec![
                     "if", "else", "while", "for", "loop", "break", "continue", "return", "match",
-                    "task", "handler", "do", "resume"
+                    "task", "handler", "do", "resume",
                 ],
                 storage_type: vec![
                     "fn", "let", "global", "const", "struct", "enum", "variant", "flags", "impl",
-                    "trait", "type", "resource", "world", "effect"
+                    "trait", "type", "resource", "world", "effect",
                 ],
-                storage_modifier: vec!["pub", "export", "mut", "async", "move", "unique", "stores", "reactive"],
+                storage_modifier: vec![
+                    "pub", "export", "mut", "async", "move", "unique", "stores", "reactive",
+                ],
                 other: vec![
                     "use", "from", "import", "test", "as", "with", "in", "of", "assert",
-
                 ],
             },
             operators: OperatorCategories {
