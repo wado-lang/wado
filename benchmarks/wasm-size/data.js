@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777449989951,
+  "lastUpdate": 1777451459067,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -17921,6 +17921,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/00b55508ea0a7caaa48303ef145c58053bf045d4"
         },
         "date": 1777449989645,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8774,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18518,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 515704,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2143d139232f8e4f8cf6be3b7e10dbef64e6f442",
+          "message": "Merge pull request #964 from wado-lang/claude/expand-tirlocal-functions-klDFk\n\nrefactor(tir): promote TirFunction/TirGlobal local_types to Vec<TirLocal>",
+          "timestamp": "2026-04-29T17:25:56+09:00",
+          "tree_id": "818a8bae9dfcb86bbb8944c2b8b002a947e26ae1",
+          "url": "https://github.com/wado-lang/wado/commit/2143d139232f8e4f8cf6be3b7e10dbef64e6f442"
+        },
+        "date": 1777451458743,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
