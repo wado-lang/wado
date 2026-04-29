@@ -49,8 +49,11 @@ export fn run() with Stdout, MonotonicClock, Preopens {
     b.iterations = 100;
     b.input_size = Option::Some(sql.len());
 
-    // NOTE: `if let Err(e) = sqlite::parse(&sql)` inside the closure triggers
-    // a codegen panic (`unresolved local: result`). Fall back to `.is_ok()`.
+    // NOTE: ideally `if let Err(e) = sqlite::parse(&sql) { panic(...) }`
+    // inside the closure body, but that combination triggers a TIR-to-WIR
+    // local-index collision when a closure's if-let lowering and a template
+    // string in the same body share an allocator. Using `.is_ok()` sidesteps
+    // the problematic shape. See AGENTS.md / TODO for the deeper fix.
     let last_ok = b.run("", || sqlite::parse(&sql).is_ok());
     assert last_ok, "sqlite::parse failed";
 }

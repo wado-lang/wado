@@ -1,0 +1,30 @@
+// Regression: `let inner: ! = f()` followed by `return inner` inside a
+// generic wrapper used to panic codegen with "unresolved local: inner".
+//
+// Setup: `run_with<T>` is monomorphized with `T = !` because the closure
+// argument unconditionally diverges. The TIR has `let inner: ! = f();
+// return inner;`. The Let lowering correctly skips DeclareLocal for a
+// Never-typed local, but the `return inner` still emitted a `LocalGet`
+// for the (undeclared) local, blowing up at codegen.
+//
+// The fix is in wir_build/translate.rs: `TirExprKind::Local` now treats
+// Never-typed locals the same as Unit (returns Nop), letting the
+// surrounding `translate_expr` wrapper terminate the block with
+// `Unreachable`.
+
+use { Stdout, println } from "core:cli";
+
+fn run_with<T>(f: fn() -> T) -> T {
+    let inner = f();
+    return inner;
+}
+
+export fn run() with Stdout {
+    let _ = run_with(|| {
+        panic("boom");
+    });
+    println("unreachable");
+}
+
+__DATA__
+{"stderr_contains": ["boom"], "trapped": true}
