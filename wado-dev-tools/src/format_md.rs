@@ -14,8 +14,14 @@ pub fn run(paths: &[String], check: bool) -> bool {
             let path = Path::new(p);
             if path.is_dir() {
                 all.extend(collect_md_files(path));
-            } else {
+            } else if path.extension().and_then(|s| s.to_str()) == Some("md") {
                 all.push(path.to_path_buf());
+            } else {
+                eprintln!(
+                    "error: refusing to format non-Markdown file {} (only *.md files are supported)",
+                    path.display()
+                );
+                return false;
             }
         }
         all
