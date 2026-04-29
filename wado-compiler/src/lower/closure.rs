@@ -984,9 +984,7 @@ impl ClosureLowerer {
             TirExprKind::Closure {
                 functor_id: None, ..
             } => {
-                unreachable!(
-                    "Closure node missing functor_id; the collect pass should assign it"
-                )
+                unreachable!("Closure node missing functor_id; the collect pass should assign it")
             }
             TirExprKind::Local { index, .. } => {
                 // If a local that holds a closure is passed as an argument, mark it unsafe
@@ -1142,8 +1140,15 @@ impl ClosureLowerer {
         // body carries the nested IDs). Sort by id so `functor_infos[id]`
         // is the functor for the closure with that id — every later pass
         // uses index-by-id lookups.
-        self.collected_closures.sort_by_key(|c| c.id);
-        for collected in &self.collected_closures.clone() {
+        //
+        // Move out of `self.collected_closures` to avoid cloning the bodies:
+        // the loop body needs `&mut self` to push to `generated_structs` and
+        // `functor_infos`, but the borrow checker would otherwise see one
+        // long borrow over `collected_closures`. The list isn't read again
+        // after this pass, so we drop it at the end.
+        let mut collected_closures = std::mem::take(&mut self.collected_closures);
+        collected_closures.sort_by_key(|c| c.id);
+        for collected in &collected_closures {
             // Extract the actual return type from the closure's function type
             // This is more reliable than body.type_id for closures with block bodies
             let return_type = match type_table.get(collected.func_type_id) {
@@ -2210,9 +2215,9 @@ impl ClosureLowerer {
             TirExprKind::TemplateString { .. }
             | TirExprKind::WithHandler { .. }
             | TirExprKind::Resume { .. } => {
-                panic!(
-                    "[lower/closure] unexpected {:?} in closure body during transform_closure_body — should be lowered earlier",
-                    std::mem::discriminant(&expr.kind)
+                unreachable!(
+                    "[lower/closure] unexpected expr kind in closure body during transform_closure_body at {:?}: {:?} — should be lowered earlier",
+                    expr.span, &expr.kind
                 )
             }
         }
@@ -3657,15 +3662,20 @@ impl ClosureLowerer {
                 expr.type_id,
                 expr.span,
             ),
-            TirExprKind::TupleSpread { expr: inner } | TirExprKind::TupleZip { expr: inner } => {
-                TirExpr::new(
-                    TirExprKind::TupleSpread {
-                        expr: Box::new(self.specialize_expr(inner, param_to_functor, type_table)),
-                    },
-                    expr.type_id,
-                    expr.span,
-                )
-            }
+            TirExprKind::TupleSpread { expr: inner } => TirExpr::new(
+                TirExprKind::TupleSpread {
+                    expr: Box::new(self.specialize_expr(inner, param_to_functor, type_table)),
+                },
+                expr.type_id,
+                expr.span,
+            ),
+            TirExprKind::TupleZip { expr: inner } => TirExpr::new(
+                TirExprKind::TupleZip {
+                    expr: Box::new(self.specialize_expr(inner, param_to_functor, type_table)),
+                },
+                expr.type_id,
+                expr.span,
+            ),
             TirExprKind::TypePackExpansion {
                 call_expr: inner,
                 pack_type_id,
@@ -3974,9 +3984,8 @@ impl ClosureLowerer {
                 // to keep a counter in sync with traversal order — which
                 // would break the moment we walk a different set of
                 // functions (e.g. the generated `__call` methods).
-                let closure_id = functor_id.expect(
-                    "Closure node missing functor_id; the collect pass should assign it",
-                );
+                let closure_id = functor_id
+                    .expect("Closure node missing functor_id; the collect pass should assign it");
 
                 // Don't recurse into the body. The body lives in *this*
                 // closure's local-index namespace, not the function we
