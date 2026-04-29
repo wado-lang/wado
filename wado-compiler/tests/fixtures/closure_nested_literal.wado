@@ -1,0 +1,27 @@
+// Regression: a closure body that constructs another closure must
+// compile and run at every optimization level.
+//
+// At -O0 this previously failed Wasm validation with
+//   type mismatch: expected (ref null $type), found (ref (exact $type))
+// because the closure-lowering pass used a per-AST-walk counter to
+// match `Closure` nodes to their generated functor structs. Once the
+// pass was extended to lower the cloned bodies inside generated
+// `__call` methods (where nested closures live), the counter fell out
+// of sync with the IDs originally assigned in step 1, and inner
+// closures got mis-matched to functors of a different shape — yielding
+// the validation failure above.
+//
+// The fix assigns a stable `functor_id` to every Closure node during
+// the collect pass; every later pass reads it directly off the AST,
+// so traversal order no longer affects identity.
+
+test "nested closure literal" {
+    let outer = || {
+        let inner = || 42;
+        return inner();
+    };
+    assert outer() == 42;
+}
+
+__DATA__
+{"test": {}}
