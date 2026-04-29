@@ -143,8 +143,8 @@ fn parse_descriptor_text(text: &String) -> ParsedDescriptor {
 /// `>` delimiters before handing it to `antlr4`, so any literal that needs
 /// to survive ST as `\` must be written as `\\` in the descriptor (and any
 /// literal `<` / `>` as `\<` / `\>`). Without this step, descriptors like
-/// `LETTERS : ('a'|'\\u00E0'..'\\u00E5')` reach the g4 parser with a
-/// 6-char string `à` that cannot serve as a range bound.
+/// `LETTERS : ('a'|'\\u00E0'..'\\u00E5')` reach the g4 parser with the
+/// 6-character escape text `\u00E0`, which cannot serve as a range bound.
 ///
 /// We deliberately leave non-delimiter backslash sequences (`\n`, `\u…`,
 /// `\t`, …) intact: ST's text mode does not interpret them, so passing
