@@ -412,6 +412,56 @@ Considered and rejected for v1:
 
 Sugar can land in a follow-up WEP once the bare method form is in real use and the right ergonomic shape is clear.
 
+### Interaction with existing features
+
+Four interactions need explicit rules. Everything else (`Default`, `Ord`, `Drop`/RAII, variants holding resources, `fn` types, effects, `stores[...]`, pattern matching) follows from the subtyping and method-resolution rules already established and needs no separate treatment.
+
+#### `Eq` is auto-derived as reference equality
+
+Every `externref`-backed resource auto-derives `Eq`. Two handles compare equal iff they reference the same host object — JavaScript's `===` semantics for the browser case.
+
+`Eq` lowers to a host import:
+
+```
+is-same: func(externref, externref) -> bool
+```
+
+Cross-type comparison falls out of subtyping. `el == html_input` is well-typed when one operand is upcast to the other's static type; the host predicate compares the underlying refs and returns the right answer.
+
+`Ord` is **not** auto-derived. Resources have no natural ordering and the host has no obligation to define one.
+
+#### `Inspect`, `InspectAlt`, and `Display` delegate to the host
+
+For resources, the auto-derived implementations of `Inspect` (`{x:?}`), `InspectAlt` (`{x:#?}`), and `Display` (`{x}`) call host-imported formatters:
+
+```
+inspect:     func(externref) -> string
+inspect-alt: func(externref) -> string
+display:     func(externref) -> string
+```
+
+These are the **one place** where dynamic-type information leaks into Wado output: the host inspects the runtime type of the underlying object and renders accordingly, so `{n:?}` on a `Node` value that is actually an `HTMLInputElement` prints the input element. This matches the intuition that debug output is most valuable when it reflects what's really there.
+
+A user `impl Inspect for Element { ... }` (or `Display`, etc.) shadows the auto-derived host call by the normal trait-resolution rules, with the trait-vs-inherited collision rule (rule 2 of method resolution) keeping ambiguities loud.
+
+#### `serde` is a compile error on resources
+
+`#[derive(Serialize)]` and `#[derive(Deserialize)]` are not auto-derived for resources (already the case today) and additionally **fail at compile time** when applied to a resource type, or to a struct/variant that transitively contains one. There is no silent fallback, no runtime panic, no placeholder serialization.
+
+Resources are opaque host references. Their identity is meaningful only inside the running component instance; serializing one and reading it back has no defensible semantics.
+
+#### `Option<T>` and `Result<T, E>` are invariant — a known sharp edge
+
+Per the subtyping rules, every aggregate is invariant in its type parameters. `Option` and `Result` are aggregates, so:
+
+```wado
+let r: Option<HtmlInputElement> = ...;
+let n: Option<Node> = r;                   // ERROR: Option<HtmlInputElement> ≮: Option<Node>
+let n: Option<Node> = r.map(|el| el);      // OK: upcast applies inside the closure body
+```
+
+Coming from languages where `Option` is covariant (Scala, Kotlin's nullable types, etc.), this is the most likely surprise. The same rule applies to `Result<T, E>` in both type parameters and to every other generic container. The `.map(...)` workaround is short and does not allocate.
+
 ## Consequences
 
 ### Implementation Roadmap
