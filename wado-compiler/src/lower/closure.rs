@@ -455,17 +455,12 @@ impl ClosureLowerer {
 
                 // Build the function type
                 let param_types: Vec<TypeId> = closure_params.iter().map(|(_, t)| *t).collect();
-                let func_type = type_table.make_function(
-                    param_types.clone(),
-                    sig.return_type,
-                    Vec::new(),
-                    Vec::new(),
-                );
+                let func_type =
+                    type_table.make_function(param_types, sig.return_type, Vec::new(), Vec::new());
 
                 // Replace the FuncRef with a Closure. The synthetic body
-                // only references the param locals, so the closure's
-                // local namespace is exactly its parameter list.
-                let param_count = closure_params.len() as u32;
+                // is a single `Call` that forwards to the named function;
+                // the closure's local namespace is exactly its parameters.
                 expr.kind = TirExprKind::Closure {
                     params: closure_params,
                     body: Box::new(body),
@@ -473,8 +468,7 @@ impl ClosureLowerer {
                     functor_id: None,
                     source_text: None,
                     address_taken_locals: crate::hashmap::IndexSet::default(),
-                    local_count: param_count,
-                    local_types: param_types,
+                    body_locals: Vec::new(),
                 };
                 expr.type_id = func_type;
             }
@@ -3647,8 +3641,7 @@ impl ClosureLowerer {
                 functor_id,
                 source_text,
                 address_taken_locals,
-                local_count,
-                local_types,
+                body_locals,
             } => TirExpr::new(
                 TirExprKind::Closure {
                     params: params.clone(),
@@ -3657,8 +3650,7 @@ impl ClosureLowerer {
                     functor_id: *functor_id,
                     source_text: source_text.clone(),
                     address_taken_locals: address_taken_locals.clone(),
-                    local_count: *local_count,
-                    local_types: local_types.clone(),
+                    body_locals: body_locals.clone(),
                 },
                 expr.type_id,
                 expr.span,

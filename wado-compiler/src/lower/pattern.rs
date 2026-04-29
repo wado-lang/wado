@@ -3039,32 +3039,39 @@ impl<'a> PatternLowerer<'a> {
                 }
             }
             TirExprKind::Closure {
+                params,
+                body_locals,
                 body,
-                local_count,
-                local_types,
                 ..
             } => {
-                // Closures have their own local-index namespace — the resolver
-                // builds each closure's `FunctionContext` with a fresh
-                // `next_local: 0`, so the body's `Local`/`Let` indices are
-                // independent of the outer function's. Pattern lowering must
-                // honour that: any temp it allocates while descending into the
-                // body has to live in the closure's namespace, otherwise the
-                // closure-functor lowering pass (`lower/closure.rs`) builds a
-                // `local_types` table where the temp's outer-scoped index
-                // collides with a real closure-scoped local, producing a
-                // closure body whose `LocalSet` targets the wrong slot.
+                // Closures have their own local-index namespace — the
+                // resolver builds each closure's `FunctionContext` with a
+                // fresh `next_local: 0`, so the body's `Local` / `Let`
+                // indices are independent of the outer function's.
+                // Pattern lowering must honour that: any temp it allocates
+                // while descending into the body has to live in the
+                // closure's namespace, otherwise the closure-functor
+                // lowering pass (`lower/closure.rs`) builds a `local_types`
+                // table where the temp's outer-scoped index collides with
+                // a real closure-scoped local, producing a closure body
+                // whose `LocalSet` targets the wrong slot.
                 //
-                // The closure node carries the resolver's `next_local` /
-                // `local_types`, so we just swap them in here. Any new locals
-                // pattern lowering allocates while descending into the body
-                // will be re-collected by the closure functor lowering pass
-                // via `collect_locals_from_block`, so we discard the updated
-                // state on the way out.
+                // The closure carries its parameter list and the types of
+                // its body-level let-bindings (`body_locals`); the
+                // closure-scope state is their concatenation. Temps
+                // pattern lowering allocates while descending grow the
+                // local maps for the duration of the visit, then the
+                // closure-functor lowering pass re-collects them from the
+                // body's `Let`s via `collect_locals_from_block`, so we
+                // discard the updated state on the way out.
                 let saved_count = self.local_count;
                 let saved_types = std::mem::take(&mut self.local_types);
-                self.local_count = *local_count;
-                self.local_types = local_types.clone();
+                self.local_count = (params.len() + body_locals.len()) as u32;
+                self.local_types = params
+                    .iter()
+                    .map(|(_, ty)| *ty)
+                    .chain(body_locals.iter().map(|l| l.type_id))
+                    .collect();
 
                 self.lower_expr(body, type_table);
 

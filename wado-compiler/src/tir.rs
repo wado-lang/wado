@@ -2506,14 +2506,17 @@ pub enum TirExprKind {
         /// for synthesised closures (e.g. effect-handler dispatch),
         /// which never take addresses.
         address_taken_locals: crate::hashmap::IndexSet<u32>,
-        /// Closure-scope local count (i.e. resolver's `next_local` for this
-        /// closure). Captured at resolve time so pattern lowering can seed
-        /// its per-closure state without re-walking the body.
-        local_count: u32,
-        /// Closure-scope local types, indexed by local index. Same purpose
-        /// as `local_count` — captured from the closure's resolution
-        /// `FunctionContext`.
-        local_types: Vec<TypeId>,
+        /// Body-level let-bindings inside the closure, in declaration
+        /// order. Indices `0..params.len()` belong to the closure's
+        /// parameters (whose info lives in `params`); these body locals
+        /// occupy `params.len()..params.len()+body_locals.len()` in the
+        /// closure's local-index namespace.
+        ///
+        /// Captured at resolve time from the closure's `FunctionContext`
+        /// so pattern lowering can seed a closure-scoped allocator
+        /// without re-walking the body. Synthetic closures created by
+        /// `synthesis/` have an empty `body_locals`.
+        body_locals: Vec<TirLocal>,
     },
 
     /// Indirect call through a callable value (closure or funcref)
@@ -3173,6 +3176,23 @@ impl TirFunction {
     pub fn is_value_copy(&self) -> bool {
         matches!(self.kind, FunctionKind::ValueCopy { .. })
     }
+}
+
+/// A body-level local variable — a `let` binding (or destructure binding)
+/// inside a function or closure body, identified by its declaration order
+/// in the surrounding scope.
+///
+/// Currently used for `TirExprKind::Closure { body_locals, .. }` to record
+/// the closure's body-scope state at end of resolution. Function-level
+/// state (`TirFunction::local_types`) only records `TypeId` for historical
+/// reasons; promoting it to `Vec<TirLocal>` is a separate refactor.
+#[derive(Debug, Clone)]
+pub struct TirLocal {
+    /// Source-level name of the binding (or a synthesised `__name` for
+    /// resolver-generated temporaries that have no surface syntax).
+    pub name: String,
+    pub type_id: TypeId,
+    pub is_mut: bool,
 }
 
 #[derive(Debug, Clone)]

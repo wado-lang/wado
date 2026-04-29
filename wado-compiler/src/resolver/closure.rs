@@ -197,6 +197,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
             Vec::new(),
         );
 
+        // `closure_ctx.locals[..params.len()]` is just the param entries
+        // (each param was registered via `add_local`). The remainder is
+        // body-level let-bindings — the only state later passes can't
+        // already derive from `params`.
+        let mut all_locals = closure_ctx.locals;
+        let body_locals = all_locals.split_off(params.len());
+
         let closure_tir = TirExpr::new(
             TirExprKind::Closure {
                 params,
@@ -205,8 +212,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 functor_id: None,
                 source_text: closure.source_text.clone(),
                 address_taken_locals: closure_ctx.address_taken_locals,
-                local_count: closure_ctx.next_local,
-                local_types: closure_ctx.local_types,
+                body_locals,
             },
             func_type,
             closure.span,
@@ -316,6 +322,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
             Vec::new(),
         );
 
+        let mut all_locals = closure_ctx.locals;
+        let body_locals = all_locals.split_off(params.len());
+
         TirExpr::new(
             TirExprKind::Closure {
                 params,
@@ -324,8 +333,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 functor_id: None, // Assigned during lowering
                 source_text: closure.source_text.clone(),
                 address_taken_locals: closure_ctx.address_taken_locals,
-                local_count: closure_ctx.next_local,
-                local_types: closure_ctx.local_types,
+                body_locals,
             },
             func_type,
             closure.span,
