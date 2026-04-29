@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777464074208,
+  "lastUpdate": 1777472866935,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -18185,6 +18185,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/beff83db80e57c0fb2ffc00904243f38dff9e479"
         },
         "date": 1777464073865,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1775,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8776,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18520,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 515706,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0a57e6ccb12a4717f8f390e695850bb6606b9033",
+          "message": "Merge pull request #970 from wado-lang/gfx/cleanup_tests\n\nchore: cleanup tests",
+          "timestamp": "2026-04-29T23:21:50+09:00",
+          "tree_id": "75e9ad94859384b454e3e54bbfe29fe0d78cf9c6",
+          "url": "https://github.com/wado-lang/wado/commit/0a57e6ccb12a4717f8f390e695850bb6606b9033"
+        },
+        "date": 1777472866586,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
