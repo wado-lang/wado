@@ -218,6 +218,8 @@ A `match` on a value of type `Parent` cannot match the concrete `Child` arm by s
 
 ### Method resolution
 
+Guiding principle: **maximum strictness and soundness up front; revisit based on real-world use cases.** Every rule in this section errs on the side of rejecting ambiguous or surprising programs. Loosening these rules later (allowing a default, picking a winner) is a non-breaking change; tightening would break existing code, so we start tight.
+
 Method resolution is **fully static**. There is no virtual dispatch, no vtable, no late binding. The compiler walks the `extends` chain at compile time, picks one declaration, and emits a direct CM-level method call.
 
 #### Core algorithm
