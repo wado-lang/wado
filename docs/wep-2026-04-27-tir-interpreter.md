@@ -313,9 +313,9 @@ production compilers use:
   loop is the one fixed-point.
 
 The wasm backend's cost is dominated by module compilation (~1-100 ms)
-and instantiation overhead (~µs-ms). Both amortize with the per-`(fn,
-monomorph)` `Module` cache, so a `fib(_)` invoked 100 times incurs one
-codegen.
+and instantiation overhead (~µs-ms). Both amortize with the
+per-`(fn, monomorph)` `Module` cache, so a `fib(_)` invoked 100 times
+incurs one codegen.
 
 ## Determinism
 
