@@ -446,9 +446,17 @@ A user `impl Inspect for Element { ... }` (or `Display`, etc.) shadows the auto-
 
 #### `serde` is a compile error on resources
 
-`#[derive(Serialize)]` and `#[derive(Deserialize)]` are not auto-derived for resources (already the case today) and additionally **fail at compile time** when applied to a resource type, or to a struct/variant that transitively contains one. There is no silent fallback, no runtime panic, no placeholder serialization.
+Wado's `Serialize` / `Deserialize` are synthesized via the body-less `impl Trait for Type;` form (see [WEP: Serde](./wep-2026-02-28-serde.md)). For a resource type — or any struct or variant that transitively contains one — the synthesis **fails at compile time**:
 
-Resources are opaque host references. Their identity is meaningful only inside the running component instance; serializing one and reading it back has no defensible semantics.
+```wado
+pub resource Element extends Node { ... }
+
+impl Serialize for Element;            // ERROR: cannot synthesize Serialize for resource
+struct Wrapper { el: Element }
+impl Serialize for Wrapper;            // ERROR: Wrapper.el is a resource
+```
+
+There is no silent fallback, no runtime panic, no placeholder serialization. Resources are opaque host references; their identity is meaningful only inside the running component instance, so serializing one and reading it back has no defensible semantics. A user who wants a Serialize-shaped projection writes a hand-rolled `impl Serialize for Element { fn serialize(...) ... }` that picks specific fields off the host object.
 
 #### `Option<T>` and `Result<T, E>` are invariant — a known sharp edge
 
