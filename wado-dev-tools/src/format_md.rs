@@ -3,7 +3,8 @@ use std::path::{Path, PathBuf};
 use dprint_plugin_markdown::configuration::ConfigurationBuilder;
 use dprint_plugin_markdown::format_text;
 
-const DEFAULT_EXCLUDED_DIRS: &[&str] = &["vendor", "target", "node_modules", ".git"];
+const DEFAULT_EXCLUDED_DIRS: &[&str] =
+    &[".vscode-test", "vendor", "target", "node_modules", ".git"];
 
 pub fn run(paths: &[String], check: bool) -> bool {
     let files = if paths.is_empty() {
