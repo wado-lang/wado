@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777451537656,
+  "lastUpdate": 1777457113015,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -18009,6 +18009,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/bbe8fbcbbcc5769041ca3085742810d854f34072"
         },
         "date": 1777451537373,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1775,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8776,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18520,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 515706,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8a71455c04b4ae4ab8cfc699a624fa9a64e4ed29",
+          "message": "Merge pull request #966 from wado-lang/gfx/ignore_vscode_md_files\n\nchore: ignore .vscode-test in format_md.rs",
+          "timestamp": "2026-04-29T19:00:07+09:00",
+          "tree_id": "ea34df5fccf0f99ca0dbee3a1204f1d155cb8469",
+          "url": "https://github.com/wado-lang/wado/commit/8a71455c04b4ae4ab8cfc699a624fa9a64e4ed29"
+        },
+        "date": 1777457112694,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
