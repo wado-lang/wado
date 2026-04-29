@@ -900,16 +900,16 @@ fn "wado-compiler/tests/fixtures/http-echo-headers.wado/__cm_binding__Fields_app
     let __vresult: ref "wasi:http/types.wado//HeaderError";
     let __disc_10: i32;
     let __option_result: ref null "core:prelude/string.wado//String";
-    let __local_13: ref builtin::array<u8>;
-    let __local_14: i32;
-    let __local_17: i32;
-    let __local_18: i32;
-    let __local_19: ref builtin::array<u8>;
+    let data: ref builtin::array<u8>;
+    let len_14: i32;
+    let ptr: i32;
+    let len_18: i32;
+    let arr_19: ref builtin::array<u8>;
     __name_packed = "core:internal/cm_lower_string"(name);
     __value_packed = __inline_cm_lower_array_u8_0: block -> i64 {
-        __local_13 = value.repr;
-        __local_14 = value.used;
-        break __inline_cm_lower_array_u8_0: "core:internal/cm_lower_list_u8"(__local_13, __local_14);
+        data = value.repr;
+        len_14 = value.used;
+        break __inline_cm_lower_array_u8_0: "core:internal/cm_lower_list_u8"(data, len_14);
         unreachable;
     };
     __outptr = "mem/realloc"(0, 0, 4, 20);
@@ -934,10 +934,10 @@ fn "wado-compiler/tests/fixtures/http-echo-headers.wado/__cm_binding__Fields_app
             __option_result = ref.null none;
             if __disc_10 != 0 {
                 __option_result = ref.as_non_null(__inline_memory_to_gc_string_3: block -> ref "core:prelude/string.wado//String" {
-                    __local_17 = builtin::load_i32(((__outptr + 4) + 4) + 4);
-                    __local_18 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4);
-                    __local_19 = "core:internal/memory_to_gc_array"(__local_17, __local_18);
-                    break __inline_memory_to_gc_string_3: struct.new "core:prelude/string.wado//String" { repr: __local_19, used: __local_18 };
+                    ptr = builtin::load_i32(((__outptr + 4) + 4) + 4);
+                    len_18 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4);
+                    arr_19 = "core:internal/memory_to_gc_array"(ptr, len_18);
+                    break __inline_memory_to_gc_string_3: struct.new "core:prelude/string.wado//String" { repr: arr_19, used: len_18 };
                     unreachable;
                 });
                 drop("mem/realloc"(builtin::load_i32(((__outptr + 4) + 4) + 4), builtin::load_i32((((__outptr + 4) + 4) + 4) + 4), 1, 0));
@@ -1111,11 +1111,11 @@ fn "core:prelude/array.wado/Array<Array<u8>>::grow"(self) {
     let old_repr: ref builtin::array<Array<u8>>;
     let used: i32;
     let i: i32;
-    let __local_7: i32;
+    let a: i32;
     capacity = builtin::array_len(self.repr);
     new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_7 = capacity * 2;
-        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+        a = capacity * 2;
+        break __inline_i32_max_0: select i32(a > 4, a, 4);
         unreachable;
     };
     new_repr = builtin::array_new<ref "core:prelude//Array<u8>">(new_capacity);
@@ -1154,11 +1154,11 @@ fn "core:prelude/array.wado/Array<u8>::grow"(self) {
     let old_repr: ref builtin::array<u8>;
     let used: i32;
     let i: i32;
-    let __local_7: i32;
+    let a: i32;
     capacity = builtin::array_len(self.repr);
     new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_7 = capacity * 2;
-        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+        a = capacity * 2;
+        break __inline_i32_max_0: select i32(a > 4, a, 4);
         unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);

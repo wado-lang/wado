@@ -6,7 +6,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::{ModuleSource, mangle_generic_name};
 use crate::tir::{
     MonomorphInfo, PrimitiveType, ResolvedType, TirBlock, TirExpr, TirExprKind, TirField,
-    TirFunction, TirModule, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField,
+    TirFunction, TirLocal, TirModule, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField,
     TirUnaryOp, TypeId, TypeTable,
 };
 use crate::token::Span;
@@ -146,7 +146,7 @@ impl BoxLowerer {
         &self,
         block: &mut TirBlock,
         local_count: &mut u32,
-        local_types: &mut Vec<TypeId>,
+        locals: &mut Vec<TirLocal>,
         type_table: &TypeTable,
     ) {
         let mut new_stmts: Vec<TirStmt> = Vec::with_capacity(block.stmts.len());
@@ -155,7 +155,7 @@ impl BoxLowerer {
             // Recurse into nested blocks first
             new_stmts.push(stmt);
             let stmt = new_stmts.last_mut().unwrap();
-            self.expand_deref_assigns_in_stmt(stmt, local_count, local_types, type_table);
+            self.expand_deref_assigns_in_stmt(stmt, local_count, locals, type_table);
 
             // Check if this stmt is Expr(Assign { target: Deref(..), value })
             let should_expand = matches!(
@@ -209,11 +209,11 @@ impl BoxLowerer {
             // Allocate temp locals
             let ref_local_idx = *local_count;
             *local_count += 1;
-            local_types.push(ref_type_id);
+            locals.push(TirLocal::synth(ref_local_idx, ref_type_id, false));
 
             let val_local_idx = *local_count;
             *local_count += 1;
-            local_types.push(inner_type_id);
+            locals.push(TirLocal::synth(val_local_idx, inner_type_id, false));
 
             // Take ownership of ref_expr and value
             let ref_owned = std::mem::replace(
@@ -316,7 +316,7 @@ impl BoxLowerer {
         &self,
         stmt: &mut TirStmt,
         local_count: &mut u32,
-        local_types: &mut Vec<TypeId>,
+        locals: &mut Vec<TirLocal>,
         type_table: &TypeTable,
     ) {
         match &mut stmt.kind {
@@ -325,42 +325,22 @@ impl BoxLowerer {
                 else_block,
                 ..
             } => {
-                self.expand_deref_assigns_in_block(
-                    then_block,
-                    local_count,
-                    local_types,
-                    type_table,
-                );
+                self.expand_deref_assigns_in_block(then_block, local_count, locals, type_table);
                 if let Some(else_block) = else_block {
-                    self.expand_deref_assigns_in_block(
-                        else_block,
-                        local_count,
-                        local_types,
-                        type_table,
-                    );
+                    self.expand_deref_assigns_in_block(else_block, local_count, locals, type_table);
                 }
             }
             TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-                self.expand_deref_assigns_in_block(body, local_count, local_types, type_table);
+                self.expand_deref_assigns_in_block(body, local_count, locals, type_table);
             }
             TirStmtKind::IfLet {
                 then_block,
                 else_block,
                 ..
             } => {
-                self.expand_deref_assigns_in_block(
-                    then_block,
-                    local_count,
-                    local_types,
-                    type_table,
-                );
+                self.expand_deref_assigns_in_block(then_block, local_count, locals, type_table);
                 if let Some(else_block) = else_block {
-                    self.expand_deref_assigns_in_block(
-                        else_block,
-                        local_count,
-                        local_types,
-                        type_table,
-                    );
+                    self.expand_deref_assigns_in_block(else_block, local_count, locals, type_table);
                 }
             }
             _ => {}
@@ -463,7 +443,7 @@ impl BoxLowerer {
     fn transform_function(&self, func: &mut TirFunction, type_table_rc: &Rc<RefCell<TypeTable>>) {
         let type_table = type_table_rc.borrow();
 
-        // Update local_types for address-taken locals.
+        // Update locals for address-taken locals.
         //
         // Parameters need special handling: their local type cannot be silently
         // changed to Box<T> because the Wasm function-call convention reads the
@@ -480,20 +460,24 @@ impl BoxLowerer {
         let mut effective_address_taken = address_taken.clone();
 
         for &local_idx in &address_taken {
-            let local_type_id = func.local_types[local_idx as usize];
+            let local_type_id = func.locals[local_idx as usize].type_id;
             let Some(&box_type_id) = self.box_struct_types.get(&local_type_id) else {
                 continue;
             };
             if local_idx < param_count {
                 let shadow_idx = func.local_count;
                 func.local_count += 1;
-                func.local_types.push(box_type_id);
+                let name = func.params[local_idx as usize].name.clone();
+                func.locals.push(TirLocal {
+                    name: format!("__boxed_param_{local_idx}"),
+                    type_id: box_type_id,
+                    is_mut: false,
+                });
                 effective_address_taken.swap_remove(&local_idx);
                 effective_address_taken.insert(shadow_idx);
-                let name = func.params[local_idx as usize].name.clone();
                 shadowed_params.push((local_idx, shadow_idx, box_type_id, local_type_id, name));
             } else {
-                func.local_types[local_idx as usize] = box_type_id;
+                func.locals[local_idx as usize].type_id = box_type_id;
             }
         }
 
@@ -567,7 +551,7 @@ impl BoxLowerer {
             self.expand_deref_assigns_in_block(
                 body,
                 &mut func.local_count,
-                &mut func.local_types,
+                &mut func.locals,
                 &type_table,
             );
         }

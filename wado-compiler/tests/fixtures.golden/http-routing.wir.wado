@@ -409,7 +409,7 @@ fn "wado-compiler/tests/fixtures/http-routing.wado/handle"(request) {
     let __packed_156: i64;
     let __ptr_157: i32;
     let __len_158: i32;
-    let __local_163: ref "core:prelude/string.wado//String";
+    let v: ref "core:prelude/string.wado//String";
     path = "wado-compiler/tests/fixtures/http-routing.wado/__cm_binding__Request_get_path_with_query"(request);
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/future-new"();
@@ -422,8 +422,8 @@ fn "wado-compiler/tests/fixtures/http-routing.wado/handle"(request) {
     response = __sroa___pattern_temp_1_0;
     if ref.is_null(path) == 0 {
         p = __inline__value_copy_T19_2: block -> ref "core:prelude/string.wado//String" {
-            __local_163 = ref.as_non_null(path);
-            break __inline__value_copy_T19_2: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(__local_163.repr)), used: __local_163.used };
+            v = ref.as_non_null(path);
+            break __inline__value_copy_T19_2: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(v.repr)), used: v.used };
             unreachable;
         };
         if "core:prelude/string.wado/String^Eq::eq"(p, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("/not-found"), used: 10 }) {
@@ -760,19 +760,19 @@ fn "wado-compiler/tests/fixtures/http-routing.wado/__cm_binding__Request_get_pat
     let __outptr: i32;
     let __disc: i32;
     let __option_result: ref null "core:prelude/string.wado//String";
-    let __local_4: i32;
-    let __local_5: i32;
-    let __local_6: ref builtin::array<u8>;
+    let ptr: i32;
+    let len_5: i32;
+    let arr: ref builtin::array<u8>;
     __outptr = "mem/realloc"(0, 0, 4, 12);
     "wasi/wasi:http/Request::get_path_with_query"(self, __outptr);
     __disc = builtin::load_u8(__outptr);
     __option_result = ref.null none;
     if __disc != 0 {
         __option_result = ref.as_non_null(__inline_memory_to_gc_string_0: block -> ref "core:prelude/string.wado//String" {
-            __local_4 = builtin::load_i32(__outptr + 4);
-            __local_5 = builtin::load_i32((__outptr + 4) + 4);
-            __local_6 = "core:internal/memory_to_gc_array"(__local_4, __local_5);
-            break __inline_memory_to_gc_string_0: struct.new "core:prelude/string.wado//String" { repr: __local_6, used: __local_5 };
+            ptr = builtin::load_i32(__outptr + 4);
+            len_5 = builtin::load_i32((__outptr + 4) + 4);
+            arr = "core:internal/memory_to_gc_array"(ptr, len_5);
+            break __inline_memory_to_gc_string_0: struct.new "core:prelude/string.wado//String" { repr: arr, used: len_5 };
             unreachable;
         });
         drop("mem/realloc"(builtin::load_i32(__outptr + 4), builtin::load_i32((__outptr + 4) + 4), 1, 0));

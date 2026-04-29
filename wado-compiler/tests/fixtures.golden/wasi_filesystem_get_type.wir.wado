@@ -366,9 +366,9 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_get_type.wado/__cm_binding__Pre
     let __elem_addr: i32;
     let __lifted_result_6: i32;
     let __lifted_result_7: ref "core:prelude/string.wado//String";
-    let __local_9: i32;
-    let __local_10: i32;
-    let __local_11: ref builtin::array<u8>;
+    let ptr: i32;
+    let len_10: i32;
+    let arr: ref builtin::array<u8>;
     __outptr = "mem/realloc"(0, 0, 4, 8);
     "wasi/wasi:filesystem/Preopens::get_directories"(__outptr);
     __base = builtin::load_i32(__outptr);
@@ -383,10 +383,10 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_get_type.wado/__cm_binding__Pre
             __elem_addr = __base + (__i * 12);
             __lifted_result_6 = builtin::load_i32(__elem_addr + 0);
             __lifted_result_7 = __inline_memory_to_gc_string_1: block -> ref "core:prelude/string.wado//String" {
-                __local_9 = builtin::load_i32(__elem_addr + 4);
-                __local_10 = builtin::load_i32((__elem_addr + 4) + 4);
-                __local_11 = "core:internal/memory_to_gc_array"(__local_9, __local_10);
-                break __inline_memory_to_gc_string_1: struct.new "core:prelude/string.wado//String" { repr: __local_11, used: __local_10 };
+                ptr = builtin::load_i32(__elem_addr + 4);
+                len_10 = builtin::load_i32((__elem_addr + 4) + 4);
+                arr = "core:internal/memory_to_gc_array"(ptr, len_10);
+                break __inline_memory_to_gc_string_1: struct.new "core:prelude/string.wado//String" { repr: arr, used: len_10 };
                 unreachable;
             };
             "core:prelude/Array<Tuple<wasi:filesystem/types.wado/Descriptor,String>>::push"(__result, struct.new "tuple//[Descriptor, String]" { 0: __lifted_result_6, 1: __lifted_result_7 });
@@ -635,11 +635,11 @@ fn "core:prelude/array.wado/Array<Tuple<wasi:filesystem/types.wado/Descriptor,St
     let old_repr: ref "builtin::array<Tuple<wasi:filesystem/types.wado/Descriptor,String>>";
     let used: i32;
     let i: i32;
-    let __local_7: i32;
+    let a: i32;
     capacity = builtin::array_len(self.repr);
     new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_7 = capacity * 2;
-        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+        a = capacity * 2;
+        break __inline_i32_max_0: select i32(a > 4, a, 4);
         unreachable;
     };
     new_repr = builtin::array_new<ref "tuple//[Descriptor, String]">(new_capacity);
@@ -662,9 +662,9 @@ fn "core:prelude/array.wado/Array<Tuple<wasi:filesystem/types.wado/Descriptor,St
 }
 
 fn "core:prelude/types.wado/AsyncCall<Result<wasi:filesystem/types.wado/DescriptorFlags,wasi:filesystem/types.wado/ErrorCode>>::wait"(self) {
-    let handle: i32;
+    let handle_1: i32;
     let raw: i32;
-    let ws: i32;
+    let ws_3: i32;
     let result: ref "core:prelude/types.wado//Result<u32,wasi:filesystem/types.wado/ErrorCode>";
     let __local_6: i32;
     let __local_7: ref "core:prelude/types.wado//Result<u32,wasi:filesystem/types.wado/ErrorCode>";
@@ -672,18 +672,18 @@ fn "core:prelude/types.wado/AsyncCall<Result<wasi:filesystem/types.wado/Descript
     let __local_9: ref "wasi:filesystem/types.wado//ErrorCode";
     let __local_10: i32;
     let __local_11: ref null "core:prelude/string.wado//String";
-    let __local_12: i32;
-    let __local_14: i32;
-    let __local_15: i32;
-    let __local_16: ref builtin::array<u8>;
-    handle = self.__cm_packed >> 4;
-    if handle != 0 {
-        raw = handle;
-        ws = "wasi/waitable-set-new"();
+    let handle_12: i32;
+    let ptr: i32;
+    let len_15: i32;
+    let arr: ref builtin::array<u8>;
+    handle_1 = self.__cm_packed >> 4;
+    if handle_1 != 0 {
+        raw = handle_1;
+        ws_3 = "wasi/waitable-set-new"();
         drop(__inline_cm_waitable_join_0: block -> i32 {
-            __local_12 = raw;
-            "wasi/waitable-join"(__local_12, ws);
-            break __inline_cm_waitable_join_0: __local_12;
+            handle_12 = raw;
+            "wasi/waitable-join"(handle_12, ws_3);
+            break __inline_cm_waitable_join_0: handle_12;
             unreachable;
         });
         b31: block {
@@ -691,7 +691,7 @@ fn "core:prelude/types.wado/AsyncCall<Result<wasi:filesystem/types.wado/Descript
                 let __sroa_event_code: i32;
                 let __sroa_event_handle: i32;
                 let __sroa_event_payload: u32;
-                multivalue_bind [__sroa_event_code, __sroa_event_handle, __sroa_event_payload] = "core:internal/cm_waitable_set_wait"(ws);
+                multivalue_bind [__sroa_event_code, __sroa_event_handle, __sroa_event_payload] = "core:internal/cm_waitable_set_wait"(ws_3);
                 if __sroa_event_payload == 2 {
                     break b31;
                 }
@@ -699,7 +699,7 @@ fn "core:prelude/types.wado/AsyncCall<Result<wasi:filesystem/types.wado/Descript
             };
         };
         "wasi/subtask-drop"(raw);
-        "wasi/waitable-set-drop"(ws);
+        "wasi/waitable-set-drop"(ws_3);
     }
     __local_6 = builtin::load_u8(self.__cm_outptr);
     __local_7 = ref.null none;
@@ -785,10 +785,10 @@ fn "core:prelude/types.wado/AsyncCall<Result<wasi:filesystem/types.wado/Descript
             __local_11 = ref.null none;
             if __local_10 != 0 {
                 __local_11 = ref.as_non_null(__inline_memory_to_gc_string_1: block -> ref "core:prelude/string.wado//String" {
-                    __local_14 = builtin::load_i32(((self.__cm_outptr + 4) + 4) + 4);
-                    __local_15 = builtin::load_i32((((self.__cm_outptr + 4) + 4) + 4) + 4);
-                    __local_16 = "core:internal/memory_to_gc_array"(__local_14, __local_15);
-                    break __inline_memory_to_gc_string_1: struct.new "core:prelude/string.wado//String" { repr: __local_16, used: __local_15 };
+                    ptr = builtin::load_i32(((self.__cm_outptr + 4) + 4) + 4);
+                    len_15 = builtin::load_i32((((self.__cm_outptr + 4) + 4) + 4) + 4);
+                    arr = "core:internal/memory_to_gc_array"(ptr, len_15);
+                    break __inline_memory_to_gc_string_1: struct.new "core:prelude/string.wado//String" { repr: arr, used: len_15 };
                     unreachable;
                 });
                 drop("mem/realloc"(builtin::load_i32(((self.__cm_outptr + 4) + 4) + 4), builtin::load_i32((((self.__cm_outptr + 4) + 4) + 4) + 4), 1, 0));
@@ -803,9 +803,9 @@ fn "core:prelude/types.wado/AsyncCall<Result<wasi:filesystem/types.wado/Descript
 }
 
 fn "core:prelude/types.wado/AsyncCall<Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>::wait"(self) {
-    let handle: i32;
+    let handle_1: i32;
     let raw: i32;
-    let ws: i32;
+    let ws_3: i32;
     let result: ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>";
     let __local_6: i32;
     let __local_7: ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>";
@@ -813,18 +813,18 @@ fn "core:prelude/types.wado/AsyncCall<Result<wasi:filesystem/types.wado/Descript
     let __local_9: ref "wasi:filesystem/types.wado//ErrorCode";
     let __local_10: i32;
     let __local_11: ref null "core:prelude/string.wado//String";
-    let __local_12: i32;
-    let __local_14: i32;
-    let __local_15: i32;
-    let __local_16: ref builtin::array<u8>;
-    handle = self.__cm_packed >> 4;
-    if handle != 0 {
-        raw = handle;
-        ws = "wasi/waitable-set-new"();
+    let handle_12: i32;
+    let ptr: i32;
+    let len_15: i32;
+    let arr: ref builtin::array<u8>;
+    handle_1 = self.__cm_packed >> 4;
+    if handle_1 != 0 {
+        raw = handle_1;
+        ws_3 = "wasi/waitable-set-new"();
         drop(__inline_cm_waitable_join_0: block -> i32 {
-            __local_12 = raw;
-            "wasi/waitable-join"(__local_12, ws);
-            break __inline_cm_waitable_join_0: __local_12;
+            handle_12 = raw;
+            "wasi/waitable-join"(handle_12, ws_3);
+            break __inline_cm_waitable_join_0: handle_12;
             unreachable;
         });
         b73: block {
@@ -832,7 +832,7 @@ fn "core:prelude/types.wado/AsyncCall<Result<wasi:filesystem/types.wado/Descript
                 let __sroa_event_code: i32;
                 let __sroa_event_handle: i32;
                 let __sroa_event_payload: u32;
-                multivalue_bind [__sroa_event_code, __sroa_event_handle, __sroa_event_payload] = "core:internal/cm_waitable_set_wait"(ws);
+                multivalue_bind [__sroa_event_code, __sroa_event_handle, __sroa_event_payload] = "core:internal/cm_waitable_set_wait"(ws_3);
                 if __sroa_event_payload == 2 {
                     break b73;
                 }
@@ -840,7 +840,7 @@ fn "core:prelude/types.wado/AsyncCall<Result<wasi:filesystem/types.wado/Descript
             };
         };
         "wasi/subtask-drop"(raw);
-        "wasi/waitable-set-drop"(ws);
+        "wasi/waitable-set-drop"(ws_3);
     }
     __local_6 = builtin::load_u8(self.__cm_outptr);
     __local_7 = ref.null none;
@@ -926,10 +926,10 @@ fn "core:prelude/types.wado/AsyncCall<Result<wasi:filesystem/types.wado/Descript
             __local_11 = ref.null none;
             if __local_10 != 0 {
                 __local_11 = ref.as_non_null(__inline_memory_to_gc_string_1: block -> ref "core:prelude/string.wado//String" {
-                    __local_14 = builtin::load_i32(((self.__cm_outptr + 4) + 4) + 4);
-                    __local_15 = builtin::load_i32((((self.__cm_outptr + 4) + 4) + 4) + 4);
-                    __local_16 = "core:internal/memory_to_gc_array"(__local_14, __local_15);
-                    break __inline_memory_to_gc_string_1: struct.new "core:prelude/string.wado//String" { repr: __local_16, used: __local_15 };
+                    ptr = builtin::load_i32(((self.__cm_outptr + 4) + 4) + 4);
+                    len_15 = builtin::load_i32((((self.__cm_outptr + 4) + 4) + 4) + 4);
+                    arr = "core:internal/memory_to_gc_array"(ptr, len_15);
+                    break __inline_memory_to_gc_string_1: struct.new "core:prelude/string.wado//String" { repr: arr, used: len_15 };
                     unreachable;
                 });
                 drop("mem/realloc"(builtin::load_i32(((self.__cm_outptr + 4) + 4) + 4), builtin::load_i32((((self.__cm_outptr + 4) + 4) + 4) + 4), 1, 0));
@@ -944,9 +944,9 @@ fn "core:prelude/types.wado/AsyncCall<Result<wasi:filesystem/types.wado/Descript
 }
 
 fn "core:prelude/types.wado/AsyncCall<Result<wasi:filesystem/types.wado/DescriptorType,wasi:filesystem/types.wado/ErrorCode>>::wait"(self) {
-    let handle: i32;
+    let handle_1: i32;
     let raw: i32;
-    let ws: i32;
+    let ws_3: i32;
     let result: ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorType,wasi:filesystem/types.wado/ErrorCode>";
     let __local_6: i32;
     let __local_7: ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorType,wasi:filesystem/types.wado/ErrorCode>";
@@ -958,21 +958,21 @@ fn "core:prelude/types.wado/AsyncCall<Result<wasi:filesystem/types.wado/Descript
     let __local_13: ref "wasi:filesystem/types.wado//ErrorCode";
     let __local_14: i32;
     let __local_15: ref null "core:prelude/string.wado//String";
-    let __local_16: i32;
-    let __local_18: i32;
-    let __local_19: i32;
-    let __local_20: ref builtin::array<u8>;
-    let __local_21: i32;
-    let __local_22: i32;
-    let __local_23: ref builtin::array<u8>;
-    handle = self.__cm_packed >> 4;
-    if handle != 0 {
-        raw = handle;
-        ws = "wasi/waitable-set-new"();
+    let handle_16: i32;
+    let ptr_18: i32;
+    let len_19: i32;
+    let arr_20: ref builtin::array<u8>;
+    let ptr_21: i32;
+    let len_22: i32;
+    let arr_23: ref builtin::array<u8>;
+    handle_1 = self.__cm_packed >> 4;
+    if handle_1 != 0 {
+        raw = handle_1;
+        ws_3 = "wasi/waitable-set-new"();
         drop(__inline_cm_waitable_join_0: block -> i32 {
-            __local_16 = raw;
-            "wasi/waitable-join"(__local_16, ws);
-            break __inline_cm_waitable_join_0: __local_16;
+            handle_16 = raw;
+            "wasi/waitable-join"(handle_16, ws_3);
+            break __inline_cm_waitable_join_0: handle_16;
             unreachable;
         });
         b115: block {
@@ -980,7 +980,7 @@ fn "core:prelude/types.wado/AsyncCall<Result<wasi:filesystem/types.wado/Descript
                 let __sroa_event_code: i32;
                 let __sroa_event_handle: i32;
                 let __sroa_event_payload: u32;
-                multivalue_bind [__sroa_event_code, __sroa_event_handle, __sroa_event_payload] = "core:internal/cm_waitable_set_wait"(ws);
+                multivalue_bind [__sroa_event_code, __sroa_event_handle, __sroa_event_payload] = "core:internal/cm_waitable_set_wait"(ws_3);
                 if __sroa_event_payload == 2 {
                     break b115;
                 }
@@ -988,7 +988,7 @@ fn "core:prelude/types.wado/AsyncCall<Result<wasi:filesystem/types.wado/Descript
             };
         };
         "wasi/subtask-drop"(raw);
-        "wasi/waitable-set-drop"(ws);
+        "wasi/waitable-set-drop"(ws_3);
     }
     __local_6 = builtin::load_u8(self.__cm_outptr);
     __local_7 = ref.null none;
@@ -1014,10 +1014,10 @@ fn "core:prelude/types.wado/AsyncCall<Result<wasi:filesystem/types.wado/Descript
             __local_11 = ref.null none;
             if __local_10 != 0 {
                 __local_11 = ref.as_non_null(__inline_memory_to_gc_string_1: block -> ref "core:prelude/string.wado//String" {
-                    __local_18 = builtin::load_i32(((self.__cm_outptr + 4) + 4) + 4);
-                    __local_19 = builtin::load_i32((((self.__cm_outptr + 4) + 4) + 4) + 4);
-                    __local_20 = "core:internal/memory_to_gc_array"(__local_18, __local_19);
-                    break __inline_memory_to_gc_string_1: struct.new "core:prelude/string.wado//String" { repr: __local_20, used: __local_19 };
+                    ptr_18 = builtin::load_i32(((self.__cm_outptr + 4) + 4) + 4);
+                    len_19 = builtin::load_i32((((self.__cm_outptr + 4) + 4) + 4) + 4);
+                    arr_20 = "core:internal/memory_to_gc_array"(ptr_18, len_19);
+                    break __inline_memory_to_gc_string_1: struct.new "core:prelude/string.wado//String" { repr: arr_20, used: len_19 };
                     unreachable;
                 });
                 drop("mem/realloc"(builtin::load_i32(((self.__cm_outptr + 4) + 4) + 4), builtin::load_i32((((self.__cm_outptr + 4) + 4) + 4) + 4), 1, 0));
@@ -1105,10 +1105,10 @@ fn "core:prelude/types.wado/AsyncCall<Result<wasi:filesystem/types.wado/Descript
             __local_15 = ref.null none;
             if __local_14 != 0 {
                 __local_15 = ref.as_non_null(__inline_memory_to_gc_string_2: block -> ref "core:prelude/string.wado//String" {
-                    __local_21 = builtin::load_i32(((self.__cm_outptr + 4) + 4) + 4);
-                    __local_22 = builtin::load_i32((((self.__cm_outptr + 4) + 4) + 4) + 4);
-                    __local_23 = "core:internal/memory_to_gc_array"(__local_21, __local_22);
-                    break __inline_memory_to_gc_string_2: struct.new "core:prelude/string.wado//String" { repr: __local_23, used: __local_22 };
+                    ptr_21 = builtin::load_i32(((self.__cm_outptr + 4) + 4) + 4);
+                    len_22 = builtin::load_i32((((self.__cm_outptr + 4) + 4) + 4) + 4);
+                    arr_23 = "core:internal/memory_to_gc_array"(ptr_21, len_22);
+                    break __inline_memory_to_gc_string_2: struct.new "core:prelude/string.wado//String" { repr: arr_23, used: len_22 };
                     unreachable;
                 });
                 drop("mem/realloc"(builtin::load_i32(((self.__cm_outptr + 4) + 4) + 4), builtin::load_i32((((self.__cm_outptr + 4) + 4) + 4) + 4), 1, 0));

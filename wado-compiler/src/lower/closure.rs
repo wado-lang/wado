@@ -7,9 +7,9 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::{LocalMethodName, MethodName, ModuleSource};
 use crate::tir::{
     CallArg, ClosureFunctor, FunctionKind, FunctionRef, InlineHint, ResolvedType, TirBlock,
-    TirCapture, TirExpr, TirExprKind, TirField, TirFunction, TirImpl, TirMatchArm, TirModule,
-    TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirStructPatternField,
-    TirUnaryOp, TypeId, TypeTable,
+    TirCapture, TirExpr, TirExprKind, TirField, TirFunction, TirImpl, TirLocal, TirMatchArm,
+    TirModule, TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField,
+    TirStructPatternField, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -656,17 +656,17 @@ impl ClosureLowerer {
         }
     }
 
-    /// Update `local_types` in a function after closure transformation
+    /// Update `locals` in a function after closure transformation
     fn update_local_types(&self, func: &mut TirFunction) {
         // For each local that stored a closure and was transformed to a struct,
         // update its type from function type to struct type
         for (local_idx, closure_id) in &self.local_to_closure {
             if self.specializable.contains(closure_id)
                 && let Some(functor) = self.functor_infos.get(*closure_id as usize)
-                && let Some(type_id) = func.local_types.get_mut(*local_idx as usize)
+                && let Some(local) = func.locals.get_mut(*local_idx as usize)
             {
                 // Functors are reference types
-                *type_id = functor.ref_type_id;
+                local.type_id = functor.ref_type_id;
             }
         }
     }
@@ -1280,31 +1280,49 @@ impl ClosureLowerer {
 
             let body_block = TirBlock::new(body_stmts, collected.span);
 
-            // Collect local types: self + params + internal locals from body
-            // Parameters are locals 0 (self) through params.len()
+            // Collect locals: self + params + internal locals from body.
+            // Parameters are locals 0 (self) through params.len(); the
+            // closure-functor's `__call` method receives the env struct as
+            // self, so the first slot is the synthesised self ref.
             let param_count = 1 + collected.params.len() as u32;
-            let mut local_types = vec![self_ref_type];
-            local_types.extend(collected.params.iter().map(|(_, t)| *t));
+            let mut locals: Vec<TirLocal> = Vec::with_capacity(param_count as usize);
+            locals.push(TirLocal {
+                name: "self".to_string(),
+                type_id: self_ref_type,
+                is_mut: false,
+            });
+            for (name, ty) in &collected.params {
+                locals.push(TirLocal {
+                    name: name.clone(),
+                    type_id: *ty,
+                    is_mut: false,
+                });
+            }
 
             // Collect internal locals from the body (Let statements with index >= param_count)
             let mut body_locals: Vec<(u32, TypeId)> = Vec::new();
             Self::collect_locals_from_block(&body_block, &mut body_locals);
 
-            // Extend local_types with body locals, sorted by index
+            // Extend `locals` with body locals, sorted by index. Body locals
+            // come from the closure body's `Let` statements; the source
+            // names are recovered later in `wir_build` via
+            // `TirFunction::locals[idx].name`, so here we only need stable
+            // synthetic placeholders.
             body_locals.sort_by_key(|(idx, _)| *idx);
             for (idx, type_id) in &body_locals {
                 // Ensure we only add locals beyond parameter range
                 if *idx >= param_count {
                     // Extend vector if needed to accommodate sparse indices
-                    while local_types.len() <= *idx as usize {
-                        local_types.push(TypeTable::UNKNOWN);
+                    while locals.len() <= *idx as usize {
+                        let placeholder_idx = locals.len() as u32;
+                        locals.push(TirLocal::synth(placeholder_idx, TypeTable::UNKNOWN, false));
                     }
-                    local_types[*idx as usize] = *type_id;
+                    locals[*idx as usize] = TirLocal::synth(*idx, *type_id, false);
                 }
             }
 
             // local_count is the total number of locals
-            let local_count = local_types.len() as u32;
+            let local_count = locals.len() as u32;
 
             // method_info tells codegen how to register this function with the proper mangled name
             let method_info = LocalMethodName::new(
@@ -1331,7 +1349,7 @@ impl ClosureLowerer {
                 body: Some(body_block),
                 span: collected.span,
                 local_count,
-                local_types,
+                locals,
                 address_taken_locals: IndexSet::default(),
                 stores_aliased_locals: IndexSet::default(),
                 is_cm_binding: false,
@@ -3121,12 +3139,12 @@ impl ClosureLowerer {
             }
         }
 
-        // Clone and modify local_types (same indexing as params)
-        let mut new_local_types = callee.local_types.clone();
+        // Clone and modify locals (same indexing as params)
+        let mut new_locals = callee.locals.clone();
         for (arg_idx, &functor_type) in &arg_to_functor {
             let local_idx = (*arg_idx + param_offset) as usize;
-            if local_idx < new_local_types.len() {
-                new_local_types[local_idx] = type_table.make_ref(functor_type);
+            if local_idx < new_locals.len() {
+                new_locals[local_idx].type_id = type_table.make_ref(functor_type);
             }
         }
 
@@ -3188,7 +3206,7 @@ impl ClosureLowerer {
             body: new_body,
             span: callee.span,
             local_count: callee.local_count,
-            local_types: new_local_types,
+            locals: new_locals,
             address_taken_locals: callee.address_taken_locals.clone(),
             stores_aliased_locals: callee.stores_aliased_locals.clone(),
             is_cm_binding: false,

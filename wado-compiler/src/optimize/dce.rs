@@ -1437,8 +1437,8 @@ fn collect_types_from_function(
     collect_type_transitive(func.return_type, type_table, reachable);
 
     // Collect local variable types (includes types from inlined functions)
-    for &local_type_id in &func.local_types {
-        collect_type_transitive(local_type_id, type_table, reachable);
+    for local in &func.locals {
+        collect_type_transitive(local.type_id, type_table, reachable);
     }
 
     // Collect monomorphization type args (used by WIR for name mangling)

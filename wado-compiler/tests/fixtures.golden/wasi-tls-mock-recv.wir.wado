@@ -164,11 +164,11 @@ fn "wado-compiler/tests/fixtures/wasi-tls-mock-recv.wado/run"() with Stdout, Con
     let cipher_rx: i32;
     let cipher_tx: i32;
     let tls_rx: i32;
-    let __local_9: i32;
-    let __local_10: ref "core:prelude//Array<u8>";
+    let e: i32;
+    let __b_10: ref "core:prelude//Array<u8>";
     let received: ref "core:prelude//Array<u8>";
     let chunk: ref "core:prelude//Array<u8>";
-    let __local_13: ref "core:prelude/string.wado//String";
+    let s: ref "core:prelude/string.wado//String";
     let __local_14: ref "core:prelude/string.wado//String";
     conn = "wado-compiler/tests/fixtures/wasi-tls-mock-recv.wado/__cm_binding__Connector_new"();
     let __pair_temp_1: i64;
@@ -194,19 +194,19 @@ fn "wado-compiler/tests/fixtures/wasi-tls-mock-recv.wado/run"() with Stdout, Con
     } else {
         let __cast_3: ref "core:prelude/types.wado//Result<unit,wasi:tls/types.wado/Error>::Err";
         __cast_3 = ref.cast "core:prelude/types.wado//Result<unit,wasi:tls/types.wado/Error>::Err"(__match_scrut_0);
-        __local_9 = __cast_3.payload_0;
+        e = __cast_3.payload_0;
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
             __local_14 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(46), used: 0 };
             "core:prelude/string.wado/String::push_str"(__local_14, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected handshake failure: "), used: 30 });
-            "core:prelude/string.wado/String::push_str"(__local_14, "wado-compiler/tests/fixtures/wasi-tls-mock-recv.wado/__cm_binding__Error_to_debug_string"(__local_9));
+            "core:prelude/string.wado/String::push_str"(__local_14, "wado-compiler/tests/fixtures/wasi-tls-mock-recv.wado/__cm_binding__Error_to_debug_string"(e));
             break __tmpl: __local_14;
             unreachable;
         });
         unreachable;
     }
     received = __seq_lit: block -> ref "core:prelude//Array<u8>" {
-        __local_10 = struct.new "core:prelude//Array<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
-        break __seq_lit: __local_10;
+        __b_10 = struct.new "core:prelude//Array<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
+        break __seq_lit: __b_10;
         unreachable;
     };
     b1: block {
@@ -224,8 +224,8 @@ fn "wado-compiler/tests/fixtures/wasi-tls-mock-recv.wado/run"() with Stdout, Con
     let __sroa___match_scrut_1_payload_0: ref null "core:prelude/string.wado//String";
     multivalue_bind [__sroa___match_scrut_1_discriminant, __sroa___match_scrut_1_payload_0] = "core:prelude/string.wado/String::from_utf8<Array<u8>>"(received);
     if __sroa___match_scrut_1_discriminant == 0 {
-        __local_13 = ref.as_non_null(__sroa___match_scrut_1_payload_0);
-        "core:cli/println"(__local_13);
+        s = ref.as_non_null(__sroa___match_scrut_1_payload_0);
+        "core:cli/println"(s);
     } else {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("recv was not valid UTF-8"), used: 24 });
         unreachable;
@@ -277,16 +277,16 @@ fn "wado-compiler/tests/fixtures/wasi-tls-mock-recv.wado/__cm_binding__Connector
 fn "wado-compiler/tests/fixtures/wasi-tls-mock-recv.wado/__cm_binding__Error_to_debug_string"(self) with Error {
     let __outptr: i32;
     let __lifted_result_2: ref "core:prelude/string.wado//String";
-    let __local_3: i32;
-    let __local_4: i32;
-    let __local_5: ref builtin::array<u8>;
+    let ptr: i32;
+    let len_4: i32;
+    let arr: ref builtin::array<u8>;
     __outptr = "mem/realloc"(0, 0, 4, 8);
     "wasi/wasi:tls/Error::to_debug_string"(self, __outptr);
     __lifted_result_2 = __inline_memory_to_gc_string_0: block -> ref "core:prelude/string.wado//String" {
-        __local_3 = builtin::load_i32(__outptr);
-        __local_4 = builtin::load_i32(__outptr + 4);
-        __local_5 = "core:internal/memory_to_gc_array"(__local_3, __local_4);
-        break __inline_memory_to_gc_string_0: struct.new "core:prelude/string.wado//String" { repr: __local_5, used: __local_4 };
+        ptr = builtin::load_i32(__outptr);
+        len_4 = builtin::load_i32(__outptr + 4);
+        arr = "core:internal/memory_to_gc_array"(ptr, len_4);
+        break __inline_memory_to_gc_string_0: struct.new "core:prelude/string.wado//String" { repr: arr, used: len_4 };
         unreachable;
     };
     drop("mem/realloc"(__outptr, 8, 4, 0));
@@ -482,19 +482,19 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref builtin::array<u8>;
-    let __local_5: i32;
-    let __local_7: i32;
+    let a_5: i32;
+    let a_7: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
     new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_5 = __inline_i32_max_1: block -> i32 {
-            __local_7 = capacity * 2;
-            break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+        a_5 = __inline_i32_max_1: block -> i32 {
+            a_7 = capacity * 2;
+            break __inline_i32_max_1: select i32(a_7 > min_capacity, a_7, min_capacity);
             unreachable;
         };
-        break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        break __inline_i32_max_0: select i32(a_5 > 8, a_5, 8);
         unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
@@ -738,19 +738,19 @@ fn "core:prelude/array.wado/Array<u8>::grow_to"(self, min_capacity) {
     let old_repr: ref builtin::array<u8>;
     let used: i32;
     let i: i32;
-    let __local_8: i32;
-    let __local_10: i32;
+    let a_8: i32;
+    let a_10: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
     new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_8 = __inline_i32_max_1: block -> i32 {
-            __local_10 = capacity * 2;
-            break __inline_i32_max_1: select i32(__local_10 > min_capacity, __local_10, min_capacity);
+        a_8 = __inline_i32_max_1: block -> i32 {
+            a_10 = capacity * 2;
+            break __inline_i32_max_1: select i32(a_10 > min_capacity, a_10, min_capacity);
             unreachable;
         };
-        break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
+        break __inline_i32_max_0: select i32(a_8 > 4, a_8, 4);
         unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
@@ -773,21 +773,21 @@ fn "core:prelude/array.wado/Array<u8>::grow_to"(self, min_capacity) {
 }
 
 fn "core:prelude/types.wado/AsyncCall<Result<unit,wasi:tls/types.wado/Error>>::wait"(self) {
-    let handle: i32;
+    let handle_1: i32;
     let raw: i32;
-    let ws: i32;
+    let ws_3: i32;
     let result: ref "core:prelude/types.wado//Result<unit,wasi:tls/types.wado/Error>";
     let __local_6: i32;
     let __local_7: ref "core:prelude/types.wado//Result<unit,wasi:tls/types.wado/Error>";
-    let __local_8: i32;
-    handle = self.__cm_packed >> 4;
-    if handle != 0 {
-        raw = handle;
-        ws = "wasi/waitable-set-new"();
+    let handle_8: i32;
+    handle_1 = self.__cm_packed >> 4;
+    if handle_1 != 0 {
+        raw = handle_1;
+        ws_3 = "wasi/waitable-set-new"();
         drop(__inline_cm_waitable_join_0: block -> i32 {
-            __local_8 = raw;
-            "wasi/waitable-join"(__local_8, ws);
-            break __inline_cm_waitable_join_0: __local_8;
+            handle_8 = raw;
+            "wasi/waitable-join"(handle_8, ws_3);
+            break __inline_cm_waitable_join_0: handle_8;
             unreachable;
         });
         b64: block {
@@ -795,7 +795,7 @@ fn "core:prelude/types.wado/AsyncCall<Result<unit,wasi:tls/types.wado/Error>>::w
                 let __sroa_event_code: i32;
                 let __sroa_event_handle: i32;
                 let __sroa_event_payload: u32;
-                multivalue_bind [__sroa_event_code, __sroa_event_handle, __sroa_event_payload] = "core:internal/cm_waitable_set_wait"(ws);
+                multivalue_bind [__sroa_event_code, __sroa_event_handle, __sroa_event_payload] = "core:internal/cm_waitable_set_wait"(ws_3);
                 if __sroa_event_payload == 2 {
                     break b64;
                 }
@@ -803,7 +803,7 @@ fn "core:prelude/types.wado/AsyncCall<Result<unit,wasi:tls/types.wado/Error>>::w
             };
         };
         "wasi/subtask-drop"(raw);
-        "wasi/waitable-set-drop"(ws);
+        "wasi/waitable-set-drop"(ws_3);
     }
     __local_6 = builtin::load_u8(self.__cm_outptr);
     __local_7 = ref.null none;

@@ -998,8 +998,8 @@ impl FunctionTranslator<'_, '_> {
                             // promoted to Box<T> by the address-taken boxing pass)
                             // rather than the pattern binding's original type_id.
                             let local_type_id =
-                                if (*local_index as usize) < self.tir_func.local_types.len() {
-                                    self.tir_func.local_types[*local_index as usize]
+                                if (*local_index as usize) < self.tir_func.locals.len() {
+                                    self.tir_func.locals[*local_index as usize].type_id
                                 } else {
                                     *type_id
                                 };

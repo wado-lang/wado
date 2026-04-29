@@ -8,8 +8,8 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::{LocalMethodName, MethodName, ModuleSource, mangle_generic_name};
 use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InstantiationKey, MonomorphInfo, ResolvedType, TirBinaryOp,
-    TirBlock, TirExpr, TirExprKind, TirFunction, TirModule, TirParam, TirPattern, TirStmt,
-    TirStmtKind, TirTemplatePart, TirUnaryOp, TypeId, TypeTable,
+    TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirModule, TirParam, TirPattern,
+    TirStmt, TirStmtKind, TirTemplatePart, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 
@@ -789,11 +789,15 @@ impl Monomorphizer {
         // Substitute return type
         let return_type = self.substitute_type(generic.return_type, &substitution, type_table);
 
-        // Substitute types in local_types
-        let mut local_types: Vec<TypeId> = generic
-            .local_types
+        // Substitute types in `locals`
+        let mut locals: Vec<TirLocal> = generic
+            .locals
             .iter()
-            .map(|&t| self.substitute_type(t, &substitution, type_table))
+            .map(|local| TirLocal {
+                name: local.name.clone(),
+                type_id: self.substitute_type(local.type_id, &substitution, type_table),
+                is_mut: local.is_mut,
+            })
             .collect();
 
         // Clone and substitute types in body
@@ -811,10 +815,10 @@ impl Monomorphizer {
                 &substitution,
                 type_table,
                 &mut local_count,
-                &mut local_types,
+                &mut locals,
             );
             // Fixup TypePackExpansion: allocate separate locals for each expanded element
-            Self::fixup_pack_expansion_locals(&mut new_body, &mut local_count, &mut local_types);
+            Self::fixup_pack_expansion_locals(&mut new_body, &mut local_count, &mut locals);
             new_body
         });
 
@@ -866,7 +870,7 @@ impl Monomorphizer {
             body,
             span: generic.span,
             local_count,
-            local_types,
+            locals,
             address_taken_locals: generic.address_taken_locals.clone(),
             stores_aliased_locals: generic.stores_aliased_locals.clone(),
             // Scratch local fields - computed by lower phase (after monomorphization)
@@ -889,7 +893,7 @@ impl Monomorphizer {
         substitution: &IndexMap<u32, TypeId>,
         type_table: &mut TypeTable,
         local_count: &mut u32,
-        local_types: &mut Vec<TypeId>,
+        locals: &mut Vec<TirLocal>,
     ) {
         let has_variadic = block
             .stmts
@@ -904,7 +908,7 @@ impl Monomorphizer {
                         substitution,
                         type_table,
                         local_count,
-                        local_types,
+                        locals,
                     ));
                 } else {
                     self.substitute_types_in_stmt(
@@ -912,20 +916,14 @@ impl Monomorphizer {
                         substitution,
                         type_table,
                         local_count,
-                        local_types,
+                        locals,
                     );
                     block.stmts.push(stmt);
                 }
             }
         } else {
             for stmt in &mut block.stmts {
-                self.substitute_types_in_stmt(
-                    stmt,
-                    substitution,
-                    type_table,
-                    local_count,
-                    local_types,
-                );
+                self.substitute_types_in_stmt(stmt, substitution, type_table, local_count, locals);
             }
         }
     }
@@ -936,27 +934,15 @@ impl Monomorphizer {
         substitution: &IndexMap<u32, TypeId>,
         type_table: &mut TypeTable,
         local_count: &mut u32,
-        local_types: &mut Vec<TypeId>,
+        locals: &mut Vec<TirLocal>,
     ) {
         match &mut stmt.kind {
             TirStmtKind::Let { value, type_id, .. } => {
                 *type_id = self.substitute_type(*type_id, substitution, type_table);
-                self.substitute_types_in_expr(
-                    value,
-                    substitution,
-                    type_table,
-                    local_count,
-                    local_types,
-                );
+                self.substitute_types_in_expr(value, substitution, type_table, local_count, locals);
             }
             TirStmtKind::Expr(expr) => {
-                self.substitute_types_in_expr(
-                    expr,
-                    substitution,
-                    type_table,
-                    local_count,
-                    local_types,
-                );
+                self.substitute_types_in_expr(expr, substitution, type_table, local_count, locals);
             }
             TirStmtKind::Return { value } => {
                 if let Some(expr) = value {
@@ -965,7 +951,7 @@ impl Monomorphizer {
                         substitution,
                         type_table,
                         local_count,
-                        local_types,
+                        locals,
                     );
                 }
             }
@@ -979,14 +965,14 @@ impl Monomorphizer {
                     substitution,
                     type_table,
                     local_count,
-                    local_types,
+                    locals,
                 );
                 self.substitute_types_in_block(
                     then_block,
                     substitution,
                     type_table,
                     local_count,
-                    local_types,
+                    locals,
                 );
                 if let Some(else_blk) = else_block {
                     self.substitute_types_in_block(
@@ -994,28 +980,16 @@ impl Monomorphizer {
                         substitution,
                         type_table,
                         local_count,
-                        local_types,
+                        locals,
                     );
                 }
             }
             TirStmtKind::Loop { body } => {
-                self.substitute_types_in_block(
-                    body,
-                    substitution,
-                    type_table,
-                    local_count,
-                    local_types,
-                );
+                self.substitute_types_in_block(body, substitution, type_table, local_count, locals);
             }
             TirStmtKind::Break { value, .. } => {
                 if let Some(v) = value {
-                    self.substitute_types_in_expr(
-                        v,
-                        substitution,
-                        type_table,
-                        local_count,
-                        local_types,
-                    );
+                    self.substitute_types_in_expr(v, substitution, type_table, local_count, locals);
                 }
             }
             TirStmtKind::Continue => {}
@@ -1025,7 +999,7 @@ impl Monomorphizer {
                     substitution,
                     type_table,
                     local_count,
-                    local_types,
+                    locals,
                 );
             }
             TirStmtKind::IfLet {
@@ -1039,7 +1013,7 @@ impl Monomorphizer {
                     substitution,
                     type_table,
                     local_count,
-                    local_types,
+                    locals,
                 );
                 self.substitute_types_in_pattern(pattern, substitution, type_table);
                 self.substitute_types_in_block(
@@ -1047,7 +1021,7 @@ impl Monomorphizer {
                     substitution,
                     type_table,
                     local_count,
-                    local_types,
+                    locals,
                 );
                 if let Some(else_blk) = else_block {
                     self.substitute_types_in_block(
@@ -1055,19 +1029,13 @@ impl Monomorphizer {
                         substitution,
                         type_table,
                         local_count,
-                        local_types,
+                        locals,
                     );
                 }
             }
             TirStmtKind::LetDestructure { pattern, value, .. } => {
                 self.substitute_types_in_pattern(pattern, substitution, type_table);
-                self.substitute_types_in_expr(
-                    value,
-                    substitution,
-                    type_table,
-                    local_count,
-                    local_types,
-                );
+                self.substitute_types_in_expr(value, substitution, type_table, local_count, locals);
             }
             TirStmtKind::TaskReturn { .. } => {
                 unreachable!("TaskReturn should be eliminated by synthesis before this phase")
@@ -1084,7 +1052,7 @@ impl Monomorphizer {
         substitution: &IndexMap<u32, TypeId>,
         type_table: &mut TypeTable,
         local_count: &mut u32,
-        local_types: &mut Vec<TypeId>,
+        locals: &mut Vec<TirLocal>,
     ) {
         // Substitute the expression's own type
         expr.type_id = self.substitute_type(expr.type_id, substitution, type_table);
@@ -1303,7 +1271,7 @@ impl Monomorphizer {
                         substitution,
                         type_table,
                         local_count,
-                        local_types,
+                        locals,
                     );
                 }
             }
@@ -1319,7 +1287,7 @@ impl Monomorphizer {
                     substitution,
                     type_table,
                     local_count,
-                    local_types,
+                    locals,
                 );
                 for type_arg in type_args.iter_mut() {
                     *type_arg = self.substitute_type(*type_arg, substitution, type_table);
@@ -1330,7 +1298,7 @@ impl Monomorphizer {
                         substitution,
                         type_table,
                         local_count,
-                        local_types,
+                        locals,
                     );
                 }
 
@@ -1410,25 +1378,13 @@ impl Monomorphizer {
                         substitution,
                         type_table,
                         local_count,
-                        local_types,
+                        locals,
                     );
                 }
             }
             TirExprKind::Binary { op, left, right } => {
-                self.substitute_types_in_expr(
-                    left,
-                    substitution,
-                    type_table,
-                    local_count,
-                    local_types,
-                );
-                self.substitute_types_in_expr(
-                    right,
-                    substitution,
-                    type_table,
-                    local_count,
-                    local_types,
-                );
+                self.substitute_types_in_expr(left, substitution, type_table, local_count, locals);
+                self.substitute_types_in_expr(right, substitution, type_table, local_count, locals);
                 // After type substitution, comparison operators on non-primitive
                 // types must be lowered to Eq::eq / Ord::cmp method calls.
                 if matches!(
@@ -1452,13 +1408,7 @@ impl Monomorphizer {
                 }
             }
             TirExprKind::Unary { expr: inner, .. } => {
-                self.substitute_types_in_expr(
-                    inner,
-                    substitution,
-                    type_table,
-                    local_count,
-                    local_types,
-                );
+                self.substitute_types_in_expr(inner, substitution, type_table, local_count, locals);
             }
             TirExprKind::Block(block) => {
                 self.substitute_types_in_block(
@@ -1466,7 +1416,7 @@ impl Monomorphizer {
                     substitution,
                     type_table,
                     local_count,
-                    local_types,
+                    locals,
                 );
             }
             TirExprKind::If {
@@ -1479,14 +1429,14 @@ impl Monomorphizer {
                     substitution,
                     type_table,
                     local_count,
-                    local_types,
+                    locals,
                 );
                 self.substitute_types_in_block(
                     then_branch,
                     substitution,
                     type_table,
                     local_count,
-                    local_types,
+                    locals,
                 );
                 if let Some(else_blk) = else_branch {
                     self.substitute_types_in_block(
@@ -1494,7 +1444,7 @@ impl Monomorphizer {
                         substitution,
                         type_table,
                         local_count,
-                        local_types,
+                        locals,
                     );
                 }
             }
@@ -1508,7 +1458,7 @@ impl Monomorphizer {
                             substitution,
                             type_table,
                             local_count,
-                            local_types,
+                            locals,
                         );
                     }
                 }
@@ -1567,7 +1517,7 @@ impl Monomorphizer {
                                     &elem_sub,
                                     type_table,
                                     local_count,
-                                    local_types,
+                                    locals,
                                 );
                                 // Fix up Return statements: the per-element substitution
                                 // incorrectly maps pack types in return positions.
@@ -1606,46 +1556,22 @@ impl Monomorphizer {
                     substitution,
                     type_table,
                     local_count,
-                    local_types,
+                    locals,
                 );
-                self.substitute_types_in_expr(
-                    value,
-                    substitution,
-                    type_table,
-                    local_count,
-                    local_types,
-                );
+                self.substitute_types_in_expr(value, substitution, type_table, local_count, locals);
             }
             TirExprKind::Cast {
                 expr: inner,
                 target_type,
             } => {
                 *target_type = self.substitute_type(*target_type, substitution, type_table);
-                self.substitute_types_in_expr(
-                    inner,
-                    substitution,
-                    type_table,
-                    local_count,
-                    local_types,
-                );
+                self.substitute_types_in_expr(inner, substitution, type_table, local_count, locals);
             }
             TirExprKind::FieldAccess { expr: inner, .. } => {
-                self.substitute_types_in_expr(
-                    inner,
-                    substitution,
-                    type_table,
-                    local_count,
-                    local_types,
-                );
+                self.substitute_types_in_expr(inner, substitution, type_table, local_count, locals);
             }
             TirExprKind::TupleSpread { expr: inner } => {
-                self.substitute_types_in_expr(
-                    inner,
-                    substitution,
-                    type_table,
-                    local_count,
-                    local_types,
-                );
+                self.substitute_types_in_expr(inner, substitution, type_table, local_count, locals);
             }
             TirExprKind::TupleZip { expr: zip_inner } => {
                 self.substitute_types_in_expr(
@@ -1653,7 +1579,7 @@ impl Monomorphizer {
                     substitution,
                     type_table,
                     local_count,
-                    local_types,
+                    locals,
                 );
                 // After substitution, expand to transposed TupleLiteral.
                 // Inner expr type: [[A0, A1, ...], [B0, B1, ...], ...]
@@ -1730,24 +1656,12 @@ impl Monomorphizer {
                     substitution,
                     type_table,
                     local_count,
-                    local_types,
+                    locals,
                 );
             }
             TirExprKind::Index { expr: array, index } => {
-                self.substitute_types_in_expr(
-                    array,
-                    substitution,
-                    type_table,
-                    local_count,
-                    local_types,
-                );
-                self.substitute_types_in_expr(
-                    index,
-                    substitution,
-                    type_table,
-                    local_count,
-                    local_types,
-                );
+                self.substitute_types_in_expr(array, substitution, type_table, local_count, locals);
+                self.substitute_types_in_expr(index, substitution, type_table, local_count, locals);
             }
             TirExprKind::Match {
                 expr: scrutinee,
@@ -1758,7 +1672,7 @@ impl Monomorphizer {
                     substitution,
                     type_table,
                     local_count,
-                    local_types,
+                    locals,
                 );
                 for arm in arms {
                     self.substitute_types_in_pattern(&mut arm.pattern, substitution, type_table);
@@ -1768,7 +1682,7 @@ impl Monomorphizer {
                             substitution,
                             type_table,
                             local_count,
-                            local_types,
+                            locals,
                         );
                     }
                     self.substitute_types_in_expr(
@@ -1776,7 +1690,7 @@ impl Monomorphizer {
                         substitution,
                         type_table,
                         local_count,
-                        local_types,
+                        locals,
                     );
                 }
             }
@@ -1792,13 +1706,7 @@ impl Monomorphizer {
                 for cap in captures {
                     cap.type_id = self.substitute_type(cap.type_id, substitution, type_table);
                 }
-                self.substitute_types_in_expr(
-                    body,
-                    substitution,
-                    type_table,
-                    local_count,
-                    local_types,
-                );
+                self.substitute_types_in_expr(body, substitution, type_table, local_count, locals);
             }
             TirExprKind::StructLiteral {
                 struct_type,
@@ -1812,7 +1720,7 @@ impl Monomorphizer {
                         substitution,
                         type_table,
                         local_count,
-                        local_types,
+                        locals,
                     );
                 }
 
@@ -1863,7 +1771,7 @@ impl Monomorphizer {
                     substitution,
                     type_table,
                     local_count,
-                    local_types,
+                    locals,
                 );
                 for arg in args {
                     self.substitute_types_in_expr(
@@ -1871,7 +1779,7 @@ impl Monomorphizer {
                         substitution,
                         type_table,
                         local_count,
-                        local_types,
+                        locals,
                     );
                 }
             }
@@ -1885,7 +1793,7 @@ impl Monomorphizer {
                     substitution,
                     type_table,
                     local_count,
-                    local_types,
+                    locals,
                 );
                 *target_fn_type = self.substitute_type(*target_fn_type, substitution, type_table);
             }
@@ -1902,7 +1810,7 @@ impl Monomorphizer {
                         substitution,
                         type_table,
                         local_count,
-                        local_types,
+                        locals,
                     );
                 }
                 // After substitution, if variant_type is still a bare Variant (from
@@ -1945,46 +1853,22 @@ impl Monomorphizer {
                     substitution,
                     type_table,
                     local_count,
-                    local_types,
+                    locals,
                 );
             }
             TirExprKind::GlobalVarSet { value, .. } => {
-                self.substitute_types_in_expr(
-                    value,
-                    substitution,
-                    type_table,
-                    local_count,
-                    local_types,
-                );
+                self.substitute_types_in_expr(value, substitution, type_table, local_count, locals);
             }
             TirExprKind::VariantTag { expr } => {
-                self.substitute_types_in_expr(
-                    expr,
-                    substitution,
-                    type_table,
-                    local_count,
-                    local_types,
-                );
+                self.substitute_types_in_expr(expr, substitution, type_table, local_count, locals);
             }
             TirExprKind::VariantTest { expr, .. } => {
-                self.substitute_types_in_expr(
-                    expr,
-                    substitution,
-                    type_table,
-                    local_count,
-                    local_types,
-                );
+                self.substitute_types_in_expr(expr, substitution, type_table, local_count, locals);
             }
             TirExprKind::VariantPayload {
                 expr, payload_type, ..
             } => {
-                self.substitute_types_in_expr(
-                    expr,
-                    substitution,
-                    type_table,
-                    local_count,
-                    local_types,
-                );
+                self.substitute_types_in_expr(expr, substitution, type_table, local_count, locals);
                 *payload_type = self.substitute_type(*payload_type, substitution, type_table);
             }
             TirExprKind::Switch {
@@ -1998,7 +1882,7 @@ impl Monomorphizer {
                     substitution,
                     type_table,
                     local_count,
-                    local_types,
+                    locals,
                 );
                 for arm in arms {
                     self.substitute_types_in_block(
@@ -2006,7 +1890,7 @@ impl Monomorphizer {
                         substitution,
                         type_table,
                         local_count,
-                        local_types,
+                        locals,
                     );
                 }
                 self.substitute_types_in_block(
@@ -2014,7 +1898,7 @@ impl Monomorphizer {
                     substitution,
                     type_table,
                     local_count,
-                    local_types,
+                    locals,
                 );
             }
             // Literals and other simple expressions
@@ -2039,7 +1923,7 @@ impl Monomorphizer {
                             substitution,
                             type_table,
                             local_count,
-                            local_types,
+                            locals,
                         );
                     }
                 }
@@ -2294,7 +2178,7 @@ impl Monomorphizer {
         substitution: &IndexMap<u32, TypeId>,
         type_table: &mut TypeTable,
         local_count: &mut u32,
-        local_types: &mut Vec<TypeId>,
+        locals: &mut Vec<TirLocal>,
     ) -> Vec<TirStmt> {
         let span = stmt.span;
         let TirStmtKind::VariadicForOf {
@@ -2310,7 +2194,7 @@ impl Monomorphizer {
         };
 
         // Substitute types in the iterable to get the concrete tuple type
-        self.substitute_types_in_expr(iterable, substitution, type_table, local_count, local_types);
+        self.substitute_types_in_expr(iterable, substitution, type_table, local_count, locals);
 
         // Get the concrete tuple elements
         let iterable_type = iterable.type_id;
@@ -2343,7 +2227,11 @@ impl Monomorphizer {
         // will be reused per-iteration below with distinct types per element).
         let temp_local_idx = *local_count;
         *local_count += 1;
-        local_types.push(iterable_type);
+        locals.push(TirLocal {
+            name: temp_name.clone(),
+            type_id: iterable_type,
+            is_mut: false,
+        });
 
         let mut outer_stmts = Vec::new();
 
@@ -2371,7 +2259,11 @@ impl Monomorphizer {
             // Allocate a unique binding local per iteration (each element has a different type)
             let iter_binding = *local_count;
             *local_count += 1;
-            local_types.push(elem_type);
+            locals.push(TirLocal {
+                name: b_name.clone(),
+                type_id: elem_type,
+                is_mut: b_mut,
+            });
 
             let tuple_ref = TirExpr::new(
                 TirExprKind::Local {
@@ -2451,10 +2343,14 @@ impl Monomorphizer {
                         } = &orig_stmt.kind
                         {
                             let field_type = pair_fields.get(j).copied().unwrap_or(body_pack_type);
-                            // Update local_types for this local
+                            // Update locals for this local
                             let idx = *local_index as usize;
-                            if idx < local_types.len() {
-                                local_types[idx] = field_type;
+                            if idx < locals.len() {
+                                locals[idx] = TirLocal {
+                                    name: name.clone(),
+                                    type_id: field_type,
+                                    is_mut: *is_mut,
+                                };
                             }
                             let binding_ref = TirExpr::new(
                                 TirExprKind::Local {
@@ -2509,7 +2405,7 @@ impl Monomorphizer {
                         &elem_substitution,
                         type_table,
                         local_count,
-                        local_types,
+                        locals,
                     );
 
                     // Reassemble: fresh destructured stmts + substituted user body
@@ -2523,7 +2419,7 @@ impl Monomorphizer {
                         &elem_substitution,
                         type_table,
                         local_count,
-                        local_types,
+                        locals,
                     );
                 }
             } else {
@@ -2533,7 +2429,7 @@ impl Monomorphizer {
                     substitution,
                     type_table,
                     local_count,
-                    local_types,
+                    locals,
                 );
                 self.rewrite_variadic_binding_types(
                     &mut elem_body,
@@ -2565,12 +2461,12 @@ impl Monomorphizer {
                     *local_count += 1;
                     let body_local_type = Self::find_local_type_in_block(&elem_body, body_local)
                         .unwrap_or(
-                            local_types
+                            locals
                                 .get(body_local as usize)
-                                .copied()
+                                .map(|l| l.type_id)
                                 .unwrap_or(TypeTable::UNIT),
                         );
-                    local_types.push(body_local_type);
+                    locals.push(TirLocal::synth(new_idx, body_local_type, false));
                     for s in &mut elem_body.stmts {
                         Self::rewrite_local_index_in_stmt(s, body_local, new_idx);
                     }
@@ -2949,38 +2845,38 @@ impl Monomorphizer {
     fn fixup_pack_expansion_locals(
         block: &mut TirBlock,
         local_count: &mut u32,
-        local_types: &mut Vec<TypeId>,
+        locals: &mut Vec<TirLocal>,
     ) {
         for stmt in &mut block.stmts {
-            Self::fixup_pack_expansion_locals_in_stmt(stmt, local_count, local_types);
+            Self::fixup_pack_expansion_locals_in_stmt(stmt, local_count, locals);
         }
     }
 
     fn fixup_pack_expansion_locals_in_stmt(
         stmt: &mut TirStmt,
         local_count: &mut u32,
-        local_types: &mut Vec<TypeId>,
+        locals: &mut Vec<TirLocal>,
     ) {
         match &mut stmt.kind {
             TirStmtKind::Expr(expr) | TirStmtKind::Return { value: Some(expr) } => {
-                Self::fixup_pack_expansion_locals_in_expr(expr, local_count, local_types);
+                Self::fixup_pack_expansion_locals_in_expr(expr, local_count, locals);
             }
             TirStmtKind::Let { value, .. } => {
-                Self::fixup_pack_expansion_locals_in_expr(value, local_count, local_types);
+                Self::fixup_pack_expansion_locals_in_expr(value, local_count, locals);
             }
             TirStmtKind::If {
                 condition,
                 then_block,
                 else_block,
             } => {
-                Self::fixup_pack_expansion_locals_in_expr(condition, local_count, local_types);
-                Self::fixup_pack_expansion_locals(then_block, local_count, local_types);
+                Self::fixup_pack_expansion_locals_in_expr(condition, local_count, locals);
+                Self::fixup_pack_expansion_locals(then_block, local_count, locals);
                 if let Some(eb) = else_block {
-                    Self::fixup_pack_expansion_locals(eb, local_count, local_types);
+                    Self::fixup_pack_expansion_locals(eb, local_count, locals);
                 }
             }
             TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-                Self::fixup_pack_expansion_locals(body, local_count, local_types);
+                Self::fixup_pack_expansion_locals(body, local_count, locals);
             }
             _ => {}
         }
@@ -2989,7 +2885,7 @@ impl Monomorphizer {
     fn fixup_pack_expansion_locals_in_expr(
         expr: &mut TirExpr,
         local_count: &mut u32,
-        local_types: &mut Vec<TypeId>,
+        locals: &mut Vec<TirLocal>,
     ) {
         match &mut expr.kind {
             TirExprKind::TupleLiteral { elements } if elements.len() > 1 => {
@@ -3000,21 +2896,21 @@ impl Monomorphizer {
                     let mut locals_in_elem: Vec<u32> = Vec::new();
                     Self::collect_locals_in_expr(elem, &mut locals_in_elem);
                     if elem_idx == 0 {
-                        // Update local_types for element 0's locals from expression types
+                        // Update locals for element 0's locals from expression types
                         for &local_idx in &locals_in_elem {
                             if let Some(correct_type) =
                                 Self::find_local_type_in_expr(elem, local_idx)
-                                && let Some(entry) = local_types.get_mut(local_idx as usize)
+                                && let Some(entry) = locals.get_mut(local_idx as usize)
                             {
-                                *entry = correct_type;
+                                entry.type_id = correct_type;
                             }
                         }
                         first_seen_locals.extend(locals_in_elem);
                     } else {
                         // Reallocate locals shared with previous elements;
-                        // for new locals, update local_types from the expression's
+                        // for new locals, update locals from the expression's
                         // actual types (pattern bindings have correct per-element types
-                        // but local_types may have wrong types from pack substitution).
+                        // but locals may have wrong types from pack substitution).
                         let mut new_locals: Vec<u32> = Vec::new();
                         for old_idx in &locals_in_elem {
                             if first_seen_locals.contains(old_idx) {
@@ -3022,19 +2918,19 @@ impl Monomorphizer {
                                 *local_count += 1;
                                 let local_type = Self::find_local_type_in_expr(elem, *old_idx)
                                     .unwrap_or(
-                                        local_types
+                                        locals
                                             .get(*old_idx as usize)
-                                            .copied()
+                                            .map(|l| l.type_id)
                                             .unwrap_or(TypeTable::UNIT),
                                     );
-                                local_types.push(local_type);
+                                locals.push(TirLocal::synth(new_idx, local_type, false));
                                 Self::rewrite_local_index_in_expr(elem, *old_idx, new_idx);
                             } else {
                                 if let Some(correct_type) =
                                     Self::find_local_type_in_expr(elem, *old_idx)
-                                    && let Some(entry) = local_types.get_mut(*old_idx as usize)
+                                    && let Some(entry) = locals.get_mut(*old_idx as usize)
                                 {
-                                    *entry = correct_type;
+                                    entry.type_id = correct_type;
                                 }
                                 new_locals.push(*old_idx);
                             }
@@ -3045,27 +2941,19 @@ impl Monomorphizer {
             }
             TirExprKind::Call { args, .. } | TirExprKind::MethodCall { args, .. } => {
                 for arg in args {
-                    Self::fixup_pack_expansion_locals_in_expr(
-                        &mut arg.expr,
-                        local_count,
-                        local_types,
-                    );
+                    Self::fixup_pack_expansion_locals_in_expr(&mut arg.expr, local_count, locals);
                 }
             }
             TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
-                Self::fixup_pack_expansion_locals(block, local_count, local_types);
+                Self::fixup_pack_expansion_locals(block, local_count, locals);
             }
             TirExprKind::Match {
                 expr: scrutinee,
                 arms,
             } => {
-                Self::fixup_pack_expansion_locals_in_expr(scrutinee, local_count, local_types);
+                Self::fixup_pack_expansion_locals_in_expr(scrutinee, local_count, locals);
                 for arm in arms {
-                    Self::fixup_pack_expansion_locals_in_expr(
-                        &mut arm.body,
-                        local_count,
-                        local_types,
-                    );
+                    Self::fixup_pack_expansion_locals_in_expr(&mut arm.body, local_count, locals);
                 }
             }
             TirExprKind::VariantConstruct {
@@ -3074,23 +2962,19 @@ impl Monomorphizer {
             | TirExprKind::FieldAccess { expr: p, .. }
             | TirExprKind::Cast { expr: p, .. }
             | TirExprKind::Unary { expr: p, .. } => {
-                Self::fixup_pack_expansion_locals_in_expr(p, local_count, local_types);
+                Self::fixup_pack_expansion_locals_in_expr(p, local_count, locals);
             }
             TirExprKind::Binary { left, right, .. }
             | TirExprKind::Assign {
                 target: left,
                 value: right,
             } => {
-                Self::fixup_pack_expansion_locals_in_expr(left, local_count, local_types);
-                Self::fixup_pack_expansion_locals_in_expr(right, local_count, local_types);
+                Self::fixup_pack_expansion_locals_in_expr(left, local_count, locals);
+                Self::fixup_pack_expansion_locals_in_expr(right, local_count, locals);
             }
             TirExprKind::StructLiteral { fields, .. } => {
                 for f in fields {
-                    Self::fixup_pack_expansion_locals_in_expr(
-                        &mut f.value,
-                        local_count,
-                        local_types,
-                    );
+                    Self::fixup_pack_expansion_locals_in_expr(&mut f.value, local_count, locals);
                 }
             }
             TirExprKind::If {
@@ -3099,15 +2983,15 @@ impl Monomorphizer {
                 else_branch,
                 ..
             } => {
-                Self::fixup_pack_expansion_locals_in_expr(condition, local_count, local_types);
-                Self::fixup_pack_expansion_locals(then_branch, local_count, local_types);
+                Self::fixup_pack_expansion_locals_in_expr(condition, local_count, locals);
+                Self::fixup_pack_expansion_locals(then_branch, local_count, locals);
                 if let Some(eb) = else_branch {
-                    Self::fixup_pack_expansion_locals(eb, local_count, local_types);
+                    Self::fixup_pack_expansion_locals(eb, local_count, locals);
                 }
             }
             TirExprKind::Index { expr: array, index } => {
-                Self::fixup_pack_expansion_locals_in_expr(array, local_count, local_types);
-                Self::fixup_pack_expansion_locals_in_expr(index, local_count, local_types);
+                Self::fixup_pack_expansion_locals_in_expr(array, local_count, locals);
+                Self::fixup_pack_expansion_locals_in_expr(index, local_count, locals);
             }
             _ => {}
         }

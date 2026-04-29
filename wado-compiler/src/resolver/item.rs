@@ -330,7 +330,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             // init). Constant `null` initializers set only `is_nullable`.
             is_nullable: false,
             lazy_init: false,
-            local_types: ctx.locals.iter().map(|l| l.type_id).collect(),
+            locals: ctx.locals.clone(),
         })
     }
 
@@ -698,7 +698,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             body,
             span: func.span,
             local_count: ctx.next_local,
-            local_types: ctx.locals.iter().map(|l| l.type_id).collect(),
+            locals: ctx.locals.clone(),
             address_taken_locals: ctx.address_taken_locals,
             stores_aliased_locals: IndexSet::default(),
             // Scratch local fields - computed by lower phase
@@ -783,7 +783,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             body: Some(body),
             span: test_decl.span,
             local_count: ctx.next_local,
-            local_types: ctx.locals.iter().map(|l| l.type_id).collect(),
+            locals: ctx.locals.clone(),
             address_taken_locals: ctx.address_taken_locals,
             stores_aliased_locals: IndexSet::default(),
             is_cm_binding: false,
@@ -1212,7 +1212,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             body,
             span: func.span,
             local_count: ctx.next_local,
-            local_types: ctx.locals.iter().map(|l| l.type_id).collect(),
+            locals: ctx.locals.clone(),
             address_taken_locals: ctx.address_taken_locals,
             stores_aliased_locals: IndexSet::default(),
             is_cm_binding: false,

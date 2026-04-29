@@ -36,8 +36,8 @@ impl Monomorphizer {
                 param.type_id = rewriter.rewrite_type_id(param.type_id);
             }
             func.return_type = rewriter.rewrite_type_id(func.return_type);
-            for local_type in &mut func.local_types {
-                *local_type = rewriter.rewrite_type_id(*local_type);
+            for local in &mut func.locals {
+                local.type_id = rewriter.rewrite_type_id(local.type_id);
             }
             if let Some(body) = &mut func.body {
                 rewriter.visit_block(body);

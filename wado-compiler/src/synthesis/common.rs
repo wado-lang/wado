@@ -10,7 +10,8 @@ use crate::hashmap::IndexSet;
 use crate::name::{LocalMethodName, ModuleSource};
 use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, TirBinaryOp, TirBlock, TirExpr,
-    TirExprKind, TirFunction, TirParam, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
+    TirExprKind, TirFunction, TirLocal, TirParam, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
+    TypeTable,
 };
 use crate::token::Span;
 
@@ -278,12 +279,58 @@ pub fn block(stmts: Vec<TirStmt>) -> TirBlock {
     }
 }
 
-/// Allocate a local variable, returning its index.
-pub fn alloc_local(next_local: &mut u32, local_types: &mut Vec<TypeId>, ty: TypeId) -> u32 {
+/// Allocate a local variable, returning its index. The synthesised local
+/// is named `__local_N` (matching the codegen fallback convention) and
+/// marked immutable; sites that need a more descriptive name should use
+/// `alloc_named_local` instead.
+pub fn alloc_local(next_local: &mut u32, locals: &mut Vec<TirLocal>, ty: TypeId) -> u32 {
+    alloc_named_local(next_local, locals, None, ty, false)
+}
+
+/// Allocate a local with an explicit name and mutability. Pass `name = None`
+/// to get the default `__local_N` synthesised name.
+pub fn alloc_named_local(
+    next_local: &mut u32,
+    locals: &mut Vec<TirLocal>,
+    name: Option<String>,
+    ty: TypeId,
+    is_mut: bool,
+) -> u32 {
     let idx = *next_local;
     *next_local += 1;
-    local_types.push(ty);
+    let name = name.unwrap_or_else(|| format!("__local_{idx}"));
+    locals.push(TirLocal {
+        name,
+        type_id: ty,
+        is_mut,
+    });
     idx
+}
+
+/// Seed a synthesised function's `locals` table from its parameter list.
+/// The returned vector holds one `TirLocal` per param at indices `0..N`,
+/// inheriting each param's name, type, and mutability so the parameter
+/// slot's metadata matches the corresponding `TirParam`.
+pub fn locals_from_params(params: &[TirParam]) -> Vec<TirLocal> {
+    params
+        .iter()
+        .map(|p| TirLocal {
+            name: p.name.clone(),
+            type_id: p.type_id,
+            is_mut: p.is_mut,
+        })
+        .collect()
+}
+
+/// Build a single `TirLocal` for a synthesised parameter slot. Convenience
+/// wrapper around the literal struct construction so synthesis sites can
+/// seed their `locals` table with `vec![param_local(...), ...]`.
+pub fn param_local(name: &str, type_id: TypeId, is_mut: bool) -> TirLocal {
+    TirLocal {
+        name: name.to_string(),
+        type_id,
+        is_mut,
+    }
 }
 
 /// Create a static call to a generic struct method with proper monomorphization info.
@@ -370,9 +417,9 @@ pub fn make_synthetic_method(
     params: Vec<TirParam>,
     return_type: TypeId,
     body: TirBlock,
-    local_types: Vec<TypeId>,
+    locals: Vec<TirLocal>,
 ) -> TirFunction {
-    let local_count = local_types.len() as u32;
+    let local_count = locals.len() as u32;
 
     TirFunction {
         module_source: ModuleSource::default(),
@@ -392,7 +439,7 @@ pub fn make_synthetic_method(
         body: Some(body),
         span: synth_span(),
         local_count,
-        local_types,
+        locals,
         address_taken_locals: IndexSet::default(),
         stores_aliased_locals: IndexSet::default(),
         is_cm_binding: false,

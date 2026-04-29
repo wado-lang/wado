@@ -18,13 +18,14 @@ use crate::name::{LocalMethodName, MethodName, ModuleSource};
 use crate::package::Package;
 use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ResolvedType, TirBinaryOp,
-    TirBlock, TirExpr, TirExprKind, TirFunction, TirModule, TirParam, TirStmt, TirStmtKind,
-    TirTypeParam, TirUnaryOp, TypeId, TypeTable,
+    TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirModule, TirParam, TirStmt,
+    TirStmtKind, TirTypeParam, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::token::Span;
 
 use super::common::{
-    deref_expr, make_synthetic_method, ref_expr, synth_span, trait_method_call, write_str_stmt,
+    deref_expr, make_synthetic_method, param_local, ref_expr, synth_span, trait_method_call,
+    write_str_stmt,
 };
 
 /// Run trait synthesis on the entire project.
@@ -907,7 +908,10 @@ fn generate_enum_inspect_fn(
         params,
         TypeTable::UNIT,
         body,
-        vec![ref_enum_type, fmt_type],
+        vec![
+            param_local("self", ref_enum_type, false),
+            param_local("f", fmt_type, false),
+        ],
     )
 }
 
@@ -1061,7 +1065,10 @@ fn generate_struct_inspect_fn(
         params,
         TypeTable::UNIT,
         body,
-        vec![ref_struct_type, fmt_type],
+        vec![
+            param_local("self", ref_struct_type, false),
+            param_local("f", fmt_type, false),
+        ],
     )
 }
 
@@ -1227,7 +1234,10 @@ fn generate_generic_struct_inspect_fn(
         body: Some(body),
         span,
         local_count,
-        local_types: vec![ref_struct_type, fmt_type],
+        locals: vec![
+            param_local("self", ref_struct_type, false),
+            param_local("f", fmt_type, false),
+        ],
         address_taken_locals: IndexSet::default(),
         stores_aliased_locals: IndexSet::default(),
         is_cm_binding: false,
@@ -1390,7 +1400,10 @@ fn generate_variant_inspect_fn(
         params,
         TypeTable::UNIT,
         body,
-        vec![ref_variant_type, fmt_type],
+        vec![
+            param_local("self", ref_variant_type, false),
+            param_local("f", fmt_type, false),
+        ],
     )
 }
 
@@ -1551,7 +1564,10 @@ fn generate_generic_variant_inspect_fn(
         body: Some(body),
         span,
         local_count: 2,
-        local_types: vec![ref_variant_type, fmt_type],
+        locals: vec![
+            param_local("self", ref_variant_type, false),
+            param_local("f", fmt_type, false),
+        ],
         address_taken_locals: IndexSet::default(),
         stores_aliased_locals: IndexSet::default(),
         is_cm_binding: false,
@@ -1647,7 +1663,10 @@ fn generate_newtype_inspect_fn(
         inspect_params(ref_newtype_type, fmt_type, span),
         TypeTable::UNIT,
         TirBlock::new(stmts, span),
-        vec![ref_newtype_type, fmt_type],
+        vec![
+            param_local("self", ref_newtype_type, false),
+            param_local("f", fmt_type, false),
+        ],
     )
 }
 
@@ -1862,7 +1881,10 @@ fn generate_flags_inspect_fn(
         inspect_params(ref_flags_type, fmt_type, *span),
         TypeTable::UNIT,
         body,
-        vec![ref_flags_type, fmt_type],
+        vec![
+            param_local("self", ref_flags_type, false),
+            param_local("f", fmt_type, false),
+        ],
     )
 }
 
@@ -1902,7 +1924,10 @@ fn generate_fn_inspect_fn(
         inspect_params(ref_fn_type, fmt_type, span),
         TypeTable::UNIT,
         body,
-        vec![ref_fn_type, fmt_type],
+        vec![
+            param_local("self", ref_fn_type, false),
+            param_local("f", fmt_type, false),
+        ],
     )
 }
 
@@ -1943,7 +1968,10 @@ fn generate_opaque_inspect_fn(
         inspect_params(ref_type, fmt_type, span),
         TypeTable::UNIT,
         body,
-        vec![ref_type, fmt_type],
+        vec![
+            param_local("self", ref_type, false),
+            param_local("f", fmt_type, false),
+        ],
     )
 }
 
@@ -2305,7 +2333,10 @@ fn generate_struct_inspect_alt_fn(
         inspect_params(ref_struct_type, fmt_type, span),
         TypeTable::UNIT,
         body,
-        vec![ref_struct_type, fmt_type],
+        vec![
+            param_local("self", ref_struct_type, false),
+            param_local("f", fmt_type, false),
+        ],
     )
 }
 
@@ -2365,7 +2396,10 @@ fn generate_generic_struct_inspect_alt_fn(
         body: Some(body),
         span,
         local_count: 2,
-        local_types: vec![ref_struct_type, fmt_type],
+        locals: vec![
+            param_local("self", ref_struct_type, false),
+            param_local("f", fmt_type, false),
+        ],
         address_taken_locals: IndexSet::default(),
         stores_aliased_locals: IndexSet::default(),
         is_cm_binding: false,
@@ -2510,7 +2544,10 @@ fn generate_variant_inspect_alt_fn(
         inspect_params(ref_variant_type, fmt_type, span),
         TypeTable::UNIT,
         body,
-        vec![ref_variant_type, fmt_type],
+        vec![
+            param_local("self", ref_variant_type, false),
+            param_local("f", fmt_type, false),
+        ],
     )
 }
 
@@ -2565,7 +2602,10 @@ fn generate_generic_variant_inspect_alt_fn(
         body: Some(body),
         span,
         local_count: 2,
-        local_types: vec![ref_variant_type, fmt_type],
+        locals: vec![
+            param_local("self", ref_variant_type, false),
+            param_local("f", fmt_type, false),
+        ],
         address_taken_locals: IndexSet::default(),
         stores_aliased_locals: IndexSet::default(),
         is_cm_binding: false,
@@ -3141,7 +3181,10 @@ fn generate_display_fallback(
         body: Some(body),
         span,
         local_count: 2,
-        local_types: vec![ref_type, fmt_type],
+        locals: vec![
+            param_local("self", ref_type, false),
+            param_local("f", fmt_type, false),
+        ],
         address_taken_locals: IndexSet::default(),
         stores_aliased_locals: IndexSet::default(),
         is_cm_binding: false,
@@ -3733,7 +3776,10 @@ fn generate_enum_eq_fn(
         params,
         TypeTable::BOOL,
         body,
-        vec![ref_enum_type, ref_enum_type],
+        vec![
+            param_local("self", ref_enum_type, false),
+            param_local("other", ref_enum_type, false),
+        ],
     )
 }
 
@@ -3958,7 +4004,12 @@ fn generate_enum_ord_fn(
         params,
         ordering_type,
         body,
-        vec![ref_enum_type, ref_enum_type, enum_type, enum_type],
+        vec![
+            param_local("self", ref_enum_type, false),
+            param_local("other", ref_enum_type, false),
+            TirLocal::synth(2, enum_type, false),
+            TirLocal::synth(3, enum_type, false),
+        ],
     )
 }
 
@@ -4254,7 +4305,10 @@ fn generate_struct_eq_fn(
         params,
         TypeTable::BOOL,
         body,
-        vec![ref_struct_type, ref_struct_type],
+        vec![
+            param_local("self", ref_struct_type, false),
+            param_local("other", ref_struct_type, false),
+        ],
     )
 }
 
@@ -4336,7 +4390,10 @@ fn generate_struct_ord_fn(
     );
 
     let mut stmts = Vec::new();
-    let mut local_types = vec![ref_struct_type, ref_struct_type];
+    let mut locals = vec![
+        param_local("self", ref_struct_type, false),
+        param_local("other", ref_struct_type, false),
+    ];
 
     // Local indices start at 2 (0 = self, 1 = other).
     for (local_idx, (field_name, field_type, field_index)) in (2_u32..).zip(fields.iter()) {
@@ -4368,7 +4425,11 @@ fn generate_struct_ord_fn(
             span,
         );
 
-        local_types.push(ordering_type);
+        locals.push(TirLocal {
+            name: "c".to_string(),
+            type_id: ordering_type,
+            is_mut: false,
+        });
 
         // let c = self.field.cmp(&other.field);
         stmts.push(TirStmt::new(
@@ -4436,7 +4497,7 @@ fn generate_struct_ord_fn(
         params,
         ordering_type,
         body,
-        local_types,
+        locals,
     )
 }
 
@@ -4602,7 +4663,10 @@ fn generate_generic_struct_eq_fn(
         body: Some(body),
         span,
         local_count: 2,
-        local_types: vec![ref_struct_type, ref_struct_type],
+        locals: vec![
+            param_local("self", ref_struct_type, false),
+            param_local("other", ref_struct_type, false),
+        ],
         address_taken_locals: IndexSet::default(),
         stores_aliased_locals: IndexSet::default(),
         is_cm_binding: false,
@@ -4693,7 +4757,10 @@ fn generate_variant_eq_fn(
         params,
         TypeTable::BOOL,
         body,
-        vec![ref_variant_type, ref_variant_type],
+        vec![
+            param_local("self", ref_variant_type, false),
+            param_local("other", ref_variant_type, false),
+        ],
     )
 }
 
@@ -4789,7 +4856,10 @@ fn generate_generic_variant_eq_fn(
         body: Some(body),
         span,
         local_count: 2,
-        local_types: vec![ref_variant_type, ref_variant_type],
+        locals: vec![
+            param_local("self", ref_variant_type, false),
+            param_local("other", ref_variant_type, false),
+        ],
         address_taken_locals: IndexSet::default(),
         stores_aliased_locals: IndexSet::default(),
         is_cm_binding: false,
@@ -5023,7 +5093,10 @@ fn generate_generic_struct_ord_fn(
     );
 
     let mut stmts = Vec::new();
-    let mut local_types = vec![ref_struct_type, ref_struct_type];
+    let mut locals = vec![
+        param_local("self", ref_struct_type, false),
+        param_local("other", ref_struct_type, false),
+    ];
 
     // Local indices start at 2 (0 = self, 1 = other).
     for (local_idx, (field_name, field_type, field_index)) in (2_u32..).zip(fields.iter()) {
@@ -5055,7 +5128,11 @@ fn generate_generic_struct_ord_fn(
             span,
         );
 
-        local_types.push(ordering_type);
+        locals.push(TirLocal {
+            name: "c".to_string(),
+            type_id: ordering_type,
+            is_mut: false,
+        });
 
         stmts.push(TirStmt::new(
             TirStmtKind::Let {
@@ -5133,8 +5210,8 @@ fn generate_generic_struct_ord_fn(
         stores: vec![],
         body: Some(body),
         span,
-        local_count: local_types.len() as u32,
-        local_types,
+        local_count: locals.len() as u32,
+        locals,
         address_taken_locals: IndexSet::default(),
         stores_aliased_locals: IndexSet::default(),
         is_cm_binding: false,

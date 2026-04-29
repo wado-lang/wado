@@ -139,13 +139,13 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 
 fn "wado-compiler/tests/fixtures/serde_ndjson_wrapper.wado/response_body"(ok) {
     let body: ref "core:prelude/string.wado//String";
-    let __local_3: ref "wado-compiler/tests/fixtures/serde_ndjson_wrapper.wado//ErrorMessage";
-    let __local_5: ref "core:prelude/string.wado//String";
-    let __local_6: ref "core:prelude/string.wado//String";
-    let __local_7: ref "core:prelude/string.wado//String";
-    let __local_9: ref "core:prelude/string.wado//String";
-    let __local_10: ref "core:prelude/string.wado//String";
-    let __local_11: ref "core:prelude/string.wado//String";
+    let value_3: ref "wado-compiler/tests/fixtures/serde_ndjson_wrapper.wado//ErrorMessage";
+    let s_5: ref "core:prelude/string.wado//String";
+    let self_6: ref "core:prelude/string.wado//String";
+    let other_7: ref "core:prelude/string.wado//String";
+    let s_9: ref "core:prelude/string.wado//String";
+    let self_10: ref "core:prelude/string.wado//String";
+    let other_11: ref "core:prelude/string.wado//String";
     if ok {
         body = __inline_ndjson_Message__0: block -> ref "core:prelude/string.wado//String" {
             __inline_String_Add__add_1: block -> ref "core:prelude/string.wado//String" {
@@ -153,15 +153,15 @@ fn "wado-compiler/tests/fixtures/serde_ndjson_wrapper.wado/response_body"(ok) {
                 let __sroa___match_scrut_0_case0_payload_0: ref null "core:prelude/string.wado//String";
                 let __sroa___match_scrut_0_case1_payload_0: ref null "core:serde//SerializeError";
                 multivalue_bind [__sroa___match_scrut_0_discriminant, __sroa___match_scrut_0_case0_payload_0, __sroa___match_scrut_0_case1_payload_0] = "core:json/core/json/to_string<Message>"(1);
-                __local_6 = (if __sroa___match_scrut_0_discriminant == 0 -> ref "core:prelude/string.wado//String" {
-                    __local_5 = ref.as_non_null(__sroa___match_scrut_0_case0_payload_0);
-                    __local_5;
+                self_6 = (if __sroa___match_scrut_0_discriminant == 0 -> ref "core:prelude/string.wado//String" {
+                    s_5 = ref.as_non_null(__sroa___match_scrut_0_case0_payload_0);
+                    s_5;
                 } else {
                     struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("null"), used: 4 };
                 });
-                __local_7 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+                other_7 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 "), used: 1 };
-                break __inline_String_Add__add_1: "core:prelude/string.wado/String::concat"(__local_6, __local_7);
+                break __inline_String_Add__add_1: "core:prelude/string.wado/String::concat"(self_6, other_7);
                 unreachable;
             };
             break __inline_ndjson_Message__0;
@@ -169,21 +169,21 @@ fn "wado-compiler/tests/fixtures/serde_ndjson_wrapper.wado/response_body"(ok) {
         };
     } else {
         body = __inline_ndjson_ErrorMessage__1: block -> ref "core:prelude/string.wado//String" {
-            __local_3 = struct.new "wado-compiler/tests/fixtures/serde_ndjson_wrapper.wado//ErrorMessage" { error: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("nope"), used: 4 } };
+            value_3 = struct.new "wado-compiler/tests/fixtures/serde_ndjson_wrapper.wado//ErrorMessage" { error: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("nope"), used: 4 } };
             __inline_String_Add__add_3: block -> ref "core:prelude/string.wado//String" {
                 let __sroa___match_scrut_1_discriminant: i32;
                 let __sroa___match_scrut_1_case0_payload_0: ref null "core:prelude/string.wado//String";
                 let __sroa___match_scrut_1_case1_payload_0: ref null "core:serde//SerializeError";
-                multivalue_bind [__sroa___match_scrut_1_discriminant, __sroa___match_scrut_1_case0_payload_0, __sroa___match_scrut_1_case1_payload_0] = "core:json/core/json/to_string<ErrorMessage>"(__local_3.error);
-                __local_10 = (if __sroa___match_scrut_1_discriminant == 0 -> ref "core:prelude/string.wado//String" {
-                    __local_9 = ref.as_non_null(__sroa___match_scrut_1_case0_payload_0);
-                    __local_9;
+                multivalue_bind [__sroa___match_scrut_1_discriminant, __sroa___match_scrut_1_case0_payload_0, __sroa___match_scrut_1_case1_payload_0] = "core:json/core/json/to_string<ErrorMessage>"(value_3.error);
+                self_10 = (if __sroa___match_scrut_1_discriminant == 0 -> ref "core:prelude/string.wado//String" {
+                    s_9 = ref.as_non_null(__sroa___match_scrut_1_case0_payload_0);
+                    s_9;
                 } else {
                     struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("null"), used: 4 };
                 });
-                __local_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+                other_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 "), used: 1 };
-                break __inline_String_Add__add_3: "core:prelude/string.wado/String::concat"(__local_10, __local_11);
+                break __inline_String_Add__add_3: "core:prelude/string.wado/String::concat"(self_10, other_11);
                 unreachable;
             };
             break __inline_ndjson_ErrorMessage__1;
@@ -349,7 +349,7 @@ fn "core:prelude/primitive.wado/count_digits_base"(val, base) {
 fn "core:json/write_escaped_string"(buf, s) {
     let __iter_2: ref "core:prelude/string.wado//StrCharIter";
     let c: char;
-    let __local_4: i32;
+    let code: i32;
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
     "core:prelude/string.wado/String::push"(buf, 34);
@@ -378,13 +378,13 @@ fn "core:json/write_escaped_string"(buf, s) {
                     "core:prelude/string.wado/String::push"(buf, 116);
                 } else {
                     if c <u 32 {
-                        __local_4 = c;
+                        code = c;
                         "core:prelude/string.wado/String::push_str"(buf, __tmpl: block -> ref "core:prelude/string.wado//String" {
                             __local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 };
                             "core:prelude/string.wado/String::push"(__local_5, 92);
                             "core:prelude/string.wado/String::push"(__local_5, 117);
                             __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 48, align: 2, sign_plus: 0, zero_pad: 1, width: 4, precision: -1, indent: 0, buf: __local_5 };
-                            "core:prelude/primitive.wado/i32^LowerHex::fmt"(__local_4, __local_6);
+                            "core:prelude/primitive.wado/i32^LowerHex::fmt"(code, __local_6);
                             break __tmpl: __local_5;
                             unreachable;
                         });
@@ -403,7 +403,7 @@ fn "core:json/write_escaped_string"(buf, s) {
 
 fn "core:json/core/json/to_string<ErrorMessage>"(value) {
     let buf: ref "core:prelude/string.wado//String";
-    let __local_4: ref "core:serde//SerializeError";
+    let __qm_e: ref "core:serde//SerializeError";
     buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     let __match_scrut_0: ref null "core:serde//SerializeError";
     __match_scrut_0 = "wado-compiler/tests/fixtures/serde_ndjson_wrapper.wado/ErrorMessage^Serialize::serialize<JsonSerializer>"(value, buf);
@@ -411,8 +411,8 @@ fn "core:json/core/json/to_string<ErrorMessage>"(value) {
     } else {
         let __cast_1: ref null "core:serde//SerializeError";
         __cast_1 = ref.as_non_null(__match_scrut_0);
-        __local_4 = ref.as_non_null(__cast_1);
-        return 1, ref.null none, __local_4;
+        __qm_e = ref.as_non_null(__cast_1);
+        return 1, ref.null none, __qm_e;
         unreachable;
         unreachable;
     }
@@ -421,7 +421,7 @@ fn "core:json/core/json/to_string<ErrorMessage>"(value) {
 
 fn "core:json/core/json/to_string<Message>"(value) {
     let buf: ref "core:prelude/string.wado//String";
-    let __local_4: ref "core:serde//SerializeError";
+    let __qm_e: ref "core:serde//SerializeError";
     buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     let __match_scrut_0: ref null "core:serde//SerializeError";
     __match_scrut_0 = "wado-compiler/tests/fixtures/serde_ndjson_wrapper.wado/Message^Serialize::serialize<JsonSerializer>"(value, buf);
@@ -429,8 +429,8 @@ fn "core:json/core/json/to_string<Message>"(value) {
     } else {
         let __cast_1: ref null "core:serde//SerializeError";
         __cast_1 = ref.as_non_null(__match_scrut_0);
-        __local_4 = ref.as_non_null(__cast_1);
-        return 1, ref.null none, __local_4;
+        __qm_e = ref.as_non_null(__cast_1);
+        return 1, ref.null none, __qm_e;
         unreachable;
         unreachable;
     }
@@ -441,13 +441,13 @@ fn "core:prelude/primitive.wado/i64::fmt_base"(self, is_negative, f, base, upper
     let abs_val: i64;
     let digit_count: i32;
     let offset: i32;
-    let __local_9: ref "core:prelude/string.wado//String";
+    let self_9: ref "core:prelude/string.wado//String";
     abs_val = self;
     digit_count = "core:prelude/primitive.wado/count_digits_base"(abs_val, base);
     offset = "core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, prefix, digit_count);
     "core:prelude/primitive.wado/write_base_digits"(__inline_String__internal_raw_bytes_0: block -> ref builtin::array<u8> {
-        __local_9 = f.buf;
-        break __inline_String__internal_raw_bytes_0: __local_9.repr;
+        self_9 = f.buf;
+        break __inline_String__internal_raw_bytes_0: self_9.repr;
         unreachable;
     }, offset, abs_val, digit_count, base, upper);
 }
@@ -470,19 +470,19 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref builtin::array<u8>;
-    let __local_5: i32;
-    let __local_7: i32;
+    let a_5: i32;
+    let a_7: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
     new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_5 = __inline_i32_max_1: block -> i32 {
-            __local_7 = capacity * 2;
-            break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+        a_5 = __inline_i32_max_1: block -> i32 {
+            a_7 = capacity * 2;
+            break __inline_i32_max_1: select i32(a_7 > min_capacity, a_7, min_capacity);
             unreachable;
         };
-        break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        break __inline_i32_max_0: select i32(a_5 > 8, a_5, 8);
         unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
@@ -542,7 +542,7 @@ fn "core:prelude/string.wado/StrCharIter^Iterator::next"(self) {
     let b2_8: u32;
     let b3: u32;
     let code_10: u32;
-    let __local_11: u32;
+    let value_11: u32;
     if self.byte_index >= self.used {
         return 1, 0;
     }
@@ -550,8 +550,8 @@ fn "core:prelude/string.wado/StrCharIter^Iterator::next"(self) {
     self.byte_index = self.byte_index + 1;
     if b0 <u 128 {
         return 0, __inline_char__from_u32_unchecked_0: block -> char {
-            __local_11 = b0;
-            break __inline_char__from_u32_unchecked_0: __local_11;
+            value_11 = b0;
+            break __inline_char__from_u32_unchecked_0: value_11;
             unreachable;
         };
     }
@@ -753,7 +753,7 @@ fn "wado-compiler/tests/fixtures/serde_ndjson_wrapper.wado/Message^Serialize::se
 
 fn "core:json/JsonStructSerializer^SerializeStruct::field<bool>"(self, name, value) {
     let r: ref null "core:serde//SerializeError";
-    let __local_8: bool;
+    let v: bool;
     let __sroa_ser_buf: ref "core:prelude/string.wado//String";
     if self.count > 0 {
         "core:prelude/string.wado/String::push"(self.buf, 44);
@@ -762,8 +762,8 @@ fn "core:json/JsonStructSerializer^SerializeStruct::field<bool>"(self, name, val
     "core:prelude/string.wado/String::push"(self.buf, 58);
     __sroa_ser_buf = self.buf;
     r = __inline_JsonSerializer_Serializer__serialize_bool_1: block -> ref null "core:serde//SerializeError" {
-        __local_8 = value;
-        if __local_8 {
+        v = value;
+        if v {
             "core:prelude/string.wado/String::push"(__sroa_ser_buf, 116);
             "core:prelude/string.wado/String::push"(__sroa_ser_buf, 114);
             "core:prelude/string.wado/String::push"(__sroa_ser_buf, 117);

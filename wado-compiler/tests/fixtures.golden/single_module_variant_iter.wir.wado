@@ -145,7 +145,7 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 fn "wado-compiler/tests/fixtures/single_module_variant_iter.wado/run"() {
     let leaf1: ref "wado-compiler/tests/fixtures/single_module_variant_iter.wado//Choice";
     let leaf2: ref "wado-compiler/tests/fixtures/single_module_variant_iter.wado//Choice";
-    let __local_2: ref "core:prelude//Array<Choice>";
+    let __b_2: ref "core:prelude//Array<Choice>";
     let children: ref "core:prelude//Array<Choice>";
     let tree: ref "core:prelude/types.wado//Box<Choice>";
     let result: i32;
@@ -154,21 +154,21 @@ fn "wado-compiler/tests/fixtures/single_module_variant_iter.wado/run"() {
     let __local_9: ref "core:prelude/format.wado//Formatter";
     let __local_10: ref "core:prelude/string.wado//String";
     let __local_11: ref "core:prelude/format.wado//Formatter";
-    let __local_21: ref "wado-compiler/tests/fixtures/single_module_variant_iter.wado//Counter";
-    let __local_25: ref "core:prelude/format.wado//Formatter";
-    let __local_36: ref "core:prelude/format.wado//Formatter";
+    let counter: ref "wado-compiler/tests/fixtures/single_module_variant_iter.wado//Counter";
+    let f_25: ref "core:prelude/format.wado//Formatter";
+    let f_36: ref "core:prelude/format.wado//Formatter";
     leaf1 = struct.new "wado-compiler/tests/fixtures/single_module_variant_iter.wado//Choice::B" { discriminant: 1, payload_0: struct.new "wado-compiler/tests/fixtures/single_module_variant_iter.wado//BData" { value: 10 } };
     leaf2 = struct.new "wado-compiler/tests/fixtures/single_module_variant_iter.wado//Choice::B" { discriminant: 1, payload_0: struct.new "wado-compiler/tests/fixtures/single_module_variant_iter.wado//BData" { value: 20 } };
     children = __seq_lit: block -> ref "core:prelude//Array<Choice>" {
-        __local_2 = struct.new "core:prelude//Array<Choice>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/single_module_variant_iter.wado//Choice">(leaf1, leaf2), used: 2 };
-        break __seq_lit: __local_2;
+        __b_2 = struct.new "core:prelude//Array<Choice>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/single_module_variant_iter.wado//Choice">(leaf1, leaf2), used: 2 };
+        break __seq_lit: __b_2;
         unreachable;
     };
     tree = struct.new "core:prelude/types.wado//Box<Choice>" { value: struct.new "wado-compiler/tests/fixtures/single_module_variant_iter.wado//Choice::A" { discriminant: 0, payload_0: struct.new "wado-compiler/tests/fixtures/single_module_variant_iter.wado//AData" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("root"), used: 4 }, children: children } } };
     result = __inline_count_7: block -> i32 {
-        __local_21 = struct.new "wado-compiler/tests/fixtures/single_module_variant_iter.wado//Counter" { total: 0 };
-        "wado-compiler/tests/fixtures/single_module_variant_iter.wado/walk<Counter>"(__local_21, tree.value);
-        break __inline_count_7: __local_21.total;
+        counter = struct.new "wado-compiler/tests/fixtures/single_module_variant_iter.wado//Counter" { total: 0 };
+        "wado-compiler/tests/fixtures/single_module_variant_iter.wado/walk<Counter>"(counter, tree.value);
+        break __inline_count_7: counter.total;
         unreachable;
     };
     __cond = result == 30;
@@ -186,8 +186,8 @@ fn "wado-compiler/tests/fixtures/single_module_variant_iter.wado/run"() {
             "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/single_module_variant_iter.wado"), used: 60 });
             "core:prelude/string.wado/String::push"(__local_10, 58);
             __local_11 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
-            __local_25 = __local_11;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(52, __local_25);
+            f_25 = __local_11;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(52, f_25);
             "core:prelude/string.wado/String::push"(__local_10, 58);
             "core:prelude/string.wado/String::push"(__local_10, 32);
             "core:prelude/string.wado/String::push_str"(__local_10, __tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -210,8 +210,8 @@ condition: result == 30
             "core:prelude/string.wado/String::push"(__local_10, 58);
             "core:prelude/string.wado/String::push"(__local_10, 32);
             __local_11 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
-            __local_36 = __local_11;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(result, __local_36);
+            f_36 = __local_11;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(result, f_36);
             "core:prelude/string.wado/String::push"(__local_10, 10);
             break __tmpl: __local_10;
             unreachable;
@@ -226,32 +226,32 @@ fn "wado-compiler/tests/fixtures/single_module_variant_iter.wado/__cm_export__ru
 }
 
 fn "wado-compiler/tests/fixtures/single_module_variant_iter.wado/walk<Counter>"(h, c) {
-    let __local_2: ref "wado-compiler/tests/fixtures/single_module_variant_iter.wado//AData";
-    let __local_3: ref "core:prelude/array.wado//ArrayRefIter<Choice>";
-    let __local_4: ref "core:prelude/types.wado//Box<Choice>";
-    let __local_5: ref "wado-compiler/tests/fixtures/single_module_variant_iter.wado//BData";
+    let a: ref "wado-compiler/tests/fixtures/single_module_variant_iter.wado//AData";
+    let __iter_3: ref "core:prelude/array.wado//ArrayRefIter<Choice>";
+    let child: ref "core:prelude/types.wado//Box<Choice>";
+    let b: ref "wado-compiler/tests/fixtures/single_module_variant_iter.wado//BData";
     let __local_6: ref null "core:prelude/types.wado//Box<Choice>";
-    let __local_7: ref "core:prelude//Array<Choice>";
-    let __local_8: ref "core:prelude//Array<Choice>";
-    let __local_10: i32;
+    let self_7: ref "core:prelude//Array<Choice>";
+    let arr: ref "core:prelude//Array<Choice>";
+    let v: i32;
     let __match_scrut_0: ref "wado-compiler/tests/fixtures/single_module_variant_iter.wado//Choice";
     __match_scrut_0 = c;
     if ref.test "wado-compiler/tests/fixtures/single_module_variant_iter.wado//Choice::A"(__match_scrut_0) {
         let __cast_2: ref "wado-compiler/tests/fixtures/single_module_variant_iter.wado//Choice::A";
         __cast_2 = ref.cast "wado-compiler/tests/fixtures/single_module_variant_iter.wado//Choice::A"(__match_scrut_0);
-        __local_2 = __cast_2.payload_0;
-        __local_3 = __inline__Choice_IntoIterator__into_iter_0: block -> ref "core:prelude/array.wado//ArrayRefIter<Choice>" {
-            __local_7 = __local_2.children;
-            __local_8 = __local_7;
-            break __inline__Choice_IntoIterator__into_iter_0: struct.new "core:prelude/array.wado//ArrayRefIter<Choice>" { repr: __local_8.repr, used: __local_8.used, index: 0 };
+        a = __cast_2.payload_0;
+        __iter_3 = __inline__Choice_IntoIterator__into_iter_0: block -> ref "core:prelude/array.wado//ArrayRefIter<Choice>" {
+            self_7 = a.children;
+            arr = self_7;
+            break __inline__Choice_IntoIterator__into_iter_0: struct.new "core:prelude/array.wado//ArrayRefIter<Choice>" { repr: arr.repr, used: arr.used, index: 0 };
             unreachable;
         };
         b2: block {
             l3: loop {
-                __local_6 = "core:prelude/array.wado/ArrayRefIter<Choice>^Iterator::next"(__local_3);
+                __local_6 = "core:prelude/array.wado/ArrayRefIter<Choice>^Iterator::next"(__iter_3);
                 if ref.is_null(__local_6) == 0 {
-                    __local_4 = ref.as_non_null(__local_6);
-                    "wado-compiler/tests/fixtures/single_module_variant_iter.wado/walk<Counter>"(h, __local_4.value);
+                    child = ref.as_non_null(__local_6);
+                    "wado-compiler/tests/fixtures/single_module_variant_iter.wado/walk<Counter>"(h, child.value);
                 } else {
                     break b2;
                 }
@@ -261,10 +261,10 @@ fn "wado-compiler/tests/fixtures/single_module_variant_iter.wado/walk<Counter>"(
     } else {
         let __cast_1: ref "wado-compiler/tests/fixtures/single_module_variant_iter.wado//Choice::B";
         __cast_1 = ref.cast "wado-compiler/tests/fixtures/single_module_variant_iter.wado//Choice::B"(__match_scrut_0);
-        __local_5 = __cast_1.payload_0;
+        b = __cast_1.payload_0;
         block {
-            __local_10 = __local_5.value;
-            h.total = h.total + __local_10;
+            v = b.value;
+            h.total = h.total + v;
         };
     }
 }
@@ -411,7 +411,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     let abs_val: i64;
     let digit_count: i32;
     let offset: i32;
-    let __local_6: ref "core:prelude/string.wado//String";
+    let self_6: ref "core:prelude/string.wado//String";
     is_negative = self < 0;
     abs_val = (if is_negative -> i64 {
         0_i64 - builtin::i64_extend_i32_s(self);
@@ -421,8 +421,8 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     digit_count = "core:prelude/primitive.wado/count_digits_i64"(abs_val);
     offset = "core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
     "core:prelude/primitive.wado/write_decimal_digits"(__inline_String__internal_raw_bytes_0: block -> ref builtin::array<u8> {
-        __local_6 = f.buf;
-        break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        self_6 = f.buf;
+        break __inline_String__internal_raw_bytes_0: self_6.repr;
         unreachable;
     }, offset, abs_val, digit_count);
 }
@@ -431,19 +431,19 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref builtin::array<u8>;
-    let __local_5: i32;
-    let __local_7: i32;
+    let a_5: i32;
+    let a_7: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
     new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_5 = __inline_i32_max_1: block -> i32 {
-            __local_7 = capacity * 2;
-            break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+        a_5 = __inline_i32_max_1: block -> i32 {
+            a_7 = capacity * 2;
+            break __inline_i32_max_1: select i32(a_7 > min_capacity, a_7, min_capacity);
             unreachable;
         };
-        break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        break __inline_i32_max_0: select i32(a_5 > 8, a_5, 8);
         unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);

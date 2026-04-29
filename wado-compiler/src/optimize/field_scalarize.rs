@@ -29,8 +29,8 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::ModuleSource;
 use crate::tir::{
-    FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind,
-    TirUnaryOp, TypeId, TypeTable,
+    FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirStmt,
+    TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
 
 const MIN_ACCESS_COUNT: usize = 4;
@@ -764,17 +764,17 @@ fn scalarize_function(
         return false;
     };
     let mut local_count = func.local_count;
-    let mut local_types = func.local_types.clone();
-    let changed = scalarize_block(body, &mut local_count, &mut local_types, type_table, cache);
+    let mut locals = func.locals.clone();
+    let changed = scalarize_block(body, &mut local_count, &mut locals, type_table, cache);
     func.local_count = local_count;
-    func.local_types = local_types;
+    func.locals = locals;
     changed
 }
 
 fn scalarize_block(
     block: &mut TirBlock,
     local_count: &mut u32,
-    local_types: &mut Vec<TypeId>,
+    locals: &mut Vec<TirLocal>,
     type_table: &TypeTable,
     cache: &FieldUsageCache,
 ) -> bool {
@@ -785,9 +785,9 @@ fn scalarize_block(
         match &mut stmt.kind {
             TirStmtKind::Loop { body } => {
                 // Recurse into inner blocks/loops first.
-                changed |= scalarize_block(body, local_count, local_types, type_table, cache);
+                changed |= scalarize_block(body, local_count, locals, type_table, cache);
                 // Try to scalarize hot fields at this loop level.
-                let result = scalarize_loop(body, local_count, local_types, type_table, cache);
+                let result = scalarize_loop(body, local_count, locals, type_table, cache);
                 if result.pre_stmts.is_empty() {
                     new_stmts.push(stmt);
                 } else {
@@ -802,14 +802,14 @@ fn scalarize_block(
                 else_block,
                 ..
             } => {
-                changed |= scalarize_block(then_block, local_count, local_types, type_table, cache);
+                changed |= scalarize_block(then_block, local_count, locals, type_table, cache);
                 if let Some(eb) = else_block {
-                    changed |= scalarize_block(eb, local_count, local_types, type_table, cache);
+                    changed |= scalarize_block(eb, local_count, locals, type_table, cache);
                 }
                 new_stmts.push(stmt);
             }
             TirStmtKind::LabeledBlock { block: inner, .. } => {
-                changed |= scalarize_block(inner, local_count, local_types, type_table, cache);
+                changed |= scalarize_block(inner, local_count, locals, type_table, cache);
                 new_stmts.push(stmt);
             }
             TirStmtKind::IfLet {
@@ -817,9 +817,9 @@ fn scalarize_block(
                 else_block,
                 ..
             } => {
-                changed |= scalarize_block(then_block, local_count, local_types, type_table, cache);
+                changed |= scalarize_block(then_block, local_count, locals, type_table, cache);
                 if let Some(eb) = else_block {
-                    changed |= scalarize_block(eb, local_count, local_types, type_table, cache);
+                    changed |= scalarize_block(eb, local_count, locals, type_table, cache);
                 }
                 new_stmts.push(stmt);
             }
@@ -852,7 +852,7 @@ struct ScalarizeCandidate {
 fn scalarize_loop(
     loop_body: &mut TirBlock,
     local_count: &mut u32,
-    local_types: &mut Vec<TypeId>,
+    locals: &mut Vec<TirLocal>,
     type_table: &TypeTable,
     cache: &FieldUsageCache,
 ) -> ScalarizeResult {
@@ -899,7 +899,11 @@ fn scalarize_loop(
             type_id: info.field_type_id,
             new_local_index: next_local,
         });
-        local_types.push(info.field_type_id);
+        locals.push(TirLocal {
+            name: format!("_hfs_{}_{}", info.field_name, next_local),
+            type_id: info.field_type_id,
+            is_mut: true,
+        });
         next_local += 1;
     }
 
@@ -916,8 +920,8 @@ fn scalarize_loop(
     let span = crate::token::Span::new(0, 0, 0, 0);
     let mut pre_stmts = Vec::new();
     for c in &candidates {
-        let local_type_id = if (c.local_index as usize) < local_types.len() {
-            local_types[c.local_index as usize]
+        let local_type_id = if (c.local_index as usize) < locals.len() {
+            locals[c.local_index as usize].type_id
         } else {
             c.type_id
         };
@@ -970,7 +974,7 @@ fn scalarize_loop(
     replace_in_block(
         loop_body,
         &candidates,
-        local_types,
+        locals,
         type_table,
         cache,
         &enclosing_labels,
@@ -1384,7 +1388,7 @@ fn mark_local_aliased(local_idx: u32, counts: &mut IndexMap<(u32, u32), FieldAcc
 
 /// Context needed to insert write-back/re-read inside `LabeledBlock` expressions.
 struct ReplaceCtx<'a> {
-    local_types: &'a [TypeId],
+    locals: &'a [TirLocal],
     type_table: &'a TypeTable,
     cache: &'a FieldUsageCache,
     /// Labels of `LabeledBlock`s that lexically enclose the current position.
@@ -1397,14 +1401,14 @@ struct ReplaceCtx<'a> {
 fn replace_in_block(
     block: &mut TirBlock,
     candidates: &[ScalarizeCandidate],
-    local_types: &[TypeId],
+    locals: &[TirLocal],
     type_table: &TypeTable,
     cache: &FieldUsageCache,
     enclosing_labels: &IndexSet<String>,
     loop_depth: usize,
 ) {
     let ctx = ReplaceCtx {
-        local_types,
+        locals,
         type_table,
         cache,
         enclosing_labels,
@@ -1449,7 +1453,7 @@ fn replace_in_block(
                 replace_in_block(
                     then_block,
                     candidates,
-                    local_types,
+                    locals,
                     type_table,
                     cache,
                     enclosing_labels,
@@ -1459,7 +1463,7 @@ fn replace_in_block(
                     replace_in_block(
                         eb,
                         candidates,
-                        local_types,
+                        locals,
                         type_table,
                         cache,
                         enclosing_labels,
@@ -1504,7 +1508,7 @@ fn replace_in_block(
                 replace_in_block(
                     then_block,
                     candidates,
-                    local_types,
+                    locals,
                     type_table,
                     cache,
                     enclosing_labels,
@@ -1514,7 +1518,7 @@ fn replace_in_block(
                     replace_in_block(
                         eb,
                         candidates,
-                        local_types,
+                        locals,
                         type_table,
                         cache,
                         enclosing_labels,
@@ -1533,7 +1537,7 @@ fn replace_in_block(
                 replace_in_block(
                     body,
                     candidates,
-                    local_types,
+                    locals,
                     type_table,
                     cache,
                     enclosing_labels,
@@ -1549,13 +1553,7 @@ fn replace_in_block(
                 let mut extended = enclosing_labels.clone();
                 extended.insert(label.clone());
                 replace_in_block(
-                    inner,
-                    candidates,
-                    local_types,
-                    type_table,
-                    cache,
-                    &extended,
-                    loop_depth,
+                    inner, candidates, locals, type_table, cache, &extended, loop_depth,
                 );
                 new_stmts.push(stmt);
                 continue;
@@ -1577,7 +1575,7 @@ fn replace_in_block(
                         replace_in_block(
                             arm,
                             candidates,
-                            local_types,
+                            locals,
                             type_table,
                             cache,
                             enclosing_labels,
@@ -1587,7 +1585,7 @@ fn replace_in_block(
                     replace_in_block(
                         default,
                         candidates,
-                        local_types,
+                        locals,
                         type_table,
                         cache,
                         enclosing_labels,
@@ -2339,7 +2337,7 @@ fn replace_in_expr(expr: &mut TirExpr, candidates: &[ScalarizeCandidate], ctx: &
             replace_in_block(
                 block,
                 candidates,
-                ctx.local_types,
+                ctx.locals,
                 ctx.type_table,
                 ctx.cache,
                 &extended,

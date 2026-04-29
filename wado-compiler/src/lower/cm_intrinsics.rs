@@ -26,8 +26,8 @@ use crate::component_model::WasiRegistry;
 use crate::name::ModuleSource;
 use crate::synthesis::cm_binding::{LiftContext, synthesize_lift_with_context};
 use crate::tir::{
-    FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirModule, TirStmt, TirStmtKind,
-    TypeId, TypeTable,
+    FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirLocal, TirModule, TirStmt,
+    TirStmtKind, TypeId, TypeTable,
 };
 use crate::tir_visitor::TirMutVisitor;
 use crate::token::Span;
@@ -48,13 +48,13 @@ pub fn expand_cm_intrinsics(module: &mut TirModule) {
             continue;
         }
         let mut next_local = func.local_count;
-        let mut local_types = std::mem::take(&mut func.local_types);
+        let mut locals = std::mem::take(&mut func.locals);
         let mut body = func.body.take().expect("body checked above");
         let fn_name = func.name.clone();
         {
             let mut rewriter = Rewriter {
                 next_local: &mut next_local,
-                local_types: &mut local_types,
+                locals: &mut locals,
                 type_table: &type_table,
                 wasi_registry,
                 rewrite_count: 0,
@@ -65,13 +65,13 @@ pub fn expand_cm_intrinsics(module: &mut TirModule) {
         }
         func.body = Some(body);
         func.local_count = next_local;
-        func.local_types = local_types;
+        func.locals = locals;
     }
 }
 
 struct Rewriter<'a> {
     next_local: &'a mut u32,
-    local_types: &'a mut Vec<TypeId>,
+    locals: &'a mut Vec<TirLocal>,
     type_table: &'a RefCell<TypeTable>,
     wasi_registry: &'a WasiRegistry,
     rewrite_count: u32,
@@ -113,7 +113,7 @@ impl TirMutVisitor for Rewriter<'_> {
             addr_expr,
             self.next_local,
             &mut stmts,
-            self.local_types,
+            self.locals,
             &LiftContext {
                 wasi_registry: self.wasi_registry,
                 type_table: self.type_table,

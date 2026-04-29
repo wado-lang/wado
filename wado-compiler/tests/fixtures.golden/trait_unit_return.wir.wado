@@ -69,14 +69,14 @@ fn "wado-compiler/tests/fixtures/trait_unit_return.wado/__cm_binding__Stdout_wri
 }
 
 fn "wado-compiler/tests/fixtures/trait_unit_return.wado/__cm_export__run"() {
-    let __local_4: ref "core:prelude/string.wado//String";
+    let __local_1: ref "core:prelude/string.wado//String";
     let __sroa_m_text: ref "core:prelude/string.wado//String";
     __sroa_m_text = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Hello, World!"), used: 13 };
     "core:cli/println"(__inline_Message_Printable__print_5____tmpl: block -> ref "core:prelude/string.wado//String" {
-        __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(25), used: 0 };
-        "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Message: "), used: 9 });
-        "core:prelude/string.wado/String::push_str"(__local_4, __sroa_m_text);
-        break __inline_Message_Printable__print_5____tmpl: __local_4;
+        __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(25), used: 0 };
+        "core:prelude/string.wado/String::push_str"(__local_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Message: "), used: 9 });
+        "core:prelude/string.wado/String::push_str"(__local_1, __sroa_m_text);
+        break __inline_Message_Printable__print_5____tmpl: __local_1;
         unreachable;
     });
     "wasi/task-return"(0);
@@ -169,19 +169,19 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref builtin::array<u8>;
-    let __local_5: i32;
-    let __local_7: i32;
+    let a_5: i32;
+    let a_7: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
     new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_5 = __inline_i32_max_1: block -> i32 {
-            __local_7 = capacity * 2;
-            break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+        a_5 = __inline_i32_max_1: block -> i32 {
+            a_7 = capacity * 2;
+            break __inline_i32_max_1: select i32(a_7 > min_capacity, a_7, min_capacity);
             unreachable;
         };
-        break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        break __inline_i32_max_0: select i32(a_5 > 8, a_5, 8);
         unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);

@@ -9,7 +9,7 @@ use crate::name::ModuleSource;
 use crate::tir::FunctionRef;
 use crate::tir::{
     FunctionKind, InlineHint, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirGlobal,
-    TirModule, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
+    TirLocal, TirModule, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -136,7 +136,7 @@ pub(super) fn lower_global_initializers(module: &mut TirModule) {
     let type_table = module.type_table.borrow();
 
     // Collect non-constant initializers with their indices for topological sorting
-    let mut lazy_inits: Vec<(usize, String, ModuleSource, TypeId, TirExpr, Vec<TypeId>)> =
+    let mut lazy_inits: Vec<(usize, String, ModuleSource, TypeId, TirExpr, Vec<TirLocal>)> =
         Vec::new();
 
     for (idx, global) in module.globals.iter_mut().enumerate() {
@@ -148,7 +148,7 @@ pub(super) fn lower_global_initializers(module: &mut TirModule) {
                 global.module_source.clone(),
                 global.ty,
                 global.initializer.clone(),
-                global.local_types.clone(),
+                global.locals.clone(),
             ));
             // Replace with default value
             global.initializer = default_value_for_type(global.ty, &type_table, global.span);
@@ -193,15 +193,15 @@ pub(super) fn lower_global_initializers(module: &mut TirModule) {
     // Generate __initialize_module function
     let span = Span::new(0, 0, 1, 1);
     let mut init_stmts: Vec<TirStmt> = Vec::new();
-    let mut merged_local_types: Vec<TypeId> = Vec::new();
+    let mut merged_locals: Vec<TirLocal> = Vec::new();
 
-    for (_, name, module_source, _, mut initializer, local_types) in sorted_inits {
+    for (_, name, module_source, _, mut initializer, locals) in sorted_inits {
         // Renumber locals if this isn't the first global (to avoid index conflicts)
-        let offset = u32::try_from(merged_local_types.len()).unwrap();
-        if offset > 0 && !local_types.is_empty() {
+        let offset = u32::try_from(merged_locals.len()).unwrap();
+        if offset > 0 && !locals.is_empty() {
             renumber_locals_in_expr(&mut initializer, offset);
         }
-        merged_local_types.extend_from_slice(&local_types);
+        merged_locals.extend(locals);
 
         // Create: global_name = initializer;
         let global_set = TirExpr::new(
@@ -216,7 +216,7 @@ pub(super) fn lower_global_initializers(module: &mut TirModule) {
         init_stmts.push(TirStmt::new(TirStmtKind::Expr(global_set), span));
     }
 
-    let local_count = u32::try_from(merged_local_types.len()).unwrap();
+    let local_count = u32::try_from(merged_locals.len()).unwrap();
 
     let init_body = TirBlock {
         stmts: init_stmts,
@@ -241,7 +241,7 @@ pub(super) fn lower_global_initializers(module: &mut TirModule) {
         body: Some(init_body),
         span,
         local_count,
-        local_types: merged_local_types,
+        locals: merged_locals,
         address_taken_locals: IndexSet::default(),
         stores_aliased_locals: IndexSet::default(),
         is_cm_binding: false,
@@ -361,9 +361,9 @@ fn collect_global_refs(expr: &TirExpr, refs: &mut IndexSet<String>) {
 ///
 /// Returns the initializers in an order where dependencies are initialized first.
 fn topological_sort_global_inits(
-    lazy_inits: &[(usize, String, ModuleSource, TypeId, TirExpr, Vec<TypeId>)],
+    lazy_inits: &[(usize, String, ModuleSource, TypeId, TirExpr, Vec<TirLocal>)],
     _all_globals: &[TirGlobal],
-) -> Vec<(usize, String, ModuleSource, TypeId, TirExpr, Vec<TypeId>)> {
+) -> Vec<(usize, String, ModuleSource, TypeId, TirExpr, Vec<TirLocal>)> {
     if lazy_inits.len() <= 1 {
         return lazy_inits.to_vec();
     }
@@ -671,7 +671,7 @@ pub(super) fn generate_initialize_modules_flat(flat: &mut FlatPackage) {
         span,
         is_nullable: false,
         lazy_init: false,
-        local_types: Vec::new(),
+        locals: Vec::new(),
     };
     flat.globals.push(init_flag_global);
 
@@ -760,7 +760,7 @@ pub(super) fn generate_initialize_modules_flat(flat: &mut FlatPackage) {
         body: Some(init_body),
         span,
         local_count: 0,
-        local_types: Vec::new(),
+        locals: Vec::new(),
         address_taken_locals: IndexSet::default(),
         stores_aliased_locals: IndexSet::default(),
         is_cm_binding: false,

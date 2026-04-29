@@ -175,12 +175,12 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 fn "wado-compiler/tests/fixtures/cross_module_treemap_variant.wado/run"() with Stdout {
     let map: ref "core:collections//TreeMap<String,Value>";
     let obj: ref "core:prelude/types.wado//Box<Value>";
-    let __local_3: ref "core:prelude//Array<TreeMapEntry<String,Value>>";
+    let __b_3: ref "core:prelude//Array<TreeMapEntry<String,Value>>";
     let key: ref "core:prelude/string.wado//String";
     let value: ref "./sub/cross_module_treemap_variant_helper.wado//Value";
     map = struct.new "core:collections//TreeMap<String,Value>" { root: ref.null none, entries: ref.as_non_null(__inline_TreeMap_String_Value___new_2____seq_lit: block -> ref "core:prelude//Array<TreeMapEntry<String,Value>>" {
-        __local_3 = struct.new "core:prelude//Array<TreeMapEntry<String,Value>>" { repr: builtin::array_new<ref "core:collections//TreeMapEntry<String,Value>">(0), used: 0 };
-        break __inline_TreeMap_String_Value___new_2____seq_lit: __local_3;
+        __b_3 = struct.new "core:prelude//Array<TreeMapEntry<String,Value>>" { repr: builtin::array_new<ref "core:collections//TreeMapEntry<String,Value>">(0), used: 0 };
+        break __inline_TreeMap_String_Value___new_2____seq_lit: __b_3;
         unreachable;
     }), size: 0, deleted_count: 0 };
     key = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
@@ -200,13 +200,13 @@ fn "wado-compiler/tests/fixtures/cross_module_treemap_variant.wado/__cm_export__
 }
 
 fn "./sub/cross_module_treemap_variant_helper.wado/stringify"(v) {
-    let __local_1: ref "core:prelude/string.wado//String";
-    let __local_2: ref "core:collections//TreeMap<String,Value>";
-    let __local_3: ref "core:prelude/string.wado//String";
-    let __local_4: ref "core:prelude//Array<Tuple<String,Value>>";
-    let __local_5: i32;
-    let __local_6: ref "core:prelude/string.wado//String";
-    let __local_7: ref "core:prelude/types.wado//Box<Value>";
+    let s: ref "core:prelude/string.wado//String";
+    let map: ref "core:collections//TreeMap<String,Value>";
+    let result: ref "core:prelude/string.wado//String";
+    let entries: ref "core:prelude//Array<Tuple<String,Value>>";
+    let i: i32;
+    let key: ref "core:prelude/string.wado//String";
+    let val: ref "core:prelude/types.wado//Box<Value>";
     let __local_8: ref "core:prelude/string.wado//String";
     let __local_9: ref "core:prelude/string.wado//String";
     let __local_10: ref "core:prelude/string.wado//String";
@@ -215,11 +215,11 @@ fn "./sub/cross_module_treemap_variant_helper.wado/stringify"(v) {
     return let __match_scrut_0: ref "./sub/cross_module_treemap_variant_helper.wado//Value", __match_scrut_0 = v, (if ref.test "./sub/cross_module_treemap_variant_helper.wado//Value::Str"(__match_scrut_0) -> ref "core:prelude/string.wado//String" {
         let __cast_2: ref "./sub/cross_module_treemap_variant_helper.wado//Value::Str";
         __cast_2 = ref.cast "./sub/cross_module_treemap_variant_helper.wado//Value::Str"(__match_scrut_0);
-        __local_1 = __cast_2.payload_0;
+        s = __cast_2.payload_0;
         __tmpl: block -> ref "core:prelude/string.wado//String" {
             __local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 };
             "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("\""), used: 1 });
-            "core:prelude/string.wado/String::push_str"(__local_8, __local_1);
+            "core:prelude/string.wado/String::push_str"(__local_8, s);
             "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("\""), used: 1 });
             break __tmpl: __local_8;
             unreachable;
@@ -227,53 +227,53 @@ fn "./sub/cross_module_treemap_variant_helper.wado/stringify"(v) {
     } else {
         let __cast_1: ref "./sub/cross_module_treemap_variant_helper.wado//Value::Obj";
         __cast_1 = ref.cast "./sub/cross_module_treemap_variant_helper.wado//Value::Obj"(__match_scrut_0);
-        __local_2 = __cast_1.payload_0;
-        __local_3 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("{"), used: 1 };
-        __local_4 = "core:collections/TreeMap<String,Value>::entries"(__local_2);
+        map = __cast_1.payload_0;
+        result = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("{"), used: 1 };
+        entries = "core:collections/TreeMap<String,Value>::entries"(map);
         __for_0: block {
-            __local_5 = 0;
+            i = 0;
             block {
                 l2: loop {
-                    if __local_5 >= __local_4.used {
+                    if i >= entries.used {
                         break __for_0;
                     }
-                    if __local_5 > 0 {
-                        __local_3 = __tmpl: block -> ref "core:prelude/string.wado//String" {
+                    if i > 0 {
+                        result = __tmpl: block -> ref "core:prelude/string.wado//String" {
                             __local_9 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(17), used: 0 };
-                            "core:prelude/string.wado/String::push_str"(__local_9, __local_3);
+                            "core:prelude/string.wado/String::push_str"(__local_9, result);
                             "core:prelude/string.wado/String::push_str"(__local_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(","), used: 1 });
                             break __tmpl: __local_9;
                             unreachable;
                         };
                     }
                     __local_12 = __inline_Array_Tuple_String___sub_cross_module_treemap_variant_helper_wado_Value___IndexValue_i32___index_value_3: block -> ref "tuple//[String, Value]" {
-                        if __local_5 >= __local_4.used {
+                        if i >= entries.used {
                             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                             unreachable;
                         }
-                        break __inline_Array_Tuple_String___sub_cross_module_treemap_variant_helper_wado_Value___IndexValue_i32___index_value_3: builtin::array_get<ref "tuple//[String, Value]">(__local_4.repr, __local_5);
+                        break __inline_Array_Tuple_String___sub_cross_module_treemap_variant_helper_wado_Value___IndexValue_i32___index_value_3: builtin::array_get<ref "tuple//[String, Value]">(entries.repr, i);
                         unreachable;
                     };
-                    __local_6 = __local_12.0;
-                    __local_7 = struct.new "core:prelude/types.wado//Box<Value>" { value: __local_12.1 };
-                    __local_3 = __tmpl: block -> ref "core:prelude/string.wado//String" {
+                    key = __local_12.0;
+                    val = struct.new "core:prelude/types.wado//Box<Value>" { value: __local_12.1 };
+                    result = __tmpl: block -> ref "core:prelude/string.wado//String" {
                         __local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(51), used: 0 };
-                        "core:prelude/string.wado/String::push_str"(__local_10, __local_3);
+                        "core:prelude/string.wado/String::push_str"(__local_10, result);
                         "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("\""), used: 1 });
-                        "core:prelude/string.wado/String::push_str"(__local_10, __local_6);
+                        "core:prelude/string.wado/String::push_str"(__local_10, key);
                         "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("\":"), used: 2 });
-                        "core:prelude/string.wado/String::push_str"(__local_10, "./sub/cross_module_treemap_variant_helper.wado/stringify"(__local_7.value));
+                        "core:prelude/string.wado/String::push_str"(__local_10, "./sub/cross_module_treemap_variant_helper.wado/stringify"(val.value));
                         break __tmpl: __local_10;
                         unreachable;
                     };
-                    __local_5 = __local_5 + 1;
+                    i = i + 1;
                     continue l2;
                 };
             };
         };
         __tmpl: block -> ref "core:prelude/string.wado//String" {
             __local_11 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(17), used: 0 };
-            "core:prelude/string.wado/String::push_str"(__local_11, __local_3);
+            "core:prelude/string.wado/String::push_str"(__local_11, result);
             "core:prelude/string.wado/String::push_str"(__local_11, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("}"), used: 1 });
             break __tmpl: __local_11;
             unreachable;
@@ -405,19 +405,19 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref builtin::array<u8>;
-    let __local_5: i32;
-    let __local_7: i32;
+    let a_5: i32;
+    let a_7: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
     new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_5 = __inline_i32_max_1: block -> i32 {
-            __local_7 = capacity * 2;
-            break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+        a_5 = __inline_i32_max_1: block -> i32 {
+            a_7 = capacity * 2;
+            break __inline_i32_max_1: select i32(a_7 > min_capacity, a_7, min_capacity);
             unreachable;
         };
-        break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        break __inline_i32_max_0: select i32(a_5 > 8, a_5, 8);
         unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
@@ -516,24 +516,24 @@ fn "core:collections/TreeMap<String,Value>::insert"(self, key, value) {
     let existing_index: i32;
     let new_index: i32;
     let entry: ref "core:collections//TreeMapEntry<String,Value>";
-    let __local_6: ref "core:prelude//Array<TreeMapEntry<String,Value>>";
-    let __local_8: ref "core:prelude//Array<TreeMapEntry<String,Value>>";
+    let self_6: ref "core:prelude//Array<TreeMapEntry<String,Value>>";
+    let self_8: ref "core:prelude//Array<TreeMapEntry<String,Value>>";
     existing_index = "core:collections/TreeMap<String,Value>::find_index"(self, key);
     if existing_index >= 0 {
         __inline_Array_TreeMapEntry_String_Value___IndexValue_i32___index_value_0: block -> ref "core:collections//TreeMapEntry<String,Value>" {
-            __local_6 = self.entries;
-            if existing_index >= __local_6.used {
+            self_6 = self.entries;
+            if existing_index >= self_6.used {
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
-            break __inline_Array_TreeMapEntry_String_Value___IndexValue_i32___index_value_0: builtin::array_get<ref "core:collections//TreeMapEntry<String,Value>">(__local_6.repr, existing_index);
+            break __inline_Array_TreeMapEntry_String_Value___IndexValue_i32___index_value_0: builtin::array_get<ref "core:collections//TreeMapEntry<String,Value>">(self_6.repr, existing_index);
             unreachable;
         }.value = value;
         return;
     }
     new_index = __inline_Array_TreeMapEntry_String_Value____len_1: block -> i32 {
-        __local_8 = self.entries;
-        break __inline_Array_TreeMapEntry_String_Value____len_1: __local_8.used;
+        self_8 = self.entries;
+        break __inline_Array_TreeMapEntry_String_Value____len_1: self_8.used;
         unreachable;
     };
     entry = struct.new "core:collections//TreeMapEntry<String,Value>" { key: key, value: value, deleted: 0 };
@@ -628,11 +628,11 @@ fn "core:prelude/array.wado/Array<TreeMapEntry<String,Value>>::grow"(self) {
     let old_repr: ref builtin::array<TreeMapEntry<String,Value>>;
     let used: i32;
     let i: i32;
-    let __local_7: i32;
+    let a: i32;
     capacity = builtin::array_len(self.repr);
     new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_7 = capacity * 2;
-        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+        a = capacity * 2;
+        break __inline_i32_max_0: select i32(a > 4, a, 4);
         unreachable;
     };
     new_repr = builtin::array_new<ref "core:collections//TreeMapEntry<String,Value>">(new_capacity);
@@ -658,7 +658,7 @@ fn "core:collections/TreeMap<String,Value>::find_index"(self, key) {
     let current: ref null "core:collections//TreeMapNode<String>";
     let n: ref "core:collections//TreeMapNode<String>";
     let entry: ref "core:collections//TreeMapEntry<String,Value>";
-    let __local_7: i32;
+    let index: i32;
     let _licm_entries_8: ref "core:prelude//Array<TreeMapEntry<String,Value>>";
     let _licm_used_9: i32;
     let _licm_repr_10: ref builtin::array<TreeMapEntry<String,Value>>;
@@ -672,12 +672,12 @@ fn "core:collections/TreeMap<String,Value>::find_index"(self, key) {
                 n = ref.as_non_null(current);
                 if "core:prelude/string.wado/String^Eq::eq"(key, n.key) {
                     entry = __inline_Array_TreeMapEntry_String_Value___IndexValue_i32___index_value_0: block -> ref "core:collections//TreeMapEntry<String,Value>" {
-                        __local_7 = n.index;
-                        if __local_7 >= _licm_used_9 {
+                        index = n.index;
+                        if index >= _licm_used_9 {
                             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                             unreachable;
                         }
-                        break __inline_Array_TreeMapEntry_String_Value___IndexValue_i32___index_value_0: builtin::array_get<ref "core:collections//TreeMapEntry<String,Value>">(_licm_repr_10, __local_7);
+                        break __inline_Array_TreeMapEntry_String_Value___IndexValue_i32___index_value_0: builtin::array_get<ref "core:collections//TreeMapEntry<String,Value>">(_licm_repr_10, index);
                         unreachable;
                     };
                     if entry.deleted {
@@ -710,20 +710,20 @@ fn "core:prelude/array.wado/ArrayIter<TreeMapEntry<String,Value>>^Iterator::next
 }
 
 fn "core:collections/TreeMap<String,Value>::entries"(self) {
-    let __local_1: ref "core:prelude//Array<Tuple<String,Value>>";
+    let __b: ref "core:prelude//Array<Tuple<String,Value>>";
     let result: ref "core:prelude//Array<Tuple<String,Value>>";
     let __iter_3: ref "core:prelude/array.wado//ArrayIter<TreeMapEntry<String,Value>>";
     let entry: ref "core:collections//TreeMapEntry<String,Value>";
     let __pattern_temp_0: ref null "core:collections//TreeMapEntry<String,Value>";
-    let __local_9: ref "core:prelude//Array<TreeMapEntry<String,Value>>";
+    let self_9: ref "core:prelude//Array<TreeMapEntry<String,Value>>";
     result = __seq_lit: block -> ref "core:prelude//Array<Tuple<String,Value>>" {
-        __local_1 = struct.new "core:prelude//Array<Tuple<String,Value>>" { repr: builtin::array_new<ref "tuple//[String, Value]">(0), used: 0 };
-        break __seq_lit: __local_1;
+        __b = struct.new "core:prelude//Array<Tuple<String,Value>>" { repr: builtin::array_new<ref "tuple//[String, Value]">(0), used: 0 };
+        break __seq_lit: __b;
         unreachable;
     };
     __iter_3 = __inline_Array_TreeMapEntry_String_Value___IntoIterator__into_iter_3: block -> ref "core:prelude/array.wado//ArrayIter<TreeMapEntry<String,Value>>" {
-        __local_9 = self.entries;
-        break __inline_Array_TreeMapEntry_String_Value___IntoIterator__into_iter_3: struct.new "core:prelude/array.wado//ArrayIter<TreeMapEntry<String,Value>>" { repr: __local_9.repr, used: __local_9.used, index: 0 };
+        self_9 = self.entries;
+        break __inline_Array_TreeMapEntry_String_Value___IntoIterator__into_iter_3: struct.new "core:prelude/array.wado//ArrayIter<TreeMapEntry<String,Value>>" { repr: self_9.repr, used: self_9.used, index: 0 };
         unreachable;
     };
     b51: block {
@@ -760,11 +760,11 @@ fn "core:prelude/array.wado/Array<Tuple<String,./sub/cross_module_treemap_varian
     let old_repr: ref "builtin::array<Tuple<String,./sub/cross_module_treemap_variant_helper.wado/Value>>";
     let used: i32;
     let i: i32;
-    let __local_7: i32;
+    let a: i32;
     capacity = builtin::array_len(self.repr);
     new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_7 = capacity * 2;
-        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+        a = capacity * 2;
+        break __inline_i32_max_0: select i32(a > 4, a, 4);
         unreachable;
     };
     new_repr = builtin::array_new<ref "tuple//[String, Value]">(new_capacity);

@@ -18,8 +18,8 @@ use crate::hashmap::IndexMap;
 use crate::name::{LocalMethodName, ModuleSource};
 use crate::tir::{
     CallArg, FunctionRef, MonomorphInfo, ResolvedType, TemplateFormatSpec, TirBlock, TirExpr,
-    TirExprKind, TirModule, TirStmt, TirStmtKind, TirStructField, TirTemplatePart, TirUnaryOp,
-    TypeId, TypeTable,
+    TirExprKind, TirLocal, TirModule, TirStmt, TirStmtKind, TirStructField, TirTemplatePart,
+    TirUnaryOp, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -36,11 +36,11 @@ pub fn expand_templates(module: &TirModule, tt: &Rc<RefCell<TypeTable>>) {
             let closure_sources = collect_closure_sources(body);
             let mut alloc = FuncLocalAlloc {
                 next_index: local_count,
-                new_types: Vec::new(),
+                new_locals: Vec::new(),
             };
             expand_block(body, tt, &mut alloc, &closure_sources);
             func.local_count = alloc.next_index;
-            func.local_types.extend(alloc.new_types);
+            func.locals.extend(alloc.new_locals);
         }
     }
 }
@@ -102,14 +102,14 @@ fn collect_closure_sources_expr(expr: &TirExpr, sources: &mut IndexMap<u32, Stri
 
 struct FuncLocalAlloc {
     next_index: u32,
-    new_types: Vec<TypeId>,
+    new_locals: Vec<TirLocal>,
 }
 
 impl FuncLocalAlloc {
     fn alloc(&mut self, type_id: TypeId) -> u32 {
         let idx = self.next_index;
         self.next_index += 1;
-        self.new_types.push(type_id);
+        self.new_locals.push(TirLocal::synth(idx, type_id, false));
         idx
     }
 }

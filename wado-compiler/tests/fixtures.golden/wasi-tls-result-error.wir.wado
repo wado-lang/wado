@@ -241,21 +241,21 @@ fn "core:internal/cm_waitable_set_wait"(ws) {
 }
 
 fn "core:prelude/types.wado/AsyncCall<Result<unit,wasi:tls/types.wado/Error>>::wait"(self) {
-    let handle: i32;
+    let handle_1: i32;
     let raw: i32;
-    let ws: i32;
+    let ws_3: i32;
     let result: ref "core:prelude/types.wado//Result<unit,wasi:tls/types.wado/Error>";
     let __local_6: i32;
     let __local_7: ref "core:prelude/types.wado//Result<unit,wasi:tls/types.wado/Error>";
-    let __local_8: i32;
-    handle = self.__cm_packed >> 4;
-    if handle != 0 {
-        raw = handle;
-        ws = "wasi/waitable-set-new"();
+    let handle_8: i32;
+    handle_1 = self.__cm_packed >> 4;
+    if handle_1 != 0 {
+        raw = handle_1;
+        ws_3 = "wasi/waitable-set-new"();
         drop(__inline_cm_waitable_join_0: block -> i32 {
-            __local_8 = raw;
-            "wasi/waitable-join"(__local_8, ws);
-            break __inline_cm_waitable_join_0: __local_8;
+            handle_8 = raw;
+            "wasi/waitable-join"(handle_8, ws_3);
+            break __inline_cm_waitable_join_0: handle_8;
             unreachable;
         });
         b7: block {
@@ -263,7 +263,7 @@ fn "core:prelude/types.wado/AsyncCall<Result<unit,wasi:tls/types.wado/Error>>::w
                 let __sroa_event_code: i32;
                 let __sroa_event_handle: i32;
                 let __sroa_event_payload: u32;
-                multivalue_bind [__sroa_event_code, __sroa_event_handle, __sroa_event_payload] = "core:internal/cm_waitable_set_wait"(ws);
+                multivalue_bind [__sroa_event_code, __sroa_event_handle, __sroa_event_payload] = "core:internal/cm_waitable_set_wait"(ws_3);
                 if __sroa_event_payload == 2 {
                     break b7;
                 }
@@ -271,7 +271,7 @@ fn "core:prelude/types.wado/AsyncCall<Result<unit,wasi:tls/types.wado/Error>>::w
             };
         };
         "wasi/subtask-drop"(raw);
-        "wasi/waitable-set-drop"(ws);
+        "wasi/waitable-set-drop"(ws_3);
     }
     __local_6 = builtin::load_u8(self.__cm_outptr);
     __local_7 = ref.null none;
