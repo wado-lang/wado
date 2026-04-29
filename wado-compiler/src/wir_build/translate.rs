@@ -12,10 +12,13 @@ use crate::wir::{CanonicalIntrinsic, WirInstr, WirName, WirType, WirTypeDef, Wir
 
 use super::context::WirContext;
 
-/// Recursively collect variable names from Let statements. Used as a
-/// fallback only for `TirFunction`s whose `locals` table is empty (e.g.
-/// pre-lower library functions); the resolver / synthesis sites populate
-/// `locals` directly so the normal path consults `tir_func.locals[idx].name`.
+/// Recursively collect variable names from Let statements.
+///
+/// These names are gathered eagerly from the statement tree and preferred
+/// when present; any missing entries are then backfilled from
+/// `tir_func.locals[idx].name` (for example, slots created in expression
+/// contexts the walker doesn't recurse into, or by optimizer passes that
+/// allocate locals without emitting a `Let`).
 fn collect_let_names(names: &mut IndexMap<u32, String>, stmts: &[TirStmt]) {
     for stmt in stmts {
         match &stmt.kind {

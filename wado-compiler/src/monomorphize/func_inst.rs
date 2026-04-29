@@ -2471,7 +2471,6 @@ impl Monomorphizer {
                                     type_id: field_type,
                                     is_mut: *is_mut,
                                 };
-                                let _ = is_reactive;
                             }
                             let binding_ref = TirExpr::new(
                                 TirExprKind::Local {
