@@ -3192,9 +3192,12 @@ impl ClosureLocalCollector {
             TirStmtKind::Expr(expr) | TirStmtKind::Return { value: Some(expr) } => {
                 self.visit_expr(expr);
             }
-            TirStmtKind::Return { value: None }
-            | TirStmtKind::Break { .. }
-            | TirStmtKind::Continue => {}
+            TirStmtKind::Return { value: None } | TirStmtKind::Continue => {}
+            TirStmtKind::Break { value, .. } => {
+                if let Some(value) = value {
+                    self.visit_expr(value);
+                }
+            }
             TirStmtKind::If {
                 condition,
                 then_block,

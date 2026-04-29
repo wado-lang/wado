@@ -1315,9 +1315,12 @@ impl ClosureLowerer {
             TirStmtKind::Expr(expr) | TirStmtKind::Return { value: Some(expr) } => {
                 Self::collect_locals_from_expr(expr, locals);
             }
-            TirStmtKind::Return { value: None }
-            | TirStmtKind::Break { .. }
-            | TirStmtKind::Continue => {}
+            TirStmtKind::Return { value: None } | TirStmtKind::Continue => {}
+            TirStmtKind::Break { value, .. } => {
+                if let Some(value) = value {
+                    Self::collect_locals_from_expr(value, locals);
+                }
+            }
             TirStmtKind::If {
                 condition,
                 then_block,
