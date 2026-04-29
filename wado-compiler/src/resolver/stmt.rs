@@ -313,15 +313,44 @@ impl<H: CompilerHost> Resolver<'_, H> {
             // lets `let c: fn() with Stdout = || { ... }` accept a closure with
             // a synthesized `fn() with []` type without a spurious mismatch,
             // while still rejecting genuine signature mismatches such as a
-            // closure with the wrong arity or parameter types.
+            // closure with the wrong arity or parameter types. `check_assignable`
+            // returns `Deferred` whenever either side contains a type param
+            // (rule 3), so for generic signatures like `fn(T) -> T` we fall back
+            // to a direct `TypeId` comparison of params and return — that
+            // accepts identical generic shapes that differ only in effects
+            // without admitting any type-param-to-concrete mismatches.
             let is_compatible_fn_type = {
                 let type_table = self.type_table.borrow();
-                matches!(type_table.get(value.type_id), ResolvedType::Function { .. })
-                    && matches!(type_table.get(type_id), ResolvedType::Function { .. })
-                    && matches!(
-                        check_assignable(value.type_id, type_id, &type_table),
-                        TypeCheckResult::Compatible
-                    )
+                if let (
+                    ResolvedType::Function {
+                        params: actual_params,
+                        return_type: actual_return,
+                        ..
+                    },
+                    ResolvedType::Function {
+                        params: expected_params,
+                        return_type: expected_return,
+                        ..
+                    },
+                ) = (
+                    type_table.get(value.type_id),
+                    type_table.get(type_id),
+                ) {
+                    match check_assignable(value.type_id, type_id, &type_table) {
+                        TypeCheckResult::Compatible => true,
+                        TypeCheckResult::Deferred => {
+                            actual_params.len() == expected_params.len()
+                                && actual_params
+                                    .iter()
+                                    .zip(expected_params.iter())
+                                    .all(|(a, e)| a == e)
+                                && actual_return == expected_return
+                        }
+                        TypeCheckResult::Incompatible => false,
+                    }
+                } else {
+                    false
+                }
             };
             if !is_null_to_option && !is_compatible_fn_type {
                 let _ = self.logger.error(TypeError::TypeMismatch {

@@ -3126,15 +3126,18 @@ impl TypeTableExt for TypeTable {
     }
 }
 
-/// Reconstruct a closure body's `(local_count, local_types)` from the body's
-/// existing `Let` declarations.
+/// Reconstruct a closure body's `(local_count, local_types)` from its
+/// existing local declarations and pattern bindings.
 ///
 /// The resolver gives each closure its own local-index namespace starting at
 /// `0`, but the resulting `next_local` is not stored on the `Closure`
-/// expression — the only record of the closure-scoped locals is the set of
-/// `TirStmtKind::Let` nodes inside the body. Pattern lowering uses this to
-/// initialize a fresh `(local_count, local_types)` before descending into the
-/// closure body so any temp it allocates picks up a closure-scoped index.
+/// expression — the remaining record of the closure-scoped locals is the
+/// set of `TirStmtKind::Let` nodes plus any `TirPattern::Binding` indices
+/// inside the body, including bindings introduced by pattern-bearing
+/// statements such as `IfLet` and `LetDestructure` and by `Match` arms.
+/// Pattern lowering uses this to initialize a fresh
+/// `(local_count, local_types)` before descending into the closure body so
+/// any temp it allocates picks up a closure-scoped index.
 fn collect_closure_locals(body: &TirExpr) -> (u32, Vec<TypeId>) {
     let mut state = ClosureLocalCollector {
         max_index: None,

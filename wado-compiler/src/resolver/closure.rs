@@ -20,10 +20,10 @@ use crate::hashmap::IndexMap;
 /// default to the expected positional param type, and the body is resolved
 /// against the expected return type so e.g. struct-literal bodies elaborate
 /// correctly. The closure's *effect* set is left as an empty list rather
-/// than copied from the hint — `assign_let_type` handles function-type
-/// assignability structurally, so the closure expression and the let
-/// annotation can carry different `effects` lists without a spurious
-/// `TypeMismatch`.
+/// than copied from the hint — let-statement resolution in
+/// `resolver/stmt.rs` handles function-type assignability structurally, so
+/// the closure expression and the let annotation can carry different
+/// `effects` lists without a spurious `TypeMismatch`.
 struct ExpectedFn {
     params: Vec<TypeId>,
     return_type: TypeId,
@@ -149,9 +149,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Step 5: Resolve body with modified context. Forward the expected
         // return type so e.g. struct-literal bodies can be elaborated against
         // it (`|x, y| Point { x, y }` against `fn(i32, i32) -> Point`).
-        // Forward the expected return type so e.g. struct-literal bodies can
-        // be elaborated against it (`|x, y| Point { x, y }` against
-        // `fn(i32, i32) -> Point`).
         let body_expected = expected_fn.as_ref().map(|ef| ef.return_type);
         let body = self.resolve_expr(&closure.body, &mut closure_ctx, body_expected);
 
@@ -269,10 +266,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .collect();
 
         // Resolve body — forward expected return type for contextual
-        // elaboration of expression-bodied closures.
-        // Forward the expected return type so e.g. struct-literal bodies can
-        // be elaborated against it (`|x, y| Point { x, y }` against
-        // `fn(i32, i32) -> Point`).
+        // elaboration of expression-bodied closures (e.g. `|x, y| Point { x, y }`
+        // against `fn(i32, i32) -> Point`).
         let body_expected = expected_fn.as_ref().map(|ef| ef.return_type);
         let body = self.resolve_expr(&closure.body, &mut closure_ctx, body_expected);
 
