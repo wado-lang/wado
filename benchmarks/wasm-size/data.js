@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777429231743,
+  "lastUpdate": 1777435444799,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -17701,6 +17701,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/ea9b2ad7c9c6ce6b64526e681de52bfa86804d08"
         },
         "date": 1777429231412,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8774,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18518,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 1281621,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f6b631687eb095a894c8451cb43742c10ba6311e",
+          "message": "Merge pull request #960 from wado-lang/claude/optimize-benchmarks-Hklm9\n\ncore:benchmark module + Never-local codegen fix",
+          "timestamp": "2026-04-29T12:57:10+09:00",
+          "tree_id": "47672bd582750e2e2de678eb7488a47f41410216",
+          "url": "https://github.com/wado-lang/wado/commit/f6b631687eb095a894c8451cb43742c10ba6311e"
+        },
+        "date": 1777435444479,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
