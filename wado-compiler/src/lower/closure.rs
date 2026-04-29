@@ -2145,11 +2145,27 @@ impl ClosureLowerer {
             | TirExprKind::FuncRef { .. }
             | TirExprKind::GlobalVarGet { .. }
             | TirExprKind::EnumConstruct { .. } => expr.clone(),
+            // Nested closures are a separate scope: their body uses its
+            // own local-index namespace and gets its own `__call` method
+            // generated in `generate_functor_items`. Don't recurse into
+            // the body or shift its locals here. Cloning preserves the
+            // `Closure` expression so the third pass
+            // (`transform_block`) can later rewrite it into a struct
+            // literal or `ClosureToCanonical`.
+            //
+            // Note: the nested closure's `captures[*].outer_index`
+            // references locals in *this* closure's pre-shift scope,
+            // not in the synthesized `__call`. Because nested-closure
+            // construction sites are themselves rewritten by the third
+            // pass to read capture values via the shifted local map,
+            // the outer-index field is treated as a logical reference
+            // to the source-level local rather than a raw shifted
+            // index — so we leave it alone here.
+            TirExprKind::Closure { .. } => expr.clone(),
             // Constructs that are desugared / lowered before this pass.
             // Reaching them here would silently drop sub-expressions (and any
             // captured locals inside them), so make the failure explicit.
-            TirExprKind::Closure { .. }
-            | TirExprKind::TemplateString { .. }
+            TirExprKind::TemplateString { .. }
             | TirExprKind::WithHandler { .. }
             | TirExprKind::Resume { .. } => {
                 panic!(
