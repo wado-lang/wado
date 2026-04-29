@@ -181,7 +181,7 @@ A handful of types are "produce-only" with respect to their type parameter: ther
 | `Stream<T>`         | covariant       | Same shape as `Future<T>`, repeated.                             |
 | `StreamWritable<T>` | contravariant   | Same as `FutureWritable<T>`.                                     |
 
-These exceptions are tied to specific stdlib types whose API surface the compiler knows. They do **not** generalize to user-defined generics in v1; user generics are invariant in their type parameters by default.
+These exceptions are tied to specific stdlib types whose API surface the compiler knows. They do **not** generalize to user-defined generics. Every user-defined generic — `struct MyBox<T>`, `resource MyContainer<T>`, `variant MyEither<L, R>`, etc. — is **invariant** in each of its type parameters, regardless of how the parameter is used inside the body. There is no variance annotation, and no auto-variance inference. A future WEP can revisit this if a clear need emerges; v1 commits to the simpler rule.
 
 #### Where coercion fires
 
