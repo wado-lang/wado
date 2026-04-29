@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777441481111,
+  "lastUpdate": 1777444324371,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -17809,6 +17809,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 1281621,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6f23bce57624bc3bc71144302488cf962964b470",
+          "message": "Merge pull request #961 from wado-lang/claude/reduce-parser-wasm-size-G3XyD\n\nperf(gale): route lookahead conditions through kind_check_str",
+          "timestamp": "2026-04-29T15:27:02+09:00",
+          "tree_id": "518a566cde8836963927e4a2e0b1c251f0ce47cf",
+          "url": "https://github.com/wado-lang/wado/commit/6f23bce57624bc3bc71144302488cf962964b470"
+        },
+        "date": 1777444324057,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8774,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18518,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 515704,
             "unit": "bytes"
           }
         ]
