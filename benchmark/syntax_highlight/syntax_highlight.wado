@@ -39,9 +39,9 @@ fn read_file(path: String) -> String with Preopens {
 }
 
 
-#[timeout_ms(600000)]
-test "benchmark" {
-    run();
+test "smoke" {
+    // Tiny inline statement; no Preopens needed.
+    assert sqlite::highlight(&"SELECT 1;").len() > 0;
 }
 
 export fn run() with Stdout, MonotonicClock, Preopens {

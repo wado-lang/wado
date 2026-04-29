@@ -65,8 +65,10 @@ fn read_file(path: String) -> String with Preopens {
     return buf;
 }
 
-test "benchmark" {
-    run();
+test "smoke" {
+    // Tiny GeoJSON FeatureCollection with one feature, two coordinates.
+    let count = count_points("{\"type\":\"FeatureCollection\",\"features\":[{\"type\":\"Feature\",\"properties\":{\"name\":\"x\"},\"geometry\":{\"type\":\"Polygon\",\"coordinates\":[[[0.0,0.0],[1.0,1.0]]]}}]}");
+    assert count == 2;
 }
 
 fn count_points(json_data: String) -> i32 {

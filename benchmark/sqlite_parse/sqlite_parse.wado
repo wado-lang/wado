@@ -38,9 +38,9 @@ fn read_file(path: String) -> String with Preopens {
 }
 
 
-#[timeout_ms(300000)]
-test "benchmark" {
-    run();
+test "smoke" {
+    // Tiny inline statement; no Preopens needed.
+    assert sqlite::parse(&"SELECT 1;").is_ok();
 }
 
 export fn run() with Stdout, MonotonicClock, Preopens {

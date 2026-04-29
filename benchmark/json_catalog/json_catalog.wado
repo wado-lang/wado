@@ -124,8 +124,11 @@ fn read_file(path: String) -> String with Preopens {
     return buf;
 }
 
-test "benchmark" {
-    run();
+test "smoke" {
+    // Minimal valid CitmCatalog with empty maps and no events / performances.
+    let counts = parse_counts("{\"areaNames\":{},\"audienceSubCategoryNames\":{},\"blockNames\":{},\"events\":{},\"performances\":[],\"seatCategoryNames\":{},\"subTopicNames\":{},\"subjectNames\":{},\"topicNames\":{},\"topicSubTopics\":{},\"venueNames\":{}}");
+    assert counts.events == 0;
+    assert counts.performances == 0;
 }
 
 struct CatalogCounts {

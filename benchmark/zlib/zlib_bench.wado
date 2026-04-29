@@ -35,8 +35,19 @@ fn read_file_bytes(path: String) -> Array<u8> with Preopens {
     return buf;
 }
 
-test "benchmark" {
-    run();
+test "smoke" {
+    // Round-trip a tiny in-memory buffer; no Preopens needed.
+    let data: Array<u8> = [
+        72 as u8, 101 as u8, 108 as u8, 108 as u8, 111 as u8,
+        44 as u8, 32 as u8,
+        87 as u8, 111 as u8, 114 as u8, 108 as u8, 100 as u8, 33 as u8,
+    ];
+    let compressed = zlib_compress(&data);
+    let decompressed = inflate_zlib(&compressed).unwrap();
+    assert decompressed.len() == data.len();
+    for let mut i = 0; i < data.len(); i += 1 {
+        assert decompressed[i] == data[i];
+    }
 }
 
 export fn run() with Stdout, MonotonicClock, Preopens {

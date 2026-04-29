@@ -31,8 +31,10 @@ fn fts_run(n: i32) -> FtsResult {
     return FtsResult { total_bytes, byte_sum };
 }
 
-test "benchmark" {
-    run();
+test "smoke" {
+    let r = fts_run(100);
+    assert r.total_bytes > 0;
+    assert r.byte_sum > 0;
 }
 
 export fn run() with Stdout, MonotonicClock {
