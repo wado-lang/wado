@@ -258,11 +258,13 @@ fn resolve_cm_export_type(ty: &Type, wasi_registry: &WasiRegistry) -> CmExportTy
         let interface_fq = wasi_registry
             .resolve_cm_source_for(named, None)
             .map(str::to_string)
-            .unwrap_or_else(|| panic!(
-                "world export type `{}` has no source interface — neither the \
+            .unwrap_or_else(|| {
+                panic!(
+                    "world export type `{}` has no source interface — neither the \
                  AST source_interface nor any registry index resolved it",
-                named.name,
-            ));
+                    named.name,
+                )
+            });
         let cm_name = wasi_registry
             .get_resource_cm_name_by_source(&interface_fq, &named.name)
             .or_else(|| wasi_registry.get_variant_cm_name_by_source(&interface_fq, &named.name))
@@ -378,11 +380,7 @@ mod tests {
         }
 
         pub fn named(name: &str) -> Type {
-            Type::Named(NamedType::new(
-                AstId::fresh(),
-                name.to_string(),
-                span(),
-            ))
+            Type::Named(NamedType::new(AstId::fresh(), name.to_string(), span()))
         }
 
         pub fn result_of(ok: Type, err: Type) -> Type {
@@ -402,21 +400,21 @@ mod tests {
 
         // Bare unit forms
         assert!(matches!(
-            resolve_cm_export_type(&unit_named(), &registry),
+            resolve_cm_export_type(&unit_named(), registry),
             CmExportType::Unit
         ));
         assert!(matches!(
-            resolve_cm_export_type(&empty_tuple(), &registry),
+            resolve_cm_export_type(&empty_tuple(), registry),
             CmExportType::Unit
         ));
 
         // Result<(), ()> — both arms unit → still Unit (CLI Command::run shape)
         assert!(matches!(
-            resolve_cm_export_type(&result_of(unit_named(), unit_named()), &registry),
+            resolve_cm_export_type(&result_of(unit_named(), unit_named()), registry),
             CmExportType::Unit
         ));
         assert!(matches!(
-            resolve_cm_export_type(&result_of(empty_tuple(), empty_tuple()), &registry),
+            resolve_cm_export_type(&result_of(empty_tuple(), empty_tuple()), registry),
             CmExportType::Unit
         ));
     }
@@ -429,14 +427,14 @@ mod tests {
         // wasi:http handler shape: Result<Response, ErrorCode>
         let http = result_of(named("Response"), named("ErrorCode"));
         assert!(matches!(
-            resolve_cm_export_type(&http, &registry),
+            resolve_cm_export_type(&http, registry),
             CmExportType::HandlerResult
         ));
 
         // core:kiln generator shape: Result<Response, Error>
         let kiln = result_of(named("Response"), named("Error"));
         assert!(matches!(
-            resolve_cm_export_type(&kiln, &registry),
+            resolve_cm_export_type(&kiln, registry),
             CmExportType::HandlerResult
         ));
     }
@@ -447,7 +445,7 @@ mod tests {
         let (registry, _) = crate::component_model::WasiRegistry::build_from_stdlib();
 
         // `Request` is a resource declared in `wasi:http/types`.
-        match resolve_cm_export_type(&named("Request"), &registry) {
+        match resolve_cm_export_type(&named("Request"), registry) {
             CmExportType::Named {
                 interface_fq,
                 cm_name,
@@ -469,7 +467,7 @@ mod tests {
 
         // `RawRequest` is a struct declared in `core:kiln/types` — exercises
         // the `find_kiln_*` half of `resolve_cm_source_for`.
-        match resolve_cm_export_type(&named("RawRequest"), &registry) {
+        match resolve_cm_export_type(&named("RawRequest"), registry) {
             CmExportType::Named {
                 interface_fq,
                 cm_name,

@@ -140,6 +140,6 @@
   )
   (alias core export $main "run" (core func $run-core (;2;)))
   (type $run-func-type (;4;) (func async (result $result-unit)))
-  (func $run (;0;) (type $run-func-type) (canon lift (core func $run-core) async (memory $memory)))
+  (func $run (;0;) (type $run-func-type) (canon lift (core func $run-core) async (memory $memory) (realloc $realloc)))
   (export $"#func1 run" (@name "run") (;1;) "run" (func $run))
 )
