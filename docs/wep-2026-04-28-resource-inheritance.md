@@ -26,10 +26,10 @@ Every design choice in this WEP picks the **strictest sound default** and leaves
 
 Wado will support **two resource representations** for the foreseeable future:
 
-| Representation     | Backing                             | Used by                                |
-| ------------------ | ----------------------------------- | -------------------------------------- |
-| `i32` handle       | CM canonical handle table per type  | WIT-derived resources (WASI, etc.)     |
-| `externref`        | Wasm GC reference to a host object  | WebIDL-derived resources (Tide)        |
+| Representation | Backing                            | Used by                            |
+| -------------- | ---------------------------------- | ---------------------------------- |
+| `i32` handle   | CM canonical handle table per type | WIT-derived resources (WASI, etc.) |
+| `externref`    | Wasm GC reference to a host object | WebIDL-derived resources (Tide)    |
 
 Reasoning:
 
@@ -125,10 +125,10 @@ The variance rules below are picked for soundness — every position where a wri
 
 Given `Child <: Parent`:
 
-| Type            | Subtyping                       | Justification                                                            |
-| --------------- | ------------------------------- | ------------------------------------------------------------------------ |
-| `&Child`        | `&Child <: &Parent`             | Read-only view; every method available on `&Parent` is available on `&Child`. |
-| `&mut Child`    | **invariant** in the resource type | A `&mut Parent` permits writing back any `Parent` (e.g., `*r = other_parent`); allowing `&mut Child <: &mut Parent` would let an arbitrary `Parent` be assigned where `Child` is required. |
+| Type         | Subtyping                          | Justification                                                                                                                                                                              |
+| ------------ | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `&Child`     | `&Child <: &Parent`                | Read-only view; every method available on `&Parent` is available on `&Child`.                                                                                                              |
+| `&mut Child` | **invariant** in the resource type | A `&mut Parent` permits writing back any `Parent` (e.g., `*r = other_parent`); allowing `&mut Child <: &mut Parent` would let an arbitrary `Parent` be assigned where `Child` is required. |
 
 Resource handles have value semantics, so the common case is plain value passing — implicit upcast happens at the call site:
 
@@ -158,12 +158,12 @@ The contravariant argument rule is what makes a generic event listener like `fn(
 
 All composite types that store a resource value, struct field, or container slot are **invariant** in the contained resource type:
 
-| Type                  | Variance in `T`                            |
-| --------------------- | ------------------------------------------ |
-| `Array<T>`            | invariant                                  |
-| `Option<T>`           | invariant                                  |
-| `TreeMap<K, V>`       | invariant in both                          |
-| `[T, U, ...]` (tuple) | invariant in each element                  |
+| Type                  | Variance in `T`                                 |
+| --------------------- | ----------------------------------------------- |
+| `Array<T>`            | invariant                                       |
+| `Option<T>`           | invariant                                       |
+| `TreeMap<K, V>`       | invariant in both                               |
+| `[T, U, ...]` (tuple) | invariant in each element                       |
 | `struct { f: T }`     | invariant in `T` (field assignment writes back) |
 
 The conservative invariance is forced by the existence of `&mut` access into the container — `arr[i] = other` and `m.f = other` must not be able to install an unrelated subtype.
@@ -172,12 +172,12 @@ The conservative invariance is forced by the existence of `&mut` access into the
 
 A handful of types are "produce-only" with respect to their type parameter: there is no API that takes a `&mut Self` to write a `T` back. For those, covariance is sound:
 
-| Type                | Variance in `T` | Reason                                                           |
-| ------------------- | --------------- | ---------------------------------------------------------------- |
+| Type                | Variance in `T` | Reason                                                                                                                             |
+| ------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
 | `Future<T>`         | covariant       | The only consumer-side API is `read()` which yields `T`. There is no `set` on the read end; writes go through `FutureWritable<T>`. |
-| `FutureWritable<T>` | contravariant   | Symmetric: writes into `T`, never reads.                         |
-| `Stream<T>`         | covariant       | Same shape as `Future<T>`, repeated.                             |
-| `StreamWritable<T>` | contravariant   | Same as `FutureWritable<T>`.                                     |
+| `FutureWritable<T>` | contravariant   | Symmetric: writes into `T`, never reads.                                                                                           |
+| `Stream<T>`         | covariant       | Same shape as `Future<T>`, repeated.                                                                                               |
+| `StreamWritable<T>` | contravariant   | Same as `FutureWritable<T>`.                                                                                                       |
 
 These exceptions are tied to specific stdlib types whose API surface the compiler knows. They do **not** generalize to user-defined generics. Every user-defined generic — `struct MyBox<T>`, `resource MyContainer<T>`, `variant MyEither<L, R>`, etc. — is **invariant** in each of its type parameters, regardless of how the parameter is used inside the body. There is no variance annotation, and no auto-variance inference.
 
@@ -351,13 +351,13 @@ Across the language, every `resource` method takes `&self`. The Wado-side handle
 
 The static type checker enforces, at the call site:
 
-| Relation between `Self` and `T` | Status               |
-| ------------------------------- | -------------------- |
-| `T` is a strict subtype of `Self` | OK (the only valid case) |
-| `T == Self`                     | compile error (trivial cast — use the value directly) |
-| `Self <: T` (i.e., `T` is an ancestor) | compile error (use implicit upcast) |
-| `T` and `Self` share an ancestor but neither extends the other (sibling) | compile error (statically cannot succeed) |
-| `T` and `Self` are unrelated    | compile error                              |
+| Relation between `Self` and `T`                                          | Status                                                |
+| ------------------------------------------------------------------------ | ----------------------------------------------------- |
+| `T` is a strict subtype of `Self`                                        | OK (the only valid case)                              |
+| `T == Self`                                                              | compile error (trivial cast — use the value directly) |
+| `Self <: T` (i.e., `T` is an ancestor)                                   | compile error (use implicit upcast)                   |
+| `T` and `Self` share an ancestor but neither extends the other (sibling) | compile error (statically cannot succeed)             |
+| `T` and `Self` are unrelated                                             | compile error                                         |
 
 Both `Self` and `T` must declare `type="extern-ref"` in `#[cm(...)]`. The check is redundant given the v1 gating (`extends` requires `externref`), but the compiler validates it defensively.
 
@@ -470,11 +470,11 @@ How `extends` and the operations on it lower from Wado to WIT/CM, and from WIT/C
 
 #### Three layers
 
-| Layer  | Identity                                                          |
-| ------ | ----------------------------------------------------------------- |
-| Wado   | each type in the `extends` chain is distinct (`Element ≠ Node`)   |
-| WIT/CM | one resource type, `extern-ref`                                   |
-| Wasm   | the corresponding GC reference, `externref`                       |
+| Layer  | Identity                                                        |
+| ------ | --------------------------------------------------------------- |
+| Wado   | each type in the `extends` chain is distinct (`Element ≠ Node`) |
+| WIT/CM | one resource type, `extern-ref`                                 |
+| Wasm   | the corresponding GC reference, `externref`                     |
 
 This is the same erasure pattern as [Newtype Semantics](./wep-2026-01-29-newtype-semantics.md): the Wado type system holds the structure, the wasm output knows nothing about it. extends differs from newtype only in that **method namespacing is preserved at the WIT layer** — methods are imported under per-Wado-type WIT interfaces, even though the receiver type is universal.
 
@@ -542,14 +542,14 @@ The `is-T` predicates scale O(N) with the number of extends-participating types.
 
 #### Operation lowering at a glance
 
-| Wado operation                                | WIT/CM lowering                                                   |
-| --------------------------------------------- | ----------------------------------------------------------------- |
-| `let n: Node = el;` (implicit upcast)         | identity                                                          |
-| `el.foo()` resolving to `Node::foo`           | call `node.foo(el, ...)`                                          |
-| `el.downcast::<HtmlInputElement>()`           | call `is-html-input-element(el)`, branch into `Option::Some(el)` or `Option::None` |
-| `a == b` for `a, b: ExternRef`-backed         | call `is-same(a, b)`                                              |
-| `` `{x:?}` ``                                 | call `inspect(x)`                                                 |
-| `` `{x}` ``                                   | call `display(x)`                                                 |
+| Wado operation                        | WIT/CM lowering                                                                    |
+| ------------------------------------- | ---------------------------------------------------------------------------------- |
+| `let n: Node = el;` (implicit upcast) | identity                                                                           |
+| `el.foo()` resolving to `Node::foo`   | call `node.foo(el, ...)`                                                           |
+| `el.downcast::<HtmlInputElement>()`   | call `is-html-input-element(el)`, branch into `Option::Some(el)` or `Option::None` |
+| `a == b` for `a, b: ExternRef`-backed | call `is-same(a, b)`                                                               |
+| `` `{x:?}` ``                         | call `inspect(x)`                                                                  |
+| `` `{x}` ``                           | call `display(x)`                                                                  |
 
 Upcast and the receiver argument of inherited methods are wasm-level no-ops; the same `externref` value flows through unchanged.
 
@@ -565,7 +565,39 @@ Upcast and the receiver argument of inherited methods are wasm-level no-ops; the
 
 ### Implementation Roadmap
 
-- [ ] (to be filled)
+#### M1: Language core + `#[cm(...)]` extension + minimal lowering (single landing)
+
+Lands as one milestone to avoid an intermediate "compiles but does not run" state.
+
+- [ ] `extends` keyword in lexer / AST / parser
+- [ ] Subtyping relation (reflexive, transitive, antisymmetric)
+- [ ] Variance rules: `&T` covariant, `&mut T` invariant, aggregates (`Array`, `Option`, `TreeMap`, tuple, struct field) invariant
+- [ ] Implicit upcast insertion at call args / return / annotated `let` / parent-typed field assignment / branch unify
+- [ ] Method resolution: walk extends chain + visible trait impls, ambiguity is an error
+- [ ] Corner cases: override forbidden / trait-vs-inherited collision error / static methods do not inherit / `Self` fixed at declaring resource / visibility judged at declaring module
+- [ ] `#[cm(..., type="extern-ref" | "i32")]` field made mandatory
+- [ ] Backing-match structural validation across `extends` families
+- [ ] Minimal CM lowering: universal receiver, per-Wado-type WIT interfaces, upcast as no-op — enough to compile and run a basic `Child extends Parent` program
+
+#### M2: Downcast
+
+- [ ] Synthesized `fn downcast<T>(&self) -> Option<T>` on extern-ref-backed resources
+- [ ] Static target check: strict subtype only, generic `T` rejected, backing match defensive check
+- [ ] Per-type `is-T` host import synthesis and CM emission
+- [ ] Lowering: branch on `is-T(self)` into `Option::Some(self)` / `Option::None`
+
+#### M3: Built-in trait integration via host imports
+
+- [ ] `Eq` auto-derived on extern-ref-backed resources, lowered through `is-same`
+- [ ] `Inspect`, `InspectAlt`, `Display` auto-derived through `inspect`, `inspect-alt`, `display` host imports
+- [ ] `Serialize` / `Deserialize` synthesis (`impl Trait for Type;`) is a compile error on resources and on types transitively containing one
+- [ ] `Ord` is **not** auto-derived for resources (explicit exclusion)
+
+#### M4: Bundled WIT consistency
+
+- [ ] Confirm bundled WIT for extends-participating resources emits the universal-receiver shape (per-Wado-type interface, receiver is `extern-ref`)
+- [ ] Verify no `extends` relation leaks into the bundled WIT
+- [ ] Adjust the existing emission path if needed
 
 ## See Also
 
