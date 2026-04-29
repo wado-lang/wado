@@ -40,7 +40,7 @@ let p = geo::Point::new(1, 2);  // access via namespace
 Non-`.wado` files (`.g4`, `.proto`, ...) are imported via a generator declared in `[build-dependencies]` of `wado.toml`. See [WEP: Kiln](./wep-2026-04-12-kiln.md) for the mechanism, [WEP: Gale](./wep-2026-03-02-gale.md) for the real-world usage.
 
 ```wado
-use { Parser } from "./Calc.g4" with { // Gale parses Antlr4 grammar files
+use { Parser } from "./Calc.g4" with { // Gale parses ANTLR4 grammar files
     generator: {
         module: "wado:gale@0.1",
         options: { highlight: false },
@@ -52,7 +52,7 @@ use { Parser } from "./Calc.g4" with { // Gale parses Antlr4 grammar files
 
 See [WEP: Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md).
 
-Wado uses Wasm GC for memory management There is no borrow checker or lifetime annotations. Primitives and composite types have value semantics: assignment creates a copy. Reference types (`&T`, `&mut T`) share the underlying value.
+Wado uses Wasm GC for memory management. There is no borrow checker or lifetime annotations. Primitives and composite types have value semantics: assignment creates a copy. Reference types (`&T`, `&mut T`) share the underlying value.
 
 ## Literals
 
@@ -889,7 +889,7 @@ All primitives implement `Eq` and `Ord`. Structs auto-derive `Eq` and `Ord` when
 
 Variants auto-derive `Eq` and `Ord` as well. `Option<T: Eq>`, `Result<T: Eq, E: Eq>`, `Array<T: Eq>` implement `Eq`. `Array<T: Ord>` implements `Ord`.
 
-`Inspect` and `InspectAlt` are also auto-derived, defaulting to `Inspect` and `InspectAlt` respectively.
+`Inspect` and `InspectAlt` are also auto-derived. The compiler synthesizes `Display` and `DisplayAlt` fallbacks that delegate to `Inspect` and `InspectAlt` respectively.
 
 `Default` is auto-derived for a non-generic struct when every field has a declared default expression (`f: T = expr`).
 
