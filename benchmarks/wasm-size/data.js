@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777419403192,
+  "lastUpdate": 1777429231743,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -17657,6 +17657,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c42ece019eaa7843beb08b4306820fad52ea1835"
         },
         "date": 1777419402861,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8774,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18518,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 1281621,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ea9b2ad7c9c6ce6b64526e681de52bfa86804d08",
+          "message": "Merge pull request #959 from wado-lang/claude/webidl-prerequisites-review-siC5B\n\ndocs(wep): split resource inheritance / downcast out of Tide",
+          "timestamp": "2026-04-29T11:14:22+09:00",
+          "tree_id": "88a9012cb10b5c9769f3650d0042d391ffd74e8b",
+          "url": "https://github.com/wado-lang/wado/commit/ea9b2ad7c9c6ce6b64526e681de52bfa86804d08"
+        },
+        "date": 1777429231412,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
