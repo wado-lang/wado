@@ -111,6 +111,98 @@ An `externref`-backed resource and an `i32`-backed resource are **distinct types
 
 In practice this is not a constraint: WebIDL bindings live in `web:*` modules and do not appear in WIT signatures, and vice versa. As CM-GC matures (per [GC in Components](./wep-2026-03-28-gc-in-components.md)), more types migrate to `externref`-style representations on their own; we expect the moment "convert i32 to externref" becomes urgent to never quite arrive.
 
+### Subtyping rules
+
+Given `resource Child extends Parent`, the relation `Child <: Parent` is induced. The relation is **reflexive** (`T <: T`), **transitive** (`A <: B` and `B <: C` ⟹ `A <: C`), and **antisymmetric** (no cycles, enforced syntactically). Resources unrelated by `extends` are incomparable.
+
+The variance rules below are picked for soundness — every position where a write can re-establish the underlying value at a different concrete type is **invariant**. This is strictly stronger than Rust's defaults and rules out Java-array-style breakage.
+
+#### Reference types
+
+Given `Child <: Parent`:
+
+| Type            | Subtyping                       | Justification                                                            |
+| --------------- | ------------------------------- | ------------------------------------------------------------------------ |
+| `&Child`        | `&Child <: &Parent`             | Read-only view; every method available on `&Parent` is available on `&Child`. |
+| `&mut Child`    | **invariant** in the resource type | A `&mut Parent` permits writing back any `Parent` (e.g., `*r = other_parent`); allowing `&mut Child <: &mut Parent` would let an arbitrary `Parent` be assigned where `Child` is required. |
+
+Concretely, the following are accepted (implicit upcast at the call site):
+
+```wado
+fn read_node(n: &Node) -> u16 { return n.node_type(); }
+let el: Element = ...;
+read_node(&el);              // OK: &Element <: &Node
+```
+
+The following is rejected:
+
+```wado
+fn replace_node(n: &mut Node) { *n = some_node(); }
+let mut el: Element = ...;
+replace_node(&mut el);       // ERROR: &mut Element ≮: &mut Node
+```
+
+#### Function types
+
+`fn(A) -> B` (with or without `with` effects) is **contravariant in `A`** and **covariant in `B`**. Effects do not interact with subtyping for resources; they follow their own rules.
+
+```wado
+let f: fn(Element) -> i32 = ...;
+let g: fn(Node) -> i32 = f;        // ERROR: contravariance — f might not accept arbitrary Nodes
+let h: fn(Element) -> i32 = ...;   // OK
+let k: fn(Element) -> Element = ...;
+let m: fn(Element) -> Node = k;    // OK: Element <: Node in the result
+```
+
+The contravariant argument rule is what makes a generic event listener like `fn(Event)` accept callbacks that handle the most general event type, while still rejecting callbacks that demand a more specific input than the listener might receive.
+
+#### Container and aggregate types
+
+All composite types that store a resource value, struct field, or container slot are **invariant** in the contained resource type:
+
+| Type                  | Variance in `T`                            |
+| --------------------- | ------------------------------------------ |
+| `Array<T>`            | invariant                                  |
+| `Option<T>`           | invariant                                  |
+| `TreeMap<K, V>`       | invariant in both                          |
+| `[T, U, ...]` (tuple) | invariant in each element                  |
+| `struct { f: T }`     | invariant in `T` (field assignment writes back) |
+
+The conservative invariance is forced by the existence of `&mut` access into the container — `arr[i] = other` and `m.f = other` must not be able to install an unrelated subtype.
+
+#### Read-only views: covariant exception
+
+A handful of types are "produce-only" with respect to their type parameter: there is no API that takes a `&mut Self` to write a `T` back. For those, covariance is sound:
+
+| Type                | Variance in `T` | Reason                                                           |
+| ------------------- | --------------- | ---------------------------------------------------------------- |
+| `Future<T>`         | covariant       | The only consumer-side API is `read()` which yields `T`. There is no `set` on the read end; writes go through `FutureWritable<T>`. |
+| `FutureWritable<T>` | contravariant   | Symmetric: writes into `T`, never reads.                         |
+| `Stream<T>`         | covariant       | Same shape as `Future<T>`, repeated.                             |
+| `StreamWritable<T>` | contravariant   | Same as `FutureWritable<T>`.                                     |
+
+These exceptions are tied to specific stdlib types whose API surface the compiler knows. They do **not** generalize to user-defined generics in v1; user generics are invariant in their type parameters by default.
+
+#### Where coercion fires
+
+Implicit upcast is inserted at:
+
+- Function and method call argument positions
+- Function return positions
+- `let` and `let mut` bindings with an explicit type annotation
+- Assignments to struct fields and container slots that are typed as a parent
+- Branch arms of `if` / `match` / `loop` that need to unify to a common parent type
+
+Implicit upcast does **not** fire at:
+
+- Type parameter inference (`T` is solved to the most specific concrete type; the upcast happens later, at a use site)
+- Inside aggregate types where the rule above forces invariance — e.g., constructing `Array<Node>` from `[el1, el2]` where `el1: Element, el2: Element` requires an explicit annotation, because `Array<T>` is invariant
+- Across the `i32`/`externref` representation boundary — by the rule from §"No cross-representation conversion in v1"
+
+#### Pattern matching and `match`
+
+A `match` on a value of type `Parent` cannot match the concrete `Child` arm by structure alone — that's a downcast, not subtyping (covered in a later section). Pattern matching against an `extends`-related type requires explicit `downcast::<Child>()` first.
+
 ## Consequences
 
 ### Implementation Roadmap
