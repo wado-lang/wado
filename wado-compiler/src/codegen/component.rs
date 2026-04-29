@@ -1307,7 +1307,7 @@ fn emit_canonical_intrinsics(
             cm_export_type_to_idx(
                 ctx,
                 &export.cm_result,
-                &component_plan.world_package,
+                component_plan.world_package.as_deref(),
                 result_unit_type,
             )
         })
@@ -1524,7 +1524,7 @@ fn resolve_future_type(
 fn cm_export_type_to_idx(
     ctx: &ComponentModelContext,
     ty: &crate::wir_build::component_plan::CmExportType,
-    world_package: &str,
+    world_package: Option<&str>,
     result_unit_type: u32,
 ) -> u32 {
     use crate::wir_build::component_plan::CmExportType;
@@ -1534,27 +1534,24 @@ fn cm_export_type_to_idx(
             interface_fq,
             cm_name,
         } => {
-            let pkg = interface_fq_package(interface_fq).unwrap_or_else(|| {
-                panic!(
-                    "world export Named CM type interface `{interface_fq}` has no `scheme:pkg/...` shape",
-                )
-            });
+            let pkg = crate::world_registry::fq_name_package(interface_fq);
+            assert!(
+                !pkg.is_empty(),
+                "world export Named CM type interface `{interface_fq}` has no `scheme:pkg/...` shape",
+            );
             let key = format!("{pkg}-{cm_name}");
             ctx.type_idx(&key)
         }
         CmExportType::HandlerResult => {
-            let key = format!("{world_package}-handler-result");
+            // The plan only emits `HandlerResult` for worlds with a known
+            // package — `world_package` is guaranteed `Some` at this point.
+            let pkg = world_package.expect(
+                "HandlerResult emitted for a world with no package: stdlib bootstrap regression",
+            );
+            let key = format!("{pkg}-handler-result");
             ctx.type_idx(&key)
         }
     }
-}
-
-/// Extract the package segment of a CM interface FQ (`wasi:http/types` →
-/// `"http"`, `core:kiln/types` → `"kiln"`).
-fn interface_fq_package(interface_fq: &str) -> Option<&str> {
-    let (_, rest) = interface_fq.split_once(':')?;
-    let (pkg, _) = rest.split_once('/')?;
-    Some(pkg)
 }
 
 fn emit_world_exports(
@@ -1563,7 +1560,7 @@ fn emit_world_exports(
     component_plan: &crate::wir_build::component_plan::ComponentPlan,
     result_unit_type: u32,
 ) {
-    let world_package = component_plan.world_package.as_str();
+    let world_package = component_plan.world_package.as_deref();
     for export in &component_plan.world_exports {
         let core_name = format!("{}-core", export.name);
         let func_type_name = format!("{}-func-type", export.name);
@@ -1580,15 +1577,10 @@ fn emit_world_exports(
         {
             let (_, enc) = builder.ty(Some(&func_type_name));
 
-            // Resolve each plan-level [`CmExportType`] to a registered
-            // component type index. Resources and variants follow the
-            // `{pkg}-{cm-name}` naming convention emitted by
-            // `import_wasi_http_types` / `emit_kiln_world_types`; the
-            // synthesized `result<own<resp>, error>` lives under
-            // `{world_pkg}-handler-result`. The previous form here was a
-            // hand-coded `if export.is_http_handler { ... } else if
-            // is_kiln_generator { ... } else { ... }` branch — collapsing
-            // it to a uniform iteration is the point of this pass.
+            // Resources and variants follow the `{pkg}-{cm-name}` naming
+            // convention emitted by `import_wasi_http_types` /
+            // `emit_kiln_world_types`; the synthesized `result<own<resp>, error>`
+            // lives under `{world_pkg}-handler-result`. See [`CmExportType`].
             let param_idxs: Vec<(String, u32)> = export
                 .cm_params
                 .iter()
@@ -1616,13 +1608,14 @@ fn emit_world_exports(
             CanonicalOption::Async,
             CanonicalOption::Memory(ctx.memory_idx()),
         ];
-        // Exports that pass CM records / lists / strings / own-handles
-        // through their params need `realloc` so the canon can materialise
-        // those payloads into linear memory for the core function.
-        // Param-free exports (CLI `run`, the unknown-world fallback) stay
-        // realloc-free — `wasm-tools` rejects `realloc` on a canon with no
-        // lifting work to do.
-        if !export.cm_params.is_empty() {
+        // `realloc` is required iff the canon has any non-Unit param to
+        // materialise into linear memory. `wasm-tools` rejects `realloc`
+        // on a canon with no lifting work to do.
+        let needs_realloc = export
+            .cm_params
+            .iter()
+            .any(|(_, cm_ty)| cm_ty.needs_realloc());
+        if needs_realloc {
             lift_opts.push(CanonicalOption::Realloc(ctx.core_func_idx("realloc")));
         }
         builder.lift_func(

@@ -162,10 +162,14 @@ impl WorldInfo {
     }
 }
 
-/// Extract the package segment of a world `fq_name` (`"wasi:http/service"`
-/// → `"http"`; `"core:kiln/generator"` → `"kiln"`). Returns `""` when
-/// the name has no `scheme:package/interface` shape.
-fn fq_name_package(fq_name: &str) -> &str {
+/// Extract the package segment of a CM-style fully-qualified name
+/// (`"wasi:http/service"` → `"http"`; `"core:kiln/generator"` →
+/// `"kiln"`). Returns `""` when the name has no `scheme:package/...` shape.
+///
+/// Works for both world `fq_name`s (`wasi:http/service`) and interface FQs
+/// (`wasi:http/types`) — the parsing only cares about the `scheme:pkg/...`
+/// prefix and ignores whatever follows the `/`.
+pub fn fq_name_package(fq_name: &str) -> &str {
     let Some((_, rest)) = fq_name.split_once(':') else {
         return "";
     };
