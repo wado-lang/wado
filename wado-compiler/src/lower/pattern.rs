@@ -3142,10 +3142,7 @@ impl TypeTableExt for TypeTable {
 /// initialize a fresh allocator before descending into the closure body
 /// so any temp it allocates picks up a closure-scoped index that does not
 /// collide with parameters or existing locals.
-fn collect_closure_locals(
-    params: &[(String, TypeId)],
-    body: &TirExpr,
-) -> (u32, Vec<TypeId>) {
+fn collect_closure_locals(params: &[(String, TypeId)], body: &TirExpr) -> (u32, Vec<TypeId>) {
     let mut state = ClosureLocalCollector {
         max_index: None,
         types: Vec::new(),
