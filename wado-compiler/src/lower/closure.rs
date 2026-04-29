@@ -1806,7 +1806,7 @@ impl ClosureLowerer {
                     expr.span,
                 )
             }
-            TirExprKind::TupleSpread { expr: inner } | TirExprKind::TupleZip { expr: inner } => {
+            TirExprKind::TupleSpread { expr: inner } => {
                 let new_inner = self.transform_closure_body(
                     inner,
                     captures,
@@ -1816,6 +1816,22 @@ impl ClosureLowerer {
                 );
                 TirExpr::new(
                     TirExprKind::TupleSpread {
+                        expr: Box::new(new_inner),
+                    },
+                    expr.type_id,
+                    expr.span,
+                )
+            }
+            TirExprKind::TupleZip { expr: inner } => {
+                let new_inner = self.transform_closure_body(
+                    inner,
+                    captures,
+                    struct_type_id,
+                    self_ref_type,
+                    span,
+                );
+                TirExpr::new(
+                    TirExprKind::TupleZip {
                         expr: Box::new(new_inner),
                     },
                     expr.type_id,
