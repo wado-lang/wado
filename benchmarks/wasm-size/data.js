@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777451459067,
+  "lastUpdate": 1777451537656,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -17985,6 +17985,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 515704,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bbe8fbcbbcc5769041ca3085742810d854f34072",
+          "message": "Merge pull request #965 from wado-lang/claude/analyze-world-hardcoding-Nsiwg\n\nrefactor: data-drive world-shape codegen, drop world-name string matches",
+          "timestamp": "2026-04-29T17:26:23+09:00",
+          "tree_id": "b98b526c39c54e9b7529cd61896653026bcacd5f",
+          "url": "https://github.com/wado-lang/wado/commit/bbe8fbcbbcc5769041ca3085742810d854f34072"
+        },
+        "date": 1777451537373,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1775,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8776,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18520,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 515706,
             "unit": "bytes"
           }
         ]
