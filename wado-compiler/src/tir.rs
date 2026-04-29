@@ -3178,14 +3178,21 @@ impl TirFunction {
     }
 }
 
-/// A body-level local variable — a `let` binding (or destructure binding)
-/// inside a function or closure body, identified by its declaration order
-/// in the surrounding scope.
+/// A resolved local-slot entry in a function or closure scope, identified
+/// by its declaration / order in the surrounding local environment.
 ///
-/// Currently used for `TirExprKind::Closure { body_locals, .. }` to record
-/// the closure's body-scope state at end of resolution. Function-level
-/// state (`TirFunction::local_types`) only records `TypeId` for historical
-/// reasons; promoting it to `Vec<TirLocal>` is a separate refactor.
+/// `FunctionContext::add_local` records every local — source-level
+/// parameters, `let` bindings, destructure bindings, and resolver-generated
+/// temporaries — as a `TirLocal`. The single source of truth for the local
+/// namespace is `FunctionContext::locals: Vec<TirLocal>`; from there:
+///
+/// * Closure resolution copies the body's slice
+///   (`locals[params.len()..]`) onto `TirExprKind::Closure { body_locals,
+///   .. }` so pattern lowering can seed a closure-scoped allocator
+///   without re-walking the body.
+/// * Function-level state (`TirFunction::local_types`,
+///   `TirGlobal::local_types`) currently keeps only `Vec<TypeId>`;
+///   promoting those to `Vec<TirLocal>` is a separate refactor.
 #[derive(Debug, Clone)]
 pub struct TirLocal {
     /// Source-level name of the binding (or a synthesised `__name` for

@@ -1001,7 +1001,10 @@ impl ClosureLowerer {
             TirExprKind::Closure {
                 functor_id: None, ..
             } => {
-                unreachable!("Closure node missing functor_id; the collect pass should assign it")
+                unreachable!(
+                    "Closure node missing functor_id; the collect pass should assign it (span: {:?}, kind: {:?})",
+                    expr.span, &expr.kind
+                )
             }
             TirExprKind::Local { index, .. } => {
                 // If a local that holds a closure is passed as an argument, mark it unsafe
@@ -4010,8 +4013,12 @@ impl ClosureLowerer {
                 // to keep a counter in sync with traversal order — which
                 // would break the moment we walk a different set of
                 // functions (e.g. the generated `__call` methods).
-                let closure_id = functor_id
-                    .expect("Closure node missing functor_id; the collect pass should assign it");
+                let closure_id = functor_id.unwrap_or_else(|| {
+                    panic!(
+                        "Closure node missing functor_id; the collect pass should assign it (span: {:?})",
+                        expr.span,
+                    )
+                });
 
                 // Don't recurse into the body. The body lives in *this*
                 // closure's local-index namespace, not the function we
