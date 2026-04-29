@@ -1999,7 +1999,7 @@ fn gen_scan_optional_with_lookahead(w: &mut CodeWriter, group_elements: &Array<E
         if sig.len() == 0 {
             continue;
         }
-        let cond = gen_scan_lookahead_condition(&sig);
+        let cond = gen_scan_lookahead_condition(ctx, &sig);
 
         if is_first {
             w.begin(`if {cond}`);
@@ -2038,28 +2038,19 @@ fn gen_scan_optional_with_lookahead(w: &mut CodeWriter, group_elements: &Array<E
 
 /// Scan-side twin of `gen_lookahead_condition`. Uses
 /// `tokens[pos + d].kind` (guarded by `pos + d < tokens.len()`) instead
-/// of `p.peek_at(d)`.
-fn gen_scan_lookahead_condition(sig: &Array<Array<String>>) -> String {
+/// of `p.peek_at(d)`. Multi-token sets route through
+/// `ctx.kind_check_str` so they collapse to a `_gale_kind_set_<id>(...)`
+/// helper call; otherwise a 120-keyword set inlined at every dispatch
+/// site bloats the generated wasm by hundreds of KB.
+fn gen_scan_lookahead_condition(ctx: &mut GenContext, sig: &Array<Array<String>>) -> String {
     let mut parts: Array<String> = [];
     for let mut d = 0; d < sig.len(); d += 1 {
         let kinds = &sig[d];
         let idx_expr = if d == 0 { `pos` } else { `pos + {d}` };
         let check_expr = `tokens[{idx_expr}].kind`;
         let guard = `{idx_expr} < tokens.len()`;
-        if kinds.len() == 1 {
-            parts.push(`{guard} && {check_expr} == {kinds[0]}`);
-        } else {
-            let mut inner = String::with_capacity(64);
-            inner.push_str(`{guard} && (`);
-            for let mut j = 0; j < kinds.len(); j += 1 {
-                if j > 0 {
-                    inner.push_str(" || ");
-                }
-                inner.push_str(`{check_expr} == {kinds[j]}`);
-            }
-            inner.push_str(")");
-            parts.push(inner);
-        }
+        let check = ctx.kind_check_str(kinds, &check_expr);
+        parts.push(`{guard} && {check}`);
     }
     let mut result = String::with_capacity(128);
     for let mut i = 0; i < parts.len(); i += 1 {
@@ -3251,25 +3242,12 @@ fn shape_lookahead_signature(shape: &Array<i32>, elements: &Array<Element>, ctx:
     return sig;
 }
 
-fn gen_lookahead_condition(sig: &Array<Array<String>>) -> String {
+fn gen_lookahead_condition(ctx: &mut GenContext, sig: &Array<Array<String>>) -> String {
     let mut parts: Array<String> = [];
     for let mut d = 0; d < sig.len(); d += 1 {
         let tokens = &sig[d];
-        let check_expr = if d == 0 { "p.peek_kind()" } else { `p.peek_at({d})` };
-        if tokens.len() == 1 {
-            parts.push(`{check_expr} == {tokens[0]}`);
-        } else {
-            let mut inner = String::with_capacity(64);
-            inner.push_str("(");
-            for let mut j = 0; j < tokens.len(); j += 1 {
-                if j > 0 {
-                    inner.push_str(" || ");
-                }
-                inner.push_str(`{check_expr} == {tokens[j]}`);
-            }
-            inner.push_str(")");
-            parts.push(inner);
-        }
+        let check_expr = if d == 0 { `p.peek_kind()` } else { `p.peek_at({d})` };
+        parts.push(ctx.kind_check_str(tokens, &check_expr));
     }
     let mut result = String::with_capacity(128);
     for let mut i = 0; i < parts.len(); i += 1 {
@@ -3291,7 +3269,7 @@ fn gen_optional_with_lookahead(w: &mut CodeWriter, group_elements: &Array<Elemen
         if sig.len() == 0 {
             continue;
         }
-        let cond = gen_lookahead_condition(&sig);
+        let cond = gen_lookahead_condition(ctx, &sig);
 
         if is_first {
             w.begin(`if {cond}`);
@@ -3655,7 +3633,7 @@ fn gen_storable_optional_with_lookahead(w: &mut CodeWriter, inner: &Element, ctx
             if sig.len() == 0 {
                 continue;
             }
-            let cond = gen_lookahead_condition(&sig);
+            let cond = gen_lookahead_condition(ctx, &sig);
 
             if is_first {
                 w.begin(`let {opt_name}: Option<{type_str}> = if {cond}`);
