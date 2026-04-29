@@ -332,10 +332,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         return_type: expected_return,
                         ..
                     },
-                ) = (
-                    type_table.get(value.type_id),
-                    type_table.get(type_id),
-                ) {
+                ) = (type_table.get(value.type_id), type_table.get(type_id))
+                {
                     match check_assignable(value.type_id, type_id, &type_table) {
                         TypeCheckResult::Compatible => true,
                         TypeCheckResult::Deferred => {
