@@ -224,8 +224,7 @@ pub fn build_component(
         trailers_future_type,
         &transmission_future_types,
         &scalar_future_types,
-        project.has_http_handler_export,
-        project.is_kiln_generator_world(),
+        component_plan,
     );
 
     // Lower WASI functions
@@ -360,13 +359,7 @@ pub fn build_component(
     builder.core_instantiate(Some("main"), ctx.core_module_idx("main-mod"), main_args);
 
     // World exports
-    emit_world_exports(
-        &mut builder,
-        &mut ctx,
-        component_plan,
-        result_unit_type,
-        project.is_kiln_generator_world(),
-    );
+    emit_world_exports(&mut builder, &mut ctx, component_plan, result_unit_type);
 
     if !project.strip_names {
         builder.append_names();
@@ -1298,9 +1291,24 @@ fn emit_canonical_intrinsics(
     trailers_future_type: u32,
     transmission_future_types: &IndexMap<String, u32>,
     scalar_future_types: &IndexSet<(CmScalarType, u32)>,
-    has_http_handler_export: bool,
-    is_kiln_generator: bool,
+    component_plan: &crate::wir_build::component_plan::ComponentPlan,
 ) {
+    // The `task.return` canon needs the export's CM-resolved result type.
+    // Worlds with one boundary export (HTTP service `handle`, kiln
+    // `generate`, CLI `Command::run`) all share this single-task assumption;
+    // the test world emits zero world exports so we fall back to `result<>`.
+    let task_return_type = component_plan
+        .world_exports
+        .first()
+        .map(|export| {
+            cm_export_type_to_idx(
+                ctx,
+                &export.cm_result,
+                &component_plan.world_package,
+                result_unit_type,
+            )
+        })
+        .unwrap_or(result_unit_type);
     for intrinsic in canonical_intrinsics {
         ctx.register_core_func(&intrinsic.import_name());
 
@@ -1419,21 +1427,17 @@ fn emit_canonical_intrinsics(
                 builder.future_drop_readable(ft);
             }
             CanonicalIntrinsic::TaskReturn => {
-                // Select the task-return result shape based on the
-                // active world: `result<response, error>` for the kiln
-                // generator, `http-handler-result` for HTTP service,
-                // bare `result<>` otherwise. The flat decomposition of
-                // this type must match the core module's task-return
+                // The `task.return` result shape is the active world
+                // export's CM-resolved return type — `result<response,
+                // error>` for the kiln generator, `http-handler-result`
+                // for HTTP service, `result<>` for CLI and the test
+                // world. Computed once at function entry from
+                // `component_plan.world_exports[0].cm_result` so the
+                // code path here is uniform across worlds. The flat
+                // decomposition must match the core module's task-return
                 // import signature (computed via
                 // `compute_export_flat_return_types`) or component
                 // validation fails at instantiation.
-                let task_return_type = if is_kiln_generator && ctx.has_type("kiln-handler-result") {
-                    ctx.type_idx("kiln-handler-result")
-                } else if has_http_handler_export && ctx.has_type("http-handler-result") {
-                    ctx.type_idx("http-handler-result")
-                } else {
-                    result_unit_type
-                };
                 // task.return lifts payloads from linear memory into
                 // component values; it does not allocate, so `realloc`
                 // must not appear in the option list (wasm-tools
@@ -1507,13 +1511,56 @@ fn resolve_future_type(
     }
 }
 
+/// Resolve a plan-level [`CmExportType`] to a component type index registered
+/// in `ctx`.
+///
+/// The naming convention `{pkg}-{cm_name}` mirrors what
+/// `import_wasi_http_types` and `emit_kiln_world_types` register for resource
+/// own-handles and named variants. `HandlerResult` resolves to the per-world
+/// `{world_package}-handler-result` synthesised by the same helpers.
+fn cm_export_type_to_idx(
+    ctx: &ComponentModelContext,
+    ty: &crate::wir_build::component_plan::CmExportType,
+    world_package: &str,
+    result_unit_type: u32,
+) -> u32 {
+    use crate::wir_build::component_plan::CmExportType;
+    match ty {
+        CmExportType::Unit => result_unit_type,
+        CmExportType::Named {
+            interface_fq,
+            cm_name,
+        } => {
+            let pkg = interface_fq_package(interface_fq).unwrap_or_else(|| {
+                panic!(
+                    "world export Named CM type interface `{interface_fq}` has no `scheme:pkg/...` shape",
+                )
+            });
+            let key = format!("{pkg}-{cm_name}");
+            ctx.type_idx(&key)
+        }
+        CmExportType::HandlerResult => {
+            let key = format!("{world_package}-handler-result");
+            ctx.type_idx(&key)
+        }
+    }
+}
+
+/// Extract the package segment of a CM interface FQ (`wasi:http/types` →
+/// `"http"`, `core:kiln/types` → `"kiln"`).
+fn interface_fq_package(interface_fq: &str) -> Option<&str> {
+    let (_, rest) = interface_fq.split_once(':')?;
+    let (pkg, _) = rest.split_once('/')?;
+    Some(pkg)
+}
+
 fn emit_world_exports(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
     component_plan: &crate::wir_build::component_plan::ComponentPlan,
     result_unit_type: u32,
-    is_kiln_generator: bool,
 ) {
+    let world_package = component_plan.world_package.as_str();
     for export in &component_plan.world_exports {
         let core_name = format!("{}-core", export.name);
         let func_type_name = format!("{}-func-type", export.name);
@@ -1530,29 +1577,35 @@ fn emit_world_exports(
         {
             let (_, enc) = builder.ty(Some(&func_type_name));
 
-            if export.is_http_handler {
-                let request_type_idx = ctx.type_idx("http-request");
-                let handler_result_type_idx = ctx.type_idx("http-handler-result");
-                enc.function()
-                    .async_(export.is_async)
-                    .params([("request", ComponentValType::Type(request_type_idx))])
-                    .result(Some(ComponentValType::Type(handler_result_type_idx)));
-            } else if is_kiln_generator
-                && ctx.has_type("kiln-raw-request")
-                && ctx.has_type("kiln-handler-result")
-            {
-                let raw_request_idx = ctx.type_idx("kiln-raw-request");
-                let handler_result_idx = ctx.type_idx("kiln-handler-result");
-                enc.function()
-                    .async_(export.is_async)
-                    .params([("req", ComponentValType::Type(raw_request_idx))])
-                    .result(Some(ComponentValType::Type(handler_result_idx)));
-            } else {
-                enc.function()
-                    .async_(export.is_async)
-                    .params::<[(&str, ComponentValType); 0], ComponentValType>([])
-                    .result(Some(ComponentValType::Type(result_unit_type)));
-            }
+            // Resolve each plan-level [`CmExportType`] to a registered
+            // component type index. Resources and variants follow the
+            // `{pkg}-{cm-name}` naming convention emitted by
+            // `import_wasi_http_types` / `emit_kiln_world_types`; the
+            // synthesized `result<own<resp>, error>` lives under
+            // `{world_pkg}-handler-result`. The previous form here was a
+            // hand-coded `if export.is_http_handler { ... } else if
+            // is_kiln_generator { ... } else { ... }` branch — collapsing
+            // it to a uniform iteration is the point of this pass.
+            let param_idxs: Vec<(String, u32)> = export
+                .cm_params
+                .iter()
+                .map(|(name, cm_ty)| {
+                    (
+                        name.clone(),
+                        cm_export_type_to_idx(ctx, cm_ty, world_package, result_unit_type),
+                    )
+                })
+                .collect();
+            let param_refs: Vec<(&str, ComponentValType)> = param_idxs
+                .iter()
+                .map(|(n, idx)| (n.as_str(), ComponentValType::Type(*idx)))
+                .collect();
+            let result_idx =
+                cm_export_type_to_idx(ctx, &export.cm_result, world_package, result_unit_type);
+            enc.function()
+                .async_(export.is_async)
+                .params(param_refs)
+                .result(Some(ComponentValType::Type(result_idx)));
         }
 
         ctx.register_comp_func(&export.name);
@@ -1560,12 +1613,13 @@ fn emit_world_exports(
             CanonicalOption::Async,
             CanonicalOption::Memory(ctx.memory_idx()),
         ];
-        // HTTP and Kiln exports pass CM-level records / lists / strings
-        // through their params, so the canon must materialize them into
-        // linear memory for the core function. `realloc` satisfies the
-        // validator; `result_unit_type` exports take no params so stay
-        // realloc-free.
-        if export.is_http_handler || (is_kiln_generator && ctx.has_type("kiln-raw-request")) {
+        // Exports that pass CM records / lists / strings / own-handles
+        // through their params need `realloc` so the canon can materialise
+        // those payloads into linear memory for the core function.
+        // Param-free exports (CLI `run`, the unknown-world fallback) stay
+        // realloc-free — `wasm-tools` rejects `realloc` on a canon with no
+        // lifting work to do.
+        if !export.cm_params.is_empty() {
             lift_opts.push(CanonicalOption::Realloc(ctx.core_func_idx("realloc")));
         }
         builder.lift_func(

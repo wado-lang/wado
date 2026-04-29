@@ -52,6 +52,7 @@ pub fn link(package: Package) -> FlatPackage {
         entry_tests,
         &package.export_binding_names,
         package.world_registry,
+        package.wasi_registry,
     );
 
     // Flatten all per-module TIR into flat lists.
