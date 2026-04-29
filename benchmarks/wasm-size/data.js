@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777457113015,
+  "lastUpdate": 1777457744696,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -18053,6 +18053,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/8a71455c04b4ae4ab8cfc699a624fa9a64e4ed29"
         },
         "date": 1777457112694,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1775,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8776,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18520,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 515706,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "28f4bc97473d25b4204a38eb9355b822e437c028",
+          "message": "Merge pull request #967 from wado-lang/gfx/update_deps\n\nchore: update deps",
+          "timestamp": "2026-04-29T19:06:45+09:00",
+          "tree_id": "e6d6d2ed882119d7cb9cc7cefbc9d4d058d5e895",
+          "url": "https://github.com/wado-lang/wado/commit/28f4bc97473d25b4204a38eb9355b822e437c028"
+        },
+        "date": 1777457744395,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
