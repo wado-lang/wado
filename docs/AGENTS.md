@@ -104,3 +104,4 @@ It may include TODOs on WIP.
 - [Synopsis Tests](./wep-2026-04-26-synopsis-tests.md)
 - [Compile-Time Parameters](./wep-2026-04-26-compile-time-params.md)
 - [TIR Interpreter (`tiri`) Evolution Plan](./wep-2026-04-27-tir-interpreter.md)
+- [Resource Inheritance and Downcast (`resource extends`)](./wep-2026-04-28-resource-inheritance.md)
