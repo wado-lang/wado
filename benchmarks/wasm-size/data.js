@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777555008132,
+  "lastUpdate": 1777556171014,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -18317,6 +18317,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/60eda3d6533659e7a61952b956643d7d05d2b44f"
         },
         "date": 1777555007798,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1775,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8776,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18520,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 515706,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "56caa81a118cfbe88a12aa99ed242ced8f6dadc6",
+          "message": "Merge pull request #973 from wado-lang/gfx/sync_vendor\n\nchore: update vendor/ submodules",
+          "timestamp": "2026-04-30T22:31:09+09:00",
+          "tree_id": "191fc1520185fb100b3c393f8705d8cb7175c887",
+          "url": "https://github.com/wado-lang/wado/commit/56caa81a118cfbe88a12aa99ed242ced8f6dadc6"
+        },
+        "date": 1777556170716,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
