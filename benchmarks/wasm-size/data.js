@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777554508731,
+  "lastUpdate": 1777555008132,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -18273,6 +18273,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c6edde362c5df31d3bbf9956faa05ab5da6cae7e"
         },
         "date": 1777554508394,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1775,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8776,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18520,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 515706,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "60eda3d6533659e7a61952b956643d7d05d2b44f",
+          "message": "Merge pull request #972 from wado-lang/gfx/gale_antlr4_tests\n\npackage-gale: land ANTLR4 descriptor Phase 2 (every category)",
+          "timestamp": "2026-04-30T22:11:50+09:00",
+          "tree_id": "93b8c8778b161e1cc9013e1c01c066ee957a28da",
+          "url": "https://github.com/wado-lang/wado/commit/60eda3d6533659e7a61952b956643d7d05d2b44f"
+        },
+        "date": 1777555007798,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
