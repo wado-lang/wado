@@ -1,0 +1,15 @@
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let u: () = ();
+    assert u.to_string() == "()";
+    assert `{u}` == "()";
+    let mut buf = String::with_capacity(8);
+    let mut f = Formatter::new(&mut buf);
+    u.fmt(&mut f);
+    assert buf == "()";
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

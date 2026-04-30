@@ -1490,6 +1490,12 @@ impl f64 {
     }
 }
 
+impl Display for () {
+    pub fn fmt(&self, f: &mut Formatter) {
+        f.write_str("()");
+    }
+}
+
 impl Display for bool {
     pub fn fmt(&self, f: &mut Formatter) {
         self.fmt_into(f);
@@ -1565,6 +1571,12 @@ impl Display for f32 {
 impl Display for f64 {
     pub fn fmt(&self, f: &mut Formatter) {
         self.fmt_into(f);
+    }
+}
+
+impl Inspect for () {
+    pub fn inspect(&self, f: &mut Formatter) {
+        f.write_str("()");
     }
 }
 
