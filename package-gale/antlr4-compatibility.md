@@ -24,15 +24,25 @@ Treat this as a hard contract: if you find a real-world `.g4` file
 that ANTLR4 accepts but Gale rejects, or one whose generated parser
 diverges, that is a bug in Gale.
 
-Today the contract is met **only up to Stage B (partial)** — see the
-stages below. Action bodies (`{ ... }` action blocks, `{ ... }?`
-semantic predicates, `catch`/`finally` handlers, `@init`/`@after`
-rule prequels) are recognised by the g4 frontend but their host-
-language source is currently _skipped_ during code generation. That
-gap is **Stage C**, and it is in scope; it just hasn't been built
-yet. See
-[`docs/wep-2026-03-02-gale.md`](../docs/wep-2026-03-02-gale.md) for
-the design direction.
+Today the contract is met as follows:
+
+- **Stage A (syntactic)** — broadly green across the full upstream
+  descriptor corpus (14 categories, 345 descriptors). 4 known
+  `[todo]` entries flag a single real gap: element options
+  (`<p=N>`, `<fail='…'>`) on alternatives and semantic predicates.
+  See [TODO.md](./TODO.md) and the [Current state](#current-state)
+  section below.
+- **Stage B (semantic)** — _partial_; only hand-curated driver
+  fixtures participate. Lifting the descriptor corpus into Stage B
+  is [Phase 3](#phase-3-next--stage-b-tree-shape-equivalence).
+- **Stage C (action-body translation)** — not yet built. Action
+  bodies (`{ ... }` action blocks, `{ ... }?` semantic predicates,
+  `catch`/`finally` handlers, `@init`/`@after` rule prequels) are
+  recognised by the g4 frontend but their host-language source is
+  currently _skipped_ during code generation. In scope; sequenced
+  after Stages A and B. See
+  [`docs/wep-2026-03-02-gale.md`](../docs/wep-2026-03-02-gale.md)
+  for the design direction.
 
 ## Stages of compatibility
 
@@ -79,7 +89,7 @@ descriptor is "clean" (no host-language action printing).
 
 Stage B is _partial today_: only the curated driver fixtures
 participate. Lifting descriptor-based fixtures into Stage B is
-[Phase 3 below](#phase-3--stage-b-tree-shape-equivalence).
+[Phase 3 below](#phase-3-next--stage-b-tree-shape-equivalence).
 
 ### Stage C — Action-body translation (not yet built)
 
@@ -187,14 +197,11 @@ Re-generate after editing `status.toml`, after adding categories, or
 after bumping `vendor/antlr4`:
 
 ```sh
-# Default: Phase 1 set (Sets, LexerExec, ParseTrees)
+# Default: every category under .../descriptors/
 package-gale/scripts/extract-antlr4-descriptors.sh
 
 # A specific subset
 package-gale/scripts/extract-antlr4-descriptors.sh ParserExec LeftRecursion
-
-# Every category present under .../descriptors/
-package-gale/scripts/extract-antlr4-descriptors.sh all
 ```
 
 The wrapper changes `cwd` to the repository root and runs the Wado
@@ -224,15 +231,15 @@ wado test package-gale/tests/antlr4-compat/lexer_exec_test.wado
 Output for a healthy run looks like:
 
 ```
-... (76 lines of `ok`)
+... (lots of `ok`)
 
-TODO tests (7):
-  · pending   ... — sets_unicodeescapedbmprangeset
-  · pending   ... — sets_unicodeescapedsmprangeset
-  · pending   ... — lexerexec_nongreedyoptional
-  ... (etc)
+TODO tests (4):
+  · pending   ... — leftrecursion_multipleactionspredicatesoptions_1
+  · pending   ... — leftrecursion_multipleactionspredicatesoptions_2
+  · pending   ... — leftrecursion_multipleactionspredicatesoptions_3
+  · pending   ... — leftrecursion_sempredfailoption
 
-76 passed, 0 failed; 7 todo
+937 passed, 0 failed; 4 todo
 ```
 
 `#[TODO]` tests intentionally fail; the runner counts them on a
@@ -272,64 +279,77 @@ Once a Gale gap is fixed:
 
 ## Current state
 
-### Phase 1 (landed) — Sets, LexerExec, ParseTrees
+### Phase 1 + Phase 2 (landed) — every descriptor category
 
-- 83 descriptors processed, 81 pass, 2 in `[skip]`, 0 marked `#[TODO]`.
+All 14 categories under `vendor/antlr4/.../descriptors/` are
+extracted: **345 descriptors** emitted, **341 pass**, **4 `[todo]`**
+(all `LeftRecursion`, all the element-options gap — `<p=N>`,
+`<fail='…'>`), **12 `[skip]`** (testsuite StringTemplate artefacts).
+See `tests/antlr4-compat/status.toml` for the per-descriptor reasons.
 
-The two skipped descriptors (`ParseTrees/AltNum` and
-`ParseTrees/TokenAndRuleContextString`) carry grammar-level `<…>`
-StringTemplate directives that the upstream test runner substitutes
-per target before `antlr4` ever sees the `.g4`. They are not
-self-contained grammars and cannot be promoted to a parse-only test.
+### Phase 3 (next) — Stage B tree-shape equivalence
 
-Two structural fixes were needed to close Phase 1:
-
-- The descriptor extractor now applies StringTemplate-equivalent
-  text-mode unescape (`\\` → `\`, `\<` → `<`, `\>` → `>`) to the
-  `[grammar]` / `[slaveGrammar]` blocks. This mirrors the
-  `new ST(group, descriptor.grammar)` step in the upstream
-  `RuntimeTests.prepareGrammars`, so descriptors written for the Java
-  testsuite (e.g. `'\\u{1F600}'..'\\u{1F943}'`) reach the g4 parser
-  in the form `antlr4` would actually receive.
-- The g4 parser's postfix handler now accepts `??` (non-greedy
-  optional) on a single element, matching the existing handling of
-  `*?` and `+?`. See `parse_postfix` / `parse_lexer_postfix` in
-  `src/g4/parser.wado`.
-
-### Phase 2 (planned) — `ParserExec`, `LeftRecursion`, `SemPred*`, `Composite*`, `FullContextParsing`, `*Errors`
-
-Remaining categories under `vendor/antlr4/.../descriptors/`. Run the
-extractor with `all` (or specific categories) once Phase 1 stabilises;
-new failures triage into `status.toml` the same way.
-
-`LeftRecursion` (98 descriptors) deserves special attention — Gale's
-left-recursion handling is non-trivial and has known gaps documented
-in [`docs/wep-2026-03-02-gale.md`](../docs/wep-2026-03-02-gale.md).
-Many `[todo]` entries are likely to land there.
-
-### Phase 3 — Stage B tree-shape equivalence
-
-Once descriptors are accepted by `g4::parse`, the natural next step
-is to feed the `[input]` blocks through the _generated_ parser and
-check `to_string_tree()` against a normalised form of `[output]`.
+Stage A is now broadly green (modulo the 4 `LeftRecursion` TODOs and
+the 12 testsuite-template skips). The natural next step is to feed
+the `[input]` blocks through the _generated_ parser and check
+`to_string_tree()` against a normalised form of `[output]`.
 Mechanically this is the same machinery as the existing driver
 fixtures, but driven systematically off the descriptor corpus
 instead of hand-written cases.
 
-This requires:
+This requires three pieces, each landable independently:
 
-1. A second extractor pass that emits, for each `[output]`-bearing
-   descriptor, a Wado driver test (`use ... with { generator: ... }`)
-   with `assert_tree(input, expected)`.
-2. A normaliser that strips the `[output]`'s host-language
-   side-effect prints (e.g. `<writeln(...)>` outputs) and keeps only
-   the parse-tree shape.
-3. Triage entries like `[stage_b_skip]` for descriptors whose
-   `[output]` is _only_ host-language prints (no observable tree
-   structure).
+1. **A second extractor pass.** For each descriptor that carries an
+   `[output]` block, emit a Wado driver test under
+   `tests/antlr4-compat/stage_b/<category>_test.wado` of roughly the
+   shape:
+   ```wado
+   use t from "../grammars/<Category>/<Name>.g4"
+       with { generator: { module: "../../../src/generator.wado" } };
+   use { normalize_tree } from "../grammars/<Category>/<Name>.g4";
 
-There is no Stage B descriptor automation today; only Phase 1's
+   test "<Category>/<Name>" {
+       let root = t::parse(INPUT).unwrap();
+       let actual = t::to_tree(&root).to_string_tree();
+       assert actual == normalize_tree(EXPECTED);
+   }
+   ```
+   The extractor already reads `[input]` and `[output]` from the
+   descriptor — Phase 3 just needs to thread them through to a new
+   emitter alongside the existing parse-only one.
+2. **An `[output]` normaliser.** Most descriptors' `[output]` is a
+   mix of `to_string_tree()` shape and host-language side-effect
+   prints (e.g. `<writeln(...)>` outputs). The normaliser strips the
+   prints and keeps only the parse-tree shape, so we can compare
+   what Gale's generated parser produces. Where the entire `[output]`
+   is host-language prints (no tree shape), the descriptor goes into
+   a new `[stage_b_skip]` bucket.
+3. **A new triage bucket — `[stage_b_skip]` and `[stage_b_todo]`.**
+   Stage B has different failure modes from Stage A: a descriptor can
+   parse cleanly under Stage A and still produce the wrong tree.
+   Reusing the Stage A `[todo]`/`[skip]` keys would conflate the two,
+   so Phase 3 introduces parallel buckets in the same `status.toml`.
+
+There is no Stage B descriptor automation today; only the Phase 1+2
 parse-only layer is wired.
+
+### Pre-requisites that should land before Phase 3
+
+These are surfacable now and worth doing first because Stage B
+amplifies their cost:
+
+- **Element options on alternatives and semantic predicates.** The
+  4 `LeftRecursion` TODOs all want `<p=N>` (precedence override) and
+  `<fail='…'>` (custom predicate failure message). Stage B will hit
+  the same gap multiplied by every descriptor that uses these
+  options. Closing this is a localised change to the g4 parser's
+  alternative / semantic-predicate handling. See
+  [TODO.md](./TODO.md).
+- **Listeners category emit-suppression.** `Listeners` currently
+  emits a header-only test file with zero tests; once Phase 3 lands
+  the same shape will likely apply to other categories. Either drop
+  empty files or keep them as a marker — decide before Phase 3 so
+  we don't churn fixture lists.
 
 ## Compiler bugs surfaced during compatibility work
 
