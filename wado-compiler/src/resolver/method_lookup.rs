@@ -521,6 +521,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 // Use None to trigger "search all loaded modules" logic
                 (prim.as_str().to_string(), None, None, None)
             }
+            // Unit type () - search for impl blocks in loaded modules
+            ResolvedType::Unit => (TypeTable::UNIT_TYPE_NAME.to_string(), None, None, None),
             // Enum types - search for impl blocks by enum name
             ResolvedType::Enum {
                 name,

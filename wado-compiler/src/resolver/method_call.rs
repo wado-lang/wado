@@ -63,6 +63,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 self.type_table.borrow().mangle_type_name(base_type_id),
                 ModuleSource::primitive(),
             ),
+            // Unit type () has impl blocks in core:prelude/primitive
+            ResolvedType::Unit => (TypeTable::UNIT_TYPE_NAME.to_string(), ModuleSource::primitive()),
             // Enum types - use enum name and its defining module
             ResolvedType::Enum {
                 name,
