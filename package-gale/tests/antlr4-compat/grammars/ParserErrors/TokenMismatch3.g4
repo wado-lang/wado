@@ -1,0 +1,23 @@
+grammar T;
+
+expression
+:   value
+|   expression op=AND expression
+|   expression op=OR expression
+;
+value
+:   BOOLEAN_LITERAL
+|   ID
+|   ID1
+|   '(' expression ')'
+;
+
+AND : '&&';
+OR  : '||';
+
+BOOLEAN_LITERAL : 'true' | 'false';
+
+ID  : [a-z]+;
+ID1 : '$';
+
+WS  : [ \t\r\n]+ -> skip ;

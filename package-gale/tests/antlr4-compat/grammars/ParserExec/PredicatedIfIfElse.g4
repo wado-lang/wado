@@ -1,0 +1,7 @@
+grammar T;
+s : stmt EOF ;
+stmt : ifStmt | ID;
+ifStmt : 'if' ID stmt ('else' stmt | { <LANotEquals("1", {T<ParserToken("Parser", "ELSE")>})> }?);
+ELSE : 'else';
+ID : [a-zA-Z]+;
+WS : [ \n\t]+ -> skip;

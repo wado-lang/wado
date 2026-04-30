@@ -1,0 +1,7 @@
+grammar T;
+s @after {<ToStringTree("$ctx"):writeln()>} : a ;
+a : a {<True()>}? ID
+  | ID
+  ;
+ID : 'a'..'z'+ ;
+WS : (' '|'\n') -> skip ;
