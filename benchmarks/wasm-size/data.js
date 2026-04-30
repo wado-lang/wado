@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777556171014,
+  "lastUpdate": 1777557613371,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -18361,6 +18361,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/56caa81a118cfbe88a12aa99ed242ced8f6dadc6"
         },
         "date": 1777556170716,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1775,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8776,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18520,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 515706,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "977a54dc164d9c31771f5c793f8d70acd7e54057",
+          "message": "Merge pull request #974 from wado-lang/gfx/update-js-deps\n\nchore: update js deps",
+          "timestamp": "2026-04-30T22:55:08+09:00",
+          "tree_id": "158bf5946546fcc41298453c2fcf18e5a7651e44",
+          "url": "https://github.com/wado-lang/wado/commit/977a54dc164d9c31771f5c793f8d70acd7e54057"
+        },
+        "date": 1777557613223,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
