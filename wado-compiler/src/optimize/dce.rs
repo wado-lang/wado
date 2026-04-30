@@ -863,6 +863,16 @@ fn analyze_expr(
                         ));
                         analysis.callees.insert(method_id);
                     }
+                    ResolvedType::Unit => {
+                        // Unit type () method call (e.g., ().to_string(), ().fmt(&f))
+                        let method_id = FunctionId::Method(MethodName::new(
+                            ModuleSource::primitive(),
+                            TypeTable::UNIT_TYPE_NAME.to_string(),
+                            trait_name,
+                            method_name,
+                        ));
+                        analysis.callees.insert(method_id);
+                    }
                     ResolvedType::GenericInstance {
                         name,
                         type_args,
@@ -1159,6 +1169,16 @@ fn add_to_string_callee(type_id: TypeId, type_table: &TypeTable, analysis: &mut 
             let method_id = FunctionId::Method(MethodName::new(
                 ModuleSource::primitive(),
                 prim_name.to_string(),
+                None,
+                "to_string".to_string(),
+            ));
+            analysis.callees.insert(method_id);
+        }
+        ResolvedType::Unit => {
+            // Unit type () to_string is defined in core:prelude/primitive
+            let method_id = FunctionId::Method(MethodName::new(
+                ModuleSource::primitive(),
+                TypeTable::UNIT_TYPE_NAME.to_string(),
                 None,
                 "to_string".to_string(),
             ));

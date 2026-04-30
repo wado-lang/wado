@@ -601,11 +601,18 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
 /// Extract a type name from an AST type without needing a Resolver instance.
 fn get_type_name_static(ty: &ast::Type) -> String {
     match ty {
+        ast::Type::Named(named) if named.name == "()" => TypeTable::UNIT_TYPE_NAME.to_string(),
         ast::Type::Named(named) => named.name.clone(),
         ast::Type::Generic(generic) => generic.name.clone(),
         ast::Type::Reference(_) => "&".to_string(),
         ast::Type::MutReference(_) => "&mut".to_string(),
-        ast::Type::Tuple(_) => TypeTable::TUPLE_TYPE_NAME.to_string(),
+        ast::Type::Tuple(elems) => {
+            if elems.is_empty() {
+                TypeTable::UNIT_TYPE_NAME.to_string()
+            } else {
+                TypeTable::TUPLE_TYPE_NAME.to_string()
+            }
+        }
         _ => "Unknown".to_string(),
     }
 }
