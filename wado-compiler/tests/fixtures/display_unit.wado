@@ -4,10 +4,15 @@ export fn run() with Stdout {
     let u: () = ();
     assert u.to_string() == "()";
     assert `{u}` == "()";
+    assert `{u:#}` == "()";
     let mut buf = String::with_capacity(8);
     let mut f = Formatter::new(&mut buf);
     u.fmt(&mut f);
     assert buf == "()";
+    let mut buf2 = String::with_capacity(8);
+    let mut f2 = Formatter::new(&mut buf2);
+    u.fmt_alt(&mut f2);
+    assert buf2 == "()";
     println("ok");
 }
 

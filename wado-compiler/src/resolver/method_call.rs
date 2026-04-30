@@ -64,7 +64,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 ModuleSource::primitive(),
             ),
             // Unit type () has impl blocks in core:prelude/primitive
-            ResolvedType::Unit => (TypeTable::UNIT_TYPE_NAME.to_string(), ModuleSource::primitive()),
+            ResolvedType::Unit => (
+                TypeTable::UNIT_TYPE_NAME.to_string(),
+                ModuleSource::primitive(),
+            ),
             // Enum types - use enum name and its defining module
             ResolvedType::Enum {
                 name,

@@ -875,9 +875,6 @@ fn trait_fmt_call(
 ) -> Vec<TirStmt> {
     let resolved = tt.borrow().get(type_id).clone();
     match resolved {
-        ResolvedType::Unit => {
-            vec![write_str_stmt("()", fmt, tt, span)]
-        }
         ResolvedType::GenericInstance {
             ref name,
             ref type_args,
