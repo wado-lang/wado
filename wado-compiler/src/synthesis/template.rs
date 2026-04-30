@@ -859,10 +859,9 @@ fn deref_to_inner(expr: TirExpr, target_type: TypeId, span: Span) -> TirExpr {
 /// Unified format trait dispatch.
 ///
 /// Handles ALL type kinds for both Display and Inspect format traits:
-/// - `Unit`: writes `"()"` inline.
 /// - `Tuple`: writes `[elem1, elem2, ...]` with per-element Inspect recursion.
 /// - `Function`: writes the type signature `|params| -> ret` (Inspect only).
-/// - All other types (including `Ref(T)` / `MutRef(T)`): emits a trait method call,
+/// - All other types (including `Unit`, `Ref(T)` / `MutRef(T)`): emits a trait method call,
 ///   delegating to the Wado-level trait implementation (including blanket impls).
 fn trait_fmt_call(
     type_id: TypeId,
