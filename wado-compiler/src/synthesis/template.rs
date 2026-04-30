@@ -13,8 +13,6 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::hashmap::IndexMap;
-
 use crate::name::{LocalMethodName, ModuleSource};
 use crate::tir::{
     CallArg, FunctionRef, MonomorphInfo, ResolvedType, TemplateFormatSpec, TirBlock, TirExpr,
@@ -33,70 +31,14 @@ pub fn expand_templates(module: &TirModule, tt: &Rc<RefCell<TypeTable>>) {
         let mut func = func_rc.borrow_mut();
         let local_count = func.local_count;
         if let Some(ref mut body) = func.body {
-            let closure_sources = collect_closure_sources(body);
             let mut alloc = FuncLocalAlloc {
                 next_index: local_count,
                 new_locals: Vec::new(),
             };
-            expand_block(body, tt, &mut alloc, &closure_sources);
+            expand_block(body, tt, &mut alloc);
             func.local_count = alloc.next_index;
             func.locals.extend(alloc.new_locals);
         }
-    }
-}
-
-/// Collect closure source text from the body for `#:?` format.
-fn collect_closure_sources(body: &TirBlock) -> IndexMap<u32, String> {
-    let mut sources = IndexMap::default();
-    for stmt in &body.stmts {
-        collect_closure_sources_stmt(stmt, &mut sources);
-    }
-    sources
-}
-
-fn collect_closure_sources_stmt(stmt: &TirStmt, sources: &mut IndexMap<u32, String>) {
-    match &stmt.kind {
-        TirStmtKind::Let {
-            local_index, value, ..
-        } => {
-            if let Some(text) = extract_closure_source_text(value) {
-                sources.insert(*local_index, text);
-            }
-            collect_closure_sources_expr(value, sources);
-        }
-        TirStmtKind::Expr(expr)
-        | TirStmtKind::Break {
-            value: Some(expr), ..
-        } => {
-            collect_closure_sources_expr(expr, sources);
-        }
-        _ => {}
-    }
-}
-
-fn collect_closure_sources_expr(expr: &TirExpr, sources: &mut IndexMap<u32, String>) {
-    match &expr.kind {
-        TirExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            collect_closure_sources_expr(condition, sources);
-            for stmt in &then_branch.stmts {
-                collect_closure_sources_stmt(stmt, sources);
-            }
-            if let Some(eb) = else_branch {
-                for stmt in &eb.stmts {
-                    collect_closure_sources_stmt(stmt, sources);
-                }
-            }
-        }
-        TirExprKind::LabeledBlock { block, .. } => {
-            for stmt in &block.stmts {
-                collect_closure_sources_stmt(stmt, sources);
-            }
-        }
-        _ => {}
     }
 }
 
@@ -114,44 +56,34 @@ impl FuncLocalAlloc {
     }
 }
 
-fn expand_block(
-    block: &mut TirBlock,
-    tt: &Rc<RefCell<TypeTable>>,
-    alloc: &mut FuncLocalAlloc,
-    cs: &IndexMap<u32, String>,
-) {
+fn expand_block(block: &mut TirBlock, tt: &Rc<RefCell<TypeTable>>, alloc: &mut FuncLocalAlloc) {
     for stmt in &mut block.stmts {
-        expand_stmt(stmt, tt, alloc, cs);
+        expand_stmt(stmt, tt, alloc);
     }
 }
 
-fn expand_stmt(
-    stmt: &mut TirStmt,
-    tt: &Rc<RefCell<TypeTable>>,
-    alloc: &mut FuncLocalAlloc,
-    cs: &IndexMap<u32, String>,
-) {
+fn expand_stmt(stmt: &mut TirStmt, tt: &Rc<RefCell<TypeTable>>, alloc: &mut FuncLocalAlloc) {
     match &mut stmt.kind {
-        TirStmtKind::Expr(e) => expand_expr(e, tt, alloc, cs),
+        TirStmtKind::Expr(e) => expand_expr(e, tt, alloc),
         TirStmtKind::Let { value, .. } => {
-            expand_expr(value, tt, alloc, cs);
+            expand_expr(value, tt, alloc);
         }
         TirStmtKind::Return { value: Some(e) } | TirStmtKind::Break { value: Some(e), .. } => {
-            expand_expr(e, tt, alloc, cs);
+            expand_expr(e, tt, alloc);
         }
         TirStmtKind::If {
             condition,
             then_block,
             else_block,
         } => {
-            expand_expr(condition, tt, alloc, cs);
-            expand_block(then_block, tt, alloc, cs);
+            expand_expr(condition, tt, alloc);
+            expand_block(then_block, tt, alloc);
             if let Some(eb) = else_block {
-                expand_block(eb, tt, alloc, cs);
+                expand_block(eb, tt, alloc);
             }
         }
         TirStmtKind::Loop { body } => {
-            expand_block(body, tt, alloc, cs);
+            expand_block(body, tt, alloc);
         }
         TirStmtKind::IfLet {
             scrutinee,
@@ -159,44 +91,39 @@ fn expand_stmt(
             else_block,
             ..
         } => {
-            expand_expr(scrutinee, tt, alloc, cs);
-            expand_block(then_block, tt, alloc, cs);
+            expand_expr(scrutinee, tt, alloc);
+            expand_block(then_block, tt, alloc);
             if let Some(eb) = else_block {
-                expand_block(eb, tt, alloc, cs);
+                expand_block(eb, tt, alloc);
             }
         }
         TirStmtKind::LetDestructure { value, .. } | TirStmtKind::TaskReturn { value, .. } => {
-            expand_expr(value, tt, alloc, cs);
+            expand_expr(value, tt, alloc);
         }
         TirStmtKind::LabeledBlock { block, .. } => {
-            expand_block(block, tt, alloc, cs);
+            expand_block(block, tt, alloc);
         }
         TirStmtKind::VariadicForOf { iterable, body, .. } => {
-            expand_expr(iterable, tt, alloc, cs);
-            expand_block(body, tt, alloc, cs);
+            expand_expr(iterable, tt, alloc);
+            expand_block(body, tt, alloc);
         }
         _ => {}
     }
 }
 
-fn expand_expr(
-    expr: &mut TirExpr,
-    tt: &Rc<RefCell<TypeTable>>,
-    alloc: &mut FuncLocalAlloc,
-    cs: &IndexMap<u32, String>,
-) {
+fn expand_expr(expr: &mut TirExpr, tt: &Rc<RefCell<TypeTable>>, alloc: &mut FuncLocalAlloc) {
     // First, recurse into sub-expressions
     match &mut expr.kind {
         TirExprKind::TemplateString { parts } => {
             // Expand sub-expressions within template parts first
             for part in parts.iter_mut() {
                 if let TirTemplatePart::Interpolation { expr: inner, .. } = part {
-                    expand_expr(inner, tt, alloc, cs);
+                    expand_expr(inner, tt, alloc);
                 }
             }
         }
         TirExprKind::Block(b) | TirExprKind::LabeledBlock { block: b, .. } => {
-            expand_block(b, tt, alloc, cs);
+            expand_block(b, tt, alloc);
             return;
         }
         TirExprKind::If {
@@ -204,39 +131,39 @@ fn expand_expr(
             then_branch,
             else_branch,
         } => {
-            expand_expr(condition, tt, alloc, cs);
-            expand_block(then_branch, tt, alloc, cs);
+            expand_expr(condition, tt, alloc);
+            expand_block(then_branch, tt, alloc);
             if let Some(eb) = else_branch {
-                expand_block(eb, tt, alloc, cs);
+                expand_block(eb, tt, alloc);
             }
             return;
         }
         TirExprKind::Match { expr: s, arms } => {
-            expand_expr(s, tt, alloc, cs);
+            expand_expr(s, tt, alloc);
             for arm in arms {
                 if let Some(guard) = &mut arm.guard {
-                    expand_expr(guard, tt, alloc, cs);
+                    expand_expr(guard, tt, alloc);
                 }
-                expand_expr(&mut arm.body, tt, alloc, cs);
+                expand_expr(&mut arm.body, tt, alloc);
             }
             return;
         }
         TirExprKind::Call { args, .. } => {
             for a in args {
-                expand_expr(&mut a.expr, tt, alloc, cs);
+                expand_expr(&mut a.expr, tt, alloc);
             }
             return;
         }
         TirExprKind::MethodCall { receiver, args, .. } => {
-            expand_expr(receiver, tt, alloc, cs);
+            expand_expr(receiver, tt, alloc);
             for a in args {
-                expand_expr(&mut a.expr, tt, alloc, cs);
+                expand_expr(&mut a.expr, tt, alloc);
             }
             return;
         }
         TirExprKind::Binary { left, right, .. } => {
-            expand_expr(left, tt, alloc, cs);
-            expand_expr(right, tt, alloc, cs);
+            expand_expr(left, tt, alloc);
+            expand_expr(right, tt, alloc);
             return;
         }
         TirExprKind::Unary { expr: inner, .. }
@@ -245,63 +172,63 @@ fn expand_expr(
         | TirExprKind::VariantTag { expr: inner }
         | TirExprKind::VariantTest { expr: inner, .. }
         | TirExprKind::VariantPayload { expr: inner, .. } => {
-            expand_expr(inner, tt, alloc, cs);
+            expand_expr(inner, tt, alloc);
             return;
         }
         TirExprKind::Assign { target, value } => {
-            expand_expr(target, tt, alloc, cs);
-            expand_expr(value, tt, alloc, cs);
+            expand_expr(target, tt, alloc);
+            expand_expr(value, tt, alloc);
             return;
         }
         TirExprKind::Index {
             expr: e,
             index: idx,
         } => {
-            expand_expr(e, tt, alloc, cs);
-            expand_expr(idx, tt, alloc, cs);
+            expand_expr(e, tt, alloc);
+            expand_expr(idx, tt, alloc);
             return;
         }
         TirExprKind::StructLiteral { fields, .. } => {
             for f in fields {
-                expand_expr(&mut f.value, tt, alloc, cs);
+                expand_expr(&mut f.value, tt, alloc);
             }
             return;
         }
         TirExprKind::TupleLiteral { elements } => {
             for e in elements {
-                expand_expr(e, tt, alloc, cs);
+                expand_expr(e, tt, alloc);
             }
             return;
         }
         TirExprKind::Closure { body, .. } => {
-            expand_expr(body, tt, alloc, cs);
+            expand_expr(body, tt, alloc);
             return;
         }
         TirExprKind::IndirectCall { callee, args } => {
-            expand_expr(callee, tt, alloc, cs);
+            expand_expr(callee, tt, alloc);
             for a in args {
-                expand_expr(a, tt, alloc, cs);
+                expand_expr(a, tt, alloc);
             }
             return;
         }
         TirExprKind::CmRawCall { args, .. } => {
             for a in args {
-                expand_expr(a, tt, alloc, cs);
+                expand_expr(a, tt, alloc);
             }
             return;
         }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {
-                expand_expr(p, tt, alloc, cs);
+                expand_expr(p, tt, alloc);
             }
             return;
         }
         TirExprKind::GlobalVarSet { value, .. } => {
-            expand_expr(value, tt, alloc, cs);
+            expand_expr(value, tt, alloc);
             return;
         }
         TirExprKind::ClosureToCanonical { functor, .. } => {
-            expand_expr(functor, tt, alloc, cs);
+            expand_expr(functor, tt, alloc);
             return;
         }
         TirExprKind::Switch {
@@ -310,22 +237,22 @@ fn expand_expr(
             default,
             ..
         } => {
-            expand_expr(scrutinee, tt, alloc, cs);
+            expand_expr(scrutinee, tt, alloc);
             for arm in arms {
-                expand_block(arm, tt, alloc, cs);
+                expand_block(arm, tt, alloc);
             }
-            expand_block(default, tt, alloc, cs);
+            expand_block(default, tt, alloc);
             return;
         }
         TirExprKind::WithHandler { bindings, body, .. } => {
             for binding in bindings {
-                expand_expr(&mut binding.handler, tt, alloc, cs);
+                expand_expr(&mut binding.handler, tt, alloc);
             }
-            expand_block(body, tt, alloc, cs);
+            expand_block(body, tt, alloc);
             return;
         }
         TirExprKind::Resume { value } => {
-            expand_expr(value, tt, alloc, cs);
+            expand_expr(value, tt, alloc);
             return;
         }
         _ => return,
@@ -343,7 +270,7 @@ fn expand_expr(
         unreachable!();
     };
 
-    let expanded = build_template_block(parts, string_type, span, tt, alloc, cs);
+    let expanded = build_template_block(parts, string_type, span, tt, alloc);
     *expr = expanded;
 }
 
@@ -354,7 +281,6 @@ fn build_template_block(
     span: Span,
     tt: &Rc<RefCell<TypeTable>>,
     alloc: &mut FuncLocalAlloc,
-    cs: &IndexMap<u32, String>,
 ) -> TirExpr {
     let label = "__tmpl".to_string();
 
@@ -587,17 +513,7 @@ fn build_template_block(
                 );
 
                 if is_inspect {
-                    // #:? with closure source text: write source directly.
-                    let is_closure = matches!(
-                        tt.borrow().get(inner_type).clone(),
-                        ResolvedType::Function { .. }
-                    );
-                    if is_closure
-                        && is_alternate
-                        && let Some(text) = closure_source_text(&resolved, cs)
-                    {
-                        stmts.push(write_str_stmt(&text, fmt_mut_ref, tt, span));
-                    } else if is_alternate {
+                    if is_alternate {
                         // {:#?} → InspectAlt::inspect_alt
                         let call_stmts = trait_fmt_call(
                             resolved.type_id,
@@ -860,7 +776,6 @@ fn deref_to_inner(expr: TirExpr, target_type: TypeId, span: Span) -> TirExpr {
 ///
 /// Handles ALL type kinds for both Display and Inspect format traits:
 /// - `Tuple`: writes `[elem1, elem2, ...]` with per-element Inspect recursion.
-/// - `Function`: writes the type signature `|params| -> ret` (Inspect only).
 /// - All other types (including `Unit`, `Ref(T)` / `MutRef(T)`): emits a trait method call,
 ///   delegating to the Wado-level trait implementation (including blanket impls).
 fn trait_fmt_call(
@@ -907,17 +822,6 @@ fn trait_fmt_call(
             }
             stmts.push(write_str_stmt("]", fmt, tt, span));
             stmts
-        }
-        ResolvedType::Function {
-            params,
-            return_type,
-            ..
-        } => {
-            let param_names: Vec<String> =
-                params.iter().map(|p| tt.borrow().type_name(*p)).collect();
-            let ret_name = tt.borrow().type_name(return_type);
-            let sig = format!("|{}| -> {}", param_names.join(", "), ret_name);
-            vec![write_str_stmt(&sig, fmt, tt, span)]
         }
         _ => {
             let MethodCallInfo {
@@ -1069,38 +973,6 @@ fn trait_impl_module(
         | ResolvedType::Newtype { module_source, .. }
         | ResolvedType::Flags { module_source, .. } => module_source,
         _ => ModuleSource::primitive(),
-    }
-}
-
-/// Extract source text from a closure expression, looking through `&`/`&mut` wrappers.
-fn extract_closure_source_text(expr: &TirExpr) -> Option<String> {
-    match &expr.kind {
-        TirExprKind::Closure {
-            source_text: Some(text),
-            ..
-        } => Some(text.clone()),
-        TirExprKind::Unary {
-            op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
-            expr,
-        } => extract_closure_source_text(expr),
-        _ => None,
-    }
-}
-
-/// Extract closure source text from a template interpolation expression.
-/// Handles direct closures, `&`/`&mut` wrapped closures, and locals bound to closures.
-fn closure_source_text(expr: &TirExpr, cs: &IndexMap<u32, String>) -> Option<String> {
-    match &expr.kind {
-        TirExprKind::Closure {
-            source_text: Some(text),
-            ..
-        } => Some(text.clone()),
-        TirExprKind::Unary {
-            op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
-            expr,
-        } => extract_closure_source_text(expr),
-        TirExprKind::Local { index, .. } => cs.get(index).cloned(),
-        _ => None,
     }
 }
 
