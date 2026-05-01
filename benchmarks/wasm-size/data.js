@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777557613371,
+  "lastUpdate": 1777594010697,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -18405,6 +18405,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/977a54dc164d9c31771f5c793f8d70acd7e54057"
         },
         "date": 1777557613223,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1775,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8776,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18520,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 515706,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "abfb481e476da4380b0f0da4171948a176fc0e86",
+          "message": "Merge pull request #976 from wado-lang/copilot/configure-copilot-setup-steps\n\nAdd copilot-setup-steps.yml to pre-warm dev environment",
+          "timestamp": "2026-05-01T09:01:57+09:00",
+          "tree_id": "f775d854726cc4a958b1e074fe31d2562ec4fb90",
+          "url": "https://github.com/wado-lang/wado/commit/abfb481e476da4380b0f0da4171948a176fc0e86"
+        },
+        "date": 1777594010384,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
