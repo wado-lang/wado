@@ -1570,7 +1570,8 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
         // synthesised local names (`__h_<label>` etc.) so dumps stay
         // readable when multiple instantiations of the same base
         // resource are installed in nested `with` blocks.
-        let label = instantiation_label(&interface_name, &trait_type_args, &env.type_table.borrow());
+        let label =
+            instantiation_label(&interface_name, &trait_type_args, &env.type_table.borrow());
 
         // 1. let __h_<E> = handler_expr;
         //

@@ -158,7 +158,9 @@ impl WorldInfo {
     /// any future world that imports the same effect, replacing string
     /// matches against `target_world == "core:kiln/generator"`.
     pub fn imports_interface(&self, interface_name: &str) -> bool {
-        self.imports.iter().any(|i| i.interface_name == interface_name)
+        self.imports
+            .iter()
+            .any(|i| i.interface_name == interface_name)
     }
 }
 

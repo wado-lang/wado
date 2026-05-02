@@ -1019,11 +1019,13 @@ fn analyze_expr(
             // CmRawCall references a lowered WASI import function.
             // Parse the local_name (e.g., "wasi:cli/Stdout::write_via_stream")
             // to extract the interface_name and op_name for WASI import tracking.
-            if let Some((interface_name, op_name)) = local_name.split_once("::").map(|(prefix, op)| {
-                // prefix is like "wasi:cli/Stdout" → extract "Stdout"
-                let effect = prefix.rsplit('/').next().unwrap_or(prefix);
-                (effect.to_string(), op.to_string())
-            }) {
+            if let Some((interface_name, op_name)) =
+                local_name.split_once("::").map(|(prefix, op)| {
+                    // prefix is like "wasi:cli/Stdout" → extract "Stdout"
+                    let effect = prefix.rsplit('/').next().unwrap_or(prefix);
+                    (effect.to_string(), op.to_string())
+                })
+            {
                 analysis.effect_calls.insert((interface_name, op_name));
             }
             for arg in args {

@@ -5,14 +5,14 @@
 use crate::ast::{
     AssertStmt, AssignExpr, AttrArg, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, CallExpr,
     CastExpr, ClosureExpr, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition,
-    ConditionElement, InterfaceDecl, InterfaceMethod, EnumCase, EnumDecl, Expr, ExprStmt,
-    FieldAccessExpr, FlagsDecl, ForOfStmt, ForStmt, Function, FunctionType, GenericParam,
-    GlobalDecl, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, Item, LabeledBlockStmt,
-    LetStmt, Literal, LoopStmt, MatchArm, MatchExpr, MethodCallExpr, Module, Newtype, Param,
-    Pattern, ResourceDecl, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StoresEntry,
-    StructDecl, StructField, StructLiteralExpr, TemplateStringExpr, TestDecl, TraitDecl,
-    TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple,
-    VariantCase, VariantDecl, WhileStmt, WorldDecl,
+    ConditionElement, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl, ForOfStmt,
+    ForStmt, Function, FunctionType, GenericParam, GlobalDecl, IfExpr, IfStmt, ImplBlock,
+    ImportAttributes, IndexExpr, InterfaceDecl, InterfaceMethod, Item, LabeledBlockStmt, LetStmt,
+    Literal, LoopStmt, MatchArm, MatchExpr, MethodCallExpr, Module, Newtype, Param, Pattern,
+    ResourceDecl, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StoresEntry, StructDecl,
+    StructField, StructLiteralExpr, TemplateStringExpr, TestDecl, TraitDecl, TupleLiteralExpr,
+    TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase,
+    VariantDecl, WhileStmt, WorldDecl,
 };
 use crate::comment::{Comment, CommentKind, CommentMap};
 use crate::hashmap::IndexSet;
@@ -984,7 +984,7 @@ impl<'a> Unparser<'a> {
             self.output.push_str("pub ");
         }
 
-        self.output.push_str("effect ");
+        self.output.push_str("interface ");
         self.output.push_str(&e.name);
         self.output.push_str(" {\n");
 

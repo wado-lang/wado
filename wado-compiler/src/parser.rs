@@ -5,17 +5,17 @@ use crate::ast::{
     AssertStmt, AssignExpr, AssociatedConst, AssociatedTypeBinding, AssociatedTypeDecl, AstId,
     AttrArg, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, CallExpr, CastExpr,
     ChainedComparison, ClosureExpr, ClosureParam, CmImport, ComparisonChainExpr,
-    CompoundAssignExpr, CompoundAssignOp, Condition, ConditionElement, ContinueStmt, InterfaceDecl,
-    InterfaceMethod, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl, FlagsVariant,
-    ForOfStmt, ForStmt, FormatSpec, Function, FunctionType, GenericType, GlobalDecl, IdentExpr,
-    IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute, Item, LabeledBlockStmt,
-    LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm, MatchExpr, MatchesExpr, MethodCallExpr,
-    Module, NamedType, NamespacedGenericType, Newtype, Param, PathSegment, Pattern, RangeExpr,
-    RangeKind, ResourceDecl, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StoresEntry,
-    StructDecl, StructField, StructLiteralExpr, StructLiteralField, StructPatternField,
-    TaskReturnStmt, TestDecl, TraitDecl, TryOpExpr, TupleLiteralExpr, TupleTypeDecl, Type,
-    UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, WhileStmt,
-    WorldDecl, WorldExport, WorldImport,
+    CompoundAssignExpr, CompoundAssignOp, Condition, ConditionElement, ContinueStmt, EnumCase,
+    EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl, FlagsVariant, ForOfStmt, ForStmt,
+    FormatSpec, Function, FunctionType, GenericType, GlobalDecl, IdentExpr, IfExpr, IfStmt,
+    ImplBlock, ImportAttributes, IndexExpr, InnerAttribute, InterfaceDecl, InterfaceMethod, Item,
+    LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm, MatchExpr, MatchesExpr,
+    MethodCallExpr, Module, NamedType, NamespacedGenericType, Newtype, Param, PathSegment, Pattern,
+    RangeExpr, RangeKind, ResourceDecl, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt,
+    StoresEntry, StructDecl, StructField, StructLiteralExpr, StructLiteralField,
+    StructPatternField, TaskReturnStmt, TestDecl, TraitDecl, TryOpExpr, TupleLiteralExpr,
+    TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase,
+    VariantDecl, WhileStmt, WorldDecl, WorldExport, WorldImport,
 };
 use crate::token::{Span, Token, TokenKind};
 
@@ -453,7 +453,9 @@ impl Parser {
             TokenKind::Fn => self
                 .parse_function(is_pub, is_export, is_async, attrs)
                 .map(Item::Function),
-            TokenKind::Interface => self.parse_interface_decl(is_pub, attrs).map(Item::Interface),
+            TokenKind::Interface => self
+                .parse_interface_decl(is_pub, attrs)
+                .map(Item::Interface),
             TokenKind::Struct => self.parse_struct_decl(is_pub, attrs).map(Item::Struct),
             TokenKind::Enum => self.parse_enum_decl(is_pub, attrs).map(Item::Enum),
             TokenKind::Variant => self.parse_variant_decl(is_pub, attrs).map(Item::Variant),

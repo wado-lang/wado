@@ -10,8 +10,8 @@ use wit_parser::{
 };
 
 use crate::ir::{
-    WadoInterface, WadoEnum, WadoEnumVariant, WadoField, WadoFlagMember, WadoFlags, WadoFunction,
-    WadoImport, WadoModule, WadoNewtype, WadoParam, WadoResource, WadoStruct, WadoType,
+    WadoEnum, WadoEnumVariant, WadoField, WadoFlagMember, WadoFlags, WadoFunction, WadoImport,
+    WadoInterface, WadoModule, WadoNewtype, WadoParam, WadoResource, WadoStruct, WadoType,
     WadoTypeDef, WadoVariant, WadoVariantCase, WadoWorld, WadoWorldExport, WadoWorldImport,
 };
 use crate::naming::{to_snake_case, to_upper_camel_case};

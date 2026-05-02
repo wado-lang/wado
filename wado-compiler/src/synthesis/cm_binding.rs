@@ -6336,9 +6336,12 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                 let func_info = func_info.clone();
                 let binding_name =
                     binding_func_name(&func_info.interface_name, &func_info.method_name);
-                let owner_module =
-                    lookup_effect_owner(&owner_sources, &func_info.interface_name, &func_info.package)
-                        .unwrap_or_else(|| ModuleSource::wasi(&func_info.package));
+                let owner_module = lookup_effect_owner(
+                    &owner_sources,
+                    &func_info.interface_name,
+                    &func_info.package,
+                )
+                .unwrap_or_else(|| ModuleSource::wasi(&func_info.package));
                 let adapter = synthesize_adapter(
                     &func_info,
                     project.wasi_registry,
@@ -8523,7 +8526,11 @@ fn rewrite_calls_in_expr(
             ..
         } = &mut expr.kind
     {
-        let interface_name = func.module_source.clone().interface_name().unwrap_or_default();
+        let interface_name = func
+            .module_source
+            .clone()
+            .interface_name()
+            .unwrap_or_default();
         let method_name = func.name.clone();
         let qualified = format!("{interface_name}::{method_name}");
 

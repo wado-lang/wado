@@ -2,9 +2,9 @@ use crate::hashmap::IndexSet;
 use serde::Serialize;
 
 use crate::ast::{
-    AssociatedConst, Attribute, InterfaceDecl, EnumDecl, FlagsDecl, Function, GenericParam,
-    GlobalDecl, ImplBlock, Item, Module, Newtype, Param, SelfKind, StructDecl, StructField,
-    TraitDecl, Type, UseItem, VariantDecl,
+    AssociatedConst, Attribute, EnumDecl, FlagsDecl, Function, GenericParam, GlobalDecl, ImplBlock,
+    InterfaceDecl, Item, Module, Newtype, Param, SelfKind, StructDecl, StructField, TraitDecl,
+    Type, UseItem, VariantDecl,
 };
 use crate::comment::{CommentKind, CommentMap};
 use crate::stdlib;
@@ -409,7 +409,7 @@ fn build_doc_interface(e: &InterfaceDecl, comments: &CommentMap) -> DocEffect {
     if e.is_pub {
         sig.push_str("pub ");
     }
-    sig.push_str("effect ");
+    sig.push_str("interface ");
     sig.push_str(&e.name);
 
     let methods: Vec<DocFunction> = e

@@ -170,7 +170,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // Verify the underlying struct type has `impl <Effect> for <Type>`.
         if let Some(EffectRef::Concrete {
-            name: interface_name, ..
+            name: interface_name,
+            ..
         }) = &effect
         {
             let type_name = self.type_table.borrow().type_name(handler_type);

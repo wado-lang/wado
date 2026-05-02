@@ -47,7 +47,7 @@ impl<T: Ord> Iterator for Array<T> {
 }
 
 /// Async effect method is preserved
-effect MyEffect {
+interface MyEffect {
     async fn perform(x: i32) -> i32;
     fn sync_op(y: String);
 }
@@ -111,7 +111,7 @@ impl<T: Ord> Array<T> {
 }
 
 // async methods in effect
-effect FileIO {
+interface FileIO {
     /* read bytes */
     async fn read(path: String) -> Array<u8>;
     /* write bytes */

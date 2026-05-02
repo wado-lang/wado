@@ -3,8 +3,8 @@
 use std::fmt::Write;
 
 use crate::ir::{
-    WadoInterface, WadoEnum, WadoFlags, WadoFunction, WadoModule, WadoParam, WadoResource, WadoStruct,
-    WadoType, WadoTypeDef, WadoVariant, WadoWorld,
+    WadoEnum, WadoFlags, WadoFunction, WadoInterface, WadoModule, WadoParam, WadoResource,
+    WadoStruct, WadoType, WadoTypeDef, WadoVariant, WadoWorld,
 };
 
 pub struct WadoCodeGenerator {
