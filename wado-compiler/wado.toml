@@ -1,0 +1,26 @@
+[package]
+name = "wado-compiler"
+version = "0.1.0"
+
+[test]
+# E2E compiler test fixtures (`tests/`) are not Wado source code in the
+# library sense — they are compile-and-run scenarios driven by `cargo test`
+# via `tests/e2e.rs`. Skip them in `wado test` discovery; otherwise they
+# would be (re)compiled here under the test world.
+#
+# `lib/core/prelude/**` is the prelude itself: each fragment defines types
+# (`Array`, `String`, ...) that the compiler also auto-imports from the
+# prelude module, so compiling a fragment as its own entry conflicts with
+# the prelude it gets bundled into. They're only valid when reached
+# transitively from `lib/core/prelude.wado` (or from a user file that
+# disables the prelude with `#![no_prelude]`).
+#
+# `lib/core/allocator.wado` is `#![wasm_module("mem")]` — it is meant to
+# be bundled into the host module's component as a separate core wasm
+# module, not compiled as its own entry. Compiling it standalone trips a
+# WIR-pipeline panic because nothing is exported as `realloc`.
+exclude = [
+    "tests/**",
+    "lib/core/prelude/**",
+    "lib/core/allocator.wado",
+]

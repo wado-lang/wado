@@ -465,6 +465,7 @@ pub fn empty_manifest() -> wado_manifest::Manifest {
         dev_dependencies: indexmap::IndexMap::new(),
         build_dependencies: indexmap::IndexMap::new(),
         workspace: None,
+        test: wado_manifest::TestSettings::default(),
     }
 }
 
