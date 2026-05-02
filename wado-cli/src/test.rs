@@ -378,6 +378,13 @@ struct TodoCompileError {
     path: String,
 }
 
+/// A non-TODO module that failed to compile.
+/// Counted on the `compile` axis of the summary; does not abort the run so
+/// other files still get a chance to compile and report.
+struct CompileFailure {
+    path: String,
+}
+
 /// Phase 1: Compile all test files and collect test jobs.
 ///
 /// Prints a log line for each file as compilation finishes (with elapsed time),
@@ -390,10 +397,12 @@ async fn collect_test_jobs(
     Vec<Arc<CompiledTestModule>>,
     Vec<TestJob>,
     Vec<TodoCompileError>,
+    Vec<CompileFailure>,
 )> {
     let mut modules = Vec::new();
     let mut jobs = Vec::new();
     let mut todo_compile_errors = Vec::new();
+    let mut compile_failures = Vec::new();
 
     for path in paths {
         // Compile with --world test so test functions become component exports
@@ -425,8 +434,12 @@ async fn collect_test_jobs(
                 continue;
             }
             Err(_) => {
-                // Non-TODO module failed to compile — fatal
-                process::exit(1);
+                // Non-TODO module failed to compile — record on the compile
+                // axis and continue with the next file. See WEP 2026-05-02.
+                let dur = format_duration(compile_duration);
+                eprintln!("[{elapsed}] FAILED to compile {path} ({dur})");
+                compile_failures.push(CompileFailure { path: path.clone() });
+                continue;
             }
         };
 
@@ -472,7 +485,7 @@ async fn collect_test_jobs(
         }));
     }
 
-    Ok((modules, jobs, todo_compile_errors))
+    Ok((modules, jobs, todo_compile_errors, compile_failures))
 }
 
 /// Run a single test in its own Store
@@ -692,7 +705,7 @@ pub async fn run(opts: TestOptions) {
     let overall_start = Instant::now();
 
     // Phase 1: Compile all files and collect test jobs
-    let (modules, jobs, todo_compile_errors) = match collect_test_jobs(
+    let (modules, jobs, todo_compile_errors, compile_failures) = match collect_test_jobs(
         &opts.paths,
         opts.opt_level,
         overall_start,
@@ -706,8 +719,15 @@ pub async fn run(opts: TestOptions) {
         }
     };
 
+    // `compile_ok` counts every file whose compilation finished without a
+    // non-TODO error. `#![TODO]` modules whose expected compile error fired
+    // also count as compile-passed because the compile-level outcome was as
+    // declared.
+    let compile_ok = modules.len() + todo_compile_errors.len();
+    let compile_failed = compile_failures.len();
+
     let total_tests = jobs.len() + todo_compile_errors.len();
-    if total_tests == 0 {
+    if total_tests == 0 && compile_failed == 0 {
         println!("No tests found");
         return;
     }
@@ -867,21 +887,33 @@ pub async fn run(opts: TestOptions) {
         }
     }
 
-    // Summary line: "N passed, N failed; N todo (M resolved)"
-    let total_dur = format_duration(overall_start.elapsed());
-    println!();
-    let mut summary = format!("{total_passed} passed, {total_failed} failed");
-    let todo_total = total_todo + total_todo_resolved;
-    if todo_total > 0 {
-        summary.push_str(&format!("; {todo_total} todo"));
-        if total_todo_resolved > 0 {
-            summary.push_str(&format!(" ({total_todo_resolved} resolved)"));
+    // Compile-failure summary (path list).
+    if compile_failed > 0 {
+        println!();
+        println!("compile failures:");
+        for entry in &compile_failures {
+            println!("    {}", entry.path);
         }
     }
-    summary.push_str(&format!(" ({total_dur})"));
-    println!("{summary}");
 
-    if total_failed > 0 || total_todo_resolved > 0 {
+    // Three-axis summary (WEP 2026-05-02): compile, test, todo. Each axis is
+    // independent — a run is successful only when compile_failed, test_failed,
+    // and todo_resolved are all zero.
+    let total_dur = format_duration(overall_start.elapsed());
+    println!();
+    println!("compile: {compile_ok} ok, {compile_failed} failed");
+    println!("test:    {total_passed} passed, {total_failed} failed");
+    let todo_total = total_todo + total_todo_resolved;
+    if todo_total > 0 {
+        let mut todo_line = format!("todo:    {total_todo} pending");
+        if total_todo_resolved > 0 {
+            todo_line.push_str(&format!(", {total_todo_resolved} resolved"));
+        }
+        println!("{todo_line}");
+    }
+    println!("({total_dur})");
+
+    if compile_failed > 0 || total_failed > 0 || total_todo_resolved > 0 {
         process::exit(1);
     }
 }

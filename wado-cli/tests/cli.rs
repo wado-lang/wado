@@ -360,6 +360,27 @@ fn test_test_filter_keeps_matching_path() {
 }
 
 #[test]
+fn test_test_compile_failure_reported_on_compile_axis() {
+    // A file that fails to compile must (a) not abort the run, (b) be reported
+    // on the `compile` axis, and (c) cause a non-zero exit. The peer file
+    // still compiles and its passing test still runs.
+    wado()
+        .args([
+            "test",
+            "wado-cli/tests/fixtures/test_compile_error.wado",
+            "wado-compiler/tests/fixtures/test_decl.wado",
+        ])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("compile: 1 ok, 1 failed"))
+        .stdout(predicate::str::contains("test:    2 passed, 0 failed"))
+        .stdout(predicate::str::contains("compile failures:"))
+        .stdout(predicate::str::contains(
+            "wado-cli/tests/fixtures/test_compile_error.wado",
+        ));
+}
+
+#[test]
 fn test_test_filter_drops_non_matching_path() {
     // No path matches the pattern, so no test files remain to run.
     wado()
