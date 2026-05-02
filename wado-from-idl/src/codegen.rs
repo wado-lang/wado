@@ -24,34 +24,33 @@ impl WadoCodeGenerator {
     pub fn generate(&mut self, module: &WadoModule) -> String {
         self.output.clear();
 
-        // Header comment
         self.write_header(module);
 
-        // Types
         for type_def in &module.types {
             self.write_type_def(type_def);
             self.writeln("");
         }
 
-        // Resources
         for resource in &module.resources {
             self.write_resource(resource);
             self.writeln("");
         }
 
-        // Effects
         for effect in &module.effects {
             self.write_effect(effect);
             self.writeln("");
         }
 
-        // Worlds
         for world in &module.worlds {
             self.write_world(world);
             self.writeln("");
         }
 
-        self.output.clone()
+        // normalize trailing newlines
+        let mut s = self.output.trim_end().to_owned();
+        s.push('\n');
+        s
+
     }
 
     fn write_header(&mut self, module: &WadoModule) {
@@ -74,9 +73,6 @@ impl WadoCodeGenerator {
         for import in &module.imports {
             let names = import.type_names.join(", ");
             self.writeln(&format!("use {{ {names} }} from \"{}\";", import.from_path));
-        }
-        if !module.imports.is_empty() {
-            self.writeln("");
         }
     }
 
