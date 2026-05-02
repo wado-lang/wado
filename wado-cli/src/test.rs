@@ -172,7 +172,7 @@ fn discover_packages(
         let paths = result
             .files
             .iter()
-            .map(|p| p.display().to_string())
+            .map(|p| display_path(p))
             .collect();
         runs.push(PackageRun { label, paths });
 
@@ -196,6 +196,16 @@ fn relative_label(invocation_root: &Path, pkg_root: &Path) -> String {
         |_| pkg_root.display().to_string(),
         |rel| rel.display().to_string(),
     )
+}
+
+/// Render a discovered path as the canonical string the runner stores and
+/// matches against. The walker emits `./pkg/file.wado` when rooted at `.`,
+/// but we strip the leading `./` so that `--filter` and `[test].exclude`
+/// patterns see the same shape (`pkg/file.wado`) regardless of how the user
+/// invoked `wado test`.
+fn display_path(p: &Path) -> String {
+    let s = p.display().to_string();
+    s.strip_prefix("./").map_or(s.clone(), str::to_string)
 }
 
 /// Resolve a mix of files and directory arguments into a single flat path
