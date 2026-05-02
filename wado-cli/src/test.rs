@@ -169,11 +169,7 @@ fn discover_packages(
         let result = discover::discover_test_files(&pkg_root, &excludes).map_err(CliExit::error)?;
 
         let label = relative_label(&invocation_root, &pkg_root);
-        let paths = result
-            .files
-            .iter()
-            .map(|p| display_path(p))
-            .collect();
+        let paths = result.files.iter().map(|p| display_path(p)).collect();
         runs.push(PackageRun { label, paths });
 
         // Sub-packages: enqueue in reverse so the resulting `runs` order is
