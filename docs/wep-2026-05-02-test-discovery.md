@@ -136,18 +136,3 @@ Add a `wado.toml` at the repo root so that:
   compilation and by `[test].exclude` for known-large fixture trees.
 - Sub-package recursion duplicates some bookkeeping (each package gets its
   own summary line) but keeps each package's results attributable.
-
-## TODOs
-
-- [x] Implement discovery walker with gitignore / submodule / dot-prefix /
-      nested-`wado.toml` / `[test].exclude` rules and symlink cycle detection.
-- [x] Add `[test].exclude: Vec<String>` to `wado-manifest`.
-- [x] Add `--exclude` and switch `--filter` to wildcard path matching.
-- [x] Audit and, if necessary, restrict test-block execution to the entry
-      module.
-- [x] Implement compile-only validation for files without test blocks.
-- [x] Emit three-axis summary and propagate exit code.
-- [x] Recurse into nested `wado.toml` packages.
-- [x] Add a root `wado.toml` to this repository wiring up the exclude list.
-- [x] Update `docs/cheatsheet.md` and the CLI subcommands doc to describe the
-      new discovery rules.
