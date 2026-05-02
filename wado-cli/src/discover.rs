@@ -1,4 +1,4 @@
-//! Test file discovery walker for `wado test` (WEP 2026-05-02).
+//! Test file discovery walker for `wado test`.
 //!
 //! Walks a project root for `*.wado` files, honouring:
 //!
@@ -63,7 +63,7 @@ pub struct DiscoveryResult {
     pub files: Vec<PathBuf>,
     /// Sub-directories that were skipped because they contain their own
     /// `wado.toml`. The caller is expected to recurse into them as separate
-    /// package contexts (cargo workspace style; see WEP 2026-05-02).
+    /// package contexts (cargo workspace style).
     pub subpackages: Vec<PathBuf>,
 }
 
@@ -105,17 +105,15 @@ pub fn discover_test_files(root: &Path, excludes: &[String]) -> Result<Discovery
 fn compile_excludes(excludes: &[String]) -> Result<Vec<Pattern>, WalkError> {
     let mut out = Vec::with_capacity(excludes.len());
     for s in excludes {
-        out.push(
-            Pattern::new(s).map_err(|source| WalkError::InvalidExclude {
-                pattern: s.clone(),
-                source,
-            })?,
-        );
+        out.push(Pattern::new(s).map_err(|source| WalkError::InvalidExclude {
+            pattern: s.clone(),
+            source,
+        })?);
         // glob's `**` requires at least one trailing path component, so a
         // pattern like `dir/**` does NOT match the bare `dir` entry the
         // walker checks before descending. Users almost always intend
         // `dir/**` to mean "everything at and below dir", so we also accept
-        // the `dir` prefix as an exclude. See WEP 2026-05-02.
+        // the `dir` prefix as an exclude.
         if let Some(prefix) = s.strip_suffix("/**")
             && !prefix.is_empty()
         {

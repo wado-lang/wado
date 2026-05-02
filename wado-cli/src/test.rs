@@ -29,7 +29,7 @@ pub struct TestOptions {
     /// Each entry corresponds to one package context. The first entry is the
     /// root package (or the synthetic `"."` label when `wado test` is invoked
     /// outside a `wado.toml` project); subsequent entries come from
-    /// recursively discovered sub-packages (WEP 2026-05-02).
+    /// recursively discovered sub-packages.
     pub package_runs: Vec<PackageRun>,
     pub jobs: usize,
     pub opt_level: OptLevel,
@@ -130,7 +130,7 @@ pub fn print_usage() {
 }
 
 /// Walk `root` and produce one `PackageRun` for the root and one for each
-/// sub-package discovered transitively (cargo-workspace-style; WEP 2026-05-02).
+/// sub-package discovered transitively (cargo-workspace-style).
 ///
 /// `apply_manifest_excludes` controls whether the root's `wado.toml`
 /// `[test].exclude` patterns (if any) are applied — sub-packages always
@@ -301,9 +301,9 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
     }
 
     // Resolve paths into per-package runs. With no args, recurse from cwd
-    // through every nested `wado.toml` (WEP 2026-05-02). With explicit args,
-    // collapse everything into a single synthetic root run; sub-package
-    // recursion only kicks in for the no-args (project-wide) case.
+    // through every nested `wado.toml`. With explicit args, collapse
+    // everything into a single synthetic root run; sub-package recursion
+    // only kicks in for the no-args (project-wide) case.
     let mut package_runs: Vec<PackageRun> = if paths.is_empty() {
         discover_packages(Path::new("."), true, &cli_excludes)?
     } else {
@@ -314,10 +314,9 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
         }]
     };
 
-    // --filter: shell-style wildcard match against each discovered path. The
-    // filter is path-based (not test-name-based) — see WEP 2026-05-02. To
-    // match anywhere within a path, wrap the term in `*`s (e.g. `*foo*`).
-    // Repeatable: a path is kept if any pattern matches.
+    // --filter: shell-style wildcard match against each discovered path.
+    // To match anywhere within a path, wrap the term in `*`s (e.g.
+    // `*foo*`). Repeatable: a path is kept if any pattern matches.
     if !filters.is_empty() {
         let patterns: Vec<Pattern> = filters
             .iter()
@@ -520,7 +519,7 @@ async fn collect_test_jobs(
             }
             Err(_) => {
                 // Non-TODO module failed to compile — record on the compile
-                // axis and continue with the next file. See WEP 2026-05-02.
+                // axis and continue with the next file.
                 let dur = format_duration(compile_duration);
                 eprintln!("[{elapsed}] FAILED to compile {path} ({dur})");
                 compile_failures.push(CompileFailure { path: path.clone() });

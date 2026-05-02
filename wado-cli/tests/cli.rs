@@ -354,9 +354,9 @@ fn test_test_failing() {
 
 #[test]
 fn test_test_filter_keeps_matching_path() {
-    // --filter is a path-based wildcard (WEP 2026-05-02). `*` does not cross
-    // path separators (consistent with shell glob and `.gitignore`); use
-    // `**` to match across directories.
+    // --filter is a path-based wildcard. `*` does not cross path
+    // separators (consistent with shell glob and `.gitignore`); use `**`
+    // to match across directories.
     wado()
         .args([
             "test",

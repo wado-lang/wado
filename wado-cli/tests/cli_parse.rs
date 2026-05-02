@@ -358,8 +358,8 @@ fn test_with_files() {
 
 #[test]
 fn test_with_filter_keeps_matching_paths() {
-    // --filter is now a path-based wildcard applied during parse. See
-    // WEP 2026-05-02. `*.wado` keeps `a.wado` and drops `b.txt`.
+    // --filter is a path-based wildcard applied during parse: `*.wado`
+    // keeps `a.wado` and drops `b.txt`.
     let parser = Parser::from_args(&["-f", "*.wado", "a.wado", "b.txt"]);
     let opts = wado_cli::test::parse_args(parser).unwrap();
     assert_eq!(opts.package_runs.len(), 1);

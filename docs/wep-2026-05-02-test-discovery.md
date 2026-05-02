@@ -1,17 +1,17 @@
-# WEP: Test Discovery Refinement
+# WEP: Test Discovery
 
 ## Context
 
-[WEP: Synopsis Tests](./wep-2026-04-26-synopsis-tests.md) changed `wado test`
-discovery from `**/*_test.wado` to `**/*.wado` so that synopsis blocks living
-in implementation files are reached by the runner. That WEP left the concrete
-discovery rules ("the same project-root and ignore rules currently in effect")
-unspecified.
+`wado test` walks a project for test files, compiles them under the `test`
+world, and runs the test blocks they declare. The walker did not have a
+formal definition: there were no rules for `.gitignore`, submodules, hidden
+files, package boundaries, or per-package configuration. Real projects (this
+repo included) accumulate fixture trees and nested packages that need
+explicit expression, and discovery has to behave the same way across
+sub-packages so that conventions don't silently diverge.
 
-This WEP fills in those rules and adds the surrounding mechanics needed for
-the discovery change to be usable in real projects — most immediately, this
-repository, which contains a large `wado-compiler/tests` fixture tree that
-must not be picked up as project-level tests.
+This WEP defines how `wado test` discovers files, what it does with them,
+and how the result is reported.
 
 ## Decision
 
@@ -19,16 +19,20 @@ must not be picked up as project-level tests.
 
 Walk the project root for `*.wado` files. Skip:
 
-- Entries matched by `.gitignore` (and ancestor `.gitignore`s, as git would).
-- Git submodule directories.
+- Entries matched by `.gitignore` (and ancestor `.gitignore`s, with the same
+  semantics git applies — last matching rule wins, directory-only patterns
+  end in `/`, negation with `!`, `**` for multi-segment wildcards). The
+  parser is in-process; no `git` binary is required.
+- Directories listed in the project's `.gitmodules`.
 - Dot-prefixed files and directories (`.git`, `.vscode`, ...).
-- Subtrees rooted at a nested `wado.toml` — those are separate packages and
-  are visited by recursing into them as their own `wado test` invocation
-  (cargo workspace style).
-- Entries listed in `[test].exclude` of the project's `wado.toml`.
+- Subtrees rooted at a nested `wado.toml`. Each such directory is a separate
+  package and is visited as its own `wado test` invocation (cargo workspace
+  style).
+- Entries matched by `[test].exclude` in the package's `wado.toml`, or by
+  `--exclude <pattern>` on the CLI.
 
-Symbolic links are followed; cycles are detected by tracking visited canonical
-paths.
+Symbolic links are followed; cycles are detected by tracking visited
+canonical paths.
 
 `#![generated]` files are **not** skipped. Parsing them is required to detect
 the attribute, and once parsed there is no reason to stop short of compiling
@@ -44,20 +48,28 @@ exclude = [
 ]
 ```
 
-`exclude` is a list of glob patterns relative to the package root. The CLI
-gains `--exclude <pattern>` to extend the manifest list at invocation time.
+`exclude` is a list of shell-style glob patterns relative to the package
+root. The CLI's `--exclude <pattern>` flag (repeatable) extends the manifest
+list at invocation time.
+
+`*` honours path separators, so `src/*.wado` matches direct children of
+`src/` only. Use `**` to cross directories. As a convenience, `dir/**` also
+excludes the bare `dir` entry (otherwise the walker would still descend into
+it, since `**` requires at least one trailing path component).
 
 ### Filter
 
-`--filter <pattern>` matches discovered file paths using shell-style
-wildcards (`*`, `?`, `[...]`). Not regex. The pattern is matched against the
-path relative to the package root.
+`--filter <pattern>` (repeatable) matches discovered file paths using
+shell-style wildcards (`*`, `?`, `[...]`). Not regex. A path is kept when
+any pattern matches. The pattern is matched against the path string the
+walker emits (relative to the invocation root, with no leading `./`).
 
 ### World
 
-All discovered files compile under the `test` world. Worlds are entry-point
-selectors and coexist within a single component, so files written for
-`wasi:cli/command` or `wasi:http/service` still type-check under `test`.
+All discovered files compile under the `test` world. The world is an
+entry-point selector — `export fn run` and `export async fn handle` from
+other worlds still type-check under `test`, so any `.wado` file is a valid
+discovery target regardless of the world it's normally built for.
 
 ### Test block execution scope
 
@@ -65,70 +77,90 @@ Only test blocks declared in the **entry module** (the file passed to the
 compiler) are executed. Test blocks reachable through `use` imports are
 compiled but not registered.
 
-This is necessary so that running `wado test` on a project does not multiply
-test executions by the number of importers each test-bearing module has, and
-so that file-by-file discovery yields a stable, source-order test schedule.
-The current behaviour must be audited and corrected if it deviates.
+This keeps file-by-file discovery from multiplying test executions by the
+number of importers each test-bearing module has, and yields a stable,
+source-order test schedule.
 
 ### Files without test blocks
 
 Parsed and compiled for validation. No Wasm is emitted, nothing is executed.
 A compile failure in such a file fails the `wado test` invocation (non-zero
-exit) and is reported on a separate axis from test pass/fail.
+exit) and is reported on the compile axis of the summary, separate from
+test pass/fail.
 
 ### Reporting
 
 Three axes in the summary:
 
-- compile: passed / failed
-- test: passed / failed
-- skipped (filtered out, `#[TODO]`, etc.)
+- **compile**: passed / failed
+- **test**: passed / failed
+- **todo**: pending / resolved (when `#[TODO]` is in play)
 
-Any non-zero compile-failed or test-failed count makes the process exit
-non-zero.
+When more than one package ran (the no-args case under sub-package
+recursion), each package emits its own three-axis line under a
+`=== package: <label> ===` banner, followed by an `=== aggregate ===`
+block summing the axes across packages.
 
-### This repository
+Any non-zero compile-failed, test-failed, or `todo resolved` count makes the
+process exit non-zero.
 
-Add a `wado.toml` at the repo root so that:
+### Sub-package recursion
 
-- Sub-package recursion (`wado-cli/`, `wado-compiler/`, ...) is exercised by
-  the project's own CI.
-- Fixture trees under `wado-compiler/tests/` and similar are excluded via
-  `[test].exclude`.
+When `wado test` is invoked without explicit path arguments, the walker
+treats every nested `wado.toml` as a separate package context: the recursion
+applies that package's own `[test].exclude`, the per-package summary line is
+labelled with the package's relative path, and the parent walk does not
+descend into the sub-package's source. Explicit path arguments collapse to a
+single root run; sub-package recursion only fires for the project-wide case.
+
+### CLI flags
+
+| Flag                    | Effect                                                                  |
+| ----------------------- | ----------------------------------------------------------------------- |
+| `--filter <pat>`        | Keep paths matching the wildcard. Repeatable; OR-combined.              |
+| `--exclude <pat>`       | Drop paths matching the wildcard. Repeatable; extends `[test].exclude`. |
+| `-O<n>`                 | Optimization level for the compile step.                                |
+| `-p <N>` / `--parallel` | Parallel test workers.                                                  |
+| `--dir <host[::guest]>` | Preopen a host directory for WASI filesystem access.                    |
+| `--no-dir`              | Disable the default `(".", ".")` preopen.                               |
 
 ## Consequences
 
 ### User-visible
 
-- `wado test` honours `.gitignore`, submodules, dot-prefixed paths, nested
-  `wado.toml` boundaries, and `[test].exclude` automatically. No flags
-  required for the common case.
-- `--filter` is path-based wildcard matching; users coming from regex tools
-  must adjust.
-- A compile error in a previously unreached `.wado` file now fails
-  `wado test`. This is intentional — see Synopsis Tests WEP.
-- Test blocks in transitively imported modules are no longer executed
-  per-importer. If an existing project relied on this, those tests must move
-  to the file that owns them.
+- `wado test` (no arguments) walks the project root from cwd, honouring
+  `.gitignore`, `.gitmodules`, dot-prefixed paths, nested `wado.toml`
+  boundaries, and `[test].exclude` automatically. No flags required for the
+  common case.
+- `*_test.wado` is no longer required for discovery. It remains a
+  recommended convention for files that are exclusively tests, as a
+  human-readable signal.
+- `--filter` is path-based wildcard matching; users expecting regex must
+  adjust.
+- A compile error in any reached `.wado` file fails `wado test`, even when
+  the file has no test blocks. This is the compile-only validation axis.
+- Test blocks in transitively imported modules are not executed
+  per-importer; they only run in the file that owns them.
 
 ### Implementation
 
-- `wado-cli/src/test.rs`: replace the discovery walker with one that consults
-  `ignore` (gitignore), submodule list, dot-prefix filter, nested `wado.toml`
-  boundaries, and the `[test].exclude` glob set. Follow symlinks with cycle
-  detection.
-- `wado-cli/src/test.rs`: recurse into nested packages by re-invoking the
-  discovery + run pipeline rooted at each nested `wado.toml`.
-- `wado-manifest/`: add `[test].exclude: Vec<String>` to the manifest schema.
-- `wado-cli`: add `--exclude <pattern>` (repeatable) and change `--filter` to
-  wildcard semantics.
-- `wado-compiler` (test runner side): ensure only entry-module test blocks
-  are registered. Audit the current path; fix if imported test blocks leak
-  into the schedule.
-- `wado-cli/src/test.rs`: emit the three-axis summary and propagate a
-  non-zero exit on compile or test failures.
-- Add a top-level `wado.toml` to this repository configured to exercise the
-  exclude list and sub-package recursion.
+- `wado-cli/src/discover.rs`: walker with in-process `.gitignore` /
+  `.gitmodules` parsing, dot-prefix filter, nested-`wado.toml` boundaries,
+  manifest + CLI excludes, and symlink cycle detection. Glob patterns are
+  matched with `require_literal_separator: true`; `dir/**` is augmented
+  with the bare `dir` prefix so directory excludes behave intuitively.
+- `wado-cli/src/test.rs`: turns the walker output into a `Vec<PackageRun>`
+  (root + recursively discovered sub-packages), applies `--filter`, drives
+  the compile/run pipeline per package, and emits the per-package and
+  aggregate three-axis summaries.
+- `wado-manifest/`: `[test].exclude: Vec<String>` on the manifest schema.
+- `wado-compiler/src/loader.rs`: `#include_str` / `#include_bytes` path
+  resolution recognises the entry module so that running with a
+  `./pkg/src/main.wado`-style argument no longer doubles the base path.
+- `wado-compiler` (test runner side): only entry-module test blocks are
+  registered as exports — sealed by a fixture pair under
+  `tests/fixtures/test_imported_test_block_skipped.wado` that traps in an
+  imported test block and asserts that `wado test` never invokes it.
 
 ### Trade-offs
 
@@ -140,23 +172,23 @@ Add a `wado.toml` at the repo root so that:
 ## Open question: package-local assets
 
 `wado test` runs every package in the same WASI sandbox: there is one
-`--dir` setup for the whole invocation. That is sufficient when test
-bodies use `#include_str` / `#include_bytes` to embed their fixtures at
-compile time (the dominant case, and what `benchmark/*` settled on
-after this WEP), but it leaves no clean answer for a sub-package whose
-tests genuinely need to read files at runtime — the per-package
-`wado.toml` cannot ask the runner to preopen its own directory.
+`--dir` setup for the whole invocation. That is sufficient when test bodies
+use `#include_str` / `#include_bytes` to embed their fixtures at compile
+time (the dominant case, and what `benchmark/*` does), but it leaves no
+clean answer for a sub-package whose tests genuinely need to read files at
+runtime — the per-package `wado.toml` cannot ask the runner to preopen its
+own directory.
 
 The likely shape of a follow-up: a manifest declaration such as
 `[package].assets = "fixtures"`, combined with a compile-time parameter
 ([WEP: Compile-Time Parameters](./wep-2026-04-26-compile-time-params.md))
 that exposes the package's preopen name to source. Tests then read
-`Preopens::read_file(`{ASSETS_DIR}/queries.sql`)` without hard-coding
-host paths, and `wado test` arranges the per-package preopens during
-sub-package recursion.
+`Preopens::read_file(`{ASSETS_DIR}/queries.sql`)` without hard-coding host
+paths, and `wado test` arranges the per-package preopens during sub-package
+recursion.
 
-This is intentionally **not** part of this WEP. The 95-percent answer
-is `#include_str` and the runtime path only earns its complexity once
-several real consumers want it. The open question is recorded here so
-that if and when those consumers appear, the design starts from a
-known position rather than from scratch.
+This is intentionally **not** part of this WEP. The 95-percent answer is
+`#include_str`; the runtime path earns its complexity only when several
+real consumers want it. The open question is recorded here so that if those
+consumers appear, the design starts from a known position rather than from
+scratch.

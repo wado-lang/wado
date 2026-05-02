@@ -100,16 +100,15 @@ description = "Run Wado module tests"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
-# Universal `wado test` walks the repo-root wado.toml and recurses into
-# every nested package (WEP 2026-05-02). In CI, package-gale runs in its
-# own per-optlevel jobs (test-gale-o1/o2/o3), so we exclude it here to
-# keep this job fast. Locally we include everything so a single
-# `mise run test-wado` covers it all.
+# `wado test` walks the repo-root wado.toml and recurses into every
+# nested package. In CI, package-gale runs in its own per-optlevel jobs
+# (test-gale-o1/o2/o3), so we exclude it here to keep this job fast.
+# Locally we include everything so a single `mise run test-wado` covers
+# it all.
 #
-# benchmark/* test blocks intentionally use only inline data (the
-# `Preopens`-driven file reads sit in `export fn run()`, which the test
-# world does not invoke); they fold into the same `wado test` call and no
-# longer need a separate `--dir` invocation.
+# benchmark/* test blocks use only inline data — the `Preopens`-driven
+# file reads sit in `export fn run()`, which the test world does not
+# invoke — so they need no `--dir` setup of their own.
 excludes=()
 if [ -n "${CI:-}" ]; then
     excludes+=(--exclude 'package-gale/**')
