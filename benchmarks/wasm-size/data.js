@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777686376219,
+  "lastUpdate": 1777752131997,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -18537,6 +18537,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c0a18b3a2a6c35b169fcaefb7261bc89948b27ed"
         },
         "date": 1777686375886,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1775,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8776,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18520,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 515706,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "909321b8f71b44877018dff4f9cecb51b5565385",
+          "message": "Merge pull request #980 from wado-lang/claude/update-wado-test-discovery-G3Gr6\n\nDefine `wado test` discovery",
+          "timestamp": "2026-05-03T04:57:09+09:00",
+          "tree_id": "cf0e44dbe9ee8d0393d31d2b8124a89e936f9ac1",
+          "url": "https://github.com/wado-lang/wado/commit/909321b8f71b44877018dff4f9cecb51b5565385"
+        },
+        "date": 1777752131659,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
