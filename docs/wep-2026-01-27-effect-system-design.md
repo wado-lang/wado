@@ -243,7 +243,7 @@ No existing language has this mechanism. The closest precedents are Koka's effec
 Example: `Stdout` has a single operation:
 
 ```wado
-pub effect Stdout {
+pub interface Stdout {
     fn write_via_stream(data: Stream<u8>) -> Future<Result<(), ErrorCode>>;
 }
 ```

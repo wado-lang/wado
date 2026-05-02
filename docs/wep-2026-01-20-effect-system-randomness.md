@@ -41,7 +41,7 @@ WASI P3 provides a dedicated effect specifically for this use case:
 
 ```wado
 /// The insecure-seed interface for seeding hash-map DoS resistance.
-pub effect InsecureSeed {
+pub interface InsecureSeed {
     /// This function is intended to only be called once, by a source language
     /// to initialize Denial Of Service (DoS) protection in its hash-map
     /// implementation.

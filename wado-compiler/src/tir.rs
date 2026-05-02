@@ -1972,7 +1972,7 @@ impl TypeTable {
     /// Standalone uses (e.g. `mangle_type_name(ErrorCode)` outside a
     /// generic instance, or method-dispatch `base_struct_name`) keep the
     /// short name so that `wasi_registry`, `LocalMethodName`, and
-    /// `ModuleSource::effect_name` keys remain unchanged.
+    /// `ModuleSource::interface_name` keys remain unchanged.
     ///
     /// User-facing display (`TypeTable::type_name`) is independent and
     /// is unaffected by this function.
@@ -3100,7 +3100,7 @@ pub struct TirFunction {
 
     /// Whether this function is marked `#[ambient]`. Ambient functions are implicitly
     /// available to callers without requiring matching `with` clauses — they still carry
-    /// effect declarations for documentation / implementation purposes, but the effect
+    /// interface declarations for documentation / implementation purposes, but the effect
     /// checker does not propagate those requirements to callers.
     pub is_ambient: bool,
 

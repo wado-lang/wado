@@ -133,8 +133,8 @@ impl Package {
 
     /// Check if any function from the given WASI effect is used.
     /// Effect names are like "Stdout", "Stderr", "Environment", etc.
-    pub fn has_effect(&self, effect_name: &str) -> bool {
-        let prefix = format!("{effect_name}::");
+    pub fn has_interface(&self, interface_name: &str) -> bool {
+        let prefix = format!("{interface_name}::");
         self.used_wasi_functions
             .iter()
             .any(|f| f.starts_with(&prefix))

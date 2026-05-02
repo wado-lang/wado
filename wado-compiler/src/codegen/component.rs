@@ -52,7 +52,7 @@ pub fn build_component(
     // declaration so any kiln-generator-shaped world picks this path up
     // — the previous form matched `target_world == "core:kiln/generator"`
     // by string and missed future generator worlds.
-    if project.world_imports_effect("KilnHost") {
+    if project.world_imports_interface("KilnHost") {
         emit_kiln_world_types(&mut builder, &mut ctx);
     }
 
@@ -281,7 +281,7 @@ pub fn build_component(
             ctx.core_func_idx(local_name),
         ));
     }
-    if (project.has_http_handler_export || project.has_effect("Client"))
+    if (project.has_http_handler_export || project.has_interface("Client"))
         && ctx.has_core_func("http-fields-constructor")
     {
         wasi_exports.push((
@@ -1746,7 +1746,7 @@ fn generate_cm_imports(
                 // Use per-function check (same as wir_build) to avoid including
                 // unused functions that reference unsupported types (e.g. Stream<u8>
                 // in tuples when read_via_stream is not called).
-                let func_key = format!("{}::{}", func.effect_name, func.method_name);
+                let func_key = format!("{}::{}", func.interface_name, func.method_name);
                 project.used_wasi_functions.contains(&func_key)
             })
             .collect();
@@ -2266,12 +2266,12 @@ fn generate_cm_imports(
     // Import wasi:http/types when the world exports an HTTP handler
     // or when the code uses the HTTP Client effect (e.g., CLI programs
     // that make outgoing HTTP requests).
-    if project.has_http_handler_export || project.has_effect("Client") {
+    if project.has_http_handler_export || project.has_interface("Client") {
         import_http_types_for_service(project, builder, ctx);
     }
 
     // Import wasi:http/client if Client::send is used
-    if project.has_effect("Client") && ctx.has_type("http-handler-result") {
+    if project.has_interface("Client") && ctx.has_type("http-handler-result") {
         import_http_client(builder, ctx, project);
     }
 }
@@ -2335,7 +2335,7 @@ fn import_http_types_for_service(
         // Processing their parameter and return types triggers on-demand emission of
         // all dependent types (error-code variant and its payload record types).
         let is_constructor_or_static = |f: &WasiFunctionInfo| {
-            http_resource_names.contains(f.effect_name.as_str())
+            http_resource_names.contains(f.interface_name.as_str())
                 && (f.wasi_func_name.starts_with("[constructor]")
                     || f.wasi_func_name.starts_with("[static]"))
         };
@@ -2395,7 +2395,7 @@ fn import_http_types_for_service(
                     return false;
                 }
                 // Only include methods for known HTTP resources
-                if !http_resource_names.contains(f.effect_name.as_str()) {
+                if !http_resource_names.contains(f.interface_name.as_str()) {
                     return false;
                 }
                 // Only include method/static functions
@@ -2408,7 +2408,7 @@ fn import_http_types_for_service(
                 // referencing unsupported resource types (e.g. RequestOptions).
                 project
                     .used_wasi_functions
-                    .contains(&format!("{}::{}", f.effect_name, f.method_name))
+                    .contains(&format!("{}::{}", f.interface_name, f.method_name))
             })
             .cloned()
             .collect();
@@ -2545,7 +2545,7 @@ fn import_http_types_for_service(
                     .iter()
                     .filter(|f| {
                         // Only include functions for known HTTP resources
-                        if !http_resource_names.contains(f.effect_name.as_str()) {
+                        if !http_resource_names.contains(f.interface_name.as_str()) {
                             return false;
                         }
                         // Skip Fields constructor and Response::new (handled above)
@@ -2561,7 +2561,7 @@ fn import_http_types_for_service(
                         is_resource_func
                             && project
                                 .used_wasi_functions
-                                .contains(&format!("{}::{}", f.effect_name, f.method_name))
+                                .contains(&format!("{}::{}", f.interface_name, f.method_name))
                     })
                     .map(|f| (f.wasi_func_name.clone(), f.local_alias_name()))
                     .collect()
@@ -2709,7 +2709,7 @@ fn import_interface_with_resource(
 
     let local_name = func.local_alias_name();
 
-    if !project.has_effect(&func.effect_name) || ctx.has_comp_func(&local_name) {
+    if !project.has_interface(&func.interface_name) || ctx.has_comp_func(&local_name) {
         return;
     }
 
@@ -2813,7 +2813,7 @@ fn import_interfaces_with_resources(
         }
 
         let is_needed = interface_info.functions.first().is_some_and(|f| {
-            project.has_effect(&f.effect_name) && !ctx.has_comp_func(&f.local_alias_name())
+            project.has_interface(&f.interface_name) && !ctx.has_comp_func(&f.local_alias_name())
         });
         if !is_needed {
             continue;
@@ -2986,7 +2986,7 @@ fn import_resource_using_interfaces(
                 if !project.wasi_registry.is_function_supported(func) {
                     return false;
                 }
-                let func_key = format!("{}::{}", func.effect_name, func.method_name);
+                let func_key = format!("{}::{}", func.interface_name, func.method_name);
                 project.used_wasi_functions.contains(&func_key)
             })
             .collect();

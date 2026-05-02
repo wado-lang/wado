@@ -5,7 +5,7 @@
 use crate::ast::{
     AssertStmt, AssignExpr, AttrArg, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, CallExpr,
     CastExpr, ClosureExpr, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition,
-    ConditionElement, EffectDecl, EffectMethod, EnumCase, EnumDecl, Expr, ExprStmt,
+    ConditionElement, InterfaceDecl, InterfaceMethod, EnumCase, EnumDecl, Expr, ExprStmt,
     FieldAccessExpr, FlagsDecl, ForOfStmt, ForStmt, Function, FunctionType, GenericParam,
     GlobalDecl, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, Item, LabeledBlockStmt,
     LetStmt, Literal, LoopStmt, MatchArm, MatchExpr, MethodCallExpr, Module, Newtype, Param,
@@ -147,7 +147,7 @@ impl<'a> Unparser<'a> {
             Item::Newtype(t) => self.unparse_newtype(t),
             Item::Impl(i) => self.unparse_impl(i),
             Item::Trait(t) => self.unparse_trait(t),
-            Item::Effect(e) => self.unparse_effect(e),
+            Item::Interface(e) => self.unparse_interface(e),
             Item::Resource(r) => self.unparse_resource(r),
             Item::World(w) => self.unparse_world(w),
             Item::Test(t) => self.unparse_test(t),
@@ -235,11 +235,11 @@ impl<'a> Unparser<'a> {
                     self.output.push_str(alias);
                 }
             }
-            UseItem::EffectFunctions {
-                effect_name,
+            UseItem::InterfaceFunctions {
+                interface_name,
                 functions,
             } => {
-                self.output.push_str(effect_name);
+                self.output.push_str(interface_name);
                 self.output.push_str("::{ ");
                 for (i, func) in functions.iter().enumerate() {
                     if i > 0 {
@@ -970,7 +970,7 @@ impl<'a> Unparser<'a> {
         self.output.push_str("}\n");
     }
 
-    fn unparse_effect(&mut self, e: &EffectDecl) {
+    fn unparse_interface(&mut self, e: &InterfaceDecl) {
         self.write_indent();
 
         // Attributes
@@ -1006,7 +1006,7 @@ impl<'a> Unparser<'a> {
         self.output.push_str("}\n");
     }
 
-    fn unparse_effect_method(&mut self, m: &EffectMethod) {
+    fn unparse_effect_method(&mut self, m: &InterfaceMethod) {
         self.write_indent();
 
         for attr in &m.attrs {
@@ -1104,7 +1104,7 @@ impl<'a> Unparser<'a> {
             self.emit_blank_lines_to(imp.span.line);
             self.write_indent();
             self.output.push_str("import ");
-            self.output.push_str(&imp.effect_name);
+            self.output.push_str(&imp.interface_name);
             self.output.push_str(" {\n");
 
             self.indent_level += 1;
@@ -2805,7 +2805,7 @@ pub fn get_item_span(item: &Item) -> Span {
         Item::Newtype(t) => t.span,
         Item::Impl(i) => i.span,
         Item::Trait(t) => t.span,
-        Item::Effect(e) => e.span,
+        Item::Interface(e) => e.span,
         Item::Resource(r) => r.span,
         Item::World(w) => w.span,
         Item::Test(t) => t.span,
@@ -2824,7 +2824,7 @@ fn get_item_first_line(item: &Item) -> usize {
         Item::Struct(s) => first_attr_line(&s.attrs),
         Item::Enum(e) => first_attr_line(&e.attrs),
         Item::Variant(v) => first_attr_line(&v.attrs),
-        Item::Effect(e) => first_attr_line(&e.attrs),
+        Item::Interface(e) => first_attr_line(&e.attrs),
         Item::Resource(r) => first_attr_line(&r.attrs),
         Item::Function(f) => first_attr_line(&f.attrs),
         Item::Newtype(t) => first_attr_line(&t.attrs),

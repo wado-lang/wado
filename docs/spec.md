@@ -3774,27 +3774,27 @@ Effects can be defined in two ways:
 
 ```wado
 // WASI CLI effects (see wasi:cli for real definitions)
-effect Stdout {
+interface Stdout {
     fn write_via_stream(data: Stream<u8>) -> Result<(), ErrorCode>;
 }
 
-effect Stderr {
+interface Stderr {
     fn write_via_stream(data: Stream<u8>) -> Result<(), ErrorCode>;
 }
 
-effect Environment {
+interface Environment {
     fn get_environment() -> Array<[String, String]>;
     fn get_arguments() -> Array<String>;
     fn get_initial_cwd() -> Option<String>;
 }
 
 // Custom effect interfaces
-effect Http {
+interface Http {
     fn get(url: String) -> Response;
     fn post(url: String, body: String) -> Response;
 }
 
-effect Dom {
+interface Dom {
     fn query(selector: String) -> Option<Element>;
     fn create_element(tag: String) -> Element;
 }
@@ -4299,7 +4299,7 @@ Use `#[cm(...)]` attributes to link Wado definitions to Component Model interfac
 ```wado
 // Link an effect interface to a CM interface
 #[cm("wasi:cli/stdout@0.3.0-rc-2025-09-16")]
-pub effect Stdout {
+pub interface Stdout {
     #[cm("wasi:cli/stdout@0.3.0-rc-2025-09-16#write-via-stream")]
     fn write_via_stream(data: Stream<u8>) -> Result<(), ErrorCode>;
 }

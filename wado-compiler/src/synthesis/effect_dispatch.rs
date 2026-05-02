@@ -970,7 +970,7 @@ fn build_resource_fallback_call(
     // post-cm_binding shape is indistinguishable from a hand-written
     // `Future::<i32>::new()` call site.
     //
-    // `method_type_args` stays empty: `ast::EffectMethod` carries no
+    // `method_type_args` stays empty: `ast::InterfaceMethod` carries no
     // type-parameter list, so resource / effect operations cannot
     // themselves be generic — only the resource type can. The `T` in
     // `Stream<T>::read(self, max) -> Array<T>` is the resource's type
@@ -1513,7 +1513,7 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
     let mut bundle_locals: IndexMap<u32, (u32, String)> = IndexMap::default();
 
     for binding in bindings {
-        let (effect_name, effect_module) = match binding.effect.clone() {
+        let (interface_name, effect_module) = match binding.effect.clone() {
             Some(EffectRef::Concrete {
                 name,
                 module_source,
@@ -1533,13 +1533,13 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
         let trait_type_args = binding.trait_type_args.clone();
         let key: InstantiationKey = (
             effect_module.clone(),
-            effect_name.clone(),
+            interface_name.clone(),
             trait_type_args.clone(),
         );
         let plan = env.plans.get(&key).unwrap_or_else(|| {
             panic!(
                 "effect-dispatch synthesis: no DispatchPlan for \
-                 instantiation `{effect_name}<{trait_type_args:?}>` in module \
+                 instantiation `{interface_name}<{trait_type_args:?}>` in module \
                  {effect_module:?} — `identify_active_effects` and \
                  `synthesize_dispatch_infrastructure` are out of sync"
             )
@@ -1550,16 +1550,16 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
         let impl_key: HandlerImplKey = (
             handler_type_name.clone(),
             effect_module.clone(),
-            effect_name.clone(),
+            interface_name.clone(),
             trait_type_args.clone(),
         );
         let impl_info = env.impl_index.get(&impl_key).unwrap_or_else(|| {
             panic!(
-                "effect-dispatch synthesis: no `impl {effect_name} for \
+                "effect-dispatch synthesis: no `impl {interface_name} for \
                  {handler_type_name}` (type args = {trait_type_args:?}) \
                  registered in the impl index for effect module \
                  {effect_module:?} — the resolver should have rejected \
-                 the `with {effect_name} => h do` binding if no matching \
+                 the `with {interface_name} => h do` binding if no matching \
                  impl exists"
             )
         });
@@ -1570,7 +1570,7 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
         // synthesised local names (`__h_<label>` etc.) so dumps stay
         // readable when multiple instantiations of the same base
         // resource are installed in nested `with` blocks.
-        let label = instantiation_label(&effect_name, &trait_type_args, &env.type_table.borrow());
+        let label = instantiation_label(&interface_name, &trait_type_args, &env.type_table.borrow());
 
         // 1. let __h_<E> = handler_expr;
         //
@@ -2323,7 +2323,7 @@ fn rewrite_call_sites_to_wrappers(
 
     // Pre-build lookup maps:
     //
-    // - `user_to_wrapper`: keyed `(effect_name, op_name)` for
+    // - `user_to_wrapper`: keyed `(interface_name, op_name)` for
     //   `Effect::op()` user-effect Calls. Effects collapse to a
     //   single instantiation (`type_args: []`) so the lookup is
     //   unambiguous.
@@ -2336,7 +2336,7 @@ fn rewrite_call_sites_to_wrappers(
     //     resolve to a `Call` whose `func.module_source` is the
     //     `Local { path: "<EffectName>" }` form (`is_effect_like()`)
     //     even when the op carries a `#[cm("...")]` attribute. The
-    //     rewriter intercepts these via `(effect_name, op_name)` in
+    //     rewriter intercepts these via `(interface_name, op_name)` in
     //     `user_to_wrapper`.
     //   * resource methods (`Fields::new()`, `tx.write(payload)`,
     //     `Stream::<u8>::new()`) resolve to a `Call` / `MethodCall`
@@ -2416,7 +2416,7 @@ fn rewrite_call_sites_to_wrappers(
 /// `Ref(<receiver-type>)` ids when wrapping a value receiver to match
 /// the wrapper's `&Self` first parameter.
 struct RewriteCtx<'a> {
-    /// `(effect_name, op_name) → wrapper_name` for user-effect Calls
+    /// `(interface_name, op_name) → wrapper_name` for user-effect Calls
     /// (e.g. `Counter::next()`).
     user_to_wrapper: &'a IndexMap<(String, String), String>,
     /// `(resource_module, base_name, cm_name) → [(type_args,

@@ -122,7 +122,7 @@ pub struct Resolver<'a, H: CompilerHost> {
     /// Namespace import aliases (e.g., "helper" -> module source for `use helper from "..."`)
     namespace_imports: IndexMap<String, ModuleSource>,
     /// Effect name to source module mapping (e.g., "Stdout" -> wasi:cli module source)
-    /// Built from import declarations and local effect declarations.
+    /// Built from import declarations and local interface declarations.
     effect_sources: IndexMap<String, ModuleSource>,
     /// Effect parameter names currently in scope (from enclosing function's `<effect E>`)
     current_effect_params: IndexSet<String>,
@@ -427,8 +427,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     );
                     for use_item in &use_decl.items {
                         match use_item {
-                            ast::UseItem::EffectFunctions { effect_name, .. } => {
-                                sources.insert(effect_name.clone(), source.clone());
+                            ast::UseItem::InterfaceFunctions { interface_name, .. } => {
+                                sources.insert(interface_name.clone(), source.clone());
                             }
                             ast::UseItem::Simple { name, alias, .. } => {
                                 // Track simple imports that look like effect names (PascalCase)
@@ -441,7 +441,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         }
                     }
                 }
-                Item::Effect(effect_decl) => {
+                Item::Interface(effect_decl) => {
                     sources.insert(effect_decl.name.clone(), module_source.clone());
                 }
                 Item::Resource(resource_decl) => {
@@ -540,7 +540,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             self.record_reference_to_key(*id, sym.defined_at.clone());
                         }
                     }
-                    ast::UseItem::EffectFunctions { .. }
+                    ast::UseItem::InterfaceFunctions { .. }
                     | ast::UseItem::Wildcard
                     | ast::UseItem::Namespace { .. } => {}
                 }
@@ -969,7 +969,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         });
                     }
                 }
-                Item::Effect(effect_decl) => {
+                Item::Interface(effect_decl) => {
                     let tir_effect = self.resolve_effect_decl(effect_decl);
                     tir_module.add_effect(tir_effect);
                 }

@@ -67,20 +67,20 @@ impl WorldExportInfo {
     }
 }
 
-/// Information about a world's imported effect (a single `import Effect { ... }`
+/// Information about a world's imported interface (a single `import Interface { ... }`
 /// block in a Wado world declaration).
 ///
 /// Mirrors the [`crate::ast::WorldImport`] AST node but lives outside the AST
 /// graph so codegen can ask "does this world import `KilnHost`?" without
-/// re-parsing the world declaration. The `effect_name` is the locally-bound
+/// re-parsing the world declaration. The `interface_name` is the locally-bound
 /// name (the one written in `import Foo { ... }`); resolving it to a CM
 /// interface FQ requires the [`crate::component_model::WasiRegistry`] and is
 /// done lazily by the consumer.
 #[derive(Debug, Clone)]
 pub struct WorldImportInfo {
-    /// Imported effect name (e.g., `"Stdout"`, `"Types"`, `"KilnHost"`).
-    pub effect_name: String,
-    /// Functions / methods picked from the effect.
+    /// Imported interface name (e.g., `"Stdout"`, `"Types"`, `"KilnHost"`).
+    pub interface_name: String,
+    /// Functions / methods picked from the interface.
     pub functions: Vec<String>,
 }
 
@@ -88,7 +88,7 @@ impl WorldImportInfo {
     /// Create from a parsed [`WorldImport`].
     pub fn from_ast(import: &WorldImport) -> Self {
         Self {
-            effect_name: import.effect_name.clone(),
+            interface_name: import.interface_name.clone(),
             functions: import.functions.clone(),
         }
     }
@@ -101,7 +101,7 @@ pub struct WorldInfo {
     pub fq_name: String,
     /// Exported functions
     pub exports: Vec<WorldExportInfo>,
-    /// Imported effects (one entry per `import Effect { ... }` block).
+    /// Imported interfaces (one entry per `import Interface { ... }` block).
     pub imports: Vec<WorldImportInfo>,
 }
 
@@ -149,16 +149,16 @@ impl WorldInfo {
         fq_name_namespace_prefix(&self.fq_name)
     }
 
-    /// True when this world has an `import {effect_name} { ... }` block.
+    /// True when this world has an `import {interface_name} { ... }` block.
     ///
-    /// The check is by locally-bound effect name (the identifier written in
+    /// The check is by locally-bound interface name (the identifier written in
     /// the world declaration), which is unique within a world's imports.
     /// Codegen uses this to drive world-shape decisions from data — e.g.
-    /// `imports_effect("KilnHost")` is true for the kiln generator world and
+    /// `imports_interface("KilnHost")` is true for the kiln generator world and
     /// any future world that imports the same effect, replacing string
     /// matches against `target_world == "core:kiln/generator"`.
-    pub fn imports_effect(&self, effect_name: &str) -> bool {
-        self.imports.iter().any(|i| i.effect_name == effect_name)
+    pub fn imports_interface(&self, interface_name: &str) -> bool {
+        self.imports.iter().any(|i| i.interface_name == interface_name)
     }
 }
 
@@ -464,15 +464,15 @@ mod tests {
             .get("core:kiln/generator")
             .expect("kiln world registered");
         assert!(
-            kiln.imports_effect("KilnHost"),
+            kiln.imports_interface("KilnHost"),
             "kiln Generator imports KilnHost — expected by step-2c codegen gating"
         );
-        assert!(!kiln.imports_effect("Stdout"));
+        assert!(!kiln.imports_interface("Stdout"));
 
         let cli = world_registry
             .get("wasi:cli/command")
             .expect("cli world registered");
-        assert!(cli.imports_effect("Stdout"));
-        assert!(!cli.imports_effect("KilnHost"));
+        assert!(cli.imports_interface("Stdout"));
+        assert!(!cli.imports_interface("KilnHost"));
     }
 }

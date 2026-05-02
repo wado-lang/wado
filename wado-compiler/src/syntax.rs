@@ -77,7 +77,7 @@ impl SyntaxDefinition {
                 ],
                 storage_type: vec![
                     "fn", "let", "global", "const", "struct", "enum", "variant", "flags", "impl",
-                    "trait", "type", "resource", "world", "effect",
+                    "trait", "type", "resource", "world", "effect", "interface",
                 ],
                 storage_modifier: vec![
                     "pub", "export", "mut", "async", "move", "unique", "stores", "reactive",
@@ -209,7 +209,7 @@ mod tests {
         let lexer_keywords = [
             "use", "from", "as", "fn", "with", "let", "mut", "return", "if", "else", "match",
             "matches", "for", "while", "loop", "break", "continue", "in", "of", "pub", "effect",
-            "handler", "reactive", "move", "unique", "struct", "enum", "variant", "flags", "type",
+            "interface", "handler", "reactive", "move", "unique", "struct", "enum", "variant", "flags", "type",
             "impl", "trait", "resource", "world", "async", "import", "export", "assert", "global",
             "const", "stores",
         ];

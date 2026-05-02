@@ -999,8 +999,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // Handle WASI effect operations (e.g., Environment::get_arguments)
         if callee_module.is_effect_like()
-            && let Some(effect_name) = callee_module.effect_name()
-            && let Some(return_type) = self.get_wasi_effect_return_type(&effect_name, func_name)
+            && let Some(interface_name) = callee_module.interface_name()
+            && let Some(return_type) = self.get_wasi_effect_return_type(&interface_name, func_name)
         {
             return return_type;
         }
@@ -1014,8 +1014,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // synthesis would have to patch up every Let / template that depends
         // on the value.
         if callee_module.is_effect_like()
-            && let Some(effect_name) = callee_module.effect_name()
-            && let Some(return_type) = self.get_user_effect_return_type(&effect_name, func_name)
+            && let Some(interface_name) = callee_module.interface_name()
+            && let Some(return_type) = self.get_user_effect_return_type(&interface_name, func_name)
         {
             return return_type;
         }
@@ -1150,7 +1150,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
     ) -> Option<TypeId> {
         let (module_source, item_idx) = self.trait_env.effect_decl_index.get(effect)?.clone();
         let module = self.loaded_modules.get(&module_source)?;
-        let crate::ast::Item::Effect(decl) = module.items.get(item_idx)? else {
+        let crate::ast::Item::Interface(decl) = module.items.get(item_idx)? else {
             return None;
         };
         let method = decl.methods.iter().find(|m| m.name == operation)?;

@@ -289,7 +289,7 @@ pub enum TypeError {
     /// does not implement effect `E`.
     HandlerEffectNotImplemented {
         type_name: String,
-        effect_name: String,
+        interface_name: String,
         span: Span,
     },
 
@@ -570,13 +570,13 @@ impl std::fmt::Display for TypeError {
             }
             TypeError::HandlerEffectNotImplemented {
                 type_name,
-                effect_name,
+                interface_name,
                 span,
             } => {
                 write!(
                     f,
                     "{}:{}: handler value of type '{}' does not implement effect '{}'",
-                    span.line, span.column, type_name, effect_name
+                    span.line, span.column, type_name, interface_name
                 )
             }
             TypeError::BundledHandlerImplementsNoEffect { type_name, span } => {
@@ -823,12 +823,12 @@ impl From<TypeError> for crate::compiler_host::Diagnostic {
             ),
             TypeError::HandlerEffectNotImplemented {
                 type_name,
-                effect_name,
+                interface_name,
                 span,
             } => (
                 Code::TypeMismatch,
                 format!(
-                    "handler value of type '{type_name}' does not implement effect '{effect_name}'"
+                    "handler value of type '{type_name}' does not implement effect '{interface_name}'"
                 ),
                 *span,
             ),

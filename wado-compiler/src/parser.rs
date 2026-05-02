@@ -5,8 +5,8 @@ use crate::ast::{
     AssertStmt, AssignExpr, AssociatedConst, AssociatedTypeBinding, AssociatedTypeDecl, AstId,
     AttrArg, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, CallExpr, CastExpr,
     ChainedComparison, ClosureExpr, ClosureParam, CmImport, ComparisonChainExpr,
-    CompoundAssignExpr, CompoundAssignOp, Condition, ConditionElement, ContinueStmt, EffectDecl,
-    EffectMethod, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl, FlagsVariant,
+    CompoundAssignExpr, CompoundAssignOp, Condition, ConditionElement, ContinueStmt, InterfaceDecl,
+    InterfaceMethod, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl, FlagsVariant,
     ForOfStmt, ForStmt, FormatSpec, Function, FunctionType, GenericType, GlobalDecl, IdentExpr,
     IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute, Item, LabeledBlockStmt,
     LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm, MatchExpr, MatchesExpr, MethodCallExpr,
@@ -453,7 +453,7 @@ impl Parser {
             TokenKind::Fn => self
                 .parse_function(is_pub, is_export, is_async, attrs)
                 .map(Item::Function),
-            TokenKind::Effect => self.parse_effect_decl(is_pub, attrs).map(Item::Effect),
+            TokenKind::Interface => self.parse_interface_decl(is_pub, attrs).map(Item::Interface),
             TokenKind::Struct => self.parse_struct_decl(is_pub, attrs).map(Item::Struct),
             TokenKind::Enum => self.parse_enum_decl(is_pub, attrs).map(Item::Enum),
             TokenKind::Variant => self.parse_variant_decl(is_pub, attrs).map(Item::Variant),
@@ -722,7 +722,7 @@ impl Parser {
             let mut methods = Vec::new();
             while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
                 // Reuse effect method parser for resource methods
-                methods.push(self.parse_effect_method()?);
+                methods.push(self.parse_interface_method()?);
             }
 
             let end = self.expect(&TokenKind::RBrace)?.span;
@@ -828,8 +828,8 @@ impl Parser {
                 let functions = self.parse_use_item_simple_list()?;
                 self.expect(&TokenKind::RBrace)?;
 
-                items.push(UseItem::EffectFunctions {
-                    effect_name: name,
+                items.push(UseItem::InterfaceFunctions {
+                    interface_name: name,
                     functions,
                 });
             } else {
@@ -3861,25 +3861,25 @@ impl Parser {
 
     // Placeholder implementations for other declarations
 
-    fn parse_effect_decl(
+    fn parse_interface_decl(
         &mut self,
         is_pub: bool,
         attrs: Vec<Attribute>,
-    ) -> ParseResult<EffectDecl> {
+    ) -> ParseResult<InterfaceDecl> {
         let id = self.alloc_ast_id();
         let start_span = self.peek().span;
-        self.expect(&TokenKind::Effect)?;
+        self.expect(&TokenKind::Interface)?;
         let (name, name_span) = self.consume_ident_with_span()?;
         self.expect(&TokenKind::LBrace)?;
 
         let mut methods = Vec::new();
         while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
-            methods.push(self.parse_effect_method()?);
+            methods.push(self.parse_interface_method()?);
         }
 
         let end_span = self.expect(&TokenKind::RBrace)?.span;
 
-        Ok(EffectDecl {
+        Ok(InterfaceDecl {
             id,
             name,
             name_span,
@@ -3890,7 +3890,7 @@ impl Parser {
         })
     }
 
-    fn parse_effect_method(&mut self) -> ParseResult<EffectMethod> {
+    fn parse_interface_method(&mut self) -> ParseResult<InterfaceMethod> {
         // Parse any attributes on the method (e.g., #[cm("...")])
         let attrs = self.parse_attributes()?;
 
@@ -3923,7 +3923,7 @@ impl Parser {
 
         self.expect(&TokenKind::Semicolon)?;
 
-        Ok(EffectMethod {
+        Ok(InterfaceMethod {
             id,
             name,
             name_span,
@@ -4701,7 +4701,7 @@ impl Parser {
     fn parse_world_import(&mut self) -> ParseResult<WorldImport> {
         let start_span = self.peek().span;
         self.expect(&TokenKind::Import)?;
-        let effect_name = self.consume_ident()?;
+        let interface_name = self.consume_ident()?;
         self.expect(&TokenKind::LBrace)?;
 
         let functions =
@@ -4711,7 +4711,7 @@ impl Parser {
         self.expect(&TokenKind::RBrace)?;
 
         Ok(WorldImport {
-            effect_name,
+            interface_name,
             functions,
             span: start_span.merge(&close_span),
         })
@@ -5086,16 +5086,16 @@ mod tests {
         if let Item::Use(use_decl) = &module.items[0] {
             assert_eq!(use_decl.source, "wasi:cli");
             assert_eq!(use_decl.items.len(), 1);
-            if let UseItem::EffectFunctions {
-                effect_name,
+            if let UseItem::InterfaceFunctions {
+                interface_name,
                 functions,
             } = &use_decl.items[0]
             {
-                assert_eq!(effect_name, "Stdout");
+                assert_eq!(interface_name, "Stdout");
                 assert_eq!(functions.len(), 1);
                 assert_eq!(functions[0].name, "write_via_stream");
             } else {
-                panic!("expected EffectFunctions");
+                panic!("expected InterfaceFunctions");
             }
         } else {
             panic!("expected use declaration");
@@ -5260,7 +5260,7 @@ mod tests {
 
             // Check import
             let import = &world.imports[0];
-            assert_eq!(import.effect_name, "Stdout");
+            assert_eq!(import.interface_name, "Stdout");
             assert_eq!(import.functions, vec!["write_via_stream"]);
 
             // Check export
@@ -5305,7 +5305,7 @@ mod tests {
 
             // Check Environment import has multiple functions
             let env_import = &world.imports[2];
-            assert_eq!(env_import.effect_name, "Environment");
+            assert_eq!(env_import.interface_name, "Environment");
             assert_eq!(env_import.functions.len(), 2);
             assert_eq!(
                 env_import.functions,
@@ -5324,7 +5324,7 @@ mod tests {
     #[test]
     fn test_effect_with_async_method() {
         let source = r"
-            effect Http {
+            interface Http {
                 async fn get(url: String) -> Response;
                 fn status() -> i32;
             }
@@ -5332,7 +5332,7 @@ mod tests {
 
         let module = parse(source).unwrap();
 
-        if let Item::Effect(effect) = &module.items[0] {
+        if let Item::Interface(effect) = &module.items[0] {
             assert_eq!(effect.name, "Http");
             assert_eq!(effect.methods.len(), 2);
 
@@ -5344,14 +5344,14 @@ mod tests {
             assert!(!effect.methods[1].is_async);
             assert_eq!(effect.methods[1].name, "status");
         } else {
-            panic!("expected effect declaration");
+            panic!("expected interface declaration");
         }
     }
 
     #[test]
     fn test_effect_with_cm_attribute() {
         let source = r#"
-            pub effect Stdout {
+            pub interface Stdout {
                 #[cm("wasi:cli/stdout@0.3.0-rc-2025-09-16#write-via-stream")]
                 async fn write_via_stream(data: Stream<u8>) -> Result<(), ErrorCode>;
             }
@@ -5359,7 +5359,7 @@ mod tests {
 
         let module = parse(source).unwrap();
 
-        if let Item::Effect(effect) = &module.items[0] {
+        if let Item::Interface(effect) = &module.items[0] {
             assert_eq!(effect.name, "Stdout");
             assert!(effect.is_pub);
             assert_eq!(effect.methods.len(), 1);
@@ -5379,7 +5379,7 @@ mod tests {
             assert_eq!(cm.interface, "stdout");
             assert_eq!(cm.function.as_deref(), Some("write-via-stream"));
         } else {
-            panic!("expected effect declaration");
+            panic!("expected interface declaration");
         }
     }
 
@@ -5892,12 +5892,12 @@ line 2
         // Ensure effect methods with generic parameters parse correctly
         // (previously used a naive skip that could break on nested <>)
         let source = r"
-            effect Store {
+            interface Store {
                 fn get<K>(key: K) -> String;
             }
         ";
         let module = parse(source).unwrap();
-        if let Item::Effect(effect) = &module.items[0] {
+        if let Item::Interface(effect) = &module.items[0] {
             assert_eq!(effect.methods.len(), 1);
             assert_eq!(effect.methods[0].name, "get");
         }

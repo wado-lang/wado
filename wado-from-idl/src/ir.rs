@@ -19,7 +19,7 @@ pub struct WadoModule {
     pub imports: Vec<WadoImport>,
     pub types: Vec<WadoTypeDef>,
     pub resources: Vec<WadoResource>,
-    pub effects: Vec<WadoEffect>,
+    pub interfaces: Vec<WadoInterface>,
     pub standalone_functions: Vec<WadoFunction>,
     pub worlds: Vec<WadoWorld>,
 }
@@ -34,7 +34,7 @@ impl WadoModule {
             imports: Vec::new(),
             types: Vec::new(),
             resources: Vec::new(),
-            effects: Vec::new(),
+            interfaces: Vec::new(),
             standalone_functions: Vec::new(),
             worlds: Vec::new(),
         }
@@ -67,7 +67,7 @@ impl WadoModule {
         for r in &self.resources {
             names.push(r.name.clone());
         }
-        for e in &self.effects {
+        for e in &self.interfaces {
             names.push(e.name.clone());
         }
         names
@@ -166,7 +166,7 @@ pub struct WadoResource {
 }
 
 #[derive(Debug, Clone)]
-pub struct WadoEffect {
+pub struct WadoInterface {
     pub name: String,
     pub doc_comment: Option<String>,
     pub cm_interface: String,
@@ -204,7 +204,7 @@ pub struct WadoWorld {
 
 #[derive(Debug, Clone)]
 pub struct WadoWorldImport {
-    pub effect_name: String,
+    pub interface_name: String,
     pub functions: Vec<String>,
 }
 

@@ -156,7 +156,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
     fn resolve_effect_ops(
         &mut self,
         type_params: &[ast::GenericParam],
-        methods: &[ast::EffectMethod],
+        methods: &[ast::InterfaceMethod],
         resource_self: Option<(&str, ModuleSource)>,
     ) -> Vec<TirEffectOp> {
         let mut scope = self.enter_inherited_type_param_scope();
@@ -273,7 +273,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         ops
     }
 
-    pub(super) fn resolve_effect_decl(&mut self, decl: &ast::EffectDecl) -> TirEffect {
+    pub(super) fn resolve_effect_decl(&mut self, decl: &ast::InterfaceDecl) -> TirEffect {
         let operations = self.resolve_effect_ops(&[], &decl.methods, None);
         TirEffect {
             name: decl.name.clone(),

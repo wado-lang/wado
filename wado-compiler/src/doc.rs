@@ -2,7 +2,7 @@ use crate::hashmap::IndexSet;
 use serde::Serialize;
 
 use crate::ast::{
-    AssociatedConst, Attribute, EffectDecl, EnumDecl, FlagsDecl, Function, GenericParam,
+    AssociatedConst, Attribute, InterfaceDecl, EnumDecl, FlagsDecl, Function, GenericParam,
     GlobalDecl, ImplBlock, Item, Module, Newtype, Param, SelfKind, StructDecl, StructField,
     TraitDecl, Type, UseItem, VariantDecl,
 };
@@ -218,7 +218,7 @@ pub fn extract_doc(module: &Module, comments: &CommentMap, module_name: &str) ->
             Item::Enum(e) => enums.push(build_doc_enum(e, comments)),
             Item::Variant(v) => variants.push(build_doc_variant(v, comments)),
             Item::Flags(f) => flags.push(build_doc_flags(f, comments)),
-            Item::Effect(e) => effects.push(build_doc_effect(e, comments)),
+            Item::Interface(e) => effects.push(build_doc_interface(e, comments)),
             Item::Resource(r) => resources.push(build_doc_resource(r, comments)),
             Item::Function(f) => functions.push(build_doc_function(f, comments)),
             _ => {}
@@ -404,7 +404,7 @@ fn build_doc_flags(f: &FlagsDecl, comments: &CommentMap) -> DocFlags {
     }
 }
 
-fn build_doc_effect(e: &EffectDecl, comments: &CommentMap) -> DocEffect {
+fn build_doc_interface(e: &InterfaceDecl, comments: &CommentMap) -> DocEffect {
     let mut sig = String::new();
     if e.is_pub {
         sig.push_str("pub ");
@@ -544,7 +544,7 @@ fn is_pub_or_export(item: &Item) -> bool {
         Item::Flags(f) => f.is_pub,
         Item::Newtype(t) => t.is_pub,
         Item::Trait(t) => t.is_pub,
-        Item::Effect(e) => e.is_pub,
+        Item::Interface(e) => e.is_pub,
         Item::Global(g) => g.is_pub,
         Item::Resource(r) => r.is_pub,
         Item::Impl(_) => true,
@@ -605,7 +605,7 @@ fn render_param(param: &Param) -> String {
     }
 }
 
-fn render_effect_method_signature(m: &crate::ast::EffectMethod) -> String {
+fn render_effect_method_signature(m: &crate::ast::InterfaceMethod) -> String {
     let mut sig = String::new();
     if m.is_async {
         sig.push_str("async ");
@@ -809,8 +809,8 @@ fn collect_pub_use_names(module: &Module) -> IndexSet<String> {
                     UseItem::Simple { name, alias, .. } => {
                         names.insert(alias.as_ref().unwrap_or(name).clone());
                     }
-                    UseItem::EffectFunctions { effect_name, .. } => {
-                        names.insert(effect_name.clone());
+                    UseItem::InterfaceFunctions { interface_name, .. } => {
+                        names.insert(interface_name.clone());
                     }
                     UseItem::Wildcard | UseItem::Namespace { .. } => {}
                 }

@@ -10,7 +10,7 @@ use wit_parser::{
 };
 
 use crate::ir::{
-    WadoEffect, WadoEnum, WadoEnumVariant, WadoField, WadoFlagMember, WadoFlags, WadoFunction,
+    WadoInterface, WadoEnum, WadoEnumVariant, WadoField, WadoFlagMember, WadoFlags, WadoFunction,
     WadoImport, WadoModule, WadoNewtype, WadoParam, WadoResource, WadoStruct, WadoType,
     WadoTypeDef, WadoVariant, WadoVariantCase, WadoWorld, WadoWorldExport, WadoWorldImport,
 };
@@ -79,7 +79,7 @@ impl<'a> Transformer<'a> {
             .collect::<Result<Vec<_>>>()?;
 
         if !functions.is_empty() {
-            module.effects.push(WadoEffect {
+            module.interfaces.push(WadoInterface {
                 name: to_upper_camel_case(&iface_name),
                 doc_comment: iface.docs.contents.clone(),
                 cm_interface,
@@ -150,7 +150,7 @@ impl<'a> Transformer<'a> {
 
                 if !functions.is_empty() {
                     imports.push(WadoWorldImport {
-                        effect_name: to_upper_camel_case(&iface_name),
+                        interface_name: to_upper_camel_case(&iface_name),
                         functions,
                     });
                 }

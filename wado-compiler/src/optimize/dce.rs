@@ -24,7 +24,7 @@ use crate::tir::{
 /// Call graph: function ID -> set of called function IDs
 type CallGraph = IndexMap<FunctionId, IndexSet<FunctionId>>;
 
-/// Effect usage: function ID -> set of (`effect_name`, `operation_name`) pairs
+/// Effect usage: function ID -> set of (`interface_name`, `operation_name`) pairs
 type EffectUsageMap = IndexMap<FunctionId, IndexSet<(String, String)>>;
 
 /// Analysis results for a single function
@@ -32,7 +32,7 @@ type EffectUsageMap = IndexMap<FunctionId, IndexSet<(String, String)>>;
 struct FunctionAnalysis {
     /// Functions called by this function
     callees: IndexSet<FunctionId>,
-    /// Effect calls: (`effect_name`, `op_name`)
+    /// Effect calls: (`interface_name`, `op_name`)
     effect_calls: IndexSet<(String, String)>,
 }
 
@@ -99,8 +99,8 @@ fn resolve_imports(
     let mut used_wasi_functions: IndexSet<String> = IndexSet::default();
     for func_id in reachable {
         if let Some(effects) = effect_usage.get(func_id) {
-            for (effect_name, op_name) in effects {
-                used_wasi_functions.insert(format!("{effect_name}::{op_name}"));
+            for (interface_name, op_name) in effects {
+                used_wasi_functions.insert(format!("{interface_name}::{op_name}"));
             }
         }
     }
@@ -121,7 +121,7 @@ fn resolve_imports(
     // `wasi:cli/stdout`. Gate on `import KilnHost` so the rule fires
     // for any kiln-generator-shaped world, not just the canonical
     // `core:kiln/generator`.
-    if !project.world_imports_effect("KilnHost") {
+    if !project.world_imports_interface("KilnHost") {
         if reachable.iter().any(|func_id| {
             matches!(func_id, FunctionId::Free(f) if is_builtin_func(f) && {
                 let name = f.name.strip_prefix("builtin::").unwrap_or(&f.name);
@@ -688,8 +688,8 @@ fn analyze_expr(
                 ));
                 analysis.callees.insert(callee_id);
 
-                if let Some(effect_name) = original_callee_module.effect_name() {
-                    analysis.effect_calls.insert((effect_name, func_name));
+                if let Some(interface_name) = original_callee_module.interface_name() {
+                    analysis.effect_calls.insert((interface_name, func_name));
                 }
             }
 
@@ -1018,13 +1018,13 @@ fn analyze_expr(
         TirExprKind::CmRawCall { local_name, args } => {
             // CmRawCall references a lowered WASI import function.
             // Parse the local_name (e.g., "wasi:cli/Stdout::write_via_stream")
-            // to extract the effect_name and op_name for WASI import tracking.
-            if let Some((effect_name, op_name)) = local_name.split_once("::").map(|(prefix, op)| {
+            // to extract the interface_name and op_name for WASI import tracking.
+            if let Some((interface_name, op_name)) = local_name.split_once("::").map(|(prefix, op)| {
                 // prefix is like "wasi:cli/Stdout" → extract "Stdout"
                 let effect = prefix.rsplit('/').next().unwrap_or(prefix);
                 (effect.to_string(), op.to_string())
             }) {
-                analysis.effect_calls.insert((effect_name, op_name));
+                analysis.effect_calls.insert((interface_name, op_name));
             }
             for arg in args {
                 analyze_expr(arg, current_module, type_table, analysis);

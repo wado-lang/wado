@@ -8,7 +8,7 @@
 use crate::ast::{
     AssertStmt, AssignExpr, AstId, BinaryExpr, BinaryOp, Block, BreakStmt, CallExpr, CastExpr,
     ClosureExpr, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition,
-    ConditionElement, ContinueStmt, EffectDecl, EnumDecl, Expr, ExprStmt, FieldAccessExpr,
+    ConditionElement, ContinueStmt, InterfaceDecl, EnumDecl, Expr, ExprStmt, FieldAccessExpr,
     ForOfStmt, ForStmt, FormatSpec, Function, GlobalDecl, IdentExpr, IfExpr, IfStmt, ImplBlock,
     IndexExpr, Item, LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm,
     MatchExpr, MethodCallExpr, Module, Newtype, Pattern, ReturnStmt, StaticMethodCallExpr, Stmt,
@@ -178,7 +178,7 @@ fn desugar_item(item: &Item, ctx: &mut DesugarContext) -> Item {
         Item::Variant(v) => Item::Variant(v.clone()),
         Item::Flags(f) => Item::Flags(f.clone()),
         Item::Newtype(t) => Item::Newtype(desugar_newtype(t)),
-        Item::Effect(e) => Item::Effect(desugar_effect(e)),
+        Item::Interface(e) => Item::Interface(desugar_interface(e)),
         Item::Use(u) => Item::Use(u.clone()),
         Item::Resource(r) => Item::Resource(r.clone()),
         Item::World(w) => Item::World(w.clone()),
@@ -293,7 +293,7 @@ fn desugar_newtype(t: &Newtype) -> Newtype {
     t.clone()
 }
 
-fn desugar_effect(e: &EffectDecl) -> EffectDecl {
+fn desugar_interface(e: &InterfaceDecl) -> InterfaceDecl {
     e.clone()
 }
 
