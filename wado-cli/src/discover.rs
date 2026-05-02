@@ -85,7 +85,10 @@ fn augmented_patterns(raw: &str) -> impl Iterator<Item = (String, String)> + '_ 
 
 #[derive(Debug)]
 pub enum WalkError {
-    Io(io::Error),
+    /// I/O failure on a specific filesystem entry (broken symlink,
+    /// permission denied, race with deletion, ...). The path is captured
+    /// so the runner can report exactly which entry failed.
+    Io { path: PathBuf, source: io::Error },
     InvalidExclude {
         pattern: String,
         source: PatternError,
@@ -95,7 +98,9 @@ pub enum WalkError {
 impl std::fmt::Display for WalkError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            WalkError::Io(e) => write!(f, "io error during test discovery: {e}"),
+            WalkError::Io { path, source } => {
+                write!(f, "io error reading {}: {source}", path.display())
+            }
             WalkError::InvalidExclude { pattern, source } => {
                 write!(f, "invalid exclude pattern {pattern:?}: {source}")
             }
@@ -104,12 +109,6 @@ impl std::fmt::Display for WalkError {
 }
 
 impl std::error::Error for WalkError {}
-
-impl From<io::Error> for WalkError {
-    fn from(err: io::Error) -> Self {
-        WalkError::Io(err)
-    }
-}
 
 /// Result of a package-rooted discovery walk.
 #[derive(Debug, Default)]
@@ -170,7 +169,13 @@ fn walk_dir(
 ) -> Result<(), WalkError> {
     let added_rules = load_gitignore(dir, rules);
 
-    let mut entries: Vec<_> = fs::read_dir(dir)?.filter_map(Result::ok).collect();
+    let mut entries: Vec<_> = fs::read_dir(dir)
+        .map_err(|source| WalkError::Io {
+            path: dir.to_path_buf(),
+            source,
+        })?
+        .filter_map(Result::ok)
+        .collect();
     entries.sort_by_key(std::fs::DirEntry::file_name);
 
     for entry in entries {
@@ -182,10 +187,10 @@ fn walk_dir(
             continue;
         }
 
-        let metadata = match fs::metadata(&path) {
-            Ok(m) => m,
-            Err(_) => continue,
-        };
+        let metadata = fs::metadata(&path).map_err(|source| WalkError::Io {
+            path: path.clone(),
+            source,
+        })?;
         let is_dir = metadata.is_dir();
 
         if is_dir && submodules.contains(&path) {
@@ -235,7 +240,7 @@ fn read_submodule_paths(root: &Path) -> Result<Vec<PathBuf>, WalkError> {
     let content = match fs::read_to_string(&path) {
         Ok(s) => s,
         Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(e) => return Err(e.into()),
+        Err(source) => return Err(WalkError::Io { path, source }),
     };
     Ok(parse_gitmodules(&content))
 }
@@ -243,15 +248,23 @@ fn read_submodule_paths(root: &Path) -> Result<Vec<PathBuf>, WalkError> {
 fn parse_gitmodules(content: &str) -> Vec<PathBuf> {
     let mut paths = Vec::new();
     for line in content.lines() {
-        let trimmed = line.trim();
-        let Some(rest) = trimmed.strip_prefix("path") else {
+        // Match `path = value` (leading whitespace permitted). Require a
+        // word boundary after the `path` key so we don't pick up siblings
+        // like `pathology = …`.
+        let Some(rest) = line.trim_start().strip_prefix("path") else {
             continue;
         };
-        let rest = rest.trim_start();
-        let Some(rest) = rest.strip_prefix('=') else {
+        if !rest
+            .chars()
+            .next()
+            .is_some_and(|c| c == '=' || c.is_whitespace())
+        {
+            continue;
+        }
+        let Some(value) = rest.trim_start().strip_prefix('=') else {
             continue;
         };
-        paths.push(PathBuf::from(rest.trim()));
+        paths.push(PathBuf::from(value.trim()));
     }
     paths
 }
@@ -457,6 +470,23 @@ mod tests {
         assert!(got.contains("a.wado"));
         assert!(got.contains("nested/a.wado"));
         assert!(!got.contains("nested/skipme.wado"));
+    }
+
+    #[test]
+    fn gitmodules_parser_requires_word_boundary_after_path_key() {
+        let content = "\
+[submodule \"sub\"]\n\
+\tpath = vendor/sub\n\
+\turl  = https://example.com\n\
+[submodule \"siblings\"]\n\
+pathology = should-not-match\n\
+\tpath=vendor/no-spaces\n\
+";
+        let paths: Vec<String> = parse_gitmodules(content)
+            .iter()
+            .map(|p| p.to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(paths, vec!["vendor/sub", "vendor/no-spaces"]);
     }
 
     #[test]
