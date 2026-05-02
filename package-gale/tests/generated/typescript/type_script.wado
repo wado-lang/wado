@@ -17270,7 +17270,7 @@ fn parse_interface_declaration(p: &mut Parser) -> Result<InterfaceDeclarationNod
     } else {
         null
     };
-    let interface = p.expect(TK_Interface)?;
+    let interface_ = p.expect(TK_Interface)?;
     let identifier = parse_identifier(p)?;
     let type_parameters: Option<TypeParametersNode> = if p.peek_kind() == TK_LIT_LT {
         let type_parameters = parse_type_parameters(p)?;
@@ -17295,7 +17295,7 @@ fn parse_interface_declaration(p: &mut Parser) -> Result<InterfaceDeclarationNod
         span: Span::new(start, p.last_end()),
         export_,
         declare,
-        interface,
+        interface: interface_,
         identifier,
         type_parameters,
         interface_extends_clause,
@@ -26038,10 +26038,10 @@ fn parse_keyword(p: &mut Parser) -> Result<KeywordNode, ParseError> {
         }));
     }
     if kind == TK_Interface {
-        let interface = p.expect(TK_Interface)?;
+        let interface_ = p.expect(TK_Interface)?;
         return Result::<KeywordNode, ParseError>::Ok(KeywordNode::Alt37(KeywordAlt37 {
             span: Span::new(start, p.last_end()),
-            interface,
+            interface: interface_,
         }));
     }
     if kind == TK_Package {
