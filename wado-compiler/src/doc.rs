@@ -416,7 +416,7 @@ fn build_doc_interface(e: &InterfaceDecl, comments: &CommentMap) -> DocEffect {
         .methods
         .iter()
         .map(|m| DocFunction {
-            signature: render_effect_method_signature(m),
+            signature: render_interface_method_signature(m),
             doc: extract_doc_comment_with_attrs(comments, &m.span, &m.attrs),
         })
         .collect();
@@ -442,7 +442,7 @@ fn build_doc_resource(r: &crate::ast::ResourceDecl, comments: &CommentMap) -> Do
         .methods
         .iter()
         .map(|m| DocFunction {
-            signature: render_effect_method_signature(m),
+            signature: render_interface_method_signature(m),
             doc: extract_doc_comment_with_attrs(comments, &m.span, &m.attrs),
         })
         .collect();
@@ -605,7 +605,7 @@ fn render_param(param: &Param) -> String {
     }
 }
 
-fn render_effect_method_signature(m: &crate::ast::InterfaceMethod) -> String {
+fn render_interface_method_signature(m: &crate::ast::InterfaceMethod) -> String {
     let mut sig = String::new();
     if m.is_async {
         sig.push_str("async ");
