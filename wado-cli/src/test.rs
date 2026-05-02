@@ -6,7 +6,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
-use glob::glob;
 use lexopt::Arg::Value;
 use tokio::sync::mpsc;
 use wasmtime::Engine;
@@ -14,6 +13,8 @@ use wasmtime::component::Component;
 
 use crate::args::{self, CliExit};
 use crate::compile::{self, OptLevel};
+use crate::discover;
+use crate::manifest as project_manifest;
 
 const DEFAULT_TIMEOUT_MS: u64 = 5000;
 // Epoch tick interval for wasmtime's epoch-based interruption.
@@ -90,12 +91,22 @@ fn format_usage() -> String {
     writeln!(buf).unwrap();
     writeln!(
         buf,
-        "If no files are specified, searches for **/*_test.wado recursively."
+        "If no files are specified, searches for *.wado files under the project root,"
     )
     .unwrap();
     writeln!(
         buf,
-        "If a directory is given, searches for *_test.wado files within it."
+        "honouring .gitignore, .gitmodules, dot-prefixed entries, nested wado.toml"
+    )
+    .unwrap();
+    writeln!(
+        buf,
+        "boundaries, and the [test].exclude list in wado.toml. Files without `test`"
+    )
+    .unwrap();
+    writeln!(
+        buf,
+        "blocks are still compiled (compile-only check); only files with tests run."
     )
     .unwrap();
     writeln!(buf).unwrap();
@@ -108,40 +119,39 @@ pub fn print_usage() {
     eprint!("{}", format_usage());
 }
 
-/// Find all *_test.wado files recursively in the given directory.
-fn find_test_files_in(dir: &str) -> Result<Vec<String>, CliExit> {
-    let pattern = format!("{dir}/**/*_test.wado");
-    let mut files: Vec<String> = Vec::new();
-
-    match glob(&pattern) {
-        Ok(paths) => {
-            for entry in paths.flatten() {
-                files.push(entry.display().to_string());
-            }
+/// Discover `*.wado` files using the project-aware walker (WEP 2026-05-02).
+///
+/// `root` is the directory to walk. When `apply_manifest_excludes` is true and
+/// a `wado.toml` is found at or above `root`, its `[test].exclude` patterns
+/// are applied.
+fn discover_in(root: &Path, apply_manifest_excludes: bool) -> Result<Vec<String>, CliExit> {
+    let excludes: Vec<String> = if apply_manifest_excludes {
+        match project_manifest::discover(root) {
+            Ok(Some(project)) => project.manifest.test.exclude.clone(),
+            Ok(None) => Vec::new(),
+            Err(e) => return Err(CliExit::error(e)),
         }
-        Err(e) => {
-            return Err(CliExit::error(format!("failed to glob pattern: {e}")));
-        }
-    }
-
-    files.sort();
-    Ok(files)
+    } else {
+        Vec::new()
+    };
+    let files = discover::discover_test_files(root, &excludes).map_err(CliExit::error)?;
+    Ok(files
+        .into_iter()
+        .map(|p| p.display().to_string())
+        .collect())
 }
 
-/// Find all *_test.wado files recursively in the current directory.
-fn find_test_files() -> Result<Vec<String>, CliExit> {
-    find_test_files_in(".")
-}
-
-/// Resolve paths: expand directories to their contained *_test.wado files.
+/// Resolve paths: expand directories to their contained `*.wado` files using
+/// the discovery walker. File paths are passed through unchanged.
 fn resolve_paths(paths: Vec<String>) -> Result<Vec<String>, CliExit> {
     let mut resolved = Vec::new();
     for path in paths {
-        if Path::new(&path).is_dir() {
-            let mut found = find_test_files_in(&path)?;
+        let p = Path::new(&path);
+        if p.is_dir() {
+            let mut found = discover_in(p, true)?;
             if found.is_empty() {
                 return Err(CliExit::error(format!(
-                    "no *_test.wado files found in directory '{path}'"
+                    "no .wado files found in directory '{path}'"
                 )));
             }
             resolved.append(&mut found);
@@ -225,12 +235,14 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
         preopened_dirs.push((".".to_owned(), ".".to_owned()));
     }
 
-    // Resolve paths: expand directories to *_test.wado files
+    // Resolve paths: walk the project root for *.wado files when no explicit
+    // paths are given; otherwise expand any directory arguments via the
+    // discovery walker. See WEP 2026-05-02.
     if paths.is_empty() {
-        paths = find_test_files()?;
+        paths = discover_in(Path::new("."), true)?;
         if paths.is_empty() {
             return Err(CliExit {
-                message: "No test files found (looking for **/*_test.wado)\n".to_owned(),
+                message: "No .wado files found under the project root\n".to_owned(),
                 exit_code: 0,
             });
         }
