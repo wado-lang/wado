@@ -50,7 +50,6 @@ impl WadoCodeGenerator {
         let mut s = self.output.trim_end().to_owned();
         s.push('\n');
         s
-
     }
 
     fn write_header(&mut self, module: &WadoModule) {
