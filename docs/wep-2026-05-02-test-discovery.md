@@ -139,15 +139,15 @@ Add a `wado.toml` at the repo root so that:
 
 ## TODOs
 
-- [ ] Implement discovery walker with gitignore / submodule / dot-prefix /
+- [x] Implement discovery walker with gitignore / submodule / dot-prefix /
       nested-`wado.toml` / `[test].exclude` rules and symlink cycle detection.
-- [ ] Add `[test].exclude: Vec<String>` to `wado-manifest`.
-- [ ] Add `--exclude` and switch `--filter` to wildcard path matching.
-- [ ] Audit and, if necessary, restrict test-block execution to the entry
+- [x] Add `[test].exclude: Vec<String>` to `wado-manifest`.
+- [x] Add `--exclude` and switch `--filter` to wildcard path matching.
+- [x] Audit and, if necessary, restrict test-block execution to the entry
       module.
-- [ ] Implement compile-only validation for files without test blocks.
-- [ ] Emit three-axis summary and propagate exit code.
-- [ ] Recurse into nested `wado.toml` packages.
-- [ ] Add a root `wado.toml` to this repository wiring up the exclude list.
-- [ ] Update `docs/cheatsheet.md` and the CLI subcommands doc to describe the
+- [x] Implement compile-only validation for files without test blocks.
+- [x] Emit three-axis summary and propagate exit code.
+- [x] Recurse into nested `wado.toml` packages.
+- [x] Add a root `wado.toml` to this repository wiring up the exclude list.
+- [x] Update `docs/cheatsheet.md` and the CLI subcommands doc to describe the
       new discovery rules.
