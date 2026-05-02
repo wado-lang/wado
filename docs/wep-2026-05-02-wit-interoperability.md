@@ -10,18 +10,20 @@ that the compiler has never seen before — has never been written down in one
 place.
 
 This WEP collects the existing pieces, captures the current state of the
-implementation, and states the long-term goal explicitly.
+implementation, and states the long-term goal explicitly. It also makes a
+shape-level decision (unifying `effect` and `interface`) that several earlier
+WEPs left open or implicitly inconsistent.
 
 ### Existing WEPs in this area
 
-| WEP                                                                                     | Scope                                                                                                              |
-| --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| [WIT and Wado Mapping](./wep-2026-01-29-wit-wado-mapping.md)                            | Bidirectional type/structure mapping. `pub` vs `export`. `interface` vs `effect`.                                  |
-| [World Conformance and Export Syntax](./wep-2026-01-16-world-conformance-and-export.md) | `contract <World>;` declaration and `export(World::name)` mapping syntax.                                          |
-| [TIR-Level CM Binding Synthesis](./wep-2026-02-15-cm-binding-synthesis.md)              | Type-driven lift/lower binding synthesis at the TIR layer.                                                         |
-| [WIT Bundling in Component Binaries](./wep-2026-03-21-wit-bundling.md)                  | The producer side: embed WIT into output `.wasm` via `component-type` custom section.                              |
-| [WebAssembly Module Import Support](./wep-2026-01-10-wasm-import.md)                    | Phase 1 (core wasm asset import) is delivered. Phase 2 (CM-boundary external `.wasm`) is now subsumed by this WEP. |
-| [Target WASI P3 Only](./wep-2026-01-11-wasi-p3-only.md)                                 | The CM target is fixed to WASI Preview 3.                                                                          |
+| WEP                                                                                     | Scope                                                                                                                                             |
+| --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [WIT and Wado Mapping](./wep-2026-01-29-wit-wado-mapping.md)                            | Bidirectional type/structure mapping. `pub` vs `export`. Originally split `interface` and `effect`; superseded by the unification decision below. |
+| [World Conformance and Export Syntax](./wep-2026-01-16-world-conformance-and-export.md) | `contract <World>;` declaration and `export(World::name)` mapping syntax.                                                                         |
+| [TIR-Level CM Binding Synthesis](./wep-2026-02-15-cm-binding-synthesis.md)              | Type-driven lift/lower binding synthesis at the TIR layer.                                                                                        |
+| [WIT Bundling in Component Binaries](./wep-2026-03-21-wit-bundling.md)                  | The producer side: embed WIT into output `.wasm` via `component-type` custom section.                                                             |
+| [WebAssembly Module Import Support](./wep-2026-01-10-wasm-import.md)                    | Phase 1 (core wasm asset import) is delivered. Phase 2 (CM-boundary external `.wasm`) is now subsumed by this WEP.                                |
+| [Target WASI P3 Only](./wep-2026-01-11-wasi-p3-only.md)                                 | The CM target is fixed to WASI Preview 3.                                                                                                         |
 
 ## Goal
 
@@ -33,14 +35,113 @@ be consumed without compiler changes. Concretely:
 2. The compiler reads the `component-type` custom section embedded in the
    component (the section described by [WIT Bundling](./wep-2026-03-21-wit-bundling.md);
    the producer side is designed but not yet implemented).
-3. The use resolver constructs Wado IR (worlds, interfaces, effects,
-   resources, types) directly from that embedded WIT.
+3. The use resolver constructs Wado IR (worlds, interfaces, resources, types)
+   directly from that embedded WIT.
 4. The CM binding synthesis lifts/lowers values at the boundary based on that
    IR, without any per-component, per-world, or per-resource hand-coding in
    the compiler.
 
 There is no separate registry of "known WASI modules". The set of supported
 worlds equals the set of WITs the compiler has parsed during this compilation.
+
+## Key Decision: Unify `effect` (declaration) into `interface`
+
+WIT's organizing primitive is `interface`: a named group of free functions,
+resources (with their methods), and types. Wado split this into two keywords —
+`effect` for the import side (with effect tracking) and `interface` for the
+export side (pure CM grouping). The split was justified in WEP: WIT and Wado
+Mapping under the assumption that the import side carries Wado-level meaning
+(effect tracking) while the export side does not.
+
+In practice, `effect` blocks already contain free functions, resources, and
+types. The keyword name no longer matches the contents, and the producer-side
+`interface` keyword (a pure grouping) becomes a separate concept the user has
+to learn.
+
+This WEP collapses the two:
+
+- `effect <Name> { ... }` declarations become `interface <Name> { ... }`.
+- An interface contains free functions, resources, and types — exactly the
+  WIT shape.
+- The `with` clause continues to take interface names. `fn foo() with Stdout`
+  reads as "this function uses the Stdout interface, which is effectful".
+  Effect tracking semantics are unchanged.
+- Worlds `import` and `export` interfaces by name. Each `import Foo` resolves
+  to a known `pub interface Foo` declaration that carries `#[cm(...)]` and is
+  therefore traceable back to its WIT FQ name.
+
+The `effect` keyword is retained for one purpose only: **polymorphic effect
+parameters**, e.g.
+
+```wado
+fn wrapper<effect E>(f: fn() with E) with E { f(); }
+```
+
+Here `E` is an effect variable, not an interface declaration. This is a
+genuinely different concept (a type-level binder over effect rows) and keeping
+the keyword for this case avoids overloading `interface` with a meaning it does
+not have in WIT.
+
+### What this resolves
+
+- Effect-vs-interface ambiguity: `interface` is the single concept; `effect` is
+  a binder for polymorphic effect parameters only.
+- Producer-side keyword duplication: there is one keyword for both sides.
+  `pub interface Geometry { ... }` defines and groups; `export Geometry` from a
+  world publishes it.
+- World import information loss (see Current State below): `import Foo` in a
+  world is now a reference to an `interface Foo` declaration, which carries
+  `#[cm(...)]`. The interface FQ name is preserved by construction.
+
+### Cross-package disambiguation
+
+WIT distinguishes `wasi:filesystem/types` from `wasi:sockets/types` by package.
+Wado worlds need a syntax to do the same when a single world imports two
+interfaces with the same local name:
+
+```wado
+#[cm("wasi:cli/command@...")]
+pub world Command {
+    import Stdout;
+    import { Types } from "wasi:filesystem";
+    import { Types as SocketsTypes } from "wasi:sockets";
+
+    export async fn run() -> Result<(), ()>;
+}
+```
+
+`from "..."` mirrors WIT's `import wasi:filesystem/types@...;`. `as` is the
+escape hatch for local name collisions. Bare `import Stdout` keeps working
+when the local name is unambiguous.
+
+### Pure interfaces
+
+WIT has no purity annotation. An interface that contains only types (no
+functions) is simply not effectful — it never appears in a `with` clause, and
+users `use` its types directly. No new syntax is needed. An interface with
+functions is conservatively treated as effectful by the call site.
+
+## Migration Plan
+
+The migration runs on a single feature branch and lands as one merge:
+
+- Replace `effect <Name> { ... }` with `interface <Name> { ... }` across
+  `lib/wasi/**`, `lib/core/**`, `wado-compiler` internals, examples, fixtures,
+  and docs.
+- Update `wado-from-idl` so its generated stdlib emits `interface` blocks.
+- Keep the `effect` keyword in the parser for `<effect E>` polymorphic effect
+  parameters only. Remove `effect` as a declaration form.
+- Add `cm_interface_fq` to `WorldImportInfo` and populate it from the
+  referenced interface's `#[cm(...)]`. Remove the lazy `WasiRegistry` lookup
+  comment.
+- Add the `import { X } from "<package>"` and `import { X as Y }` world
+  syntax. Update the world parser, `WorldImportInfo`, and `wado-from-idl`.
+- Update WEP: WIT and Wado Mapping to mark the interface/effect split as
+  superseded.
+
+There is no compatibility shim and no deprecation period. Wado is pre-stable
+and this is a source-level rename plus a small registry change; a single
+landing keeps the codebase consistent.
 
 ## Non-Goals
 
@@ -55,14 +156,15 @@ worlds equals the set of WITs the compiler has parsed during this compilation.
 
 ### What is already WIT-driven
 
-| Aspect                                               | Mechanism                                                                           |
-| ---------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| World definitions                                    | Parsed from `lib/wasi/**/worlds.wado`; `#[cm("...")]` carries the FQ name.          |
-| Effect → CM import binding                           | Each effect method declares `#[cm_import("wasi:cli/stdout@...#write-via-stream")]`. |
-| Resources, structs, enums, variants, flags, newtypes | Registered from stdlib `.wado` parsing; `#[cm(...)]` carries CM-side names.         |
-| Entry function names (`run`, `handle`)               | Pulled from the world's declared `export` items, not hardcoded strings.             |
-| HTTP detection                                       | Namespace prefix `wasi:http/` plus return-type shape (`Result<Response, _>`).       |
-| CM lift/lower                                        | `synthesize_lift` / `synthesize_lower_to_flat` are recursive and type-driven.       |
+| Aspect                                               | Mechanism                                                                                          |
+| ---------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| World definitions                                    | Parsed from `lib/wasi/**/worlds.wado`; `#[cm("...")]` carries the FQ name.                         |
+| Interface → CM import binding (currently `effect`)   | Each method declares `#[cm_import("wasi:cli/stdout@...#write-via-stream")]`.                       |
+| Resources, structs, enums, variants, flags, newtypes | Registered from stdlib `.wado` parsing; `#[cm(...)]` carries CM-side names.                        |
+| Entry function names (`run`, `handle`)               | Pulled from the world's declared `export` items, not hardcoded strings.                            |
+| HTTP detection                                       | Namespace prefix `wasi:http/` plus return-type shape (`Result<Response, _>`).                      |
+| CM lift/lower                                        | `synthesize_lift` / `synthesize_lower_to_flat` are recursive and type-driven.                      |
+| `(interface, name)` scoping for type lookups         | `source_interface` field disambiguates same-named types across interfaces (e.g. two `ErrorCode`s). |
 
 ### What is still hardcoded or specialized
 
@@ -85,6 +187,15 @@ worlds equals the set of WITs the compiler has parsed during this compilation.
   in [WIT Bundling](./wep-2026-03-21-wit-bundling.md)) is designed but not
   yet implemented in codegen. Without it, a Wado-compiled component cannot
   be consumed via the embedded-WIT path described in this WEP's Goal.
+- `WorldImportInfo` (`world_registry.rs`) stores only the imported local name
+  and method list; it does not record the original WIT interface FQ. The
+  `wado-from-idl`-generated `worlds.wado` reflects the same loss: the original
+  `import wasi:filesystem/types@...;` becomes a bare `import Types { ... }`
+  with explicit method enumeration. The link to the WIT FQ name is recovered
+  lazily from `WasiRegistry`, which works today only because methods happen
+  to be unique enough to disambiguate. The `effect → interface` unification
+  fixes this by making `import Foo` a reference to an interface declaration
+  that carries `#[cm(...)]`.
 
 ### Stale items already cleaned up
 
@@ -101,22 +212,24 @@ worlds equals the set of WITs the compiler has parsed during this compilation.
 
 WIT worlds are containers: a world bundles a set of imports and exports, and
 the same interface can appear in multiple worlds with different roles. The
-current Wado treatment flattens this — `effect`s are global, and the user
-imports them with `use` regardless of which world is targeted.
+current Wado treatment flattens this — interfaces are globally visible, and
+the user imports them with `use` regardless of which world is targeted.
 
 Levels of faithfulness to consider:
 
-- L1 (current): worlds declare entry points; effects are globally visible.
-- L2: `contract <World>;` declarations verify that the module's effect usage
-  is a subset of the world's imports (WEP: World Conformance, not yet
+- L1 (current): worlds declare entry points; interfaces are globally visible.
+- L2: `contract <World>;` declarations verify that the module's interface
+  usage is a subset of the world's imports (WEP: World Conformance, not yet
   implemented).
-- L3: each world owns a scope of usable effects and interfaces. Importing an
-  effect not declared by the active world is a compile error.
+- L3: each world owns a scope of usable interfaces. Importing an interface
+  not declared by the active world is a compile error.
 - L4: full WIT structure — `include`, `with`, world inheritance.
 
 External WIT consumption realistically requires at least L2 and probably L3:
 without per-world scope, two unrelated worlds whose imports share a name
-(e.g. two `Logger` interfaces) collapse into one effect.
+(e.g. two `Logger` interfaces from different packages) would still need to be
+disambiguated only by the cross-package syntax above, which is workable but
+fragile if the user forgets to qualify.
 
 ### `contract` declaration
 
@@ -124,13 +237,15 @@ WEP: World Conformance and Export Syntax defines the syntax. The parser does
 not implement it. Designing L2/L3 above means deciding the runtime behavior
 of `contract` before parser work starts.
 
-### Effect vs interface
+### "All methods" import form
 
-WEP: WIT and Wado Mapping splits these along import/export lines. That is
-fine for stdlib bindings but needs to be checked against arbitrary external
-components, where the Wado consumer may want to consume an exported interface
-(non-effectful) or import an interface that is effectful in the consumer's
-world.
+WIT's `import stdout;` means "import the entire interface, all current and
+future methods". The current `wado-from-idl` output expands this to an
+explicit method list. The unified model with `import Stdout;` (bare, no
+brace block) maps directly to the WIT all-methods form and avoids
+regenerating the stdlib when a WIT interface gains a new method. The
+brace-block form `import Stdout { foo, bar }` is retained for the case where
+the user wants a strict subset. The world parser needs to support both.
 
 ## Roadmap
 
@@ -138,6 +253,11 @@ This WEP is a roadmap document. Each item below either has its own WEP or
 will get one when work starts.
 
 - [x] Type-driven CM binding synthesis (WEP: TIR-Level CM Binding Synthesis).
+- [ ] Unify `effect` declarations into `interface` (single-branch migration;
+      see Migration Plan above). Retain `effect` keyword for `<effect E>`
+      polymorphic effect parameters.
+- [ ] Augment `WorldImportInfo` with `cm_interface_fq`; teach the world
+      parser the `from "<package>"` and `as` qualifications.
 - [ ] Producer side: embed `component-type` in output (WEP: WIT Bundling).
       Designed but not implemented — required before round-trip Wado-to-Wado
       consumption via the embedded-WIT path can work.
@@ -149,7 +269,7 @@ will get one when work starts.
 - [ ] Add `wit-parser` / `wit-component` as compiler dependencies, behind a
       use-resolver entry point that reads embedded `component-type` from
       external `.wasm` imports.
-- [ ] Construct world / interface / effect / resource entries in the existing
+- [ ] Construct world / interface / resource entries in the existing
       registries directly from parsed WIT, on the same code path as
       stdlib-derived entries.
 - [ ] Close the binding-synthesis gaps required for arbitrary worlds: struct,
@@ -164,6 +284,11 @@ will get one when work starts.
 
 - A single, documented end-to-end goal for WIT support replaces a scatter of
   point WEPs.
+- One keyword (`interface`) for both the import and export sides, matching
+  WIT's vocabulary directly. The `effect` keyword keeps a narrow,
+  well-defined role (polymorphic effect parameters).
+- World imports are traceable to WIT FQ names by construction, removing the
+  fragile method-name-based disambiguation in `WasiRegistry`.
 - Adding a new WASI or third-party CM library no longer requires patching the
   compiler or the stdlib list.
 - The producer (WIT Bundling) and consumer (this WEP) sides become
@@ -172,9 +297,12 @@ will get one when work starts.
 
 ### Negative
 
+- A one-shot rename of `effect` to `interface` touches the entire stdlib and
+  any user code that declared effects. There is no migration period; this is
+  a single-branch change.
 - Bringing `wit-parser` / `wit-component` into the compiler increases the
   dependency surface and binary size of the compiler itself.
-- L3 world scoping changes the meaning of `use`: a `use` of an effect not
+- L3 world scoping changes the meaning of `use`: a `use` of an interface not
   in the active world's imports becomes a compile error. This is a
   user-visible behavior change.
 
@@ -184,6 +312,11 @@ will get one when work starts.
   diverges from the current "the `.wado` file is the source of truth" model.
   The two paths will coexist: stdlib stays `.wado`-first via `wado-from-idl`;
   external imports become WIT-first.
+- Reusing `interface` for both effectful and pure groupings means the
+  presence of effect tracking is decided per-call (does this function call an
+  effectful interface member?) rather than per-declaration. This is closer to
+  WIT's lack of purity annotation and removes a Wado-specific concept users
+  had to learn.
 
 ## References
 
