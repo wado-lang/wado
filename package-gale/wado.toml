@@ -3,3 +3,14 @@ name = "gale"
 version = "0.1.0"
 command = "src/main.wado"
 generator = "src/generator.wado"
+
+[test]
+# `tests/kiln-consumer/` is a sub-package whose `src/main.wado` only
+# compiles when its `with { generator: ... }` `use` is resolved against a
+# path layout the universal `wado test` walker does not currently match
+# (the Kiln redirect's `./grammar.g4` resolves relative to the importing
+# file's dir, but the file lives in `src/` while the grammar lives one
+# level up). Cargo-side tests in `wado-cli/tests/kiln_*.rs` already cover
+# the pipeline; keep it out of discovery until the path-resolution gap is
+# fixed independently.
+exclude = ["tests/kiln-consumer/**"]
