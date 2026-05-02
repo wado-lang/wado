@@ -71,11 +71,15 @@ fn test_compile_help() {
 
 #[test]
 fn test_compile_missing_input() {
+    // The repo root carries a `wado.toml` with no `[package].command` so the
+    // resolver can't synthesise an input file; the user gets a focused error.
     wado()
         .arg("compile")
         .assert()
         .failure()
-        .stderr(predicate::str::contains("no input file specified"));
+        .stderr(predicate::str::contains(
+            "wado.toml found but [package].command is not set",
+        ));
 }
 
 #[test]
@@ -281,11 +285,16 @@ fn test_run_help() {
 
 #[test]
 fn test_run_missing_input() {
+    // Same story as `test_compile_missing_input`: the repo root has a
+    // `wado.toml` without `[package].command`, so the entry-point resolver
+    // surfaces a more specific failure.
     wado()
         .arg("run")
         .assert()
         .failure()
-        .stderr(predicate::str::contains("no input file specified"));
+        .stderr(predicate::str::contains(
+            "wado.toml found but [package].command is not set",
+        ));
 }
 
 #[test]
