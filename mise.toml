@@ -100,15 +100,19 @@ description = "Run Wado module tests"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
-# In CI, package-gale runs in its own per-optlevel jobs (test-gale-o1/o2/o3)
-# so it is excluded here to keep this job fast. Locally, we include it so
-# a single `mise run test-wado` covers everything.
-targets=(example/*.wado wado-compiler/lib/core wasm-size/*/*.wado)
-if [ -z "${CI:-}" ]; then
-    targets+=(package-gale)
+# Universal `wado test` walks the repo-root wado.toml and recurses into
+# every nested package (WEP 2026-05-02). In CI, package-gale runs in its
+# own per-optlevel jobs (test-gale-o1/o2/o3), so we exclude it here to
+# keep this job fast. Locally we include everything so a single
+# `mise run test-wado` covers it all.
+excludes=()
+if [ -n "${CI:-}" ]; then
+    excludes+=(--exclude 'package-gale/**')
 fi
-cargo run -p wado-cli -- test "${targets[@]}"
-cargo run -p wado-cli -- test --dir benchmark::. benchmark/*/*.wado
+cargo run -p wado-cli -- test "${excludes[@]}"
+# Benchmarks need their host directory preopened as the guest's cwd so
+# fixture lookups resolve, so they stay in their own invocation.
+cargo run -p wado-cli -- test --dir benchmark::. benchmark
 """
 
 [tasks.test-gale-o1]

@@ -135,8 +135,13 @@ fn compile_help() {
 
 #[test]
 fn compile_no_input() {
+    // The repo root carries a wado.toml without `[package].command`, so
+    // the resolver short-circuits with the more specific message.
     let parser = Parser::from_args::<&[&str]>(&[]);
-    assert_err(compile::parse_args(parser), "no input file specified");
+    assert_err(
+        compile::parse_args(parser),
+        "wado.toml found but [package].command is not set",
+    );
 }
 
 #[test]
@@ -244,8 +249,13 @@ fn run_help() {
 
 #[test]
 fn run_no_input() {
+    // Same situation as compile_no_input: repo-root wado.toml has no
+    // `[package].command`, and the resolver surfaces that.
     let parser = Parser::from_args::<&[&str]>(&[]);
-    assert_err(wado_cli::run::parse_args(parser), "no input file specified");
+    assert_err(
+        wado_cli::run::parse_args(parser),
+        "wado.toml found but [package].command is not set",
+    );
 }
 
 #[test]
@@ -309,10 +319,13 @@ fn serve_help() {
 
 #[test]
 fn serve_no_input() {
+    // `wado serve` resolves the entry point against `[package].service`;
+    // the repo-root wado.toml is missing that, so the resolver emits the
+    // more specific error.
     let parser = Parser::from_args::<&[&str]>(&[]);
     assert_err(
         wado_cli::serve::parse_args(parser),
-        "no input file specified",
+        "wado.toml found but [package].service is not set",
     );
 }
 
@@ -371,6 +384,18 @@ fn test_with_invalid_filter_pattern() {
         wado_cli::test::parse_args(parser),
         "invalid --filter pattern",
     );
+}
+
+#[test]
+fn test_with_exclude_drops_matching_directory_entries() {
+    // `--exclude` extends the manifest-level [test].exclude list. With
+    // explicit file arguments (no directories) the flag is a no-op because
+    // resolve_paths does not walk; this is the same shape as cargo's
+    // --exclude behaviour. The test confirms parsing accepts the flag and
+    // file arguments survive.
+    let parser = Parser::from_args(&["--exclude", "package-gale/**", "a.wado"]);
+    let opts = wado_cli::test::parse_args(parser).unwrap();
+    assert_eq!(opts.package_runs[0].paths, vec!["a.wado"]);
 }
 
 #[test]

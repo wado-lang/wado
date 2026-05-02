@@ -48,6 +48,7 @@ pub struct PackageRun {
 #[derive(Clone, Copy)]
 enum Opt {
     Filter,
+    Exclude,
     Parallel,
     OptLevel,
     Dir,
@@ -58,6 +59,7 @@ enum Opt {
 impl Opt {
     const ALL: &[Self] = &[
         Self::Filter,
+        Self::Exclude,
         Self::Parallel,
         Self::OptLevel,
         Self::Dir,
@@ -72,6 +74,12 @@ impl Opt {
                 short: Some('f'),
                 value: Some("<pattern>"),
                 desc: "Keep only files whose path matches the wildcard pattern (`*`, `?`, `[...]`)",
+            },
+            Self::Exclude => args::OptSpec {
+                long: Some("exclude"),
+                short: None,
+                value: Some("<pattern>"),
+                desc: "Drop files whose path matches the glob (repeatable; extends [test].exclude)",
             },
             Self::Parallel => args::OptSpec {
                 long: Some("parallel"),
@@ -133,13 +141,14 @@ pub fn print_usage() {
 fn discover_packages(
     root: &Path,
     apply_manifest_excludes: bool,
+    extra_excludes: &[String],
 ) -> Result<Vec<PackageRun>, CliExit> {
     let mut runs: Vec<PackageRun> = Vec::new();
     let invocation_root = root.to_path_buf();
     let mut queue: Vec<(PathBuf, bool)> = vec![(invocation_root.clone(), apply_manifest_excludes)];
 
     while let Some((pkg_root, apply_excludes)) = queue.pop() {
-        let excludes: Vec<String> = if apply_excludes {
+        let mut excludes: Vec<String> = if apply_excludes {
             match project_manifest::discover(&pkg_root) {
                 Ok(Some(project)) if project.root == pkg_root => {
                     project.manifest.test.exclude.clone()
@@ -150,6 +159,12 @@ fn discover_packages(
         } else {
             Vec::new()
         };
+        // CLI `--exclude` patterns layer on top of the manifest's; they are
+        // matched relative to each package root, so a single
+        // `--exclude package-gale/**` invocation suppresses the package's
+        // contents from the root walk and remains a no-op once we recurse
+        // into other packages where the pattern simply doesn't match.
+        excludes.extend(extra_excludes.iter().cloned());
 
         let result = discover::discover_test_files(&pkg_root, &excludes).map_err(CliExit::error)?;
 
@@ -185,12 +200,12 @@ fn relative_label(invocation_root: &Path, pkg_root: &Path) -> String {
 
 /// Resolve a mix of files and directory arguments into a single flat path
 /// list. Directories are walked with the discovery rules; files pass through.
-fn resolve_paths(paths: Vec<String>) -> Result<Vec<String>, CliExit> {
+fn resolve_paths(paths: Vec<String>, extra_excludes: &[String]) -> Result<Vec<String>, CliExit> {
     let mut resolved = Vec::new();
     for path in paths {
         let p = Path::new(&path);
         if p.is_dir() {
-            let runs = discover_packages(p, true)?;
+            let runs = discover_packages(p, true, extra_excludes)?;
             let mut count = 0usize;
             for run in runs {
                 count += run.paths.len();
@@ -217,6 +232,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
     let usage = format_usage();
     let mut paths: Vec<String> = Vec::new();
     let mut filter: Option<String> = None;
+    let mut cli_excludes: Vec<String> = Vec::new();
     let mut jobs: Option<usize> = None;
     let mut opt_level = OptLevel::default();
     let mut preopened_dirs: Vec<(String, String)> = Vec::new();
@@ -227,6 +243,9 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
             match opt {
                 Opt::Filter => {
                     filter = Some(args::require_string(&mut parser)?);
+                }
+                Opt::Exclude => {
+                    cli_excludes.push(args::require_string(&mut parser)?);
                 }
                 Opt::Parallel => {
                     let val = args::require_string(&mut parser)?;
@@ -286,9 +305,9 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
     // collapse everything into a single synthetic root run; sub-package
     // recursion only kicks in for the no-args (project-wide) case.
     let mut package_runs: Vec<PackageRun> = if paths.is_empty() {
-        discover_packages(Path::new("."), true)?
+        discover_packages(Path::new("."), true, &cli_excludes)?
     } else {
-        let resolved = resolve_paths(paths)?;
+        let resolved = resolve_paths(paths, &cli_excludes)?;
         vec![PackageRun {
             label: ".".to_string(),
             paths: resolved,
