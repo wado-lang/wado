@@ -105,14 +105,16 @@ set -xe -o pipefail
 # own per-optlevel jobs (test-gale-o1/o2/o3), so we exclude it here to
 # keep this job fast. Locally we include everything so a single
 # `mise run test-wado` covers it all.
+#
+# benchmark/* test blocks intentionally use only inline data (the
+# `Preopens`-driven file reads sit in `export fn run()`, which the test
+# world does not invoke); they fold into the same `wado test` call and no
+# longer need a separate `--dir` invocation.
 excludes=()
 if [ -n "${CI:-}" ]; then
     excludes+=(--exclude 'package-gale/**')
 fi
 cargo run -p wado-cli -- test "${excludes[@]}"
-# Benchmarks need their host directory preopened as the guest's cwd so
-# fixture lookups resolve, so they stay in their own invocation.
-cargo run -p wado-cli -- test --dir benchmark::. benchmark
 """
 
 [tasks.test-gale-o1]

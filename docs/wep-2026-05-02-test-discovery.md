@@ -136,3 +136,27 @@ Add a `wado.toml` at the repo root so that:
   compilation and by `[test].exclude` for known-large fixture trees.
 - Sub-package recursion duplicates some bookkeeping (each package gets its
   own summary line) but keeps each package's results attributable.
+
+## Open question: package-local assets
+
+`wado test` runs every package in the same WASI sandbox: there is one
+`--dir` setup for the whole invocation. That is sufficient when test
+bodies use `#include_str` / `#include_bytes` to embed their fixtures at
+compile time (the dominant case, and what `benchmark/*` settled on
+after this WEP), but it leaves no clean answer for a sub-package whose
+tests genuinely need to read files at runtime — the per-package
+`wado.toml` cannot ask the runner to preopen its own directory.
+
+The likely shape of a follow-up: a manifest declaration such as
+`[package].assets = "fixtures"`, combined with a compile-time parameter
+([WEP: Compile-Time Parameters](./wep-2026-04-26-compile-time-params.md))
+that exposes the package's preopen name to source. Tests then read
+`Preopens::read_file(`{ASSETS_DIR}/queries.sql`)` without hard-coding
+host paths, and `wado test` arranges the per-package preopens during
+sub-package recursion.
+
+This is intentionally **not** part of this WEP. The 95-percent answer
+is `#include_str` and the runtime path only earns its complexity once
+several real consumers want it. The open question is recorded here so
+that if and when those consumers appear, the design starts from a
+known position rather than from scratch.
