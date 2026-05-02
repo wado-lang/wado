@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777684943420,
+  "lastUpdate": 1777686376219,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -18493,6 +18493,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/9cb018b6bd242a5deecb57e351bc774f8bdaa100"
         },
         "date": 1777684943242,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1775,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8776,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18520,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 515706,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c0a18b3a2a6c35b169fcaefb7261bc89948b27ed",
+          "message": "Merge pull request #978 from wado-lang/gfx/fix_wado_from_idl_sources\n\nfix(wado-from-idl): attribute generated sources by package, not short name",
+          "timestamp": "2026-05-02T10:40:50+09:00",
+          "tree_id": "33a186c33b2ff2a0d764a7ec38820b0a0f31fde2",
+          "url": "https://github.com/wado-lang/wado/commit/c0a18b3a2a6c35b169fcaefb7261bc89948b27ed"
+        },
+        "date": 1777686375886,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
