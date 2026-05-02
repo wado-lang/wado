@@ -16,6 +16,17 @@ pub struct Manifest {
     pub dev_dependencies: IndexMap<String, Dependency>,
     pub build_dependencies: IndexMap<String, Dependency>,
     pub workspace: Option<Workspace>,
+    pub test: TestSettings,
+}
+
+/// The `[test]` section of `wado.toml`.
+///
+/// Controls how `wado test` discovers and runs `*.wado` files in the package.
+#[derive(Debug, Clone, Default)]
+pub struct TestSettings {
+    /// Glob patterns (relative to the package root) for paths to exclude from
+    /// test discovery. See WEP 2026-05-02.
+    pub exclude: Vec<String>,
 }
 
 /// The `[package]` section of `wado.toml`.
@@ -180,6 +191,12 @@ struct RawManifest {
     #[serde(rename = "build-dependencies")]
     build_dependencies: Option<IndexMap<String, RawDependency>>,
     workspace: Option<RawWorkspace>,
+    test: Option<RawTestSettings>,
+}
+
+#[derive(Deserialize)]
+struct RawTestSettings {
+    exclude: Option<Vec<String>>,
 }
 
 #[derive(Deserialize)]
@@ -220,6 +237,7 @@ fn convert_raw(raw: RawManifest) -> Result<Manifest, ManifestError> {
     let dev_dependencies = convert_deps(raw.dev_dependencies.unwrap_or_default())?;
     let build_dependencies = convert_deps(raw.build_dependencies.unwrap_or_default())?;
     let workspace = raw.workspace.map(convert_workspace).transpose()?;
+    let test = raw.test.map(convert_test).unwrap_or_default();
 
     Ok(Manifest {
         package,
@@ -228,7 +246,14 @@ fn convert_raw(raw: RawManifest) -> Result<Manifest, ManifestError> {
         dev_dependencies,
         build_dependencies,
         workspace,
+        test,
     })
+}
+
+fn convert_test(raw: RawTestSettings) -> TestSettings {
+    TestSettings {
+        exclude: raw.exclude.unwrap_or_default(),
+    }
 }
 
 fn convert_package(raw: RawPackage) -> Result<Package, ManifestError> {
@@ -518,6 +543,36 @@ shared = { path = "../shared", package = "myorg:shared", version = "^0.1.0" }
             }
             other => panic!("expected Path, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn parse_test_exclude() {
+        let toml = r#"
+[package]
+name = "app"
+version = "0.1.0"
+command = "main.wado"
+
+[test]
+exclude = ["wado-compiler/tests/**", "vendor/**"]
+"#;
+        let m = toml.parse::<Manifest>().unwrap();
+        assert_eq!(
+            m.test.exclude,
+            vec!["wado-compiler/tests/**", "vendor/**"]
+        );
+    }
+
+    #[test]
+    fn test_section_defaults_when_omitted() {
+        let toml = r#"
+[package]
+name = "app"
+version = "0.1.0"
+command = "main.wado"
+"#;
+        let m = toml.parse::<Manifest>().unwrap();
+        assert!(m.test.exclude.is_empty());
     }
 
     #[test]
