@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777594010697,
+  "lastUpdate": 1777684943420,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -18449,6 +18449,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/abfb481e476da4380b0f0da4171948a176fc0e86"
         },
         "date": 1777594010384,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1775,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8776,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18520,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 515706,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9cb018b6bd242a5deecb57e351bc774f8bdaa100",
+          "message": "Merge pull request #977 from wado-lang/gfx/update_wasmtime_4401\n\nchore: update wasmtime to v44.01",
+          "timestamp": "2026-05-02T10:15:15+09:00",
+          "tree_id": "550722ddcc6dd6f0d44c671d05264654c4b450f6",
+          "url": "https://github.com/wado-lang/wado/commit/9cb018b6bd242a5deecb57e351bc774f8bdaa100"
+        },
+        "date": 1777684943242,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
