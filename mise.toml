@@ -304,7 +304,7 @@ cargo run -p wado-from-idl -- \
 cargo run -p wado-from-idl -- \
     --wit-dir vendor/wasmtime/crates/wasi-tls/src/p3/wit \
     --output-dir wado-compiler/lib/wasi
-cargo run -p wado-cli -- format -w wado-compiler/lib/wasi/**/*.wado
+find wado-compiler/lib/wasi -type f -name '*.wado' -exec cargo run -p wado-cli -- format -w {} +
 """
 
 [tasks.update-stdlib-kiln]
