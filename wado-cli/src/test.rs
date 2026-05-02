@@ -229,7 +229,10 @@ fn resolve_paths(paths: Vec<String>, extra_excludes: &[String]) -> Result<Vec<St
                 )));
             }
         } else {
-            resolved.push(path);
+            // Run explicit file arguments through the same canonical form
+            // as discovered paths so `--filter` patterns see one consistent
+            // shape (forward-slash, no leading `./`).
+            resolved.push(display_path(p));
         }
     }
     Ok(resolved)
