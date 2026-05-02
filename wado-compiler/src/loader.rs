@@ -1485,16 +1485,20 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
 /// Resolve an include path relative to the module that contains it.
 ///
 /// Returns a path suitable for passing to `CompilerHost::load_source`, which
-/// joins the result with `base_path`. Two situations:
+/// joins the result with `base_path`. Three situations:
 ///
-/// - **Entry module**: the user's input path already encodes whatever leading
-///   prefix `base_path` would re-introduce (because `compile_with_options`
-///   derives `base_path` as the entry's parent directory). Prepending `dir`
-///   here would make `host.load_source`'s subsequent `base_path.join(...)`
-///   double the prefix — e.g. `wado test ./pkg/src/main.wado` resolving
-///   `#include_str("./x.wado")` would otherwise produce
-///   `./pkg/src/./pkg/src/x.wado`. Strip the leading `./` from `raw_path`
-///   only and let the host's join restore the prefix.
+/// - **CWD-relative entry module** (path begins with `./` or `../`): the
+///   user's input path already encodes the prefix `base_path` will
+///   re-introduce, because `compile_with_options` derives `base_path` from
+///   the entry's parent directory. Prepending `dir` here would make
+///   `host.load_source`'s subsequent `base_path.join(...)` double the prefix
+///   — e.g. `wado test ./pkg/src/main.wado` resolving `#include_str("./x")`
+///   would otherwise produce `./pkg/src/./pkg/src/x`. Strip the leading
+///   `./` from `raw_path` only and let the host's join restore the prefix.
+/// - **Absolute / non-prefixed entry module**: keep the dir-prefixed result.
+///   `Path::join` collapses absolute joins to the absolute path, so the
+///   loader's output stays the form callers (including LSP test hosts)
+///   expect.
 /// - **Imported module**: paths inside the loader are normalised to a `./`
 ///   form rooted at `base_path`, so prepending `dir` (e.g. `./sub` for an
 ///   import at `./sub/helper.wado`) yields the right base_path-relative
@@ -1510,7 +1514,9 @@ fn resolve_include_path_impl(
     }
     let stripped = raw_path.strip_prefix("./").unwrap_or(raw_path);
     let is_entry = entry_module_source.is_some_and(|e| e == module_source_str);
-    if is_entry {
+    let entry_is_cwd_relative =
+        module_source_str.starts_with("./") || module_source_str.starts_with("../");
+    if is_entry && entry_is_cwd_relative {
         return stripped.to_string();
     }
     let Some(dir_end) = module_source_str.rfind('/') else {
@@ -1552,12 +1558,14 @@ mod resolve_include_path_tests {
     }
 
     #[test]
-    fn entry_with_absolute_path_strips_only() {
+    fn entry_with_absolute_path_keeps_dir_prefix() {
+        // Absolute paths are not double-prefixed by `Path::join` (the join
+        // collapses to the absolute path), so the dir-prefixed form stays
+        // the canonical answer here. Test hosts that key on the absolute
+        // path string see the form they expect.
         let entry = "/abs/pkg/main.wado";
         let resolved = resolve(Some(entry), entry, "./runtime.wado");
-        // Stripping is enough — host joins with `/abs/pkg`, which yields the
-        // intended absolute include path.
-        assert_eq!(resolved, "runtime.wado");
+        assert_eq!(resolved, "/abs/pkg/runtime.wado");
     }
 
     #[test]
