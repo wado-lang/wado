@@ -41,12 +41,23 @@ impl From<io::Error> for WalkError {
     }
 }
 
+/// Result of a package-rooted discovery walk.
+#[derive(Debug, Default)]
+pub struct DiscoveryResult {
+    /// `*.wado` files belonging to this package, sorted.
+    pub files: Vec<PathBuf>,
+    /// Sub-directories that were skipped because they contain their own
+    /// `wado.toml`. The caller is expected to recurse into them as separate
+    /// package contexts (cargo workspace style; see WEP 2026-05-02).
+    pub subpackages: Vec<PathBuf>,
+}
+
 /// Discover all `*.wado` files reachable from `root`.
 ///
 /// `excludes` are shell-style globs evaluated against paths relative to `root`.
 /// Returned paths are absolute (relative to whatever `root` was given) and
-/// sorted for stable output.
-pub fn discover_test_files(root: &Path, excludes: &[String]) -> Result<Vec<PathBuf>, WalkError> {
+/// sorted for stable output. Returned sub-package roots are sorted as well.
+pub fn discover_test_files(root: &Path, excludes: &[String]) -> Result<DiscoveryResult, WalkError> {
     let exclude_patterns = compile_excludes(excludes)?;
 
     let submodules = read_submodule_paths(root)?
@@ -59,7 +70,7 @@ pub fn discover_test_files(root: &Path, excludes: &[String]) -> Result<Vec<PathB
         visited.insert(canon);
     }
 
-    let mut out = Vec::new();
+    let mut result = DiscoveryResult::default();
     let mut rules: Vec<GitignoreRule> = Vec::new();
     walk_dir(
         root,
@@ -68,11 +79,12 @@ pub fn discover_test_files(root: &Path, excludes: &[String]) -> Result<Vec<PathB
         &submodules,
         &mut rules,
         &mut visited,
-        &mut out,
+        &mut result,
     )?;
 
-    out.sort();
-    Ok(out)
+    result.files.sort();
+    result.subpackages.sort();
+    Ok(result)
 }
 
 fn compile_excludes(excludes: &[String]) -> Result<Vec<Pattern>, WalkError> {
@@ -95,7 +107,7 @@ fn walk_dir(
     submodules: &HashSet<PathBuf>,
     rules: &mut Vec<GitignoreRule>,
     visited: &mut HashSet<PathBuf>,
-    out: &mut Vec<PathBuf>,
+    out: &mut DiscoveryResult,
 ) -> Result<(), WalkError> {
     let added_rules = load_gitignore(dir, rules);
 
@@ -134,10 +146,10 @@ fn walk_dir(
         }
 
         if is_dir {
-            // Nested wado.toml: separate package boundary; do not recurse in.
-            // (The root itself can have a wado.toml — that's how we were
-            // rooted here. We only check sub-directory entries.)
+            // Nested wado.toml: separate package boundary; record it for the
+            // caller to recurse into and do not enter it ourselves.
             if path.join("wado.toml").is_file() {
+                out.subpackages.push(path);
                 continue;
             }
 
@@ -149,7 +161,7 @@ fn walk_dir(
 
             walk_dir(&path, root, excludes, submodules, rules, visited, out)?;
         } else if path.extension().is_some_and(|ext| ext == "wado") {
-            out.push(path);
+            out.files.push(path);
         }
     }
 
@@ -311,7 +323,7 @@ mod tests {
         touch(&root.join("readme.md"));
         touch(&root.join("nested/notes.txt"));
 
-        let files = discover_test_files(root, &[]).unwrap();
+        let files = discover_test_files(root, &[]).unwrap().files;
         let got = names_of(root, &files);
         let want: BTreeSet<_> = ["a.wado", "nested/b.wado", "nested/deep/c.wado"]
             .iter()
@@ -327,7 +339,7 @@ mod tests {
         touch(&root.join("a.wado"));
         touch(&root.join(".hidden/secret.wado"));
 
-        let files = discover_test_files(root, &[]).unwrap();
+        let files = discover_test_files(root, &[]).unwrap().files;
         let got = names_of(root, &files);
         assert_eq!(got.len(), 1);
         assert!(got.contains("a.wado"));
@@ -341,7 +353,7 @@ mod tests {
         touch(&root.join("target/build.wado"));
         fs::write(root.join(".gitignore"), "target/\n").unwrap();
 
-        let files = discover_test_files(root, &[]).unwrap();
+        let files = discover_test_files(root, &[]).unwrap().files;
         let got = names_of(root, &files);
         assert!(got.contains("a.wado"));
         assert!(!got.iter().any(|p| p.starts_with("target/")));
@@ -356,7 +368,7 @@ mod tests {
         touch(&root.join("pkg/skip/keep.wado"));
         fs::write(root.join("pkg/.gitignore"), "skip/\n!skip/keep.wado\n").unwrap();
 
-        let files = discover_test_files(root, &[]).unwrap();
+        let files = discover_test_files(root, &[]).unwrap().files;
         let got = names_of(root, &files);
         // Negation cannot resurrect files inside an ignored directory because
         // the directory itself is skipped — match git's actual behaviour.
@@ -373,7 +385,7 @@ mod tests {
         touch(&root.join("nested/skipme.wado"));
         fs::write(root.join(".gitignore"), "skipme.wado\n").unwrap();
 
-        let files = discover_test_files(root, &[]).unwrap();
+        let files = discover_test_files(root, &[]).unwrap().files;
         let got = names_of(root, &files);
         assert!(got.contains("a.wado"));
         assert!(got.contains("nested/a.wado"));
@@ -392,14 +404,14 @@ mod tests {
         )
         .unwrap();
 
-        let files = discover_test_files(root, &[]).unwrap();
+        let files = discover_test_files(root, &[]).unwrap().files;
         let got = names_of(root, &files);
         assert!(got.contains("a.wado"));
         assert!(!got.iter().any(|p| p.starts_with("vendor/sub/")));
     }
 
     #[test]
-    fn skips_nested_wado_toml_packages() {
+    fn skips_nested_wado_toml_packages_and_records_them() {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path();
         touch(&root.join("a.wado"));
@@ -410,10 +422,12 @@ mod tests {
         )
         .unwrap();
 
-        let files = discover_test_files(root, &[]).unwrap();
-        let got = names_of(root, &files);
+        let result = discover_test_files(root, &[]).unwrap();
+        let got = names_of(root, &result.files);
         assert!(got.contains("a.wado"));
         assert!(!got.contains("subpkg/main.wado"));
+        // The nested package directory is reported so the caller can recurse.
+        assert_eq!(result.subpackages, vec![root.join("subpkg")]);
     }
 
     #[test]
@@ -423,7 +437,7 @@ mod tests {
         touch(&root.join("src/main.wado"));
         touch(&root.join("compiler/tests/fixture.wado"));
 
-        let files = discover_test_files(root, &["compiler/tests/**".to_string()]).unwrap();
+        let files = discover_test_files(root, &["compiler/tests/**".to_string()]).unwrap().files;
         let got = names_of(root, &files);
         assert!(got.contains("src/main.wado"));
         assert!(!got.contains("compiler/tests/fixture.wado"));
@@ -447,7 +461,7 @@ mod tests {
         // Create a symlink loop: root/loop -> root
         symlink(root, root.join("loop")).unwrap();
 
-        let files = discover_test_files(root, &[]).unwrap();
+        let files = discover_test_files(root, &[]).unwrap().files;
         let got = names_of(root, &files);
         assert!(got.contains("real/a.wado"));
         // The loop must not produce duplicate entries; each canonical path is

@@ -334,9 +334,13 @@ fn serve_log_level() {
 
 #[test]
 fn test_with_files() {
+    // Explicit file arguments collapse into a single synthetic root
+    // PackageRun; sub-package recursion only kicks in when no args are given.
     let parser = Parser::from_args(&["a.wado", "b.wado"]);
     let opts = wado_cli::test::parse_args(parser).unwrap();
-    assert_eq!(opts.paths, vec!["a.wado", "b.wado"]);
+    assert_eq!(opts.package_runs.len(), 1);
+    assert_eq!(opts.package_runs[0].label, ".");
+    assert_eq!(opts.package_runs[0].paths, vec!["a.wado", "b.wado"]);
 }
 
 #[test]
@@ -345,7 +349,8 @@ fn test_with_filter_keeps_matching_paths() {
     // WEP 2026-05-02. `*.wado` keeps `a.wado` and drops `b.txt`.
     let parser = Parser::from_args(&["-f", "*.wado", "a.wado", "b.txt"]);
     let opts = wado_cli::test::parse_args(parser).unwrap();
-    assert_eq!(opts.paths, vec!["a.wado"]);
+    assert_eq!(opts.package_runs.len(), 1);
+    assert_eq!(opts.package_runs[0].paths, vec!["a.wado"]);
 }
 
 #[test]
