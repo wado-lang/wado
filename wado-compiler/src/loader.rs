@@ -1512,25 +1512,58 @@ fn resolve_include_path_impl(
     module_source_str: &str,
     raw_path: &str,
 ) -> String {
-    let is_relative_arg = raw_path.starts_with("./") || raw_path.starts_with("../");
-    if !is_relative_arg {
+    if !is_cwd_relative(raw_path) {
         return raw_path.to_string();
     }
     let stripped = raw_path.strip_prefix("./").unwrap_or(raw_path);
+    if let Some(dir) = dir_prefix_to_keep(entry_module_source, module_source_str) {
+        format!("{dir}/{stripped}")
+    } else {
+        stripped.to_string()
+    }
+}
+
+/// Wado's relative-path notation matches gitignore / shell convention:
+/// `./` is "next to me" and `../` is "up one". Anything else is interpreted
+/// by the host (`core:`, `wasi:`, absolute, ...) and is not our concern.
+fn is_cwd_relative(path: &str) -> bool {
+    path.starts_with("./") || path.starts_with("../")
+}
+
+/// Decide whether the include path should keep its containing module's
+/// directory as a prefix (`Some(dir)`) or collapse to the bare filename
+/// (`None`).
+///
+/// Two situations strip to the bare filename — both because re-prepending
+/// `dir` would only duplicate what `host.load_source`'s
+/// `base_path.join(...)` is already going to add:
+///
+/// 1. The cwd-relative entry module itself. Its `dir` IS `base_path`.
+/// 2. Any module whose `dir` does not look base_path-relative. Imports
+///    normalised by the loader sit under `./...`/`../...`; entries whose
+///    module-source string is a bare `pkg/src/main.wado` carry `base_path`
+///    inside the source string already, so the dir there is also part of
+///    what `base_path.join` will re-introduce.
+///
+/// The remaining cases (absolute paths, and imports rooted at `./` /
+/// `../`) keep the dir prefix. Absolute joins collapse cleanly via
+/// `Path::join`; relative-rooted imports need the prefix to stay inside
+/// the importer's directory.
+fn dir_prefix_to_keep<'a>(
+    entry_module_source: Option<&str>,
+    module_source_str: &'a str,
+) -> Option<&'a str> {
     let is_entry = entry_module_source.is_some_and(|e| e == module_source_str);
-    let entry_is_cwd_relative =
-        module_source_str.starts_with("./") || module_source_str.starts_with("../");
-    if is_entry && entry_is_cwd_relative {
-        return stripped.to_string();
+    if is_entry && is_cwd_relative(module_source_str) {
+        return None;
     }
-    let Some(dir_end) = module_source_str.rfind('/') else {
-        return stripped.to_string();
-    };
+    let dir_end = module_source_str.rfind('/')?;
     let dir = &module_source_str[..dir_end];
-    if module_source_str.starts_with('/') || dir.starts_with("./") || dir.starts_with("../") {
-        return format!("{dir}/{stripped}");
+    if module_source_str.starts_with('/') || is_cwd_relative(dir) {
+        Some(dir)
+    } else {
+        None
     }
-    stripped.to_string()
 }
 
 #[cfg(test)]
