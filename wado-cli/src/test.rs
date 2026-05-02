@@ -213,6 +213,18 @@ fn display_path(p: &Path) -> String {
 /// Resolve a mix of files and directory arguments into a single flat path
 /// list. Directories are walked with the discovery rules; files pass through.
 fn resolve_paths(paths: Vec<String>, extra_excludes: &[String]) -> Result<Vec<String>, CliExit> {
+    let exclude_patterns: Vec<Pattern> = extra_excludes
+        .iter()
+        .map(|s| {
+            Pattern::new(s)
+                .map_err(|e| CliExit::error(format!("invalid --exclude pattern {s:?}: {e}")))
+        })
+        .collect::<Result<_, _>>()?;
+    let is_excluded = |canonical: &str| {
+        exclude_patterns
+            .iter()
+            .any(|p| p.matches_with(canonical, discover::WALK_MATCH_OPTIONS))
+    };
     let mut resolved = Vec::new();
     for path in paths {
         let p = Path::new(&path);
@@ -230,9 +242,15 @@ fn resolve_paths(paths: Vec<String>, extra_excludes: &[String]) -> Result<Vec<St
             }
         } else {
             // Run explicit file arguments through the same canonical form
-            // as discovered paths so `--filter` patterns see one consistent
-            // shape (forward-slash, no leading `./`).
-            resolved.push(display_path(p));
+            // as discovered paths so `--filter` and `--exclude` patterns
+            // see one consistent shape (forward-slash, no leading `./`).
+            // Then honour `--exclude` even for explicit args, matching the
+            // flag's documented "drop files whose path matches" behaviour.
+            let canonical = display_path(p);
+            if is_excluded(&canonical) {
+                continue;
+            }
+            resolved.push(canonical);
         }
     }
     Ok(resolved)
@@ -877,15 +895,15 @@ async fn run_one_package(
 
     let total_tests = jobs.len() + todo_compile_errors.len();
     if total_tests == 0 && compile_failed == 0 {
-        if show_banner {
-            println!("(no tests)");
-        } else {
-            println!("No tests found");
-        }
-        return PackageTotals {
+        // Compile-only validation finished cleanly with no tests to run.
+        // Still emit the three-axis summary so the compile total is visible.
+        let totals = PackageTotals {
             compile_ok,
             ..PackageTotals::default()
         };
+        println!();
+        print_three_axis(&totals, None);
+        return totals;
     }
 
     // Phase 2: Execute tests in parallel

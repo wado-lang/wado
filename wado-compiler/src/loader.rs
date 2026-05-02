@@ -1485,7 +1485,8 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
 /// Resolve an include path relative to the module that contains it.
 ///
 /// Returns a path suitable for passing to `CompilerHost::load_source`, which
-/// joins the result with `base_path`. Three situations:
+/// joins the result with `base_path`. The logic forks on the module source's
+/// shape:
 ///
 /// - **CWD-relative entry module** (path begins with `./` or `../`): the
 ///   user's input path already encodes the prefix `base_path` will
@@ -1495,14 +1496,17 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
 ///   — e.g. `wado test ./pkg/src/main.wado` resolving `#include_str("./x")`
 ///   would otherwise produce `./pkg/src/./pkg/src/x`. Strip the leading
 ///   `./` from `raw_path` only and let the host's join restore the prefix.
-/// - **Absolute / non-prefixed entry module**: keep the dir-prefixed result.
-///   `Path::join` collapses absolute joins to the absolute path, so the
-///   loader's output stays the form callers (including LSP test hosts)
-///   expect.
-/// - **Imported module**: paths inside the loader are normalised to a `./`
-///   form rooted at `base_path`, so prepending `dir` (e.g. `./sub` for an
-///   import at `./sub/helper.wado`) yields the right base_path-relative
-///   result.
+/// - **Absolute entry module** (path begins with `/`): keep the dir-prefixed
+///   result. `Path::join` collapses absolute joins to the absolute path, so
+///   `base_path.join("/abs/dir/x")` returns `/abs/dir/x` unchanged. Test
+///   hosts (e.g. `wado-lsp/tests/definition.rs`) key on this form.
+/// - **Imported module rooted at `./` or `../`** (`./sub/helper.wado`): the
+///   `dir` is itself base_path-relative, so prepending it to `stripped`
+///   yields the right base_path-relative result for the include.
+/// - **Other shapes** (entry without leading `./` / `../` / `/`, or an
+///   import without a `./` prefix): the dir prefix is already part of the
+///   `base_path` the host will rejoin, so we strip to the bare filename
+///   like the cwd-relative entry case.
 fn resolve_include_path_impl(
     entry_module_source: Option<&str>,
     module_source_str: &str,
