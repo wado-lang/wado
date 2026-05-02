@@ -19,7 +19,10 @@ use glob::{Pattern, PatternError};
 #[derive(Debug)]
 pub enum WalkError {
     Io(io::Error),
-    InvalidExclude { pattern: String, source: PatternError },
+    InvalidExclude {
+        pattern: String,
+        source: PatternError,
+    },
 }
 
 impl std::fmt::Display for WalkError {
@@ -111,9 +114,7 @@ fn walk_dir(
 ) -> Result<(), WalkError> {
     let added_rules = load_gitignore(dir, rules);
 
-    let mut entries: Vec<_> = fs::read_dir(dir)?
-        .filter_map(Result::ok)
-        .collect();
+    let mut entries: Vec<_> = fs::read_dir(dir)?.filter_map(Result::ok).collect();
     entries.sort_by_key(std::fs::DirEntry::file_name);
 
     for entry in entries {
@@ -437,7 +438,9 @@ mod tests {
         touch(&root.join("src/main.wado"));
         touch(&root.join("compiler/tests/fixture.wado"));
 
-        let files = discover_test_files(root, &["compiler/tests/**".to_string()]).unwrap().files;
+        let files = discover_test_files(root, &["compiler/tests/**".to_string()])
+            .unwrap()
+            .files;
         let got = names_of(root, &files);
         assert!(got.contains("src/main.wado"));
         assert!(!got.contains("compiler/tests/fixture.wado"));

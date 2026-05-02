@@ -161,8 +161,7 @@ fn discover_packages(
             Vec::new()
         };
 
-        let result =
-            discover::discover_test_files(&pkg_root, &excludes).map_err(CliExit::error)?;
+        let result = discover::discover_test_files(&pkg_root, &excludes).map_err(CliExit::error)?;
 
         let label = relative_label(&invocation_root, &pkg_root);
         let paths = result
@@ -188,11 +187,10 @@ fn relative_label(invocation_root: &Path, pkg_root: &Path) -> String {
     if pkg_root == invocation_root {
         return ".".to_string();
     }
-    pkg_root
-        .strip_prefix(invocation_root)
-        .map_or_else(|_| pkg_root.display().to_string(), |rel| {
-            rel.display().to_string()
-        })
+    pkg_root.strip_prefix(invocation_root).map_or_else(
+        |_| pkg_root.display().to_string(),
+        |rel| rel.display().to_string(),
+    )
 }
 
 /// Resolve a mix of files and directory arguments into a single flat path
@@ -311,9 +309,8 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
     // filter is path-based (not test-name-based) — see WEP 2026-05-02. To
     // match anywhere within a path, wrap the term in `*`s (e.g. `*foo*`).
     if let Some(pat_str) = filter.as_deref() {
-        let pattern = Pattern::new(pat_str).map_err(|e| {
-            CliExit::error(format!("invalid --filter pattern {pat_str:?}: {e}"))
-        })?;
+        let pattern = Pattern::new(pat_str)
+            .map_err(|e| CliExit::error(format!("invalid --filter pattern {pat_str:?}: {e}")))?;
         for run in &mut package_runs {
             run.paths.retain(|p| pattern.matches(p));
         }

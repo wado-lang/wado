@@ -276,9 +276,14 @@ Embedded `.wado` files in `wado-compiler/lib/`:
 Stdlib tests are co-located with their source as `*_test.wado` files (e.g., `lib/core/zlib_test.wado`). They use Wado's `test` declaration syntax and run via `wado test`:
 
 ```sh
-mise run test-wado   # runs all *_test.wado files
+mise run test-wado   # runs the curated stdlib + example targets via wado test
 cargo run --bin wado -- test wado-compiler/lib/core/zlib_test.wado  # run one file
 ```
+
+`wado test` itself walks every `*.wado` file under the project root with the
+WEP 2026-05-02 discovery rules; the `_test.wado` suffix is a human-readable
+convention rather than a runner requirement. Files without `test` blocks
+are still compiled (compile-only validation) but produce no test exports.
 
 Test names can contain any characters (parentheses, dashes, etc.) — the compiler sanitizes them into valid kebab-case CM export names.
 

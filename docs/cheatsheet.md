@@ -1101,11 +1101,23 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
 Test blocks compile to the `test` world. Files with test blocks are discovered and executed by `wado test`:
 
 ```sh
-wado test                            # discover and run *_test.wado files
-wado test file.wado                  # run specific file
-wado test --filter pattern           # filter tests by name
-wado compile --world test file.wado  # compile with test world
+wado test                            # walk the project for every *.wado file
+wado test file.wado                  # run a specific file
+wado test --filter '*pattern*'       # keep files whose path matches the wildcard
+wado compile --world test file.wado  # compile a single file with the test world
 ```
+
+Discovery walks the project root for every `*.wado` file, honouring
+`.gitignore`, `.gitmodules`, dot-prefixed entries, and nested `wado.toml`
+boundaries (each sub-package is run in its own context). Add
+`[test].exclude = ["..."]` to `wado.toml` to skip extra paths. Files without
+`test` blocks are still parsed and compiled (compile-only validation); only
+files with `test` blocks register and run tests.
+
+`--filter <pattern>` is a path-based shell wildcard (`*`, `?`, `[...]`); it
+is _not_ a regex. To match anywhere in a path, wrap the term in `*`s, e.g.
+`'*foo*'`. The runner exits non-zero on any compile failure, test failure,
+or `#[TODO]` test that resolved unexpectedly.
 
 ```wado
 test {

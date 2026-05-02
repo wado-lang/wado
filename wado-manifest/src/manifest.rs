@@ -557,10 +557,7 @@ command = "main.wado"
 exclude = ["wado-compiler/tests/**", "vendor/**"]
 "#;
         let m = toml.parse::<Manifest>().unwrap();
-        assert_eq!(
-            m.test.exclude,
-            vec!["wado-compiler/tests/**", "vendor/**"]
-        );
+        assert_eq!(m.test.exclude, vec!["wado-compiler/tests/**", "vendor/**"]);
     }
 
     #[test]
