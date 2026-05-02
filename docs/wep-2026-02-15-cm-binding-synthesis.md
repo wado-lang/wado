@@ -159,7 +159,7 @@ This requires:
 - [x] `synthesize_lower_to_flat` for non-Result returns (the function exists, just not wired for direct returns)
 - [ ] Handle return-via-flat-params vs return-via-outptr (CM spec: if flat count > `MAX_FLAT_RESULTS`, use an outptr)
 
-Implemented via `synthesize_general_export_adapter` which handles non-Result return types. The binding calls the user function, lowers the return value to flat CM values, and calls `task-return(0, ...flat_values)` — wrapping in Ok since CM exports wrap returns in `result<T, error-context>`.
+Implemented via `synthesize_general_export_binding` which handles non-Result return types. The binding calls the user function, lowers the return value to flat CM values, and calls `task-return(0, ...flat_values)` — wrapping in Ok since CM exports wrap returns in `result<T, error-context>`.
 
 ### Sync Export Support
 
@@ -193,7 +193,7 @@ Parameter count validation is implemented: if the user's export function has a d
 | Task                        | Difficulty | Status  | Notes                                     |
 | --------------------------- | ---------- | ------- | ----------------------------------------- |
 | Parameter lifting           | Medium     | Done    | `synthesize_lift_from_flat_params`        |
-| Non-Result return types     | Low        | Done    | `synthesize_general_export_adapter`       |
+| Non-Result return types     | Low        | Done    | `synthesize_general_export_binding`       |
 | Sync export support         | Medium     | Pending | World metadata for async/sync distinction |
 | Export signature validation | Low        | Partial | Parameter count validated; types not yet  |
 
@@ -213,7 +213,7 @@ These gaps are safe for current worlds (Command, Service) but would need to be a
 
 #### Flat Return Type Mismatch in General Adapter
 
-`synthesize_general_export_adapter` computes flat return types from the **user function's return type**, not from the world's `result<T, error-context>` wrapper. This means:
+`synthesize_general_export_binding` computes flat return types from the **user function's return type**, not from the world's `result<T, error-context>` wrapper. This means:
 
 - `task-return(0, ...T_flat)` provides `1 + |T_flat|` args
 - The CM expects `1 + max(|T_flat|, |E_flat|)` args (union of Ok and Err payloads)
@@ -221,7 +221,7 @@ These gaps are safe for current worlds (Command, Service) but would need to be a
 
 In practice this is safe because:
 
-- Current worlds use `Result<(), ()>` (no error-context) or `Result<T, E>` (handled by `synthesize_result_export_adapter`)
+- Current worlds use `Result<(), ()>` (no error-context) or `Result<T, E>` (handled by `synthesize_result_export_binding`)
 - `error-context` is typically i32 (1 slot), and most return types have >= 1 slot
 
 To fix: compute flat return types from the world's full `result<T, error-context>` type, and zero-fill any extra slots.

@@ -31,7 +31,8 @@ be consumed without compiler changes. Concretely:
 1. The user writes `use { Foo } from "./external.wasm" with { type: "wasm" };`
    (or depends on a packaged component via `wado.toml`).
 2. The compiler reads the `component-type` custom section embedded in the
-   component (the same section Wado already produces — see WIT Bundling).
+   component (the section described by [WIT Bundling](./wep-2026-03-21-wit-bundling.md);
+   the producer side is designed but not yet implemented).
 3. The use resolver constructs Wado IR (worlds, interfaces, effects,
    resources, types) directly from that embedded WIT.
 4. The CM binding synthesis lifts/lowers values at the boundary based on that
@@ -62,7 +63,6 @@ worlds equals the set of WITs the compiler has parsed during this compilation.
 | Entry function names (`run`, `handle`)               | Pulled from the world's declared `export` items, not hardcoded strings.             |
 | HTTP detection                                       | Namespace prefix `wasi:http/` plus return-type shape (`Result<Response, _>`).       |
 | CM lift/lower                                        | `synthesize_lift` / `synthesize_lower_to_flat` are recursive and type-driven.       |
-| WIT in output                                        | Producer side embeds `component-type` (see WEP: WIT Bundling).                      |
 
 ### What is still hardcoded or specialized
 
@@ -81,6 +81,10 @@ worlds equals the set of WITs the compiler has parsed during this compilation.
 - Cargo dependencies do not yet include `wit-parser` / `wit-component`. The
   compiler relies on `wado-from-idl`-generated `.wado` files as the source of
   truth.
+- Producer-side WIT embedding (the `component-type` custom section described
+  in [WIT Bundling](./wep-2026-03-21-wit-bundling.md)) is designed but not
+  yet implemented in codegen. Without it, a Wado-compiled component cannot
+  be consumed via the embedded-WIT path described in this WEP's Goal.
 
 ### Stale items already cleaned up
 
@@ -133,8 +137,10 @@ world.
 This WEP is a roadmap document. Each item below either has its own WEP or
 will get one when work starts.
 
-- [x] Producer side: embed `component-type` in output (WEP: WIT Bundling).
 - [x] Type-driven CM binding synthesis (WEP: TIR-Level CM Binding Synthesis).
+- [ ] Producer side: embed `component-type` in output (WEP: WIT Bundling).
+      Designed but not implemented — required before round-trip Wado-to-Wado
+      consumption via the embedded-WIT path can work.
 - [ ] Decide world structure faithfulness level (L2 vs L3) and document.
 - [ ] Implement `contract` declaration with the chosen scope rules (revise
       WEP: World Conformance accordingly).
@@ -168,7 +174,7 @@ will get one when work starts.
 
 - Bringing `wit-parser` / `wit-component` into the compiler increases the
   dependency surface and binary size of the compiler itself.
-- L3 world scoping changes the meaning of `use`: an `use` of an effect not
+- L3 world scoping changes the meaning of `use`: a `use` of an effect not
   in the active world's imports becomes a compile error. This is a
   user-visible behavior change.
 
