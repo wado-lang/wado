@@ -202,7 +202,11 @@ fn relative_label(invocation_root: &Path, pkg_root: &Path) -> String {
 /// of OS or how the user invoked `wado test`.
 fn display_path(p: &Path) -> String {
     let s = p.display().to_string();
-    let s = if cfg!(windows) { s.replace('\\', "/") } else { s };
+    let s = if cfg!(windows) {
+        s.replace('\\', "/")
+    } else {
+        s
+    };
     s.strip_prefix("./").map_or(s.clone(), str::to_string)
 }
 
