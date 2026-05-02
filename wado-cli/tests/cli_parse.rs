@@ -387,15 +387,22 @@ fn test_with_invalid_filter_pattern() {
 }
 
 #[test]
-fn test_with_exclude_drops_matching_directory_entries() {
-    // `--exclude` extends the manifest-level [test].exclude list. With
-    // explicit file arguments (no directories) the flag is a no-op because
-    // resolve_paths does not walk; this is the same shape as cargo's
-    // --exclude behaviour. The test confirms parsing accepts the flag and
-    // file arguments survive.
+fn test_with_exclude_keeps_non_matching_explicit_file() {
+    // `--exclude` extends the manifest-level [test].exclude list and is
+    // applied to explicit file arguments too: `package-gale/**` does not
+    // match `a.wado`, so the file survives.
     let parser = Parser::from_args(&["--exclude", "package-gale/**", "a.wado"]);
     let opts = wado_cli::test::parse_args(parser).unwrap();
     assert_eq!(opts.package_runs[0].paths, vec!["a.wado"]);
+}
+
+#[test]
+fn test_with_exclude_drops_matching_explicit_file() {
+    // The matching counterpart: `drop/**` covers `drop/inner.wado` so
+    // that file is filtered out, while `keep.wado` survives.
+    let parser = Parser::from_args(&["--exclude", "drop/**", "drop/inner.wado", "keep.wado"]);
+    let opts = wado_cli::test::parse_args(parser).unwrap();
+    assert_eq!(opts.package_runs[0].paths, vec!["keep.wado"]);
 }
 
 #[test]

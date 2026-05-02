@@ -133,11 +133,11 @@ pub fn print_usage() {
 /// sub-package discovered transitively (cargo-workspace-style).
 ///
 /// `apply_manifest_excludes` controls whether the root package's
-/// `[test].exclude` patterns are honoured. Sub-packages always apply their
-/// own manifest. CLI `--exclude` patterns (`extra_excludes`) apply only to
-/// the invocation root walk — they are matched relative to that root, so
-/// re-running them for each sub-package would only ever be a no-op while
-/// adding work.
+/// `[test].exclude` is honoured. Sub-packages always apply their own
+/// manifest. CLI `--exclude` patterns (`extra_excludes`) apply to *every*
+/// package walked: each pattern is matched relative to the package being
+/// walked, so a project-wide `--exclude 'tests/**'` drops `tests/` in the
+/// root and in every nested package consistently.
 ///
 /// The returned list is ordered: the root package first, then sub-packages in
 /// source order.
@@ -150,8 +150,12 @@ fn discover_packages(
     let mut runs: Vec<PackageRun> = Vec::new();
     let mut queue: Vec<PathBuf> = Vec::new();
 
-    let root_excludes =
-        compile_root_excludes(&invocation_root, apply_manifest_excludes, extra_excludes)?;
+    let root_manifest = if apply_manifest_excludes {
+        package_manifest_excludes(&invocation_root)?
+    } else {
+        Vec::new()
+    };
+    let root_excludes = compile_excludes(&root_manifest, extra_excludes)?;
     walk_into(
         &invocation_root,
         &invocation_root,
@@ -162,7 +166,7 @@ fn discover_packages(
 
     while let Some(pkg_root) = queue.pop() {
         let manifest = package_manifest_excludes(&pkg_root)?;
-        let excludes = discover::ExcludeSet::compile(&manifest).map_err(CliExit::error)?;
+        let excludes = compile_excludes(&manifest, extra_excludes)?;
         walk_into(
             &pkg_root,
             &invocation_root,
@@ -175,18 +179,13 @@ fn discover_packages(
     Ok(runs)
 }
 
-/// Compile the exclude set for the invocation root: the root manifest's
-/// `[test].exclude` (when honoured) plus any CLI `--exclude` patterns.
-fn compile_root_excludes(
-    invocation_root: &Path,
-    apply_manifest_excludes: bool,
+/// Compile a package's exclude set: the manifest's `[test].exclude` plus
+/// any CLI `--exclude` patterns. Both layers share the same shape so the
+/// walker treats them uniformly.
+fn compile_excludes(
+    manifest: &[String],
     extra_excludes: &[String],
 ) -> Result<discover::ExcludeSet, CliExit> {
-    let manifest = if apply_manifest_excludes {
-        package_manifest_excludes(invocation_root)?
-    } else {
-        Vec::new()
-    };
     let combined: Vec<&str> = manifest
         .iter()
         .map(String::as_str)

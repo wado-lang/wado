@@ -167,7 +167,7 @@ fn walk_dir(
     visited: &mut HashSet<PathBuf>,
     out: &mut DiscoveryResult,
 ) -> Result<(), WalkError> {
-    let added_rules = load_gitignore(dir, rules);
+    let added_rules = load_gitignore(dir, rules)?;
 
     let mut entries: Vec<_> = fs::read_dir(dir)
         .map_err(|source| WalkError::Io {
@@ -283,15 +283,20 @@ struct GitignoreRule {
 
 /// Append rules from `dir/.gitignore` (if it exists) to `rules`. Returns the
 /// number of rules added so the caller can truncate them after leaving `dir`.
-fn load_gitignore(dir: &Path, rules: &mut Vec<GitignoreRule>) -> usize {
+/// Missing `.gitignore` files are non-fatal; other I/O failures (permission
+/// denied, broken symlink, ...) are propagated so the user is told instead
+/// of silently losing ignore coverage.
+fn load_gitignore(dir: &Path, rules: &mut Vec<GitignoreRule>) -> Result<usize, WalkError> {
     let path = dir.join(".gitignore");
-    let Ok(content) = fs::read_to_string(&path) else {
-        return 0;
+    let content = match fs::read_to_string(&path) {
+        Ok(s) => s,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(0),
+        Err(source) => return Err(WalkError::Io { path, source }),
     };
     let added = parse_gitignore(&content, dir);
     let n = added.len();
     rules.extend(added);
-    n
+    Ok(n)
 }
 
 fn parse_gitignore(content: &str, base: &Path) -> Vec<GitignoreRule> {
