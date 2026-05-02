@@ -220,7 +220,7 @@ fn walk_into(
 /// sub-packages without their own `wado.toml` simply contribute no excludes.
 fn package_manifest_excludes(pkg_root: &Path) -> Result<Vec<String>, CliExit> {
     match project_manifest::discover(pkg_root) {
-        Ok(Some(project)) if project.root == pkg_root => Ok(project.manifest.test.exclude.clone()),
+        Ok(Some(project)) if project.root == pkg_root => Ok(project.manifest.test.exclude),
         Ok(_) => Ok(Vec::new()),
         Err(e) => Err(CliExit::error(e)),
     }
