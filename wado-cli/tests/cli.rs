@@ -344,17 +344,34 @@ fn test_test_failing() {
 }
 
 #[test]
-fn test_test_filter() {
+fn test_test_filter_keeps_matching_path() {
+    // --filter is a path-based wildcard (WEP 2026-05-02). When the filter
+    // matches the file's path, all of its tests run.
     wado()
         .args([
             "test",
             "--filter",
-            "simple",
+            "*test_decl*",
             "wado-compiler/tests/fixtures/test_decl.wado",
         ])
         .assert()
         .success()
-        .stdout(predicate::str::contains("1 passed, 0 failed"));
+        .stdout(predicate::str::contains("2 passed, 0 failed"));
+}
+
+#[test]
+fn test_test_filter_drops_non_matching_path() {
+    // No path matches the pattern, so no test files remain to run.
+    wado()
+        .args([
+            "test",
+            "--filter",
+            "*does_not_match*",
+            "wado-compiler/tests/fixtures/test_decl.wado",
+        ])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("No .wado files match --filter"));
 }
 
 #[test]

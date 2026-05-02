@@ -337,14 +337,35 @@ fn test_with_files() {
     let parser = Parser::from_args(&["a.wado", "b.wado"]);
     let opts = wado_cli::test::parse_args(parser).unwrap();
     assert_eq!(opts.paths, vec!["a.wado", "b.wado"]);
-    assert_eq!(opts.filter, None);
 }
 
 #[test]
-fn test_with_filter() {
-    let parser = Parser::from_args(&["-f", "pattern", "a.wado"]);
+fn test_with_filter_keeps_matching_paths() {
+    // --filter is now a path-based wildcard applied during parse. See
+    // WEP 2026-05-02. `*.wado` keeps `a.wado` and drops `b.txt`.
+    let parser = Parser::from_args(&["-f", "*.wado", "a.wado", "b.txt"]);
     let opts = wado_cli::test::parse_args(parser).unwrap();
-    assert_eq!(opts.filter, Some("pattern".to_string()));
+    assert_eq!(opts.paths, vec!["a.wado"]);
+}
+
+#[test]
+fn test_with_filter_no_match_exits_cleanly() {
+    // No discovered path matches the filter — the user gets a non-fatal exit
+    // (code 0) with an explanatory message rather than running zero tests.
+    let parser = Parser::from_args(&["-f", "no_match", "a.wado"]);
+    assert_help(
+        wado_cli::test::parse_args(parser),
+        "No .wado files match --filter",
+    );
+}
+
+#[test]
+fn test_with_invalid_filter_pattern() {
+    let parser = Parser::from_args(&["-f", "[unterminated", "a.wado"]);
+    assert_err(
+        wado_cli::test::parse_args(parser),
+        "invalid --filter pattern",
+    );
 }
 
 #[test]

@@ -6,6 +6,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
+use glob::Pattern;
 use lexopt::Arg::Value;
 use tokio::sync::mpsc;
 use wasmtime::Engine;
@@ -26,7 +27,6 @@ use crate::runtime;
 
 pub struct TestOptions {
     pub paths: Vec<String>,
-    pub filter: Option<String>,
     pub jobs: usize,
     pub opt_level: OptLevel,
     /// Preopened directories as `(host_path, guest_path)` pairs.
@@ -59,7 +59,7 @@ impl Opt {
                 long: Some("filter"),
                 short: Some('f'),
                 value: Some("<pattern>"),
-                desc: "Filter tests by name pattern",
+                desc: "Keep only files whose path matches the wildcard pattern (`*`, `?`, `[...]`)",
             },
             Self::Parallel => args::OptSpec {
                 long: Some("parallel"),
@@ -250,6 +250,22 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
         paths = resolve_paths(paths)?;
     }
 
+    // --filter: shell-style wildcard match against each discovered path. The
+    // filter is path-based (not test-name-based) — see WEP 2026-05-02. To
+    // match anywhere within a path, wrap the term in `*`s (e.g. `*foo*`).
+    if let Some(pat_str) = filter.as_deref() {
+        let pattern = Pattern::new(pat_str).map_err(|e| {
+            CliExit::error(format!("invalid --filter pattern {pat_str:?}: {e}"))
+        })?;
+        paths.retain(|p| pattern.matches(p));
+        if paths.is_empty() {
+            return Err(CliExit {
+                message: format!("No .wado files match --filter {pat_str:?}\n"),
+                exit_code: 0,
+            });
+        }
+    }
+
     // Default to half of available CPUs (minimum 2)
     // This accounts for hyperthreading and leaves headroom for the system
     let jobs = jobs.unwrap_or_else(|| {
@@ -259,7 +275,6 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
 
     Ok(TestOptions {
         paths,
-        filter,
         jobs,
         opt_level,
         preopened_dirs,
@@ -369,7 +384,6 @@ struct TodoCompileError {
 /// so the user can see progress during long compilation runs.
 async fn collect_test_jobs(
     paths: &[String],
-    filter: Option<&str>,
     opt_level: OptLevel,
     overall_start: Instant,
 ) -> Result<(
@@ -432,12 +446,6 @@ async fn collect_test_jobs(
 
         for (name, _) in component_ty.exports(&engine) {
             if name.starts_with("test-") {
-                // Apply filter if specified
-                if let Some(pattern) = filter
-                    && !name.contains(pattern)
-                {
-                    continue;
-                }
                 test_names.push(name.to_string());
             }
         }
@@ -686,7 +694,6 @@ pub async fn run(opts: TestOptions) {
     // Phase 1: Compile all files and collect test jobs
     let (modules, jobs, todo_compile_errors) = match collect_test_jobs(
         &opts.paths,
-        opts.filter.as_deref(),
         opts.opt_level,
         overall_start,
     )
