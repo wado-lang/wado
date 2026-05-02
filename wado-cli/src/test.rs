@@ -132,9 +132,12 @@ pub fn print_usage() {
 /// Walk `root` and produce one `PackageRun` for the root and one for each
 /// sub-package discovered transitively (cargo-workspace-style).
 ///
-/// `apply_manifest_excludes` controls whether the root's `wado.toml`
-/// `[test].exclude` patterns (if any) are applied — sub-packages always
-/// honour their own manifest.
+/// `apply_manifest_excludes` controls whether the root package's
+/// `[test].exclude` patterns are honoured. Sub-packages always apply their
+/// own manifest. CLI `--exclude` patterns (`extra_excludes`) apply only to
+/// the invocation root walk — they are matched relative to that root, so
+/// re-running them for each sub-package would only ever be a no-op while
+/// adding work.
 ///
 /// The returned list is ordered: the root package first, then sub-packages in
 /// source order.
@@ -143,43 +146,84 @@ fn discover_packages(
     apply_manifest_excludes: bool,
     extra_excludes: &[String],
 ) -> Result<Vec<PackageRun>, CliExit> {
-    let mut runs: Vec<PackageRun> = Vec::new();
     let invocation_root = root.to_path_buf();
-    let mut queue: Vec<(PathBuf, bool)> = vec![(invocation_root.clone(), apply_manifest_excludes)];
+    let mut runs: Vec<PackageRun> = Vec::new();
+    let mut queue: Vec<PathBuf> = Vec::new();
 
-    while let Some((pkg_root, apply_excludes)) = queue.pop() {
-        let mut excludes: Vec<String> = if apply_excludes {
-            match project_manifest::discover(&pkg_root) {
-                Ok(Some(project)) if project.root == pkg_root => {
-                    project.manifest.test.exclude.clone()
-                }
-                Ok(_) => Vec::new(),
-                Err(e) => return Err(CliExit::error(e)),
-            }
-        } else {
-            Vec::new()
-        };
-        // CLI `--exclude` patterns layer on top of the manifest's; they are
-        // matched relative to each package root, so a single
-        // `--exclude package-gale/**` invocation suppresses the package's
-        // contents from the root walk and remains a no-op once we recurse
-        // into other packages where the pattern simply doesn't match.
-        excludes.extend(extra_excludes.iter().cloned());
+    let root_excludes =
+        compile_root_excludes(&invocation_root, apply_manifest_excludes, extra_excludes)?;
+    walk_into(
+        &invocation_root,
+        &invocation_root,
+        &root_excludes,
+        &mut runs,
+        &mut queue,
+    )?;
 
-        let result = discover::discover_test_files(&pkg_root, &excludes).map_err(CliExit::error)?;
-
-        let label = relative_label(&invocation_root, &pkg_root);
-        let paths = result.files.iter().map(|p| display_path(p)).collect();
-        runs.push(PackageRun { label, paths });
-
-        // Sub-packages: enqueue in reverse so the resulting `runs` order is
-        // root, then sub-packages in source (sorted) order.
-        for sub in result.subpackages.into_iter().rev() {
-            queue.push((sub, true));
-        }
+    while let Some(pkg_root) = queue.pop() {
+        let manifest = package_manifest_excludes(&pkg_root)?;
+        let excludes = discover::ExcludeSet::compile(&manifest).map_err(CliExit::error)?;
+        walk_into(
+            &pkg_root,
+            &invocation_root,
+            &excludes,
+            &mut runs,
+            &mut queue,
+        )?;
     }
 
     Ok(runs)
+}
+
+/// Compile the exclude set for the invocation root: the root manifest's
+/// `[test].exclude` (when honoured) plus any CLI `--exclude` patterns.
+fn compile_root_excludes(
+    invocation_root: &Path,
+    apply_manifest_excludes: bool,
+    extra_excludes: &[String],
+) -> Result<discover::ExcludeSet, CliExit> {
+    let manifest = if apply_manifest_excludes {
+        package_manifest_excludes(invocation_root)?
+    } else {
+        Vec::new()
+    };
+    let combined: Vec<&str> = manifest
+        .iter()
+        .map(String::as_str)
+        .chain(extra_excludes.iter().map(String::as_str))
+        .collect();
+    discover::ExcludeSet::compile(&combined).map_err(CliExit::error)
+}
+
+/// Walk a single package root, append its `PackageRun`, and queue its
+/// sub-packages (in source order — pushed in reverse so the LIFO `pop`
+/// emits them root-first).
+fn walk_into(
+    pkg_root: &Path,
+    invocation_root: &Path,
+    excludes: &discover::ExcludeSet,
+    runs: &mut Vec<PackageRun>,
+    queue: &mut Vec<PathBuf>,
+) -> Result<(), CliExit> {
+    let result = discover::discover_test_files(pkg_root, excludes).map_err(CliExit::error)?;
+    let label = relative_label(invocation_root, pkg_root);
+    let paths = result.files.iter().map(|p| display_path(p)).collect();
+    runs.push(PackageRun { label, paths });
+    for sub in result.subpackages.into_iter().rev() {
+        queue.push(sub);
+    }
+    Ok(())
+}
+
+/// Read `[test].exclude` from the `wado.toml` rooted at `pkg_root` (if any).
+/// Returns the empty list when no manifest sits exactly at that directory —
+/// sub-packages without their own `wado.toml` simply contribute no excludes.
+fn package_manifest_excludes(pkg_root: &Path) -> Result<Vec<String>, CliExit> {
+    match project_manifest::discover(pkg_root) {
+        Ok(Some(project)) if project.root == pkg_root => Ok(project.manifest.test.exclude.clone()),
+        Ok(_) => Ok(Vec::new()),
+        Err(e) => Err(CliExit::error(e)),
+    }
 }
 
 /// Format a sub-package path relative to the invocation root, falling back to
@@ -201,56 +245,46 @@ fn relative_label(invocation_root: &Path, pkg_root: &Path) -> String {
 /// are documented as forward-slash globs — see a consistent shape regardless
 /// of OS or how the user invoked `wado test`.
 fn display_path(p: &Path) -> String {
-    let s = p.display().to_string();
-    let s = if cfg!(windows) {
-        s.replace('\\', "/")
+    let raw = p.display().to_string();
+    let normalised = if cfg!(windows) {
+        raw.replace('\\', "/")
     } else {
-        s
+        raw
     };
-    s.strip_prefix("./").map_or(s.clone(), str::to_string)
+    match normalised.strip_prefix("./") {
+        Some(stripped) => stripped.to_string(),
+        None => normalised,
+    }
 }
 
 /// Resolve a mix of files and directory arguments into a single flat path
 /// list. Directories are walked with the discovery rules; files pass through.
 fn resolve_paths(paths: Vec<String>, extra_excludes: &[String]) -> Result<Vec<String>, CliExit> {
-    let exclude_patterns: Vec<Pattern> = extra_excludes
-        .iter()
-        .map(|s| {
-            Pattern::new(s)
-                .map_err(|e| CliExit::error(format!("invalid --exclude pattern {s:?}: {e}")))
-        })
-        .collect::<Result<_, _>>()?;
-    let is_excluded = |canonical: &str| {
-        exclude_patterns
-            .iter()
-            .any(|p| p.matches_with(canonical, discover::WALK_MATCH_OPTIONS))
-    };
+    let excludes = discover::ExcludeSet::compile(extra_excludes).map_err(CliExit::error)?;
     let mut resolved = Vec::new();
     for path in paths {
         let p = Path::new(&path);
         if p.is_dir() {
             let runs = discover_packages(p, true, extra_excludes)?;
-            let mut count = 0usize;
-            for run in runs {
-                count += run.paths.len();
-                resolved.extend(run.paths);
-            }
-            if count == 0 {
+            let total: usize = runs.iter().map(|r| r.paths.len()).sum();
+            if total == 0 {
                 return Err(CliExit::error(format!(
                     "no .wado files found in directory '{path}'"
                 )));
+            }
+            for run in runs {
+                resolved.extend(run.paths);
             }
         } else {
             // Run explicit file arguments through the same canonical form
             // as discovered paths so `--filter` and `--exclude` patterns
             // see one consistent shape (forward-slash, no leading `./`).
-            // Then honour `--exclude` even for explicit args, matching the
+            // Honour `--exclude` even for explicit args, matching the
             // flag's documented "drop files whose path matches" behaviour.
             let canonical = display_path(p);
-            if is_excluded(&canonical) {
-                continue;
+            if !excludes.matches_str(&canonical) {
+                resolved.push(canonical);
             }
-            resolved.push(canonical);
         }
     }
     Ok(resolved)

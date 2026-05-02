@@ -28,6 +28,61 @@ pub const WALK_MATCH_OPTIONS: MatchOptions = MatchOptions {
     require_literal_leading_dot: false,
 };
 
+/// Compiled set of `[test].exclude` / `--exclude` glob patterns.
+///
+/// Owns the [`Pattern`]s once and exposes a single matching entry point so
+/// the walker, the discovery driver, and any explicit-arg filtering all
+/// interpret patterns identically — including the `dir/**` augmentation
+/// (`glob`'s `**` requires at least one trailing path component, so `dir/**`
+/// alone would not stop the walker from descending into `dir`).
+#[derive(Debug, Default)]
+pub struct ExcludeSet {
+    patterns: Vec<Pattern>,
+}
+
+impl ExcludeSet {
+    /// Compile every glob in `patterns`. Errors carry the user-supplied
+    /// source string so the CLI can surface "invalid exclude pattern …".
+    pub fn compile<S: AsRef<str>>(patterns: &[S]) -> Result<Self, WalkError> {
+        let compiled = patterns
+            .iter()
+            .flat_map(|raw| augmented_patterns(raw.as_ref()))
+            .map(|(pattern, source)| {
+                Pattern::new(&pattern).map_err(|e| WalkError::InvalidExclude {
+                    pattern: source,
+                    source: e,
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(Self { patterns: compiled })
+    }
+
+    /// True when `path` (relative to the matching root) matches any pattern.
+    pub fn matches(&self, path: &Path) -> bool {
+        self.patterns
+            .iter()
+            .any(|p| p.matches_path_with(path, WALK_MATCH_OPTIONS))
+    }
+
+    /// Convenience for already-rendered path strings.
+    pub fn matches_str(&self, path: &str) -> bool {
+        self.matches(Path::new(path))
+    }
+}
+
+/// Yield the patterns we actually compile for one user-supplied glob.
+/// `dir/**` becomes `[dir/**, dir]` so the walker also drops the bare `dir`
+/// entry; everything else round-trips unchanged.
+fn augmented_patterns(raw: &str) -> impl Iterator<Item = (String, String)> + '_ {
+    let prefix = raw
+        .strip_suffix("/**")
+        .filter(|p| !p.is_empty())
+        .map(str::to_string);
+    let source = raw.to_string();
+    std::iter::once((raw.to_string(), source.clone()))
+        .chain(prefix.into_iter().map(move |p| (p, source.clone())))
+}
+
 #[derive(Debug)]
 pub enum WalkError {
     Io(io::Error),
@@ -72,9 +127,10 @@ pub struct DiscoveryResult {
 /// `excludes` are shell-style globs evaluated against paths relative to `root`.
 /// Returned paths are absolute (relative to whatever `root` was given) and
 /// sorted for stable output. Returned sub-package roots are sorted as well.
-pub fn discover_test_files(root: &Path, excludes: &[String]) -> Result<DiscoveryResult, WalkError> {
-    let exclude_patterns = compile_excludes(excludes)?;
-
+pub fn discover_test_files(
+    root: &Path,
+    excludes: &ExcludeSet,
+) -> Result<DiscoveryResult, WalkError> {
     let submodules = read_submodule_paths(root)?
         .into_iter()
         .map(|rel| root.join(rel))
@@ -90,7 +146,7 @@ pub fn discover_test_files(root: &Path, excludes: &[String]) -> Result<Discovery
     walk_dir(
         root,
         root,
-        &exclude_patterns,
+        excludes,
         &submodules,
         &mut rules,
         &mut visited,
@@ -102,37 +158,11 @@ pub fn discover_test_files(root: &Path, excludes: &[String]) -> Result<Discovery
     Ok(result)
 }
 
-fn compile_excludes(excludes: &[String]) -> Result<Vec<Pattern>, WalkError> {
-    let mut out = Vec::with_capacity(excludes.len());
-    for s in excludes {
-        out.push(Pattern::new(s).map_err(|source| WalkError::InvalidExclude {
-            pattern: s.clone(),
-            source,
-        })?);
-        // glob's `**` requires at least one trailing path component, so a
-        // pattern like `dir/**` does NOT match the bare `dir` entry the
-        // walker checks before descending. Users almost always intend
-        // `dir/**` to mean "everything at and below dir", so we also accept
-        // the `dir` prefix as an exclude.
-        if let Some(prefix) = s.strip_suffix("/**")
-            && !prefix.is_empty()
-        {
-            out.push(
-                Pattern::new(prefix).map_err(|source| WalkError::InvalidExclude {
-                    pattern: s.clone(),
-                    source,
-                })?,
-            );
-        }
-    }
-    Ok(out)
-}
-
 #[allow(clippy::too_many_arguments)]
 fn walk_dir(
     dir: &Path,
     root: &Path,
-    excludes: &[Pattern],
+    excludes: &ExcludeSet,
     submodules: &HashSet<PathBuf>,
     rules: &mut Vec<GitignoreRule>,
     visited: &mut HashSet<PathBuf>,
@@ -167,9 +197,7 @@ fn walk_dir(
         }
 
         if let Ok(rel) = path.strip_prefix(root)
-            && excludes
-                .iter()
-                .any(|p| p.matches_path_with(rel, WALK_MATCH_OPTIONS))
+            && excludes.matches(rel)
         {
             continue;
         }
@@ -352,7 +380,9 @@ mod tests {
         touch(&root.join("readme.md"));
         touch(&root.join("nested/notes.txt"));
 
-        let files = discover_test_files(root, &[]).unwrap().files;
+        let files = discover_test_files(root, &ExcludeSet::default())
+            .unwrap()
+            .files;
         let got = names_of(root, &files);
         let want: BTreeSet<_> = ["a.wado", "nested/b.wado", "nested/deep/c.wado"]
             .iter()
@@ -368,7 +398,9 @@ mod tests {
         touch(&root.join("a.wado"));
         touch(&root.join(".hidden/secret.wado"));
 
-        let files = discover_test_files(root, &[]).unwrap().files;
+        let files = discover_test_files(root, &ExcludeSet::default())
+            .unwrap()
+            .files;
         let got = names_of(root, &files);
         assert_eq!(got.len(), 1);
         assert!(got.contains("a.wado"));
@@ -382,7 +414,9 @@ mod tests {
         touch(&root.join("target/build.wado"));
         fs::write(root.join(".gitignore"), "target/\n").unwrap();
 
-        let files = discover_test_files(root, &[]).unwrap().files;
+        let files = discover_test_files(root, &ExcludeSet::default())
+            .unwrap()
+            .files;
         let got = names_of(root, &files);
         assert!(got.contains("a.wado"));
         assert!(!got.iter().any(|p| p.starts_with("target/")));
@@ -397,7 +431,9 @@ mod tests {
         touch(&root.join("pkg/skip/keep.wado"));
         fs::write(root.join("pkg/.gitignore"), "skip/\n!skip/keep.wado\n").unwrap();
 
-        let files = discover_test_files(root, &[]).unwrap().files;
+        let files = discover_test_files(root, &ExcludeSet::default())
+            .unwrap()
+            .files;
         let got = names_of(root, &files);
         // Negation cannot resurrect files inside an ignored directory because
         // the directory itself is skipped — match git's actual behaviour.
@@ -414,7 +450,9 @@ mod tests {
         touch(&root.join("nested/skipme.wado"));
         fs::write(root.join(".gitignore"), "skipme.wado\n").unwrap();
 
-        let files = discover_test_files(root, &[]).unwrap().files;
+        let files = discover_test_files(root, &ExcludeSet::default())
+            .unwrap()
+            .files;
         let got = names_of(root, &files);
         assert!(got.contains("a.wado"));
         assert!(got.contains("nested/a.wado"));
@@ -433,7 +471,9 @@ mod tests {
         )
         .unwrap();
 
-        let files = discover_test_files(root, &[]).unwrap().files;
+        let files = discover_test_files(root, &ExcludeSet::default())
+            .unwrap()
+            .files;
         let got = names_of(root, &files);
         assert!(got.contains("a.wado"));
         assert!(!got.iter().any(|p| p.starts_with("vendor/sub/")));
@@ -451,7 +491,7 @@ mod tests {
         )
         .unwrap();
 
-        let result = discover_test_files(root, &[]).unwrap();
+        let result = discover_test_files(root, &ExcludeSet::default()).unwrap();
         let got = names_of(root, &result.files);
         assert!(got.contains("a.wado"));
         assert!(!got.contains("subpkg/main.wado"));
@@ -466,9 +506,12 @@ mod tests {
         touch(&root.join("src/main.wado"));
         touch(&root.join("compiler/tests/fixture.wado"));
 
-        let files = discover_test_files(root, &["compiler/tests/**".to_string()])
-            .unwrap()
-            .files;
+        let files = discover_test_files(
+            root,
+            &ExcludeSet::compile(&["compiler/tests/**".to_string()]).unwrap(),
+        )
+        .unwrap()
+        .files;
         let got = names_of(root, &files);
         assert!(got.contains("src/main.wado"));
         assert!(!got.contains("compiler/tests/fixture.wado"));
@@ -486,7 +529,11 @@ mod tests {
         touch(&root.join("skip/me.wado"));
         touch(&root.join("skip/deep/also.wado"));
 
-        let result = discover_test_files(root, &["skip/**".to_string()]).unwrap();
+        let result = discover_test_files(
+            root,
+            &ExcludeSet::compile(&["skip/**".to_string()]).unwrap(),
+        )
+        .unwrap();
         let got = names_of(root, &result.files);
         assert_eq!(got.len(), 1);
         assert!(got.contains("keep.wado"));
@@ -507,7 +554,11 @@ mod tests {
         )
         .unwrap();
 
-        let result = discover_test_files(root, &["subpkg/**".to_string()]).unwrap();
+        let result = discover_test_files(
+            root,
+            &ExcludeSet::compile(&["subpkg/**".to_string()]).unwrap(),
+        )
+        .unwrap();
         let got = names_of(root, &result.files);
         assert_eq!(got.len(), 1);
         assert!(got.contains("a.wado"));
@@ -529,9 +580,12 @@ mod tests {
         touch(&root.join("src/top.wado"));
         touch(&root.join("src/sub/inner.wado"));
 
-        let files = discover_test_files(root, &["src/*.wado".to_string()])
-            .unwrap()
-            .files;
+        let files = discover_test_files(
+            root,
+            &ExcludeSet::compile(&["src/*.wado".to_string()]).unwrap(),
+        )
+        .unwrap()
+        .files;
         let got = names_of(root, &files);
         assert!(!got.contains("src/top.wado"));
         assert!(got.contains("src/sub/inner.wado"));
@@ -547,9 +601,12 @@ mod tests {
         touch(&root.join("a/b/c/foo.wado"));
         touch(&root.join("a/b/keep.wado"));
 
-        let files = discover_test_files(root, &["**/foo.wado".to_string()])
-            .unwrap()
-            .files;
+        let files = discover_test_files(
+            root,
+            &ExcludeSet::compile(&["**/foo.wado".to_string()]).unwrap(),
+        )
+        .unwrap()
+        .files;
         let got = names_of(root, &files);
         assert!(!got.iter().any(|p| p.ends_with("/foo.wado")));
         assert!(got.contains("a/b/keep.wado"));
@@ -557,9 +614,7 @@ mod tests {
 
     #[test]
     fn rejects_invalid_exclude_pattern() {
-        let tmp = tempfile::tempdir().unwrap();
-        let root = tmp.path();
-        let err = discover_test_files(root, &["[unterminated".to_string()]).unwrap_err();
+        let err = ExcludeSet::compile(&["[unterminated".to_string()]).unwrap_err();
         assert!(matches!(err, WalkError::InvalidExclude { .. }));
     }
 
@@ -573,7 +628,9 @@ mod tests {
         // Create a symlink loop: root/loop -> root
         symlink(root, root.join("loop")).unwrap();
 
-        let files = discover_test_files(root, &[]).unwrap().files;
+        let files = discover_test_files(root, &ExcludeSet::default())
+            .unwrap()
+            .files;
         let got = names_of(root, &files);
         assert!(got.contains("real/a.wado"));
         // The loop must not produce duplicate entries; each canonical path is
