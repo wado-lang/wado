@@ -7,7 +7,7 @@
 
 ### Effects
 
-#### `pub effect Environment`
+#### `pub interface Environment`
 
 ##### `fn get_environment() -> Array<[String, String]>`
 
@@ -29,7 +29,7 @@ Get the POSIX-style arguments to the program.
 Return a path that programs should use as their initial current working
 directory, interpreting `.` as shorthand for this.
 
-#### `pub effect Exit`
+#### `pub interface Exit`
 
 ##### `fn exit(status: Result<(), ()>)`
 
@@ -46,13 +46,13 @@ The meaning of the code depends on the context, with 0 usually meaning
 This function does not return; the effect is analogous to a trap, but
 without the connotation that something bad has happened.
 
-#### `pub effect Run`
+#### `pub interface Run`
 
 ##### `async fn run() -> AsyncCall<Result<(), ()>>`
 
 Run the program.
 
-#### `pub effect Stdin`
+#### `pub interface Stdin`
 
 ##### `fn read_via_stream() -> [Stream<u8>, Future<Result<(), ErrorCode>>]`
 
@@ -70,7 +70,7 @@ failed for some other reason.
 Multiple streams may be active at the same time. The behavior of concurrent
 reads is implementation-specific.
 
-#### `pub effect Stdout`
+#### `pub interface Stdout`
 
 ##### `fn write_via_stream(data: Stream<u8>) -> Future<Result<(), ErrorCode>>`
 
@@ -83,7 +83,7 @@ error-code representing a failure.
 Otherwise if there is an error the readable end of the stream will be
 dropped and this function will return an error-code.
 
-#### `pub effect Stderr`
+#### `pub interface Stderr`
 
 ##### `fn write_via_stream(data: Stream<u8>) -> Future<Result<(), ErrorCode>>`
 
@@ -96,7 +96,7 @@ error-code representing a failure.
 Otherwise if there is an error the readable end of the stream will be
 dropped and this function will return an error-code.
 
-#### `pub effect TerminalStdin`
+#### `pub interface TerminalStdin`
 
 An interface providing an optional `terminal-input` for stdin as a
 link-time authority.
@@ -106,7 +106,7 @@ link-time authority.
 If stdin is connected to a terminal, return a `terminal-input` handle
 allowing further interaction with it.
 
-#### `pub effect TerminalStdout`
+#### `pub interface TerminalStdout`
 
 An interface providing an optional `terminal-output` for stdout as a
 link-time authority.
@@ -116,7 +116,7 @@ link-time authority.
 If stdout is connected to a terminal, return a `terminal-output` handle
 allowing further interaction with it.
 
-#### `pub effect TerminalStderr`
+#### `pub interface TerminalStderr`
 
 An interface providing an optional `terminal-output` for stderr as a
 link-time authority.
@@ -156,7 +156,7 @@ Broken pipe
 
 ### Effects
 
-#### `pub effect Preopens`
+#### `pub interface Preopens`
 
 ##### `fn get_directories() -> Array<[Descriptor, String]>`
 
@@ -849,7 +849,7 @@ Truncate file to size 0, similar to `O_TRUNC` in POSIX.
 
 ### Effects
 
-#### `pub effect Handler`
+#### `pub interface Handler`
 
 This interface defines a handler of HTTP Requests.
 
@@ -864,7 +864,7 @@ the "downstream" and "upstream" directions of the middleware chain.
 This function may be called with either an incoming request read from the
 network or a request synthesized or forwarded by another component.
 
-#### `pub effect Client`
+#### `pub interface Client`
 
 This interface defines an HTTP client for sending "outgoing" requests.
 
@@ -1429,7 +1429,7 @@ consistent between implementations.
 
 ### Effects
 
-#### `pub effect MonotonicClock`
+#### `pub interface MonotonicClock`
 
 WASI Monotonic Clock is a clock API intended to let users measure elapsed
 time.
@@ -1465,7 +1465,7 @@ Wait until the specified mark has occurred.
 
 Wait for the specified duration to elapse.
 
-#### `pub effect SystemClock`
+#### `pub interface SystemClock`
 
 WASI System Clock is a clock API intended to let users query the current
 time. The clock is not necessarily monotonic as it may be reset.
@@ -1492,7 +1492,7 @@ The nanoseconds field of the output is always less than 1000000000.
 Query the resolution of the clock. Returns the smallest duration of time
 that the implementation permits distinguishing.
 
-#### `pub effect Timezone`
+#### `pub interface Timezone`
 
 ##### `fn iana_id() -> Option<String>`
 
@@ -1568,7 +1568,7 @@ https://tc39.es/proposal-temporal/docs/timezone.html
 
 ### Effects
 
-#### `pub effect InsecureSeed`
+#### `pub interface InsecureSeed`
 
 The insecure-seed interface for seeding hash-map DoS resistance.
 
@@ -1595,7 +1595,7 @@ This will likely be changed to a value import, to prevent it from being
 called multiple times and potentially used for purposes other than DoS
 protection.
 
-#### `pub effect Insecure`
+#### `pub interface Insecure`
 
 The insecure interface for insecure pseudo-random numbers.
 
@@ -1627,7 +1627,7 @@ Return an insecure pseudo-random `u64` value.
 This function returns the same type of pseudo-random data as
 `get-insecure-random-bytes`, represented as a `u64`.
 
-#### `pub effect Random`
+#### `pub interface Random`
 
 WASI Random is a random data API.
 
@@ -1668,7 +1668,7 @@ represented as a `u64`.
 
 ### Effects
 
-#### `pub effect IpNameLookup`
+#### `pub interface IpNameLookup`
 
 ##### `async fn resolve_addresses(name: String) -> AsyncCall<Result<Array<IpAddress>, ErrorCode>>`
 
