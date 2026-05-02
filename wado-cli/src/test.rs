@@ -1,12 +1,12 @@
 use std::fmt::Write as _;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
-use glob::glob;
+use glob::Pattern;
 use lexopt::Arg::Value;
 use tokio::sync::mpsc;
 use wasmtime::Engine;
@@ -14,6 +14,8 @@ use wasmtime::component::Component;
 
 use crate::args::{self, CliExit};
 use crate::compile::{self, OptLevel};
+use crate::discover;
+use crate::manifest as project_manifest;
 
 const DEFAULT_TIMEOUT_MS: u64 = 5000;
 // Epoch tick interval for wasmtime's epoch-based interruption.
@@ -24,17 +26,29 @@ const EPOCH_INTERVAL_MS: u64 = 1000;
 use crate::runtime;
 
 pub struct TestOptions {
-    pub paths: Vec<String>,
-    pub filter: Option<String>,
+    /// Each entry corresponds to one package context. The first entry is the
+    /// root package (or the synthetic `"."` label when `wado test` is invoked
+    /// outside a `wado.toml` project); subsequent entries come from
+    /// recursively discovered sub-packages.
+    pub package_runs: Vec<PackageRun>,
     pub jobs: usize,
     pub opt_level: OptLevel,
     /// Preopened directories as `(host_path, guest_path)` pairs.
     pub preopened_dirs: Vec<(String, String)>,
 }
 
+/// One package context's discovered test files.
+pub struct PackageRun {
+    /// Display label, relative to the original invocation directory
+    /// (`"."` for the root, `"subpkg"` for a nested sub-package).
+    pub label: String,
+    pub paths: Vec<String>,
+}
+
 #[derive(Clone, Copy)]
 enum Opt {
     Filter,
+    Exclude,
     Parallel,
     OptLevel,
     Dir,
@@ -45,6 +59,7 @@ enum Opt {
 impl Opt {
     const ALL: &[Self] = &[
         Self::Filter,
+        Self::Exclude,
         Self::Parallel,
         Self::OptLevel,
         Self::Dir,
@@ -58,7 +73,13 @@ impl Opt {
                 long: Some("filter"),
                 short: Some('f'),
                 value: Some("<pattern>"),
-                desc: "Filter tests by name pattern",
+                desc: "Keep only files whose path matches the wildcard pattern (`*`, `?`, `[...]`)",
+            },
+            Self::Exclude => args::OptSpec {
+                long: Some("exclude"),
+                short: None,
+                value: Some("<pattern>"),
+                desc: "Drop files whose path matches the glob (repeatable; extends [test].exclude)",
             },
             Self::Parallel => args::OptSpec {
                 long: Some("parallel"),
@@ -90,12 +111,12 @@ fn format_usage() -> String {
     writeln!(buf).unwrap();
     writeln!(
         buf,
-        "If no files are specified, searches for **/*_test.wado recursively."
+        "Discovers **/*.wado under the project root (honours .gitignore, .gitmodules,"
     )
     .unwrap();
     writeln!(
         buf,
-        "If a directory is given, searches for *_test.wado files within it."
+        "dot-prefixed entries, nested wado.toml, and [test].exclude in wado.toml)."
     )
     .unwrap();
     writeln!(buf).unwrap();
@@ -108,45 +129,161 @@ pub fn print_usage() {
     eprint!("{}", format_usage());
 }
 
-/// Find all *_test.wado files recursively in the given directory.
-fn find_test_files_in(dir: &str) -> Result<Vec<String>, CliExit> {
-    let pattern = format!("{dir}/**/*_test.wado");
-    let mut files: Vec<String> = Vec::new();
+/// Walk `root` and produce one `PackageRun` for the root and one for each
+/// sub-package discovered transitively (cargo-workspace-style).
+///
+/// `apply_manifest_excludes` controls whether the root package's
+/// `[test].exclude` is honoured. Sub-packages always apply their own
+/// manifest. CLI `--exclude` patterns (`extra_excludes`) apply to *every*
+/// package walked: each pattern is matched relative to the package being
+/// walked, so a project-wide `--exclude 'tests/**'` drops `tests/` in the
+/// root and in every nested package consistently.
+///
+/// The returned list is ordered: the root package first, then sub-packages in
+/// source order.
+fn discover_packages(
+    root: &Path,
+    apply_manifest_excludes: bool,
+    extra_excludes: &[String],
+) -> Result<Vec<PackageRun>, CliExit> {
+    let invocation_root = root.to_path_buf();
+    let mut runs: Vec<PackageRun> = Vec::new();
+    let mut queue: Vec<PathBuf> = Vec::new();
 
-    match glob(&pattern) {
-        Ok(paths) => {
-            for entry in paths.flatten() {
-                files.push(entry.display().to_string());
-            }
-        }
-        Err(e) => {
-            return Err(CliExit::error(format!("failed to glob pattern: {e}")));
-        }
+    let root_manifest = if apply_manifest_excludes {
+        package_manifest_excludes(&invocation_root)?
+    } else {
+        Vec::new()
+    };
+    let root_excludes = compile_excludes(&root_manifest, extra_excludes)?;
+    walk_into(
+        &invocation_root,
+        &invocation_root,
+        &root_excludes,
+        &mut runs,
+        &mut queue,
+    )?;
+
+    while let Some(pkg_root) = queue.pop() {
+        let manifest = package_manifest_excludes(&pkg_root)?;
+        let excludes = compile_excludes(&manifest, extra_excludes)?;
+        walk_into(
+            &pkg_root,
+            &invocation_root,
+            &excludes,
+            &mut runs,
+            &mut queue,
+        )?;
     }
 
-    files.sort();
-    Ok(files)
+    Ok(runs)
 }
 
-/// Find all *_test.wado files recursively in the current directory.
-fn find_test_files() -> Result<Vec<String>, CliExit> {
-    find_test_files_in(".")
+/// Compile a package's exclude set: the manifest's `[test].exclude` plus
+/// any CLI `--exclude` patterns. Both layers share the same shape so the
+/// walker treats them uniformly.
+fn compile_excludes(
+    manifest: &[String],
+    extra_excludes: &[String],
+) -> Result<discover::ExcludeSet, CliExit> {
+    let combined: Vec<&str> = manifest
+        .iter()
+        .map(String::as_str)
+        .chain(extra_excludes.iter().map(String::as_str))
+        .collect();
+    discover::ExcludeSet::compile(&combined).map_err(CliExit::error)
 }
 
-/// Resolve paths: expand directories to their contained *_test.wado files.
-fn resolve_paths(paths: Vec<String>) -> Result<Vec<String>, CliExit> {
+/// Walk a single package root, append its `PackageRun`, and queue its
+/// sub-packages (in source order — pushed in reverse so the LIFO `pop`
+/// emits them root-first).
+fn walk_into(
+    pkg_root: &Path,
+    invocation_root: &Path,
+    excludes: &discover::ExcludeSet,
+    runs: &mut Vec<PackageRun>,
+    queue: &mut Vec<PathBuf>,
+) -> Result<(), CliExit> {
+    let result = discover::discover_test_files(pkg_root, excludes).map_err(CliExit::error)?;
+    let label = relative_label(invocation_root, pkg_root);
+    let paths = result.files.iter().map(|p| display_path(p)).collect();
+    runs.push(PackageRun { label, paths });
+    for sub in result.subpackages.into_iter().rev() {
+        queue.push(sub);
+    }
+    Ok(())
+}
+
+/// Read `[test].exclude` from the `wado.toml` rooted at `pkg_root` (if any).
+/// Returns the empty list when no manifest sits exactly at that directory —
+/// sub-packages without their own `wado.toml` simply contribute no excludes.
+fn package_manifest_excludes(pkg_root: &Path) -> Result<Vec<String>, CliExit> {
+    match project_manifest::discover(pkg_root) {
+        Ok(Some(project)) if project.root == pkg_root => Ok(project.manifest.test.exclude),
+        Ok(_) => Ok(Vec::new()),
+        Err(e) => Err(CliExit::error(e)),
+    }
+}
+
+/// Format a sub-package path relative to the invocation root, falling back to
+/// the absolute display when not a descendant.
+fn relative_label(invocation_root: &Path, pkg_root: &Path) -> String {
+    if pkg_root == invocation_root {
+        return ".".to_string();
+    }
+    pkg_root.strip_prefix(invocation_root).map_or_else(
+        |_| pkg_root.display().to_string(),
+        |rel| rel.display().to_string(),
+    )
+}
+
+/// Render a discovered path as the canonical string the runner stores and
+/// matches against. The walker emits `./pkg/file.wado` (or `.\pkg\file.wado`
+/// on Windows) when rooted at `.`; we normalise separators to `/` and strip
+/// the leading `./` so that `--filter` and `[test].exclude` patterns — which
+/// are documented as forward-slash globs — see a consistent shape regardless
+/// of OS or how the user invoked `wado test`.
+fn display_path(p: &Path) -> String {
+    let raw = p.display().to_string();
+    let normalised = if cfg!(windows) {
+        raw.replace('\\', "/")
+    } else {
+        raw
+    };
+    match normalised.strip_prefix("./") {
+        Some(stripped) => stripped.to_string(),
+        None => normalised,
+    }
+}
+
+/// Resolve a mix of files and directory arguments into a single flat path
+/// list. Directories are walked with the discovery rules; files pass through.
+fn resolve_paths(paths: Vec<String>, extra_excludes: &[String]) -> Result<Vec<String>, CliExit> {
+    let excludes = discover::ExcludeSet::compile(extra_excludes).map_err(CliExit::error)?;
     let mut resolved = Vec::new();
     for path in paths {
-        if Path::new(&path).is_dir() {
-            let mut found = find_test_files_in(&path)?;
-            if found.is_empty() {
+        let p = Path::new(&path);
+        if p.is_dir() {
+            let runs = discover_packages(p, true, extra_excludes)?;
+            let total: usize = runs.iter().map(|r| r.paths.len()).sum();
+            if total == 0 {
                 return Err(CliExit::error(format!(
-                    "no *_test.wado files found in directory '{path}'"
+                    "no .wado files found in directory '{path}'"
                 )));
             }
-            resolved.append(&mut found);
+            for run in runs {
+                resolved.extend(run.paths);
+            }
         } else {
-            resolved.push(path);
+            // Run explicit file arguments through the same canonical form
+            // as discovered paths so `--filter` and `--exclude` patterns
+            // see one consistent shape (forward-slash, no leading `./`).
+            // Honour `--exclude` even for explicit args, matching the
+            // flag's documented "drop files whose path matches" behaviour.
+            let canonical = display_path(p);
+            if !excludes.matches_str(&canonical) {
+                resolved.push(canonical);
+            }
         }
     }
     Ok(resolved)
@@ -160,7 +297,8 @@ fn resolve_paths(paths: Vec<String>) -> Result<Vec<String>, CliExit> {
 pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
     let usage = format_usage();
     let mut paths: Vec<String> = Vec::new();
-    let mut filter: Option<String> = None;
+    let mut filters: Vec<String> = Vec::new();
+    let mut cli_excludes: Vec<String> = Vec::new();
     let mut jobs: Option<usize> = None;
     let mut opt_level = OptLevel::default();
     let mut preopened_dirs: Vec<(String, String)> = Vec::new();
@@ -170,7 +308,10 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
         if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
             match opt {
                 Opt::Filter => {
-                    filter = Some(args::require_string(&mut parser)?);
+                    filters.push(args::require_string(&mut parser)?);
+                }
+                Opt::Exclude => {
+                    cli_excludes.push(args::require_string(&mut parser)?);
                 }
                 Opt::Parallel => {
                     let val = args::require_string(&mut parser)?;
@@ -225,17 +366,54 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
         preopened_dirs.push((".".to_owned(), ".".to_owned()));
     }
 
-    // Resolve paths: expand directories to *_test.wado files
-    if paths.is_empty() {
-        paths = find_test_files()?;
-        if paths.is_empty() {
-            return Err(CliExit {
-                message: "No test files found (looking for **/*_test.wado)\n".to_owned(),
-                exit_code: 0,
+    // Resolve paths into per-package runs. With no args, recurse from cwd
+    // through every nested `wado.toml`. With explicit args, collapse
+    // everything into a single synthetic root run; sub-package recursion
+    // only kicks in for the no-args (project-wide) case.
+    let mut package_runs: Vec<PackageRun> = if paths.is_empty() {
+        discover_packages(Path::new("."), true, &cli_excludes)?
+    } else {
+        let resolved = resolve_paths(paths, &cli_excludes)?;
+        vec![PackageRun {
+            label: ".".to_string(),
+            paths: resolved,
+        }]
+    };
+
+    // --filter: shell-style wildcard match against each discovered path.
+    // To match anywhere within a path, wrap the term in `*`s (e.g.
+    // `*foo*`). Repeatable: a path is kept if any pattern matches.
+    if !filters.is_empty() {
+        let patterns: Vec<Pattern> = filters
+            .iter()
+            .map(|s| {
+                Pattern::new(s)
+                    .map_err(|e| CliExit::error(format!("invalid --filter pattern {s:?}: {e}")))
+            })
+            .collect::<Result<_, _>>()?;
+        // `--filter` shares the walker's match semantics so users get
+        // consistent results between `--filter`, `--exclude`, and the
+        // manifest's `[test].exclude`. See `discover::WALK_MATCH_OPTIONS`.
+        for run in &mut package_runs {
+            run.paths.retain(|p| {
+                patterns
+                    .iter()
+                    .any(|pat| pat.matches_with(p, discover::WALK_MATCH_OPTIONS))
             });
         }
-    } else {
-        paths = resolve_paths(paths)?;
+    }
+    package_runs.retain(|run| !run.paths.is_empty());
+
+    if package_runs.is_empty() {
+        let message = if filters.is_empty() {
+            "No .wado files found under the project root\n".to_owned()
+        } else {
+            format!("No .wado files match --filter {filters:?}\n")
+        };
+        return Err(CliExit {
+            message,
+            exit_code: 0,
+        });
     }
 
     // Default to half of available CPUs (minimum 2)
@@ -246,8 +424,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
     });
 
     Ok(TestOptions {
-        paths,
-        filter,
+        package_runs,
         jobs,
         opt_level,
         preopened_dirs,
@@ -351,23 +528,31 @@ struct TodoCompileError {
     path: String,
 }
 
+/// A non-TODO module that failed to compile.
+/// Counted on the `compile` axis of the summary; does not abort the run so
+/// other files still get a chance to compile and report.
+struct CompileFailure {
+    path: String,
+}
+
 /// Phase 1: Compile all test files and collect test jobs.
 ///
 /// Prints a log line for each file as compilation finishes (with elapsed time),
 /// so the user can see progress during long compilation runs.
 async fn collect_test_jobs(
     paths: &[String],
-    filter: Option<&str>,
     opt_level: OptLevel,
     overall_start: Instant,
 ) -> Result<(
     Vec<Arc<CompiledTestModule>>,
     Vec<TestJob>,
     Vec<TodoCompileError>,
+    Vec<CompileFailure>,
 )> {
     let mut modules = Vec::new();
     let mut jobs = Vec::new();
     let mut todo_compile_errors = Vec::new();
+    let mut compile_failures = Vec::new();
 
     for path in paths {
         // Compile with --world test so test functions become component exports
@@ -399,8 +584,12 @@ async fn collect_test_jobs(
                 continue;
             }
             Err(_) => {
-                // Non-TODO module failed to compile — fatal
-                process::exit(1);
+                // Non-TODO module failed to compile — record on the compile
+                // axis and continue with the next file.
+                let dur = format_duration(compile_duration);
+                eprintln!("[{elapsed}] FAILED to compile {path} ({dur})");
+                compile_failures.push(CompileFailure { path: path.clone() });
+                continue;
             }
         };
 
@@ -420,12 +609,6 @@ async fn collect_test_jobs(
 
         for (name, _) in component_ty.exports(&engine) {
             if name.starts_with("test-") {
-                // Apply filter if specified
-                if let Some(pattern) = filter
-                    && !name.contains(pattern)
-                {
-                    continue;
-                }
                 test_names.push(name.to_string());
             }
         }
@@ -452,7 +635,7 @@ async fn collect_test_jobs(
         }));
     }
 
-    Ok((modules, jobs, todo_compile_errors))
+    Ok((modules, jobs, todo_compile_errors, compile_failures))
 }
 
 /// Run a single test in its own Store
@@ -668,34 +851,96 @@ fn format_duration(d: Duration) -> String {
     }
 }
 
-pub async fn run(opts: TestOptions) {
-    let overall_start = Instant::now();
+/// Per-package totals tracked while running one package's tests; merged
+/// across all packages by [`run`] to produce the aggregate summary.
+#[derive(Default)]
+struct PackageTotals {
+    compile_ok: usize,
+    compile_failed: usize,
+    test_passed: u32,
+    test_failed: u32,
+    todo_pending: u32,
+    todo_resolved: u32,
+}
+
+impl PackageTotals {
+    fn merge(&mut self, other: &PackageTotals) {
+        self.compile_ok += other.compile_ok;
+        self.compile_failed += other.compile_failed;
+        self.test_passed += other.test_passed;
+        self.test_failed += other.test_failed;
+        self.todo_pending += other.todo_pending;
+        self.todo_resolved += other.todo_resolved;
+    }
+}
+
+fn print_three_axis(totals: &PackageTotals, duration: Option<&str>) {
+    println!(
+        "compile: {} ok, {} failed",
+        totals.compile_ok, totals.compile_failed
+    );
+    println!(
+        "test:    {} passed, {} failed",
+        totals.test_passed, totals.test_failed
+    );
+    let todo_total = totals.todo_pending + totals.todo_resolved;
+    if todo_total > 0 {
+        let mut todo_line = format!("todo:    {} pending", totals.todo_pending);
+        if totals.todo_resolved > 0 {
+            todo_line.push_str(&format!(", {} resolved", totals.todo_resolved));
+        }
+        println!("{todo_line}");
+    }
+    if let Some(d) = duration {
+        println!("({d})");
+    }
+}
+
+async fn run_one_package(
+    pkg_run: &PackageRun,
+    opt_level: OptLevel,
+    parallelism: usize,
+    preopened_dirs: Arc<Vec<(String, String)>>,
+    overall_start: Instant,
+    show_banner: bool,
+) -> PackageTotals {
+    if show_banner {
+        println!();
+        println!("=== package: {} ===", pkg_run.label);
+    }
 
     // Phase 1: Compile all files and collect test jobs
-    let (modules, jobs, todo_compile_errors) = match collect_test_jobs(
-        &opts.paths,
-        opts.filter.as_deref(),
-        opts.opt_level,
-        overall_start,
-    )
-    .await
-    {
-        Ok(result) => result,
-        Err(e) => {
-            eprintln!("Error collecting tests: {e}");
-            process::exit(1);
-        }
-    };
+    let (modules, jobs, todo_compile_errors, compile_failures) =
+        match collect_test_jobs(&pkg_run.paths, opt_level, overall_start).await {
+            Ok(result) => result,
+            Err(e) => {
+                eprintln!("Error collecting tests: {e}");
+                process::exit(1);
+            }
+        };
+
+    // `compile_ok` counts every file whose compilation finished without a
+    // non-TODO error. `#![TODO]` modules whose expected compile error fired
+    // also count as compile-passed because the compile-level outcome was as
+    // declared.
+    let compile_ok = modules.len() + todo_compile_errors.len();
+    let compile_failed = compile_failures.len();
 
     let total_tests = jobs.len() + todo_compile_errors.len();
-    if total_tests == 0 {
-        println!("No tests found");
-        return;
+    if total_tests == 0 && compile_failed == 0 {
+        // Compile-only validation finished cleanly with no tests to run.
+        // Still emit the three-axis summary so the compile total is visible.
+        let totals = PackageTotals {
+            compile_ok,
+            ..PackageTotals::default()
+        };
+        println!();
+        print_three_axis(&totals, None);
+        return totals;
     }
 
     // Phase 2: Execute tests in parallel
-    let preopened_dirs = Arc::new(opts.preopened_dirs);
-    let results = execute_tests_parallel(&modules, jobs, opts.jobs, preopened_dirs).await;
+    let results = execute_tests_parallel(&modules, jobs, parallelism, preopened_dirs).await;
 
     // Group results by file for display
     let mut results_by_file: indexmap::IndexMap<String, Vec<&TestResult>> =
@@ -719,7 +964,6 @@ pub async fn run(opts: TestOptions) {
     let mut total_todo = 0u32;
     let mut total_todo_resolved = 0u32;
 
-    // Collect TODO entries for the summary section at the end
     struct TodoEntry {
         file_path: String,
         display_name: String,
@@ -727,7 +971,6 @@ pub async fn run(opts: TestOptions) {
     }
     let mut todo_entries: Vec<TodoEntry> = Vec::new();
 
-    // Collect failures for the summary section at the end (cargo test style)
     struct FailEntry {
         file_path: String,
         display_name: String,
@@ -735,8 +978,7 @@ pub async fn run(opts: TestOptions) {
     }
     let mut fail_entries: Vec<FailEntry> = Vec::new();
 
-    for path in &opts.paths {
-        // Handle #![TODO] modules that failed to compile
+    for path in &pkg_run.paths {
         if todo_error_by_path.contains_key(path.as_str()) {
             println!("  \x1b[33m·\x1b[0m #![TODO] module — compile error (expected)  ({path})");
             total_todo += 1;
@@ -751,7 +993,6 @@ pub async fn run(opts: TestOptions) {
         if let Some(file_results) = results_by_file.get(path) {
             println!("Running tests in {path}...");
 
-            // Sort by test name for consistent output
             let mut sorted_results: Vec<_> = file_results.clone();
             sorted_results.sort_by(|a, b| a.test_name.cmp(&b.test_name));
 
@@ -803,7 +1044,6 @@ pub async fn run(opts: TestOptions) {
         }
     }
 
-    // Failure summary (cargo test style)
     if !fail_entries.is_empty() {
         println!();
         println!("failures:");
@@ -821,7 +1061,6 @@ pub async fn run(opts: TestOptions) {
         }
     }
 
-    // TODO summary section
     if !todo_entries.is_empty() {
         println!();
         let todo_total = total_todo + total_todo_resolved;
@@ -848,21 +1087,60 @@ pub async fn run(opts: TestOptions) {
         }
     }
 
-    // Summary line: "N passed, N failed; N todo (M resolved)"
-    let total_dur = format_duration(overall_start.elapsed());
-    println!();
-    let mut summary = format!("{total_passed} passed, {total_failed} failed");
-    let todo_total = total_todo + total_todo_resolved;
-    if todo_total > 0 {
-        summary.push_str(&format!("; {todo_total} todo"));
-        if total_todo_resolved > 0 {
-            summary.push_str(&format!(" ({total_todo_resolved} resolved)"));
+    if compile_failed > 0 {
+        println!();
+        println!("compile failures:");
+        for entry in &compile_failures {
+            println!("    {}", entry.path);
         }
     }
-    summary.push_str(&format!(" ({total_dur})"));
-    println!("{summary}");
 
-    if total_failed > 0 || total_todo_resolved > 0 {
+    let totals = PackageTotals {
+        compile_ok,
+        compile_failed,
+        test_passed: total_passed,
+        test_failed: total_failed,
+        todo_pending: total_todo,
+        todo_resolved: total_todo_resolved,
+    };
+
+    // Per-package three-axis summary (no duration; the aggregate or the run
+    // itself owns the elapsed-time line).
+    println!();
+    print_three_axis(&totals, None);
+
+    totals
+}
+
+pub async fn run(opts: TestOptions) {
+    let overall_start = Instant::now();
+    let multi_pkg = opts.package_runs.len() > 1;
+    let preopened_dirs = Arc::new(opts.preopened_dirs);
+
+    let mut grand = PackageTotals::default();
+    for pkg_run in &opts.package_runs {
+        let totals = run_one_package(
+            pkg_run,
+            opts.opt_level,
+            opts.jobs,
+            preopened_dirs.clone(),
+            overall_start,
+            multi_pkg,
+        )
+        .await;
+        grand.merge(&totals);
+    }
+
+    let total_dur = format_duration(overall_start.elapsed());
+    if multi_pkg {
+        println!();
+        println!("=== aggregate ===");
+        print_three_axis(&grand, Some(&total_dur));
+    } else {
+        println!("({total_dur})");
+    }
+
+    if grand.compile_failed > 0 || grand.test_failed > 0 || grand.todo_resolved > 0 {
         process::exit(1);
     }
 }

@@ -1,0 +1,13 @@
+// Entry module verifies that a `test` block declared in an imported module is
+// NOT executed when the importer is compiled with the test world. The imported
+// `test` traps via `unreachable()`; if it were exported and run, this fixture
+// would fail.
+
+use { helper } from "./sub/test_unreachable.wado";
+
+test "entry module test runs" {
+    assert helper() == 42;
+}
+
+__DATA__
+{"test": {}}

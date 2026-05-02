@@ -135,8 +135,13 @@ fn compile_help() {
 
 #[test]
 fn compile_no_input() {
+    // The repo root carries a wado.toml without `[package].command`, so
+    // the resolver short-circuits with the more specific message.
     let parser = Parser::from_args::<&[&str]>(&[]);
-    assert_err(compile::parse_args(parser), "no input file specified");
+    assert_err(
+        compile::parse_args(parser),
+        "wado.toml found but [package].command is not set",
+    );
 }
 
 #[test]
@@ -244,8 +249,13 @@ fn run_help() {
 
 #[test]
 fn run_no_input() {
+    // Same situation as compile_no_input: repo-root wado.toml has no
+    // `[package].command`, and the resolver surfaces that.
     let parser = Parser::from_args::<&[&str]>(&[]);
-    assert_err(wado_cli::run::parse_args(parser), "no input file specified");
+    assert_err(
+        wado_cli::run::parse_args(parser),
+        "wado.toml found but [package].command is not set",
+    );
 }
 
 #[test]
@@ -309,10 +319,13 @@ fn serve_help() {
 
 #[test]
 fn serve_no_input() {
+    // `wado serve` resolves the entry point against `[package].service`;
+    // the repo-root wado.toml is missing that, so the resolver emits the
+    // more specific error.
     let parser = Parser::from_args::<&[&str]>(&[]);
     assert_err(
         wado_cli::serve::parse_args(parser),
-        "no input file specified",
+        "wado.toml found but [package].service is not set",
     );
 }
 
@@ -334,17 +347,62 @@ fn serve_log_level() {
 
 #[test]
 fn test_with_files() {
+    // Explicit file arguments collapse into a single synthetic root
+    // PackageRun; sub-package recursion only kicks in when no args are given.
     let parser = Parser::from_args(&["a.wado", "b.wado"]);
     let opts = wado_cli::test::parse_args(parser).unwrap();
-    assert_eq!(opts.paths, vec!["a.wado", "b.wado"]);
-    assert_eq!(opts.filter, None);
+    assert_eq!(opts.package_runs.len(), 1);
+    assert_eq!(opts.package_runs[0].label, ".");
+    assert_eq!(opts.package_runs[0].paths, vec!["a.wado", "b.wado"]);
 }
 
 #[test]
-fn test_with_filter() {
-    let parser = Parser::from_args(&["-f", "pattern", "a.wado"]);
+fn test_with_filter_keeps_matching_paths() {
+    // --filter is a path-based wildcard applied during parse: `*.wado`
+    // keeps `a.wado` and drops `b.txt`.
+    let parser = Parser::from_args(&["-f", "*.wado", "a.wado", "b.txt"]);
     let opts = wado_cli::test::parse_args(parser).unwrap();
-    assert_eq!(opts.filter, Some("pattern".to_string()));
+    assert_eq!(opts.package_runs.len(), 1);
+    assert_eq!(opts.package_runs[0].paths, vec!["a.wado"]);
+}
+
+#[test]
+fn test_with_filter_no_match_exits_cleanly() {
+    // No discovered path matches the filter — the user gets a non-fatal exit
+    // (code 0) with an explanatory message rather than running zero tests.
+    let parser = Parser::from_args(&["-f", "no_match", "a.wado"]);
+    assert_help(
+        wado_cli::test::parse_args(parser),
+        "No .wado files match --filter",
+    );
+}
+
+#[test]
+fn test_with_invalid_filter_pattern() {
+    let parser = Parser::from_args(&["-f", "[unterminated", "a.wado"]);
+    assert_err(
+        wado_cli::test::parse_args(parser),
+        "invalid --filter pattern",
+    );
+}
+
+#[test]
+fn test_with_exclude_keeps_non_matching_explicit_file() {
+    // `--exclude` extends the manifest-level [test].exclude list and is
+    // applied to explicit file arguments too: `package-gale/**` does not
+    // match `a.wado`, so the file survives.
+    let parser = Parser::from_args(&["--exclude", "package-gale/**", "a.wado"]);
+    let opts = wado_cli::test::parse_args(parser).unwrap();
+    assert_eq!(opts.package_runs[0].paths, vec!["a.wado"]);
+}
+
+#[test]
+fn test_with_exclude_drops_matching_explicit_file() {
+    // The matching counterpart: `drop/**` covers `drop/inner.wado` so
+    // that file is filtered out, while `keep.wado` survives.
+    let parser = Parser::from_args(&["--exclude", "drop/**", "drop/inner.wado", "keep.wado"]);
+    let opts = wado_cli::test::parse_args(parser).unwrap();
+    assert_eq!(opts.package_runs[0].paths, vec!["keep.wado"]);
 }
 
 #[test]

@@ -1462,11 +1462,15 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                 pairs.insert([ms_str.clone(), raw_path.clone()]);
             }
         }
+        // Format the entry module source once so the per-include resolver
+        // can compare against it without allocating per call.
+        let entry_module_source = self.entry_module_source.as_ref().map(ToString::to_string);
         let mut included = IndexMap::default();
         for pair in pairs {
             let [ref ms_str, ref raw_path] = pair;
             // Resolve path relative to the module source's directory
-            let resolved = self.resolve_include_path(ms_str, raw_path);
+            let resolved =
+                resolve_include_path_impl(entry_module_source.as_deref(), ms_str, raw_path);
             let bytes = self
                 .host
                 .load_source(&resolved)
@@ -1476,36 +1480,167 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         }
         Ok(included)
     }
+}
 
-    /// Resolve an include path relative to the module that contains it.
-    ///
-    /// Returns a path suitable for passing to `CompilerHost::load_source`, which
-    /// joins the result with `base_path`. Three cases:
-    ///
-    /// - Absolute path (`/…`): prepend `dir` so the result is absolute; `join`
-    ///   with `base_path` returns just the absolute path unchanged. When the
-    ///   entry sits at the filesystem root (`/foo.wado`), `dir` collapses to the
-    ///   empty string but the path is still absolute, so we preserve the leading
-    ///   `/` rather than falling into the CWD-relative branch.
-    /// - Module-import relative (`./…` or `../…`): `dir` is already
-    ///   base_path-relative (all imported modules are normalized to `./`), so
-    ///   prepending it produces the correct base_path-relative result.
-    /// - Entry-file CWD-relative (no leading `/`, `./`, or `../`): `dir` contains
-    ///   the full CWD-relative prefix including `base_path`. Prepending it would
-    ///   double that prefix when `join` adds `base_path` again. Return only
-    ///   `stripped` so that `base_path.join(stripped)` produces the right path.
-    fn resolve_include_path(&self, module_source_str: &str, raw_path: &str) -> String {
-        if (raw_path.starts_with("./") || raw_path.starts_with("../"))
-            && let Some(dir_end) = module_source_str.rfind('/')
-        {
-            let dir = &module_source_str[..dir_end];
-            let stripped = raw_path.strip_prefix("./").unwrap_or(raw_path);
-            if module_source_str.starts_with('/') || dir.starts_with("./") || dir.starts_with("../")
-            {
-                return format!("{dir}/{stripped}");
-            }
-            return stripped.to_string();
-        }
-        raw_path.to_string()
+/// Resolve an include path relative to the module that contains it.
+///
+/// Returns a path suitable for passing to `CompilerHost::load_source`, which
+/// joins the result with `base_path`. The logic forks on the module source's
+/// shape:
+///
+/// - **CWD-relative entry module** (path begins with `./` or `../`): the
+///   user's input path already encodes the prefix `base_path` will
+///   re-introduce, because `compile_with_options` derives `base_path` from
+///   the entry's parent directory. Prepending `dir` here would make
+///   `host.load_source`'s subsequent `base_path.join(...)` double the prefix
+///   — e.g. `wado test ./pkg/src/main.wado` resolving `#include_str("./x")`
+///   would otherwise produce `./pkg/src/./pkg/src/x`. Strip the leading
+///   `./` from `raw_path` only and let the host's join restore the prefix.
+/// - **Absolute entry module** (path begins with `/`): keep the dir-prefixed
+///   result. `Path::join` collapses absolute joins to the absolute path, so
+///   `base_path.join("/abs/dir/x")` returns `/abs/dir/x` unchanged. Test
+///   hosts (e.g. `wado-lsp/tests/definition.rs`) key on this form.
+/// - **Imported module rooted at `./` or `../`** (`./sub/helper.wado`): the
+///   `dir` is itself base_path-relative, so prepending it to `stripped`
+///   yields the right base_path-relative result for the include.
+/// - **Other shapes** (entry without leading `./` / `../` / `/`, or an
+///   import without a `./` prefix): the dir prefix is already part of the
+///   `base_path` the host will rejoin, so we strip to the bare filename
+///   like the cwd-relative entry case.
+fn resolve_include_path_impl(
+    entry_module_source: Option<&str>,
+    module_source_str: &str,
+    raw_path: &str,
+) -> String {
+    if !is_cwd_relative(raw_path) {
+        return raw_path.to_string();
+    }
+    let stripped = raw_path.strip_prefix("./").unwrap_or(raw_path);
+    if let Some(dir) = dir_prefix_to_keep(entry_module_source, module_source_str) {
+        format!("{dir}/{stripped}")
+    } else {
+        stripped.to_string()
+    }
+}
+
+/// Wado's relative-path notation matches gitignore / shell convention:
+/// `./` is "next to me" and `../` is "up one". Anything else is interpreted
+/// by the host (`core:`, `wasi:`, absolute, ...) and is not our concern.
+fn is_cwd_relative(path: &str) -> bool {
+    path.starts_with("./") || path.starts_with("../")
+}
+
+/// Decide whether the include path should keep its containing module's
+/// directory as a prefix (`Some(dir)`) or collapse to the bare filename
+/// (`None`).
+///
+/// Two situations strip to the bare filename — both because re-prepending
+/// `dir` would only duplicate what `host.load_source`'s
+/// `base_path.join(...)` is already going to add:
+///
+/// 1. The cwd-relative entry module itself. Its `dir` IS `base_path`.
+/// 2. Any module whose `dir` does not look base_path-relative. Imports
+///    normalised by the loader sit under `./...`/`../...`; entries whose
+///    module-source string is a bare `pkg/src/main.wado` carry `base_path`
+///    inside the source string already, so the dir there is also part of
+///    what `base_path.join` will re-introduce.
+///
+/// The remaining cases (absolute paths, and imports rooted at `./` /
+/// `../`) keep the dir prefix. Absolute joins collapse cleanly via
+/// `Path::join`; relative-rooted imports need the prefix to stay inside
+/// the importer's directory.
+fn dir_prefix_to_keep<'a>(
+    entry_module_source: Option<&str>,
+    module_source_str: &'a str,
+) -> Option<&'a str> {
+    let is_entry = entry_module_source.is_some_and(|e| e == module_source_str);
+    if is_entry && is_cwd_relative(module_source_str) {
+        return None;
+    }
+    let dir_end = module_source_str.rfind('/')?;
+    let dir = &module_source_str[..dir_end];
+    if module_source_str.starts_with('/') || is_cwd_relative(dir) {
+        Some(dir)
+    } else {
+        None
+    }
+}
+
+#[cfg(test)]
+mod resolve_include_path_tests {
+    use super::resolve_include_path_impl;
+
+    fn resolve(entry: Option<&str>, module: &str, include: &str) -> String {
+        resolve_include_path_impl(entry, module, include)
+    }
+
+    #[test]
+    fn entry_with_dot_prefix_does_not_double_base_path() {
+        // Reproduces the bug surfaced by universal `wado test` discovery:
+        // running `wado test ./pkg/src/main.wado` made `compile_with_options`
+        // pick `base_path = ./pkg/src`, but the loader still saw the entry
+        // path as `./pkg/src/main.wado`. Prepending `dir = ./pkg/src` and
+        // then joining with `base_path` would yield
+        // `./pkg/src/./pkg/src/runtime.wado`.
+        let entry = "./pkg/src/main.wado";
+        let resolved = resolve(Some(entry), entry, "./runtime.wado");
+        assert_eq!(resolved, "runtime.wado");
+    }
+
+    #[test]
+    fn entry_without_prefix_strips_only() {
+        let entry = "pkg/src/main.wado";
+        let resolved = resolve(Some(entry), entry, "./runtime.wado");
+        assert_eq!(resolved, "runtime.wado");
+    }
+
+    #[test]
+    fn entry_with_absolute_path_keeps_dir_prefix() {
+        // Absolute paths are not double-prefixed by `Path::join` (the join
+        // collapses to the absolute path), so the dir-prefixed form stays
+        // the canonical answer here. Test hosts that key on the absolute
+        // path string see the form they expect.
+        let entry = "/abs/pkg/main.wado";
+        let resolved = resolve(Some(entry), entry, "./runtime.wado");
+        assert_eq!(resolved, "/abs/pkg/runtime.wado");
+    }
+
+    #[test]
+    fn import_module_keeps_dir_prefix() {
+        // An imported module sitting beside the entry uses the dir-prefixed
+        // form so that `base_path.join(...)` lands in the importer's
+        // directory, not at base_path's root.
+        let entry = "./main.wado";
+        let import = "./sub/helper.wado";
+        let resolved = resolve(Some(entry), import, "./data.txt");
+        assert_eq!(resolved, "./sub/data.txt");
+    }
+
+    #[test]
+    fn import_at_base_root_returns_filename_only() {
+        let entry = "./main.wado";
+        let import = "./helper.wado";
+        let resolved = resolve(Some(entry), import, "./data.txt");
+        // dir = ".", which doesn't match the `./` / `../` prefix branch,
+        // so we fall back to the bare filename and let the host's join
+        // place it under base_path.
+        assert_eq!(resolved, "data.txt");
+    }
+
+    #[test]
+    fn parent_relative_import_keeps_dir_prefix() {
+        let entry = "./main.wado";
+        let import = "../sibling/helper.wado";
+        let resolved = resolve(Some(entry), import, "./data.txt");
+        assert_eq!(resolved, "../sibling/data.txt");
+    }
+
+    #[test]
+    fn non_relative_arg_passes_through() {
+        let entry = "./main.wado";
+        // `core:foo` etc. (no leading `./` / `../`) are not relative and the
+        // resolver must not touch them.
+        let resolved = resolve(Some(entry), entry, "/abs/data.txt");
+        assert_eq!(resolved, "/abs/data.txt");
     }
 }

@@ -71,11 +71,15 @@ fn test_compile_help() {
 
 #[test]
 fn test_compile_missing_input() {
+    // The repo root carries a `wado.toml` with no `[package].command` so the
+    // resolver can't synthesise an input file; the user gets a focused error.
     wado()
         .arg("compile")
         .assert()
         .failure()
-        .stderr(predicate::str::contains("no input file specified"));
+        .stderr(predicate::str::contains(
+            "wado.toml found but [package].command is not set",
+        ));
 }
 
 #[test]
@@ -281,11 +285,16 @@ fn test_run_help() {
 
 #[test]
 fn test_run_missing_input() {
+    // Same story as `test_compile_missing_input`: the repo root has a
+    // `wado.toml` without `[package].command`, so the entry-point resolver
+    // surfaces a more specific failure.
     wado()
         .arg("run")
         .assert()
         .failure()
-        .stderr(predicate::str::contains("no input file specified"));
+        .stderr(predicate::str::contains(
+            "wado.toml found but [package].command is not set",
+        ));
 }
 
 #[test]
@@ -344,17 +353,73 @@ fn test_test_failing() {
 }
 
 #[test]
-fn test_test_filter() {
+fn test_test_filter_keeps_matching_path() {
+    // --filter is a path-based wildcard. `*` does not cross path
+    // separators (consistent with shell glob and `.gitignore`); use `**`
+    // to match across directories.
     wado()
         .args([
             "test",
             "--filter",
-            "simple",
+            "**/test_decl.wado",
             "wado-compiler/tests/fixtures/test_decl.wado",
         ])
         .assert()
         .success()
-        .stdout(predicate::str::contains("1 passed, 0 failed"));
+        .stdout(predicate::str::contains("2 passed, 0 failed"));
+}
+
+#[test]
+fn test_test_filter_repeatable_keeps_union_of_matches() {
+    // `--filter` is repeatable: a path is kept when any pattern matches.
+    wado()
+        .args([
+            "test",
+            "--filter",
+            "**/test_decl.wado",
+            "--filter",
+            "**/never_matches.wado",
+            "wado-compiler/tests/fixtures/test_decl.wado",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("2 passed, 0 failed"));
+}
+
+#[test]
+fn test_test_compile_failure_reported_on_compile_axis() {
+    // A file that fails to compile must (a) not abort the run, (b) be reported
+    // on the `compile` axis, and (c) cause a non-zero exit. The peer file
+    // still compiles and its passing test still runs.
+    wado()
+        .args([
+            "test",
+            "wado-cli/tests/fixtures/test_compile_error.wado",
+            "wado-compiler/tests/fixtures/test_decl.wado",
+        ])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("compile: 1 ok, 1 failed"))
+        .stdout(predicate::str::contains("test:    2 passed, 0 failed"))
+        .stdout(predicate::str::contains("compile failures:"))
+        .stdout(predicate::str::contains(
+            "wado-cli/tests/fixtures/test_compile_error.wado",
+        ));
+}
+
+#[test]
+fn test_test_filter_drops_non_matching_path() {
+    // No path matches the pattern, so no test files remain to run.
+    wado()
+        .args([
+            "test",
+            "--filter",
+            "**/does_not_match.wado",
+            "wado-compiler/tests/fixtures/test_decl.wado",
+        ])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("No .wado files match --filter"));
 }
 
 #[test]

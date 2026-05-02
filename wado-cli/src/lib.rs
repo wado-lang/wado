@@ -16,6 +16,7 @@ pub mod args;
 pub mod check;
 pub mod compile;
 pub mod compiler_host;
+pub mod discover;
 pub mod doc;
 pub mod dump;
 pub mod format;
