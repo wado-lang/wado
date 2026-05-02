@@ -14,4 +14,13 @@ version = "0.1.0"
 # the prelude it gets bundled into. They're only valid when reached
 # transitively from `lib/core/prelude.wado` (or from a user file that
 # disables the prelude with `#![no_prelude]`).
-exclude = ["tests/**", "lib/core/prelude/**"]
+#
+# `lib/core/allocator.wado` is `#![wasm_module("mem")]` — it is meant to
+# be bundled into the host module's component as a separate core wasm
+# module, not compiled as its own entry. Compiling it standalone trips a
+# WIR-pipeline panic because nothing is exported as `realloc`.
+exclude = [
+    "tests/**",
+    "lib/core/prelude/**",
+    "lib/core/allocator.wado",
+]

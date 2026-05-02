@@ -1462,11 +1462,15 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                 pairs.insert([ms_str.clone(), raw_path.clone()]);
             }
         }
+        // Format the entry module source once so the per-include resolver
+        // can compare against it without allocating per call.
+        let entry_module_source = self.entry_module_source.as_ref().map(ToString::to_string);
         let mut included = IndexMap::default();
         for pair in pairs {
             let [ref ms_str, ref raw_path] = pair;
             // Resolve path relative to the module source's directory
-            let resolved = self.resolve_include_path(ms_str, raw_path);
+            let resolved =
+                resolve_include_path_impl(entry_module_source.as_deref(), ms_str, raw_path);
             let bytes = self
                 .host
                 .load_source(&resolved)
@@ -1475,11 +1479,6 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             included.insert(pair, bytes);
         }
         Ok(included)
-    }
-
-    fn resolve_include_path(&self, module_source_str: &str, raw_path: &str) -> String {
-        let entry = self.entry_module_source.as_ref().map(ToString::to_string);
-        resolve_include_path_impl(entry.as_deref(), module_source_str, raw_path)
     }
 }
 

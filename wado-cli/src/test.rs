@@ -195,12 +195,14 @@ fn relative_label(invocation_root: &Path, pkg_root: &Path) -> String {
 }
 
 /// Render a discovered path as the canonical string the runner stores and
-/// matches against. The walker emits `./pkg/file.wado` when rooted at `.`,
-/// but we strip the leading `./` so that `--filter` and `[test].exclude`
-/// patterns see the same shape (`pkg/file.wado`) regardless of how the user
-/// invoked `wado test`.
+/// matches against. The walker emits `./pkg/file.wado` (or `.\pkg\file.wado`
+/// on Windows) when rooted at `.`; we normalise separators to `/` and strip
+/// the leading `./` so that `--filter` and `[test].exclude` patterns — which
+/// are documented as forward-slash globs — see a consistent shape regardless
+/// of OS or how the user invoked `wado test`.
 fn display_path(p: &Path) -> String {
     let s = p.display().to_string();
+    let s = if cfg!(windows) { s.replace('\\', "/") } else { s };
     s.strip_prefix("./").map_or(s.clone(), str::to_string)
 }
 
