@@ -103,22 +103,12 @@ fn format_usage() -> String {
     writeln!(buf).unwrap();
     writeln!(
         buf,
-        "If no files are specified, searches for *.wado files under the project root,"
+        "Discovers **/*.wado under the project root (honours .gitignore, .gitmodules,"
     )
     .unwrap();
     writeln!(
         buf,
-        "honouring .gitignore, .gitmodules, dot-prefixed entries, nested wado.toml"
-    )
-    .unwrap();
-    writeln!(
-        buf,
-        "boundaries, and the [test].exclude list in wado.toml. Files without `test`"
-    )
-    .unwrap();
-    writeln!(
-        buf,
-        "blocks are still compiled (compile-only check); only files with tests run."
+        "dot-prefixed entries, nested wado.toml, and [test].exclude in wado.toml)."
     )
     .unwrap();
     writeln!(buf).unwrap();
