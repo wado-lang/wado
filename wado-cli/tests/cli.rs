@@ -354,13 +354,31 @@ fn test_test_failing() {
 
 #[test]
 fn test_test_filter_keeps_matching_path() {
-    // --filter is a path-based wildcard (WEP 2026-05-02). When the filter
-    // matches the file's path, all of its tests run.
+    // --filter is a path-based wildcard (WEP 2026-05-02). `*` does not cross
+    // path separators (consistent with shell glob and `.gitignore`); use
+    // `**` to match across directories.
     wado()
         .args([
             "test",
             "--filter",
-            "*test_decl*",
+            "**/test_decl.wado",
+            "wado-compiler/tests/fixtures/test_decl.wado",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("2 passed, 0 failed"));
+}
+
+#[test]
+fn test_test_filter_repeatable_keeps_union_of_matches() {
+    // `--filter` is repeatable: a path is kept when any pattern matches.
+    wado()
+        .args([
+            "test",
+            "--filter",
+            "**/test_decl.wado",
+            "--filter",
+            "**/never_matches.wado",
             "wado-compiler/tests/fixtures/test_decl.wado",
         ])
         .assert()
@@ -396,7 +414,7 @@ fn test_test_filter_drops_non_matching_path() {
         .args([
             "test",
             "--filter",
-            "*does_not_match*",
+            "**/does_not_match.wado",
             "wado-compiler/tests/fixtures/test_decl.wado",
         ])
         .assert()

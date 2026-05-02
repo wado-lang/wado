@@ -14,7 +14,19 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use glob::{Pattern, PatternError};
+use glob::{MatchOptions, Pattern, PatternError};
+
+/// Match options used throughout the walker. `require_literal_separator: true`
+/// makes `*` honour path components — `src/*.wado` matches direct children
+/// only, and `**` is required to cross directories. This matches both
+/// standard shell glob convention and `.gitignore` semantics, and keeps the
+/// CLI `--filter`, `--exclude`, and `[test].exclude` patterns interpreted
+/// the same way.
+pub const WALK_MATCH_OPTIONS: MatchOptions = MatchOptions {
+    case_sensitive: true,
+    require_literal_separator: true,
+    require_literal_leading_dot: false,
+};
 
 #[derive(Debug)]
 pub enum WalkError {
@@ -91,15 +103,31 @@ pub fn discover_test_files(root: &Path, excludes: &[String]) -> Result<Discovery
 }
 
 fn compile_excludes(excludes: &[String]) -> Result<Vec<Pattern>, WalkError> {
-    excludes
-        .iter()
-        .map(|s| {
+    let mut out = Vec::with_capacity(excludes.len());
+    for s in excludes {
+        out.push(
             Pattern::new(s).map_err(|source| WalkError::InvalidExclude {
                 pattern: s.clone(),
                 source,
-            })
-        })
-        .collect()
+            })?,
+        );
+        // glob's `**` requires at least one trailing path component, so a
+        // pattern like `dir/**` does NOT match the bare `dir` entry the
+        // walker checks before descending. Users almost always intend
+        // `dir/**` to mean "everything at and below dir", so we also accept
+        // the `dir` prefix as an exclude. See WEP 2026-05-02.
+        if let Some(prefix) = s.strip_suffix("/**")
+            && !prefix.is_empty()
+        {
+            out.push(
+                Pattern::new(prefix).map_err(|source| WalkError::InvalidExclude {
+                    pattern: s.clone(),
+                    source,
+                })?,
+            );
+        }
+    }
+    Ok(out)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -141,7 +169,9 @@ fn walk_dir(
         }
 
         if let Ok(rel) = path.strip_prefix(root)
-            && excludes.iter().any(|p| p.matches_path(rel))
+            && excludes
+                .iter()
+                .any(|p| p.matches_path_with(rel, WALK_MATCH_OPTIONS))
         {
             continue;
         }
@@ -278,7 +308,7 @@ fn is_ignored(rules: &[GitignoreRule], path: &Path, is_dir: bool) -> bool {
         let Ok(rel) = path.strip_prefix(&rule.base) else {
             continue;
         };
-        if rule.pattern.matches_path(rel) {
+        if rule.pattern.matches_path_with(rel, WALK_MATCH_OPTIONS) {
             ignored = !rule.negate;
         }
     }
@@ -444,6 +474,87 @@ mod tests {
         let got = names_of(root, &files);
         assert!(got.contains("src/main.wado"));
         assert!(!got.contains("compiler/tests/fixture.wado"));
+    }
+
+    #[test]
+    fn dir_globstar_pattern_excludes_the_directory_itself() {
+        // `glob`'s `**` only matches at least one trailing path component, so
+        // `dir/**` alone would NOT keep the walker out of `dir`. The walker
+        // augments such patterns with the bare `dir` prefix so users can
+        // type `dir/**` and expect "everything at and below dir" excluded.
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        touch(&root.join("keep.wado"));
+        touch(&root.join("skip/me.wado"));
+        touch(&root.join("skip/deep/also.wado"));
+
+        let result = discover_test_files(root, &["skip/**".to_string()]).unwrap();
+        let got = names_of(root, &result.files);
+        assert_eq!(got.len(), 1);
+        assert!(got.contains("keep.wado"));
+    }
+
+    #[test]
+    fn dir_globstar_excludes_subpackage_root_too() {
+        // The same `dir/**` augmentation must apply when the directory is a
+        // sub-package boundary; otherwise a CLI `--exclude package/**` could
+        // not stop the test runner from recursing into the sub-package.
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        touch(&root.join("a.wado"));
+        touch(&root.join("subpkg/main.wado"));
+        fs::write(
+            root.join("subpkg/wado.toml"),
+            "[package]\nname=\"sub\"\nversion=\"0.1.0\"\ncommand=\"main.wado\"\n",
+        )
+        .unwrap();
+
+        let result = discover_test_files(root, &["subpkg/**".to_string()]).unwrap();
+        let got = names_of(root, &result.files);
+        assert_eq!(got.len(), 1);
+        assert!(got.contains("a.wado"));
+        assert!(
+            result.subpackages.is_empty(),
+            "subpkg should be excluded entirely, got {:?}",
+            result.subpackages,
+        );
+    }
+
+    #[test]
+    fn star_matches_within_one_path_component() {
+        // Sanity check that `glob`'s `*` honours path separators when set up
+        // via the walker. `src/*.wado` should match files directly under
+        // `src/` but not `src/sub/*.wado`. We rely on this for [test].exclude
+        // semantics.
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        touch(&root.join("src/top.wado"));
+        touch(&root.join("src/sub/inner.wado"));
+
+        let files = discover_test_files(root, &["src/*.wado".to_string()])
+            .unwrap()
+            .files;
+        let got = names_of(root, &files);
+        assert!(!got.contains("src/top.wado"));
+        assert!(got.contains("src/sub/inner.wado"));
+    }
+
+    #[test]
+    fn double_star_matches_at_any_depth() {
+        // `**/foo.wado` is the standard glob shape for "match anywhere".
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        touch(&root.join("a/foo.wado"));
+        touch(&root.join("a/b/foo.wado"));
+        touch(&root.join("a/b/c/foo.wado"));
+        touch(&root.join("a/b/keep.wado"));
+
+        let files = discover_test_files(root, &["**/foo.wado".to_string()])
+            .unwrap()
+            .files;
+        let got = names_of(root, &files);
+        assert!(!got.iter().any(|p| p.ends_with("/foo.wado")));
+        assert!(got.contains("a/b/keep.wado"));
     }
 
     #[test]

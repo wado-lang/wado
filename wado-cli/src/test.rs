@@ -231,7 +231,7 @@ fn resolve_paths(paths: Vec<String>, extra_excludes: &[String]) -> Result<Vec<St
 pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
     let usage = format_usage();
     let mut paths: Vec<String> = Vec::new();
-    let mut filter: Option<String> = None;
+    let mut filters: Vec<String> = Vec::new();
     let mut cli_excludes: Vec<String> = Vec::new();
     let mut jobs: Option<usize> = None;
     let mut opt_level = OptLevel::default();
@@ -242,7 +242,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
         if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
             match opt {
                 Opt::Filter => {
-                    filter = Some(args::require_string(&mut parser)?);
+                    filters.push(args::require_string(&mut parser)?);
                 }
                 Opt::Exclude => {
                     cli_excludes.push(args::require_string(&mut parser)?);
@@ -317,19 +317,33 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
     // --filter: shell-style wildcard match against each discovered path. The
     // filter is path-based (not test-name-based) — see WEP 2026-05-02. To
     // match anywhere within a path, wrap the term in `*`s (e.g. `*foo*`).
-    if let Some(pat_str) = filter.as_deref() {
-        let pattern = Pattern::new(pat_str)
-            .map_err(|e| CliExit::error(format!("invalid --filter pattern {pat_str:?}: {e}")))?;
+    // Repeatable: a path is kept if any pattern matches.
+    if !filters.is_empty() {
+        let patterns: Vec<Pattern> = filters
+            .iter()
+            .map(|s| {
+                Pattern::new(s)
+                    .map_err(|e| CliExit::error(format!("invalid --filter pattern {s:?}: {e}")))
+            })
+            .collect::<Result<_, _>>()?;
+        // `--filter` shares the walker's match semantics so users get
+        // consistent results between `--filter`, `--exclude`, and the
+        // manifest's `[test].exclude`. See `discover::WALK_MATCH_OPTIONS`.
         for run in &mut package_runs {
-            run.paths.retain(|p| pattern.matches(p));
+            run.paths.retain(|p| {
+                patterns
+                    .iter()
+                    .any(|pat| pat.matches_with(p, discover::WALK_MATCH_OPTIONS))
+            });
         }
     }
     package_runs.retain(|run| !run.paths.is_empty());
 
     if package_runs.is_empty() {
-        let message = match filter.as_deref() {
-            Some(pat) => format!("No .wado files match --filter {pat:?}\n"),
-            None => "No .wado files found under the project root\n".to_owned(),
+        let message = if filters.is_empty() {
+            "No .wado files found under the project root\n".to_owned()
+        } else {
+            format!("No .wado files match --filter {filters:?}\n")
         };
         return Err(CliExit {
             message,
