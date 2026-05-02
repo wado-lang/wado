@@ -97,7 +97,6 @@ Used by Service world's `handle()`. The binding:
 2. Tests the Result discriminant
 3. Ok: lowers T to flat CM values via `synthesize_lower_to_flat`, calls `task-return`
 4. Err: lowers E (variant, struct, or primitive) to flat CM values, calls `task-return`
-5. Post-return: resolves trailers future if present (HTTP-specific)
 
 The lowering is fully generic — `synthesize_lower_to_flat` recurses into any type structure (primitives, strings, options, structs, variants) without hard-coded type names.
 
@@ -111,7 +110,6 @@ The lowering is fully generic — `synthesize_lower_to_flat` recurses into any t
 | `cm_abi.rs` layout computation     | Yes              | Pure Canonical ABI spec                                                  |
 | Result Ok/Err dispatch             | Intentional      | Result is a language primitive with fixed case ordering                  |
 | `task-return` in all adapters      | Async assumption | WASI P3 is async-only; needs change for sync                             |
-| Trailers future post-return        | HTTP-specific    | Guarded by `if tx != 0`, only activates for HTTP                         |
 
 ## Remaining Work: Generic CM Exports
 
@@ -181,13 +179,6 @@ This requires:
 - [ ] Sync adapters return flat values or write to outptr instead of calling `task-return`
 - [ ] Sync adapters use `canon lift` / `canon lower` rather than `task-return`
 
-### Trailers Future Decoupling
-
-The trailers future post-return logic uses a Wasm global (`__pending_trailers_tx`) to pass the tx handle from the user's `Future::new()` call to the binding's post-task-return code. This is HTTP-specific and guarded by `is_http_handler` in `synthesize_result_export_adapter`. The global approach avoids magic memory offsets. Potential improvements:
-
-- [ ] Move trailers future resolution into the user-visible `Response` construction (stdlib level) rather than the export binding
-- [ ] Or make trailers resolution part of the world-specific binding template, not embedded in `synthesize_result_export_adapter`
-
 ### Export Validation
 
 - [x] Validate that user's export function parameter count matches the world declaration
@@ -204,7 +195,6 @@ Parameter count validation is implemented: if the user's export function has a d
 | Parameter lifting           | Medium     | Done    | `synthesize_lift_from_flat_params`        |
 | Non-Result return types     | Low        | Done    | `synthesize_general_export_adapter`       |
 | Sync export support         | Medium     | Pending | World metadata for async/sync distinction |
-| Trailers decoupling         | Low        | Pending | Design decision on where resolution lives |
 | Export signature validation | Low        | Partial | Parameter count validated; types not yet  |
 
 The type-driven synthesizer (`synthesize_lift`, `synthesize_lower_to_flat`, flat type computation) is already generic. The remaining work is sync export support and full type validation.
