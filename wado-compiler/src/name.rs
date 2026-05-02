@@ -444,7 +444,7 @@ impl ModuleSource {
             && !path[0].contains('.')
     }
 
-    /// Get the effect name if this is an effect-like module.
+    /// Get the interface name if this is an interface-like module.
     #[must_use]
     pub fn interface_name(&self) -> Option<String> {
         if self.is_effect_like() {

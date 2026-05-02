@@ -31,7 +31,7 @@ pub struct CmVariantCase {
 /// - Case-level: `#[cm("cm-name")]` → uses the whole arg directly
 ///
 /// Strip a `AsyncCall<T>` wrapper from the declared return type of an `async`
-/// effect method, recovering the CM-level result type `T`.
+/// interface method, recovering the CM-level result type `T`.
 ///
 /// In WIT, `async func foo(...) -> T` lowers the CM-level result as `T`, but
 /// the Wado-facing interface declaration exposes `AsyncCall<T>` so user code can
@@ -99,7 +99,7 @@ fn extract_cm_params_attr(attrs: &[crate::ast::Attribute]) -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// Information about a WASI function from an effect method
+/// Information about a WASI function from an interface method
 #[derive(Debug, Clone)]
 pub struct WasiFunctionInfo {
     /// Effect name (e.g., "Stdout")
@@ -743,7 +743,7 @@ impl WasiRegistry {
 
     /// Build the registry from the embedded stdlib
     ///
-    /// Parses the embedded wasi:* modules and registers their effect methods.
+    /// Parses the embedded wasi:* modules and registers their interface methods.
     /// Also collects newtypes and world definitions.
     pub fn build_from_stdlib() -> &'static (Self, crate::world_registry::WorldRegistry) {
         use std::sync::OnceLock;
@@ -973,7 +973,7 @@ impl WasiRegistry {
             }
         };
 
-        // Register effect methods with resolved types for params but NOT for return type
+        // Register interface methods with resolved types for params but NOT for return type
         // Return type must keep original names (e.g., Mark not u64) for newtype semantics
         for item in &module.items {
             if let Item::Interface(effect) = item {
@@ -1625,10 +1625,10 @@ impl WasiRegistry {
         true
     }
 
-    /// Register a WASI function from an effect method
+    /// Register a WASI function from an interface method
     ///
     /// # Arguments
-    /// * `interface_name` - The effect name (e.g., "Stdout")
+    /// * `interface_name` - The interface name (e.g., "Stdout")
     /// * `method_name` - The method name (e.g., "`write_via_stream`")
     /// * `wasi` - The parsed WASI import metadata
     /// * `is_async` - Whether this is an async function

@@ -131,8 +131,8 @@ impl Package {
         self.target_world == world_registry::TEST_WORLD
     }
 
-    /// Check if any function from the given WASI effect is used.
-    /// Effect names are like "Stdout", "Stderr", "Environment", etc.
+    /// Check if any function from the given WASI interface is used.
+    /// Interface names are like "Stdout", "Stderr", "Environment", etc.
     pub fn has_interface(&self, interface_name: &str) -> bool {
         let prefix = format!("{interface_name}::");
         self.used_wasi_functions

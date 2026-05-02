@@ -336,7 +336,7 @@ fn item_info(item: &Item, name: &str) -> Option<String> {
         Item::Flags(fl) if fl.name == name => Some(unparse::unparse_flags_header(fl)),
         Item::Trait(t) if t.name == name => Some(unparse::unparse_trait_header(t)),
         Item::Newtype(n) if n.name == name => Some(unparse::unparse_newtype_signature(n)),
-        Item::Interface(e) if e.name == name => Some(format!("effect {name}")),
+        Item::Interface(e) if e.name == name => Some(format!("interface {name}")),
         Item::Global(g) if g.name == name => Some(unparse::unparse_global_signature(g)),
         Item::Impl(imp) => {
             for method in &imp.methods {

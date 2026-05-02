@@ -111,7 +111,7 @@ impl FlatPackage {
     /// Drives world-shape decisions in codegen / lowering / DCE that used to
     /// hinge on `target_world == "core:kiln/generator"` string matches —
     /// `imports_interface("KilnHost")` is true for the kiln generator world and
-    /// any future world that imports the same effect, so adding a new
+    /// any future world that imports the same interface, so adding a new
     /// generator-shaped world no longer needs new branches.
     ///
     /// Returns `false` for the synthetic test world and for unknown worlds

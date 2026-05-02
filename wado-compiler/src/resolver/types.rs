@@ -575,7 +575,7 @@ impl std::fmt::Display for TypeError {
             } => {
                 write!(
                     f,
-                    "{}:{}: handler value of type '{}' does not implement effect '{}'",
+                    "{}:{}: handler value of type '{}' does not implement interface '{}'",
                     span.line, span.column, type_name, interface_name
                 )
             }
@@ -828,7 +828,7 @@ impl From<TypeError> for crate::compiler_host::Diagnostic {
             } => (
                 Code::TypeMismatch,
                 format!(
-                    "handler value of type '{type_name}' does not implement effect '{interface_name}'"
+                    "handler value of type '{type_name}' does not implement interface '{interface_name}'"
                 ),
                 *span,
             ),

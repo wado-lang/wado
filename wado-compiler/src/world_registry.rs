@@ -155,7 +155,7 @@ impl WorldInfo {
     /// the world declaration), which is unique within a world's imports.
     /// Codegen uses this to drive world-shape decisions from data — e.g.
     /// `imports_interface("KilnHost")` is true for the kiln generator world and
-    /// any future world that imports the same effect, replacing string
+    /// any future world that imports the same interface, replacing string
     /// matches against `target_world == "core:kiln/generator"`.
     pub fn imports_interface(&self, interface_name: &str) -> bool {
         self.imports

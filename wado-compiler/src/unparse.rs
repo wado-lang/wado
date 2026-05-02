@@ -996,7 +996,7 @@ impl<'a> Unparser<'a> {
             let effective_line = effective_start_line(&method.attrs, method.span.line);
             self.emit_leading_comments(&method.span);
             self.emit_blank_lines_to(effective_line);
-            self.unparse_effect_method(method);
+            self.unparse_interface_method(method);
             self.last_source_line = method.span.end_line();
         }
         self.indent_level -= 1;
@@ -1006,7 +1006,7 @@ impl<'a> Unparser<'a> {
         self.output.push_str("}\n");
     }
 
-    fn unparse_effect_method(&mut self, m: &InterfaceMethod) {
+    fn unparse_interface_method(&mut self, m: &InterfaceMethod) {
         self.write_indent();
 
         for attr in &m.attrs {
@@ -1069,7 +1069,7 @@ impl<'a> Unparser<'a> {
             self.last_source_line = r.span.line;
             for method in &r.methods {
                 self.emit_leading_comments(&method.span);
-                self.unparse_effect_method(method);
+                self.unparse_interface_method(method);
                 self.last_source_line = method.span.end_line();
             }
             self.last_source_line = saved_line.max(r.span.end_line());
