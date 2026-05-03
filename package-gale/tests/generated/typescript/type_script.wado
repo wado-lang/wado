@@ -1315,7 +1315,7 @@ pub struct InterfaceDeclarationNode {
     pub span: Span,
     pub export_: Option<Token>,
     pub declare: Option<Token>,
-    pub interface: Token,
+    pub interface_: Token,
     pub identifier: IdentifierNode,
     pub type_parameters: Option<TypeParametersNode>,
     pub interface_extends_clause: Option<InterfaceExtendsClauseNode>,
@@ -3994,7 +3994,7 @@ pub struct KeywordAlt36 {
 
 pub struct KeywordAlt37 {
     pub span: Span,
-    pub interface: Token,
+    pub interface_: Token,
 }
 
 pub struct KeywordAlt38 {
@@ -17295,7 +17295,7 @@ fn parse_interface_declaration(p: &mut Parser) -> Result<InterfaceDeclarationNod
         span: Span::new(start, p.last_end()),
         export_,
         declare,
-        interface: interface_,
+        interface_,
         identifier,
         type_parameters,
         interface_extends_clause,
@@ -26041,7 +26041,7 @@ fn parse_keyword(p: &mut Parser) -> Result<KeywordNode, ParseError> {
         let interface_ = p.expect(TK_Interface)?;
         return Result::<KeywordNode, ParseError>::Ok(KeywordNode::Alt37(KeywordAlt37 {
             span: Span::new(start, p.last_end()),
-            interface: interface_,
+            interface_,
         }));
     }
     if kind == TK_Package {
@@ -26941,7 +26941,7 @@ pub fn walk_interfaceDeclaration<V: Visitor>(v: &mut V, node: &InterfaceDeclarat
     if let Some(item) = &node.declare {
         v.visit_token(item);
     }
-    v.visit_token(&node.interface);
+    v.visit_token(&node.interface_);
     walk_identifier(v, &node.identifier);
     if let Some(item) = &node.type_parameters {
         walk_typeParameters(v, item);
@@ -29679,7 +29679,7 @@ pub fn walk_keyword<V: Visitor>(v: &mut V, node: &KeywordNode) {
         }
         Alt37(n) => {
             v.enter_rule(&"keyword", &n.span);
-            v.visit_token(&n.interface);
+            v.visit_token(&n.interface_);
             v.exit_rule(&"keyword", &n.span);
         }
         Alt38(n) => {

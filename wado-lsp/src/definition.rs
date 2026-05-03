@@ -11,12 +11,12 @@
 use serde::{Deserialize, Serialize};
 use wado_compiler::CompilerHost;
 use wado_compiler::annotate::{Annotated, annotate};
-use wado_compiler::ast::{self, AstId, AstVisitor, Item, Literal, Module};
+use wado_compiler::ast::{self, AstVisitor, Item, Literal, Module};
 use wado_compiler::name::resolve_import_with_entry;
 use wado_compiler::token::Span;
 
 use crate::diagnostics::{Position, Range};
-use crate::location::{module_uri, resolve_def_key, span_to_range, symbol_uri, uri_to_filename};
+use crate::location::{module_uri, span_to_range, symbol_uri, uri_to_filename};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DefinitionResult {
@@ -63,21 +63,17 @@ pub async fn find_definition<H: CompilerHost>(
         return Some(result);
     }
 
-    let def_key = resolve_def_key(&annotated, &module, line, col)?;
+    let cursor = annotated.cursor_at(&module, line, col)?;
+    let def_key = cursor.def_key()?;
 
     // Most defs are registered as symbols (functions, types, globals, locals).
     // Struct fields / enum cases / variant cases / flags members / trait and
     // impl methods are addressable by `AstId` via `name_span_of` but are not
-    // individually registered as symbols; handle both paths uniformly.
-    let symbol = annotated.symbol_at(&def_key);
-    let span = annotated
-        .name_span_of(&def_key)
-        .or_else(|| symbol.and_then(|s| s.span))
-        .or_else(|| span_of_ast_id(annotated.modules.get(&def_key.module)?, def_key.ast_id))?;
-    let def_uri = if let Some(symbol) = symbol {
-        symbol_uri(&annotated, symbol, uri)?
-    } else {
-        module_uri(&annotated, &def_key.module, uri)?
+    // individually registered as symbols; the URI fallback handles both.
+    let span = cursor.def_span()?;
+    let def_uri = match annotated.symbol_at(&def_key) {
+        Some(symbol) => symbol_uri(&annotated, symbol, uri)?,
+        None => module_uri(&annotated, &def_key.module, uri)?,
     };
     Some(DefinitionResult {
         uri: def_uri,
@@ -178,30 +174,4 @@ fn span_contains(span: &Span, line: usize, col: usize) -> bool {
         return false;
     }
     true
-}
-
-/// Best-effort span for an arbitrary [`AstId`] — walks module items looking for
-/// a matching id. Used only when `name_span_of` has no name-span and the
-/// symbol has no declared span (rare).
-fn span_of_ast_id(module: &Module, target: AstId) -> Option<Span> {
-    for item in &module.items {
-        if let Some(span) = item_span_if_match(item, target) {
-            return Some(span);
-        }
-    }
-    None
-}
-
-fn item_span_if_match(item: &Item, target: AstId) -> Option<Span> {
-    match item {
-        Item::Function(f) if f.id == target => Some(f.span),
-        Item::Struct(s) if s.id == target => Some(s.span),
-        Item::Enum(e) if e.id == target => Some(e.span),
-        Item::Variant(v) if v.id == target => Some(v.span),
-        Item::Flags(fl) if fl.id == target => Some(fl.span),
-        Item::Trait(t) if t.id == target => Some(t.span),
-        Item::Newtype(n) if n.id == target => Some(n.span),
-        Item::Global(g) if g.id == target => Some(g.span),
-        _ => None,
-    }
 }

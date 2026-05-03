@@ -1,11 +1,11 @@
 //! Hover information, powered by `wado_compiler::annotate`.
 //!
-//! Rendering strategy: `Annotated::ast_id_at` finds the innermost AST node at
-//! the cursor. If the node is a use site that resolves via
-//! `Annotated::referenced_symbol`, we follow that to the defining
-//! [`SymbolKey`]; otherwise the cursor key itself refers to a declared
-//! symbol. Locals render as `let`/param signatures (computed from the
-//! defining AST node); items delegate to `wado_compiler::unparse`.
+//! Rendering strategy: `Annotated::cursor_at` places a `Cursor` on the
+//! innermost AST node at the request position; `Cursor::def_symbol` chases
+//! the use→def edge and returns the binding's `Symbol` (or `None` if the
+//! cursor isn't on a recognised name). Locals render as `let` / param
+//! signatures (computed from the defining AST node); items delegate to
+//! `wado_compiler::unparse`.
 
 use serde::{Deserialize, Serialize};
 use wado_compiler::CompilerHost;
@@ -50,19 +50,16 @@ pub async fn find_hover<H: CompilerHost>(
     let line = position.line as usize + 1;
     let col = position.character as usize + 1;
 
-    let cursor_id = annotated.ast_id_at(&module, line, col)?;
-    let cursor_key = SymbolKey::new(module, cursor_id);
-    let def_key = annotated
-        .referenced_symbol(&cursor_key)
-        .unwrap_or_else(|| cursor_key.clone());
-
-    let symbol = annotated.symbol_at(&def_key)?;
+    let cursor = annotated.cursor_at(&module, line, col)?;
+    let symbol = cursor.def_symbol()?;
     let signature = match &symbol.kind {
-        SymbolKind::Variable(_) => render_local_binding(&annotated, &def_key, &symbol.name)?,
+        SymbolKind::Variable(_) => {
+            render_local_binding(&annotated, &symbol.defined_at, &symbol.name)?
+        }
         _ => render_item_signature(&annotated, symbol)?,
     };
 
-    let cursor_span = annotated.span_of_key(&cursor_key)?;
+    let cursor_span = cursor.span()?;
     Some(HoverResult {
         contents: MarkupContent {
             kind: MarkupKind::Markdown,

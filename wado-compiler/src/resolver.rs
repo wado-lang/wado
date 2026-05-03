@@ -266,10 +266,26 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     }
 
     /// Record a use→def reference when the definition lives in a (possibly
-    /// different) module identified directly by a [`SymbolKey`].
+    /// different) module identified directly by a [`SymbolKey`]. Prefer
+    /// [`Self::record_reference_to_decl`] when the call site is constructing
+    /// the key from `(module, ast_id)` parts.
     pub(super) fn record_reference_to_key(&self, use_id: crate::ast::AstId, def_key: SymbolKey) {
         let use_key = SymbolKey::new(self.current_module_source.clone(), use_id);
         self.references.borrow_mut().insert(use_key, def_key);
+    }
+
+    /// Record a use→def reference where the defining declaration is
+    /// identified by its `(module, ast_id)` pair. Convenience over
+    /// [`Self::record_reference_to_key`] for call sites that would
+    /// otherwise construct a [`SymbolKey`] inline — keeps `SymbolKey::new`
+    /// confined to a single place.
+    pub(super) fn record_reference_to_decl(
+        &self,
+        use_id: crate::ast::AstId,
+        decl_module: &ModuleSource,
+        decl_ast_id: crate::ast::AstId,
+    ) {
+        self.record_reference_to_key(use_id, SymbolKey::new(decl_module.clone(), decl_ast_id));
     }
 
     /// Record that an identifier resolved to a declared symbol reachable from
@@ -288,6 +304,69 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         self.references
             .borrow_mut()
             .insert(use_key, sym.defined_at.clone());
+    }
+
+    /// Record use→def edges for a `TypeName::CaseName` qualified path
+    /// expression. The prefix segment (`TypeName`) is resolved by name in
+    /// the current module's scope; the suffix segment (`CaseName`) points
+    /// directly at `(case_module, case_ast_id)`.
+    ///
+    /// Used for variant cases, enum cases, and flags members reached via
+    /// a two-segment qualified ident.
+    pub(super) fn record_qualified_case(
+        &self,
+        ident: &crate::ast::IdentExpr,
+        type_name: &str,
+        case_module: &ModuleSource,
+        case_ast_id: crate::ast::AstId,
+    ) {
+        if let Some(prefix_seg) = ident.segments.first() {
+            self.record_item_reference_by_name(prefix_seg.id, type_name);
+        }
+        if let Some(suffix_seg) = ident.segments.get(1) {
+            self.record_reference_to_decl(suffix_seg.id, case_module, case_ast_id);
+        }
+    }
+
+    /// Record the suffix (`Case`) segment of a `ns::Type::Case`
+    /// namespace-qualified case path. The leading `ns` and `Type`
+    /// segments are left to existing namespace-import edges.
+    pub(super) fn record_namespaced_case(
+        &self,
+        ident: &crate::ast::IdentExpr,
+        case_module: &ModuleSource,
+        case_ast_id: crate::ast::AstId,
+    ) {
+        if let Some(seg) = ident.segments.get(2) {
+            self.record_reference_to_decl(seg.id, case_module, case_ast_id);
+        }
+    }
+
+    /// Record a use→def edge from `use_id` to `def_id` (in the current
+    /// module) when the defining id is known. Convenience for sites that
+    /// receive an `Option<AstId>` from a local variable lookup.
+    pub(super) fn record_reference_opt(
+        &self,
+        use_id: crate::ast::AstId,
+        def_id: Option<crate::ast::AstId>,
+    ) {
+        if let Some(def_id) = def_id {
+            self.record_reference(use_id, def_id);
+        }
+    }
+
+    /// Record a use→def edge for a type-name reference (`Type::Named` /
+    /// `Type::Generic`). Generic-parameter names in scope (e.g. `T` in
+    /// `fn f<T>(x: T)`) win over module-level items: jump-to-def lands on
+    /// the `<T>` declaration rather than on a top-level item that happens
+    /// to share the name. Falls through to the symbol-table lookup
+    /// otherwise.
+    pub(super) fn record_type_name_reference(&self, use_id: crate::ast::AstId, name: &str) {
+        if let Some(&decl_id) = self.trait_ctx.type_param_decls.get(name) {
+            self.record_reference(use_id, decl_id);
+        } else {
+            self.record_item_reference_by_name(use_id, name);
+        }
     }
 
     /// Look up the `AstId` of an impl-block method by its defining module, the

@@ -54,21 +54,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
     pub(super) fn resolve_type(&mut self, ty: &Type) -> TypeId {
         match ty {
             Type::Named(named) => {
-                // Prefer generic type params in scope — `T` in `fn f<T>(x: T)`
-                // should jump to `<T>`, not to some top-level item named `T`.
-                if let Some(&decl_id) = self.trait_ctx.type_param_decls.get(&named.name) {
-                    self.record_reference(named.id, decl_id);
-                } else {
-                    self.record_item_reference_by_name(named.id, &named.name);
-                }
+                self.record_type_name_reference(named.id, &named.name);
                 self.resolve_named_type(&named.name, named.span)
             }
             Type::Generic(generic) => {
-                if let Some(&decl_id) = self.trait_ctx.type_param_decls.get(&generic.name) {
-                    self.record_reference(generic.id, decl_id);
-                } else {
-                    self.record_item_reference_by_name(generic.id, &generic.name);
-                }
+                self.record_type_name_reference(generic.id, &generic.name);
                 self.resolve_generic_type(&generic.name, &generic.args, generic.span)
             }
             Type::Function(func_ty) => {

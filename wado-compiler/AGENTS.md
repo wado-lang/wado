@@ -140,6 +140,8 @@ parse → bind → desugar → load → analyze → annotate → lower_tir → m
 - `(ModuleSource, AstId)` (`SymbolKey`) is the canonical identity for every semantic entity that originates in source. `AstId` is dense over `Block` / `Stmt` / `Expr` / `Pattern` / `Type` / `Item` / `Decl`, so every source position resolves to a key via `Module::ast_id_at`. There is no `AstId::SYNTHETIC`; builtins live in `ModuleSource::Builtin` with their own dense ID range.
 - AST is the source of truth: `annotate` attaches facts, never mutates or moves AST nodes. Decl-backed `ResolvedType` variants and `Symbol` both carry `defined_at: SymbolKey`.
 - Use→def edges are recorded by the real resolver as it performs name resolution (`resolve_ident`, `resolve_call`, …). `Annotated::referenced_symbol` is the single source of truth; there is no separate lexical re-scan. `annotate_loaded` always drives `lower_tir` so the edges exist for both LSP and batch compilation.
+- Structural facts that derive purely from the AST (per-`AstId` spans, declaration name spans, assignment write targets, position-to-`AstId` lookup) live on a per-module `AstIndex` (`src/ast_index.rs`), built once during `annotate_loaded`. Powers `Annotated::ast_id_at` / `span_of_key` / `name_span_of` / `is_write_target` without AST re-walks.
+- LSP queries entry through `Annotated::cursor_at(module, line, col) -> Cursor`, which exposes `def_key` / `def_symbol` / `def_name_span` / `def_span` / `references_to_def` / `is_write_target` / `span` / `key` / `module`. Each LSP feature is a thin pass over those query methods.
 - The `codegen.rs` principle still holds: codegen consumes `Package` without knowledge of earlier phases.
 
 Entry points:
