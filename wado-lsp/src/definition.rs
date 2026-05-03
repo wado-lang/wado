@@ -69,16 +69,11 @@ pub async fn find_definition<H: CompilerHost>(
     // Most defs are registered as symbols (functions, types, globals, locals).
     // Struct fields / enum cases / variant cases / flags members / trait and
     // impl methods are addressable by `AstId` via `name_span_of` but are not
-    // individually registered as symbols; handle both paths uniformly.
-    let symbol = annotated.symbol_at(&def_key);
-    let span = annotated
-        .name_span_of(&def_key)
-        .or_else(|| symbol.and_then(|s| s.span))
-        .or_else(|| annotated.span_of_key(&def_key))?;
-    let def_uri = if let Some(symbol) = symbol {
-        symbol_uri(&annotated, symbol, uri)?
-    } else {
-        module_uri(&annotated, &def_key.module, uri)?
+    // individually registered as symbols; the URI fallback handles both.
+    let span = cursor.def_span()?;
+    let def_uri = match annotated.symbol_at(&def_key) {
+        Some(symbol) => symbol_uri(&annotated, symbol, uri)?,
+        None => module_uri(&annotated, &def_key.module, uri)?,
     };
     Some(DefinitionResult {
         uri: def_uri,

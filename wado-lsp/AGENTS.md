@@ -9,22 +9,22 @@ Language service engine for the Wado compiler toolchain.
 
 ## Architecture
 
-| File                        | Role                                                                                             |
-| --------------------------- | ------------------------------------------------------------------------------------------------ |
-| `src/lib.rs`                | `Engine` struct: document management + query dispatch                                            |
-| `src/host.rs`               | `FilesystemCompilerHost`: default `CompilerHost` for disk-backed source loading                  |
-| `src/diagnostics.rs`        | Compiler `Diagnostic` to LSP-compatible `Diagnostic` conversion                                  |
-| `src/semantic_tokens.rs`    | Semantic token computation (lexer + AST classification)                                          |
-| `src/definition.rs`         | Go-to-definition via `Annotated::cursor_at` + use→def chase                                      |
-| `src/hover.rs`              | Hover info; locals render from the resolved AST node, items delegate to `wado_compiler::unparse` |
-| `src/references.rs`         | Find-references via `Cursor::references_to_def` over `Annotated::iter_references`                |
-| `src/document_highlight.rs` | Document highlight; Read/Write classification consults `Annotated::is_write_target`              |
-| `src/location.rs`           | URI / span helpers for translating compiler positions to LSP types                               |
-| `src/server.rs`             | `run_stdio()`: blocking stdin/stdout loop feeding the async dispatcher                           |
-| `src/server/transport.rs`   | Content-Length framing + typed JSON-RPC send/receive helpers                                     |
-| `src/server/dispatch.rs`    | LSP method routing and server-lifecycle enforcement                                              |
-| `src/server/rpc.rs`         | LSP wire types (params, capabilities, notifications)                                             |
-| `src/bin/wado-lsp.rs`       | Binary entrypoint; drives `run_stdio()` via `futures::executor::block_on`                        |
+| File                        | Role                                                                                                                      |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `src/lib.rs`                | `Engine` struct: document management + query dispatch                                                                     |
+| `src/host.rs`               | `FilesystemCompilerHost`: default `CompilerHost` for disk-backed source loading                                           |
+| `src/diagnostics.rs`        | Compiler `Diagnostic` to LSP-compatible `Diagnostic` conversion                                                           |
+| `src/semantic_tokens.rs`    | Semantic token computation (lexer + AST classification)                                                                   |
+| `src/definition.rs`         | Go-to-definition via `Cursor::{def_key, def_span}` and a file-path matcher for `use`/`#include` paths                     |
+| `src/hover.rs`              | Hover info; `Cursor::def_symbol` selects the binding, locals render from the AST node, items via `wado_compiler::unparse` |
+| `src/references.rs`         | Find-references via `Cursor::references_to_def`                                                                           |
+| `src/document_highlight.rs` | Document highlight; Read/Write classification consults `Annotated::is_write_target`                                       |
+| `src/location.rs`           | URI / span helpers for translating compiler positions to LSP types                                                        |
+| `src/server.rs`             | `run_stdio()`: blocking stdin/stdout loop feeding the async dispatcher                                                    |
+| `src/server/transport.rs`   | Content-Length framing + typed JSON-RPC send/receive helpers                                                              |
+| `src/server/dispatch.rs`    | LSP method routing and server-lifecycle enforcement                                                                       |
+| `src/server/rpc.rs`         | LSP wire types (params, capabilities, notifications)                                                                      |
+| `src/bin/wado-lsp.rs`       | Binary entrypoint; drives `run_stdio()` via `futures::executor::block_on`                                                 |
 
 ### Engine
 
@@ -164,14 +164,13 @@ concrete code location involved.
       alias go to the alias line), while clicks on the original `name` still
       go to the source module. Update `record_use_specifier_references` and
       add coverage in `tests/definition.rs`.
-- [ ] **Make `name_span_of` total so `span_of_ast_id` can be deleted.**
-      `find_definition` currently falls through three `.or_else(...)` levels
-      (`name_span_of` → `symbol.span` → `span_of_ast_id`) because
-      `name_span_of` does not cover every addressable `AstId`. The final
-      `span_of_ast_id` fallback in `src/definition.rs` only walks top-level
-      `Item`s, so struct fields, impl methods, and enum/variant cases can
-      silently fall through. Extend `Annotated::name_span_of` to return a
-      `Span` for every `AstId` that can appear as a definition target.
+- [ ] **Make `name_span_of` total enough to drop the `def_span` fallback chain.**
+      `Cursor::def_span` falls through three levels (`name_span_of` →
+      `symbol.span` → `span_of_key`) because `name_span_of` does not cover
+      every addressable `AstId` (e.g. anonymous `impl` blocks, `Item::Resource`,
+      `Item::Test` have no dedicated `name_span` field). Either give every
+      decl-bearing AST node a `name_span` so `name_span_of` becomes total,
+      or accept the fallback and remove this TODO.
 - [ ] **Split `module_uri` into display-vs-navigation helpers.** The current
       single helper in `src/location.rs` is used by both CLI output (where
       `core:<name>` is a readable pointer) and by LSP responses (where the

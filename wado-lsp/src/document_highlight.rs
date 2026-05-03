@@ -16,7 +16,6 @@
 use serde::{Deserialize, Serialize};
 use wado_compiler::CompilerHost;
 use wado_compiler::annotate::annotate;
-use wado_compiler::symbol::SymbolKey;
 
 use crate::diagnostics::{Position, Range};
 use crate::location::{span_to_range, uri_to_filename};
@@ -98,7 +97,11 @@ pub async fn document_highlight<H: CompilerHost>(
         let Some(span) = annotated.span_of_key(&use_key) else {
             continue;
         };
-        let kind = highlight_kind_for(&use_key, &annotated);
+        let kind = if annotated.is_write_target(&use_key) {
+            HighlightKind::Write
+        } else {
+            HighlightKind::Read
+        };
         out.push(DocumentHighlight {
             range: span_to_range(&span),
             kind,
@@ -108,14 +111,6 @@ pub async fn document_highlight<H: CompilerHost>(
     out.sort_by_key(|h| (h.range.start.line, h.range.start.character));
     out.dedup();
     out
-}
-
-fn highlight_kind_for(use_key: &SymbolKey, annotated: &wado_compiler::Annotated) -> HighlightKind {
-    if annotated.is_write_target(use_key) {
-        HighlightKind::Write
-    } else {
-        HighlightKind::Read
-    }
 }
 
 #[cfg(test)]

@@ -342,6 +342,20 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         }
     }
 
+    /// Record a use→def edge for a type-name reference (`Type::Named` /
+    /// `Type::Generic`). Generic-parameter names in scope (e.g. `T` in
+    /// `fn f<T>(x: T)`) win over module-level items: jump-to-def lands on
+    /// the `<T>` declaration rather than on a top-level item that happens
+    /// to share the name. Falls through to the symbol-table lookup
+    /// otherwise.
+    pub(super) fn record_type_name_reference(&self, use_id: crate::ast::AstId, name: &str) {
+        if let Some(&decl_id) = self.trait_ctx.type_param_decls.get(name) {
+            self.record_reference(use_id, decl_id);
+        } else {
+            self.record_item_reference_by_name(use_id, name);
+        }
+    }
+
     /// Look up the `AstId` of an impl-block method by its defining module, the
     /// receiving type name, and the method name. Returns `None` if the module
     /// is not loaded or no matching method exists. Searches all impl blocks in

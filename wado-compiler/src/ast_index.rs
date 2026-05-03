@@ -81,6 +81,49 @@ impl AstIndex {
     pub fn is_write_target(&self, id: AstId) -> bool {
         self.write_targets.contains(&id)
     }
+
+    /// `AstId` of the smallest id-bearing AST node whose span contains the
+    /// given 1-based `(line, column)`. Equivalent to
+    /// [`crate::ast::Module::ast_id_at`] but answered from the cached
+    /// [`Self::span_of`] table without re-walking the AST.
+    #[must_use]
+    pub fn ast_id_at(&self, line: usize, column: usize) -> Option<AstId> {
+        let mut best: Option<(AstId, Span)> = None;
+        for (&id, &span) in &self.spans {
+            if !span_contains(span, line, column) {
+                continue;
+            }
+            match best {
+                None => best = Some((id, span)),
+                Some((_, current)) if span_byte_len(span) <= span_byte_len(current) => {
+                    best = Some((id, span));
+                }
+                _ => {}
+            }
+        }
+        best.map(|(id, _)| id)
+    }
+}
+
+/// Returns true if `(line, column)` lies in
+/// `[span.line:column, span.end_line:end_column)`. Mirrors the helper
+/// in `ast.rs` (kept module-private there); duplicated here to keep the
+/// position-lookup logic colocated with the data.
+fn span_contains(span: Span, line: usize, column: usize) -> bool {
+    if line < span.line || line > span.end_line {
+        return false;
+    }
+    if line == span.line && column < span.column {
+        return false;
+    }
+    if line == span.end_line && column >= span.end_column {
+        return false;
+    }
+    true
+}
+
+fn span_byte_len(span: Span) -> usize {
+    span.end.saturating_sub(span.start)
 }
 
 struct IndexBuilder {
@@ -352,5 +395,242 @@ mod tests {
             };
             assert!(index.span_of(id).is_some(), "missing span for {id:?}");
         }
+    }
+
+    #[test]
+    fn enum_decl_and_cases_are_indexed() {
+        let module = parse("enum Color { Red, Green, Blue }\n");
+        let index = AstIndex::build(&module);
+        let e = match &module.items[0] {
+            Item::Enum(e) => e,
+            _ => unreachable!(),
+        };
+        assert_eq!(index.name_span_of(e.id), Some(e.name_span));
+        for case in &e.cases {
+            assert_eq!(index.name_span_of(case.id), Some(case.name_span));
+        }
+    }
+
+    #[test]
+    fn variant_decl_cases_and_type_params_are_indexed() {
+        let module = parse("variant Maybe<T> { Just(T), Nothing }\n");
+        let index = AstIndex::build(&module);
+        let v = match &module.items[0] {
+            Item::Variant(v) => v,
+            _ => unreachable!(),
+        };
+        assert_eq!(index.name_span_of(v.id), Some(v.name_span));
+        for tp in &v.type_params {
+            assert_eq!(index.name_span_of(tp.id), Some(tp.name_span));
+        }
+        for case in &v.cases {
+            assert_eq!(index.name_span_of(case.id), Some(case.name_span));
+        }
+    }
+
+    #[test]
+    fn flags_decl_and_members_are_indexed() {
+        let module = parse("flags Perms { Read, Write, Execute }\n");
+        let index = AstIndex::build(&module);
+        let f = match &module.items[0] {
+            Item::Flags(f) => f,
+            _ => unreachable!(),
+        };
+        assert_eq!(index.name_span_of(f.id), Some(f.name_span));
+        for member in &f.flags {
+            assert_eq!(index.name_span_of(member.id), Some(member.name_span));
+        }
+    }
+
+    #[test]
+    fn newtype_and_type_params_are_indexed() {
+        let module = parse("type Box<T> = T;\n");
+        let index = AstIndex::build(&module);
+        let n = match &module.items[0] {
+            Item::Newtype(n) => n,
+            _ => unreachable!(),
+        };
+        assert_eq!(index.name_span_of(n.id), Some(n.name_span));
+        for tp in &n.type_params {
+            assert_eq!(index.name_span_of(tp.id), Some(tp.name_span));
+        }
+    }
+
+    #[test]
+    fn trait_decl_methods_and_type_params_are_indexed() {
+        let module = parse(concat!(
+            "trait Greet<L> {\n",
+            "    fn greet(&self) -> String;\n",
+            "    fn farewell(&self) -> String;\n",
+            "}\n",
+        ));
+        let index = AstIndex::build(&module);
+        let t = match &module.items[0] {
+            Item::Trait(t) => t,
+            _ => unreachable!(),
+        };
+        assert_eq!(index.name_span_of(t.id), Some(t.name_span));
+        for tp in &t.type_params {
+            assert_eq!(index.name_span_of(tp.id), Some(tp.name_span));
+        }
+        for method in &t.methods {
+            assert_eq!(
+                index.name_span_of(method.id),
+                Some(method.name_span),
+                "method {} missing name_span",
+                method.name,
+            );
+        }
+    }
+
+    #[test]
+    fn impl_block_methods_and_type_params_are_indexed() {
+        let module = parse(concat!(
+            "struct Point { x: i32, y: i32 }\n",
+            "impl<T> Point {\n",
+            "    fn origin() -> Point { return Point { x: 0, y: 0 }; }\n",
+            "    fn sum(&self) -> i32 { return self.x + self.y; }\n",
+            "}\n",
+        ));
+        let index = AstIndex::build(&module);
+        let imp = match &module.items[1] {
+            Item::Impl(i) => i,
+            _ => unreachable!(),
+        };
+        for tp in &imp.type_params {
+            assert_eq!(index.name_span_of(tp.id), Some(tp.name_span));
+        }
+        for method in &imp.methods {
+            assert_eq!(
+                index.name_span_of(method.id),
+                Some(method.name_span),
+                "method {} missing name_span",
+                method.name,
+            );
+            for p in &method.params {
+                assert_eq!(index.name_span_of(p.id), Some(p.name_span));
+            }
+        }
+    }
+
+    #[test]
+    fn interface_decl_and_methods_are_indexed() {
+        let module = parse(concat!(
+            "interface Stdout {\n",
+            "    fn write(s: String);\n",
+            "    fn flush();\n",
+            "}\n",
+        ));
+        let index = AstIndex::build(&module);
+        let i = match &module.items[0] {
+            Item::Interface(i) => i,
+            _ => unreachable!(),
+        };
+        assert_eq!(index.name_span_of(i.id), Some(i.name_span));
+        for method in &i.methods {
+            assert_eq!(
+                index.name_span_of(method.id),
+                Some(method.name_span),
+                "method {} missing name_span",
+                method.name,
+            );
+            for p in &method.params {
+                assert_eq!(index.name_span_of(p.id), Some(p.name_span));
+            }
+        }
+    }
+
+    #[test]
+    fn global_decl_is_indexed() {
+        let module = parse("global PI: f64 = 3.14;\n");
+        let index = AstIndex::build(&module);
+        let g = match &module.items[0] {
+            Item::Global(g) => g,
+            _ => unreachable!(),
+        };
+        assert_eq!(index.name_span_of(g.id), Some(g.name_span));
+    }
+
+    #[test]
+    fn closure_param_name_spans_are_indexed() {
+        let module = parse(concat!(
+            "fn f() -> i32 {\n",
+            "    let g = |x: i32, y: i32| x + y;\n",
+            "    return g(1, 2);\n",
+            "}\n",
+        ));
+        let index = AstIndex::build(&module);
+        // Walk the AST to find the closure and check each param.
+        let func = match &module.items[0] {
+            Item::Function(f) => f,
+            _ => unreachable!(),
+        };
+        let body = func.body.as_ref().expect("body");
+        let Stmt::Let(let_stmt) = &body.stmts[0] else {
+            panic!("expected let stmt");
+        };
+        let value = let_stmt.value.as_ref().expect("let value");
+        let Expr::Closure(closure) = value else {
+            panic!("expected closure");
+        };
+        for p in &closure.params {
+            assert_eq!(index.name_span_of(p.id), Some(p.name_span));
+        }
+    }
+
+    #[test]
+    fn pattern_ident_name_spans_are_indexed() {
+        let module = parse(concat!(
+            "fn f(opt: Option<i32>) -> i32 {\n",
+            "    if let Some(v) = opt { return v; }\n",
+            "    return 0;\n",
+            "}\n",
+        ));
+        let index = AstIndex::build(&module);
+        // The cursor on `v` should resolve to the binding's AstId, and
+        // its name_span should equal the AST pattern's span. Walk the
+        // body to find the `Some(v)` pattern and check `v`.
+        let func = match &module.items[0] {
+            Item::Function(f) => f,
+            _ => unreachable!(),
+        };
+        let body = func.body.as_ref().expect("body");
+        let Stmt::If(if_stmt) = &body.stmts[0] else {
+            panic!("expected if-let");
+        };
+        let crate::ast::Condition::LetChain { elements, .. } = &if_stmt.condition else {
+            panic!("expected let-chain");
+        };
+        let crate::ast::ConditionElement::Let { pattern, .. } = &elements[0] else {
+            panic!("expected let element");
+        };
+        // pattern should be `Some(v)`; the binding pattern is the first
+        // child.
+        let crate::ast::Pattern::Variant { bindings, .. } = pattern else {
+            panic!("expected variant pattern");
+        };
+        let crate::ast::Pattern::Ident { id, span, .. } = &bindings[0] else {
+            panic!("expected ident pattern");
+        };
+        assert_eq!(index.name_span_of(*id), Some(*span));
+    }
+
+    #[test]
+    fn ast_id_at_finds_innermost_node() {
+        let module = parse("fn add(a: i32, b: i32) -> i32 { return a + b; }\n");
+        let index = AstIndex::build(&module);
+        // Cursor on the return-statement identifier `a` (line 1, col 41).
+        // Should resolve to the IdentExpr's id, not the surrounding stmt.
+        let id = index.ast_id_at(1, 41).expect("ast id at cursor");
+        let span = index.span_of(id).expect("span for id");
+        assert_eq!(span.line, 1);
+        assert!(span.column <= 41 && 41 < span.end_column);
+    }
+
+    #[test]
+    fn ast_id_at_returns_none_outside_module() {
+        let module = parse("fn f() {}\n");
+        let index = AstIndex::build(&module);
+        assert!(index.ast_id_at(99, 1).is_none());
     }
 }

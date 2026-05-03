@@ -77,9 +77,11 @@ impl Annotated {
     /// Innermost AST node containing the given `(line, column)` in `module`.
     ///
     /// Returns `None` if the module is unknown or no node covers the position.
+    /// Answered from the per-module [`AstIndex`](crate::ast_index::AstIndex);
+    /// no AST traversal happens at query time.
     #[must_use]
     pub fn ast_id_at(&self, module: &ModuleSource, line: usize, column: usize) -> Option<AstId> {
-        self.modules.get(module)?.ast_id_at(line, column)
+        self.ast_indices.get(module)?.ast_id_at(line, column)
     }
 
     /// Symbol for the given key, or `None` if the key does not refer to a
@@ -160,13 +162,12 @@ impl Annotated {
 
     /// Span of the AST node identified by `key` — the source range of the
     /// node itself, not the module's name span. Useful for computing hover /
-    /// highlight ranges from use sites.
+    /// highlight ranges from use sites. Answered from
+    /// [`AstIndex::span_of`](crate::ast_index::AstIndex::span_of), which is
+    /// total over every parser-allocated [`AstId`].
     #[must_use]
     pub fn span_of_key(&self, key: &SymbolKey) -> Option<Span> {
-        let index = self.ast_indices.get(&key.module)?;
-        index
-            .span_of(key.ast_id)
-            .or_else(|| self.modules.get(&key.module)?.span_of_ast_id(key.ast_id))
+        self.ast_indices.get(&key.module)?.span_of(key.ast_id)
     }
 
     /// Span of the defining identifier for the symbol at `key`.
@@ -278,6 +279,31 @@ impl<'a> Cursor<'a> {
     pub fn def_name_span(&self) -> Option<Span> {
         let def_key = self.def_key()?;
         self.annotated.name_span_of(&def_key)
+    }
+
+    /// Best span at the binding's declaration site, falling back from the
+    /// narrow `name_span` to the symbol's declared span to the AST node's
+    /// span. Returns `None` only when the cursor does not name a known
+    /// binding.
+    ///
+    /// `goto-definition` and `find-references` use this to highlight
+    /// declarations that lack a dedicated `name_span` field
+    /// (`Item::Resource`, anonymous `impl` blocks, tests).
+    #[must_use]
+    pub fn def_span(&self) -> Option<Span> {
+        let def_key = self.def_key()?;
+        self.annotated
+            .name_span_of(&def_key)
+            .or_else(|| self.annotated.symbol_at(&def_key).and_then(|s| s.span))
+            .or_else(|| self.annotated.span_of_key(&def_key))
+    }
+
+    /// True iff the cursor lands on an `IdentExpr` that appears as the
+    /// direct LHS of `=` or a compound assignment. Mirrors
+    /// [`Annotated::is_write_target`] for the cursor's own key.
+    #[must_use]
+    pub fn is_write_target(&self) -> bool {
+        self.annotated.is_write_target(&self.key)
     }
 
     /// Every use-site `SymbolKey` for the binding the cursor names.
