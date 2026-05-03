@@ -179,7 +179,7 @@ and resume it** from the handler. This maps directly to stack switching:
 #### Generator Pattern (from spec.md)
 
 ```wado
-effect Generator<T> {
+interface Generator<T> {
     fn yield(value: T);
 }
 

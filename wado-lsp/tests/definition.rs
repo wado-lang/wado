@@ -653,14 +653,14 @@ fn aliased_import_use_definition() {
 fn effect_in_with_clause_definition() {
     futures::executor::block_on(async {
         let source = concat!(
-            "effect Log {\n",
+            "interface Log {\n",
             "    fn write(&self, msg: String);\n",
             "}\n",
             "fn run() with Log {\n",
             "}\n",
         );
         let result = def_at(source, 3, 15).await.expect("Log in with clause");
-        assert_range(&result, 0, 7, 10);
+        assert_range(&result, 0, 10, 13);
     });
 }
 

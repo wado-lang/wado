@@ -1037,7 +1037,7 @@ See [WEP: Effect Handler](./wep-2026-04-11-effect-handler.md).
 An effect handler is an `impl Effect for Type` where the methods may call `resume value` to continue the suspended computation. The `with` block installs handlers for the duration of its `do` body. The `=>` arrow reads as "calls to E dispatch to h".
 
 ```wado
-effect Counter {
+interface Counter {
     fn next() -> i32;
 }
 

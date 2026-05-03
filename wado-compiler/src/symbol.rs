@@ -164,7 +164,7 @@ pub struct WorldSymbol {
 #[derive(Debug, Clone)]
 pub struct WorldImportSymbol {
     /// The effect name
-    pub effect_name: String,
+    pub interface_name: String,
     /// The imported function names
     pub functions: Vec<String>,
 }

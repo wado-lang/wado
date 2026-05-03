@@ -106,20 +106,20 @@ impl FlatPackage {
     }
 
     /// Check whether the active world declares an
-    /// `import {effect_name} { ... }` block.
+    /// `import {interface_name} { ... }` block.
     ///
     /// Drives world-shape decisions in codegen / lowering / DCE that used to
     /// hinge on `target_world == "core:kiln/generator"` string matches —
-    /// `imports_effect("KilnHost")` is true for the kiln generator world and
-    /// any future world that imports the same effect, so adding a new
+    /// `imports_interface("KilnHost")` is true for the kiln generator world and
+    /// any future world that imports the same interface, so adding a new
     /// generator-shaped world no longer needs new branches.
     ///
     /// Returns `false` for the synthetic test world and for unknown worlds
     /// (both have no entry in the registry).
-    pub fn world_imports_effect(&self, effect_name: &str) -> bool {
+    pub fn world_imports_interface(&self, interface_name: &str) -> bool {
         self.world_registry
             .get(&self.target_world)
-            .is_some_and(|w| w.imports_effect(effect_name))
+            .is_some_and(|w| w.imports_interface(interface_name))
     }
 
     /// Look up a variant by `(module_source, name)`.
@@ -141,8 +141,8 @@ impl FlatPackage {
     }
 
     /// Check if any function from the given WASI effect is used.
-    pub fn has_effect(&self, effect_name: &str) -> bool {
-        let prefix = format!("{effect_name}::");
+    pub fn has_interface(&self, interface_name: &str) -> bool {
+        let prefix = format!("{interface_name}::");
         self.used_wasi_functions
             .iter()
             .any(|f| f.starts_with(&prefix))

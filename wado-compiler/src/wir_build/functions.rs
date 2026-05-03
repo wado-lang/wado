@@ -111,11 +111,11 @@ fn register_wasi_imports(ctx: &mut WirContext<'_>) {
             let local_name = func.local_alias_name();
 
             // Only register functions that are actually used (per-function check).
-            // This is more precise than has_effect() which includes ALL functions
+            // This is more precise than has_interface() which includes ALL functions
             // for a used effect. Per-function filtering avoids importing unused
             // WASI functions that the component builder doesn't support (e.g.,
             // [static] HTTP functions like consume_body).
-            let wasi_func_key = format!("{}::{}", func.effect_name, func.method_name);
+            let wasi_func_key = format!("{}::{}", func.interface_name, func.method_name);
             if !ctx.package.used_wasi_functions.contains(&wasi_func_key) {
                 continue;
             }

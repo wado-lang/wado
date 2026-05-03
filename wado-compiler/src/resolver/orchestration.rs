@@ -818,7 +818,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                     imported_functions.insert(a.clone());
                                 }
                             }
-                            crate::ast::UseItem::EffectFunctions { functions, .. } => {
+                            crate::ast::UseItem::InterfaceFunctions { functions, .. } => {
                                 // Effect functions are imported by their function name
                                 for func_item in functions {
                                     imported_functions.insert(func_item.name.clone());
@@ -1092,7 +1092,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                 original_names.insert(local_name.clone(), name.clone());
                             }
                         }
-                        ast::UseItem::EffectFunctions { .. }
+                        ast::UseItem::InterfaceFunctions { .. }
                         | ast::UseItem::Wildcard
                         | ast::UseItem::Namespace { .. } => {}
                     }

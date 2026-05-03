@@ -623,7 +623,7 @@ fn name_span_of_item(item: &Item, target: AstId) -> Option<Span> {
                 }
             }
         }
-        Item::Effect(e) => {
+        Item::Interface(e) => {
             if e.id == target {
                 return Some(e.name_span);
             }

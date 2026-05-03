@@ -140,7 +140,7 @@ impl TraitEnv {
                             .entry(trait_decl.name.clone())
                             .or_insert((module_source.clone(), item_idx));
                     }
-                    Item::Effect(effect_decl) => {
+                    Item::Interface(effect_decl) => {
                         effect_decl_index
                             .entry(effect_decl.name.clone())
                             .or_insert((module_source.clone(), item_idx));

@@ -10,7 +10,7 @@
 //! - With trait: `{filename}/{struct_name}^{trait_name}::{method_name}` (e.g., `./geometry.wado/Point^Display::fmt`)
 //!
 //! ## Effect Operation Names
-//! - Qualified: `{effect_name}::{operation_name}` (e.g., `Stdout::write_via_stream`)
+//! - Qualified: `{interface_name}::{operation_name}` (e.g., `Stdout::write_via_stream`)
 //!
 //! ## WASI Names
 //! - Full: `wasi:{package}/{interface}::{function}` (e.g., `wasi:cli/stdout::write-via-stream`)
@@ -444,9 +444,9 @@ impl ModuleSource {
             && !path[0].contains('.')
     }
 
-    /// Get the effect name if this is an effect-like module.
+    /// Get the interface name if this is an interface-like module.
     #[must_use]
-    pub fn effect_name(&self) -> Option<String> {
+    pub fn interface_name(&self) -> Option<String> {
         if self.is_effect_like() {
             let path = self.to_path();
             path.into_iter().next()

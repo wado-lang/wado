@@ -40,7 +40,7 @@ out-of-band.
 
 ## Effects
 
-### `pub effect KilnHost`
+### `pub interface KilnHost`
 
 Host interface exposed to Kiln generators. Deliberately narrow:
 no clocks, no random, no network, no filesystem beyond `read-file`.

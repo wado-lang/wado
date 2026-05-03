@@ -296,7 +296,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                     self.define_unique(module_source, func.id, &func.name, kind, func.span);
                 }
 
-                Item::Effect(effect) => {
+                Item::Interface(effect) => {
                     // Extract effect-level CM import from attributes
                     let effect_cm_import = effect.attrs.first().and_then(|a| a.cm_import.clone());
 
@@ -453,7 +453,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                             .imports
                             .iter()
                             .map(|i| WorldImportSymbol {
-                                effect_name: i.effect_name.clone(),
+                                interface_name: i.interface_name.clone(),
                                 functions: i.functions.clone(),
                             })
                             .collect(),
@@ -667,12 +667,12 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                                 name,
                             );
                         }
-                        UseItem::EffectFunctions {
-                            effect_name,
+                        UseItem::InterfaceFunctions {
+                            interface_name,
                             functions,
                         } => {
                             for func_item in functions {
-                                let source_name = format!("{}::{}", effect_name, func_item.name);
+                                let source_name = format!("{}::{}", interface_name, func_item.name);
                                 let export_name =
                                     func_item.alias.as_ref().unwrap_or(&func_item.name);
                                 self.symbols.register_reexport(
@@ -760,12 +760,12 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                                 })?;
                             }
                         }
-                        UseItem::EffectFunctions {
-                            effect_name,
+                        UseItem::InterfaceFunctions {
+                            interface_name,
                             functions,
                         } => {
                             for func_item in functions {
-                                let lookup_name = format!("{}::{}", effect_name, func_item.name);
+                                let lookup_name = format!("{}::{}", interface_name, func_item.name);
                                 if let Some(symbol) =
                                     self.symbols.lookup_in_module(&module_source, &lookup_name)
                                 {

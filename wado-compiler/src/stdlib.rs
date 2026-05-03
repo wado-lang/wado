@@ -331,7 +331,7 @@ mod tests {
         assert!(
             get_stdlib_module("core:kiln/kiln_host.wado")
                 .unwrap()
-                .contains("pub effect KilnHost")
+                .contains("pub interface KilnHost")
         );
         assert!(
             get_stdlib_module("core:kiln/types.wado")

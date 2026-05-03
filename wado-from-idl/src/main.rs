@@ -240,7 +240,7 @@ fn run_directory_mode(
             // Skip empty interfaces
             if module.types.is_empty()
                 && module.resources.is_empty()
-                && module.effects.is_empty()
+                && module.interfaces.is_empty()
                 && module.imports.is_empty()
             {
                 continue;

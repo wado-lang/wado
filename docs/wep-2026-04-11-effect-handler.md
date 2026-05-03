@@ -129,7 +129,7 @@ Effects are capabilities required by functions. The runtime (wasmtime) provides 
 An effect declaration defines an interface (like a trait). Any struct that implements the effect's operations can serve as a handler:
 
 ```wado
-effect Stdin {
+interface Stdin {
     fn read_line() -> String;
 }
 

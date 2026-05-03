@@ -3,8 +3,8 @@
 use std::fmt::Write;
 
 use crate::ir::{
-    WadoEffect, WadoEnum, WadoFlags, WadoFunction, WadoModule, WadoParam, WadoResource, WadoStruct,
-    WadoType, WadoTypeDef, WadoVariant, WadoWorld,
+    WadoEnum, WadoFlags, WadoFunction, WadoInterface, WadoModule, WadoParam, WadoResource,
+    WadoStruct, WadoType, WadoTypeDef, WadoVariant, WadoWorld,
 };
 
 pub struct WadoCodeGenerator {
@@ -36,8 +36,8 @@ impl WadoCodeGenerator {
             self.writeln("");
         }
 
-        for effect in &module.effects {
-            self.write_effect(effect);
+        for effect in &module.interfaces {
+            self.write_interface(effect);
             self.writeln("");
         }
 
@@ -203,10 +203,10 @@ impl WadoCodeGenerator {
         }
     }
 
-    fn write_effect(&mut self, effect: &WadoEffect) {
+    fn write_interface(&mut self, effect: &WadoInterface) {
         self.write_doc_comment(effect.doc_comment.as_ref());
         self.writeln(&format!("#[cm(\"{}\")]", effect.cm_interface));
-        self.writeln(&format!("pub effect {} {{", effect.name));
+        self.writeln(&format!("pub interface {} {{", effect.name));
         self.indent += 1;
 
         for func in &effect.functions {
@@ -275,7 +275,7 @@ impl WadoCodeGenerator {
         self.indent += 1;
 
         for import in &world.imports {
-            self.writeln(&format!("import {} {{", import.effect_name));
+            self.writeln(&format!("import {} {{", import.interface_name));
             self.indent += 1;
             for func in &import.functions {
                 self.writeln(&format!("{func},"));

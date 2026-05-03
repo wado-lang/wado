@@ -114,12 +114,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Resolve the effect name. Use `resolve_effects` so that LSP
         // jump-to-def edges are recorded just like in `with E1, E2`
         // function signatures.
-        let effect_name = self.get_type_name(effect_ty);
+        let interface_name = self.get_type_name(effect_ty);
         let effect_ids = effect_ty
             .id()
             .map(|id| vec![(id, effect_ty.span())])
             .unwrap_or_default();
-        let mut resolved_effects = self.resolve_effects(&[effect_name], &effect_ids);
+        let mut resolved_effects = self.resolve_effects(&[interface_name], &effect_ids);
         let effect = resolved_effects.pop();
 
         // The name must point at an actual effect or resource
@@ -170,7 +170,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // Verify the underlying struct type has `impl <Effect> for <Type>`.
         if let Some(EffectRef::Concrete {
-            name: effect_name, ..
+            name: interface_name,
+            ..
         }) = &effect
         {
             let type_name = self.type_table.borrow().type_name(handler_type);
@@ -181,10 +182,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 self.type_table.borrow().get(handler_type),
                 ResolvedType::Unknown | ResolvedType::Error
             );
-            if is_real_type && !self.find_trait_impl_for_type(&type_name, effect_name) {
+            if is_real_type && !self.find_trait_impl_for_type(&type_name, interface_name) {
                 let _ = self.logger.error(TypeError::HandlerEffectNotImplemented {
                     type_name,
-                    effect_name: effect_name.clone(),
+                    interface_name: interface_name.clone(),
                     span: binding.span,
                 });
             }
@@ -306,9 +307,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
         effects
             .into_iter()
             .map(
-                |(effect_name, effect_module, type_args)| TirHandlerBinding {
+                |(interface_name, effect_module, type_args)| TirHandlerBinding {
                     effect: Some(EffectRef::Concrete {
-                        name: effect_name,
+                        name: interface_name,
                         module_source: effect_module,
                     }),
                     trait_type_args: type_args,

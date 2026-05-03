@@ -34,7 +34,7 @@ interface greet {
 
     let output = parse_wit_and_generate(wit);
 
-    assert!(output.contains("pub effect Greet {"));
+    assert!(output.contains("pub interface Greet {"));
     assert!(output.contains("fn hello(name: String) -> String;"));
     assert!(output.contains(r#"#[cm("test:example/greet@0.1.0")]"#));
 }

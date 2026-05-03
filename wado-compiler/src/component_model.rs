@@ -31,17 +31,17 @@ pub struct CmVariantCase {
 /// - Case-level: `#[cm("cm-name")]` → uses the whole arg directly
 ///
 /// Strip a `AsyncCall<T>` wrapper from the declared return type of an `async`
-/// effect method, recovering the CM-level result type `T`.
+/// interface method, recovering the CM-level result type `T`.
 ///
 /// In WIT, `async func foo(...) -> T` lowers the CM-level result as `T`, but
-/// the Wado-facing effect declaration exposes `AsyncCall<T>` so user code can
+/// the Wado-facing interface declaration exposes `AsyncCall<T>` so user code can
 /// defer `wait()`-ing until after any stream parameter rendezvous
 /// completes. The CM binding synthesiser needs the raw `T` when computing
 /// outptr layout.
 ///
 /// For non-async methods this is a no-op. For async methods whose return
 /// type is missing or not `AsyncCall<_>` we return the original type —
-/// defensive in case hand-written effect declarations predate the
+/// defensive in case hand-written interface declarations predate the
 /// `AsyncCall<T>` convention (in which case the compiler's earlier
 /// expectations still apply).
 pub fn unwrap_async_call_if_async(is_async: bool, declared: &Option<Type>) -> Option<Type> {
@@ -99,11 +99,11 @@ fn extract_cm_params_attr(attrs: &[crate::ast::Attribute]) -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// Information about a WASI function from an effect method
+/// Information about a WASI function from an interface method
 #[derive(Debug, Clone)]
 pub struct WasiFunctionInfo {
     /// Effect name (e.g., "Stdout")
-    pub effect_name: String,
+    pub interface_name: String,
     /// Method name in Wado (e.g., "`write_via_stream`")
     pub method_name: String,
     /// WASI function name (e.g., "write-via-stream")
@@ -123,10 +123,10 @@ pub struct WasiFunctionInfo {
 impl WasiFunctionInfo {
     /// Build the local alias name for Component Model imports.
     ///
-    /// Format: `wasi:{package}/{effect_name}::{method_name}`
+    /// Format: `wasi:{package}/{interface_name}::{method_name}`
     /// Example: `wasi:cli/Stdout::write_via_stream`
     pub fn local_alias_name(&self) -> String {
-        build_local_alias_name(&self.package, &self.effect_name, &self.method_name)
+        build_local_alias_name(&self.package, &self.interface_name, &self.method_name)
     }
 
     /// Whether `canon lower` requires the Memory canonical option.
@@ -260,7 +260,7 @@ impl WasiFunctionInfo {
 
 /// Build a local alias name for a WASI function.
 ///
-/// Format: `wasi:{package}/{effect_name}::{method_name}`
+/// Format: `wasi:{package}/{interface_name}::{method_name}`
 /// Example: `wasi:cli/Stdout::write_via_stream`
 ///
 /// This naming scheme:
@@ -268,8 +268,8 @@ impl WasiFunctionInfo {
 /// - Includes package for uniqueness across packages
 /// - Uses Wado effect/method names (not WIT interface/function names)
 /// - Uses `::` as method separator (Wado convention)
-pub fn build_local_alias_name(package: &str, effect_name: &str, method_name: &str) -> String {
-    format!("wasi:{package}/{effect_name}::{method_name}")
+pub fn build_local_alias_name(package: &str, interface_name: &str, method_name: &str) -> String {
+    format!("wasi:{package}/{interface_name}::{method_name}")
 }
 
 /// Information about a WASI interface (grouping functions by interface)
@@ -308,7 +308,7 @@ pub struct WasiRegistry {
     interfaces: BTreeMap<String, Vec<WasiFunctionInfo>>,
 
     /// Local alias -> (`interface_path`, `wasi_func_name`)
-    /// Key format: `wasi:{package}/{effect_name}::{method_name`}
+    /// Key format: `wasi:{package}/{interface_name}::{method_name`}
     /// e.g., "`wasi:cli/Stdout::write_via_stream`"
     local_aliases: IndexMap<String, (String, String)>,
 
@@ -477,7 +477,7 @@ fn collect_cm_definitions(module: &crate::ast::Module) -> IndexMap<String, Strin
             Item::Flags(f) => (f.name.clone(), f.attributes.as_deref().unwrap_or(&[])),
             Item::Enum(e) => (e.name.clone(), e.attrs.as_slice()),
             Item::Variant(v) => (v.name.clone(), v.attrs.as_slice()),
-            Item::Effect(e) => (e.name.clone(), e.attrs.as_slice()),
+            Item::Interface(e) => (e.name.clone(), e.attrs.as_slice()),
             _ => continue,
         };
         let source = WasiRegistry::cm_source_interface(attrs);
@@ -527,12 +527,12 @@ fn build_local_name_resolver(
                         let bind = alias.clone().unwrap_or_else(|| name.clone());
                         local.insert(bind, source.clone());
                     }
-                    UseItem::EffectFunctions {
-                        effect_name,
+                    UseItem::InterfaceFunctions {
+                        interface_name,
                         functions: _,
                     } => {
-                        if let Some(source) = other_defs.get(effect_name) {
-                            local.insert(effect_name.clone(), source.clone());
+                        if let Some(source) = other_defs.get(interface_name) {
+                            local.insert(interface_name.clone(), source.clone());
                         }
                     }
                     UseItem::Namespace { .. } | UseItem::Wildcard => {}
@@ -604,7 +604,7 @@ fn populate_named_type_sources(
                 }
             }
             Item::Newtype(a) => walk_type(&mut a.ty, local_names),
-            Item::Effect(effect) => {
+            Item::Interface(effect) => {
                 for method in &mut effect.methods {
                     for param in &mut method.params {
                         walk_type(&mut param.ty, local_names);
@@ -743,7 +743,7 @@ impl WasiRegistry {
 
     /// Build the registry from the embedded stdlib
     ///
-    /// Parses the embedded wasi:* modules and registers their effect methods.
+    /// Parses the embedded wasi:* modules and registers their interface methods.
     /// Also collects newtypes and world definitions.
     pub fn build_from_stdlib() -> &'static (Self, crate::world_registry::WorldRegistry) {
         use std::sync::OnceLock;
@@ -973,10 +973,10 @@ impl WasiRegistry {
             }
         };
 
-        // Register effect methods with resolved types for params but NOT for return type
+        // Register interface methods with resolved types for params but NOT for return type
         // Return type must keep original names (e.g., Mark not u64) for newtype semantics
         for item in &module.items {
-            if let Item::Effect(effect) = item {
+            if let Item::Interface(effect) = item {
                 for method in &effect.methods {
                     if let Some(wasi) = method.attrs.first().and_then(|a| a.cm_import.as_ref()) {
                         // Extract CM param names from #[cm_params] attribute
@@ -1625,10 +1625,10 @@ impl WasiRegistry {
         true
     }
 
-    /// Register a WASI function from an effect method
+    /// Register a WASI function from an interface method
     ///
     /// # Arguments
-    /// * `effect_name` - The effect name (e.g., "Stdout")
+    /// * `interface_name` - The interface name (e.g., "Stdout")
     /// * `method_name` - The method name (e.g., "`write_via_stream`")
     /// * `wasi` - The parsed WASI import metadata
     /// * `is_async` - Whether this is an async function
@@ -1636,7 +1636,7 @@ impl WasiRegistry {
     /// * `return_type` - Return type (if any)
     pub fn register(
         &mut self,
-        effect_name: &str,
+        interface_name: &str,
         method_name: &str,
         wasi: &CmImport,
         is_async: bool,
@@ -1658,7 +1658,7 @@ impl WasiRegistry {
             .map(|(name, cm_name, ty)| (name, cm_name, self.resolve_type(&ty)))
             .collect();
         let func_info = WasiFunctionInfo {
-            effect_name: effect_name.to_string(),
+            interface_name: interface_name.to_string(),
             method_name: method_name.to_string(),
             wasi_func_name: wasi_func_name.clone(),
             interface_path: interface_path.clone(),
@@ -1669,13 +1669,13 @@ impl WasiRegistry {
         };
 
         // Generate the local alias name using utility function
-        // Format: wasi:{package}/{effect_name}::{method_name}
+        // Format: wasi:{package}/{interface_name}::{method_name}
         let local_name = func_info.local_alias_name();
 
         self.used_names.insert(local_name.clone());
 
         // Register in effect -> func map
-        let qualified_name = format!("{effect_name}::{method_name}");
+        let qualified_name = format!("{interface_name}::{method_name}");
         self.effect_to_func
             .insert(qualified_name, func_info.clone());
 
@@ -3466,7 +3466,7 @@ mod tests {
     #[test]
     fn test_func_info_local_alias_name() {
         let func_info = WasiFunctionInfo {
-            effect_name: "Stdout".to_string(),
+            interface_name: "Stdout".to_string(),
             method_name: "write_via_stream".to_string(),
             wasi_func_name: "write-via-stream".to_string(),
             interface_path: "wasi:cli/stdout@0.3.0-rc-2025-09-16".to_string(),

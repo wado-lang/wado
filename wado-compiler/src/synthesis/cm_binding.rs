@@ -2286,8 +2286,8 @@ fn cm_param_store_plan(
 }
 
 /// Build the binding function name for a WASI import.
-pub fn binding_func_name(effect_name: &str, method_name: &str) -> String {
-    format!("__cm_binding__{effect_name}_{method_name}")
+pub fn binding_func_name(interface_name: &str, method_name: &str) -> String {
+    format!("__cm_binding__{interface_name}_{method_name}")
 }
 
 /// Build the export binding function name for a world export.
@@ -2536,7 +2536,7 @@ fn synthesize_adapter(
     type_table: &RefCell<TypeTable>,
     owner_module: &ModuleSource,
 ) -> Rc<RefCell<TirFunction>> {
-    let name = binding_func_name(&func_info.effect_name, &func_info.method_name);
+    let name = binding_func_name(&func_info.interface_name, &func_info.method_name);
     let local_name = func_info.local_alias_name();
 
     // Derive outptr needs from return type using Canonical ABI layout.
@@ -3559,7 +3559,7 @@ fn synthesize_adapter(
     {
         let mut b = binding.borrow_mut();
         b.effects.push(EffectRef::Concrete {
-            name: func_info.effect_name.clone(),
+            name: func_info.interface_name.clone(),
             module_source: owner_module.clone(),
         });
     }
@@ -6335,10 +6335,13 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
             if let Some(func_info) = project.wasi_registry.get_function(qualified_name) {
                 let func_info = func_info.clone();
                 let binding_name =
-                    binding_func_name(&func_info.effect_name, &func_info.method_name);
-                let owner_module =
-                    lookup_effect_owner(&owner_sources, &func_info.effect_name, &func_info.package)
-                        .unwrap_or_else(|| ModuleSource::wasi(&func_info.package));
+                    binding_func_name(&func_info.interface_name, &func_info.method_name);
+                let owner_module = lookup_effect_owner(
+                    &owner_sources,
+                    &func_info.interface_name,
+                    &func_info.package,
+                )
+                .unwrap_or_else(|| ModuleSource::wasi(&func_info.package));
                 let adapter = synthesize_adapter(
                     &func_info,
                     project.wasi_registry,
@@ -8514,7 +8517,7 @@ fn rewrite_calls_in_expr(
 ) {
     // Check if this is an effect-like Call that should be rewritten
     let is_effect_call = matches!(&expr.kind, TirExprKind::Call { func, .. }
-        if func.module_source.clone().is_effect_like() && func.module_source.clone().effect_name().is_some());
+        if func.module_source.clone().is_effect_like() && func.module_source.clone().interface_name().is_some());
     if is_effect_call
         && let TirExprKind::Call {
             func,
@@ -8523,9 +8526,13 @@ fn rewrite_calls_in_expr(
             ..
         } = &mut expr.kind
     {
-        let effect_name = func.module_source.clone().effect_name().unwrap_or_default();
+        let interface_name = func
+            .module_source
+            .clone()
+            .interface_name()
+            .unwrap_or_default();
         let method_name = func.name.clone();
-        let qualified = format!("{effect_name}::{method_name}");
+        let qualified = format!("{interface_name}::{method_name}");
 
         if let Some(adapter_rc) = adapters.get(&qualified) {
             // Check if this is a streaming async function
@@ -9244,10 +9251,10 @@ fn collect_effect_calls_in_expr(
         TirExprKind::Call { func, args, .. } => {
             // Collect effect-like Call nodes (sync WASI calls like Environment::get_arguments)
             if func.module_source.clone().is_effect_like()
-                && let Some(effect_name) = func.module_source.clone().effect_name()
+                && let Some(interface_name) = func.module_source.clone().interface_name()
             {
                 let method_name = func.name.clone();
-                let qualified = format!("{effect_name}::{method_name}");
+                let qualified = format!("{interface_name}::{method_name}");
                 if wasi_registry.get_function(&qualified).is_some() {
                     effects.insert(qualified);
                 }
