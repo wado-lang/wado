@@ -125,7 +125,7 @@ E2E: [opt_hfs_stores_ref_sync.wado](../wado-compiler/tests/fixtures/opt_hfs_stor
 
 ### Constant Folding (`const_folding.rs`)
 
-A thin TIR visitor that walks each function body via `opt_walk_expr` and asks the [TIR Interpreter (`tiri`)](#tir-interpreter-tiri) to apply its local rewrite rules at every node. All reduction logic — literal folding, integer cast collapsing, the `&&` / `||` short-circuit identity rules, and `GlobalVarGet` rewriting for immutable globals — lives in `tiri`; this pass owns no rewrite logic of its own. (Subsumed the standalone `const_propagation` pass when `tiri` gained a project-wide `GlobalEnv`.)
+A thin TIR visitor that walks each function body via `opt_walk_expr` and asks the [TIR Interpreter (`tiri`)](#tir-interpreter-tiri) to apply its local rewrite rules at every node. All reduction logic — literal folding, integer cast collapsing, the `&&` / `||` short-circuit identity rules, and `GlobalVarGet` rewriting for immutable globals — lives in `tiri`; this pass owns no rewrite logic of its own.
 
 E2E: [const_fold.wado](../wado-compiler/tests/fixtures/const_fold.wado), [opt_const_fold_div_zero.wado](../wado-compiler/tests/fixtures/opt_const_fold_div_zero.wado).
 

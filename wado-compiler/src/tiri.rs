@@ -53,8 +53,7 @@
 //!   Mutable globals are recorded as `NonConst` so a parent fold like
 //!   `GLOBAL_MUT + 1` reports `NonConst` rather than `Unevaluated`. The
 //!   driving visitor builds the env once per pass via
-//!   [`Interpreter::with_globals`]; this subsumes the legacy
-//!   `const_propagation` pass.
+//!   [`Interpreter::with_globals`].
 //! - `if` expressions: a constant condition collapses to the chosen
 //!   arm; a non-constant condition with both arms reducing to the same
 //!   lattice constant (and an effect-free condition) folds to that
