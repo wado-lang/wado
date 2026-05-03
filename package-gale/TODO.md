@@ -68,45 +68,6 @@ approaches below, in increasing order of implementation cost:
 
 (none currently)
 
-## g4 Parser Gap: Element Options on Alternatives and Predicates
-
-Surfaced by the ANTLR4 descriptor corpus (Phase 2 of
-[`antlr4-compatibility.md`](./antlr4-compatibility.md)). The g4
-parser does not yet accept ANTLR4's `<key=value, ...>` element-option
-syntax in two positions:
-
-- **`<p=N>` precedence override** on an alternative of a left-recursive
-  rule. Example from `LeftRecursion/MultipleActionsPredicatesOptions_1`:
-  ```antlrv4
-  e : a=e op=('+'|'-') b=e {}<p=3>{<True()>}?<fail='Message'>
-  ```
-- **`<fail='…'>` custom predicate failure message** on a semantic
-  predicate. Example from `LeftRecursion/SemPredFailOption`:
-  ```antlrv4
-  a : a ID {<False()>}?<fail='custom message'>
-  ```
-
-The format itself is documented in
-[`vendor/antlr4/doc/options.md`](../vendor/antlr4/doc/options.md)
-(`T<name=value>`, with `<assoc=…>` as the canonical example) and used
-in the wild for token / alt / predicate options.
-
-Closing this gap removes 4 `[todo]` entries from
-`tests/antlr4-compat/status.toml` (all under `LeftRecursion`) and
-unblocks the same surface for Stage B (Phase 3) where the same
-options will appear in many more descriptors.
-
-Implementation hints:
-
-- The element-option lexer token shape is already partly handled:
-  `<assoc=right>` works on token references. The gap is parsing the
-  option list in the alternative-suffix and predicate-suffix
-  positions, and threading the parsed options into the IR (where
-  they are mostly metadata for codegen).
-- Cross-check `vendor/antlr4/tool/src/org/antlr/v4/parse/ANTLRParser.g`
-  for the canonical grammar of these positions — it is the ground
-  truth per [AGENTS.md](./AGENTS.md).
-
 ## Future Work: Actions and `superClass` (low priority)
 
 Gale currently skips the contents of `{ ... }` action blocks and semantic

@@ -26,12 +26,9 @@ diverges, that is a bug in Gale.
 
 Today the contract is met as follows:
 
-- **Stage A (syntactic)** — broadly green across the full upstream
-  descriptor corpus (14 categories, 345 descriptors). 4 known
-  `[todo]` entries flag a single real gap: element options
-  (`<p=N>`, `<fail='…'>`) on alternatives and semantic predicates.
-  See [TODO.md](./TODO.md) and the [Current state](#current-state)
-  section below.
+- **Stage A (syntactic)** — green across the full upstream
+  descriptor corpus (14 categories, 345 descriptors, 0 `[todo]`).
+  See the [Current state](#current-state) section below.
 - **Stage B (semantic)** — _partial_; only hand-curated driver
   fixtures participate. Lifting the descriptor corpus into Stage B
   is [Phase 3](#phase-3-next--stage-b-tree-shape-equivalence).
@@ -282,17 +279,17 @@ Once a Gale gap is fixed:
 ### Phase 1 + Phase 2 (landed) — every descriptor category
 
 All 14 categories under `vendor/antlr4/.../descriptors/` are
-extracted: **345 descriptors** emitted, **341 pass**, **4 `[todo]`**
-(all `LeftRecursion`, all the element-options gap — `<p=N>`,
-`<fail='…'>`), **12 `[skip]`** (testsuite StringTemplate artefacts).
-See `tests/antlr4-compat/status.toml` for the per-descriptor reasons.
+extracted: **345 descriptors** emitted, **all pass**, **0 `[todo]`**,
+**12 `[skip]`** (testsuite StringTemplate artefacts). See
+`tests/antlr4-compat/status.toml` for the per-descriptor `[skip]`
+reasons.
 
 ### Phase 3 (next) — Stage B tree-shape equivalence
 
-Stage A is now broadly green (modulo the 4 `LeftRecursion` TODOs and
-the 12 testsuite-template skips). The natural next step is to feed
-the `[input]` blocks through the _generated_ parser and check
-`to_string_tree()` against a normalised form of `[output]`.
+Stage A is green (modulo the 12 testsuite-template skips). The
+natural next step is to feed the `[input]` blocks through the
+_generated_ parser and check `to_string_tree()` against a normalised
+form of `[output]`.
 Mechanically this is the same machinery as the existing driver
 fixtures, but driven systematically off the descriptor corpus
 instead of hand-written cases.
@@ -338,13 +335,6 @@ parse-only layer is wired.
 These are surfacable now and worth doing first because Stage B
 amplifies their cost:
 
-- **Element options on alternatives and semantic predicates.** The
-  4 `LeftRecursion` TODOs all want `<p=N>` (precedence override) and
-  `<fail='…'>` (custom predicate failure message). Stage B will hit
-  the same gap multiplied by every descriptor that uses these
-  options. Closing this is a localised change to the g4 parser's
-  alternative / semantic-predicate handling. See
-  [TODO.md](./TODO.md).
 - **Listeners category emit-suppression.** `Listeners` currently
   emits a header-only test file with zero tests; once Phase 3 lands
   the same shape will likely apply to other categories. Either drop
