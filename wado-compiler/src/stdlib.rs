@@ -180,56 +180,6 @@ pub fn get_stdlib_wasm_asset(import_path: &str) -> Option<&'static [u8]> {
     }
 }
 
-/// Map a filesystem path to a bundled stdlib `ModuleSource`, if any.
-///
-/// Returns `Some(ModuleSource::Core { ... })` when `path` points to a file
-/// under `lib/core/` that is bundled into the compiler (per
-/// [`get_stdlib_module`]); likewise `Some(ModuleSource::Wasi { ... })` for
-/// `lib/wasi/`. The check is suffix-based, so absolute paths like
-/// `/home/user/wado/wado-compiler/lib/core/prelude/types.wado` resolve as
-/// well as relative ones.
-///
-/// Used by the LSP entry path so opening (and editing) bundled stdlib files
-/// in the editor does not redefine prelude types under an unrelated
-/// `EntryPoint` identity, which would otherwise trigger spurious
-/// `PreludeTypeCollision` / `DuplicateDefinition` diagnostics.
-#[must_use]
-pub fn stdlib_module_source_for_path(path: &str) -> Option<crate::name::ModuleSource> {
-    use crate::name::ModuleSource;
-
-    // Locate the `lib/` segment that prefixes a bundled stdlib file. Use
-    // `rfind` so paths that themselves contain `lib/` earlier (unlikely but
-    // possible) still match the closest-to-leaf occurrence.
-    let after_lib = if let Some(idx) = path.rfind("/lib/") {
-        &path[idx + "/lib/".len()..]
-    } else {
-        path.strip_prefix("lib/")?
-    };
-
-    let (ns, rest) = after_lib.split_once('/')?;
-    let make = |canonical: &str| -> Option<ModuleSource> {
-        match ns {
-            "core" => Some(ModuleSource::core(canonical)),
-            "wasi" => Some(ModuleSource::wasi(canonical)),
-            _ => None,
-        }
-    };
-
-    // Multi-segment paths (e.g. `prelude/types.wado`) keep the `.wado`
-    // suffix in the canonical key; top-level files (e.g. `cli.wado`) drop
-    // it. Try both forms and validate against the registry.
-    if get_stdlib_module(&format!("{ns}:{rest}")).is_some() {
-        return make(rest);
-    }
-    if let Some(stem) = rest.strip_suffix(".wado")
-        && !stem.contains('/')
-        && get_stdlib_module(&format!("{ns}:{stem}")).is_some()
-    {
-        return make(stem);
-    }
-    None
-}
-
 /// Get embedded module source by import path.
 ///
 /// # Arguments
@@ -418,52 +368,5 @@ mod tests {
     fn test_non_stdlib_module() {
         assert!(get_stdlib_module("myapp:utils").is_none());
         assert!(get_stdlib_module("https://example.com/lib.wado").is_none());
-    }
-
-    #[test]
-    fn test_stdlib_module_source_for_path_top_level() {
-        use crate::name::ModuleSource;
-        assert_eq!(
-            stdlib_module_source_for_path("/some/abs/wado-compiler/lib/core/cli.wado"),
-            Some(ModuleSource::core("cli"))
-        );
-        assert_eq!(
-            stdlib_module_source_for_path("wado-compiler/lib/core/prelude.wado"),
-            Some(ModuleSource::core("prelude"))
-        );
-        assert_eq!(
-            stdlib_module_source_for_path("lib/core/zlib.wado"),
-            Some(ModuleSource::core("zlib"))
-        );
-        assert_eq!(
-            stdlib_module_source_for_path("lib/wasi/cli.wado"),
-            Some(ModuleSource::wasi("cli"))
-        );
-    }
-
-    #[test]
-    fn test_stdlib_module_source_for_path_submodule() {
-        use crate::name::ModuleSource;
-        assert_eq!(
-            stdlib_module_source_for_path("/home/u/wado/wado-compiler/lib/core/prelude/types.wado"),
-            Some(ModuleSource::core("prelude/types.wado"))
-        );
-        assert_eq!(
-            stdlib_module_source_for_path("lib/wasi/cli/stdout.wado"),
-            Some(ModuleSource::wasi("cli/stdout.wado"))
-        );
-        assert_eq!(
-            stdlib_module_source_for_path("lib/core/kiln/types.wado"),
-            Some(ModuleSource::core("kiln/types.wado"))
-        );
-    }
-
-    #[test]
-    fn test_stdlib_module_source_for_path_rejects_non_stdlib() {
-        assert!(stdlib_module_source_for_path("/path/to/main.wado").is_none());
-        assert!(stdlib_module_source_for_path("src/foo.wado").is_none());
-        // No bundled module by that name even though the path shape matches.
-        assert!(stdlib_module_source_for_path("lib/core/nonexistent.wado").is_none());
-        assert!(stdlib_module_source_for_path("lib/other/cli.wado").is_none());
     }
 }

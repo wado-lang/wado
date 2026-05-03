@@ -894,18 +894,12 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
     ) -> Result<LoadResult, LoadError> {
         // Parse, bind, and desugar entry module
         // Use "<stdin>" as synthetic filename when no filename is provided (e.g., REPL, embedded code)
-        let resolved_filename = entry_filename.unwrap_or("<stdin>");
-        // If the entry file is a bundled stdlib source (e.g. opened in an
-        // editor for inspection or in-place edits), identify it as the
-        // corresponding `core:`/`wasi:` module rather than a generic
-        // `EntryPoint`. This keeps `is_core()`-gated checks like
-        // `check_prelude_collisions` and the implicit-module dedup in
-        // `load_implicit_modules` consistent with how the same file is
-        // treated when loaded as a dependency.
-        let entry_module_source = stdlib::stdlib_module_source_for_path(resolved_filename)
-            .unwrap_or_else(|| ModuleSource::entry_point_with_filename(resolved_filename));
+        let entry_module_source =
+            ModuleSource::entry_point_with_filename(entry_filename.unwrap_or("<stdin>"));
         self.entry_module_source = Some(entry_module_source.clone());
-        self.entry_canonical_name = Some(crate::name::canonicalize_entry_point(resolved_filename));
+        self.entry_canonical_name = Some(crate::name::canonicalize_entry_point(
+            entry_filename.unwrap_or("<stdin>"),
+        ));
 
         let entry_name = entry_module_source.to_string();
         self.logger.span_start(&format!("load {entry_name}"));
