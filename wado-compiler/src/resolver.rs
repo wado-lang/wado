@@ -290,6 +290,58 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             .insert(use_key, sym.defined_at.clone());
     }
 
+    /// Record use→def edges for a `TypeName::CaseName` qualified path
+    /// expression. The prefix segment (`TypeName`) is resolved by name in
+    /// the current module's scope; the suffix segment (`CaseName`) points
+    /// directly at `(case_module, case_ast_id)`.
+    ///
+    /// Used for variant cases, enum cases, and flags members reached via
+    /// a two-segment qualified ident.
+    pub(super) fn record_qualified_case(
+        &self,
+        ident: &crate::ast::IdentExpr,
+        type_name: &str,
+        case_module: &ModuleSource,
+        case_ast_id: crate::ast::AstId,
+    ) {
+        if let Some(prefix_seg) = ident.segments.first() {
+            self.record_item_reference_by_name(prefix_seg.id, type_name);
+        }
+        if let Some(suffix_seg) = ident.segments.get(1) {
+            self.record_reference_to_key(
+                suffix_seg.id,
+                SymbolKey::new(case_module.clone(), case_ast_id),
+            );
+        }
+    }
+
+    /// Record the suffix (`Case`) segment of a `ns::Type::Case`
+    /// namespace-qualified case path. The leading `ns` and `Type`
+    /// segments are left to existing namespace-import edges.
+    pub(super) fn record_namespaced_case(
+        &self,
+        ident: &crate::ast::IdentExpr,
+        case_module: &ModuleSource,
+        case_ast_id: crate::ast::AstId,
+    ) {
+        if let Some(seg) = ident.segments.get(2) {
+            self.record_reference_to_key(seg.id, SymbolKey::new(case_module.clone(), case_ast_id));
+        }
+    }
+
+    /// Record a use→def edge from `use_id` to `def_id` (in the current
+    /// module) when the defining id is known. Convenience for sites that
+    /// receive an `Option<AstId>` from a local variable lookup.
+    pub(super) fn record_reference_opt(
+        &self,
+        use_id: crate::ast::AstId,
+        def_id: Option<crate::ast::AstId>,
+    ) {
+        if let Some(def_id) = def_id {
+            self.record_reference(use_id, def_id);
+        }
+    }
+
     /// Look up the `AstId` of an impl-block method by its defining module, the
     /// receiving type name, and the method name. Returns `None` if the module
     /// is not loaded or no matching method exists. Searches all impl blocks in

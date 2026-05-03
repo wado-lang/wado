@@ -1,11 +1,11 @@
 //! Hover information, powered by `wado_compiler::annotate`.
 //!
-//! Rendering strategy: `Annotated::ast_id_at` finds the innermost AST node at
-//! the cursor. If the node is a use site that resolves via
-//! `Annotated::referenced_symbol`, we follow that to the defining
-//! [`SymbolKey`]; otherwise the cursor key itself refers to a declared
-//! symbol. Locals render as `let`/param signatures (computed from the
-//! defining AST node); items delegate to `wado_compiler::unparse`.
+//! Rendering strategy: [`Annotated::cursor_at`] places a [`Cursor`] on the
+//! innermost AST node at the request position. If that node names a binding
+//! via the use→def edge, the cursor's `def_symbol()` returns the binding's
+//! [`Symbol`]; otherwise the cursor itself names a declared symbol. Locals
+//! render as `let`/param signatures (computed from the defining AST node);
+//! items delegate to `wado_compiler::unparse`.
 
 use serde::{Deserialize, Serialize};
 use wado_compiler::CompilerHost;
@@ -50,19 +50,21 @@ pub async fn find_hover<H: CompilerHost>(
     let line = position.line as usize + 1;
     let col = position.character as usize + 1;
 
-    let cursor_id = annotated.ast_id_at(&module, line, col)?;
-    let cursor_key = SymbolKey::new(module, cursor_id);
+    let cursor = annotated.cursor_at(&module, line, col)?;
+    // hover does not require def_key()'s "must be a recognised name"
+    // filter — when the cursor lands on, e.g., a `let` declaration site,
+    // we want to read the symbol at the cursor itself. Mirror the legacy
+    // `referenced_symbol(...).unwrap_or(cursor_key)` fallback explicitly.
     let def_key = annotated
-        .referenced_symbol(&cursor_key)
-        .unwrap_or_else(|| cursor_key.clone());
-
+        .referenced_symbol(cursor.key())
+        .unwrap_or_else(|| cursor.key().clone());
     let symbol = annotated.symbol_at(&def_key)?;
     let signature = match &symbol.kind {
         SymbolKind::Variable(_) => render_local_binding(&annotated, &def_key, &symbol.name)?,
         _ => render_item_signature(&annotated, symbol)?,
     };
 
-    let cursor_span = annotated.span_of_key(&cursor_key)?;
+    let cursor_span = cursor.span()?;
     Some(HoverResult {
         contents: MarkupContent {
             kind: MarkupKind::Markdown,

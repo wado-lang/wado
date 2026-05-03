@@ -15,11 +15,11 @@ Language service engine for the Wado compiler toolchain.
 | `src/host.rs`               | `FilesystemCompilerHost`: default `CompilerHost` for disk-backed source loading                  |
 | `src/diagnostics.rs`        | Compiler `Diagnostic` to LSP-compatible `Diagnostic` conversion                                  |
 | `src/semantic_tokens.rs`    | Semantic token computation (lexer + AST classification)                                          |
-| `src/definition.rs`         | Go-to-definition via `Annotated::{ast_id_at, referenced_symbol, symbol_at}`                      |
+| `src/definition.rs`         | Go-to-definition via `Annotated::cursor_at` + use→def chase                                      |
 | `src/hover.rs`              | Hover info; locals render from the resolved AST node, items delegate to `wado_compiler::unparse` |
-| `src/references.rs`         | Find-references, walks `Annotated::iter_references` and collects matching use-sites              |
-| `src/document_highlight.rs` | Document highlight; classifies each occurrence as Read or Write via AST walk                     |
-| `src/location.rs`           | Shared cursor→`SymbolKey` resolution and span/URI helpers                                        |
+| `src/references.rs`         | Find-references via `Cursor::references_to_def` over `Annotated::iter_references`                |
+| `src/document_highlight.rs` | Document highlight; Read/Write classification consults `Annotated::is_write_target`              |
+| `src/location.rs`           | URI / span helpers for translating compiler positions to LSP types                               |
 | `src/server.rs`             | `run_stdio()`: blocking stdin/stdout loop feeding the async dispatcher                           |
 | `src/server/transport.rs`   | Content-Length framing + typed JSON-RPC send/receive helpers                                     |
 | `src/server/dispatch.rs`    | LSP method routing and server-lifecycle enforcement                                              |

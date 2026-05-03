@@ -312,9 +312,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     type_id,
                     defining_ast_id,
                 } => {
-                    if let Some(def_id) = defining_ast_id {
-                        self.record_reference(ident.id, def_id);
-                    }
+                    self.record_reference_opt(ident.id, defining_ast_id);
                     return TirExpr::new(
                         TirExprKind::Local {
                             index,
@@ -329,9 +327,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     type_id,
                     defining_ast_id,
                 } => {
-                    if let Some(def_id) = defining_ast_id {
-                        self.record_reference(ident.id, def_id);
-                    }
+                    self.record_reference_opt(ident.id, defining_ast_id);
                     return TirExpr::new(
                         TirExprKind::Capture {
                             index,
@@ -347,9 +343,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     inner_type_id,
                     defining_ast_id,
                 } => {
-                    if let Some(def_id) = defining_ast_id {
-                        self.record_reference(ident.id, def_id);
-                    }
+                    self.record_reference_opt(ident.id, defining_ast_id);
                     // Deref capture: `*self.__capture_N` where the field holds `&mut T`
                     let capture_expr = TirExpr::new(
                         TirExprKind::Capture {
@@ -392,18 +386,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .find(|(_, c)| c.name == suffix)
                     .map(|(i, c)| (i, c.clone()))
                 {
-                    // Record use->def for path segments.
-                    // - segments[0] (prefix) -> variant type decl in current module
-                    // - segments[1] (suffix) -> case decl's AstId in owning module
-                    if let Some(prefix_seg) = ident.segments.first() {
-                        self.record_item_reference_by_name(prefix_seg.id, prefix);
-                    }
-                    if let Some(suffix_seg) = ident.segments.get(1) {
-                        self.record_reference_to_key(
-                            suffix_seg.id,
-                            SymbolKey::new(variant_info.module_source.clone(), case_data.ast_id),
-                        );
-                    }
+                    self.record_qualified_case(
+                        ident,
+                        prefix,
+                        &variant_info.module_source,
+                        case_data.ast_id,
+                    );
                     // Unit variant - payload must be unit type
                     let payload_is_unit = matches!(
                         self.type_table.borrow().get(case_data.payload),
@@ -451,15 +439,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
             if let Some(enum_info) = self.enum_cases.get(prefix).cloned()
                 && let Some(case_data) = enum_info.find_case(suffix).cloned()
             {
-                if let Some(prefix_seg) = ident.segments.first() {
-                    self.record_item_reference_by_name(prefix_seg.id, prefix);
-                }
-                if let Some(suffix_seg) = ident.segments.get(1) {
-                    self.record_reference_to_key(
-                        suffix_seg.id,
-                        SymbolKey::new(enum_info.module_source.clone(), case_data.ast_id),
-                    );
-                }
+                self.record_qualified_case(
+                    ident,
+                    prefix,
+                    &enum_info.module_source,
+                    case_data.ast_id,
+                );
                 // Use canonical name (not import alias) for consistent TypeId interning
                 let enum_type = self
                     .type_table
@@ -486,15 +471,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .find(|m| m.name == suffix)
                     .cloned()
             {
-                if let Some(prefix_seg) = ident.segments.first() {
-                    self.record_item_reference_by_name(prefix_seg.id, prefix);
-                }
-                if let Some(suffix_seg) = ident.segments.get(1) {
-                    self.record_reference_to_key(
-                        suffix_seg.id,
-                        SymbolKey::new(flags_info.module_source.clone(), member.ast_id),
-                    );
-                }
+                self.record_qualified_case(ident, prefix, &flags_info.module_source, member.ast_id);
                 return TirExpr::new(
                     TirExprKind::IntLiteral {
                         value: u64::from(member.bitmask),
@@ -527,12 +504,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         .find(|(_, c)| c.name == case_name)
                         .map(|(i, c)| (i, c.clone()))
                 {
-                    if let Some(seg) = ident.segments.get(2) {
-                        self.record_reference_to_key(
-                            seg.id,
-                            SymbolKey::new(variant_info.module_source.clone(), case_data.ast_id),
-                        );
-                    }
+                    self.record_namespaced_case(
+                        ident,
+                        &variant_info.module_source,
+                        case_data.ast_id,
+                    );
                     let payload_is_unit = matches!(
                         self.type_table.borrow().get(case_data.payload),
                         ResolvedType::Unit
@@ -580,12 +556,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 if let Some(enum_info) = ns_enum
                     && let Some(case_data) = enum_info.find_case(case_name).cloned()
                 {
-                    if let Some(seg) = ident.segments.get(2) {
-                        self.record_reference_to_key(
-                            seg.id,
-                            SymbolKey::new(enum_info.module_source.clone(), case_data.ast_id),
-                        );
-                    }
+                    self.record_namespaced_case(ident, &enum_info.module_source, case_data.ast_id);
                     let enum_type = self
                         .type_table
                         .borrow_mut()
@@ -614,12 +585,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         .find(|m| m.name == case_name)
                         .cloned()
                 {
-                    if let Some(seg) = ident.segments.get(2) {
-                        self.record_reference_to_key(
-                            seg.id,
-                            SymbolKey::new(flags_info.module_source.clone(), member.ast_id),
-                        );
-                    }
+                    self.record_namespaced_case(ident, &flags_info.module_source, member.ast_id);
                     return TirExpr::new(
                         TirExprKind::IntLiteral {
                             value: u64::from(member.bitmask),

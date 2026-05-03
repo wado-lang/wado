@@ -523,19 +523,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
                         // Find the case by name
                         if let Some((case_index, case_data)) = case_match {
-                            // Record use->def for the path segments.
-                            if let Some(prefix_seg) = ident.segments.first() {
-                                self.record_item_reference_by_name(prefix_seg.id, &prefix_owned);
-                            }
-                            if let Some(suffix_seg) = ident.segments.get(1) {
-                                self.record_reference_to_key(
-                                    suffix_seg.id,
-                                    SymbolKey::new(
-                                        variant_info.module_source.clone(),
-                                        case_data.ast_id,
-                                    ),
-                                );
-                            }
+                            self.record_qualified_case(
+                                ident,
+                                &prefix_owned,
+                                &variant_info.module_source,
+                                case_data.ast_id,
+                            );
                             // Each variant case has exactly one payload.
                             // Unit variants expect 0 args, non-unit variants expect 1 arg.
                             let payload_is_unit = matches!(
@@ -666,15 +659,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                     .find(|(_, c)| c.name == method_name)
                                     .map(|(i, c)| (i, c.clone()));
                                 if let Some((case_index, case_data)) = case_match {
-                                    if let Some(seg) = ident.segments.get(2) {
-                                        self.record_reference_to_key(
-                                            seg.id,
-                                            SymbolKey::new(
-                                                variant_info.module_source.clone(),
-                                                case_data.ast_id,
-                                            ),
-                                        );
-                                    }
+                                    self.record_namespaced_case(
+                                        ident,
+                                        &variant_info.module_source,
+                                        case_data.ast_id,
+                                    );
                                     let payload_is_unit = matches!(
                                         self.type_table.borrow().get(case_data.payload),
                                         ResolvedType::Unit

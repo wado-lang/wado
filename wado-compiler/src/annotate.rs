@@ -11,7 +11,8 @@
 //! skips it.
 
 use crate::analyze::Analyzer;
-use crate::ast::{AstId, Item, Module};
+use crate::ast::{AstId, Module};
+use crate::ast_index::AstIndex;
 use crate::compiler_host::{CompilerHost, LogLevel};
 use crate::hashmap::IndexMap;
 use crate::loader;
@@ -38,6 +39,11 @@ pub struct Annotated {
     pub modules: IndexMap<ModuleSource, Module>,
     pub symbols: SymbolTable,
     pub types: TypeTable,
+    /// Per-module structural index (name spans, write targets, span lookup).
+    /// Built once per [`Module`] in [`annotate_loaded`]. LSP queries (and
+    /// the in-tree [`name_span_of`] / [`span_of_key`] helpers) consult this
+    /// instead of re-walking the AST on every request.
+    pub(crate) ast_indices: IndexMap<ModuleSource, AstIndex>,
     pub(crate) state: AnnotateState,
     /// Use→def map populated by the real resolver as it walks function
     /// bodies in `lower_tir_from_state`. Maps `(module, IdentExpr.id)` to
@@ -157,7 +163,10 @@ impl Annotated {
     /// highlight ranges from use sites.
     #[must_use]
     pub fn span_of_key(&self, key: &SymbolKey) -> Option<Span> {
-        self.modules.get(&key.module)?.span_of_ast_id(key.ast_id)
+        let index = self.ast_indices.get(&key.module)?;
+        index
+            .span_of(key.ast_id)
+            .or_else(|| self.modules.get(&key.module)?.span_of_ast_id(key.ast_id))
     }
 
     /// Span of the defining identifier for the symbol at `key`.
@@ -165,510 +174,121 @@ impl Annotated {
     /// The `Symbol::span` field covers the whole declaring item — e.g. the
     /// entire `fn foo() { ... }` block. LSP go-to-definition wants the
     /// identifier alone (`foo`), which is carried on the AST item as
-    /// `name_span`. This walks the defining module's items, finds the one
-    /// with matching `AstId`, and returns its `name_span` when the item has
-    /// one. Returns `None` for items that do not expose a name span (e.g.
-    /// anonymous `impl` blocks, tests).
+    /// `name_span`. The lookup goes through the per-module
+    /// [`AstIndex`](crate::ast_index::AstIndex), which is populated for every
+    /// declaration node that exposes a `name_span` field. Returns `None` for
+    /// nodes without a dedicated name span (e.g. anonymous `impl` blocks,
+    /// `Item::Resource`, tests).
     #[must_use]
     pub fn name_span_of(&self, key: &SymbolKey) -> Option<Span> {
-        let module = self.modules.get(&key.module)?;
-        name_span_in_module(module, key.ast_id)
+        self.ast_indices.get(&key.module)?.name_span_of(key.ast_id)
+    }
+
+    /// True iff `key` names an `IdentExpr` that appears as the direct
+    /// LHS of `=` or a compound-assign in its declaring module. Used by
+    /// document-highlight to classify a use-site as Read vs. Write without
+    /// re-walking the body.
+    #[must_use]
+    pub fn is_write_target(&self, key: &SymbolKey) -> bool {
+        self.ast_indices
+            .get(&key.module)
+            .is_some_and(|idx| idx.is_write_target(key.ast_id))
+    }
+
+    /// Resolve a 1-based `(line, column)` position to a [`Cursor`] over
+    /// `module`. Returns `None` when the module is unknown or no id-bearing
+    /// AST node covers the position.
+    ///
+    /// The returned cursor is *positional* — it always carries the AST id
+    /// at the cursor, even if that id is not on a name. Use
+    /// [`Cursor::def_key`] to filter to "cursor lands on a recognised
+    /// name".
+    #[must_use]
+    pub fn cursor_at(
+        &self,
+        module: &ModuleSource,
+        line: usize,
+        column: usize,
+    ) -> Option<Cursor<'_>> {
+        let ast_id = self.ast_id_at(module, line, column)?;
+        Some(Cursor {
+            annotated: self,
+            key: SymbolKey::new(module.clone(), ast_id),
+        })
     }
 }
 
-fn name_span_in_module(module: &Module, ast_id: AstId) -> Option<Span> {
-    for item in &module.items {
-        if let Some(span) = name_span_of_item(item, ast_id) {
-            return Some(span);
-        }
-        if let Some(span) = name_span_of_binding_in_item(item, ast_id) {
-            return Some(span);
-        }
-    }
-    None
+/// A positional handle into [`Annotated`].
+///
+/// Captures the cursor's AST id and module so call sites can chain
+/// `def_key()`, `def_symbol()`, `references_to_def()`, etc. instead of
+/// threading the same `(annotated, module, line, col)` tuple through every
+/// query helper. Constructed via [`Annotated::cursor_at`].
+pub struct Cursor<'a> {
+    annotated: &'a Annotated,
+    key: SymbolKey,
 }
 
-fn name_span_of_binding_in_item(item: &Item, target: AstId) -> Option<Span> {
-    use crate::ast::{Block, Expr, MatchExpr, Pattern, Stmt};
-
-    fn scan_pattern(pattern: &Pattern, target: AstId) -> Option<Span> {
-        match pattern {
-            Pattern::Ident { id, span, .. } | Pattern::MutIdent { id, span, .. } => {
-                if *id == target { Some(*span) } else { None }
-            }
-            Pattern::Tuple(ps, _) | Pattern::Or(ps) => {
-                ps.iter().find_map(|p| scan_pattern(p, target))
-            }
-            Pattern::Struct { fields, .. } => {
-                fields.iter().find_map(|f| scan_pattern(&f.pattern, target))
-            }
-            Pattern::Variant { bindings, .. } => {
-                bindings.iter().find_map(|p| scan_pattern(p, target))
-            }
-            _ => None,
-        }
+impl<'a> Cursor<'a> {
+    /// Module the cursor is positioned in.
+    #[must_use]
+    pub fn module(&self) -> &ModuleSource {
+        &self.key.module
     }
 
-    fn scan_block(block: &Block, target: AstId) -> Option<Span> {
-        for stmt in &block.stmts {
-            if let Some(span) = scan_stmt(stmt, target) {
-                return Some(span);
-            }
+    /// `(module, ast_id)` of the AST node at the cursor.
+    #[must_use]
+    pub fn key(&self) -> &SymbolKey {
+        &self.key
+    }
+
+    /// Source span of the AST node at the cursor, if available.
+    #[must_use]
+    pub fn span(&self) -> Option<Span> {
+        self.annotated.span_of_key(&self.key)
+    }
+
+    /// `SymbolKey` of the binding the cursor names, following the use→def
+    /// edge when present. Returns `None` when the cursor does not land on a
+    /// recognised name (e.g. on punctuation, on an expression body, on a
+    /// numeric literal).
+    #[must_use]
+    pub fn def_key(&self) -> Option<SymbolKey> {
+        if let Some(def) = self.annotated.referenced_symbol(&self.key) {
+            return Some(def);
+        }
+        if self.annotated.symbol_at(&self.key).is_some() {
+            return Some(self.key.clone());
         }
         None
     }
 
-    fn scan_stmt(stmt: &Stmt, target: AstId) -> Option<Span> {
-        match stmt {
-            Stmt::Let(s) => {
-                if let Some(span) = scan_pattern(&s.pattern, target) {
-                    return Some(span);
-                }
-                if let Some(v) = &s.value
-                    && let Some(span) = scan_expr(v, target)
-                {
-                    return Some(span);
-                }
-            }
-            Stmt::Expr(s) => return scan_expr(&s.expr, target),
-            Stmt::Return(s) => {
-                if let Some(v) = &s.value {
-                    return scan_expr(v, target);
-                }
-            }
-            Stmt::TaskReturn(s) => return scan_expr(&s.value, target),
-            Stmt::If(s) => {
-                if let Some(span) = scan_condition(&s.condition, target) {
-                    return Some(span);
-                }
-                if let Some(span) = scan_block(&s.then_block, target) {
-                    return Some(span);
-                }
-                if let Some(eb) = &s.else_block {
-                    return scan_block(eb, target);
-                }
-            }
-            Stmt::While(s) => {
-                if let Some(span) = scan_condition(&s.condition, target) {
-                    return Some(span);
-                }
-                return scan_block(&s.body, target);
-            }
-            Stmt::For(s) => {
-                if let Some(init) = &s.init
-                    && let Some(span) = scan_stmt(init, target)
-                {
-                    return Some(span);
-                }
-                if let Some(cond) = &s.condition
-                    && let Some(span) = scan_condition(cond, target)
-                {
-                    return Some(span);
-                }
-                if let Some(u) = &s.update
-                    && let Some(span) = scan_expr(u, target)
-                {
-                    return Some(span);
-                }
-                return scan_block(&s.body, target);
-            }
-            Stmt::ForOf(s) => {
-                if let Some(span) = scan_pattern(&s.binding, target) {
-                    return Some(span);
-                }
-                if let Some(span) = scan_expr(&s.iterable, target) {
-                    return Some(span);
-                }
-                return scan_block(&s.body, target);
-            }
-            Stmt::Loop(s) => return scan_block(&s.body, target),
-            Stmt::Match(m) => return scan_match(m, target),
-            Stmt::Break(s) => {
-                if let Some(v) = &s.value {
-                    return scan_expr(v, target);
-                }
-            }
-            Stmt::Continue(_) => {}
-            Stmt::Assert(s) => {
-                if let Some(span) = scan_expr(&s.condition, target) {
-                    return Some(span);
-                }
-                if let Some(msg) = &s.message {
-                    return scan_expr(msg, target);
-                }
-            }
-            Stmt::LabeledBlock(s) => return scan_block(&s.block, target),
-        }
-        None
+    /// Symbol named by the cursor, after chasing the use→def edge.
+    #[must_use]
+    pub fn def_symbol(&self) -> Option<&'a Symbol> {
+        let def_key = self.def_key()?;
+        self.annotated.symbol_at(&def_key)
     }
 
-    fn scan_condition(cond: &crate::ast::Condition, target: AstId) -> Option<Span> {
-        use crate::ast::{Condition, ConditionElement};
-        match cond {
-            Condition::Expr(e) => scan_expr(e, target),
-            Condition::LetChain { elements, .. } => {
-                for el in elements {
-                    match el {
-                        ConditionElement::Let { pattern, expr, .. } => {
-                            if let Some(span) = scan_pattern(pattern, target) {
-                                return Some(span);
-                            }
-                            if let Some(span) = scan_expr(expr, target) {
-                                return Some(span);
-                            }
-                        }
-                        ConditionElement::Expr(e) => {
-                            if let Some(span) = scan_expr(e, target) {
-                                return Some(span);
-                            }
-                        }
-                    }
-                }
-                None
-            }
-        }
+    /// Identifier-only span of the binding the cursor names (the
+    /// `name_span` of the declaration). Returns `None` if the cursor does
+    /// not name a known binding or the binding has no narrow name span
+    /// (e.g. anonymous `impl` blocks).
+    #[must_use]
+    pub fn def_name_span(&self) -> Option<Span> {
+        let def_key = self.def_key()?;
+        self.annotated.name_span_of(&def_key)
     }
 
-    fn scan_match(m: &MatchExpr, target: AstId) -> Option<Span> {
-        if let Some(span) = scan_expr(&m.expr, target) {
-            return Some(span);
-        }
-        for arm in &m.arms {
-            if let Some(span) = scan_pattern(&arm.pattern, target) {
-                return Some(span);
-            }
-            if let Some(guard) = &arm.guard
-                && let Some(span) = scan_expr(guard, target)
-            {
-                return Some(span);
-            }
-            if let Some(span) = scan_expr(&arm.body, target) {
-                return Some(span);
-            }
-        }
-        None
-    }
-
-    fn scan_expr(expr: &Expr, target: AstId) -> Option<Span> {
-        match expr {
-            Expr::Ident(_) | Expr::Literal(_) => None,
-            Expr::Binary(e) => scan_expr(&e.left, target).or_else(|| scan_expr(&e.right, target)),
-            Expr::Unary(e) => scan_expr(&e.expr, target),
-            Expr::Assign(e) => scan_expr(&e.target, target).or_else(|| scan_expr(&e.value, target)),
-            Expr::CompoundAssign(e) => {
-                scan_expr(&e.target, target).or_else(|| scan_expr(&e.value, target))
-            }
-            Expr::ComparisonChain(e) => {
-                if let Some(span) = scan_expr(&e.first, target) {
-                    return Some(span);
-                }
-                for c in &e.comparisons {
-                    if let Some(span) = scan_expr(&c.right, target) {
-                        return Some(span);
-                    }
-                }
-                None
-            }
-            Expr::Call(e) => {
-                if let Some(span) = scan_expr(&e.callee, target) {
-                    return Some(span);
-                }
-                for a in &e.args {
-                    if let Some(span) = scan_expr(a, target) {
-                        return Some(span);
-                    }
-                }
-                None
-            }
-            Expr::MethodCall(e) => {
-                if let Some(span) = scan_expr(&e.receiver, target) {
-                    return Some(span);
-                }
-                for a in &e.args {
-                    if let Some(span) = scan_expr(a, target) {
-                        return Some(span);
-                    }
-                }
-                None
-            }
-            Expr::StaticMethodCall(e) => {
-                for a in &e.args {
-                    if let Some(span) = scan_expr(a, target) {
-                        return Some(span);
-                    }
-                }
-                None
-            }
-            Expr::FieldAccess(e) => scan_expr(&e.expr, target),
-            Expr::Index(e) => scan_expr(&e.expr, target).or_else(|| scan_expr(&e.index, target)),
-            Expr::Block(b) => scan_block(b, target),
-            Expr::If(e) => {
-                if let Some(span) = scan_condition(&e.condition, target) {
-                    return Some(span);
-                }
-                if let Some(span) = scan_block(&e.then_block, target) {
-                    return Some(span);
-                }
-                if let Some(eb) = &e.else_block {
-                    return scan_block(eb, target);
-                }
-                None
-            }
-            Expr::Match(m) => scan_match(m, target),
-            Expr::Matches(m) => {
-                if let Some(span) = scan_expr(&m.expr, target) {
-                    return Some(span);
-                }
-                if let Some(span) = scan_pattern(&m.pattern, target) {
-                    return Some(span);
-                }
-                if let Some(g) = &m.guard {
-                    return scan_expr(g, target);
-                }
-                None
-            }
-            Expr::Closure(c) => {
-                for p in &c.params {
-                    if p.id == target {
-                        return Some(p.name_span);
-                    }
-                }
-                scan_expr(&c.body, target)
-            }
-            Expr::TemplateString(t) => {
-                for part in &t.parts {
-                    if let crate::ast::TemplatePart::Interpolation { expr, .. } = part
-                        && let Some(span) = scan_expr(expr, target)
-                    {
-                        return Some(span);
-                    }
-                }
-                None
-            }
-            Expr::Cast(c) => scan_expr(&c.expr, target),
-            Expr::StructLiteral(s) => {
-                for field in &s.fields {
-                    if let Some(span) = scan_expr(&field.value, target) {
-                        return Some(span);
-                    }
-                }
-                None
-            }
-            Expr::TupleLiteral(t) => {
-                for el in &t.elements {
-                    if let Some(span) = scan_expr(el, target) {
-                        return Some(span);
-                    }
-                }
-                None
-            }
-            Expr::LabeledBlock(lb) => scan_block(&lb.block, target),
-            Expr::TryOp(t) => scan_expr(&t.expr, target),
-            Expr::Spread(inner, _) => scan_expr(inner, target),
-            Expr::Range(r) => scan_expr(&r.start, target).or_else(|| scan_expr(&r.end, target)),
-            Expr::WithHandler(w) => {
-                for binding in &w.handlers {
-                    if binding.id == target
-                        && let Some(effect) = &binding.effect
-                    {
-                        return Some(effect.span());
-                    }
-                    if let Some(span) = scan_expr(&binding.handler, target) {
-                        return Some(span);
-                    }
-                }
-                scan_block(&w.body, target)
-            }
-            Expr::Resume(r) => scan_expr(&r.value, target),
+    /// Every use-site `SymbolKey` for the binding the cursor names.
+    /// Returns an empty `Vec` when the cursor does not name a known binding.
+    #[must_use]
+    pub fn references_to_def(&self) -> Vec<SymbolKey> {
+        match self.def_key() {
+            Some(key) => self.annotated.references_to(&key),
+            None => Vec::new(),
         }
     }
-
-    match item {
-        Item::Function(f) => {
-            for p in &f.params {
-                if p.id == target {
-                    return Some(p.name_span);
-                }
-            }
-            if let Some(body) = &f.body {
-                return scan_block(body, target);
-            }
-            None
-        }
-        Item::Impl(imp) => {
-            for m in &imp.methods {
-                for p in &m.params {
-                    if p.id == target {
-                        return Some(p.name_span);
-                    }
-                }
-                if let Some(body) = &m.body
-                    && let Some(span) = scan_block(body, target)
-                {
-                    return Some(span);
-                }
-            }
-            None
-        }
-        Item::Trait(t) => {
-            for m in &t.methods {
-                for p in &m.params {
-                    if p.id == target {
-                        return Some(p.name_span);
-                    }
-                }
-                if let Some(body) = &m.body
-                    && let Some(span) = scan_block(body, target)
-                {
-                    return Some(span);
-                }
-            }
-            None
-        }
-        Item::Test(t) => scan_block(&t.body, target),
-        Item::Global(g) => scan_expr(&g.initializer, target),
-        _ => None,
-    }
-}
-
-fn name_span_of_item(item: &Item, target: AstId) -> Option<Span> {
-    match item {
-        Item::Function(f) => {
-            if f.id == target {
-                return Some(f.name_span);
-            }
-            for tp in &f.type_params {
-                if tp.id == target {
-                    return Some(tp.name_span);
-                }
-            }
-        }
-        Item::Struct(s) => {
-            if s.id == target {
-                return Some(s.name_span);
-            }
-            for field in &s.fields {
-                if field.id == target {
-                    return Some(field.name_span);
-                }
-            }
-            for tp in &s.type_params {
-                if tp.id == target {
-                    return Some(tp.name_span);
-                }
-            }
-        }
-        Item::Enum(e) => {
-            if e.id == target {
-                return Some(e.name_span);
-            }
-            for case in &e.cases {
-                if case.id == target {
-                    return Some(case.name_span);
-                }
-            }
-        }
-        Item::Variant(v) => {
-            if v.id == target {
-                return Some(v.name_span);
-            }
-            for case in &v.cases {
-                if case.id == target {
-                    return Some(case.name_span);
-                }
-            }
-            for tp in &v.type_params {
-                if tp.id == target {
-                    return Some(tp.name_span);
-                }
-            }
-        }
-        Item::Flags(f) => {
-            if f.id == target {
-                return Some(f.name_span);
-            }
-            for flag in &f.flags {
-                if flag.id == target {
-                    return Some(flag.name_span);
-                }
-            }
-        }
-        Item::Trait(t) => {
-            if t.id == target {
-                return Some(t.name_span);
-            }
-            for method in &t.methods {
-                if method.id == target {
-                    return Some(method.name_span);
-                }
-                for tp in &method.type_params {
-                    if tp.id == target {
-                        return Some(tp.name_span);
-                    }
-                }
-            }
-            for tp in &t.type_params {
-                if tp.id == target {
-                    return Some(tp.name_span);
-                }
-            }
-        }
-        Item::Newtype(n) => {
-            if n.id == target {
-                return Some(n.name_span);
-            }
-            for tp in &n.type_params {
-                if tp.id == target {
-                    return Some(tp.name_span);
-                }
-            }
-        }
-        Item::Interface(e) => {
-            if e.id == target {
-                return Some(e.name_span);
-            }
-            for method in &e.methods {
-                if method.id == target {
-                    return Some(method.name_span);
-                }
-            }
-        }
-        Item::Resource(r) => {
-            if r.id == target {
-                // ResourceDecl has no dedicated name_span; fall back to the whole-decl span.
-                return Some(r.span);
-            }
-            for method in &r.methods {
-                if method.id == target {
-                    return Some(method.name_span);
-                }
-            }
-        }
-        Item::Global(g) => {
-            if g.id == target {
-                return Some(g.name_span);
-            }
-        }
-        Item::Impl(imp) => {
-            for method in &imp.methods {
-                if method.id == target {
-                    return Some(method.name_span);
-                }
-                for tp in &method.type_params {
-                    if tp.id == target {
-                        return Some(tp.name_span);
-                    }
-                }
-            }
-            for tp in &imp.type_params {
-                if tp.id == target {
-                    return Some(tp.name_span);
-                }
-            }
-        }
-        Item::World(_) | Item::Use(_) | Item::TupleTypeDecl(_) | Item::Test(_) => {}
-    }
-    None
 }
 
 /// Run parse → bind → desugar → load → analyze → resolve on `source` and
@@ -780,11 +400,24 @@ pub(crate) fn annotate_loaded<H: CompilerHost>(
     let references = std::mem::take(&mut *state.references.borrow_mut());
     let locals = std::mem::take(&mut *state.local_symbols.borrow_mut());
 
+    // Build per-module structural indices in one walk each. Cheap relative
+    // to the resolve/lower pass and lets LSP `name_span_of` /
+    // `is_write_target` answer in O(1).
+    let ast_indices = {
+        let _span = logger.span("ast_index");
+        let mut indices: IndexMap<ModuleSource, AstIndex> = IndexMap::default();
+        for (source, module) in &load_result.modules {
+            indices.insert(source.clone(), AstIndex::build(module));
+        }
+        indices
+    };
+
     Ok(Annotated {
         entry_module_source: load_result.entry_module_source,
         modules: load_result.modules,
         symbols,
         types,
+        ast_indices,
         state,
         references,
         locals,
