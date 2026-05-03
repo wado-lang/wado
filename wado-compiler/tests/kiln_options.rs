@@ -15,7 +15,9 @@ fn block_on<F: std::future::Future>(future: F) -> F::Output {
 
 fn entry() -> ModuleSource {
     ModuleSource::EntryPoint {
-        filename: "entry.wado".to_string(),
+        filename: wado_compiler::name::InternedStr::from_string_uncanonicalized(
+            "entry.wado".to_string(),
+        ),
     }
 }
 

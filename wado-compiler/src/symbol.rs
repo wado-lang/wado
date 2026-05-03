@@ -527,7 +527,8 @@ mod tests {
     fn test_struct_aliases() {
         let mut table = SymbolTable::new();
 
-        let geometry = ModuleSource::local("./geometry.wado");
+        let mut interner = crate::name::ModuleSourceInterner::new();
+        let geometry = interner.local("./geometry.wado");
 
         let key = table.define(
             &geometry,
@@ -552,7 +553,8 @@ mod tests {
     fn test_struct_aliases_same_name() {
         let mut table = SymbolTable::new();
 
-        let geometry = ModuleSource::local("./geometry.wado");
+        let mut interner = crate::name::ModuleSourceInterner::new();
+        let geometry = interner.local("./geometry.wado");
 
         let key = table.define(
             &geometry,

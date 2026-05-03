@@ -3453,7 +3453,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .borrow()
                     .range_exclusive_module_source
                     .clone()
-                    .unwrap_or_else(|| ModuleSource::core("prelude/range"));
+                    .unwrap_or_else(|| ModuleSource::range());
                 let fields = vec![
                     TirStructField {
                         name: "start".to_string(),
@@ -3474,7 +3474,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .borrow()
                     .range_inclusive_module_source
                     .clone()
-                    .unwrap_or_else(|| ModuleSource::core("prelude/range"));
+                    .unwrap_or_else(|| ModuleSource::range());
                 let fields = vec![
                     TirStructField {
                         name: "start".to_string(),

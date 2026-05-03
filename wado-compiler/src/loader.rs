@@ -187,8 +187,14 @@ impl From<LoadError> for crate::compiler_host::Diagnostic {
 impl From<SourceError> for LoadError {
     fn from(err: SourceError) -> Self {
         match err {
+            // Error path: the `module_source` here is only consumed by
+            // `Display` / `Diagnostic::from`. We deliberately use an
+            // uncanonicalized `InternedStr` because no interner is
+            // reachable from `From::from`.
             SourceError::NotFound { path } => LoadError::ModuleNotFound {
-                module_source: ModuleSource::Local { path },
+                module_source: ModuleSource::Local {
+                    path: crate::name::InternedStr::from_string_uncanonicalized(path),
+                },
             },
             SourceError::IoError { path, message } => LoadError::IoError { path, message },
             SourceError::NetworkError { url, message } => LoadError::IoError { path: url, message },
@@ -269,6 +275,11 @@ pub struct LoadResult {
     /// (analyze, resolver) can also rewrite `use ... from "<schema>"`
     /// clauses consistently.
     pub invocations: crate::kiln::InvocationIndex,
+    /// `ModuleSource` interner created during loading. Downstream phases
+    /// (analyze / resolver / synthesis / monomorphize) borrow this to
+    /// canonicalize any `ModuleSource` they construct so that ptr-eq
+    /// remains a valid identity check across phases.
+    pub interner: crate::name::ModuleSourceInterner,
 }
 
 use crate::compiler_host::LogLevel;
@@ -764,12 +775,15 @@ fn parse_bind_desugar_stdlib(label: &str, source: &str) -> Module {
 /// [`stdlib::get_stdlib_module`]) is a stdlib bug — it panics rather than
 /// silently degrading to `EntryPoint`, since the LSP would then see the
 /// duplicate-definition cascade we introduced this attribute to suppress.
-fn parse_stdlib_identity_attribute(module: &Module) -> Option<ModuleSource> {
+fn parse_stdlib_identity_attribute(
+    interner: &mut crate::name::ModuleSourceInterner,
+    module: &Module,
+) -> Option<ModuleSource> {
     let path = module.stdlib_identity()?;
     let resolved = if let Some(name) = path.strip_prefix("core:") {
-        ModuleSource::core(name)
+        interner.core(name)
     } else if let Some(interface) = path.strip_prefix("wasi:") {
-        ModuleSource::wasi(interface)
+        interner.wasi(interface)
     } else {
         panic!(
             "#![stdlib({path:?})] must use a `core:` or `wasi:` prefix; \
@@ -801,9 +815,11 @@ mod tests {
     #[test]
     fn stdlib_identity_attribute_resolves_to_core_module_source() {
         let module = parse_test_module("#![no_prelude]\n#![stdlib(\"core:prelude/types.wado\")]\n");
+        let mut interner = crate::name::ModuleSourceInterner::new();
+        let want = interner.core("prelude/types.wado");
         assert_eq!(
-            parse_stdlib_identity_attribute(&module),
-            Some(ModuleSource::core("prelude/types.wado"))
+            parse_stdlib_identity_attribute(&mut interner, &module),
+            Some(want)
         );
     }
 }
@@ -811,10 +827,18 @@ mod tests {
 /// Cached desugared AST modules for all stdlib modules (core + WASI).
 ///
 /// Each module is parsed, bound, and desugared exactly once per process.
-fn cached_stdlib() -> &'static IndexMap<ModuleSource, Module> {
+///
+/// Keyed by the canonical display form (`"core:foo"`, `"wasi:bar/baz.wado"`)
+/// rather than by `ModuleSource` value. The cache is process-global, but
+/// every `ModuleLoader` instance creates `ModuleSource` keys through its
+/// own private interner — using string keys here keeps the cache lookup
+/// content-addressed and avoids forcing the cache to share an interner
+/// with every loader. See [`stdlib_cache_key`] for how callers compute
+/// the lookup string from a `ModuleSource`.
+fn cached_stdlib() -> &'static IndexMap<String, Module> {
     use std::sync::OnceLock;
 
-    static CACHE: OnceLock<IndexMap<ModuleSource, Module>> = OnceLock::new();
+    static CACHE: OnceLock<IndexMap<String, Module>> = OnceLock::new();
     CACHE.get_or_init(|| {
         let core_modules: &[(&str, &str)] = &[
             ("allocator", stdlib::CORE_ALLOCATOR),
@@ -847,28 +871,31 @@ fn cached_stdlib() -> &'static IndexMap<ModuleSource, Module> {
         let mut cache = IndexMap::with_capacity_and_hasher(total_count, FxBuildHasher);
 
         for &(name, source) in core_modules {
-            let module_source = ModuleSource::Core {
-                name: name.to_string(),
-            };
-            cache.insert(
-                module_source,
-                parse_bind_desugar_stdlib(&format!("core:{name}"), source),
-            );
+            let import_path = format!("core:{name}");
+            let module = parse_bind_desugar_stdlib(&import_path, source);
+            cache.insert(import_path, module);
         }
 
         for &(import_path, source) in stdlib::ALL_WASI_MODULES {
-            let interface = import_path.strip_prefix("wasi:").unwrap();
-            let module_source = ModuleSource::Wasi {
-                interface: interface.to_string(),
-            };
             cache.insert(
-                module_source,
+                import_path.to_string(),
                 parse_bind_desugar_stdlib(import_path, source),
             );
         }
 
         cache
     })
+}
+
+/// Compute the cache key string used by [`cached_stdlib`] for a
+/// `ModuleSource`. Returns `None` for variants that the stdlib cache
+/// never holds (Local / Remote / EntryPoint / Redirected / Wasm).
+fn stdlib_cache_key(ms: &ModuleSource) -> Option<String> {
+    match ms {
+        ModuleSource::Core { name } => Some(format!("core:{name}")),
+        ModuleSource::Wasi { interface } => Some(format!("wasi:{interface}")),
+        _ => None,
+    }
 }
 
 pub struct ModuleLoader<'a, H: CompilerHost> {
@@ -878,6 +905,10 @@ pub struct ModuleLoader<'a, H: CompilerHost> {
     log_level: LogLevel,
     /// Logger for timing spans and diagnostics
     logger: Logger<'a, H>,
+    /// Interner for `ModuleSource` payloads. Owned by the loader so that
+    /// every loader-produced module identity goes through the same pool.
+    /// Re-exported from [`LoadResult`] for downstream phases.
+    interner: crate::name::ModuleSourceInterner,
     /// Cache of already parsed modules
     loaded: IndexMap<ModuleSource, Module>,
     /// Set of modules currently being loaded (for cycle detection during collection)
@@ -911,6 +942,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             host,
             log_level,
             logger: Logger::new(host, log_level),
+            interner: crate::name::ModuleSourceInterner::new(),
             loaded: IndexMap::default(),
             loading: IndexSet::default(),
             implicit_modules: IndexSet::default(),
@@ -921,6 +953,13 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             entry_canonical_name: None,
             invocations: crate::kiln::InvocationIndex::new(),
         }
+    }
+
+    /// Borrow the loader's interner mutably. Used by downstream phases
+    /// (analyze / resolve / synthesis) when they need to construct
+    /// fresh `ModuleSource` values during loader-driven processing.
+    pub fn interner_mut(&mut self) -> &mut crate::name::ModuleSourceInterner {
+        &mut self.interner
     }
 
     /// Seed the loader with a Kiln invocation index. Must be called before
@@ -948,7 +987,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         // Parse, bind, and desugar entry module
         // Use "<stdin>" as synthetic filename when no filename is provided (e.g., REPL, embedded code)
         let resolved_filename = entry_filename.unwrap_or("<stdin>");
-        let tentative_entry_source = ModuleSource::entry_point_with_filename(resolved_filename);
+        let tentative_entry_source = self.interner.entry_point(resolved_filename);
 
         // Parse first; the parser only needs `module_source` for error
         // reporting, so a tentative `EntryPoint` is fine. After parsing we
@@ -961,7 +1000,8 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         };
 
         let entry_module_source =
-            parse_stdlib_identity_attribute(&entry_ast).unwrap_or(tentative_entry_source);
+            parse_stdlib_identity_attribute(&mut self.interner, &entry_ast)
+                .unwrap_or(tentative_entry_source);
         self.entry_module_source = Some(entry_module_source.clone());
         self.entry_canonical_name = Some(crate::name::canonicalize_entry_point(resolved_filename));
 
@@ -1011,9 +1051,13 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             let mod_name = module_source.to_string();
 
             // Use cached desugared module for core stdlib
-            if let Some(cached) = core_cache.get(&module_source) {
-                let _span = self.logger.span(&format!("load {mod_name} (cached)"));
+            if let Some(cached) =
+                stdlib_cache_key(&module_source).and_then(|k| core_cache.get(&k))
+            {
+                let span_name = format!("load {mod_name} (cached)");
+                self.logger.span_start(&span_name);
                 self.collect_imports(cached, &module_source, &mut pending, &mut wasm_imports)?;
+                self.logger.span_end(&span_name);
                 self.loaded.insert(module_source, cached.clone());
                 continue;
             }
@@ -1076,6 +1120,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             included_files,
             wasm_assets: self.wasm_assets,
             invocations: self.invocations,
+            interner: self.interner,
         })
     }
 
@@ -1086,7 +1131,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
     /// accumulated into a side-channel `wasm_imports_out` so the caller
     /// can run their async loading after this synchronous walk.
     fn collect_imports(
-        &self,
+        &mut self,
         module: &Module,
         from_module_source: &ModuleSource,
         pending: &mut VecDeque<(ModuleSource, ModuleSource)>,
@@ -1127,10 +1172,8 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         kind: WasmAssetKind,
         use_decl: &crate::ast::UseDecl,
     ) -> Result<(), LoadError> {
-        let source = ModuleSource::wasm(
-            resolve_wasm_asset_path(from_module_source, &use_decl.source)?,
-            kind,
-        );
+        let path = resolve_wasm_asset_path(from_module_source, &use_decl.source)?;
+        let source = self.interner.wasm(&path, kind);
 
         let _ = use_decl; // accepted for both wildcard and named forms; the
         // named form's items are resolved against the synthesized Wado
@@ -1227,7 +1270,9 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                 continue;
             }
 
-            if let Some(cached) = cache.get(&module_source) {
+            if let Some(cached) =
+                stdlib_cache_key(&module_source).and_then(|k| cache.get(&k))
+            {
                 // Load transitive dependencies from cache
                 let mut pending = VecDeque::new();
                 let mut wasm_imports = Vec::new();
@@ -1242,7 +1287,9 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                     if self.loaded.contains_key(&dep_ms) {
                         continue;
                     }
-                    if let Some(dep_cached) = cache.get(&dep_ms) {
+                    if let Some(dep_cached) =
+                        stdlib_cache_key(&dep_ms).and_then(|k| cache.get(&k))
+                    {
                         let _ = self.collect_imports(
                             dep_cached,
                             &dep_ms,
@@ -1284,9 +1331,9 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
     ) {
         use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
         let file = match from_module_source {
-            ModuleSource::Local { path } => path.clone(),
-            ModuleSource::EntryPoint { filename } => filename.clone(),
-            ModuleSource::Redirected { uri } => uri.clone(),
+            ModuleSource::Local { path } => path.to_string(),
+            ModuleSource::EntryPoint { filename } => filename.to_string(),
+            ModuleSource::Redirected { uri } => uri.to_string(),
             _ => String::new(),
         };
         self.host.emit_diagnostic(Diagnostic {
@@ -1306,7 +1353,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
 
     /// Resolve an import source relative to the importing module
     fn resolve_import(
-        &self,
+        &mut self,
         from_module_source: &ModuleSource,
         import_source: &str,
     ) -> Result<ModuleSource, LoadError> {
@@ -1325,9 +1372,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             if !decl_file.is_empty()
                 && let Some(entry_uri) = self.invocations.redirect(decl_file, import_source)
             {
-                return Ok(ModuleSource::Redirected {
-                    uri: entry_uri.to_string(),
-                });
+                return Ok(self.interner.redirected(&entry_uri));
             }
         }
 
@@ -1335,21 +1380,15 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         // Top-level: "core:cli" → Core { name: "cli" }
         // Sub-module: "core:prelude/traits.wado" → Core { name: "prelude/traits.wado" }
         if let Some(name) = import_source.strip_prefix("core:") {
-            return Ok(ModuleSource::Core {
-                name: name.to_string(),
-            });
+            return Ok(self.interner.core(name));
         }
         if let Some(interface) = import_source.strip_prefix("wasi:") {
-            return Ok(ModuleSource::Wasi {
-                interface: interface.to_string(),
-            });
+            return Ok(self.interner.wasi(interface));
         }
 
         // Handle remote modules (http:// or https://)
         if import_source.starts_with("https://") || import_source.starts_with("http://") {
-            return Ok(ModuleSource::Remote {
-                url: import_source.to_string(),
-            });
+            return Ok(self.interner.remote(import_source));
         }
 
         // Handle local modules (./ or ../)
@@ -1365,15 +1404,15 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                 {
                     return Ok(entry_ms.clone());
                 }
-                return Ok(ModuleSource::Local { path: resolved });
+                return Ok(self.interner.local(&resolved));
             }
             if let ModuleSource::Remote { url: from_url } = from_module_source {
                 let resolved = resolve_module_path(from_url, import_source);
-                return Ok(ModuleSource::Remote { url: resolved });
+                return Ok(self.interner.remote(&resolved));
             }
             // Entry point or stdlib: treat as relative to project root
             let canonical = normalize_module_path(import_source);
-            return Ok(ModuleSource::Local { path: canonical });
+            return Ok(self.interner.local(&canonical));
         }
 
         // Check for unknown namespace pattern (xxx:yyy)
@@ -1407,14 +1446,14 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             ModuleSource::Local { path } => {
                 let bytes = self.host.load_source(path).await.map_err(LoadError::from)?;
                 String::from_utf8(bytes).map_err(|_| LoadError::IoError {
-                    path: path.clone(),
+                    path: path.to_string(),
                     message: "file is not valid UTF-8".to_string(),
                 })
             }
             ModuleSource::Remote { url } => {
                 let bytes = self.host.load_source(url).await.map_err(LoadError::from)?;
                 String::from_utf8(bytes).map_err(|_| LoadError::IoError {
-                    path: url.clone(),
+                    path: url.to_string(),
                     message: "file is not valid UTF-8".to_string(),
                 })
             }
@@ -1457,7 +1496,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                 // Strip the `file:` scheme so the host sees a plain
                 // absolute path. Other schemes are passed through
                 // unchanged so in-memory hosts can use the URI as a key.
-                let host_path = strip_kiln_scheme(uri).unwrap_or_else(|| uri.clone());
+                let host_path = strip_kiln_scheme(uri).unwrap_or_else(|| uri.to_string());
                 let bytes = self
                     .host
                     .load_source(&host_path)

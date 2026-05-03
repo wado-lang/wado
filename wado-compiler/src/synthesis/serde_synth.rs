@@ -488,7 +488,7 @@ fn generate_struct_serialize(
 ) -> Option<TirFunction> {
     let struct_def = find_struct(module, &req.target_type_name)?;
     let span = synth_span();
-    let serde_module = ModuleSource::core("serde");
+    let serde_module = ModuleSource::serde();
 
     let mut tt = module.type_table.borrow_mut();
 
@@ -713,7 +713,7 @@ fn generate_struct_deserialize(
     let struct_def = find_struct(module, &req.target_type_name)?;
     let span = synth_span();
     let module_source = module.module_source.clone();
-    let serde_module = ModuleSource::core("serde");
+    let serde_module = ModuleSource::serde();
 
     let mut tt = module.type_table.borrow_mut();
 
@@ -1457,7 +1457,7 @@ fn generate_enum_serialize(
 ) -> Option<TirFunction> {
     let enum_def = find_enum(module, &req.target_type_name)?;
     let span = synth_span();
-    let serde_module = ModuleSource::core("serde");
+    let serde_module = ModuleSource::serde();
 
     let mut tt = module.type_table.borrow_mut();
 
@@ -1606,7 +1606,7 @@ fn generate_enum_deserialize(
 ) -> Option<TirFunction> {
     let enum_def = find_enum(module, &req.target_type_name)?;
     let span = synth_span();
-    let serde_module = ModuleSource::core("serde");
+    let serde_module = ModuleSource::serde();
 
     let mut tt = module.type_table.borrow_mut();
 
@@ -1982,7 +1982,7 @@ fn generate_variant_serialize(
 ) -> Option<TirFunction> {
     let variant_def = find_variant(module, &req.target_type_name)?;
     let span = synth_span();
-    let serde_module = ModuleSource::core("serde");
+    let serde_module = ModuleSource::serde();
 
     let mut tt = module.type_table.borrow_mut();
 
@@ -2267,7 +2267,7 @@ fn generate_variant_deserialize(
 ) -> Option<TirFunction> {
     let variant_def = find_variant(module, &req.target_type_name)?;
     let span = synth_span();
-    let serde_module = ModuleSource::core("serde");
+    let serde_module = ModuleSource::serde();
 
     let mut tt = module.type_table.borrow_mut();
 
@@ -2844,7 +2844,7 @@ fn generate_flags_serialize(
 ) -> Option<TirFunction> {
     let flags_def = find_flags(module, &req.target_type_name)?;
     let span = synth_span();
-    let serde_module = ModuleSource::core("serde");
+    let serde_module = ModuleSource::serde();
 
     let mut tt = module.type_table.borrow_mut();
 
@@ -3077,7 +3077,7 @@ fn generate_flags_deserialize(
 ) -> Option<TirFunction> {
     let flags_def = find_flags(module, &req.target_type_name)?;
     let span = synth_span();
-    let serde_module = ModuleSource::core("serde");
+    let serde_module = ModuleSource::serde();
 
     let mut tt = module.type_table.borrow_mut();
 

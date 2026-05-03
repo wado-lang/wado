@@ -90,7 +90,9 @@ pub fn greet() {}
     };
 
     let redirected = ModuleSource::Redirected {
-        uri: "build/kiln/test-invocation/sample.wado".to_string(),
+        uri: wado_compiler::name::InternedStr::from_string_uncanonicalized(
+            "build/kiln/test-invocation/sample.wado".to_string(),
+        ),
     };
     assert!(
         annotated.modules.contains_key(&redirected),
@@ -114,7 +116,9 @@ export fn run() {}
     ))
     .unwrap();
     let entry_ms = ModuleSource::EntryPoint {
-        filename: "entry.wado".to_string(),
+        filename: wado_compiler::name::InternedStr::from_string_uncanonicalized(
+            "entry.wado".to_string(),
+        ),
     };
     assert!(annotated.modules.contains_key(&entry_ms));
 }

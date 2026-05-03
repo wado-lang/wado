@@ -679,7 +679,9 @@ mod tests {
             m.insert(
                 name.to_string(),
                 ModuleSource::EntryPoint {
-                    filename: "test.wado".to_string(),
+                    filename: crate::name::InternedStr::from_string_uncanonicalized(
+                        "test.wado".to_string(),
+                    ),
                 },
             );
         }
@@ -706,35 +708,35 @@ mod tests {
     #[test]
     fn test_is_user_local_entry_point() {
         assert!(is_user_local(&ModuleSource::EntryPoint {
-            filename: "main.wado".to_string()
+            filename: crate::name::InternedStr::from_string_uncanonicalized("main.wado".to_string())
         }));
     }
 
     #[test]
     fn test_is_user_local_local_path() {
         assert!(is_user_local(&ModuleSource::Local {
-            path: "./lib.wado".to_string()
+            path: crate::name::InternedStr::from_string_uncanonicalized("./lib.wado".to_string())
         }));
     }
 
     #[test]
     fn test_is_user_local_core_is_foreign() {
         assert!(!is_user_local(&ModuleSource::Core {
-            name: "prelude".to_string()
+            name: crate::name::InternedStr::from_string_uncanonicalized("prelude".to_string())
         }));
     }
 
     #[test]
     fn test_is_user_local_wasi_is_foreign() {
         assert!(!is_user_local(&ModuleSource::Wasi {
-            interface: "cli".to_string()
+            interface: crate::name::InternedStr::from_string_uncanonicalized("cli".to_string())
         }));
     }
 
     #[test]
     fn test_is_user_local_remote_is_foreign() {
         assert!(!is_user_local(&ModuleSource::Remote {
-            url: "https://example.com/lib.wado".to_string()
+            url: crate::name::InternedStr::from_string_uncanonicalized("https://example.com/lib.wado".to_string())
         }));
     }
 

@@ -39,6 +39,11 @@ pub struct Annotated {
     pub modules: IndexMap<ModuleSource, Module>,
     pub symbols: SymbolTable,
     pub types: TypeTable,
+    /// `ModuleSource` interner shared with the analyze + resolve phases.
+    /// LSP queries (definition / hover / references) borrow this when
+    /// they need to resolve an import path the user clicked into a
+    /// `ModuleSource`.
+    pub interner: std::rc::Rc<std::cell::RefCell<crate::name::ModuleSourceInterner>>,
     /// Per-module structural index (name spans, write targets, span lookup).
     /// Built once per [`Module`] in [`annotate_loaded`]. LSP queries (and
     /// the in-tree [`name_span_of`] / [`span_of_key`] helpers) consult this
@@ -375,9 +380,16 @@ pub(crate) fn annotate_loaded<H: CompilerHost>(
     load_result: loader::LoadResult,
     logger: &Logger<'_, H>,
 ) -> Result<Annotated, Bail> {
+    // Wrap the loader's interner in `Rc<RefCell<>>` so analyze and the
+    // per-module resolvers can each `borrow_mut()` it from `&self`
+    // contexts. Single-threaded sharing matches the rest of the
+    // compiler's `Rc<RefCell<TypeTable>>` plumbing.
+    let interner = std::rc::Rc::new(std::cell::RefCell::new(load_result.interner));
     let symbols = {
         let _span = logger.span("analyze");
-        let mut analyzer = Analyzer::new(logger).with_invocations(load_result.invocations.clone());
+        let mut analyzer = Analyzer::new(logger)
+            .with_invocations(load_result.invocations.clone())
+            .with_interner(interner.clone());
         analyzer.analyze_loaded_modules(
             &load_result.modules,
             &load_result.entry_module_source,
@@ -394,6 +406,7 @@ pub(crate) fn annotate_loaded<H: CompilerHost>(
             &load_result.entry_module_source,
             logger,
             load_result.invocations.clone(),
+            interner.clone(),
         )?
     };
 
@@ -443,6 +456,7 @@ pub(crate) fn annotate_loaded<H: CompilerHost>(
         modules: load_result.modules,
         symbols,
         types,
+        interner,
         ast_indices,
         state,
         references,

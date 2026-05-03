@@ -2428,7 +2428,8 @@ mod tests {
     use super::*;
 
     fn free_fn(name: &str) -> FunctionId {
-        FunctionId::Free(FreeFunctionName::from_strs(&["test"], name))
+        let mut interner = crate::name::ModuleSourceInterner::new();
+        FunctionId::Free(FreeFunctionName::from_strs(&mut interner, &["test"], name))
     }
 
     #[test]

@@ -10,6 +10,8 @@ use crate::compiler_host::CompilerHost;
 use crate::loader::{resolve_wasm_asset_path, wasm_asset_kind_from_attrs};
 use crate::logger::{Bail, Logger};
 use crate::name::{ModuleSource, validate_module_path};
+use std::cell::RefCell;
+use std::rc::Rc;
 
 /// Resolve `use_decl.source` against `from`, recognising
 /// `with { type: "wat" | "wasm" }` attributes and routing them to the
@@ -20,6 +22,7 @@ use crate::name::{ModuleSource, validate_module_path};
 /// `core:libm.wat` with no leading `./`); the caller emits the
 /// downstream `InvalidModulePath` diagnostic.
 fn resolve_use_decl_module_source(
+    interner: &mut crate::name::ModuleSourceInterner,
     from: &ModuleSource,
     use_decl: &UseDecl,
     entry: Option<&ModuleSource>,
@@ -28,9 +31,10 @@ fn resolve_use_decl_module_source(
     if let Some(kind) = wasm_asset_kind_from_attrs(use_decl.attributes.as_ref()) {
         return resolve_wasm_asset_path(from, &use_decl.source)
             .ok()
-            .map(|path| ModuleSource::Wasm { path, kind });
+            .map(|path| interner.wasm(&path, kind));
     }
     Some(crate::name::resolve_import_with_invocations(
+        interner,
         from,
         &use_decl.source,
         entry,
@@ -220,6 +224,10 @@ pub struct Analyzer<'a, H: CompilerHost> {
     /// (`validate_imports`, re-export registration). Empty when the
     /// compilation did not run the Kiln pipeline.
     invocations: crate::kiln::InvocationIndex,
+    /// `ModuleSource` interner shared with the loader. Forwarded to
+    /// [`resolve_use_decl_module_source`] so analyze-phase imports get
+    /// canonicalized identities.
+    interner: Rc<RefCell<crate::name::ModuleSourceInterner>>,
 }
 
 impl<'a, H: CompilerHost> Analyzer<'a, H> {
@@ -229,9 +237,21 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
             symbols: SymbolTable::new(),
             logger,
             implicit_modules: crate::hashmap::IndexSet::default(),
-            entry_module_source: ModuleSource::entry_point_with_filename("<uninitialized>"),
+            entry_module_source: ModuleSource::entry_point_uninitialized(),
             invocations: crate::kiln::InvocationIndex::new(),
+            interner: Rc::new(RefCell::new(crate::name::ModuleSourceInterner::new())),
         }
+    }
+
+    /// Seed the analyzer with the loader's interner so import-site
+    /// resolution canonicalizes module identities consistently.
+    #[must_use]
+    pub fn with_interner(
+        mut self,
+        interner: Rc<RefCell<crate::name::ModuleSourceInterner>>,
+    ) -> Self {
+        self.interner = interner;
+        self
     }
 
     /// Seed the analyzer with a Kiln invocation index. Call before
@@ -648,6 +668,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                 // Resolve the source path to ModuleSource, honoring
                 // wasm-asset attributes and Kiln invocation redirects.
                 let Some(source_module) = resolve_use_decl_module_source(
+                    &mut self.interner.borrow_mut(),
                     module_source,
                     use_decl,
                     Some(&self.entry_module_source),
@@ -724,6 +745,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                 // Resolve the import path to ModuleSource, honoring
                 // wasm-asset attributes and Kiln invocation redirects.
                 let Some(module_source) = resolve_use_decl_module_source(
+                    &mut self.interner.borrow_mut(),
                     from_module_source,
                     use_decl,
                     Some(&self.entry_module_source),

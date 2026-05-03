@@ -750,7 +750,11 @@ fn build_dispatch_wrapper_function(
         let effect_call = TirExpr::new(
             TirExprKind::Call {
                 func: FunctionRef {
-                    module_source: ModuleSource::local(base_name.to_string()),
+                    module_source: ModuleSource::Local {
+                        path: crate::name::InternedStr::from_string_uncanonicalized(
+                            base_name.to_string(),
+                        ),
+                    },
                     name: op_name.clone(),
                     monomorph_info: None,
                     method_info: None,
@@ -2577,7 +2581,9 @@ fn rewrite_calls_in_expr(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
                     )
                 })
             } else if let ModuleSource::Local { path } = &func.module_source
-                && let Some(wrapper) = ctx.user_to_wrapper.get(&(path.clone(), func.name.clone()))
+                && let Some(wrapper) = ctx
+                    .user_to_wrapper
+                    .get(&(path.to_string(), func.name.clone()))
             {
                 Some(wrapper_call(
                     wrapper.clone(),

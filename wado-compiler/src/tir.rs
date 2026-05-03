@@ -1034,7 +1034,7 @@ impl TypeTable {
         let module_source = self
             .tuple_module_source
             .clone()
-            .unwrap_or_else(|| ModuleSource::core("prelude"));
+            .unwrap_or_else(|| ModuleSource::prelude());
         self.intern(ResolvedType::GenericInstance {
             name: Self::TUPLE_TYPE_NAME.to_string(),
             module_source,

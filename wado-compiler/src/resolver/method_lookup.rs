@@ -578,6 +578,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 .get(module_source)
                 .map(|m| {
                     Self::build_imported_type_sources(
+                        &mut self.interner.borrow_mut(),
                         m,
                         module_source,
                         Some(&self.entry_module_source),

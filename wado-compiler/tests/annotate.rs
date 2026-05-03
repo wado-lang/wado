@@ -25,7 +25,7 @@ export fn run() {
     let annotated = block_on(annotate(source, &host, Some("entry.wado"))).unwrap();
 
     let entry = ModuleSource::EntryPoint {
-        filename: "entry.wado".to_string(),
+        filename: wado_compiler::name::InternedStr::from_string_uncanonicalized("entry.wado".to_string()),
     };
 
     let point_symbol = annotated
@@ -63,7 +63,7 @@ fn annotate_resolves_position_to_ast_id() {
     let annotated = block_on(annotate(source, &host, Some("entry.wado"))).unwrap();
 
     let entry = ModuleSource::EntryPoint {
-        filename: "entry.wado".to_string(),
+        filename: wado_compiler::name::InternedStr::from_string_uncanonicalized("entry.wado".to_string()),
     };
 
     // Column 12 is inside "run" on line 1.

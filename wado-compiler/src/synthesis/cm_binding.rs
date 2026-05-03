@@ -211,9 +211,15 @@ fn wasi_interface_suffix(source_interface: &str) -> String {
 /// matching the `StructName`s under which the WIR types pass registered
 /// them (see `wir_build::types::register_struct`).
 fn module_source_for_cm_interface(source_interface: &str) -> ModuleSource {
+    // CM-binding synthesis runs after annotate; the loader's interner
+    // is not threaded through these synthesis passes. The values
+    // produced here flow into `StructName` keys whose `Eq` falls back
+    // to byte comparison when pointer identity differs.
     if source_interface.starts_with("wasi:") {
         return ModuleSource::Wasi {
-            interface: wasi_interface_suffix(source_interface),
+            interface: crate::name::InternedStr::from_string_uncanonicalized(
+                wasi_interface_suffix(source_interface),
+            ),
         };
     }
     if let Some(rest) = source_interface.strip_prefix("core:") {
@@ -223,7 +229,9 @@ fn module_source_for_cm_interface(source_interface: &str) -> ModuleSource {
         } else {
             format!("{without_version}.wado")
         };
-        return ModuleSource::Core { name };
+        return ModuleSource::Core {
+            name: crate::name::InternedStr::from_string_uncanonicalized(name),
+        };
     }
     ModuleSource::default()
 }
@@ -6341,7 +6349,11 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                     &func_info.interface_name,
                     &func_info.package,
                 )
-                .unwrap_or_else(|| ModuleSource::wasi(&func_info.package));
+                .unwrap_or_else(|| ModuleSource::Wasi {
+                    interface: crate::name::InternedStr::from_string_uncanonicalized(
+                        func_info.package.clone(),
+                    ),
+                });
                 let adapter = synthesize_adapter(
                     &func_info,
                     project.wasi_registry,
@@ -9835,7 +9847,7 @@ mod tests {
         let mut tt = TypeTable::new();
         let r = tt.intern(crate::tir::ResolvedType::Resource {
             name: "Request".to_string(),
-            module_source: ModuleSource::wasi("http"),
+            module_source: ModuleSource::wasi_http(),
         });
         assert!(!param_needs_lifting(r, &tt));
     }
@@ -9846,7 +9858,9 @@ mod tests {
         let e = tt.intern(crate::tir::ResolvedType::Enum {
             name: "Color".to_string(),
             module_source: ModuleSource::EntryPoint {
-                filename: "<test>".to_string(),
+                filename: crate::name::InternedStr::from_string_uncanonicalized(
+                    "<test>".to_string(),
+                ),
             },
         });
         assert!(!param_needs_lifting(e, &tt));
@@ -9860,7 +9874,7 @@ mod tests {
         let mut tt = TypeTable::new();
         let opt = tt.intern(crate::tir::ResolvedType::GenericInstance {
             name: "Option".to_string(),
-            module_source: ModuleSource::core("types"),
+            module_source: ModuleSource::types(),
             type_args: vec![TypeTable::I32],
         });
         assert!(param_needs_lifting(opt, &tt));

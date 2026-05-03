@@ -54,10 +54,17 @@ impl CalleeRef {
     /// A callee reached through a namespace-qualified call `Prefix::name`
     /// where `Prefix` is a module path (e.g. `Stdout::write`). The `prefix`
     /// is treated as a `ModuleSource::Local` path for codegen routing.
+    ///
+    /// The constructed `ModuleSource::Local` is uncanonicalized — its
+    /// `Arc<str>` does not go through the resolver's interner. This is
+    /// safe because the resulting `Local { path }` only flows into a
+    /// `FunctionRef` for codegen routing; it is never used as an
+    /// `IndexMap` key against a canonicalized counterpart, and `Eq`
+    /// falls back to byte comparison when pointer identity differs.
     pub fn local_namespace(prefix: impl Into<String>, name: impl Into<String>) -> Self {
         Self::new(
             ModuleSource::Local {
-                path: prefix.into(),
+                path: crate::name::InternedStr::from_string_uncanonicalized(prefix.into()),
             },
             name,
         )
