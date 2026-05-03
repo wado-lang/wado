@@ -609,8 +609,21 @@ impl<'a> Interpreter<'a> {
     /// expression's fold (`x + 1` → fold by reading `x` from env, no
     /// in-place mutation of the `Local` node). This keeps assignment
     /// targets (`x = …`, `obj.f = …`, `arr[i] = …`) safely opaque.
+    /// `GlobalVarGet` is the exception: it has a sibling
+    /// `GlobalVarSet` node so its read site is unambiguous, and the
+    /// dedicated leaf-rewrite arm below replaces the read with the
+    /// recorded `Const(v)` literal when one is available.
     pub fn reduce_local(&mut self, expr: &mut TirExpr) -> bool {
         if let Lattice::Const(v) = self.try_fold(expr) {
+            expr.kind = value_to_expr_kind(v);
+            return true;
+        }
+        if let TirExprKind::GlobalVarGet {
+            module_source,
+            name,
+        } = &expr.kind
+            && let Lattice::Const(v) = self.global_lattice(module_source, name)
+        {
             expr.kind = value_to_expr_kind(v);
             return true;
         }
@@ -1214,16 +1227,6 @@ impl<'a> Interpreter<'a> {
                     other => other,
                 }
             }
-            // Bare `GlobalVarGet` whose initializer reduces to a constant
-            // is a leaf rewrite — `reduce_local`'s `try_fold(expr) ==
-            // Const(v)` arm replaces the node with the literal. Mutable
-            // globals are recorded as `NonConst` in the env so a parent
-            // `Binary { GLOBAL_MUT + 1 }` correctly reports `NonConst`
-            // rather than a stale `Unevaluated`.
-            TirExprKind::GlobalVarGet {
-                module_source,
-                name,
-            } => self.global_lattice(module_source, name),
             _ => Lattice::Unevaluated,
         }
     }
@@ -1232,13 +1235,17 @@ impl<'a> Interpreter<'a> {
     /// [`GlobalEnv`]. Absent keys default to [`Lattice::Unevaluated`]
     /// — the engine simply has no information, same convention as
     /// un-bound locals.
+    ///
+    /// `IndexMap` lookup needs an owned tuple key, so each call clones
+    /// `ModuleSource` (one `String` allocation per variant) and the
+    /// global name. If profiling shows this on a hot path, switch the
+    /// env to `IndexMap<ModuleSource, IndexMap<String, Lattice>>` or
+    /// implement `Borrow`-keyed lookup; it's left flat for now since
+    /// `GlobalVarGet` nodes are sparse compared to local reads.
     fn global_lattice(&self, module_source: &ModuleSource, name: &str) -> Lattice {
         let Some(globals) = self.globals else {
             return Lattice::Unevaluated;
         };
-        // Tuple-key lookup needs an owned key; the clone is cheap
-        // (interned `ModuleSource`, short global names) and only paid
-        // when the engine actually inspects a `GlobalVarGet`.
         globals
             .get(&(module_source.clone(), name.to_string()))
             .copied()

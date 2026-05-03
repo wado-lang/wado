@@ -26,10 +26,9 @@ pub fn fold_constants(project: &mut FlatPackage) -> bool {
     // holds `borrow_mut` on the same function (the case where we'd
     // try to fold a self-call inside the function being walked).
     let callees = build_callee_map(project);
-    // Build the GlobalEnv once per pass — every immutable global whose
-    // initializer reduces to a constant becomes a `GlobalVarGet`
-    // rewrite target. Subsumes the legacy `const_propagation` pass,
-    // which only recognized literal initializers.
+    // Build the GlobalEnv once per pass: every immutable global whose
+    // initializer reduces to a `Const(_)` becomes a `GlobalVarGet`
+    // rewrite target; mutable globals are recorded as `NonConst`.
     let globals = build_global_env(project, &type_table, &callees);
     let mut visitor = ConstFoldVisitor {
         interpreter: Interpreter::new(&type_table),
