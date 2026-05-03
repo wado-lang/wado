@@ -113,6 +113,26 @@ fn opening_wasi_cli_stdout_is_clean() {
     });
 }
 
+/// WASI flat-package roots (`lib/wasi/<pkg>.wado`) are pure re-export
+/// hubs and carry both `#![generated]` and `#![stdlib("wasi:<pkg>")]`.
+/// Cover the non-sub-interface code path so a regression in flat-package
+/// identity resolution surfaces directly.
+#[test]
+fn opening_wasi_cli_flat_package_is_clean() {
+    futures::executor::block_on(async {
+        let path = "/work/wado-compiler/lib/wasi/cli.wado";
+        let source = include_str!("../../wado-compiler/lib/wasi/cli.wado");
+        let diags = diagnostics_for(path, source).await;
+        let errs = errors(&diags);
+        assert!(
+            errs.is_empty(),
+            "expected no errors, got {}: {:#?}",
+            errs.len(),
+            errs
+        );
+    });
+}
+
 /// Plain user code redefining `Option` does *not* opt out of the prelude
 /// and must therefore still see the collision diagnostic.
 #[test]

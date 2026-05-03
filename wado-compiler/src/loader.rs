@@ -758,19 +758,53 @@ fn parse_bind_desugar_stdlib(label: &str, source: &str) -> Module {
 /// Resolve a `#![stdlib("…")]` declaration on `module` to a canonical
 /// `ModuleSource`.
 ///
-/// Returns `None` if the attribute is absent or its argument is not a
-/// recognized `core:` / `wasi:` import path. The attribute is intended
-/// only for files inside `wado-compiler/lib/` — its sole effect on the
-/// pipeline is to pin an entry-loaded bundled stdlib source to the
-/// `Core { name }` / `Wasi { interface }` identity it occupies in the
-/// transitive load graph, so opening such a file in an editor doesn't
-/// produce a duplicate copy of every type the file defines.
+/// Returns `None` only when the attribute is absent. The attribute is
+/// authored exclusively by files inside `wado-compiler/lib/`, so a
+/// malformed argument (anything not registered in
+/// [`stdlib::get_stdlib_module`]) is a stdlib bug — it panics rather than
+/// silently degrading to `EntryPoint`, since the LSP would then see the
+/// duplicate-definition cascade we introduced this attribute to suppress.
 fn parse_stdlib_identity_attribute(module: &Module) -> Option<ModuleSource> {
     let path = module.stdlib_identity()?;
-    if let Some(name) = path.strip_prefix("core:") {
-        Some(ModuleSource::core(name))
+    let resolved = if let Some(name) = path.strip_prefix("core:") {
+        ModuleSource::core(name)
+    } else if let Some(interface) = path.strip_prefix("wasi:") {
+        ModuleSource::wasi(interface)
     } else {
-        path.strip_prefix("wasi:").map(ModuleSource::wasi)
+        panic!(
+            "#![stdlib({path:?})] must use a `core:` or `wasi:` prefix; \
+             this attribute is internal to bundled stdlib files"
+        );
+    };
+    assert!(
+        stdlib::get_stdlib_module(path).is_some(),
+        "#![stdlib({path:?})] does not match any bundled stdlib module; \
+         add the registration to `stdlib::get_stdlib_module` or correct the path",
+    );
+    Some(resolved)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::lexer::Lexer;
+    use crate::parser::Parser;
+
+    fn parse_test_module(source: &str) -> Module {
+        let mut lexer = Lexer::new(source);
+        let tokens = lexer.tokenize().expect("test source must lex");
+        let (data_section, _comments, shebang) = lexer.into_parts();
+        let mut parser = Parser::with_metadata(tokens, shebang, data_section);
+        parser.parse().expect("test source must parse")
+    }
+
+    #[test]
+    fn stdlib_identity_attribute_resolves_to_core_module_source() {
+        let module = parse_test_module("#![no_prelude]\n#![stdlib(\"core:prelude/types.wado\")]\n");
+        assert_eq!(
+            parse_stdlib_identity_attribute(&module),
+            Some(ModuleSource::core("prelude/types.wado"))
+        );
     }
 }
 
