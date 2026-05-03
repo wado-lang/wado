@@ -262,11 +262,109 @@ scalar / payload-free matching today without committing to a heap-aware
 
 ### Stage 3 — pure call inlining (in-process)
 
-- [ ] When all args of a call reduce to constants and the callee is
-      pure (effect set ⊆ pure), recursively reduce the callee body in a
-      child interpreter with a fresh `env` and a `step_budget: u32`.
-- [ ] Bail to the original `Call` expression on out-of-budget. Mirrors
-      rustc's CTFE step counter (`LINT_TERMINATOR_LIMIT`).
+Status: done. Multi-stmt bodies, `MethodCall` / `IndirectCall`, and
+heap-aware return values stay deferred (call them Stage 3.5+).
+
+- [x] `Interpreter::with_callees(&CalleeMap)` installs a pre-built
+      lookup of CTFE-eligible callees, keyed by `(module_source,
+      full_name)` to match `FunctionRef::full_name()` exactly. The
+      driving visitor (`const_folding`) builds the map once per pass
+      by walking `FlatPackage::functions` and admitting every function
+      that passes [`is_ctfe_eligible`]. Values are
+      `Rc<RefCell<TirFunction>>` handles aliased with
+      `FlatPackage::functions`, not body clones, so per-iteration
+      rebuild costs only refcount bumps. The interpreter reads each
+      callee body via `RefCell::try_borrow`; failure means the visitor
+      already holds `borrow_mut` on this same function (the
+      self-recursive-call-inside-the-walked-function case) and the
+      fold bails cleanly. CTFE-internal recursion across nested
+      folds is caught separately by `Interpreter::call_stack` since
+      `try_borrow` permits concurrent immutable borrows.
+- [x] [`is_ctfe_eligible`] gate: `effects.is_empty()`, has body, not
+      `is_cm_binding` / `is_dispatch_wrapper` / `is_cm_export`, not
+      `is_async`, no `task_return_type`, `stores.is_empty()`,
+      `inline_hint != Never`, no remaining type params (Stage 3 runs
+      after monomorphization, so concrete bodies only). The check is
+      conservative: a Wado function that traps but is otherwise pure
+      is still admitted; the trap is preserved by Stage 3's
+      `Const(_)`-only acceptance criterion (see below).
+- [x] Recognized body shape: a single statement that is either
+      `Return { value: Some(expr) }` or `Expr(expr)`. Anything else
+      (zero or multiple stmts, intermediate `Let`, `Loop`, `Break`,
+      `Return` without value) reports "no fold" and the original Call
+      survives. This covers the high-value targets (`fn double(x) {
+      return x*2 }`, expression-bodied helpers, single-tail-`if`
+      bodies). Multi-stmt bodies (let-sequences, multi-return) are
+      deferred — bailing here costs an optimization, not correctness.
+- [x] `Interpreter::try_call_fold(&TirExpr) -> Lattice`: matches on
+      `Call`, looks the callee up, reduces every arg to a `Value` via
+      `expr_to_lattice(...).as_const()`, refuses if the callee key is
+      already on `self.call_stack` (recursion guard) or
+      `self.step_budget == 0` (budget guard), then saves the env,
+      binds parameter local indices `0..params.len()` to the args'
+      `Const(v)`, evaluates the tail through `reduce_to_lattice`
+      (which clones internally, so the body in the `CalleeMap`
+      remains shareable across multiple call sites and across
+      iterations), and restores. Only `Const(v)` is exposed to the
+      caller; both `NonConst` and `Unevaluated` from the tail downgrade
+      to `Unevaluated` so the original `Call` survives. This matters
+      when the body would trap at runtime (e.g. internal div-by-zero
+      reduces to `NonConst`) — the caller gets back `Unevaluated`,
+      doesn't rewrite the node, and the trap stays observable.
+- [x] Per-pass step budget (`DEFAULT_STEP_BUDGET = 1000`,
+      overridable via `set_step_budget`). One charge per
+      `try_call_fold` entry, before any work. Budget is intentionally
+      _not_ reset per function — it caps total CTFE work in a pass,
+      mirroring rustc's CTFE step counter (`LINT_TERMINATOR_LIMIT`).
+      `enter_function` only resets `env` and asserts the recursion
+      guard is empty.
+- [x] Recursion guard via `call_stack: Vec<CalleeKey>`. A direct
+      self-call (`fn f(x) { return f(x); }`) refuses re-entry on the
+      first attempt, so the inner `f` evaluates to `Unevaluated` and
+      the outer `Call` therefore stays unfolded. A recursive function
+      with a const-condition base case (`fn f(n) { return if n==0 {
+      A } else { f(n-1) } }` invoked as `f(0)`) still folds because
+      tiri's `if` rule treats the unreachable else-arm as an SCCP
+      infeasible edge — the recursive call inside it never gets
+      asked. This is by design: classical CTFE engines key their
+      recursion guard on `(callee, arg-values)` to allow deep
+      recursive evaluation; Stage 3 keys on `callee` alone for
+      simplicity, accepting that only base cases fold. The step
+      budget guarantees termination either way.
+- [x] Memoization (Stage 1.5) is **not** added in Stage 3. The
+      tail-evaluation cost is small and the same `(callee, args)` rarely
+      shows up many times in the same walk; a memo would add hash
+      overhead per attempt with unclear payoff. Re-evaluate when a
+      benchmark shows a hot CTFE chain.
+- [x] Wired into `const_folding::fold_constants`: the visitor builds
+      the `CalleeMap` once at pass entry and hands a borrow to
+      `Interpreter::with_callees`. Every iteration of the optimizer's
+      outer loop rebuilds the map (cheap) so newly-monomorphized
+      bodies show up.
+- [x] Out of scope for Stage 3:
+  - `MethodCall` (instance methods carry a receiver `Value`; would
+    require modelling struct values).
+  - `IndirectCall` / `CmRawCall` (closure / CM-import calls).
+  - Multi-statement bodies (let-sequences, multi-return).
+  - Heap-aware return values (`String`, `Array`, struct literals,
+    variant payloads). The body's lattice naturally stays
+    `Unevaluated` for those, so we just bail.
+  - User-facing `const fn` / `#[const_eval]` syntax.
+  - Salvaging recursive depth — Stage 5 (wasm-CTFE) covers anything
+    Stage 3's recursion guard refuses.
+- [x] Unit tests at `wado-compiler/tests/tiri.rs` cover: const-args
+      via `Return` and via tail-expr bodies, two-level chained folds,
+      non-const arg left intact, effectful callee left intact,
+      multi-stmt body left intact, direct self-recursion bails via
+      `call_stack`, `set_step_budget(0)` bails up front, internal
+      div-by-zero in the body leaves the Call intact, missing-callee
+      and no-callee-map paths, every `is_ctfe_eligible` rejection
+      branch (`async`, `inline(never)`, no body, accept default), and
+      composition with the outer `if`-fold rule. E2E fixture
+      `tiri_pure_call_fold.wado` checks observable end-to-end fold —
+      a recursive function called at its base-case argument folds to
+      a literal in WIR at -O2 even though the inliner refuses
+      recursive functions outright.
 
 ### Stage 4 — bounded loop unrolling
 

@@ -8,12 +8,18 @@
 //! give the interpreter a stable contract to refactor against, not to
 //! enumerate every operator.
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use wado_compiler::Span;
+use wado_compiler::hashmap::IndexSet;
+use wado_compiler::name::ModuleSource;
 use wado_compiler::tir::{
-    PrimitiveType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirLiteralPattern, TirMatchArm,
-    TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
+    CallArg, EffectRef, FunctionKind, FunctionRef, InlineHint, PrimitiveType, TirBinaryOp,
+    TirBlock, TirExpr, TirExprKind, TirFunction, TirLiteralPattern, TirLocal, TirMatchArm,
+    TirParam, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
-use wado_compiler::tiri::{Interpreter, Lattice, Value};
+use wado_compiler::tiri::{CalleeMap, Interpreter, Lattice, Value, is_ctfe_eligible};
 
 fn char_lit(c: char) -> TirExpr {
     TirExpr::new(
@@ -599,7 +605,7 @@ fn lattice_as_const_collapses_unevaluated_and_nonconst() {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// Stage 1 — local-variable env: bind_local, invalidate_local, function reset
+// Local-variable env: bind_local, invalidate_local, function reset
 // ──────────────────────────────────────────────────────────────────────────────
 
 #[test]
@@ -751,9 +757,8 @@ fn nested_const_locals_chain() {
 
 /// Assert that `Cast{Local{0}, target_ty}` folds to
 /// `Const(Int{expected_value, target_prim})` when env binds local 0
-/// to `Const(Int{src_value, src_prim})`. Exercises the Stage 1
-/// env-resolved cast path that the previous regression silently
-/// corrupted.
+/// to `Const(Int{src_value, src_prim})`. Exercises the env-resolved
+/// cast path that a previous regression silently corrupted.
 fn check_env_cast(
     src_value: u64,
     src_prim: PrimitiveType,
@@ -967,7 +972,7 @@ fn cast_through_env_local_applies_target_prim() {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// Stage 2 — `Lattice::join` and `if`-expression reduction
+// `Lattice::join` and `if`-expression reduction
 // ──────────────────────────────────────────────────────────────────────────────
 
 fn block_with_tail_expr(e: TirExpr) -> TirBlock {
@@ -1895,7 +1900,7 @@ fn cast_int_to_float_through_env_local() {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// Stage 2.5 — `match` expression reduction (Phase A: payload-free patterns)
+// `match` expression reduction (payload-free patterns)
 // ──────────────────────────────────────────────────────────────────────────────
 
 fn match_expr(scrutinee: TirExpr, arms: Vec<TirMatchArm>, type_id: TypeId) -> TirExpr {
@@ -2746,7 +2751,7 @@ fn match_const_scrut_with_only_or_pattern_arms_picks_first() {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// Stage 2.5 — exhaustiveness gate (review feedback)
+// `match` exhaustiveness gate
 //
 // Without an unguarded catch-all the lowering inserts an `Unreachable`
 // fallback for unmatched scrutinee values. Wado's resolver enforces
@@ -2907,4 +2912,521 @@ fn match_nonconst_scrut_guarded_wildcard_does_not_count_as_exhaustive() {
     );
     assert!(!interp.reduce_local(&mut expr));
     assert!(matches!(expr.kind, TirExprKind::Match { .. }));
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Pure call inlining (try_call_fold)
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// Build a minimal `TirFunction` with the supplied signature and a
+/// single-statement body. `body_stmt` is normally `TirStmtKind::Return`
+/// or `TirStmtKind::Expr`. The function is module-public, non-async,
+/// non-CM, non-method, non-generic — i.e. CTFE-eligible by default.
+fn make_pure_fn(
+    name: &str,
+    params: Vec<(&str, TypeId)>,
+    return_type: TypeId,
+    body_stmt: TirStmtKind,
+) -> TirFunction {
+    let span = Span::default();
+    let tir_params: Vec<TirParam> = params
+        .iter()
+        .enumerate()
+        .map(|(i, (n, ty))| TirParam {
+            name: (*n).to_string(),
+            type_id: *ty,
+            #[allow(clippy::cast_possible_truncation)]
+            local_index: i as u32,
+            is_mut: false,
+            default_expr: None,
+            span,
+        })
+        .collect();
+    let locals: Vec<TirLocal> = params
+        .iter()
+        .map(|(n, ty)| TirLocal {
+            name: (*n).to_string(),
+            type_id: *ty,
+            is_mut: false,
+        })
+        .collect();
+    #[allow(clippy::cast_possible_truncation)]
+    let local_count = params.len() as u32;
+    TirFunction {
+        name: name.to_string(),
+        module_source: ModuleSource::default(),
+        is_pub: true,
+        is_export: false,
+        is_async: false,
+        type_params: Vec::new(),
+        impl_type_params: Vec::new(),
+        monomorph_info: None,
+        method_info: None,
+        params: tir_params,
+        return_type,
+        task_return_type: None,
+        effects: Vec::new(),
+        stores: Vec::new(),
+        body: Some(TirBlock::new(vec![TirStmt::new(body_stmt, span)], span)),
+        span,
+        local_count,
+        locals,
+        address_taken_locals: IndexSet::default(),
+        stores_aliased_locals: IndexSet::default(),
+        is_cm_binding: false,
+        is_dispatch_wrapper: false,
+        is_cm_export: false,
+        is_ambient: false,
+        inline_hint: InlineHint::Auto,
+        comp_features: 0,
+        export_name: None,
+        allocator_tag: None,
+        kind: FunctionKind::Regular,
+    }
+}
+
+/// Build a `Call` expression targeting `func` with the given args.
+/// Mirrors what the resolver emits for a free function call.
+fn call_expr(func: &TirFunction, args: Vec<TirExpr>) -> TirExpr {
+    let func_ref = FunctionRef {
+        module_source: func.module_source.clone(),
+        name: func.name.clone(),
+        monomorph_info: None,
+        method_info: None,
+    };
+    let call_args = args.into_iter().map(|e| CallArg::new(e, false)).collect();
+    TirExpr::new(
+        TirExprKind::Call {
+            func: func_ref,
+            type_args: Vec::new(),
+            args: call_args,
+        },
+        func.return_type,
+        Span::default(),
+    )
+}
+
+/// Build a `CalleeMap` from the supplied functions, wrapping each in
+/// `Rc<RefCell<...>>` to match the production map shape.
+fn build_callee_map_test(funcs: &[TirFunction]) -> CalleeMap {
+    let mut map = CalleeMap::default();
+    for f in funcs {
+        let key = (
+            f.module_source.clone(),
+            FunctionRef::from_resolved(f, f.module_source.clone()).full_name(),
+        );
+        map.insert(key, Rc::new(RefCell::new(f.clone())));
+    }
+    map
+}
+
+#[test]
+fn pure_call_const_args_folds_via_return() {
+    // fn double(x: i32) -> i32 { return x * 2; }
+    // double(5) → 10
+    let body = TirStmtKind::Return {
+        value: Some(binary(
+            TirBinaryOp::Mul,
+            local_expr(0, TypeTable::I32),
+            int_lit(2, TypeTable::I32, "2"),
+            TypeTable::I32,
+        )),
+    };
+    let double = make_pure_fn("double", vec![("x", TypeTable::I32)], TypeTable::I32, body);
+    let callees = build_callee_map_test(std::slice::from_ref(&double));
+
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+
+    let mut expr = call_expr(&double, vec![int_lit(5, TypeTable::I32, "5")]);
+    assert!(interp.reduce_local(&mut expr));
+    let TirExprKind::IntLiteral { value, .. } = expr.kind else {
+        panic!("expected IntLiteral, got {:?}", expr.kind);
+    };
+    assert_eq!(value, 10);
+}
+
+#[test]
+fn pure_call_const_args_folds_via_tail_expr() {
+    // fn add(a: i32, b: i32) -> i32 { a + b }   (expression-bodied)
+    let body = TirStmtKind::Expr(binary(
+        TirBinaryOp::Add,
+        local_expr(0, TypeTable::I32),
+        local_expr(1, TypeTable::I32),
+        TypeTable::I32,
+    ));
+    let add = make_pure_fn(
+        "add",
+        vec![("a", TypeTable::I32), ("b", TypeTable::I32)],
+        TypeTable::I32,
+        body,
+    );
+    let callees = build_callee_map_test(std::slice::from_ref(&add));
+
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+
+    let mut expr = call_expr(
+        &add,
+        vec![
+            int_lit(40, TypeTable::I32, "40"),
+            int_lit(2, TypeTable::I32, "2"),
+        ],
+    );
+    assert!(interp.reduce_local(&mut expr));
+    let TirExprKind::IntLiteral { value, .. } = expr.kind else {
+        panic!("expected IntLiteral");
+    };
+    assert_eq!(value, 42);
+}
+
+#[test]
+fn pure_call_chained_folds_two_levels() {
+    // fn double(x) { return x * 2 }
+    // We test bottom-up chaining: fold the inner call first, then
+    // the outer wraps the now-literal arg and folds again.
+    let body = TirStmtKind::Return {
+        value: Some(binary(
+            TirBinaryOp::Mul,
+            local_expr(0, TypeTable::I32),
+            int_lit(2, TypeTable::I32, "2"),
+            TypeTable::I32,
+        )),
+    };
+    let double = make_pure_fn("double", vec![("x", TypeTable::I32)], TypeTable::I32, body);
+    let callees = build_callee_map_test(std::slice::from_ref(&double));
+
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+
+    let mut inner = call_expr(&double, vec![int_lit(3, TypeTable::I32, "3")]);
+    assert!(interp.reduce_local(&mut inner));
+    let mut outer = call_expr(&double, vec![inner]);
+    assert!(interp.reduce_local(&mut outer));
+    let TirExprKind::IntLiteral { value, .. } = outer.kind else {
+        panic!("expected IntLiteral");
+    };
+    assert_eq!(value, 12);
+}
+
+#[test]
+fn pure_call_nonconst_arg_left_intact() {
+    // double(x) where x has no env binding — arg is Unevaluated, so
+    // the call must not be folded.
+    let body = TirStmtKind::Return {
+        value: Some(binary(
+            TirBinaryOp::Mul,
+            local_expr(0, TypeTable::I32),
+            int_lit(2, TypeTable::I32, "2"),
+            TypeTable::I32,
+        )),
+    };
+    let double = make_pure_fn("double", vec![("x", TypeTable::I32)], TypeTable::I32, body);
+    let callees = build_callee_map_test(std::slice::from_ref(&double));
+
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+
+    let mut expr = call_expr(&double, vec![local_expr(7, TypeTable::I32)]);
+    assert!(!interp.reduce_local(&mut expr));
+    assert!(matches!(expr.kind, TirExprKind::Call { .. }));
+}
+
+#[test]
+fn non_pure_call_with_effect_left_intact() {
+    // A function carrying any effect is not CTFE-eligible — the
+    // CalleeMap excludes it, so the call stays a Call.
+    let body = TirStmtKind::Return {
+        value: Some(int_lit(42, TypeTable::I32, "42")),
+    };
+    let mut greet = make_pure_fn("greet", vec![], TypeTable::I32, body);
+    greet.effects.push(EffectRef::Concrete {
+        name: "Stdout".to_string(),
+        module_source: ModuleSource::default(),
+    });
+    assert!(!is_ctfe_eligible(&greet));
+    let callees = build_callee_map_test(&[]); // greet not admitted
+
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+
+    let mut expr = call_expr(&greet, vec![]);
+    assert!(!interp.reduce_local(&mut expr));
+    assert!(matches!(expr.kind, TirExprKind::Call { .. }));
+}
+
+#[test]
+fn multi_stmt_body_left_intact() {
+    // fn f(x) { let y = x * 2; return y; }
+    // The recognized body shape is single-stmt only, so the fold
+    // declines.
+    let body_block = TirBlock::new(
+        vec![
+            TirStmt::new(
+                TirStmtKind::Let {
+                    name: "y".to_string(),
+                    local_index: 1,
+                    is_mut: false,
+                    is_reactive: false,
+                    type_id: TypeTable::I32,
+                    value: binary(
+                        TirBinaryOp::Mul,
+                        local_expr(0, TypeTable::I32),
+                        int_lit(2, TypeTable::I32, "2"),
+                        TypeTable::I32,
+                    ),
+                    skip_value_copy: false,
+                },
+                Span::default(),
+            ),
+            TirStmt::new(
+                TirStmtKind::Return {
+                    value: Some(local_expr(1, TypeTable::I32)),
+                },
+                Span::default(),
+            ),
+        ],
+        Span::default(),
+    );
+    let mut f = make_pure_fn(
+        "f",
+        vec![("x", TypeTable::I32)],
+        TypeTable::I32,
+        TirStmtKind::Return { value: None }, // placeholder, replaced below
+    );
+    f.body = Some(body_block);
+    f.local_count = 2;
+    f.locals.push(TirLocal {
+        name: "y".to_string(),
+        type_id: TypeTable::I32,
+        is_mut: false,
+    });
+
+    let callees = build_callee_map_test(std::slice::from_ref(&f));
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+
+    let mut expr = call_expr(&f, vec![int_lit(3, TypeTable::I32, "3")]);
+    assert!(!interp.reduce_local(&mut expr));
+    assert!(matches!(expr.kind, TirExprKind::Call { .. }));
+}
+
+#[test]
+fn recursive_call_bails_via_call_stack() {
+    // fn f(x) { return f(x); } — direct self-recursion. The
+    // `call_stack` guard refuses re-entry on the same key, so the
+    // inner `f` evaluates to Unevaluated and the outer call therefore
+    // stays unfolded as well.
+    let body = TirStmtKind::Return {
+        value: Some(TirExpr::new(
+            TirExprKind::Unit,
+            TypeTable::I32,
+            Span::default(),
+        )),
+    };
+    let mut f = make_pure_fn("f", vec![("x", TypeTable::I32)], TypeTable::I32, body);
+    let self_call = call_expr(&f, vec![local_expr(0, TypeTable::I32)]);
+    f.body = Some(TirBlock::new(
+        vec![TirStmt::new(
+            TirStmtKind::Return {
+                value: Some(self_call),
+            },
+            Span::default(),
+        )],
+        Span::default(),
+    ));
+
+    let callees = build_callee_map_test(std::slice::from_ref(&f));
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+
+    let mut expr = call_expr(&f, vec![int_lit(1, TypeTable::I32, "1")]);
+    // Must not fold; must terminate.
+    assert!(!interp.reduce_local(&mut expr));
+    assert!(matches!(expr.kind, TirExprKind::Call { .. }));
+}
+
+#[test]
+fn step_budget_zero_bails() {
+    // With budget set to 0 up-front, even a trivially-foldable call
+    // declines. Verifies the budget gate is reached before the body
+    // is touched.
+    let body = TirStmtKind::Return {
+        value: Some(local_expr(0, TypeTable::I32)),
+    };
+    let id = make_pure_fn("id", vec![("x", TypeTable::I32)], TypeTable::I32, body);
+    let callees = build_callee_map_test(std::slice::from_ref(&id));
+
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees).set_step_budget(0);
+
+    let mut expr = call_expr(&id, vec![int_lit(7, TypeTable::I32, "7")]);
+    assert!(!interp.reduce_local(&mut expr));
+    assert!(matches!(expr.kind, TirExprKind::Call { .. }));
+}
+
+#[test]
+fn body_traps_at_ctfe_left_intact() {
+    // fn bad() -> i32 { return 1 / 0; }
+    // The body folds to NonConst (div-by-zero), which try_call_fold
+    // downgrades to Unevaluated to keep the runtime trap intact.
+    let body = TirStmtKind::Return {
+        value: Some(binary(
+            TirBinaryOp::Div,
+            int_lit(1, TypeTable::I32, "1"),
+            int_lit(0, TypeTable::I32, "0"),
+            TypeTable::I32,
+        )),
+    };
+    let bad = make_pure_fn("bad", vec![], TypeTable::I32, body);
+    let callees = build_callee_map_test(std::slice::from_ref(&bad));
+
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+
+    let mut expr = call_expr(&bad, vec![]);
+    assert!(!interp.reduce_local(&mut expr));
+    assert!(matches!(expr.kind, TirExprKind::Call { .. }));
+}
+
+#[test]
+fn missing_callee_left_intact() {
+    // CalleeMap empty → look-up miss → no fold.
+    let body = TirStmtKind::Return {
+        value: Some(int_lit(1, TypeTable::I32, "1")),
+    };
+    let f = make_pure_fn("f", vec![], TypeTable::I32, body);
+    let callees = build_callee_map_test(&[]); // empty
+
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+
+    let mut expr = call_expr(&f, vec![]);
+    assert!(!interp.reduce_local(&mut expr));
+    assert!(matches!(expr.kind, TirExprKind::Call { .. }));
+}
+
+#[test]
+fn no_callee_map_means_no_fold() {
+    // Without `with_callees`, every Call is Unevaluated.
+    let body = TirStmtKind::Return {
+        value: Some(int_lit(1, TypeTable::I32, "1")),
+    };
+    let f = make_pure_fn("f", vec![], TypeTable::I32, body);
+
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+
+    let mut expr = call_expr(&f, vec![]);
+    assert!(!interp.reduce_local(&mut expr));
+    assert!(matches!(expr.kind, TirExprKind::Call { .. }));
+}
+
+#[test]
+fn ctfe_eligibility_rejects_async() {
+    let body = TirStmtKind::Return {
+        value: Some(int_lit(1, TypeTable::I32, "1")),
+    };
+    let mut f = make_pure_fn("f", vec![], TypeTable::I32, body);
+    f.is_async = true;
+    assert!(!is_ctfe_eligible(&f));
+}
+
+#[test]
+fn ctfe_eligibility_rejects_inline_never() {
+    let body = TirStmtKind::Return {
+        value: Some(int_lit(1, TypeTable::I32, "1")),
+    };
+    let mut f = make_pure_fn("f", vec![], TypeTable::I32, body);
+    f.inline_hint = InlineHint::Never;
+    assert!(!is_ctfe_eligible(&f));
+}
+
+#[test]
+fn ctfe_eligibility_rejects_no_body() {
+    let body = TirStmtKind::Return {
+        value: Some(int_lit(1, TypeTable::I32, "1")),
+    };
+    let mut f = make_pure_fn("f", vec![], TypeTable::I32, body);
+    f.body = None;
+    assert!(!is_ctfe_eligible(&f));
+}
+
+#[test]
+fn ctfe_eligibility_accepts_default_pure_fn() {
+    let body = TirStmtKind::Return {
+        value: Some(int_lit(1, TypeTable::I32, "1")),
+    };
+    let f = make_pure_fn("f", vec![], TypeTable::I32, body);
+    assert!(is_ctfe_eligible(&f));
+}
+
+#[test]
+fn pure_call_in_if_arm_folds_via_outer_walk() {
+    // Verifies that try_call_fold composes with the outer
+    // `if`-rewrite path. Build:
+    //   if true { double(5) } else { 0 }
+    // With the visitor's bottom-up walk, double(5) folds to 10
+    // first; then the if collapses to the then-arm.
+    let body = TirStmtKind::Return {
+        value: Some(binary(
+            TirBinaryOp::Mul,
+            local_expr(0, TypeTable::I32),
+            int_lit(2, TypeTable::I32, "2"),
+            TypeTable::I32,
+        )),
+    };
+    let double = make_pure_fn("double", vec![("x", TypeTable::I32)], TypeTable::I32, body);
+    let callees = build_callee_map_test(std::slice::from_ref(&double));
+
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+
+    let mut inner = call_expr(&double, vec![int_lit(5, TypeTable::I32, "5")]);
+    assert!(interp.reduce_local(&mut inner));
+    assert!(matches!(inner.kind, TirExprKind::IntLiteral { .. }));
+
+    let mut if_expr = TirExpr::new(
+        TirExprKind::If {
+            condition: Box::new(bool_lit(true)),
+            then_branch: TirBlock::new(
+                vec![TirStmt::new(TirStmtKind::Expr(inner), Span::default())],
+                Span::default(),
+            ),
+            else_branch: Some(TirBlock::new(
+                vec![TirStmt::new(
+                    TirStmtKind::Expr(int_lit(0, TypeTable::I32, "0")),
+                    Span::default(),
+                )],
+                Span::default(),
+            )),
+        },
+        TypeTable::I32,
+        Span::default(),
+    );
+    assert!(interp.reduce_local(&mut if_expr));
+    let TirExprKind::Block(block) = &if_expr.kind else {
+        panic!("expected Block, got {:?}", if_expr.kind);
+    };
+    let [stmt] = block.stmts.as_slice() else {
+        panic!("expected single stmt");
+    };
+    let TirStmtKind::Expr(e) = &stmt.kind else {
+        panic!("expected Expr stmt");
+    };
+    let TirExprKind::IntLiteral { value, .. } = e.kind else {
+        panic!("expected IntLiteral");
+    };
+    assert_eq!(value, 10);
 }

@@ -42,32 +42,43 @@
 //!   - bool → int / float (true ↦ 1 / 1.0, false ↦ 0 / 0.0)
 //!   - char → int (codepoint, then truncated to target width)
 //!   - u8 → char (the only int → char form the resolver permits)
-//! - Local variables (Stage 1): immutable `let` bindings whose RHS reduces
-//!   to a constant flow into the env and are read back as that constant
-//!   in their use sites. `let mut` and post-assign locals stay
-//!   `NonConst`. The driving visitor populates the env via
+//! - Local variables: immutable `let` bindings whose RHS reduces to a
+//!   constant flow into the env and are read back as that constant at
+//!   each use site. `let mut` and post-assign locals stay `NonConst`.
+//!   The driving visitor populates the env via
 //!   [`Interpreter::bind_local`] / [`Interpreter::invalidate_local`].
-//! - `if` expressions (Stage 2): a constant condition collapses the node
-//!   to the chosen arm; a non-constant condition with both arms reducing
-//!   to the same lattice constant (and an effect-free condition) folds
-//!   to that constant. The unreachable arm of a constant-condition `if`
-//!   is treated as an infeasible SCCP edge — its value never participates
-//!   in the join, so a trapping branch (`else { panic(…) }`) does not
-//!   contaminate the result.
-//! - `if` statements (Stage 2): a constant condition splices the chosen
-//!   branch's stmts into the parent block via
+//! - `if` expressions: a constant condition collapses to the chosen
+//!   arm; a non-constant condition with both arms reducing to the same
+//!   lattice constant (and an effect-free condition) folds to that
+//!   constant. The unreachable arm of a constant-condition `if` is
+//!   treated as an SCCP infeasible edge, so a trapping branch
+//!   (`else { panic(…) }`) does not contaminate the result.
+//! - `if` statements: a constant condition splices the chosen branch's
+//!   stmts into the parent block via
 //!   [`Interpreter::reduce_local_block`].
-//! - `match` expressions (Stage 2.5, Phase A): a constant scrutinee
-//!   collapses the node to the first arm whose pattern provably matches
-//!   (treating later arms as SCCP infeasible edges); a non-constant
-//!   speculatable scrutinee with every arm reducing to the same lattice
-//!   constant collapses to that constant. Phase A patterns: `_`, integer
-//!   / bool / char literal, integer range (signed and unsigned), or-of
-//!   the above, and `ConstantValue` whose inner expression reduces to a
-//!   primitive `Value`. `Binding`, `Tuple`, `Variant`, `Struct`, `Enum`,
-//!   string / null literal patterns are deferred (treated as `Unknown`,
-//!   which never lets a const-scrutinee match commit and never drops a
-//!   later arm).
+//! - `match` expressions: a constant scrutinee collapses to the first
+//!   arm whose pattern provably matches (later arms become infeasible
+//!   edges); a non-constant speculatable scrutinee with every arm
+//!   reducing to the same lattice constant collapses to that constant.
+//!   Modelled patterns: `_`, integer / bool / char literal, integer
+//!   range (signed and unsigned), or-of the above, and `ConstantValue`
+//!   whose inner expression reduces to a primitive `Value`. `Binding`,
+//!   `Tuple`, `Variant`, `Struct`, `Enum`, and string / null literal
+//!   patterns report `Unknown` — they never wrongly commit a match and
+//!   never wrongly drop a later arm.
+//! - Pure-call inlining: a free `Call` whose args all reduce to
+//!   constants and whose callee was admitted to the [`CalleeMap`]
+//!   (pure, non-async, monomorphic — see [`is_ctfe_eligible`]) and
+//!   whose body is a single `Return { Some(_) }` or `Expr(_)`
+//!   evaluates the body's tail with the args bound into a fresh local
+//!   environment. The `call_stack` of in-flight callees blocks
+//!   recursive re-entry; a per-pass step budget caps total CTFE work;
+//!   the dynamic borrow on the shared callee `RefCell` blocks the
+//!   visitor's outer `borrow_mut`. `NonConst` tail results (e.g. body
+//!   contains a runtime div-by-zero) are downgraded to Unevaluated so
+//!   the original Call survives and the runtime trap is preserved.
+//!   `MethodCall` / `IndirectCall` / `CmRawCall` and multi-stmt bodies
+//!   are out of scope.
 //!
 //! Float arithmetic uses native Rust IEEE 754 ops (same as Wasm), following
 //! cranelift's approach: fold the result, but skip if it is NaN since NaN
@@ -81,10 +92,15 @@
 //! unrolling, pure function inlining, and a complementary wasm-CTFE
 //! backend).
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use crate::hashmap::IndexMap;
+use crate::name::ModuleSource;
 use crate::tir::{
-    PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirLiteralPattern,
-    TirMatchArm, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
+    PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction,
+    TirLiteralPattern, TirMatchArm, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
+    TypeTable,
 };
 
 /// Three-state lattice over compile-time evaluation results.
@@ -103,9 +119,9 @@ use crate::tir::{
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Lattice {
     /// No information yet. Default for un-bound locals and TIR kinds
-    /// the engine doesn't currently understand (e.g. `Call`, `Block`).
-    /// Stage 3+ may later refine an `Unevaluated` cell to `Const(_)`
-    /// once pure-call inlining lands.
+    /// the engine doesn't currently understand (e.g. a `Call` whose
+    /// callee isn't pure-foldable, `Block` past a single tail
+    /// expression).
     Unevaluated,
     /// Provably reduces to this value.
     Const(Value),
@@ -225,15 +241,86 @@ impl Value {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
+// Callee map
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// Identity of a callee in the [`CalleeMap`]. Mirrors the shape produced
+/// by `FunctionRef::full_name` so the interpreter can look up a `Call`
+/// node's target without re-deriving the format.
+pub type CalleeKey = (ModuleSource, String);
+
+/// Map of CTFE-eligible callees, keyed by `(module_source, full_name)`.
+///
+/// Values are [`Rc<RefCell<TirFunction>>`] handles aliased with
+/// [`crate::flat_package::FlatPackage::functions`], not body clones, so
+/// rebuilding the map every optimizer iteration costs only refcount
+/// bumps. The interpreter reads each callee via
+/// [`std::cell::RefCell::try_borrow`]; the failure path catches the
+/// case where the visitor is currently holding `borrow_mut` on this
+/// same function (i.e. self-recursive calls inside the function being
+/// walked). CTFE-internal recursion across nested folds is handled
+/// separately by `Interpreter::call_stack`, since `try_borrow` permits
+/// concurrent immutable borrows.
+///
+/// The purity / CTFE-safety gate is decided once at map construction
+/// time by [`is_ctfe_eligible`], and the interpreter never re-checks
+/// it. Body-shape and per-call validity (arity match, all args
+/// reduce, single recognized tail expression) are checked at fold
+/// time, not here.
+pub type CalleeMap = IndexMap<CalleeKey, Rc<RefCell<TirFunction>>>;
+
+/// Default per-pass CTFE step budget. Mirrors rustc's CTFE step counter
+/// shape: a hard ceiling on the number of productive call entries
+/// before the engine starts bailing. Borrow-blocked re-entries (the
+/// recursion guard) bail before the budget charge, so they don't
+/// consume budget; the ceiling only applies to new-frame work that
+/// actually runs.
+pub const DEFAULT_STEP_BUDGET: u32 = 1000;
+
+/// Decide whether a function may be evaluated at compile time.
+///
+/// The check is a conservative pure-and-safe gate, applied once when the
+/// driving visitor builds the [`CalleeMap`]:
+///
+/// - `effects.is_empty()` — no `with` clauses (the effect system's purity
+///   witness, modulo trap effects which Wado tracks separately).
+/// - `body.is_some()` — has a Wado-source body. External / CM-import
+///   functions have no inspectable body.
+/// - `!is_cm_binding && !is_dispatch_wrapper && !is_cm_export` —
+///   synthesized ABI bridges aren't real Wado functions.
+/// - `!is_async && task_return_type.is_none()` — async functions
+///   participate in the CM async runtime; not CTFE-safe.
+/// - `stores.is_empty()` — `stores[...]` is moot for CTFE (we don't pass
+///   refs), but bail conservatively.
+/// - `inline_hint != InlineHint::Never` — respect the user's explicit
+///   "do not expand this" annotation.
+/// - `type_params` and `impl_type_params` empty — CTFE runs after
+///   monomorphization, so concrete bodies only.
+#[must_use]
+pub fn is_ctfe_eligible(func: &TirFunction) -> bool {
+    func.effects.is_empty()
+        && func.body.is_some()
+        && !func.is_cm_binding
+        && !func.is_dispatch_wrapper
+        && !func.is_cm_export
+        && !func.is_async
+        && func.task_return_type.is_none()
+        && func.stores.is_empty()
+        && func.inline_hint != crate::tir::InlineHint::Never
+        && func.type_params.is_empty()
+        && func.impl_type_params.is_empty()
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
 // Interpreter
 // ──────────────────────────────────────────────────────────────────────────────
 
 /// Partial evaluator over [`TirExpr`].
 ///
-/// Holds the type table needed to resolve operand widths and a
-/// per-function `env` mapping local indices to lattice values. Future
-/// extensions (step budget for loops, pure-call inlining via the
-/// `FlatPackage`) will live on this struct.
+/// Holds the type table needed to resolve operand widths, a per-function
+/// `env` mapping local indices to lattice values, an optional
+/// [`CalleeMap`] of pure-eligible callees, a step budget, and a
+/// `call_stack` of in-flight CTFE frames for recursion detection.
 pub struct Interpreter<'a> {
     type_table: &'a TypeTable,
     /// Lattice values for `let`-bound locals in the *current function*.
@@ -247,6 +334,24 @@ pub struct Interpreter<'a> {
     /// [`invalidate_local`]: Self::invalidate_local
     /// [`enter_function`]: Self::enter_function
     env: IndexMap<u32, Lattice>,
+    /// Pre-built map of CTFE-eligible callees. When `None`, `Call` nodes
+    /// stay [`Lattice::Unevaluated`]. The visitor populates this once
+    /// per pass via [`with_callees`].
+    ///
+    /// [`with_callees`]: Self::with_callees
+    callees: Option<&'a CalleeMap>,
+    /// Hard ceiling on the number of productive CTFE call entries
+    /// before bailing. Decremented once per successful body evaluation;
+    /// on zero, further attempts return `Unevaluated`.
+    step_budget: u32,
+    /// Keys of the callees whose bodies the engine is currently
+    /// evaluating, in entry order. A `Call` to a key already on the
+    /// stack reports `Unevaluated` immediately, so direct (`f → f`)
+    /// and indirect (`f → g → f`) recursion terminate without
+    /// consuming budget. The `RefCell` borrow guard cannot serve this
+    /// role on its own because `try_borrow` permits concurrent
+    /// immutable borrows.
+    call_stack: Vec<CalleeKey>,
 }
 
 impl<'a> Interpreter<'a> {
@@ -255,15 +360,47 @@ impl<'a> Interpreter<'a> {
         Self {
             type_table,
             env: IndexMap::default(),
+            callees: None,
+            step_budget: DEFAULT_STEP_BUDGET,
+            call_stack: Vec::new(),
         }
+    }
+
+    /// Install the [`CalleeMap`]. Without this, every `Call` node
+    /// remains [`Lattice::Unevaluated`] — the engine has no body to
+    /// look up.
+    ///
+    /// Lifetime: the map outlives this interpreter (the visitor builds
+    /// it once per pass, hands a borrow in, and discards both at end of
+    /// pass).
+    pub fn with_callees(&mut self, callees: &'a CalleeMap) -> &mut Self {
+        self.callees = Some(callees);
+        self
+    }
+
+    /// Override the per-pass CTFE step budget (default
+    /// [`DEFAULT_STEP_BUDGET`]). Called rarely — primarily by tests
+    /// exercising the budget-exhaustion path.
+    pub fn set_step_budget(&mut self, budget: u32) -> &mut Self {
+        self.step_budget = budget;
+        self
     }
 
     /// Reset the per-function environment. The driving visitor must call
     /// this before walking each function body; otherwise a previous
     /// function's bindings would leak into the next one (local indices
     /// are unique per function, not project-wide).
+    ///
+    /// Asserts the recursion guard is clear — a leaked entry would mean
+    /// a previous walk panicked mid-call. The step budget is
+    /// intentionally *not* touched: it caps total CTFE work across the
+    /// pass, not per-function.
     pub fn enter_function(&mut self) {
         self.env.clear();
+        debug_assert!(
+            self.call_stack.is_empty(),
+            "tiri call_stack leaked across function boundary",
+        );
     }
 
     /// Record a lattice value for a `let`-bound local. The driving
@@ -409,13 +546,11 @@ impl<'a> Interpreter<'a> {
     ///
     /// This is the right entry point when the caller is already driving a
     /// TIR walk (for example via `tir_visitor::opt_walk_expr`) and wants
-    /// to slot tiri's local rewrites into each visited node. Today the
-    /// rules are constant folding for Binary / Unary / Cast, the
-    /// short-circuit identity simplifications for `&&` / `||`, and the
-    /// Stage-2 `if`-expression rewrites (constant condition collapses to
-    /// the chosen arm; non-constant condition with both arms producing
-    /// the same lattice constant collapses to that constant when the
-    /// condition is effect-free).
+    /// to slot tiri's local rewrites into each visited node. The rules
+    /// are constant folding for Binary / Unary / Cast, short-circuit
+    /// identity simplifications for `&&` / `||`, pure-call inlining,
+    /// constant-condition or both-arms-equal `if` collapse, and the
+    /// matching `match`-expression collapse.
     ///
     /// `Local` nodes themselves are never rewritten in place: their env
     /// values are read transparently when computing the parent
@@ -424,6 +559,13 @@ impl<'a> Interpreter<'a> {
     /// targets (`x = …`, `obj.f = …`, `arr[i] = …`) safely opaque.
     pub fn reduce_local(&mut self, expr: &mut TirExpr) -> bool {
         if let Lattice::Const(v) = self.try_fold(expr) {
+            expr.kind = value_to_expr_kind(v);
+            return true;
+        }
+        // try_call_fold returns Const only when the whole call collapses
+        // to a literal; Unevaluated / NonConst leave the Call intact so
+        // any runtime trap inside the body survives.
+        if let Lattice::Const(v) = self.try_call_fold(expr) {
             expr.kind = value_to_expr_kind(v);
             return true;
         }
@@ -437,10 +579,10 @@ impl<'a> Interpreter<'a> {
     }
 
     /// Apply stmt-level rewrites that may expand or contract the stmt
-    /// list of `block`. Today this is solely Stage-2 `if`-statement
-    /// folding: an `if true { … } else { … }` stmt with a constant
-    /// boolean condition is replaced by the chosen branch's stmts in the
-    /// parent block; an `if false { … }` with no else is dropped entirely.
+    /// list of `block`. Currently the only such rewrite is constant-
+    /// condition `if`-statement folding: an `if true { … } else { … }`
+    /// stmt is replaced by the chosen branch's stmts in the parent
+    /// block; an `if false { … }` with no else is dropped entirely.
     ///
     /// Returns `true` when the block was rewritten. The caller (driving
     /// visitor) is expected to have walked into each stmt's children
@@ -481,8 +623,10 @@ impl<'a> Interpreter<'a> {
         true
     }
 
-    /// Stage-2 rewrite for an `if` expression. See [`reduce_local`] for
-    /// the rule set; this helper is the implementation.
+    /// Rewrite an `if` expression. A constant-bool condition collapses
+    /// the node to the chosen arm's block; a non-constant but
+    /// speculatable condition with both arms reducing to the same
+    /// `Const(v)` collapses to that literal.
     fn rewrite_if_expr(&mut self, expr: &mut TirExpr) -> bool {
         let TirExprKind::If {
             condition,
@@ -556,14 +700,12 @@ impl<'a> Interpreter<'a> {
         true
     }
 
-    /// Stage-2.5 rewrite for a `match` expression. The two reductions are:
+    /// Rewrite a `match` expression. Two reductions:
     ///
-    /// 1. **Const scrutinee**: pick the first arm whose pattern
-    ///    provably matches (no guard, definite `Yes`). Replace the
-    ///    `Match` with `Block { stmts: [Expr(arm.body)] }` so the
-    ///    surrounding pass walks the arm's residual normally. If any
-    ///    earlier arm is `Unknown`, we cannot prove a definite arm
-    ///    fires first — bail.
+    /// 1. **Const scrutinee**: pick the first arm whose pattern provably
+    ///    matches (no guard, definite `Yes`) and replace the `Match`
+    ///    with `Block { stmts: [Expr(arm.body)] }`. An earlier `Unknown`
+    ///    arm prevents us from proving a definite arm fires first; bail.
     /// 2. **Non-const speculatable scrutinee, all-arms-equal collapse**:
     ///    when every arm has no guard and reduces to the same
     ///    `Const(v)`, rewrite the whole match to that literal. The
@@ -951,12 +1093,12 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    /// Lattice value of a block: for Stage 2 we model only the simplest
-    /// useful case — a block whose sole stmt is a tail `Expr(e)`. Such
-    /// a block evaluates to whatever `e` evaluates to, so we recurse
-    /// through `expr_to_lattice`. Empty blocks evaluate to `()`, which
-    /// has no representable [`Value`], so they map to `Unevaluated`
-    /// (the join with any other arm carries the other arm's value out,
+    /// Lattice value of a block: only the simple shape — a block whose
+    /// sole stmt is a tail `Expr(e)` — is modelled. Such a block
+    /// evaluates to whatever `e` evaluates to, so we recurse through
+    /// `expr_to_lattice`. Empty blocks evaluate to `()`, which has no
+    /// representable [`Value`], so they map to `Unevaluated` (the join
+    /// with any other arm then carries the other arm's value out,
     /// matching the desired SCCP feasible-edge behavior). Everything
     /// else (intermediate `let` / `Assign` / `Loop` / function calls)
     /// is conservatively `Unevaluated` rather than `NonConst` so that
@@ -1018,6 +1160,153 @@ impl<'a> Interpreter<'a> {
             }
             _ => Lattice::Unevaluated,
         }
+    }
+
+    /// Pure-call inlining. Attempts to fold a `Call` node whose args
+    /// all reduce to constants and whose callee is registered in the
+    /// [`CalleeMap`].
+    ///
+    /// Returns `Const(v)` only when the callee body's tail expression
+    /// fully reduces to a primitive [`Value`] under the bound args.
+    /// Every other outcome — non-`Call` node, missing callee, non-const
+    /// arg, recognized-but-unfoldable body, recursion, budget
+    /// exhaustion — returns `Unevaluated` so the caller leaves the
+    /// original Call in place. `NonConst` is intentionally avoided
+    /// here: the call may still trap at runtime (a body whose tail
+    /// folds to `NonConst` because of, say, runtime div-by-zero), and
+    /// representing that as `NonConst` would let some surrounding
+    /// rewrite (e.g. an `if` both-arms-equal collapse rooted on the
+    /// other arm) drop the Call's evaluation.
+    ///
+    /// The recognized body shape is intentionally minimal — a single
+    /// statement that is either `Return { Some(expr) }` or `Expr(expr)`.
+    /// This covers the high-value targets (`fn double(x) { return x*2 }`,
+    /// expression-bodied helpers, single-tail-`if` bodies). Multi-stmt
+    /// bodies (let-sequences, multi-return) are out of scope today;
+    /// bailing here costs an optimization, not correctness.
+    ///
+    /// Recursion is bounded by two complementary guards:
+    /// `try_borrow` on the callee `RefCell` blocks the case where the
+    /// visitor is currently holding `borrow_mut` (the function being
+    /// walked); `call_stack` blocks CTFE-internal re-entry into a
+    /// callee whose body we are already evaluating, since `try_borrow`
+    /// permits concurrent immutable borrows.
+    fn try_call_fold(&mut self, expr: &TirExpr) -> Lattice {
+        let Some(callees) = self.callees else {
+            return Lattice::Unevaluated;
+        };
+        let TirExprKind::Call { func, args, .. } = &expr.kind else {
+            return Lattice::Unevaluated;
+        };
+        // Synthesise the lookup key only after we know a CalleeMap is
+        // installed and the node is actually a Call — `full_name()`
+        // formats a fresh String, so the order saves an allocation
+        // per visited non-Call expression on the no-fold paths.
+        let key: CalleeKey = (func.module_source.clone(), func.full_name());
+        let Some(callee_rc) = callees.get(&key) else {
+            return Lattice::Unevaluated;
+        };
+
+        // Recursion guard: refuse re-entry to a callee already being
+        // evaluated. Cheaper than the borrow attempt and catches CTFE
+        // recursion that `try_borrow` doesn't (multiple immutable
+        // borrows are allowed).
+        if self.call_stack.iter().any(|k| k == &key) {
+            return Lattice::Unevaluated;
+        }
+
+        // `try_borrow` failing means the function is currently held
+        // under the visitor's outer `borrow_mut`. Bail rather than
+        // panic.
+        let Ok(callee) = callee_rc.try_borrow() else {
+            return Lattice::Unevaluated;
+        };
+
+        // Reduce every arg to a Value. We only attempt the fold when
+        // every parameter has a known constant — partial constant
+        // propagation into a callee is a future extension.
+        let mut bound: Vec<Value> = Vec::with_capacity(args.len());
+        for arg in args {
+            match self.expr_to_lattice(&arg.expr).as_const() {
+                Some(v) => bound.push(v),
+                None => return Lattice::Unevaluated,
+            }
+        }
+
+        // Param/arg arity must agree. The resolver enforces this, but
+        // an arity mismatch here would silently bind the wrong locals.
+        if bound.len() != callee.params.len() {
+            return Lattice::Unevaluated;
+        }
+
+        // Recognize the body shape. A miss here is the engine declining
+        // to model anything more involved, not a hard failure.
+        let Some(tail) = single_tail_expression(&callee) else {
+            return Lattice::Unevaluated;
+        };
+
+        // Charge one step per call entry. Bail (without consuming
+        // anything) when exhausted so a chain that exactly hits the
+        // ceiling still has its outermost result left intact rather
+        // than half-folded.
+        if self.step_budget == 0 {
+            return Lattice::Unevaluated;
+        }
+        self.step_budget -= 1;
+
+        // Push call frame, swap env to a fresh one bound to the
+        // arguments. Local indices `0..params.len()` shadow the
+        // parameters — the same convention the rest of the compiler
+        // uses (`TirFunction::locals[0..params.len()]`).
+        self.call_stack.push(key);
+        let saved_env = std::mem::take(&mut self.env);
+        for (i, v) in bound.iter().enumerate() {
+            // u32 cast is safe: param counts are bounded by Wasm local
+            // index limits, well under u32::MAX.
+            #[allow(clippy::cast_possible_truncation)]
+            self.env.insert(i as u32, Lattice::Const(*v));
+        }
+
+        // Reduce the tail. We use `reduce_to_lattice`, not the bare
+        // `expr_to_lattice` projection, so Binary / Unary / Cast
+        // inside the body actually fold against the bound env (the
+        // projection alone returns Unevaluated for those kinds — only
+        // `try_fold` walks them). `reduce_to_lattice` clones internally,
+        // so the body inside the still-held `Ref` is not mutated.
+        let result = self.reduce_to_lattice(tail);
+
+        // Restore. The `Ref` (and its dynamic borrow on the callee
+        // RefCell) drops when this scope ends.
+        self.env = saved_env;
+        self.call_stack.pop();
+
+        // Only Const(v) is exposed to the caller. NonConst from the
+        // tail (e.g. a Const/Const op that hit a runtime trap like
+        // div-by-zero inside the body) is downgraded to Unevaluated
+        // so the original Call expression is left intact and the
+        // runtime trap survives.
+        match result {
+            c @ Lattice::Const(_) => c,
+            Lattice::NonConst | Lattice::Unevaluated => Lattice::Unevaluated,
+        }
+    }
+}
+
+/// Recognize a callee body shape the engine can evaluate: a single
+/// statement that is either `Return { Some(expr) }` or `Expr(expr)`.
+/// Returns the tail expression in either case.
+///
+/// Anything else (zero or multiple stmts, intermediate Let / If / Loop /
+/// Break / Return without value, …) reports `None`. The caller treats
+/// `None` as "do not fold this call", preserving the runtime call.
+fn single_tail_expression(func: &TirFunction) -> Option<&TirExpr> {
+    let body = func.body.as_ref()?;
+    let [single] = body.stmts.as_slice() else {
+        return None;
+    };
+    match &single.kind {
+        TirStmtKind::Return { value: Some(e) } | TirStmtKind::Expr(e) => Some(e),
+        _ => None,
     }
 }
 
