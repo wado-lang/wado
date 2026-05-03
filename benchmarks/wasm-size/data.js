@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777752131997,
+  "lastUpdate": 1777780554464,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -18581,6 +18581,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/909321b8f71b44877018dff4f9cecb51b5565385"
         },
         "date": 1777752131659,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1775,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8776,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18520,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 515706,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c7445176dbf0ccb85e62e0dcb74ceb7eb9f61df6",
+          "message": "Merge pull request #979 from wado-lang/claude/wit-driven-wado-compiler-foRHd\n\nrefactor: unify effect declarations into interface; document WIT interop roadmap",
+          "timestamp": "2026-05-03T12:51:01+09:00",
+          "tree_id": "ddcbe1456a7c57a74e8f41a0bc09ceeb08686065",
+          "url": "https://github.com/wado-lang/wado/commit/c7445176dbf0ccb85e62e0dcb74ceb7eb9f61df6"
+        },
+        "date": 1777780554261,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
