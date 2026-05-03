@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777804407906,
+  "lastUpdate": 1777822638891,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -18713,6 +18713,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/4c486b5b4a295d03cb5adc95ca78a57b7855f8f8"
         },
         "date": 1777804407582,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1775,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8776,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18520,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 515706,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c2d8a33cd6ac9ade5478d55942ef6172df0e5d90",
+          "message": "Merge pull request #983 from wado-lang/claude/profile-compiler-performance-oPdzb\n\nperf(resolver): remove per-module flat-map clones via TypeLookup (~28% faster compile)",
+          "timestamp": "2026-05-04T00:32:32+09:00",
+          "tree_id": "69911730c987d69d461e0fa7ee99b3c27fbb0740",
+          "url": "https://github.com/wado-lang/wado/commit/c2d8a33cd6ac9ade5478d55942ef6172df0e5d90"
+        },
+        "date": 1777822638564,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
