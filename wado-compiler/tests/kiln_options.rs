@@ -13,12 +13,8 @@ fn block_on<F: std::future::Future>(future: F) -> F::Output {
     tokio::runtime::Runtime::new().unwrap().block_on(future)
 }
 
-fn entry() -> ModuleSource {
-    ModuleSource::EntryPoint {
-        filename: wado_compiler::name::InternedStr::from_string_uncanonicalized(
-            "entry.wado".to_string(),
-        ),
-    }
+fn entry(annotated: &wado_compiler::Annotated) -> ModuleSource {
+    annotated.interner.borrow_mut().entry_point("entry.wado")
 }
 
 #[test]
@@ -34,7 +30,7 @@ pub fn generate() {}
 ";
     let host = InMemoryHost::new();
     let annotated = block_on(annotate(source, &host, Some("entry.wado"))).unwrap();
-    let desc = extract_options_descriptor(&annotated, &entry()).unwrap();
+    let desc = extract_options_descriptor(&annotated, &entry(&annotated)).unwrap();
     assert_eq!(desc.fields.len(), 3);
 
     assert_eq!(desc.fields[0].name, "highlight");
@@ -61,7 +57,7 @@ pub fn generate() {}
 ";
     let host = InMemoryHost::new();
     let annotated = block_on(annotate(source, &host, Some("entry.wado"))).unwrap();
-    let desc = extract_options_descriptor(&annotated, &entry()).unwrap();
+    let desc = extract_options_descriptor(&annotated, &entry(&annotated)).unwrap();
     assert_eq!(desc.fields.len(), 1);
     match &desc.fields[0].ty {
         OptionsType::Option(inner) => assert!(matches!(inner.as_ref(), OptionsType::String)),
@@ -86,7 +82,7 @@ pub fn generate() {}
 ";
     let host = InMemoryHost::new();
     let annotated = block_on(annotate(source, &host, Some("entry.wado"))).unwrap();
-    let desc = extract_options_descriptor(&annotated, &entry()).unwrap();
+    let desc = extract_options_descriptor(&annotated, &entry(&annotated)).unwrap();
     assert_eq!(desc.fields.len(), 1);
     match &desc.fields[0].ty {
         OptionsType::Enum { name, variants } => {
@@ -117,7 +113,7 @@ pub fn generate() {}
 ";
     let host = InMemoryHost::new();
     let annotated = block_on(annotate(source, &host, Some("entry.wado"))).unwrap();
-    let desc = extract_options_descriptor(&annotated, &entry()).unwrap();
+    let desc = extract_options_descriptor(&annotated, &entry(&annotated)).unwrap();
     assert_eq!(desc.fields.len(), 1);
     let OptionsType::Struct { name, descriptor } = &desc.fields[0].ty else {
         panic!("expected nested Struct field");
@@ -141,7 +137,7 @@ pub fn generate() {}
 ";
     let host = InMemoryHost::new();
     let annotated = block_on(annotate(source, &host, Some("entry.wado"))).unwrap();
-    let err = extract_options_descriptor(&annotated, &entry()).unwrap_err();
+    let err = extract_options_descriptor(&annotated, &entry(&annotated)).unwrap_err();
     assert!(
         err.iter()
             .any(|d| d.message.contains("does not declare `pub struct Options`"))
@@ -157,7 +153,7 @@ pub struct Options {
 ";
     let host = InMemoryHost::new();
     let annotated = block_on(annotate(source, &host, Some("entry.wado"))).unwrap();
-    let err = extract_options_descriptor(&annotated, &entry()).unwrap_err();
+    let err = extract_options_descriptor(&annotated, &entry(&annotated)).unwrap_err();
     assert!(
         err.iter()
             .any(|d| d.message.contains("does not declare `generate` function"))

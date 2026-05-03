@@ -6,7 +6,7 @@ mod common;
 
 use common::InMemoryHost;
 use wado_compiler::symbol::{SymbolKey, SymbolKind};
-use wado_compiler::{ModuleSource, annotate};
+use wado_compiler::annotate;
 
 fn block_on<F: std::future::Future>(future: F) -> F::Output {
     tokio::runtime::Runtime::new().unwrap().block_on(future)
@@ -24,9 +24,7 @@ export fn run() {
     let host = InMemoryHost::new();
     let annotated = block_on(annotate(source, &host, Some("entry.wado"))).unwrap();
 
-    let entry = ModuleSource::EntryPoint {
-        filename: wado_compiler::name::InternedStr::from_string_uncanonicalized("entry.wado".to_string()),
-    };
+    let entry = annotated.interner.borrow_mut().entry_point("entry.wado");
 
     let point_symbol = annotated
         .symbols
@@ -62,9 +60,7 @@ fn annotate_resolves_position_to_ast_id() {
     let host = InMemoryHost::new();
     let annotated = block_on(annotate(source, &host, Some("entry.wado"))).unwrap();
 
-    let entry = ModuleSource::EntryPoint {
-        filename: wado_compiler::name::InternedStr::from_string_uncanonicalized("entry.wado".to_string()),
-    };
+    let entry = annotated.interner.borrow_mut().entry_point("entry.wado");
 
     // Column 12 is inside "run" on line 1.
     let id = annotated

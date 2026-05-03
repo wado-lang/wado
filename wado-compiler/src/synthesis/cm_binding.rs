@@ -9855,13 +9855,10 @@ mod tests {
     #[test]
     fn param_needs_lifting_enum() {
         let mut tt = TypeTable::new();
+        let mut interner = crate::name::ModuleSourceInterner::new();
         let e = tt.intern(crate::tir::ResolvedType::Enum {
             name: "Color".to_string(),
-            module_source: ModuleSource::EntryPoint {
-                filename: crate::name::InternedStr::from_string_uncanonicalized(
-                    "<test>".to_string(),
-                ),
-            },
+            module_source: interner.entry_point("<test>"),
         });
         assert!(!param_needs_lifting(e, &tt));
     }

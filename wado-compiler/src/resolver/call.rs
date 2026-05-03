@@ -801,7 +801,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     // This covers Stdout::write(), etc.
                     else {
                         (
-                            Some(CalleeRef::local_namespace(prefix, suffix)),
+                            Some(CalleeRef::local_namespace(
+                                &mut self.interner.borrow_mut(),
+                                prefix,
+                                suffix,
+                            )),
                             ident.name.clone(),
                         )
                     }
@@ -860,7 +864,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 if let Expr::Ident(ident) = &field_access.expr {
                     (
                         Some(CalleeRef::local_namespace(
-                            ident.name.clone(),
+                            &mut self.interner.borrow_mut(),
+                            &ident.name,
                             field_access.field.clone(),
                         )),
                         format!("{}.{}", ident.name, field_access.field),
