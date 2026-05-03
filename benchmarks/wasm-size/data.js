@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777835094235,
+  "lastUpdate": 1777836363953,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -18801,6 +18801,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d0bbfbcdc2f5a665a31abd0728c4107036081445"
         },
         "date": 1777835093922,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1775,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8776,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18520,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 515706,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3c4d4b742ab60c481ea6a5489e2704a8aaee9554",
+          "message": "Merge pull request #985 from wado-lang/claude/improve-wado-lsp-3uToz\n\nfix(lsp): clean diagnostics when opening bundled stdlib files",
+          "timestamp": "2026-05-04T04:21:12+09:00",
+          "tree_id": "f2be09eb75bf1c1465135eca8e31459477e8da7f",
+          "url": "https://github.com/wado-lang/wado/commit/3c4d4b742ab60c481ea6a5489e2704a8aaee9554"
+        },
+        "date": 1777836363633,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
