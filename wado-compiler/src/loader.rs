@@ -769,7 +769,9 @@ fn parse_stdlib_identity_attribute(module: &Module) -> Option<ModuleSource> {
     let path = module.stdlib_identity()?;
     if let Some(name) = path.strip_prefix("core:") {
         Some(ModuleSource::core(name))
-    } else { path.strip_prefix("wasi:").map(ModuleSource::wasi) }
+    } else {
+        path.strip_prefix("wasi:").map(ModuleSource::wasi)
+    }
 }
 
 /// Cached desugared AST modules for all stdlib modules (core + WASI).
@@ -920,17 +922,14 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         // identity — see `Module::stdlib_identity` for why bundled
         // stdlib sources self-declare.
         let entry_ast = {
-            let _span = self
-                .logger
-                .span(&format!("parse {tentative_entry_source}"));
+            let _span = self.logger.span(&format!("parse {tentative_entry_source}"));
             self.parse_source(entry_source, &tentative_entry_source)?
         };
 
-        let entry_module_source = parse_stdlib_identity_attribute(&entry_ast)
-            .unwrap_or(tentative_entry_source);
+        let entry_module_source =
+            parse_stdlib_identity_attribute(&entry_ast).unwrap_or(tentative_entry_source);
         self.entry_module_source = Some(entry_module_source.clone());
-        self.entry_canonical_name =
-            Some(crate::name::canonicalize_entry_point(resolved_filename));
+        self.entry_canonical_name = Some(crate::name::canonicalize_entry_point(resolved_filename));
 
         let entry_name = entry_module_source.to_string();
         self.logger.span_start(&format!("load {entry_name}"));

@@ -5,6 +5,10 @@
 
 Auto-imported in every module. Disable with `#![no_prelude]`.
 
+`core:prelude` _is_ the prelude — it cannot auto-import itself, and
+the names it re-exports (Option, Result, Eq, Array, …) must not
+collide with "prelude" because they are the prelude. Mark accordingly.
+
 ## Functions
 
 ### `pub fn panic(message: String) -> !`
