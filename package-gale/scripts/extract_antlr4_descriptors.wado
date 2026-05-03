@@ -86,6 +86,20 @@ struct DescriptorPair {
 struct ParsedDescriptor {
     grammar: String,
     slave_grammars: Array<String>,
+    /// `[input]` block — the raw test input fed to the generated parser.
+    /// Empty when the descriptor declares no `[input]` (lexer-only smoke
+    /// tests, etc.).
+    input: String,
+    /// `[output]` block — the expected `to_string_tree()` (or host-language
+    /// artefact) the upstream test runner asserts. Empty when missing.
+    /// Stage B's `normalize_output_for_stage_b` decides whether this is a
+    /// parse-tree shape we can compare against.
+    output: String,
+    /// `[start]` field — the rule the upstream runner enters at. Gale's
+    /// generated parser always exposes the first parser rule via `parse()`,
+    /// so descriptors whose `[start]` differs from the first rule will fail
+    /// Stage B and are routed to `[stage_b_skip]` after triage.
+    start: String,
 }
 
 /// Mirrors `RuntimeTestDescriptorParser.parse` — section detection plus the
@@ -126,15 +140,27 @@ fn parse_descriptor_text(text: &String) -> ParsedDescriptor {
 
     let mut grammar: String = "";
     let mut slaves: Array<String> = [];
+    let mut input: String = "";
+    let mut output: String = "";
+    let mut start: String = "";
     for let p of pairs {
         let processed = post_process(&p.value);
         match p.name {
             "grammar" => { grammar = unescape_st_text(&processed); },
             "slaveGrammar" => { slaves.push(unescape_st_text(&processed)); },
+            "input" => { input = processed; },
+            "output" => { output = processed; },
+            "start" => { start = processed; },
             _ => {},
         }
     }
-    return ParsedDescriptor { grammar, slave_grammars: slaves };
+    return ParsedDescriptor {
+        grammar,
+        slave_grammars: slaves,
+        input,
+        output,
+        start,
+    };
 }
 
 /// Mirror StringTemplate's text-mode escape handling for the descriptor's
@@ -301,10 +327,21 @@ fn load_triage_maps(content: &Option<String>) -> TriageMaps {
     return TriageMaps { stage_a, stage_b };
 }
 
-/// Stage-A-only convenience wrapper retained so existing callers stay
-/// terse while Phase 3 wiring is still in flight.
+/// Stage-A-only convenience wrapper. Retained as its own function (rather
+/// than inlining `load_triage_maps(...).stage_a` at every call site) to
+/// work around a Wado compiler ICE: in `run()`, `let m = load_triage_maps(...);
+/// let a = m.stage_a;` triggers
+/// "WIR pipeline generated invalid core Wasm module: type mismatch:
+/// expected (ref $type), found (ref (exact $type))".
+/// Bug fixture: TODO(record-once-isolated). The two-wrapper indirection
+/// is the agreed workaround for now.
 fn load_triage_map(content: &Option<String>) -> TriageMap {
     return load_triage_maps(content).stage_a;
+}
+
+/// Stage-B-only convenience wrapper. See `load_triage_map` for the rationale.
+fn load_stage_b_triage_map(content: &Option<String>) -> TriageMap {
+    return load_triage_maps(content).stage_b;
 }
 
 fn unquote(s: &String) -> String {
@@ -514,6 +551,65 @@ fn emit_test_file_for_category(category: &String, entries: &Array<DescriptorEntr
     return w.to_string();
 }
 
+/// Emit one Stage B driver test file for a single descriptor.
+///
+/// The file lives at
+/// `tests/antlr4-compat/stage_b/<Category>/<Name>_test.wado` so each
+/// descriptor's grammar can be imported via Kiln (`use ... with {
+/// generator: ... }`) under its own `output_dir`, which avoids the
+/// one-grammar-per-file aliasing that a single per-category test file
+/// would require.
+///
+/// The emitted test:
+///   1. Imports the descriptor's `.g4` through Gale's generator,
+///   2. Runs the generated parser on `[input]`,
+///   3. Compares `to_string_tree()` against the normalised `[output]`.
+///
+/// Triage (`[stage_b_todo]` / `[stage_b_skip]`) decorates the emission:
+/// `Skip` callers should not invoke this function at all; `Todo` causes
+/// the test to be `#[TODO]`-marked so a known-failing assertion is
+/// recorded on a separate axis from real failures (matches Stage A).
+fn emit_stage_b_test_file(
+    category: &String,
+    name: &String,
+    input: &String,
+    expected_tree: &String,
+    triage: &Triage,
+) -> String {
+    let mut w = CodeWriter::new();
+    w.line(&generator_attr());
+    w.line(&"// Do not edit by hand — re-run the generator to regenerate.");
+    w.line(&"//");
+    w.line(&`// Source descriptor: {*category}/{*name} (ANTLR4 runtime-testsuite).`);
+    w.line(&"// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_b_*]).");
+    w.blank();
+    w.line(&`use t from "../../grammars/{*category}/{*name}.g4"`);
+    w.line(&"    with {");
+    w.line(&"        generator: {");
+    w.line(&`            module: "../../../../src/generator.wado",`);
+    w.line(&"            options: { highlight: false },");
+    w.line(&`            output_dir: "tests/generated/antlr4_compat/{*category}/{*name}",`);
+    w.line(&"        },");
+    w.line(&"    };");
+    w.line(&`use \{ normalize_tree \} from "../../grammars/{*category}/{*name}.g4";`);
+    w.blank();
+    if let Todo(reason) = triage {
+        w.line(&"#[TODO]");
+        w.line(&`// triage: {escape_for_wado_str(reason)}`);
+    }
+    w.begin(&`test "stage_b: {*category}/{*name}"`);
+    w.line(&`let input = "{escape_for_wado_str(input)}";`);
+    w.line(&`let expected = "{escape_for_wado_str(expected_tree)}";`);
+    w.line(&"let root = t::parse(&input).unwrap();");
+    w.line(&"let actual = t::to_tree(&root).to_string_tree();");
+    w.line(&"let norm = normalize_tree(&expected);");
+    // Backticks land in the generated source verbatim; the Wado compiler
+    // there interprets them as a template string with `{actual}` etc.
+    w.line(&"assert actual == norm, `actual:   {actual}\\nexpected: {norm}`;");
+    w.end();
+    return w.to_string();
+}
+
 // ===== Main =====
 
 struct CliArgs {
@@ -598,14 +694,12 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
         },
     };
 
-    // Load triage map (optional). The status file lives under compat_dir
-    // so all compat artefacts stay together; we read it via the repo root
-    // descriptor to keep a single canonical path.
     let status_text = match read_file_to_string(&root, &status_file_path()) {
         Ok(s) => Option::Some(s),
         Err(_) => null,
     };
     let triage_map = load_triage_map(&status_text);
+    let stage_b_triage_map = load_stage_b_triage_map(&status_text);
 
     let grammars_dir = match ensure_dir(&compat_dir, &grammars_subdir()) {
         Ok(d) => d,
@@ -615,9 +709,21 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
         },
     };
 
+    let stage_b_dir = match ensure_dir(&compat_dir, &"stage_b") {
+        Ok(d) => d,
+        Err(_) => {
+            eprintln("extract: cannot create or open antlr4-compat/stage_b/");
+            return;
+        },
+    };
+
     let mut total_emitted = 0;
     let mut total_todo = 0;
     let mut total_skip = 0;
+    let mut stage_b_emitted = 0;
+    let mut stage_b_todo = 0;
+    let mut stage_b_skip = 0;
+    let mut stage_b_auto_skip = 0;
 
     for let category of &categories {
         let cat_src_dir = match open_dir(&src_root, category, false) {
@@ -631,6 +737,13 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
             Ok(d) => d,
             Err(_) => {
                 eprintln(`extract: cannot create category dir '{*category}', skipping`);
+                continue;
+            },
+        };
+        let stage_b_cat_dir = match ensure_dir(&stage_b_dir, category) {
+            Ok(d) => d,
+            Err(_) => {
+                eprintln(`extract: cannot create stage_b/{*category}/, skipping`);
                 continue;
             },
         };
@@ -695,6 +808,65 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
                 slave_relpaths,
                 triage,
             });
+
+            // ----- Stage B: emit a tree-shape equivalence test if eligible.
+            // Eligibility (all must hold):
+            //   * descriptor has a non-empty [output] block,
+            //   * descriptor has a non-empty [input] block (otherwise there is
+            //     nothing to feed to the generated parser),
+            //   * descriptor is single-grammar (composite descriptors with
+            //     slave grammars cannot be reached through one `use` directive,
+            //     and Stage B currently has no machinery for grammar imports),
+            //   * the [output] normaliser recognises it as a parse tree,
+            //   * the [output] tree's root rule equals [start]. ANTLR4
+            //     descriptors often print a sub-tree via an `@after` action
+            //     like `<ToStringTree("$labeled.ctx"):writeln()>`; their
+            //     [output] starts with a non-start rule name. Gale's
+            //     `t::parse(input)` always returns the start rule's full
+            //     tree, so wrapping would cause a false-negative. Detect by
+            //     checking that the normalised output starts with `(<start>`.
+            // Anything else is silently skipped (auto-skip counter); explicit
+            // [stage_b_skip] / [stage_b_todo] entries override the default.
+            if parsed.output.is_empty()
+                || parsed.input.is_empty()
+                || parsed.slave_grammars.len() > 0 {
+                continue;
+            }
+            let normalised = match normalize_output_for_stage_b(&parsed.output) {
+                Some(t) => t,
+                None => {
+                    stage_b_auto_skip += 1;
+                    continue;
+                },
+            };
+            let start_trimmed = parsed.start.trim();
+            let start_prefix = `({start_trimmed}`;
+            if !start_trimmed.is_empty() && !normalised.starts_with(start_prefix) {
+                stage_b_auto_skip += 1;
+                continue;
+            }
+            let stage_b_triage = stage_b_triage_map.lookup(&key);
+            if let Skip(reason) = &stage_b_triage {
+                println(`  skipB: {key} — {*reason}`);
+                stage_b_skip += 1;
+                continue;
+            }
+            let stage_b_src = emit_stage_b_test_file(
+                category,
+                &base,
+                &parsed.input,
+                &normalised,
+                &stage_b_triage,
+            );
+            let stage_b_filename = `{base}_test.wado`;
+            if let Err(_) = write_file_string(&stage_b_cat_dir, &stage_b_filename, &stage_b_src) {
+                eprintln(`extract: cannot write stage_b/{*category}/{stage_b_filename}`);
+                continue;
+            }
+            if let Todo(_) = &stage_b_triage {
+                stage_b_todo += 1;
+            }
+            stage_b_emitted += 1;
         }
 
         // Emit the per-category test file.
@@ -708,9 +880,13 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
     }
 
     println("");
-    println(`extract: emitted {total_emitted} descriptor(s) across {categories.len()} categor(ies)`);
-    println(`extract:   {total_todo} marked #[TODO]`);
-    println(`extract:   {total_skip} skipped`);
+    println(`extract: stage A: emitted {total_emitted} descriptor(s) across {categories.len()} categor(ies)`);
+    println(`extract:          {total_todo} marked #[TODO]`);
+    println(`extract:          {total_skip} skipped`);
+    println(`extract: stage B: emitted {stage_b_emitted} tree-shape test(s)`);
+    println(`extract:          {stage_b_todo} marked #[TODO]`);
+    println(`extract:          {stage_b_skip} explicit skip`);
+    println(`extract:          {stage_b_auto_skip} auto-skip (output is not a parse tree)`);
 }
 
 // ===== Stage B: descriptor [output] normaliser =====

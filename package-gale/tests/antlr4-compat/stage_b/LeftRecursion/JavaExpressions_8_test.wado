@@ -1,0 +1,26 @@
+#![generated(by = "package-gale/scripts/extract_antlr4_descriptors.wado")]
+// Do not edit by hand — re-run the generator to regenerate.
+//
+// Source descriptor: LeftRecursion/JavaExpressions_8 (ANTLR4 runtime-testsuite).
+// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_b_*]).
+
+use t from "../../grammars/LeftRecursion/JavaExpressions_8.g4"
+    with {
+        generator: {
+            module: "../../../../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "tests/generated/antlr4_compat/LeftRecursion/JavaExpressions_8",
+        },
+    };
+use { normalize_tree } from "../../grammars/LeftRecursion/JavaExpressions_8.g4";
+
+#[TODO]
+// triage: Stage B test parse fails with Result::Err — investigation pending
+test "stage_b: LeftRecursion/JavaExpressions_8" {
+    let input = "new A().b";
+    let expected = "(s (e (e new (typespec A) ( )) . b))";
+    let root = t::parse(&input).unwrap();
+    let actual = t::to_tree(&root).to_string_tree();
+    let norm = normalize_tree(&expected);
+    assert actual == norm, `actual:   {actual}\nexpected: {norm}`;
+}
