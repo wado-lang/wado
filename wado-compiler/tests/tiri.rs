@@ -605,7 +605,7 @@ fn lattice_as_const_collapses_unevaluated_and_nonconst() {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// Stage 1 — local-variable env: bind_local, invalidate_local, function reset
+// Local-variable env: bind_local, invalidate_local, function reset
 // ──────────────────────────────────────────────────────────────────────────────
 
 #[test]
@@ -757,9 +757,8 @@ fn nested_const_locals_chain() {
 
 /// Assert that `Cast{Local{0}, target_ty}` folds to
 /// `Const(Int{expected_value, target_prim})` when env binds local 0
-/// to `Const(Int{src_value, src_prim})`. Exercises the Stage 1
-/// env-resolved cast path that the previous regression silently
-/// corrupted.
+/// to `Const(Int{src_value, src_prim})`. Exercises the env-resolved
+/// cast path that a previous regression silently corrupted.
 fn check_env_cast(
     src_value: u64,
     src_prim: PrimitiveType,
@@ -973,7 +972,7 @@ fn cast_through_env_local_applies_target_prim() {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// Stage 2 — `Lattice::join` and `if`-expression reduction
+// `Lattice::join` and `if`-expression reduction
 // ──────────────────────────────────────────────────────────────────────────────
 
 fn block_with_tail_expr(e: TirExpr) -> TirBlock {
@@ -1901,7 +1900,7 @@ fn cast_int_to_float_through_env_local() {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// Stage 2.5 — `match` expression reduction (Phase A: payload-free patterns)
+// `match` expression reduction (payload-free patterns)
 // ──────────────────────────────────────────────────────────────────────────────
 
 fn match_expr(scrutinee: TirExpr, arms: Vec<TirMatchArm>, type_id: TypeId) -> TirExpr {
@@ -2752,7 +2751,7 @@ fn match_const_scrut_with_only_or_pattern_arms_picks_first() {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// Stage 2.5 — exhaustiveness gate (review feedback)
+// `match` exhaustiveness gate
 //
 // Without an unguarded catch-all the lowering inserts an `Unreachable`
 // fallback for unmatched scrutinee values. Wado's resolver enforces

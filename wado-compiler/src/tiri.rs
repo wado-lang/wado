@@ -42,45 +42,42 @@
 //!   - bool → int / float (true ↦ 1 / 1.0, false ↦ 0 / 0.0)
 //!   - char → int (codepoint, then truncated to target width)
 //!   - u8 → char (the only int → char form the resolver permits)
-//! - Local variables (Stage 1): immutable `let` bindings whose RHS reduces
-//!   to a constant flow into the env and are read back as that constant
-//!   in their use sites. `let mut` and post-assign locals stay
-//!   `NonConst`. The driving visitor populates the env via
+//! - Local variables: immutable `let` bindings whose RHS reduces to a
+//!   constant flow into the env and are read back as that constant at
+//!   each use site. `let mut` and post-assign locals stay `NonConst`.
+//!   The driving visitor populates the env via
 //!   [`Interpreter::bind_local`] / [`Interpreter::invalidate_local`].
-//! - `if` expressions (Stage 2): a constant condition collapses the node
-//!   to the chosen arm; a non-constant condition with both arms reducing
-//!   to the same lattice constant (and an effect-free condition) folds
-//!   to that constant. The unreachable arm of a constant-condition `if`
-//!   is treated as an infeasible SCCP edge — its value never participates
-//!   in the join, so a trapping branch (`else { panic(…) }`) does not
-//!   contaminate the result.
-//! - `if` statements (Stage 2): a constant condition splices the chosen
-//!   branch's stmts into the parent block via
+//! - `if` expressions: a constant condition collapses to the chosen
+//!   arm; a non-constant condition with both arms reducing to the same
+//!   lattice constant (and an effect-free condition) folds to that
+//!   constant. The unreachable arm of a constant-condition `if` is
+//!   treated as an SCCP infeasible edge, so a trapping branch
+//!   (`else { panic(…) }`) does not contaminate the result.
+//! - `if` statements: a constant condition splices the chosen branch's
+//!   stmts into the parent block via
 //!   [`Interpreter::reduce_local_block`].
-//! - `match` expressions (Stage 2.5, Phase A): a constant scrutinee
-//!   collapses the node to the first arm whose pattern provably matches
-//!   (treating later arms as SCCP infeasible edges); a non-constant
-//!   speculatable scrutinee with every arm reducing to the same lattice
-//!   constant collapses to that constant. Phase A patterns: `_`, integer
-//!   / bool / char literal, integer range (signed and unsigned), or-of
-//!   the above, and `ConstantValue` whose inner expression reduces to a
-//!   primitive `Value`. `Binding`, `Tuple`, `Variant`, `Struct`, `Enum`,
-//!   string / null literal patterns are deferred (treated as `Unknown`,
-//!   which never lets a const-scrutinee match commit and never drops a
-//!   later arm).
+//! - `match` expressions: a constant scrutinee collapses to the first
+//!   arm whose pattern provably matches (later arms become infeasible
+//!   edges); a non-constant speculatable scrutinee with every arm
+//!   reducing to the same lattice constant collapses to that constant.
+//!   Modelled patterns: `_`, integer / bool / char literal, integer
+//!   range (signed and unsigned), or-of the above, and `ConstantValue`
+//!   whose inner expression reduces to a primitive `Value`. `Binding`,
+//!   `Tuple`, `Variant`, `Struct`, `Enum`, and string / null literal
+//!   patterns report `Unknown` — they never wrongly commit a match and
+//!   never wrongly drop a later arm.
 //! - Pure-call inlining: a free `Call` whose args all reduce to
 //!   constants and whose callee was admitted to the [`CalleeMap`]
-//!   (pure, non-async, monomorphic, single-tail-expression body) is
-//!   evaluated by binding the args into a fresh local environment and
-//!   reducing the body's tail expression. A `call_stack` of in-flight
-//!   callees blocks recursive re-entry; a per-pass step budget caps
-//!   total CTFE work; the dynamic borrow on the shared callee
-//!   `RefCell` blocks the visitor's outer `borrow_mut` (the only case
-//!   `call_stack` doesn't see, since the visitor doesn't push to it).
-//!   `NonConst` tail results (e.g. body contains a runtime div-by-zero)
-//!   are downgraded to Unevaluated so the original Call survives and
-//!   the runtime trap is preserved. `MethodCall` / `IndirectCall` /
-//!   `CmRawCall` and multi-stmt bodies are out of scope.
+//!   (pure, non-async, monomorphic, single-tail-expression body)
+//!   evaluates the body's tail with the args bound into a fresh local
+//!   environment. The `call_stack` of in-flight callees blocks
+//!   recursive re-entry; a per-pass step budget caps total CTFE work;
+//!   the dynamic borrow on the shared callee `RefCell` blocks the
+//!   visitor's outer `borrow_mut`. `NonConst` tail results (e.g. body
+//!   contains a runtime div-by-zero) are downgraded to Unevaluated so
+//!   the original Call survives and the runtime trap is preserved.
+//!   `MethodCall` / `IndirectCall` / `CmRawCall` and multi-stmt bodies
+//!   are out of scope.
 //!
 //! Float arithmetic uses native Rust IEEE 754 ops (same as Wasm), following
 //! cranelift's approach: fold the result, but skip if it is NaN since NaN
@@ -545,13 +542,11 @@ impl<'a> Interpreter<'a> {
     ///
     /// This is the right entry point when the caller is already driving a
     /// TIR walk (for example via `tir_visitor::opt_walk_expr`) and wants
-    /// to slot tiri's local rewrites into each visited node. Today the
-    /// rules are constant folding for Binary / Unary / Cast, the
-    /// short-circuit identity simplifications for `&&` / `||`, and the
-    /// Stage-2 `if`-expression rewrites (constant condition collapses to
-    /// the chosen arm; non-constant condition with both arms producing
-    /// the same lattice constant collapses to that constant when the
-    /// condition is effect-free).
+    /// to slot tiri's local rewrites into each visited node. The rules
+    /// are constant folding for Binary / Unary / Cast, short-circuit
+    /// identity simplifications for `&&` / `||`, pure-call inlining,
+    /// and the `if` / `match` rewrites described on
+    /// [`Self::rewrite_if_expr`] / [`Self::rewrite_match_expr`].
     ///
     /// `Local` nodes themselves are never rewritten in place: their env
     /// values are read transparently when computing the parent
@@ -563,13 +558,9 @@ impl<'a> Interpreter<'a> {
             expr.kind = value_to_expr_kind(v);
             return true;
         }
-        // Pure-call inlining: only `Call` nodes whose args reduce to
-        // constants and whose callee was admitted to the CalleeMap.
-        // Returning Const here means the whole call collapses to a
-        // literal; anything else (Unevaluated / NonConst) leaves the
-        // original Call expression intact so the runtime semantics
-        // (including any trap the body would have produced) are
-        // preserved.
+        // try_call_fold returns Const only when the whole call collapses
+        // to a literal; Unevaluated / NonConst leave the Call intact so
+        // any runtime trap inside the body survives.
         if let Lattice::Const(v) = self.try_call_fold(expr) {
             expr.kind = value_to_expr_kind(v);
             return true;
@@ -584,10 +575,10 @@ impl<'a> Interpreter<'a> {
     }
 
     /// Apply stmt-level rewrites that may expand or contract the stmt
-    /// list of `block`. Today this is solely Stage-2 `if`-statement
-    /// folding: an `if true { … } else { … }` stmt with a constant
-    /// boolean condition is replaced by the chosen branch's stmts in the
-    /// parent block; an `if false { … }` with no else is dropped entirely.
+    /// list of `block`. Currently the only such rewrite is constant-
+    /// condition `if`-statement folding: an `if true { … } else { … }`
+    /// stmt is replaced by the chosen branch's stmts in the parent
+    /// block; an `if false { … }` with no else is dropped entirely.
     ///
     /// Returns `true` when the block was rewritten. The caller (driving
     /// visitor) is expected to have walked into each stmt's children
@@ -628,8 +619,10 @@ impl<'a> Interpreter<'a> {
         true
     }
 
-    /// Stage-2 rewrite for an `if` expression. See [`reduce_local`] for
-    /// the rule set; this helper is the implementation.
+    /// Rewrite an `if` expression. A constant-bool condition collapses
+    /// the node to the chosen arm's block; a non-constant but
+    /// speculatable condition with both arms reducing to the same
+    /// `Const(v)` collapses to that literal.
     fn rewrite_if_expr(&mut self, expr: &mut TirExpr) -> bool {
         let TirExprKind::If {
             condition,
@@ -703,14 +696,12 @@ impl<'a> Interpreter<'a> {
         true
     }
 
-    /// Stage-2.5 rewrite for a `match` expression. The two reductions are:
+    /// Rewrite a `match` expression. Two reductions:
     ///
-    /// 1. **Const scrutinee**: pick the first arm whose pattern
-    ///    provably matches (no guard, definite `Yes`). Replace the
-    ///    `Match` with `Block { stmts: [Expr(arm.body)] }` so the
-    ///    surrounding pass walks the arm's residual normally. If any
-    ///    earlier arm is `Unknown`, we cannot prove a definite arm
-    ///    fires first — bail.
+    /// 1. **Const scrutinee**: pick the first arm whose pattern provably
+    ///    matches (no guard, definite `Yes`) and replace the `Match`
+    ///    with `Block { stmts: [Expr(arm.body)] }`. An earlier `Unknown`
+    ///    arm prevents us from proving a definite arm fires first; bail.
     /// 2. **Non-const speculatable scrutinee, all-arms-equal collapse**:
     ///    when every arm has no guard and reduces to the same
     ///    `Const(v)`, rewrite the whole match to that literal. The
@@ -1098,12 +1089,12 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    /// Lattice value of a block: for Stage 2 we model only the simplest
-    /// useful case — a block whose sole stmt is a tail `Expr(e)`. Such
-    /// a block evaluates to whatever `e` evaluates to, so we recurse
-    /// through `expr_to_lattice`. Empty blocks evaluate to `()`, which
-    /// has no representable [`Value`], so they map to `Unevaluated`
-    /// (the join with any other arm carries the other arm's value out,
+    /// Lattice value of a block: only the simple shape — a block whose
+    /// sole stmt is a tail `Expr(e)` — is modelled. Such a block
+    /// evaluates to whatever `e` evaluates to, so we recurse through
+    /// `expr_to_lattice`. Empty blocks evaluate to `()`, which has no
+    /// representable [`Value`], so they map to `Unevaluated` (the join
+    /// with any other arm then carries the other arm's value out,
     /// matching the desired SCCP feasible-edge behavior). Everything
     /// else (intermediate `let` / `Assign` / `Loop` / function calls)
     /// is conservatively `Unevaluated` rather than `NonConst` so that

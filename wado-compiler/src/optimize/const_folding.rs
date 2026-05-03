@@ -129,9 +129,9 @@ impl ConstFoldVisitor<'_> {
             } => {
                 let lat = if *is_mut {
                     // `let mut x = …` — any later `x = …` would
-                    // invalidate the binding anyway, so be conservative
-                    // up front. Stage 1 doesn't track flow-sensitive
-                    // values for mutable locals.
+                    // invalidate the binding anyway. The interpreter
+                    // doesn't track flow-sensitive values for mutable
+                    // locals, so be conservative up front.
                     Lattice::NonConst
                 } else {
                     self.interpreter.reduce_to_lattice(value)
