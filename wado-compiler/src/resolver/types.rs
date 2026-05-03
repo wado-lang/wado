@@ -1270,15 +1270,120 @@ pub(super) struct TraitMethodMatch {
     pub(super) is_blanket_ref_impl: bool,
 }
 
-/// Cached per-module type maps for cross-module type resolution.
-/// These are the flat maps that `build_module_map` produces.
-pub(super) struct ModuleTypeMaps {
-    pub(super) struct_fields: IndexMap<String, StructFieldInfo>,
-    pub(super) variant_cases: IndexMap<String, VariantInfo>,
-    pub(super) enum_cases: IndexMap<String, EnumInfo>,
-    pub(super) flags_cases: IndexMap<String, FlagsInfo>,
-    pub(super) newtypes: IndexMap<String, TypeId>,
-    pub(super) resource_types: IndexMap<String, ResourceInfo>,
+/// Read-only view that resolves a type name from a given module's perspective
+/// without cloning per-module flat maps.
+///
+/// Three-layer precedence (highest first):
+///   1. Local additions discovered during resolution (anonymous structs, in-progress
+///      newtypes/enums declared in the current module's body).
+///   2. The current module's own definitions.
+///   3. Imports of the current module (with `use { Foo as Bar }` aliasing).
+///   4. Any module that defines the name (legacy fallback for prelude-style visibility).
+///
+/// Constructed cheaply at each call site from the `Resolver`'s context. All
+/// fields are borrowed; no heap allocation.
+pub(crate) struct TypeLookup<'a> {
+    pub(crate) current_module_source: &'a ModuleSource,
+    pub(crate) imported_type_sources: &'a IndexMap<String, ModuleSource>,
+    pub(crate) import_original_names: &'a IndexMap<String, String>,
+    pub(crate) all_newtypes: &'a IndexMap<ModuleSource, IndexMap<String, TypeId>>,
+    pub(crate) all_struct_fields: &'a IndexMap<ModuleSource, IndexMap<String, StructFieldInfo>>,
+    pub(crate) all_variant_cases: &'a IndexMap<ModuleSource, IndexMap<String, VariantInfo>>,
+    pub(crate) all_enum_cases: &'a IndexMap<ModuleSource, IndexMap<String, EnumInfo>>,
+    pub(crate) all_flags_cases: &'a IndexMap<ModuleSource, IndexMap<String, FlagsInfo>>,
+    pub(crate) all_resource_types: &'a IndexMap<ModuleSource, IndexMap<String, ResourceInfo>>,
+    pub(crate) all_generic_newtypes:
+        &'a IndexMap<ModuleSource, IndexMap<String, GenericNewtypeInfo>>,
+    pub(crate) local_struct_fields: &'a IndexMap<String, StructFieldInfo>,
+    pub(crate) local_newtypes: &'a IndexMap<String, TypeId>,
+    pub(crate) local_enum_cases: &'a IndexMap<String, EnumInfo>,
+    pub(crate) local_flags_cases: &'a IndexMap<String, FlagsInfo>,
+    pub(crate) local_generic_newtypes: &'a IndexMap<String, GenericNewtypeInfo>,
+    pub(crate) local_variant_cases: &'a IndexMap<String, VariantInfo>,
+}
+
+impl<'a> TypeLookup<'a> {
+    /// Resolve `name` against `all_per_module` using the (local → current →
+    /// imports → any) precedence. Borrows have lifetime `'a`, so the caller
+    /// can keep the returned reference alive across `&self` re-borrows.
+    fn lookup_ref<V>(
+        &self,
+        name: &str,
+        local: Option<&'a IndexMap<String, V>>,
+        all_per_module: &'a IndexMap<ModuleSource, IndexMap<String, V>>,
+    ) -> Option<&'a V> {
+        if let Some(local) = local
+            && let Some(v) = local.get(name)
+        {
+            return Some(v);
+        }
+        if let Some(v) = all_per_module
+            .get(self.current_module_source)
+            .and_then(|m| m.get(name))
+        {
+            return Some(v);
+        }
+        if let Some(src) = self.imported_type_sources.get(name) {
+            let canonical = self
+                .import_original_names
+                .get(name)
+                .map(String::as_str)
+                .unwrap_or(name);
+            if let Some(v) = all_per_module.get(src).and_then(|m| m.get(canonical)) {
+                return Some(v);
+            }
+            if let ModuleSource::Wasi { interface } = src {
+                let prefix = format!("{interface}/");
+                for (s, m) in all_per_module {
+                    if let ModuleSource::Wasi { interface: sub } = s
+                        && sub.starts_with(&prefix)
+                        && let Some(v) = m.get(canonical)
+                    {
+                        return Some(v);
+                    }
+                }
+            }
+        }
+        for m in all_per_module.values() {
+            if let Some(v) = m.get(name) {
+                return Some(v);
+            }
+        }
+        None
+    }
+
+    pub(super) fn struct_fields(&self, name: &str) -> Option<&'a StructFieldInfo> {
+        self.lookup_ref(name, Some(self.local_struct_fields), self.all_struct_fields)
+    }
+
+    pub(super) fn variant_case(&self, name: &str) -> Option<&'a VariantInfo> {
+        self.lookup_ref(name, Some(self.local_variant_cases), self.all_variant_cases)
+    }
+
+    pub(super) fn enum_case(&self, name: &str) -> Option<&'a EnumInfo> {
+        self.lookup_ref(name, Some(self.local_enum_cases), self.all_enum_cases)
+    }
+
+    pub(super) fn flags_case(&self, name: &str) -> Option<&'a FlagsInfo> {
+        self.lookup_ref(name, Some(self.local_flags_cases), self.all_flags_cases)
+    }
+
+    pub(super) fn resource_type(&self, name: &str) -> Option<&'a ResourceInfo> {
+        self.lookup_ref(name, None, self.all_resource_types)
+    }
+
+    pub(super) fn generic_newtype(&self, name: &str) -> Option<&'a GenericNewtypeInfo> {
+        self.lookup_ref(
+            name,
+            Some(self.local_generic_newtypes),
+            self.all_generic_newtypes,
+        )
+    }
+
+    pub(super) fn newtype(&self, name: &str) -> Option<TypeId> {
+        self.lookup_ref(name, Some(self.local_newtypes), self.all_newtypes)
+            .copied()
+    }
 }
 
 /// Info about an Index trait implementation

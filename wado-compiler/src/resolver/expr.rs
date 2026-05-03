@@ -376,7 +376,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             let prefix = &ident.name[..pos];
             let suffix = &ident.name[pos + 2..];
 
-            if let Some(variant_info) = self.variant_cases.get(prefix).cloned() {
+            if let Some(variant_info) = self.lookup_variant_case(prefix).cloned() {
                 // Find the case by name
                 if let Some((case_index, case_data)) = variant_info
                     .cases
@@ -435,7 +435,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
 
             // Check for enum case: Color::Red (enums have no payload)
-            if let Some(enum_info) = self.enum_cases.get(prefix).cloned()
+            if let Some(enum_info) = self.lookup_enum_case(prefix).cloned()
                 && let Some(case_data) = enum_info.find_case(suffix).cloned()
             {
                 self.record_qualified_case(
@@ -463,7 +463,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
             // Check for flags member: PathFlags::SymlinkFollow
             // Flags members are bitmask integers (1 << index) represented as IntLiteral
-            if let Some(flags_info) = self.flags_cases.get(prefix).cloned()
+            if let Some(flags_info) = self.lookup_flags_case(prefix).cloned()
                 && let Some(member) = flags_info
                     .members
                     .iter()
@@ -488,12 +488,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 let type_name = &suffix[..inner_pos];
                 let case_name = &suffix[inner_pos + 2..];
 
-                self.ensure_module_maps_cached(&ns_source);
-                // Check variant cases
+                // Check variant cases — namespace imports always look up by
+                // canonical name in the source module, so we can read directly
+                // from the shared `all_*` table without any per-module cache.
                 let ns_variant = self
-                    .module_type_maps_cache
+                    .all_variant_cases
                     .get(&ns_source)
-                    .and_then(|maps| maps.variant_cases.get(type_name))
+                    .and_then(|m| m.get(type_name))
                     .cloned();
                 if let Some(variant_info) = ns_variant
                     && let Some((case_index, case_data)) = variant_info
@@ -548,9 +549,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
                 // Check enum cases
                 let ns_enum = self
-                    .module_type_maps_cache
+                    .all_enum_cases
                     .get(&ns_source)
-                    .and_then(|maps| maps.enum_cases.get(type_name))
+                    .and_then(|m| m.get(type_name))
                     .cloned();
                 if let Some(enum_info) = ns_enum
                     && let Some(case_data) = enum_info.find_case(case_name).cloned()
@@ -573,9 +574,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
                 // Check flags members
                 let ns_flags = self
-                    .module_type_maps_cache
+                    .all_flags_cases
                     .get(&ns_source)
-                    .and_then(|maps| maps.flags_cases.get(type_name))
+                    .and_then(|m| m.get(type_name))
                     .cloned();
                 if let Some(flags_info) = ns_flags
                     && let Some(member) = flags_info
@@ -782,7 +783,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
             _ => return,
         };
-        if let Some(info) = self.lookup_struct_fields(&struct_name, &module_source) {
+        if let Some(info) = self.lookup_struct_fields_in(&struct_name, &module_source) {
             for ((fname, _, _), fid) in info.fields.iter().zip(info.field_ast_ids.iter()) {
                 if fname == field_name {
                     self.record_reference_to_decl(use_id, &module_source, *fid);
@@ -808,7 +809,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 module_source,
                 ..
             } => {
-                if let Some(struct_info) = self.lookup_struct_fields(&name, &module_source) {
+                if let Some(struct_info) = self.lookup_struct_fields_in(&name, &module_source) {
                     for (index, (fname, ftype, _)) in struct_info.fields.iter().enumerate() {
                         if fname == field_name {
                             return (index as u32, *ftype);
@@ -850,7 +851,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     return (0, TypeTable::UNKNOWN);
                 }
                 // Clone fields to avoid borrow issues
-                let fields_clone = self.lookup_struct_fields(&name, &module_source).cloned();
+                let fields_clone = self.lookup_struct_fields_in(&name, &module_source).cloned();
                 if let Some(struct_info) = fields_clone {
                     for (index, (fname, ftype, _)) in struct_info.fields.iter().enumerate() {
                         if fname == field_name {
@@ -898,7 +899,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
 
         // Look up field visibility
-        if let Some(struct_info) = self.lookup_struct_fields(&struct_name, &module_source) {
+        if let Some(struct_info) = self.lookup_struct_fields_in(&struct_name, &module_source) {
             for (fname, _, is_pub) in &struct_info.fields {
                 if fname == field_name && !is_pub {
                     let _ = self.logger.error(TypeError::PrivateFieldAccess {
@@ -1500,7 +1501,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         match &resolved {
             ResolvedType::Enum { name, .. } => {
-                if let Some(enum_info) = self.enum_cases.get(name) {
+                if let Some(enum_info) = self.lookup_enum_case(name) {
                     let all_cases: IndexSet<&str> =
                         enum_info.cases.iter().map(|c| c.name.as_str()).collect();
                     let covered: IndexSet<&str> = {
@@ -1528,7 +1529,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 self.check_variant_exhaustiveness(arms, name, span);
             }
             ResolvedType::GenericInstance { name, .. } => {
-                if self.variant_cases.contains_key(name) {
+                if self.contains_variant(name) {
                     self.check_variant_exhaustiveness(arms, name, span);
                 }
             }
@@ -1568,7 +1569,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
     }
 
     fn check_variant_exhaustiveness(&self, arms: &[TirMatchArm], variant_name: &str, span: Span) {
-        if let Some(variant_info) = self.variant_cases.get(variant_name) {
+        if let Some(variant_info) = self.lookup_variant_case(variant_name) {
             let all_cases: IndexSet<&str> =
                 variant_info.cases.iter().map(|c| c.name.as_str()).collect();
             let covered: IndexSet<&str> = {
@@ -2240,7 +2241,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Resolve struct name and module_source.
         // Local definitions shadow imported/prelude structs.
         let (struct_name, struct_module_source) = if self
-            .lookup_struct_fields(name, &self.current_module_source)
+            .lookup_struct_fields_in(name, &self.current_module_source)
             .is_some()
         {
             (name.clone(), self.current_module_source.clone())
@@ -2257,13 +2258,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // Use canonical name from struct_fields info (not import alias) for consistent TypeId
         let struct_name = self
-            .lookup_struct_fields(&struct_name, &struct_module_source)
+            .lookup_struct_fields_in(&struct_name, &struct_module_source)
             .map(|info| info.name.clone())
             .unwrap_or(struct_name);
 
         // Get expected field types using (name, module_source) lookup.
         let struct_field_types: Vec<(String, TypeId)> = self
-            .lookup_struct_fields(&struct_name, &struct_module_source)
+            .lookup_struct_fields_in(&struct_name, &struct_module_source)
             .map(|info| {
                 info.fields
                     .iter()
@@ -2275,7 +2276,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Record use→def references for each field name, pointing at the
         // field definition's AstId in the struct declaration.
         let field_refs: Vec<(AstId, AstId)> = self
-            .lookup_struct_fields(&struct_name, &struct_module_source)
+            .lookup_struct_fields_in(&struct_name, &struct_module_source)
             .map(|info| {
                 struct_lit
                     .fields
@@ -2417,7 +2418,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // provided; fields with `= expr` are synthesized from the default
         // expression (pure, resolved in the struct's module scope).
         let struct_field_defaults: Vec<Option<ast::Expr>> = self
-            .lookup_struct_fields(&struct_name, &struct_module_source)
+            .lookup_struct_fields_in(&struct_name, &struct_module_source)
             .map(|info| info.field_defaults.clone())
             .unwrap_or_default();
         let mut fields = fields;
@@ -2450,7 +2451,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Check field visibility: non-pub fields cannot be set from other modules
         if struct_module_source != self.current_module_source
             && let Some(struct_info) =
-                self.lookup_struct_fields(&struct_name, &struct_module_source)
+                self.lookup_struct_fields_in(&struct_name, &struct_module_source)
         {
             for (fname, _, is_pub) in &struct_info.fields {
                 if !is_pub && fields.iter().any(|f| f.name == *fname) {
@@ -2488,8 +2489,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 fields
             } else {
                 let struct_param_map: IndexMap<TypeId, TypeId> = self
-                    .struct_fields
-                    .get(&struct_name)
+                    .lookup_struct_fields(&struct_name)
                     .map(|info| {
                         info.type_param_type_ids
                             .iter()
@@ -2533,7 +2533,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
             // Check trait bounds on inferred type arguments
             if let Some(struct_info) = self
-                .lookup_struct_fields(&struct_name, &struct_module_source)
+                .lookup_struct_fields_in(&struct_name, &struct_module_source)
                 .cloned()
             {
                 for (i, (param_name, bounds)) in struct_info.type_param_bounds.iter().enumerate() {
@@ -2650,7 +2650,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             type_param_bounds: Vec::new(),
             type_param_type_ids: Vec::new(),
         };
-        self.struct_fields.insert(anon_name.clone(), field_info);
+        self.local_struct_fields
+            .insert(anon_name.clone(), field_info);
 
         // Create TirStruct definition for codegen
         let tir_fields: Vec<TirField> = resolved_fields
@@ -2712,7 +2713,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         fields: &[TirStructField],
         expected_type: Option<TypeId>,
     ) -> Vec<TypeId> {
-        let Some(struct_info) = self.struct_fields.get(struct_name).cloned() else {
+        let Some(struct_info) = self.lookup_struct_fields(struct_name).cloned() else {
             return vec![];
         };
         if struct_info.type_param_type_ids.is_empty() {

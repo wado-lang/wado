@@ -51,8 +51,7 @@ use crate::tir::{
 use trait_env::TraitEnv;
 pub use types::TypeError;
 use types::{
-    EnumInfo, FlagsInfo, GenericNewtypeInfo, ModuleTypeMaps, ResourceInfo, StructFieldInfo,
-    VariantInfo,
+    EnumInfo, FlagsInfo, GenericNewtypeInfo, ResourceInfo, StructFieldInfo, TypeLookup, VariantInfo,
 };
 
 pub struct Resolver<'a, H: CompilerHost> {
@@ -64,27 +63,33 @@ pub struct Resolver<'a, H: CompilerHost> {
     /// Loaded modules from analyzer
     #[allow(dead_code)]
     loaded_modules: &'a IndexMap<ModuleSource, Module>,
-    /// Newtypes (name -> resolved type) - flat map for current module
-    newtypes: IndexMap<String, TypeId>,
-    /// Generic newtype definitions (name -> info) - flat map for current module
-    generic_newtype_defs: IndexMap<String, GenericNewtypeInfo>,
-    /// Struct field info (struct name -> (`module_source`, fields)) - flat map for current module
-    struct_fields: IndexMap<String, StructFieldInfo>,
-    /// Variant case info (variant name -> (`module_source`, `type_params`, cases)) - flat map for current module
-    variant_cases: IndexMap<String, VariantInfo>,
-    /// Enum case info (enum name -> (`module_source`, cases)) - flat map for current module
-    enum_cases: IndexMap<String, EnumInfo>,
-    /// Flags type info (flags name -> (`module_source`, `type_id`, members)) - flat map for current module
-    flags_cases: IndexMap<String, FlagsInfo>,
-    /// Resource info (resource name -> module source and methods) - flat map for current module
-    resource_types: IndexMap<String, ResourceInfo>,
-    /// Per-module nested maps for cross-module type resolution (shared via Rc)
+    /// Per-module nested maps for cross-module type resolution (shared via Rc).
+    /// These are the *single source of truth* for declared type info; all
+    /// per-module name resolution is performed by walking these via
+    /// [`TypeLookup`] without cloning their contents into per-module flat maps.
     all_newtypes: Rc<IndexMap<ModuleSource, IndexMap<String, TypeId>>>,
+    all_generic_newtypes: Rc<IndexMap<ModuleSource, IndexMap<String, GenericNewtypeInfo>>>,
     all_struct_fields: Rc<IndexMap<ModuleSource, IndexMap<String, StructFieldInfo>>>,
     all_variant_cases: Rc<IndexMap<ModuleSource, IndexMap<String, VariantInfo>>>,
     all_enum_cases: Rc<IndexMap<ModuleSource, IndexMap<String, EnumInfo>>>,
     all_flags_cases: Rc<IndexMap<ModuleSource, IndexMap<String, FlagsInfo>>>,
     all_resource_types: Rc<IndexMap<ModuleSource, IndexMap<String, ResourceInfo>>>,
+    /// Per-module import context (consumed by [`TypeLookup`]). Built once per
+    /// module from `use` declarations; replaces the 7 flat maps the resolver
+    /// used to clone for each module.
+    imported_type_sources: IndexMap<String, ModuleSource>,
+    import_original_names: IndexMap<String, String>,
+    /// Locally discovered additions to the type tables. Anonymous structs
+    /// (synthesized from struct literals) and the resolver's own walk of
+    /// `module.items` insert here so [`TypeLookup`] can find them at the
+    /// highest priority. Always empty unless the current module has a
+    /// reason to override / extend the shared tables.
+    local_struct_fields: IndexMap<String, StructFieldInfo>,
+    local_newtypes: IndexMap<String, TypeId>,
+    local_generic_newtypes: IndexMap<String, GenericNewtypeInfo>,
+    local_enum_cases: IndexMap<String, EnumInfo>,
+    local_flags_cases: IndexMap<String, FlagsInfo>,
+    local_variant_cases: IndexMap<String, VariantInfo>,
     /// Function return types (name -> return type)
     function_return_types: IndexMap<String, TypeId>,
     /// Imported function names for the current module
@@ -140,10 +145,6 @@ pub struct Resolver<'a, H: CompilerHost> {
     /// Associated constants from impl blocks ("`TypeName::CONST`" -> (type, expr))
     /// These are inlined at every use site during resolution.
     associated_constants: IndexMap<String, (ast::Type, ast::Expr)>,
-    /// Cache of per-module type maps for cross-module type resolution.
-    /// Built lazily on first access per module. Avoids rebuilding `build_module_map`
-    /// on every imported method call or field access.
-    module_type_maps_cache: IndexMap<ModuleSource, ModuleTypeMaps>,
     /// Immutable trait knowledge base: impl indices, trait declarations, and blanket impls.
     /// Built once and shared across all module resolvers via `Arc`.
     trait_env: Arc<TraitEnv>,
@@ -205,19 +206,21 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             type_table,
             symbols,
             loaded_modules,
-            newtypes: IndexMap::default(),
-            generic_newtype_defs: IndexMap::default(),
-            struct_fields: IndexMap::default(),
-            variant_cases: IndexMap::default(),
-            enum_cases: IndexMap::default(),
-            flags_cases: IndexMap::default(),
-            resource_types: IndexMap::default(),
             all_newtypes: Rc::new(IndexMap::default()),
+            all_generic_newtypes: Rc::new(IndexMap::default()),
             all_struct_fields: Rc::new(IndexMap::default()),
             all_variant_cases: Rc::new(IndexMap::default()),
             all_enum_cases: Rc::new(IndexMap::default()),
             all_flags_cases: Rc::new(IndexMap::default()),
             all_resource_types: Rc::new(IndexMap::default()),
+            imported_type_sources: IndexMap::default(),
+            import_original_names: IndexMap::default(),
+            local_struct_fields: IndexMap::default(),
+            local_newtypes: IndexMap::default(),
+            local_generic_newtypes: IndexMap::default(),
+            local_enum_cases: IndexMap::default(),
+            local_flags_cases: IndexMap::default(),
+            local_variant_cases: IndexMap::default(),
             function_return_types: IndexMap::default(),
             imported_functions: IndexSet::default(),
             namespace_imports: IndexMap::default(),
@@ -240,7 +243,6 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             current_module_globals: IndexMap::default(),
             imported_globals: IndexMap::default(),
             associated_constants: IndexMap::default(),
-            module_type_maps_cache: IndexMap::default(),
             trait_env,
             included_files,
             known_type_names_cache: IndexSet::default(),
@@ -255,6 +257,100 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             default_scope_module: None,
             invocations: Rc::new(crate::kiln::InvocationIndex::new()),
         }
+    }
+
+    /// Construct a [`TypeLookup`] view over the resolver's current import
+    /// context and shared `all_*` tables. Use this for any type-name
+    /// resolution; never reach into `all_*` directly.
+    pub(crate) fn type_lookup(&self) -> TypeLookup<'_> {
+        TypeLookup {
+            current_module_source: &self.current_module_source,
+            imported_type_sources: &self.imported_type_sources,
+            import_original_names: &self.import_original_names,
+            all_newtypes: &self.all_newtypes,
+            all_struct_fields: &self.all_struct_fields,
+            all_variant_cases: &self.all_variant_cases,
+            all_enum_cases: &self.all_enum_cases,
+            all_flags_cases: &self.all_flags_cases,
+            all_resource_types: &self.all_resource_types,
+            all_generic_newtypes: &self.all_generic_newtypes,
+            local_struct_fields: &self.local_struct_fields,
+            local_newtypes: &self.local_newtypes,
+            local_enum_cases: &self.local_enum_cases,
+            local_flags_cases: &self.local_flags_cases,
+            local_generic_newtypes: &self.local_generic_newtypes,
+            local_variant_cases: &self.local_variant_cases,
+        }
+    }
+
+    pub(super) fn lookup_struct_fields(&self, name: &str) -> Option<&StructFieldInfo> {
+        self.type_lookup().struct_fields(name)
+    }
+
+    pub(super) fn lookup_variant_case(&self, name: &str) -> Option<&VariantInfo> {
+        self.type_lookup().variant_case(name)
+    }
+
+    pub(super) fn lookup_enum_case(&self, name: &str) -> Option<&EnumInfo> {
+        self.type_lookup().enum_case(name)
+    }
+
+    pub(super) fn lookup_flags_case(&self, name: &str) -> Option<&FlagsInfo> {
+        self.type_lookup().flags_case(name)
+    }
+
+    pub(super) fn lookup_resource_type(&self, name: &str) -> Option<&ResourceInfo> {
+        self.type_lookup().resource_type(name)
+    }
+
+    pub(super) fn lookup_generic_newtype(&self, name: &str) -> Option<&GenericNewtypeInfo> {
+        self.type_lookup().generic_newtype(name)
+    }
+
+    pub(super) fn lookup_newtype(&self, name: &str) -> Option<TypeId> {
+        self.type_lookup().newtype(name)
+    }
+
+    pub(super) fn contains_variant(&self, name: &str) -> bool {
+        self.lookup_variant_case(name).is_some()
+    }
+
+    /// Run `body` with the resolver's "current module" perspective swapped to
+    /// `module_source` and the supplied import context. Locals are cleared
+    /// because they describe in-progress resolution, not the target module's
+    /// pre-existing definitions; they are restored on return.
+    ///
+    /// Replaces the legacy pattern of cloning per-module flat maps via
+    /// `build_module_map` and swapping six fields in/out.
+    pub(super) fn with_module_perspective<R>(
+        &mut self,
+        module_source: ModuleSource,
+        imported_type_sources: IndexMap<String, ModuleSource>,
+        import_original_names: IndexMap<String, String>,
+        body: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        let saved_src = std::mem::replace(&mut self.current_module_source, module_source);
+        let saved_imp = std::mem::replace(&mut self.imported_type_sources, imported_type_sources);
+        let saved_orig = std::mem::replace(&mut self.import_original_names, import_original_names);
+        let saved_local_struct = std::mem::take(&mut self.local_struct_fields);
+        let saved_local_newtypes = std::mem::take(&mut self.local_newtypes);
+        let saved_local_enum = std::mem::take(&mut self.local_enum_cases);
+        let saved_local_flags = std::mem::take(&mut self.local_flags_cases);
+        let saved_local_gnt = std::mem::take(&mut self.local_generic_newtypes);
+        let saved_local_variant = std::mem::take(&mut self.local_variant_cases);
+
+        let result = body(self);
+
+        self.current_module_source = saved_src;
+        self.imported_type_sources = saved_imp;
+        self.import_original_names = saved_orig;
+        self.local_struct_fields = saved_local_struct;
+        self.local_newtypes = saved_local_newtypes;
+        self.local_enum_cases = saved_local_enum;
+        self.local_flags_cases = saved_local_flags;
+        self.local_generic_newtypes = saved_local_gnt;
+        self.local_variant_cases = saved_local_variant;
+        result
     }
 
     /// Record that an identifier resolved to a local binding in the current
@@ -462,19 +558,16 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
 
     /// Look up struct field info by (name, `module_source`).
     ///
-    /// This is the correct way to look up struct fields — it disambiguates
-    /// The flat `struct_fields` map is a visibility-scoped projection of `all_struct_fields`,
-    /// containing only types visible to the current module (own definitions + explicit imports).
-    ///
-    /// `all_struct_fields` covers ALL modules and is needed for cross-module lookups where
-    /// the type wasn't explicitly imported (e.g., a struct returned by a function from another
-    /// module).
-    fn lookup_struct_fields(
+    /// Disambiguates same-named structs across modules by also matching the
+    /// owning `module_source`. Falls back to scanning the shared `all_*`
+    /// table when the visible projection (current module + locally created
+    /// anonymous structs) doesn't have the entry.
+    pub(super) fn lookup_struct_fields_in(
         &self,
         name: &str,
         module_source: &ModuleSource,
     ) -> Option<&StructFieldInfo> {
-        self.struct_fields
+        self.local_struct_fields
             .get(name)
             .filter(|info| info.module_source == *module_source)
             .or_else(|| {
@@ -1016,7 +1109,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     tir_module.add_enum(tir_enum);
                 }
                 Item::Flags(flags_decl) => {
-                    if let Some(flags_info) = self.flags_cases.get(&flags_decl.name) {
+                    if let Some(flags_info) = self.lookup_flags_case(&flags_decl.name) {
                         let tir_flags = TirFlags {
                             name: flags_decl.name.clone(),
                             module_source: self.current_module_source.clone(),
@@ -1038,7 +1131,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     }
                 }
                 Item::Newtype(newtype_decl) => {
-                    if let Some(&type_id) = self.newtypes.get(&newtype_decl.name) {
+                    if let Some(type_id) = self.lookup_newtype(&newtype_decl.name) {
                         tir_module.add_newtype(TirNewtype {
                             name: newtype_decl.name.clone(),
                             module_source: self.current_module_source.clone(),
