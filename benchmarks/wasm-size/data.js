@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777802575117,
+  "lastUpdate": 1777804407906,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -18669,6 +18669,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d0d2ac4e58722feea23e36147ea958c79793e5cb"
         },
         "date": 1777802574801,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1775,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8776,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18520,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 515706,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4c486b5b4a295d03cb5adc95ca78a57b7855f8f8",
+          "message": "Merge pull request #981 from wado-lang/claude/add-function-calling-u3oPx\n\nfeat(tiri): pure-call inlining for compile-time function evaluation",
+          "timestamp": "2026-05-03T19:28:24+09:00",
+          "tree_id": "a3d8ea38ae53d4f967a15f7fb74c76d605e33fe1",
+          "url": "https://github.com/wado-lang/wado/commit/4c486b5b4a295d03cb5adc95ca78a57b7855f8f8"
+        },
+        "date": 1777804407582,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
