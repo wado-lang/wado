@@ -256,12 +256,11 @@ pub type CalleeKey = (ModuleSource, String);
 /// The interpreter never re-checks: presence in the map is the witness.
 pub type CalleeMap = IndexMap<CalleeKey, TirFunction>;
 
-/// Default per-pass step budget. Mirrors rustc's CTFE step counter
+/// Default per-pass CTFE step budget. Mirrors rustc's CTFE step counter
 /// shape: a hard ceiling on the number of non-recursive call entries
-/// before [`Interpreter::try_call_fold`] starts bailing. Recursive
-/// re-entries are caught by the call-stack guard *before* the budget
-/// charge, so they don't consume budget; the ceiling only applies to
-/// productive new-frame work.
+/// before the engine starts bailing. Recursive re-entries are caught by
+/// the call-stack guard *before* the budget charge, so they don't
+/// consume budget; the ceiling only applies to productive new-frame work.
 pub const DEFAULT_STEP_BUDGET: u32 = 1000;
 
 /// Decide whether a function may be evaluated at compile time by Stage 3.
@@ -1180,7 +1179,7 @@ impl<'a> Interpreter<'a> {
     /// expression-bodied helpers, single-tail-`if` bodies). Multi-stmt
     /// bodies (let-sequences, multi-return) are deferred to a future
     /// stage; bailing here costs an optimization, not correctness.
-    pub fn try_call_fold(&mut self, expr: &TirExpr) -> Lattice {
+    fn try_call_fold(&mut self, expr: &TirExpr) -> Lattice {
         let Some(callees) = self.callees else {
             return Lattice::Unevaluated;
         };
@@ -1226,11 +1225,6 @@ impl<'a> Interpreter<'a> {
         let Some(tail) = single_tail_expression(callee) else {
             return Lattice::Unevaluated;
         };
-        // Clone the tail so the borrow on `callees` ends before we
-        // mutate `self.env` / `self.call_stack` — the borrow checker
-        // would otherwise see the immutable map borrow held across the
-        // mutable env swap below.
-        let tail = tail.clone();
 
         // Charge one step per call entry. Bail (without consuming
         // anything) when exhausted so a chain that exactly hits the
@@ -1278,7 +1272,7 @@ impl<'a> Interpreter<'a> {
         // so the original Call expression is left intact and the
         // runtime trap survives.
         match result {
-            Lattice::Const(v) => Lattice::Const(v),
+            c @ Lattice::Const(_) => c,
             Lattice::NonConst | Lattice::Unevaluated => Lattice::Unevaluated,
         }
     }
