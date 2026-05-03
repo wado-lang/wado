@@ -769,11 +769,7 @@ fn parse_stdlib_identity_attribute(module: &Module) -> Option<ModuleSource> {
     let path = module.stdlib_identity()?;
     if let Some(name) = path.strip_prefix("core:") {
         Some(ModuleSource::core(name))
-    } else if let Some(interface) = path.strip_prefix("wasi:") {
-        Some(ModuleSource::wasi(interface))
-    } else {
-        None
-    }
+    } else { path.strip_prefix("wasi:").map(ModuleSource::wasi) }
 }
 
 /// Cached desugared AST modules for all stdlib modules (core + WASI).
