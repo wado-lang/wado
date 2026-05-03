@@ -120,16 +120,17 @@ fn well_known_arcs() -> [Arc<str>; 22] {
 
 /// Interned string used for `ModuleSource` payloads.
 ///
-/// Eq compares by pointer identity first (fast path: O(1) when both
-/// values went through the same interner or share a well-known
-/// `LazyLock<Arc<str>>` static), then falls back to byte comparison so
-/// values produced via the `from_string_uncanonicalized` escape hatch
-/// (e.g., during synthesis where no interner is reachable) still
-/// behave correctly.
+/// Identity is by pointer: every `InternedStr` is constructed either
+/// through a [`ModuleSourceInterner`] (which canonicalises content
+/// against its `Arc<str>` pool) or by adopting one of the well-known
+/// `LazyLock<Arc<str>>` statics. The interner adopts every well-known
+/// static on construction, so calls like
+/// `interner.core("prelude")` and `ModuleSource::prelude()` share the
+/// same `Arc` and compare equal in O(1).
 ///
-/// Hash uses the byte content so a non-canonical `InternedStr` and a
-/// canonical one with the same content collide at the same bucket and
-/// `Eq` then reports them equal — required for `IndexMap` correctness.
+/// Hash also uses pointer identity. This is sound because two values
+/// with the same content always land in the same canonical `Arc` —
+/// either through the interner or via a well-known static.
 #[derive(Debug, Clone)]
 pub struct InternedStr(Arc<str>);
 
@@ -138,22 +139,6 @@ impl InternedStr {
     /// callers cannot bypass the interner.
     pub(crate) fn from_arc(arc: Arc<str>) -> Self {
         Self(arc)
-    }
-
-    /// Build from a `String` without going through a
-    /// `ModuleSourceInterner`. The resulting value has an identity
-    /// unique to this call — `Arc::ptr_eq` against a canonical interned
-    /// value with the same content returns false, but [`PartialEq`]
-    /// falls back to byte comparison so equality still holds. Hash uses
-    /// byte content so map lookups remain consistent with canonicalized
-    /// counterparts.
-    ///
-    /// Use at boundaries where an interner is not reachable: the
-    /// `From<SourceError>` impl in the loader, deep synthesis sites
-    /// that run after annotate, integration tests that build expected
-    /// `ModuleSource` values directly.
-    pub fn from_string_uncanonicalized(s: String) -> Self {
-        Self(Arc::from(s))
     }
 
     pub fn as_str(&self) -> &str {
@@ -180,26 +165,14 @@ impl AsRef<str> for InternedStr {
 
 impl PartialEq for InternedStr {
     fn eq(&self, other: &Self) -> bool {
-        // Fast path: same Arc => equal (always true for canonicalized
-        // values produced by a single `ModuleSourceInterner` and for
-        // well-known statics).
-        if Arc::ptr_eq(&self.0, &other.0) {
-            return true;
-        }
-        // Slow path: bytes match. Required because the
-        // `from_string_uncanonicalized` escape hatch produces values
-        // whose pointer identity differs from canonical values with the
-        // same content.
-        &*self.0 == &*other.0
+        Arc::ptr_eq(&self.0, &other.0)
     }
 }
 impl Eq for InternedStr {}
 
 impl Hash for InternedStr {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        // Hash by byte content so canonicalized and uncanonicalized
-        // values with the same content land at the same bucket.
-        (&*self.0).hash(state);
+        (Arc::as_ptr(&self.0).cast::<()>() as usize).hash(state);
     }
 }
 
@@ -228,6 +201,7 @@ impl PartialEq<&str> for InternedStr {
 /// (`PLACEHOLDER_NAME`, `CORE_PRELUDE`, ...), so calls like
 /// `interner.core("prelude")` return the same `Arc` as the static — and
 /// therefore the same `InternedStr` as `ModuleSource::prelude()`.
+#[derive(Debug)]
 pub struct ModuleSourceInterner {
     strings: HashSet<Arc<str>>,
 }

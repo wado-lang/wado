@@ -2427,32 +2427,42 @@ fn remove_dead_global_sets_expr(expr: &mut TirExpr, used: &IndexSet<(String, Str
 mod tests {
     use super::*;
 
-    fn free_fn(name: &str) -> FunctionId {
-        let mut interner = crate::name::ModuleSourceInterner::new();
-        FunctionId::Free(FreeFunctionName::from_strs(&mut interner, &["test"], name))
+    fn free_fn(interner: &mut crate::name::ModuleSourceInterner, name: &str) -> FunctionId {
+        FunctionId::Free(FreeFunctionName::from_strs(interner, &["test"], name))
     }
 
     #[test]
     fn test_empty_reachable_set() {
+        let mut interner = crate::name::ModuleSourceInterner::new();
         let call_graph = IndexMap::default();
-        let entry = free_fn("run");
+        let entry = free_fn(&mut interner, "run");
         let reachable = compute_reachable(&call_graph, &entry);
-        assert!(reachable.contains(&free_fn("run")));
+        assert!(reachable.contains(&free_fn(&mut interner, "run")));
         assert_eq!(reachable.len(), 1);
     }
 
     #[test]
     fn test_transitive_reachability() {
+        let mut interner = crate::name::ModuleSourceInterner::new();
         let mut call_graph = IndexMap::default();
-        call_graph.insert(free_fn("run"), IndexSet::from_iter([free_fn("foo")]));
-        call_graph.insert(free_fn("foo"), IndexSet::from_iter([free_fn("bar")]));
-        call_graph.insert(free_fn("bar"), IndexSet::default());
-        call_graph.insert(free_fn("unused"), IndexSet::from_iter([free_fn("bar")]));
+        call_graph.insert(
+            free_fn(&mut interner, "run"),
+            IndexSet::from_iter([free_fn(&mut interner, "foo")]),
+        );
+        call_graph.insert(
+            free_fn(&mut interner, "foo"),
+            IndexSet::from_iter([free_fn(&mut interner, "bar")]),
+        );
+        call_graph.insert(free_fn(&mut interner, "bar"), IndexSet::default());
+        call_graph.insert(
+            free_fn(&mut interner, "unused"),
+            IndexSet::from_iter([free_fn(&mut interner, "bar")]),
+        );
 
-        let reachable = compute_reachable(&call_graph, &free_fn("run"));
-        assert!(reachable.contains(&free_fn("run")));
-        assert!(reachable.contains(&free_fn("foo")));
-        assert!(reachable.contains(&free_fn("bar")));
-        assert!(!reachable.contains(&free_fn("unused")));
+        let reachable = compute_reachable(&call_graph, &free_fn(&mut interner, "run"));
+        assert!(reachable.contains(&free_fn(&mut interner, "run")));
+        assert!(reachable.contains(&free_fn(&mut interner, "foo")));
+        assert!(reachable.contains(&free_fn(&mut interner, "bar")));
+        assert!(!reachable.contains(&free_fn(&mut interner, "unused")));
     }
 }

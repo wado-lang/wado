@@ -23,8 +23,12 @@ use crate::stdlib;
 /// Error that can occur during module loading
 #[derive(Debug, Clone)]
 pub enum LoadError {
-    /// Module was not found
-    ModuleNotFound { module_source: ModuleSource },
+    /// Module was not found. `path` is the canonical display form
+    /// (`"core:foo"`, `"./bar.wado"`, `"<entry>"`) — kept as a plain
+    /// `String` so error construction does not need a
+    /// `ModuleSourceInterner`. This matches the shape of the other
+    /// `path`-bearing variants below (`IoError`, `InvalidModulePath`).
+    ModuleNotFound { path: String },
     /// Error while parsing module
     ParseError {
         module_source: ModuleSource,
@@ -60,8 +64,8 @@ pub enum LoadError {
 impl std::fmt::Display for LoadError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            LoadError::ModuleNotFound { module_source } => {
-                write!(f, "module not found: {module_source}")
+            LoadError::ModuleNotFound { path } => {
+                write!(f, "module not found: {path}")
             }
             LoadError::ParseError {
                 module_source,
@@ -187,15 +191,7 @@ impl From<LoadError> for crate::compiler_host::Diagnostic {
 impl From<SourceError> for LoadError {
     fn from(err: SourceError) -> Self {
         match err {
-            // Error path: the `module_source` here is only consumed by
-            // `Display` / `Diagnostic::from`. We deliberately use an
-            // uncanonicalized `InternedStr` because no interner is
-            // reachable from `From::from`.
-            SourceError::NotFound { path } => LoadError::ModuleNotFound {
-                module_source: ModuleSource::Local {
-                    path: crate::name::InternedStr::from_string_uncanonicalized(path),
-                },
-            },
+            SourceError::NotFound { path } => LoadError::ModuleNotFound { path },
             SourceError::IoError { path, message } => LoadError::IoError { path, message },
             SourceError::NetworkError { url, message } => LoadError::IoError { path: url, message },
         }
@@ -1247,7 +1243,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             return stdlib::get_stdlib_wasm_asset(path)
                 .map(<[u8]>::to_vec)
                 .ok_or_else(|| LoadError::ModuleNotFound {
-                    module_source: source.clone(),
+                    path: source.to_string(),
                 });
         }
         self.host.load_source(path).await.map_err(LoadError::from)
@@ -1462,9 +1458,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                 if let Some(source) = stdlib::get_stdlib_module(&import_path) {
                     Ok(source.to_string())
                 } else {
-                    Err(LoadError::ModuleNotFound {
-                        module_source: module_source.clone(),
-                    })
+                    Err(LoadError::ModuleNotFound { path: import_path })
                 }
             }
             ModuleSource::Wasi { interface } => {
@@ -1472,15 +1466,13 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                 if let Some(source) = stdlib::get_stdlib_module(&import_path) {
                     Ok(source.to_string())
                 } else {
-                    Err(LoadError::ModuleNotFound {
-                        module_source: module_source.clone(),
-                    })
+                    Err(LoadError::ModuleNotFound { path: import_path })
                 }
             }
             ModuleSource::EntryPoint { .. } => {
                 // Entry point source is provided directly, not loaded from host
                 Err(LoadError::ModuleNotFound {
-                    module_source: module_source.clone(),
+                    path: module_source.to_string(),
                 })
             }
             ModuleSource::Wasm { .. } => {
@@ -1489,7 +1481,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                 // Wado parsing path; reaching this branch means a Wasm asset was
                 // accidentally routed through the Wado loader.
                 Err(LoadError::ModuleNotFound {
-                    module_source: module_source.clone(),
+                    path: module_source.to_string(),
                 })
             }
             ModuleSource::Redirected { uri } => {

@@ -34,7 +34,10 @@ use crate::token::Span;
 
 /// Expand all occurrences of `builtin::cm_lift_async_result::<T>(outptr)`
 /// in `module` into inline lift code.
-pub fn expand_cm_intrinsics(module: &mut TirModule) {
+pub fn expand_cm_intrinsics(
+    module: &mut TirModule,
+    interner: &RefCell<crate::name::ModuleSourceInterner>,
+) {
     // Acquire a static reference to the WASI registry — lift of WASI
     // variants / records needs it for layout information. Reusing the
     // shared registry avoids the cost of rebuilding from stdlib.
@@ -57,6 +60,7 @@ pub fn expand_cm_intrinsics(module: &mut TirModule) {
                 locals: &mut locals,
                 type_table: &type_table,
                 wasi_registry,
+                interner,
                 rewrite_count: 0,
                 function_name: &fn_name,
             };
@@ -74,6 +78,7 @@ struct Rewriter<'a> {
     locals: &'a mut Vec<TirLocal>,
     type_table: &'a RefCell<TypeTable>,
     wasi_registry: &'a WasiRegistry,
+    interner: &'a RefCell<crate::name::ModuleSourceInterner>,
     rewrite_count: u32,
     #[allow(dead_code)]
     function_name: &'a str,
@@ -118,6 +123,7 @@ impl TirMutVisitor for Rewriter<'_> {
                 wasi_registry: self.wasi_registry,
                 type_table: self.type_table,
                 cm_package: &wasi_pkg,
+                interner: self.interner,
             },
         );
 

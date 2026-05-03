@@ -359,6 +359,7 @@ fn compile_after_load<H: CompilerHost>(
         symbols,
         state,
         tir_modules,
+        interner,
         ..
     } = annotated;
 
@@ -371,6 +372,7 @@ fn compile_after_load<H: CompilerHost>(
         state.wasi_registry,
         state.world_registry,
         state.builtin_registry,
+        interner,
     );
 
     // Apply options to package (must be before synthesis)
@@ -743,6 +745,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
                 wasi_registry,
                 world_registry,
                 builtin_registry,
+                interner.clone(),
             );
 
             // Apply target world override (must be before synthesis)

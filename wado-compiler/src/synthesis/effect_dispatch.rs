@@ -454,6 +454,7 @@ fn synthesize_dispatch_wrappers(
     let effect_module = effect_module.clone();
     let base_name = base_name.clone();
     let is_resource = meta.is_resource;
+    let interner = project.interner.clone();
     let entry_module = project
         .tir_modules
         .get_mut(entry_source)
@@ -471,6 +472,7 @@ fn synthesize_dispatch_wrappers(
             plan,
             is_resource,
             &type_table,
+            &interner,
         );
         entry_module.add_function(wrapper);
     }
@@ -486,6 +488,7 @@ fn build_dispatch_wrapper_function(
     plan: &DispatchPlan,
     is_resource: bool,
     type_table: &std::rc::Rc<std::cell::RefCell<TypeTable>>,
+    interner: &std::cell::RefCell<crate::name::ModuleSourceInterner>,
 ) -> TirFunction {
     let span = synth_span();
     let op_name = &op.name;
@@ -750,11 +753,7 @@ fn build_dispatch_wrapper_function(
         let effect_call = TirExpr::new(
             TirExprKind::Call {
                 func: FunctionRef {
-                    module_source: ModuleSource::Local {
-                        path: crate::name::InternedStr::from_string_uncanonicalized(
-                            base_name.to_string(),
-                        ),
-                    },
+                    module_source: interner.borrow_mut().local(base_name),
                     name: op_name.clone(),
                     monomorph_info: None,
                     method_info: None,
