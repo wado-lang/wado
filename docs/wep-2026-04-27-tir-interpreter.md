@@ -92,7 +92,18 @@ Status: done.
       constants. Immutable bindings are captured as `Const(v)` when the
       RHS reduces; `let mut` and assignments invalidate to `NonConst`.
       Reads of `TirExprKind::Local` consult `env`.
-- [x] Subsumes part of `const_propagation` for in-function constants.
+- [x] `GlobalEnv: IndexMap<(ModuleSource, String), Lattice>` on
+      `Interpreter` for module-scope globals. The driving visitor
+      (`const_folding`) builds the env once per pass by walking
+      `FlatPackage::globals`: each `global FOO: T = init;` whose
+      initializer reduces to `Const(v)` is recorded as `Const(v)`,
+      mutable globals as `NonConst`. Reads of
+      `TirExprKind::GlobalVarGet` consult `globals` and bare reads of
+      a `Const(v)` global rewrite to the literal via the same
+      leaf-rewrite path as a `Local`. Initializers are reduced
+      through a fresh `Interpreter` with the partially-built env
+      installed, so `global B = A + 1` folds once `A` is in scope.
+      Calls inside initializers fold via Stage 3's `with_callees`.
 
 ### Stage 1.5 — memoization (deferred)
 
@@ -437,8 +448,9 @@ incurs one codegen.
 ## Consequences
 
 - `const_folding.rs` shrinks to a thin glue file, and stays that way.
-- `tiri` may eventually subsume `const_propagation`, `const_branch_prune`,
-  and parts of `inline` — to be evaluated when each stage lands.
+- `tiri` covers immutable-global folding through Stage 1's
+  `GlobalEnv`. May further absorb parts of `const_branch_prune` and
+  `inline` — to be evaluated as later stages land.
 - Stage 2.5's match-fold is observable in the TIR optimize phase even
   though `lower_patterns` runs before `optimize`: not every match is
   desugared by `lower_patterns` (some shapes survive to optimize

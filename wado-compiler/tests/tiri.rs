@@ -19,7 +19,7 @@ use wado_compiler::tir::{
     TirBlock, TirExpr, TirExprKind, TirFunction, TirLiteralPattern, TirLocal, TirMatchArm,
     TirParam, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
-use wado_compiler::tiri::{CalleeMap, Interpreter, Lattice, Value, is_ctfe_eligible};
+use wado_compiler::tiri::{CalleeMap, GlobalEnv, Interpreter, Lattice, Value, is_ctfe_eligible};
 
 fn char_lit(c: char) -> TirExpr {
     TirExpr::new(
@@ -3429,4 +3429,137 @@ fn pure_call_in_if_arm_folds_via_outer_walk() {
         panic!("expected IntLiteral");
     };
     assert_eq!(value, 10);
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Stage 1 (extended): GlobalEnv — `GlobalVarGet` rewriting and lattice lookup
+// ──────────────────────────────────────────────────────────────────────────────
+
+fn global_get(module: ModuleSource, name: &str, type_id: TypeId) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::GlobalVarGet {
+            module_source: module,
+            name: name.to_string(),
+        },
+        type_id,
+        Span::default(),
+    )
+}
+
+#[test]
+fn global_const_int_folds_via_reduce_local() {
+    // `global X: i32 = 42;` → reading `X` rewrites to `42`.
+    let table = TypeTable::new();
+    let module = ModuleSource::default();
+    let mut globals = GlobalEnv::default();
+    globals.insert(
+        (module.clone(), "X".to_string()),
+        Lattice::Const(Value::Int {
+            value: 42,
+            prim: PrimitiveType::I32,
+        }),
+    );
+
+    let mut interp = Interpreter::new(&table);
+    interp.with_globals(&globals);
+
+    let mut expr = global_get(module, "X", TypeTable::I32);
+    assert!(interp.reduce_local(&mut expr));
+    let TirExprKind::IntLiteral { value, .. } = expr.kind else {
+        panic!("expected IntLiteral, got {:?}", expr.kind);
+    };
+    assert_eq!(value, 42);
+}
+
+#[test]
+fn global_const_threads_into_binary_fold() {
+    // `global X: i32 = 10;` → `X + 5` folds to `15`.
+    let table = TypeTable::new();
+    let module = ModuleSource::default();
+    let mut globals = GlobalEnv::default();
+    globals.insert(
+        (module.clone(), "X".to_string()),
+        Lattice::Const(Value::Int {
+            value: 10,
+            prim: PrimitiveType::I32,
+        }),
+    );
+
+    let mut interp = Interpreter::new(&table);
+    interp.with_globals(&globals);
+
+    let mut expr = binary(
+        TirBinaryOp::Add,
+        global_get(module, "X", TypeTable::I32),
+        int_lit(5, TypeTable::I32, "5"),
+        TypeTable::I32,
+    );
+    assert!(interp.reduce_local(&mut expr));
+    let TirExprKind::IntLiteral { value, .. } = expr.kind else {
+        panic!("expected IntLiteral, got {:?}", expr.kind);
+    };
+    assert_eq!(value, 15);
+}
+
+#[test]
+fn global_mut_recorded_as_nonconst_blocks_fold() {
+    // `global mut X: i32 = 0;` → `X + 5` stays as Binary, not folded.
+    // Records the local as `NonConst` so the parent fold reports
+    // `NonConst` rather than `Unevaluated`.
+    let table = TypeTable::new();
+    let module = ModuleSource::default();
+    let mut globals = GlobalEnv::default();
+    globals.insert((module.clone(), "X".to_string()), Lattice::NonConst);
+
+    let mut interp = Interpreter::new(&table);
+    interp.with_globals(&globals);
+
+    let lat = interp.reduce_to_lattice(&global_get(module.clone(), "X", TypeTable::I32));
+    assert_eq!(lat, Lattice::NonConst);
+
+    let mut expr = binary(
+        TirBinaryOp::Add,
+        global_get(module, "X", TypeTable::I32),
+        int_lit(5, TypeTable::I32, "5"),
+        TypeTable::I32,
+    );
+    assert!(!interp.reduce_local(&mut expr));
+    assert!(matches!(expr.kind, TirExprKind::Binary { .. }));
+}
+
+#[test]
+fn global_absent_stays_unevaluated() {
+    // No `with_globals` installed → `GlobalVarGet` reports `Unevaluated`
+    // (engine has no information). Same convention as un-bound locals.
+    let table = TypeTable::new();
+    let module = ModuleSource::default();
+    let mut interp = Interpreter::new(&table);
+    let lat = interp.reduce_to_lattice(&global_get(module.clone(), "MISSING", TypeTable::I32));
+    assert_eq!(lat, Lattice::Unevaluated);
+
+    // With an empty `GlobalEnv` installed, an unknown key still reports
+    // `Unevaluated` — no NonConst materializes spuriously.
+    let globals = GlobalEnv::default();
+    interp.with_globals(&globals);
+    let lat = interp.reduce_to_lattice(&global_get(module, "MISSING", TypeTable::I32));
+    assert_eq!(lat, Lattice::Unevaluated);
+}
+
+#[test]
+fn global_const_bool_folds_via_reduce_local() {
+    // `global ENABLED: bool = true;` — covers the non-int path.
+    let table = TypeTable::new();
+    let module = ModuleSource::default();
+    let mut globals = GlobalEnv::default();
+    globals.insert(
+        (module.clone(), "ENABLED".to_string()),
+        Lattice::Const(Value::Bool(true)),
+    );
+
+    let mut interp = Interpreter::new(&table);
+    interp.with_globals(&globals);
+
+    let mut expr = global_get(module, "ENABLED", TypeTable::BOOL);
+    assert!(interp.reduce_local(&mut expr));
+    assert!(matches!(expr.kind, TirExprKind::BoolLiteral(true)));
 }

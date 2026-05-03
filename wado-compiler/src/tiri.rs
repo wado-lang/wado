@@ -47,6 +47,13 @@
 //!   each use site. `let mut` and post-assign locals stay `NonConst`.
 //!   The driving visitor populates the env via
 //!   [`Interpreter::bind_local`] / [`Interpreter::invalidate_local`].
+//! - Global variables: immutable `global FOO: T = …;` declarations
+//!   whose initializer reduces to a constant flow into a project-wide
+//!   [`GlobalEnv`] and are read back at every `GlobalVarGet` site.
+//!   Mutable globals are recorded as `NonConst` so a parent fold like
+//!   `GLOBAL_MUT + 1` reports `NonConst` rather than `Unevaluated`. The
+//!   driving visitor builds the env once per pass via
+//!   [`Interpreter::with_globals`].
 //! - `if` expressions: a constant condition collapses to the chosen
 //!   arm; a non-constant condition with both arms reducing to the same
 //!   lattice constant (and an effect-free condition) folds to that
@@ -269,6 +276,30 @@ pub type CalleeKey = (ModuleSource, String);
 /// time, not here.
 pub type CalleeMap = IndexMap<CalleeKey, Rc<RefCell<TirFunction>>>;
 
+// ──────────────────────────────────────────────────────────────────────────────
+// Global env
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// Identity of a global variable in the [`GlobalEnv`]. Mirrors the
+/// `(module_source, name)` shape carried by `TirExprKind::GlobalVarGet`
+/// so the interpreter can look up a `GlobalVarGet` node directly.
+pub type GlobalKey = (ModuleSource, String);
+
+/// Lattice values for module-scope globals.
+///
+/// Populated once per pass by the driving visitor from
+/// [`crate::flat_package::FlatPackage::globals`] — typically by
+/// reducing each non-`mut` global's initializer through a fresh
+/// [`Interpreter`] (so initializers like `1 + 2`, `i32::MAX - 1`, or
+/// pure-call expressions all collapse to `Const(_)`). Mutable globals
+/// are mapped to [`Lattice::NonConst`] so reads through tiri stay
+/// conservative even while the global is in scope.
+///
+/// The map is read at every `GlobalVarGet` lookup; absent keys default
+/// to [`Lattice::Unevaluated`] (the engine simply doesn't know — same
+/// rule as un-bound locals).
+pub type GlobalEnv = IndexMap<GlobalKey, Lattice>;
+
 /// Default per-pass CTFE step budget. Mirrors rustc's CTFE step counter
 /// shape: a hard ceiling on the number of productive call entries
 /// before the engine starts bailing. Borrow-blocked re-entries (the
@@ -340,6 +371,12 @@ pub struct Interpreter<'a> {
     ///
     /// [`with_callees`]: Self::with_callees
     callees: Option<&'a CalleeMap>,
+    /// Pre-built lattice values for module-scope globals. When `None`,
+    /// every `GlobalVarGet` stays [`Lattice::Unevaluated`]. The visitor
+    /// populates this once per pass via [`with_globals`].
+    ///
+    /// [`with_globals`]: Self::with_globals
+    globals: Option<&'a GlobalEnv>,
     /// Hard ceiling on the number of productive CTFE call entries
     /// before bailing. Decremented once per successful body evaluation;
     /// on zero, further attempts return `Unevaluated`.
@@ -361,6 +398,7 @@ impl<'a> Interpreter<'a> {
             type_table,
             env: IndexMap::default(),
             callees: None,
+            globals: None,
             step_budget: DEFAULT_STEP_BUDGET,
             call_stack: Vec::new(),
         }
@@ -375,6 +413,20 @@ impl<'a> Interpreter<'a> {
     /// pass).
     pub fn with_callees(&mut self, callees: &'a CalleeMap) -> &mut Self {
         self.callees = Some(callees);
+        self
+    }
+
+    /// Install the [`GlobalEnv`]. Without this, every `GlobalVarGet`
+    /// node remains [`Lattice::Unevaluated`] — the engine has no
+    /// initializer lattice to look up.
+    ///
+    /// Lifetime: the map outlives this interpreter (the visitor builds
+    /// it once per pass, hands a borrow in, and discards both at end of
+    /// pass), mirroring [`with_callees`].
+    ///
+    /// [`with_callees`]: Self::with_callees
+    pub fn with_globals(&mut self, globals: &'a GlobalEnv) -> &mut Self {
+        self.globals = Some(globals);
         self
     }
 
@@ -557,8 +609,21 @@ impl<'a> Interpreter<'a> {
     /// expression's fold (`x + 1` → fold by reading `x` from env, no
     /// in-place mutation of the `Local` node). This keeps assignment
     /// targets (`x = …`, `obj.f = …`, `arr[i] = …`) safely opaque.
+    /// `GlobalVarGet` is the exception: it has a sibling
+    /// `GlobalVarSet` node so its read site is unambiguous, and the
+    /// dedicated leaf-rewrite arm below replaces the read with the
+    /// recorded `Const(v)` literal when one is available.
     pub fn reduce_local(&mut self, expr: &mut TirExpr) -> bool {
         if let Lattice::Const(v) = self.try_fold(expr) {
+            expr.kind = value_to_expr_kind(v);
+            return true;
+        }
+        if let TirExprKind::GlobalVarGet {
+            module_source,
+            name,
+        } = &expr.kind
+            && let Lattice::Const(v) = self.global_lattice(module_source, name)
+        {
             expr.kind = value_to_expr_kind(v);
             return true;
         }
@@ -864,6 +929,10 @@ impl<'a> Interpreter<'a> {
             TirExprKind::Local { index, .. } => {
                 self.env.get(index).copied().unwrap_or(Lattice::Unevaluated)
             }
+            TirExprKind::GlobalVarGet {
+                module_source,
+                name,
+            } => self.global_lattice(module_source, name),
             TirExprKind::Block(b) => self.block_lattice(b),
             TirExprKind::If {
                 condition,
@@ -1160,6 +1229,27 @@ impl<'a> Interpreter<'a> {
             }
             _ => Lattice::Unevaluated,
         }
+    }
+
+    /// Look up a `(module_source, name)` global in the installed
+    /// [`GlobalEnv`]. Absent keys default to [`Lattice::Unevaluated`]
+    /// — the engine simply has no information, same convention as
+    /// un-bound locals.
+    ///
+    /// `IndexMap` lookup needs an owned tuple key, so each call clones
+    /// `ModuleSource` (one `String` allocation per variant) and the
+    /// global name. If profiling shows this on a hot path, switch the
+    /// env to `IndexMap<ModuleSource, IndexMap<String, Lattice>>` or
+    /// implement `Borrow`-keyed lookup; it's left flat for now since
+    /// `GlobalVarGet` nodes are sparse compared to local reads.
+    fn global_lattice(&self, module_source: &ModuleSource, name: &str) -> Lattice {
+        let Some(globals) = self.globals else {
+            return Lattice::Unevaluated;
+        };
+        globals
+            .get(&(module_source.clone(), name.to_string()))
+            .copied()
+            .unwrap_or(Lattice::Unevaluated)
     }
 
     /// Pure-call inlining. Attempts to fold a `Call` node whose args
