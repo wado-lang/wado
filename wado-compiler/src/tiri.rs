@@ -68,6 +68,17 @@
 //!   string / null literal patterns are deferred (treated as `Unknown`,
 //!   which never lets a const-scrutinee match commit and never drops a
 //!   later arm).
+//! - Pure call inlining (Stage 3): a free `Call` whose args all reduce
+//!   to constants and whose callee was admitted to the [`CalleeMap`]
+//!   (pure, non-async, monomorphic, single-tail-expression body) is
+//!   evaluated by binding the args into a fresh local environment and
+//!   reducing the body's tail expression. A recursion guard refuses
+//!   re-entry into a callee already on the call stack; a per-pass step
+//!   budget caps total CTFE work. `NonConst` tail results (e.g. body
+//!   contains a runtime div-by-zero) are downgraded to Unevaluated so
+//!   the original Call survives and the runtime trap is preserved.
+//!   `MethodCall` / `IndirectCall` / `CmRawCall` and multi-stmt bodies
+//!   are out of scope for Stage 3.
 //!
 //! Float arithmetic uses native Rust IEEE 754 ops (same as Wasm), following
 //! cranelift's approach: fold the result, but skip if it is NaN since NaN
@@ -82,9 +93,11 @@
 //! backend).
 
 use crate::hashmap::IndexMap;
+use crate::name::ModuleSource;
 use crate::tir::{
-    PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirLiteralPattern,
-    TirMatchArm, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
+    PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction,
+    TirLiteralPattern, TirMatchArm, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
+    TypeTable,
 };
 
 /// Three-state lattice over compile-time evaluation results.
@@ -103,9 +116,8 @@ use crate::tir::{
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Lattice {
     /// No information yet. Default for un-bound locals and TIR kinds
-    /// the engine doesn't currently understand (e.g. `Call`, `Block`).
-    /// Stage 3+ may later refine an `Unevaluated` cell to `Const(_)`
-    /// once pure-call inlining lands.
+    /// the engine doesn't currently understand (e.g. `Call` outside
+    /// the Stage-3 fold path, `Block` past a single tail expression).
     Unevaluated,
     /// Provably reduces to this value.
     Const(Value),
@@ -225,15 +237,77 @@ impl Value {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
+// Callee map (Stage 3)
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// Identity of a callee in the [`CalleeMap`]. Mirrors the shape produced
+/// by `FunctionRef::full_name` so the interpreter can look up a `Call`
+/// node's target without re-deriving the format.
+pub type CalleeKey = (ModuleSource, String);
+
+/// Map of CTFE-eligible callees, keyed by `(module_source, full_name)`.
+///
+/// The driving visitor pre-clones every pure-eligible function into this
+/// map so the interpreter can read callee bodies without competing for
+/// the live `Rc<RefCell<TirFunction>>` borrow held by the visitor over
+/// the function currently being walked.
+///
+/// Eligibility is decided once, at map construction time, by [`is_ctfe_eligible`].
+/// The interpreter never re-checks: presence in the map is the witness.
+pub type CalleeMap = IndexMap<CalleeKey, TirFunction>;
+
+/// Default per-pass step budget. Mirrors rustc's CTFE step counter
+/// shape: a hard ceiling on the number of non-recursive call entries
+/// before [`Interpreter::try_call_fold`] starts bailing. Recursive
+/// re-entries are caught by the call-stack guard *before* the budget
+/// charge, so they don't consume budget; the ceiling only applies to
+/// productive new-frame work.
+pub const DEFAULT_STEP_BUDGET: u32 = 1000;
+
+/// Decide whether a function may be evaluated at compile time by Stage 3.
+///
+/// The check is a conservative pure-and-safe gate, applied once when the
+/// driving visitor builds the [`CalleeMap`]:
+///
+/// - `effects.is_empty()` — no `with` clauses (the effect system's purity
+///   witness, modulo trap effects which Wado tracks separately).
+/// - `body.is_some()` — has a Wado-source body. External / CM-import
+///   functions have no inspectable body.
+/// - `!is_cm_binding && !is_dispatch_wrapper && !is_cm_export` —
+///   synthesized ABI bridges aren't real Wado functions.
+/// - `!is_async && task_return_type.is_none()` — async functions
+///   participate in the CM async runtime; not CTFE-safe.
+/// - `stores.is_empty()` — `stores[...]` is moot for CTFE (we don't pass
+///   refs), but bail conservatively.
+/// - `inline_hint != InlineHint::Never` — respect the user's explicit
+///   "do not expand this" annotation.
+/// - `type_params` and `impl_type_params` empty — Stage 3 runs after
+///   monomorphization, so concrete bodies only.
+#[must_use]
+pub fn is_ctfe_eligible(func: &TirFunction) -> bool {
+    func.effects.is_empty()
+        && func.body.is_some()
+        && !func.is_cm_binding
+        && !func.is_dispatch_wrapper
+        && !func.is_cm_export
+        && !func.is_async
+        && func.task_return_type.is_none()
+        && func.stores.is_empty()
+        && func.inline_hint != crate::tir::InlineHint::Never
+        && func.type_params.is_empty()
+        && func.impl_type_params.is_empty()
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
 // Interpreter
 // ──────────────────────────────────────────────────────────────────────────────
 
 /// Partial evaluator over [`TirExpr`].
 ///
-/// Holds the type table needed to resolve operand widths and a
-/// per-function `env` mapping local indices to lattice values. Future
-/// extensions (step budget for loops, pure-call inlining via the
-/// `FlatPackage`) will live on this struct.
+/// Holds the type table needed to resolve operand widths, a per-function
+/// `env` mapping local indices to lattice values, and (Stage 3) a
+/// [`CalleeMap`] of pure-eligible callees plus a step budget and
+/// recursion guard for compile-time function evaluation.
 pub struct Interpreter<'a> {
     type_table: &'a TypeTable,
     /// Lattice values for `let`-bound locals in the *current function*.
@@ -247,6 +321,27 @@ pub struct Interpreter<'a> {
     /// [`invalidate_local`]: Self::invalidate_local
     /// [`enter_function`]: Self::enter_function
     env: IndexMap<u32, Lattice>,
+    /// Pre-built map of CTFE-eligible callees (Stage 3). When `None`,
+    /// `Call` nodes stay [`Lattice::Unevaluated`]. The visitor populates
+    /// this once per pass via [`with_callees`].
+    ///
+    /// [`with_callees`]: Self::with_callees
+    callees: Option<&'a CalleeMap>,
+    /// Hard ceiling on the number of CTFE call-entries before bailing
+    /// (Stage 3). Decremented once per [`try_call_fold`] entry; on zero,
+    /// further attempts return `Unevaluated`. Reset by [`enter_function`].
+    ///
+    /// [`try_call_fold`]: Self::try_call_fold
+    /// [`enter_function`]: Self::enter_function
+    step_budget: u32,
+    /// Stack of callees we're currently evaluating, used to refuse
+    /// recursive re-entry. A `Call` to a key already on the stack
+    /// reports `Unevaluated` immediately, so direct and mutual recursion
+    /// terminate without consuming the step budget. Pushed on entry to
+    /// [`try_call_fold`] and popped on exit.
+    ///
+    /// [`try_call_fold`]: Self::try_call_fold
+    call_stack: Vec<CalleeKey>,
 }
 
 impl<'a> Interpreter<'a> {
@@ -255,15 +350,47 @@ impl<'a> Interpreter<'a> {
         Self {
             type_table,
             env: IndexMap::default(),
+            callees: None,
+            step_budget: DEFAULT_STEP_BUDGET,
+            call_stack: Vec::new(),
         }
+    }
+
+    /// Install the Stage-3 [`CalleeMap`]. Without this, every `Call`
+    /// node remains [`Lattice::Unevaluated`] — the engine has no body
+    /// to look up.
+    ///
+    /// Lifetime: the map outlives this interpreter (the visitor builds
+    /// it once per pass, hands a borrow in, and discards both at end of
+    /// pass).
+    pub fn with_callees(&mut self, callees: &'a CalleeMap) -> &mut Self {
+        self.callees = Some(callees);
+        self
+    }
+
+    /// Override the per-pass CTFE step budget (default
+    /// [`DEFAULT_STEP_BUDGET`]). Called rarely — primarily by tests
+    /// exercising the budget-exhaustion path.
+    pub fn set_step_budget(&mut self, budget: u32) -> &mut Self {
+        self.step_budget = budget;
+        self
     }
 
     /// Reset the per-function environment. The driving visitor must call
     /// this before walking each function body; otherwise a previous
     /// function's bindings would leak into the next one (local indices
     /// are unique per function, not project-wide).
+    ///
+    /// Asserts the Stage-3 recursion guard is clear — a leaked entry
+    /// would mean a previous walk panicked mid-call. The step budget is
+    /// intentionally *not* touched: it caps total CTFE work across the
+    /// pass, not per-function.
     pub fn enter_function(&mut self) {
         self.env.clear();
+        debug_assert!(
+            self.call_stack.is_empty(),
+            "tiri call_stack leaked across function boundary",
+        );
     }
 
     /// Record a lattice value for a `let`-bound local. The driving
@@ -424,6 +551,17 @@ impl<'a> Interpreter<'a> {
     /// targets (`x = …`, `obj.f = …`, `arr[i] = …`) safely opaque.
     pub fn reduce_local(&mut self, expr: &mut TirExpr) -> bool {
         if let Lattice::Const(v) = self.try_fold(expr) {
+            expr.kind = value_to_expr_kind(v);
+            return true;
+        }
+        // Stage 3: pure call inlining. Attempted only on `Call` nodes
+        // whose args reduce to constants and whose callee was admitted
+        // to the CalleeMap. Returning Const here means the whole call
+        // collapses to a literal; anything else (Unevaluated / NonConst)
+        // leaves the original Call expression intact so the runtime
+        // semantics (including any trap the body would have produced)
+        // are preserved.
+        if let Lattice::Const(v) = self.try_call_fold(expr) {
             expr.kind = value_to_expr_kind(v);
             return true;
         }
@@ -1018,6 +1156,150 @@ impl<'a> Interpreter<'a> {
             }
             _ => Lattice::Unevaluated,
         }
+    }
+
+    /// Stage-3 pure-call inlining. Attempts to fold a `Call` node whose
+    /// args all reduce to constants and whose callee is registered in
+    /// the [`CalleeMap`].
+    ///
+    /// Returns `Const(v)` only when the callee body's tail expression
+    /// fully reduces to a primitive [`Value`] under the bound args.
+    /// Every other outcome — non-`Call` node, missing callee, non-const
+    /// arg, recognized-but-unfoldable body, recursion, budget
+    /// exhaustion — returns `Unevaluated` so the caller leaves the
+    /// original Call in place. `NonConst` is intentionally avoided here:
+    /// the call may still trap at runtime (a body whose tail folds to
+    /// `NonConst` because of, say, runtime div-by-zero), and
+    /// representing that as `NonConst` would let some surrounding
+    /// rewrite (e.g. an `if` both-arms-equal collapse rooted on the
+    /// other arm) drop the Call's evaluation.
+    ///
+    /// The recognized body shape is intentionally minimal — a single
+    /// statement that is either `Return { Some(expr) }` or `Expr(expr)`.
+    /// This covers the high-value targets (`fn double(x) { return x*2 }`,
+    /// expression-bodied helpers, single-tail-`if` bodies). Multi-stmt
+    /// bodies (let-sequences, multi-return) are deferred to a future
+    /// stage; bailing here costs an optimization, not correctness.
+    pub fn try_call_fold(&mut self, expr: &TirExpr) -> Lattice {
+        let Some(callees) = self.callees else {
+            return Lattice::Unevaluated;
+        };
+        let TirExprKind::Call { func, args, .. } = &expr.kind else {
+            return Lattice::Unevaluated;
+        };
+        // Synthesise the lookup key only after we know a CalleeMap is
+        // installed and the node is actually a Call — `full_name()`
+        // formats a fresh String, so the order saves an allocation
+        // per visited non-Call expression on the no-fold paths.
+        let key: CalleeKey = (func.module_source.clone(), func.full_name());
+        let Some(callee) = callees.get(&key) else {
+            return Lattice::Unevaluated;
+        };
+
+        // Refuse direct / mutual recursion. The first call onto a key
+        // already on the stack would re-evaluate the same body with the
+        // same args, looping under the budget; bail without consuming
+        // budget so callers up the chain still have headroom.
+        if self.call_stack.iter().any(|k| k == &key) {
+            return Lattice::Unevaluated;
+        }
+
+        // Reduce every arg to a Value. We only attempt the fold when
+        // every parameter has a known constant — partial constant
+        // propagation into a callee is Stage 3+ territory.
+        let mut bound: Vec<Value> = Vec::with_capacity(args.len());
+        for arg in args {
+            match self.expr_to_lattice(&arg.expr).as_const() {
+                Some(v) => bound.push(v),
+                None => return Lattice::Unevaluated,
+            }
+        }
+
+        // Param/arg arity must agree. The resolver enforces this, but
+        // an arity mismatch here would silently bind the wrong locals.
+        if bound.len() != callee.params.len() {
+            return Lattice::Unevaluated;
+        }
+
+        // Recognize the body shape. A miss here is the engine declining
+        // to model anything more involved, not a hard failure.
+        let Some(tail) = single_tail_expression(callee) else {
+            return Lattice::Unevaluated;
+        };
+        // Clone the tail so the borrow on `callees` ends before we
+        // mutate `self.env` / `self.call_stack` — the borrow checker
+        // would otherwise see the immutable map borrow held across the
+        // mutable env swap below.
+        let tail = tail.clone();
+
+        // Charge one step per call entry. Bail (without consuming
+        // anything) when exhausted so a chain that exactly hits the
+        // ceiling still has its outermost result left intact rather
+        // than half-folded.
+        if self.step_budget == 0 {
+            return Lattice::Unevaluated;
+        }
+        self.step_budget -= 1;
+
+        // Push call frame, swap env to a fresh one bound to the
+        // arguments. Local indices `0..params.len()` shadow the
+        // parameters — the same convention the rest of the compiler
+        // uses (`TirFunction::locals[0..params.len()]`).
+        self.call_stack.push(key);
+        let saved_env = std::mem::take(&mut self.env);
+        for (i, v) in bound.iter().enumerate() {
+            // u32 cast is safe: param counts are bounded by Wasm local
+            // index limits, well under u32::MAX.
+            #[allow(clippy::cast_possible_truncation)]
+            self.env.insert(i as u32, Lattice::Const(*v));
+        }
+
+        // Reduce the tail. We use `reduce_to_lattice`, not the bare
+        // `expr_to_lattice` projection, so Binary / Unary / Cast inside
+        // the body actually fold against the bound env (the projection
+        // alone returns Unevaluated for those kinds — only `try_fold`
+        // walks them). `reduce_to_lattice` clones internally, so the
+        // body in the CalleeMap is not mutated and stays shareable
+        // across multiple call sites.
+        //
+        // Calls *inside* the tail get one more level of try_call_fold
+        // through this same path: the cloned tail is `reduce_in_place`d,
+        // which calls `reduce_local`, which calls `try_call_fold`. The
+        // recursion guard above prevents unbounded re-entry.
+        let result = self.reduce_to_lattice(&tail);
+
+        // Restore.
+        self.env = saved_env;
+        self.call_stack.pop();
+
+        // Only Const(v) is exposed to the caller. NonConst from the
+        // tail (e.g. a Const/Const op that hit a runtime trap like
+        // div-by-zero inside the body) is downgraded to Unevaluated
+        // so the original Call expression is left intact and the
+        // runtime trap survives.
+        match result {
+            Lattice::Const(v) => Lattice::Const(v),
+            Lattice::NonConst | Lattice::Unevaluated => Lattice::Unevaluated,
+        }
+    }
+}
+
+/// Recognize a callee body shape Stage 3 can evaluate: a single
+/// statement that is either `Return { Some(expr) }` or `Expr(expr)`.
+/// Returns the tail expression in either case.
+///
+/// Anything else (zero or multiple stmts, intermediate Let / If / Loop /
+/// Break / Return without value, …) is out of scope for Stage 3 and
+/// reports `None`. The caller treats `None` as "do not fold this call",
+/// preserving the runtime call.
+fn single_tail_expression(func: &TirFunction) -> Option<&TirExpr> {
+    let body = func.body.as_ref()?;
+    let [single] = body.stmts.as_slice() else {
+        return None;
+    };
+    match &single.kind {
+        TirStmtKind::Return { value: Some(e) } | TirStmtKind::Expr(e) => Some(e),
+        _ => None,
     }
 }
 

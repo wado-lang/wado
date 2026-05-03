@@ -10,19 +10,28 @@
 
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
-use crate::tir::{TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind};
+use crate::tir::{FunctionRef, TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind};
 use crate::tir_visitor::{
     TirOptVisitor, TirRefVisitor, opt_walk_block, opt_walk_expr, opt_walk_stmt,
 };
-use crate::tiri::{Interpreter, Lattice};
+use crate::tiri::{CalleeMap, Interpreter, Lattice, is_ctfe_eligible};
 
 /// Apply constant folding to all functions in the project.
 pub fn fold_constants(project: &mut FlatPackage) -> bool {
     let mut changed = false;
     let type_table = project.type_table.borrow();
+    // Stage 3: build the CalleeMap once per pass. Pre-clone every
+    // CTFE-eligible callee so the interpreter can read bodies without
+    // competing for the visitor's `borrow_mut` over the function it's
+    // currently walking. Cloning is cheap (a TirFunction is mostly Vecs
+    // of Boxed nodes); the alternative — try_borrow on the live Rc —
+    // would silently skip self-calls (the function being walked is
+    // borrow_mut'd) and so let recursion misbehave.
+    let callees = build_callee_map(project);
     let mut visitor = ConstFoldVisitor {
         interpreter: Interpreter::new(&type_table),
     };
+    visitor.interpreter.with_callees(&callees);
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
         if let Some(ref mut body) = func.body {
@@ -33,6 +42,24 @@ pub fn fold_constants(project: &mut FlatPackage) -> bool {
         }
     }
     changed
+}
+
+/// Pre-build the [`CalleeMap`] from every CTFE-eligible `TirFunction`
+/// in `project`. The key shape (`(module_source, full_name)`) mirrors
+/// what `try_call_fold` synthesises from a `Call` node's `FunctionRef`
+/// so the interpreter can look the callee up by direct lookup.
+fn build_callee_map(project: &FlatPackage) -> CalleeMap {
+    let mut map = CalleeMap::default();
+    for func_rc in &project.functions {
+        let func = func_rc.borrow();
+        if !is_ctfe_eligible(&func) {
+            continue;
+        }
+        let module_source = func.module_source.clone();
+        let full_name = FunctionRef::from_resolved(&func, module_source.clone()).full_name();
+        map.insert((module_source, full_name), func.clone());
+    }
+    map
 }
 
 struct ConstFoldVisitor<'a> {
