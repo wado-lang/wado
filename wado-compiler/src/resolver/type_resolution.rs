@@ -254,27 +254,27 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
             // Check newtypes, struct definitions, and variants
             _ => {
-                if let Some(&type_id) = self.newtypes.get(name) {
+                if let Some(type_id) = self.lookup_newtype(name) {
                     type_id
-                } else if let Some(struct_info) = self.struct_fields.get(name) {
+                } else if let Some(struct_info) = self.lookup_struct_fields(name) {
                     // Use canonical name (not import alias) so interning produces the same TypeId
-                    self.type_table
-                        .borrow_mut()
-                        .make_struct(struct_info.name.clone(), struct_info.module_source.clone())
-                } else if let Some(variant_info) = self.variant_cases.get(name) {
-                    self.type_table.borrow_mut().make_variant(
+                    let (n, src) = (struct_info.name.clone(), struct_info.module_source.clone());
+                    self.type_table.borrow_mut().make_struct(n, src)
+                } else if let Some(variant_info) = self.lookup_variant_case(name) {
+                    let (n, src) = (
                         variant_info.name.clone(),
                         variant_info.module_source.clone(),
-                    )
-                } else if let Some(enum_info) = self.enum_cases.get(name) {
-                    self.type_table
-                        .borrow_mut()
-                        .make_enum(enum_info.name.clone(), enum_info.module_source.clone())
-                } else if let Some(resource_info) = self.resource_types.get(name) {
-                    self.type_table.borrow_mut().make_resource(
+                    );
+                    self.type_table.borrow_mut().make_variant(n, src)
+                } else if let Some(enum_info) = self.lookup_enum_case(name) {
+                    let (n, src) = (enum_info.name.clone(), enum_info.module_source.clone());
+                    self.type_table.borrow_mut().make_enum(n, src)
+                } else if let Some(resource_info) = self.lookup_resource_type(name) {
+                    let (n, src) = (
                         resource_info.name.clone(),
                         resource_info.module_source.clone(),
-                    )
+                    );
+                    self.type_table.borrow_mut().make_resource(n, src)
                 } else {
                     // Unknown type
                     TypeTable::UNKNOWN
@@ -347,7 +347,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         args.iter().map(|t| self.resolve_type(t)).collect();
 
                     // Get struct info for module source and bounds checking
-                    let struct_info = self.struct_fields.get(name).cloned();
+                    let struct_info = self.lookup_struct_fields(name).cloned();
                     let module_source = struct_info
                         .as_ref()
                         .map(|info| info.module_source.clone())
@@ -380,7 +380,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         module_source,
                         type_args,
                     )
-                } else if let Some(variant_info) = self.variant_cases.get(name).cloned() {
+                } else if let Some(variant_info) = self.lookup_variant_case(name).cloned() {
                     // Check if it's a generic variant (like Result<T, E>)
                     if variant_info.type_params.is_empty() {
                         TypeTable::UNKNOWN
@@ -393,7 +393,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             type_args,
                         )
                     }
-                } else if let Some(gn_info) = self.generic_newtype_defs.get(name).cloned() {
+                } else if let Some(gn_info) = self.lookup_generic_newtype(name).cloned() {
                     // Generic newtype instantiation: type MyArray<T> = Array<T>
                     // Substitute type params in the base type AST, then resolve
                     let concrete_base_ast =

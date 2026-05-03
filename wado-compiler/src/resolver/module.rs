@@ -19,13 +19,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 if let Item::Newtype(newtype_decl) = item {
                     if !newtype_decl.type_params.is_empty() {
                         // Generic newtype: store definition only if not already present
-                        if !self.generic_newtype_defs.contains_key(&newtype_decl.name) {
+                        if self.lookup_generic_newtype(&newtype_decl.name).is_none() {
                             let type_params = newtype_decl
                                 .type_params
                                 .iter()
                                 .map(|p| p.name.clone())
                                 .collect();
-                            self.generic_newtype_defs.insert(
+                            self.local_generic_newtypes.insert(
                                 newtype_decl.name.clone(),
                                 GenericNewtypeInfo {
                                     module_source: module_source.clone(),
@@ -34,7 +34,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                 },
                             );
                         }
-                    } else if !self.newtypes.contains_key(&newtype_decl.name) {
+                    } else if self.lookup_newtype(&newtype_decl.name).is_none() {
                         // Concrete newtype: resolve immediately
                         let base_type_id = self.resolve_type(&newtype_decl.ty);
                         let newtype_id = self.type_table.borrow_mut().make_newtype(
@@ -42,7 +42,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             module_source.clone(),
                             base_type_id,
                         );
-                        self.newtypes.insert(newtype_decl.name.clone(), newtype_id);
+                        self.local_newtypes
+                            .insert(newtype_decl.name.clone(), newtype_id);
                     }
                 }
             }
@@ -115,7 +116,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         .collect();
 
                     let module_source = scope.current_module_source.clone();
-                    scope.struct_fields.insert(
+                    scope.local_struct_fields.insert(
                         struct_decl.name.clone(),
                         StructFieldInfo {
                             name: struct_decl.name.clone(),
@@ -139,7 +140,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             self.current_module_source.clone(),
                             base_type_id,
                         );
-                        self.newtypes.insert(newtype_decl.name.clone(), newtype_id);
+                        self.local_newtypes
+                            .insert(newtype_decl.name.clone(), newtype_id);
                     } else {
                         // Generic newtype: store definition for lazy instantiation
                         let type_params = newtype_decl
@@ -147,7 +149,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             .iter()
                             .map(|p| p.name.clone())
                             .collect();
-                        self.generic_newtype_defs.insert(
+                        self.local_generic_newtypes.insert(
                             newtype_decl.name.clone(),
                             GenericNewtypeInfo {
                                 module_source: self.current_module_source.clone(),
@@ -196,7 +198,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     }
 
                     let module_source = scope.current_module_source.clone();
-                    scope.variant_cases.insert(
+                    scope.local_variant_cases.insert(
                         variant_decl.name.clone(),
                         VariantInfo {
                             name: variant_decl.name.clone(),
@@ -229,7 +231,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             ast_id: case.id,
                         })
                         .collect();
-                    self.enum_cases.insert(
+                    self.local_enum_cases.insert(
                         enum_decl.name.clone(),
                         EnumInfo::new(
                             enum_decl.name.clone(),
@@ -245,7 +247,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         .borrow_mut()
                         .make_flags(flags_decl.name.clone(), self.current_module_source.clone());
                     // Add to newtypes so it can be used as a type name
-                    self.newtypes.insert(flags_decl.name.clone(), flags_type);
+                    self.local_newtypes
+                        .insert(flags_decl.name.clone(), flags_type);
                     // Store member info with bitmask values (1 << index)
                     let members: Vec<FlagsMemberData> = flags_decl
                         .flags
@@ -257,7 +260,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             ast_id: m.id,
                         })
                         .collect();
-                    self.flags_cases.insert(
+                    self.local_flags_cases.insert(
                         flags_decl.name.clone(),
                         FlagsInfo {
                             type_id: flags_type,

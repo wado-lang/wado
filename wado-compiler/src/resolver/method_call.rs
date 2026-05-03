@@ -732,7 +732,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 }
             };
             if let Some((name, instance_type_args)) = generic_data
-                && let Some(variant_info) = self.variant_cases.get(&name).cloned()
+                && let Some(variant_info) = self.lookup_variant_case(&name).cloned()
                 && let Some((_, case_data)) = variant_info
                     .cases
                     .iter()
@@ -845,7 +845,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 _ => None,
             };
             if let Some(ref name) = flags_name
-                && let Some(flags_info) = self.flags_cases.get(name).cloned()
+                && let Some(flags_info) = self.lookup_flags_case(name).cloned()
             {
                 match static_call.method.as_str() {
                     "none" => {
@@ -912,7 +912,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         } = self.type_table.borrow().get(target_type_id).clone()
         {
             // Look up the variant case info
-            if let Some(variant_info) = self.variant_cases.get(&name) {
+            if let Some(variant_info) = self.lookup_variant_case(&name) {
                 // Find the case by name
                 if let Some((case_index, case_data)) = variant_info
                     .cases
@@ -967,7 +967,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         };
         if let Some(name) = generic_name {
             // Check if the base type is a variant
-            if let Some(variant_info) = self.variant_cases.get(&name).cloned() {
+            if let Some(variant_info) = self.lookup_variant_case(&name).cloned() {
                 // This is a generic variant like Result<T, E>
                 // Find the case by name
                 if let Some((case_index, case_data)) = variant_info
@@ -1461,9 +1461,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
 
         // Try looking up in loaded modules
-        if !struct_module.is_entry_point() {
-            self.ensure_module_maps_cached(struct_module);
-        }
         if !struct_module.is_entry_point()
             && let Some(module) = self.loaded_modules.get(struct_module)
         {
@@ -2173,7 +2170,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
 
         // For newtypes/flags, check if the base type has the static method
-        if let Some(&newtype_id) = self.newtypes.get(struct_name) {
+        if let Some(newtype_id) = self.lookup_newtype(struct_name) {
             let base_name = match self.type_table.borrow().get(newtype_id).clone() {
                 ResolvedType::Newtype { base_type, .. } => {
                     Some(self.type_table.borrow().type_name(base_type))
@@ -2213,7 +2210,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // For newtypes, check if the newtype itself has the method first,
         // then fall back to the base type's static method
         let (actual_struct_name, actual_mangled_name) =
-            if let Some(&newtype_id) = self.newtypes.get(struct_name) {
+            if let Some(newtype_id) = self.lookup_newtype(struct_name) {
                 // First check if the newtype itself has this static method
                 if self.has_static_method_direct(struct_name, method_name) {
                     (struct_name.to_string(), mangled_func_name.to_string())

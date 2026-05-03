@@ -173,7 +173,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         {
             let prefix = &ident.name[..pos];
             let suffix = &ident.name[pos + 2..];
-            if let Some(variant_info) = self.variant_cases.get(prefix).cloned()
+            if let Some(variant_info) = self.lookup_variant_case(prefix).cloned()
                 && let Some((_, case_data)) = variant_info
                     .cases
                     .iter()
@@ -429,7 +429,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             }
 
                             // Base→Newtype: UserId::from(u64_val) where type UserId = u64
-                            if let Some(&newtype_type_id) = self.newtypes.get(prefix) {
+                            if let Some(newtype_type_id) = self.lookup_newtype(prefix) {
                                 let base_opt =
                                     self.type_table.borrow().get_newtype_base(newtype_type_id);
                                 if let Some(base_id) = base_opt
@@ -488,7 +488,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         );
                     }
                     // Check if this is a flags type method call: Perms::none(), Perms::all()
-                    else if let Some(flags_info) = self.flags_cases.get(prefix).cloned()
+                    else if let Some(flags_info) = self.lookup_flags_case(prefix).cloned()
                         && matches!(suffix, "none" | "all")
                     {
                         if let Some(prefix_seg) = ident.segments.first() {
@@ -510,7 +510,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         );
                     }
                     // Check if this is a variant case construction (Color::Red)
-                    else if let Some(variant_info) = self.variant_cases.get(prefix) {
+                    else if let Some(variant_info) = self.lookup_variant_case(prefix) {
                         // Clone needed data to release the borrow on self
                         let variant_info = variant_info.clone();
                         let case_match = variant_info
@@ -645,11 +645,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             let method_name = &suffix[inner_pos + 2..];
 
                             // Check if this is a variant construction in the namespace
-                            self.ensure_module_maps_cached(&ns_source);
                             let ns_variant = self
-                                .module_type_maps_cache
+                                .all_variant_cases
                                 .get(&ns_source)
-                                .and_then(|maps| maps.variant_cases.get(type_name))
+                                .and_then(|m| m.get(type_name))
                                 .cloned();
                             if let Some(variant_info) = ns_variant {
                                 let case_match = variant_info
@@ -1030,10 +1029,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
             if let Some((ty, type_params)) = func_info
                 && let Some(return_type_ast) = ty
             {
-                // Build the callee module's flat maps so that type names resolve to the
-                // callee's types, not the caller's (which may have same-named different types).
-                // These reads only borrow immutable fields, so they happen before the scope
-                // guard which mutably borrows `self`.
+                // Build the callee module's import context so type names in the
+                // callee's signature resolve to the callee's types, not the
+                // caller's (which may have same-named different types).
                 let callee_module_ast = self.loaded_modules.get(callee_module);
                 let (callee_imported, callee_original_names) = callee_module_ast.map_or_else(
                     || (IndexMap::default(), IndexMap::default()),
@@ -1046,72 +1044,23 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         )
                     },
                 );
-                let callee_newtypes = Self::build_module_map(
-                    &self.all_newtypes,
-                    callee_module,
-                    &callee_imported,
-                    &callee_original_names,
-                );
-                let callee_struct_fields = Self::build_module_map(
-                    &self.all_struct_fields,
-                    callee_module,
-                    &callee_imported,
-                    &callee_original_names,
-                );
-                let callee_variant_cases = Self::build_module_map(
-                    &self.all_variant_cases,
-                    callee_module,
-                    &callee_imported,
-                    &callee_original_names,
-                );
-                let callee_enum_cases = Self::build_module_map(
-                    &self.all_enum_cases,
-                    callee_module,
-                    &callee_imported,
-                    &callee_original_names,
-                );
-                let callee_flags_cases = Self::build_module_map(
-                    &self.all_flags_cases,
-                    callee_module,
-                    &callee_imported,
-                    &callee_original_names,
-                );
-                let callee_resource_types = Self::build_module_map(
-                    &self.all_resource_types,
-                    callee_module,
-                    &callee_imported,
-                    &callee_original_names,
-                );
 
                 // Set up the function's type parameters in an inherited scope so we
                 // can resolve type parameter references (like T -> TypeParam { index: 0 }).
-                // Only `type_params` is replaced, matching the original
-                // `mem::take(&mut self.trait_ctx.type_params)` semantics.
                 let mut scope = self.enter_inherited_type_param_scope();
                 scope.trait_ctx.type_params.clear();
                 scope.register_generic_params(&type_params, 0);
 
-                // Temporarily swap in callee's flat maps
-                let old_newtypes = std::mem::replace(&mut scope.newtypes, callee_newtypes);
-                let old_struct_fields =
-                    std::mem::replace(&mut scope.struct_fields, callee_struct_fields);
-                let old_variant_cases =
-                    std::mem::replace(&mut scope.variant_cases, callee_variant_cases);
-                let old_enum_cases = std::mem::replace(&mut scope.enum_cases, callee_enum_cases);
-                let old_flags_cases = std::mem::replace(&mut scope.flags_cases, callee_flags_cases);
-                let old_resource_types =
-                    std::mem::replace(&mut scope.resource_types, callee_resource_types);
-
-                let resolved = scope.resolve_type(&return_type_ast);
-
-                // Restore caller's flat maps; trait_ctx is restored by the scope
-                // guard's Drop impl when `scope` goes out of scope below.
-                scope.newtypes = old_newtypes;
-                scope.struct_fields = old_struct_fields;
-                scope.variant_cases = old_variant_cases;
-                scope.enum_cases = old_enum_cases;
-                scope.flags_cases = old_flags_cases;
-                scope.resource_types = old_resource_types;
+                // Swap the resolver's "current module" perspective onto the
+                // callee for the duration of `resolve_type`. Locals are cleared
+                // because they only ever describe the active resolution, not
+                // the callee's pre-existing definitions.
+                let resolved = scope.with_module_perspective(
+                    callee_module.clone(),
+                    callee_imported,
+                    callee_original_names,
+                    |s| s.resolve_type(&return_type_ast),
+                );
                 drop(scope);
 
                 return resolved;
@@ -1202,7 +1151,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 // Type aliases from WASI (e.g., Mark, Instant, Duration)
                 _ => {
                     // First check if it's a registered newtype in newtypes
-                    if let Some(&newtype_id) = self.newtypes.get(&named.name) {
+                    if let Some(newtype_id) = self.lookup_newtype(&named.name) {
                         return newtype_id;
                     }
                     // Otherwise, try to resolve via WASI registry's newtypes.
@@ -1221,7 +1170,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             base_type,
                         );
                         // Cache the newtype for future lookups
-                        self.newtypes.insert(named.name.clone(), newtype_id);
+                        self.local_newtypes.insert(named.name.clone(), newtype_id);
                         newtype_id
                     } else if self
                         .wasi_registry
@@ -1528,7 +1477,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     )
                     .map(|func| func.params.clone());
                     if let Some(params) = params {
-                        // Temporarily swap to the definition module's type maps
+                        // Resolve types in the definition module's perspective
                         // so that type names resolve to the correct module's types
                         // (e.g., "Direction" resolves to module B's Direction, not module A's)
                         let callee_module = self
@@ -1547,70 +1496,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             } else {
                                 (IndexMap::default(), IndexMap::default())
                             };
-                        let saved_newtypes =
-                            if let Some(module_newtypes) = self.all_newtypes.get(&src) {
-                                Some(std::mem::replace(
-                                    &mut self.newtypes,
-                                    module_newtypes.clone(),
-                                ))
-                            } else {
-                                None
-                            };
-                        let saved_enum_cases = std::mem::replace(
-                            &mut self.enum_cases,
-                            Self::build_module_map(
-                                &self.all_enum_cases,
-                                &src,
-                                &imported_type_sources,
-                                &import_original_names,
-                            ),
+                        return self.with_module_perspective(
+                            src.clone(),
+                            imported_type_sources,
+                            import_original_names,
+                            |s| params.iter().map(|p| s.resolve_type(&p.ty)).collect(),
                         );
-                        let saved_struct_fields = std::mem::replace(
-                            &mut self.struct_fields,
-                            Self::build_module_map(
-                                &self.all_struct_fields,
-                                &src,
-                                &imported_type_sources,
-                                &import_original_names,
-                            ),
-                        );
-                        let saved_variant_cases = std::mem::replace(
-                            &mut self.variant_cases,
-                            Self::build_module_map(
-                                &self.all_variant_cases,
-                                &src,
-                                &imported_type_sources,
-                                &import_original_names,
-                            ),
-                        );
-                        let saved_flags_cases = std::mem::replace(
-                            &mut self.flags_cases,
-                            Self::build_module_map(
-                                &self.all_flags_cases,
-                                &src,
-                                &imported_type_sources,
-                                &import_original_names,
-                            ),
-                        );
-                        let saved_resource_types = std::mem::replace(
-                            &mut self.resource_types,
-                            Self::build_module_map(
-                                &self.all_resource_types,
-                                &src,
-                                &imported_type_sources,
-                                &import_original_names,
-                            ),
-                        );
-                        let result = params.iter().map(|p| self.resolve_type(&p.ty)).collect();
-                        self.resource_types = saved_resource_types;
-                        self.flags_cases = saved_flags_cases;
-                        self.variant_cases = saved_variant_cases;
-                        self.struct_fields = saved_struct_fields;
-                        self.enum_cases = saved_enum_cases;
-                        if let Some(saved) = saved_newtypes {
-                            self.newtypes = saved;
-                        }
-                        return result;
                     }
                 }
 

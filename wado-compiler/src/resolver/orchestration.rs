@@ -39,8 +39,8 @@ use crate::world_registry::WorldRegistry;
 use super::Resolver;
 use super::trait_env::TraitEnv;
 use super::types::{
-    EnumCaseData, EnumInfo, FlagsInfo, FlagsMemberData, GenericNewtypeInfo, ModuleTypeMaps,
-    ResourceInfo, StructFieldInfo, TypeError, VariantCaseData, VariantInfo,
+    EnumCaseData, EnumInfo, FlagsInfo, FlagsMemberData, GenericNewtypeInfo, ResourceInfo,
+    StructFieldInfo, TypeError, TypeLookup, VariantCaseData, VariantInfo,
 };
 
 /// Analysis state produced by [`Resolver::annotate_modules`] and consumed by
@@ -266,9 +266,10 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             }
         }
 
-        // Second sub-pass: resolve struct fields and newtypes
+        // Second sub-pass: resolve struct fields and newtypes.
+        // Each module's lookup goes directly through the in-progress shared
+        // tables (`all_*`) via [`TypeLookup`] — no per-module flat-map cloning.
         for (module_source, module) in modules {
-            // Build imported type sources for this module
             let (imported_type_sources, import_original_names) = Self::build_imported_type_sources(
                 module,
                 module_source,
@@ -276,45 +277,36 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 &invocations,
             );
 
-            // Build module-specific flat maps for resolving types in this module
-            let mut flat_newtypes = Self::build_module_map(
-                &all_newtypes,
-                module_source,
-                &imported_type_sources,
-                &import_original_names,
-            );
-            let mut flat_struct_fields = Self::build_module_map(
-                &all_struct_fields,
-                module_source,
-                &imported_type_sources,
-                &import_original_names,
-            );
-            let flat_resource_types = Self::build_module_map(
-                &all_resource_types,
-                module_source,
-                &imported_type_sources,
-                &import_original_names,
-            );
-            let flat_enum_cases = Self::build_module_map(
-                &all_enum_cases,
-                module_source,
-                &imported_type_sources,
-                &import_original_names,
-            );
-            let flat_variant_cases = Self::build_module_map(
-                &all_variant_cases,
-                module_source,
-                &imported_type_sources,
-                &import_original_names,
-            );
-            let flat_flags_cases = Self::build_module_map(
-                &all_flags_cases,
-                module_source,
-                &imported_type_sources,
-                &import_original_names,
-            );
+            // Helper closure: build a fresh TypeLookup pointed at the
+            // current state of the shared tables. Recreated per call site so
+            // that the previous borrow is released before each `borrow_mut()`
+            // on `type_table`.
+            let empty_struct: IndexMap<String, StructFieldInfo> = IndexMap::default();
+            let empty_newtype: IndexMap<String, TypeId> = IndexMap::default();
+            let empty_enum: IndexMap<String, EnumInfo> = IndexMap::default();
+            let empty_flags: IndexMap<String, FlagsInfo> = IndexMap::default();
+            let empty_gnt: IndexMap<String, GenericNewtypeInfo> = IndexMap::default();
+            let empty_variant: IndexMap<String, VariantInfo> = IndexMap::default();
 
             for item in &module.items {
+                let lookup = TypeLookup {
+                    current_module_source: module_source,
+                    imported_type_sources: &imported_type_sources,
+                    import_original_names: &import_original_names,
+                    all_newtypes: &all_newtypes,
+                    all_struct_fields: &all_struct_fields,
+                    all_variant_cases: &all_variant_cases,
+                    all_enum_cases: &all_enum_cases,
+                    all_flags_cases: &all_flags_cases,
+                    all_resource_types: &all_resource_types,
+                    all_generic_newtypes: &all_generic_newtypes,
+                    local_struct_fields: &empty_struct,
+                    local_newtypes: &empty_newtype,
+                    local_enum_cases: &empty_enum,
+                    local_flags_cases: &empty_flags,
+                    local_generic_newtypes: &empty_gnt,
+                    local_variant_cases: &empty_variant,
+                };
                 match item {
                     Item::Struct(struct_decl) => {
                         let mut fields = Vec::new();
@@ -333,23 +325,13 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                 Self::resolve_type_static(
                                     &field.ty,
                                     &mut type_table.borrow_mut(),
-                                    &flat_newtypes,
-                                    &flat_struct_fields,
-                                    &flat_resource_types,
-                                    &flat_enum_cases,
-                                    &flat_variant_cases,
-                                    &flat_flags_cases,
+                                    &lookup,
                                 )
                             } else {
                                 Self::resolve_type_static_with_params(
                                     &field.ty,
                                     &mut type_table.borrow_mut(),
-                                    &flat_newtypes,
-                                    &flat_struct_fields,
-                                    &flat_resource_types,
-                                    &flat_enum_cases,
-                                    &flat_variant_cases,
-                                    &flat_flags_cases,
+                                    &lookup,
                                     &type_params,
                                 )
                             };
@@ -381,7 +363,12 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             })
                             .collect();
 
-                        // Update the nested map entry with actual fields
+                        // Drop lookup so we can mutate `all_struct_fields`.
+
+                        // Update the nested map entry with actual fields. The
+                        // next iteration's `lookup` will see the new entry via
+                        // the "current module" path, so no flat-map echo is
+                        // needed.
                         let info = StructFieldInfo {
                             name: struct_decl.name.clone(),
                             module_source: module_source.clone(),
@@ -394,9 +381,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         all_struct_fields
                             .entry(module_source.clone())
                             .or_default()
-                            .insert(struct_decl.name.clone(), info.clone());
-                        // Also update flat map for subsequent items in this module
-                        flat_struct_fields.insert(struct_decl.name.clone(), info);
+                            .insert(struct_decl.name.clone(), info);
                     }
                     Item::Newtype(newtype_decl) => {
                         if newtype_decl.type_params.is_empty() {
@@ -404,12 +389,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             let base_type_id = Self::resolve_type_static(
                                 &newtype_decl.ty,
                                 &mut type_table.borrow_mut(),
-                                &flat_newtypes,
-                                &flat_struct_fields,
-                                &flat_resource_types,
-                                &flat_enum_cases,
-                                &flat_variant_cases,
-                                &flat_flags_cases,
+                                &lookup,
                             );
                             let newtype_id = type_table.borrow_mut().make_newtype(
                                 newtype_decl.name.clone(),
@@ -420,7 +400,6 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                 .entry(module_source.clone())
                                 .or_default()
                                 .insert(newtype_decl.name.clone(), newtype_id);
-                            flat_newtypes.insert(newtype_decl.name.clone(), newtype_id);
                         } else {
                             // Generic newtype: store definition for lazy instantiation
                             let type_params = newtype_decl
@@ -456,12 +435,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                 Self::resolve_type_static_with_params(
                                     payload_ty,
                                     &mut type_table.borrow_mut(),
-                                    &flat_newtypes,
-                                    &flat_struct_fields,
-                                    &flat_resource_types,
-                                    &flat_enum_cases,
-                                    &flat_variant_cases,
-                                    &flat_flags_cases,
+                                    &lookup,
                                     &type_params,
                                 )
                             } else {
@@ -527,8 +501,6 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             .entry(module_source.clone())
                             .or_default()
                             .insert(flags_decl.name.clone(), flags_type);
-                        // Also update flat_newtypes for subsequent items in this module
-                        flat_newtypes.insert(flags_decl.name.clone(), flags_type);
                         // Store member info with bitmask values (1 << index)
                         let members: Vec<FlagsMemberData> = flags_decl
                             .flags
@@ -738,69 +710,48 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 Some(&entry_module_source),
                 &state.invocations,
             );
-            let newtypes = Self::build_module_map(
-                &state.all_newtypes,
-                module_source,
-                &imported_type_sources,
-                &import_original_names,
-            );
-            let generic_newtype_defs = Self::build_module_map(
-                &state.all_generic_newtypes,
-                module_source,
-                &imported_type_sources,
-                &import_original_names,
-            );
-            let struct_fields = Self::build_module_map(
-                &state.all_struct_fields,
-                module_source,
-                &imported_type_sources,
-                &import_original_names,
-            );
-            let variant_cases = Self::build_module_map(
-                &state.all_variant_cases,
-                module_source,
-                &imported_type_sources,
-                &import_original_names,
-            );
-            let enum_cases = Self::build_module_map(
-                &state.all_enum_cases,
-                module_source,
-                &imported_type_sources,
-                &import_original_names,
-            );
-            let flags_cases = Self::build_module_map(
-                &state.all_flags_cases,
-                module_source,
-                &imported_type_sources,
-                &import_original_names,
-            );
-            let resource_types = Self::build_module_map(
-                &state.all_resource_types,
-                module_source,
-                &imported_type_sources,
-                &import_original_names,
-            );
-
             // Build function_return_types for this module only
-            // (functions defined in this module)
+            // (functions defined in this module). The lookup borrows the
+            // shared `all_*` tables; no per-module flat-map cloning.
             let mut function_return_types = IndexMap::default();
-            for item in &module.items {
-                if let Item::Function(func) = item {
-                    let return_type = if let Some(ret_ty) = &func.return_type {
-                        Self::resolve_type_static(
-                            ret_ty,
-                            &mut state.type_table.borrow_mut(),
-                            &newtypes,
-                            &struct_fields,
-                            &resource_types,
-                            &enum_cases,
-                            &variant_cases,
-                            &flags_cases,
-                        )
-                    } else {
-                        TypeTable::UNIT
-                    };
-                    function_return_types.insert(func.name.clone(), return_type);
+            {
+                let empty_struct: IndexMap<String, StructFieldInfo> = IndexMap::default();
+                let empty_newtype: IndexMap<String, TypeId> = IndexMap::default();
+                let empty_enum: IndexMap<String, EnumInfo> = IndexMap::default();
+                let empty_flags: IndexMap<String, FlagsInfo> = IndexMap::default();
+                let empty_gnt: IndexMap<String, GenericNewtypeInfo> = IndexMap::default();
+                let empty_variant: IndexMap<String, VariantInfo> = IndexMap::default();
+                let lookup = TypeLookup {
+                    current_module_source: module_source,
+                    imported_type_sources: &imported_type_sources,
+                    import_original_names: &import_original_names,
+                    all_newtypes: &state.all_newtypes,
+                    all_struct_fields: &state.all_struct_fields,
+                    all_variant_cases: &state.all_variant_cases,
+                    all_enum_cases: &state.all_enum_cases,
+                    all_flags_cases: &state.all_flags_cases,
+                    all_resource_types: &state.all_resource_types,
+                    all_generic_newtypes: &state.all_generic_newtypes,
+                    local_struct_fields: &empty_struct,
+                    local_newtypes: &empty_newtype,
+                    local_enum_cases: &empty_enum,
+                    local_flags_cases: &empty_flags,
+                    local_generic_newtypes: &empty_gnt,
+                    local_variant_cases: &empty_variant,
+                };
+                for item in &module.items {
+                    if let Item::Function(func) = item {
+                        let return_type = if let Some(ret_ty) = &func.return_type {
+                            Self::resolve_type_static(
+                                ret_ty,
+                                &mut state.type_table.borrow_mut(),
+                                &lookup,
+                            )
+                        } else {
+                            TypeTable::UNIT
+                        };
+                        function_return_types.insert(func.name.clone(), return_type);
+                    }
                 }
             }
 
@@ -852,19 +803,21 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 type_table: Rc::clone(&state.type_table),
                 symbols,
                 loaded_modules: modules,
-                newtypes,
-                generic_newtype_defs,
-                struct_fields,
-                variant_cases,
-                enum_cases,
-                flags_cases,
-                resource_types,
                 all_newtypes: Rc::clone(&state.all_newtypes),
+                all_generic_newtypes: Rc::clone(&state.all_generic_newtypes),
                 all_struct_fields: Rc::clone(&state.all_struct_fields),
                 all_variant_cases: Rc::clone(&state.all_variant_cases),
                 all_enum_cases: Rc::clone(&state.all_enum_cases),
                 all_flags_cases: Rc::clone(&state.all_flags_cases),
                 all_resource_types: Rc::clone(&state.all_resource_types),
+                imported_type_sources,
+                import_original_names,
+                local_struct_fields: IndexMap::default(),
+                local_newtypes: IndexMap::default(),
+                local_generic_newtypes: IndexMap::default(),
+                local_enum_cases: IndexMap::default(),
+                local_flags_cases: IndexMap::default(),
+                local_variant_cases: IndexMap::default(),
                 function_return_types,
                 imported_functions,
                 namespace_imports,
@@ -887,7 +840,6 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 current_module_globals: IndexMap::default(),
                 imported_globals: IndexMap::default(),
                 associated_constants: IndexMap::default(),
-                module_type_maps_cache: IndexMap::default(),
                 trait_env: Arc::clone(&state.trait_env),
                 included_files,
                 known_type_names_cache: state.global_known_type_names.clone(),
@@ -1006,62 +958,6 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         }
     }
 
-    /// Build a module-specific flat map from per-module entries.
-    ///
-    /// Priority: current module > imported types > any available definition.
-    pub(super) fn build_module_map<V: Clone>(
-        per_module: &IndexMap<ModuleSource, IndexMap<String, V>>,
-        current_module: &ModuleSource,
-        imported_type_sources: &IndexMap<String, ModuleSource>,
-        import_original_names: &IndexMap<String, String>,
-    ) -> IndexMap<String, V> {
-        let mut result = IndexMap::default();
-        // First: add all entries from all modules (arbitrary winner for conflicts)
-        for name_map in per_module.values() {
-            for (name, value) in name_map {
-                result.entry(name.clone()).or_insert_with(|| value.clone());
-            }
-        }
-        // Second: override with imported modules' types
-        for (local_name, import_src) in imported_type_sources {
-            // Use original name to look up in the source module (handles `use { Foo as Bar }`)
-            let lookup_name = import_original_names.get(local_name).unwrap_or(local_name);
-            // Try exact module first, then sub-modules for umbrella imports
-            // (e.g., `use { ErrorCode } from "wasi:http"` should find ErrorCode
-            // in `wasi:http/types.wado` when `wasi:http` is an umbrella module).
-            let found = per_module
-                .get(import_src)
-                .and_then(|m| m.get(lookup_name))
-                .cloned()
-                .or_else(|| {
-                    if let ModuleSource::Wasi { interface } = import_src {
-                        let prefix = format!("{interface}/");
-                        for (src, name_map) in per_module {
-                            if let ModuleSource::Wasi {
-                                interface: sub_iface,
-                            } = src
-                                && sub_iface.starts_with(&prefix)
-                                && let Some(value) = name_map.get(lookup_name)
-                            {
-                                return Some(value.clone());
-                            }
-                        }
-                    }
-                    None
-                });
-            if let Some(value) = found {
-                result.insert(local_name.clone(), value);
-            }
-        }
-        // Third: override with current module's types (highest priority)
-        if let Some(name_map) = per_module.get(current_module) {
-            for (name, value) in name_map {
-                result.insert(name.clone(), value.clone());
-            }
-        }
-        result
-    }
-
     /// Build a map of imported names to their source modules from use declarations.
     /// Build a mapping from local import names to their source modules and original names.
     ///
@@ -1102,102 +998,34 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         (sources, original_names)
     }
 
-    /// Lazily build and cache per-module type maps for cross-module type resolution.
-    ///
-    /// Must be called before borrowing `loaded_modules` for the same module,
-    /// so the cache is populated without borrow conflicts. After calling this,
-    /// use `self.module_type_maps_cache.remove(module_source)` to get the cached
-    /// maps and swap them into the resolver's active maps.
-    pub(super) fn ensure_module_maps_cached(&mut self, module_source: &ModuleSource) {
-        if self.module_type_maps_cache.contains_key(module_source) {
-            return;
-        }
-        let Some(module) = self.loaded_modules.get(module_source) else {
-            return;
-        };
-        let (imported_sources, import_names) = Self::build_imported_type_sources(
-            module,
-            module_source,
-            Some(&self.entry_module_source),
-            &self.invocations,
-        );
-        let maps = ModuleTypeMaps {
-            struct_fields: Self::build_module_map(
-                &self.all_struct_fields,
-                module_source,
-                &imported_sources,
-                &import_names,
-            ),
-            variant_cases: Self::build_module_map(
-                &self.all_variant_cases,
-                module_source,
-                &imported_sources,
-                &import_names,
-            ),
-            enum_cases: Self::build_module_map(
-                &self.all_enum_cases,
-                module_source,
-                &imported_sources,
-                &import_names,
-            ),
-            flags_cases: Self::build_module_map(
-                &self.all_flags_cases,
-                module_source,
-                &imported_sources,
-                &import_names,
-            ),
-            newtypes: Self::build_module_map(
-                &self.all_newtypes,
-                module_source,
-                &imported_sources,
-                &import_names,
-            ),
-            resource_types: Self::build_module_map(
-                &self.all_resource_types,
-                module_source,
-                &imported_sources,
-                &import_names,
-            ),
-        };
-        self.module_type_maps_cache
-            .insert(module_source.clone(), maps);
-    }
-
     /// Resolve an optional AST return type using the source module's type context.
     ///
-    /// Temporarily swaps the active type maps with those of `module_source` so that
-    /// same-named types from different modules are resolved correctly.
-    /// Requires `ensure_module_maps_cached(module_source)` to have been called first.
+    /// Temporarily swaps the resolver's "current module" perspective to
+    /// `module_source` so that same-named types from different modules are
+    /// resolved correctly. The shared `all_*` tables stay intact; only the
+    /// import context (and locals) is swapped.
     pub(super) fn resolve_return_type_in_module(
         &mut self,
         module_source: &ModuleSource,
         return_type: Option<&crate::ast::Type>,
     ) -> crate::tir::TypeId {
-        let mut cached = self
-            .module_type_maps_cache
-            .shift_remove(module_source)
-            .expect("cache populated by ensure_module_maps_cached");
-        std::mem::swap(&mut self.struct_fields, &mut cached.struct_fields);
-        std::mem::swap(&mut self.variant_cases, &mut cached.variant_cases);
-        std::mem::swap(&mut self.enum_cases, &mut cached.enum_cases);
-        std::mem::swap(&mut self.flags_cases, &mut cached.flags_cases);
-        std::mem::swap(&mut self.newtypes, &mut cached.newtypes);
-        std::mem::swap(&mut self.resource_types, &mut cached.resource_types);
-
-        let result = return_type
-            .map(|t| self.resolve_type(t))
-            .unwrap_or(crate::tir::TypeTable::UNIT);
-
-        std::mem::swap(&mut self.struct_fields, &mut cached.struct_fields);
-        std::mem::swap(&mut self.variant_cases, &mut cached.variant_cases);
-        std::mem::swap(&mut self.enum_cases, &mut cached.enum_cases);
-        std::mem::swap(&mut self.flags_cases, &mut cached.flags_cases);
-        std::mem::swap(&mut self.newtypes, &mut cached.newtypes);
-        std::mem::swap(&mut self.resource_types, &mut cached.resource_types);
-        self.module_type_maps_cache
-            .insert(module_source.clone(), cached);
-
-        result
+        let (imports, originals) = self
+            .loaded_modules
+            .get(module_source)
+            .map(|module| {
+                Self::build_imported_type_sources(
+                    module,
+                    module_source,
+                    Some(&self.entry_module_source),
+                    &self.invocations,
+                )
+            })
+            .unwrap_or_default();
+        self.with_module_perspective(module_source.clone(), imports, originals, |s| {
+            return_type
+                .map(|t| s.resolve_type(t))
+                .unwrap_or(crate::tir::TypeTable::UNIT)
+        })
     }
 
     /// Topologically sort modules based on struct field type dependencies.
@@ -2337,21 +2165,18 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         }
     }
 
-    /// Static version of `resolve_type` for use before the resolver is fully constructed
+    /// Static version of `resolve_type` for use before the resolver is fully
+    /// constructed. Reads type info via [`TypeLookup`] — the same path the
+    /// fully-constructed resolver uses, so name resolution stays in one place.
     pub(super) fn resolve_type_static(
         ty: &Type,
         type_table: &mut TypeTable,
-        newtypes: &IndexMap<String, TypeId>,
-        struct_fields: &IndexMap<String, StructFieldInfo>,
-        resource_types: &IndexMap<String, ResourceInfo>,
-        enum_cases: &IndexMap<String, EnumInfo>,
-        variant_cases: &IndexMap<String, VariantInfo>,
-        flags_cases: &IndexMap<String, FlagsInfo>,
+        lookup: &TypeLookup<'_>,
     ) -> TypeId {
         match ty {
             Type::Named(named) => {
                 // Check newtypes first
-                if let Some(&alias_type_id) = newtypes.get(&named.name) {
+                if let Some(alias_type_id) = lookup.newtype(&named.name) {
                     return alias_type_id;
                 }
 
@@ -2373,21 +2198,18 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     "()" => TypeTable::UNIT,
                     "!" => TypeTable::NEVER,
                     _ => {
-                        // Check if it's a struct type
                         // Use canonical name from info (not alias) for consistent TypeId interning
-                        if let Some(info) = struct_fields.get(&named.name) {
+                        if let Some(info) = lookup.struct_fields(&named.name) {
                             type_table.make_struct(info.name.clone(), info.module_source.clone())
-                        } else if let Some(info) = resource_types.get(&named.name) {
+                        } else if let Some(info) = lookup.resource_type(&named.name) {
                             type_table.make_resource(info.name.clone(), info.module_source.clone())
-                        } else if let Some(info) = variant_cases.get(&named.name) {
+                        } else if let Some(info) = lookup.variant_case(&named.name) {
                             type_table.make_variant(info.name.clone(), info.module_source.clone())
-                        } else if let Some(info) = enum_cases.get(&named.name) {
+                        } else if let Some(info) = lookup.enum_case(&named.name) {
                             type_table.make_enum(info.name.clone(), info.module_source.clone())
-                        } else if flags_cases.contains_key(&named.name) {
-                            // Flags are newtypes over u32, should be handled by newtypes check above.
-                            // This is a fallback in case the newtype wasn't registered yet.
-                            TypeTable::UNKNOWN
                         } else {
+                            // Flags are newtypes over u32 and should be picked up by the
+                            // newtype branch above; this catches unknown names too.
                             TypeTable::UNKNOWN
                         }
                     }
@@ -2395,41 +2217,21 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             }
             Type::Generic(generic) => match generic.name.as_str() {
                 "Option" if !generic.args.is_empty() => {
-                    let inner = Self::resolve_type_static(
-                        &generic.args[0],
-                        type_table,
-                        newtypes,
-                        struct_fields,
-                        resource_types,
-                        enum_cases,
-                        variant_cases,
-                        flags_cases,
-                    );
+                    let inner = Self::resolve_type_static(&generic.args[0], type_table, lookup);
                     type_table.make_option(inner)
                 }
                 _ => {
                     // Check if it's a generic struct type
-                    if let Some(info) = struct_fields.get(&generic.name) {
-                        // Resolve type arguments
+                    if let Some(info) = lookup.struct_fields(&generic.name) {
+                        let module_source = info.module_source.clone();
                         let type_args: Vec<TypeId> = generic
                             .args
                             .iter()
-                            .map(|arg| {
-                                Self::resolve_type_static(
-                                    arg,
-                                    type_table,
-                                    newtypes,
-                                    struct_fields,
-                                    resource_types,
-                                    enum_cases,
-                                    variant_cases,
-                                    flags_cases,
-                                )
-                            })
+                            .map(|arg| Self::resolve_type_static(arg, type_table, lookup))
                             .collect();
                         type_table.make_generic_instance(
                             generic.name.clone(),
-                            info.module_source.clone(),
+                            module_source,
                             type_args,
                         )
                     } else {
@@ -2438,29 +2240,11 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 }
             },
             Type::Reference(inner) => {
-                let inner_type = Self::resolve_type_static(
-                    inner,
-                    type_table,
-                    newtypes,
-                    struct_fields,
-                    resource_types,
-                    enum_cases,
-                    variant_cases,
-                    flags_cases,
-                );
+                let inner_type = Self::resolve_type_static(inner, type_table, lookup);
                 type_table.make_ref(inner_type)
             }
             Type::MutReference(inner) => {
-                let inner_type = Self::resolve_type_static(
-                    inner,
-                    type_table,
-                    newtypes,
-                    struct_fields,
-                    resource_types,
-                    enum_cases,
-                    variant_cases,
-                    flags_cases,
-                );
+                let inner_type = Self::resolve_type_static(inner, type_table, lookup);
                 type_table.make_mut_ref(inner_type)
             }
             Type::NamespacedGeneric(namespaced) => {
@@ -2469,16 +2253,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     && namespaced.name == "array"
                     && let Some(elem_ty) = namespaced.args.first()
                 {
-                    let elem = Self::resolve_type_static(
-                        elem_ty,
-                        type_table,
-                        newtypes,
-                        struct_fields,
-                        resource_types,
-                        enum_cases,
-                        variant_cases,
-                        flags_cases,
-                    );
+                    let elem = Self::resolve_type_static(elem_ty, type_table, lookup);
                     return type_table.make_builtin_array(elem);
                 }
                 TypeTable::UNKNOWN
@@ -2486,18 +2261,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             Type::Tuple(elements) => {
                 let elem_types: Vec<TypeId> = elements
                     .iter()
-                    .map(|e| {
-                        Self::resolve_type_static(
-                            e,
-                            type_table,
-                            newtypes,
-                            struct_fields,
-                            resource_types,
-                            enum_cases,
-                            variant_cases,
-                            flags_cases,
-                        )
-                    })
+                    .map(|e| Self::resolve_type_static(e, type_table, lookup))
                     .collect();
                 type_table.make_tuple(elem_types)
             }
@@ -2513,18 +2277,13 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     pub(super) fn resolve_type_static_with_params(
         ty: &Type,
         type_table: &mut TypeTable,
-        newtypes: &IndexMap<String, TypeId>,
-        struct_fields: &IndexMap<String, StructFieldInfo>,
-        resource_types: &IndexMap<String, ResourceInfo>,
-        enum_cases: &IndexMap<String, EnumInfo>,
-        variant_cases: &IndexMap<String, VariantInfo>,
-        flags_cases: &IndexMap<String, FlagsInfo>,
+        lookup: &TypeLookup<'_>,
         type_params: &[String],
     ) -> TypeId {
         match ty {
             Type::Named(named) => {
                 // Check newtypes first
-                if let Some(&alias_type_id) = newtypes.get(&named.name) {
+                if let Some(alias_type_id) = lookup.newtype(&named.name) {
                     return alias_type_id;
                 }
 
@@ -2551,14 +2310,13 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     "()" => TypeTable::UNIT,
                     "!" => TypeTable::NEVER,
                     _ => {
-                        // Use canonical name from info (not alias) for consistent TypeId interning
-                        if let Some(info) = struct_fields.get(&named.name) {
+                        if let Some(info) = lookup.struct_fields(&named.name) {
                             type_table.make_struct(info.name.clone(), info.module_source.clone())
-                        } else if let Some(info) = resource_types.get(&named.name) {
+                        } else if let Some(info) = lookup.resource_type(&named.name) {
                             type_table.make_resource(info.name.clone(), info.module_source.clone())
-                        } else if let Some(info) = variant_cases.get(&named.name) {
+                        } else if let Some(info) = lookup.variant_case(&named.name) {
                             type_table.make_variant(info.name.clone(), info.module_source.clone())
-                        } else if let Some(info) = enum_cases.get(&named.name) {
+                        } else if let Some(info) = lookup.enum_case(&named.name) {
                             type_table.make_enum(info.name.clone(), info.module_source.clone())
                         } else {
                             TypeTable::UNKNOWN
@@ -2571,20 +2329,14 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     let inner = Self::resolve_type_static_with_params(
                         &generic.args[0],
                         type_table,
-                        newtypes,
-                        struct_fields,
-                        resource_types,
-                        enum_cases,
-                        variant_cases,
-                        flags_cases,
+                        lookup,
                         type_params,
                     );
                     type_table.make_option(inner)
                 }
                 _ => {
-                    // Check if it's a generic struct type
-                    if let Some(info) = struct_fields.get(&generic.name) {
-                        // Resolve type arguments
+                    if let Some(info) = lookup.struct_fields(&generic.name) {
+                        let module_source = info.module_source.clone();
                         let type_args: Vec<TypeId> = generic
                             .args
                             .iter()
@@ -2592,19 +2344,14 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                 Self::resolve_type_static_with_params(
                                     arg,
                                     type_table,
-                                    newtypes,
-                                    struct_fields,
-                                    resource_types,
-                                    enum_cases,
-                                    variant_cases,
-                                    flags_cases,
+                                    lookup,
                                     type_params,
                                 )
                             })
                             .collect();
                         type_table.make_generic_instance(
                             generic.name.clone(),
-                            info.module_source.clone(),
+                            module_source,
                             type_args,
                         )
                     } else {
@@ -2613,31 +2360,13 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 }
             },
             Type::Reference(inner) => {
-                let inner_type = Self::resolve_type_static_with_params(
-                    inner,
-                    type_table,
-                    newtypes,
-                    struct_fields,
-                    resource_types,
-                    enum_cases,
-                    variant_cases,
-                    flags_cases,
-                    type_params,
-                );
+                let inner_type =
+                    Self::resolve_type_static_with_params(inner, type_table, lookup, type_params);
                 type_table.make_ref(inner_type)
             }
             Type::MutReference(inner) => {
-                let inner_type = Self::resolve_type_static_with_params(
-                    inner,
-                    type_table,
-                    newtypes,
-                    struct_fields,
-                    resource_types,
-                    enum_cases,
-                    variant_cases,
-                    flags_cases,
-                    type_params,
-                );
+                let inner_type =
+                    Self::resolve_type_static_with_params(inner, type_table, lookup, type_params);
                 type_table.make_mut_ref(inner_type)
             }
             Type::NamespacedGeneric(namespaced) => {
@@ -2649,12 +2378,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     let elem = Self::resolve_type_static_with_params(
                         elem_ty,
                         type_table,
-                        newtypes,
-                        struct_fields,
-                        resource_types,
-                        enum_cases,
-                        variant_cases,
-                        flags_cases,
+                        lookup,
                         type_params,
                     );
                     return type_table.make_builtin_array(elem);
@@ -2676,17 +2400,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 let elem_types: Vec<TypeId> = elements
                     .iter()
                     .map(|e| {
-                        Self::resolve_type_static_with_params(
-                            e,
-                            type_table,
-                            newtypes,
-                            struct_fields,
-                            resource_types,
-                            enum_cases,
-                            variant_cases,
-                            flags_cases,
-                            type_params,
-                        )
+                        Self::resolve_type_static_with_params(e, type_table, lookup, type_params)
                     })
                     .collect();
                 type_table.make_tuple(elem_types)
@@ -2696,28 +2410,13 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     .params
                     .iter()
                     .map(|p| {
-                        Self::resolve_type_static_with_params(
-                            p,
-                            type_table,
-                            newtypes,
-                            struct_fields,
-                            resource_types,
-                            enum_cases,
-                            variant_cases,
-                            flags_cases,
-                            type_params,
-                        )
+                        Self::resolve_type_static_with_params(p, type_table, lookup, type_params)
                     })
                     .collect();
                 let return_type = Self::resolve_type_static_with_params(
                     &func_type.return_type,
                     type_table,
-                    newtypes,
-                    struct_fields,
-                    resource_types,
-                    enum_cases,
-                    variant_cases,
-                    flags_cases,
+                    lookup,
                     type_params,
                 );
                 type_table.intern(crate::tir::ResolvedType::Function {
