@@ -659,9 +659,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
             &base_struct_name,
             &method_call.method,
         ) {
-            self.record_reference_to_key(
+            self.record_reference_to_decl(
                 method_call.method_id,
-                crate::symbol::SymbolKey::new(method_module_source.clone(), method_ast_id),
+                &method_module_source,
+                method_ast_id,
             );
         }
 
@@ -1322,10 +1323,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         if let Some(method_ast_id) =
             self.find_impl_method_ast_id(&struct_module, &struct_name, &static_call.method)
         {
-            self.record_reference_to_key(
-                static_call.method_id,
-                crate::symbol::SymbolKey::new(struct_module.clone(), method_ast_id),
-            );
+            self.record_reference_to_decl(static_call.method_id, &struct_module, method_ast_id);
         }
 
         TirExpr::new(

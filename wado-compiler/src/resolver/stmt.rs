@@ -1352,12 +1352,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         if let Some(case_data) = enum_info.find_case(variant_name).cloned() {
                             // Record pattern's case-name identifier -> enum case decl
                             if let Some(id) = name_id {
-                                self.record_reference_to_key(
+                                self.record_reference_to_decl(
                                     *id,
-                                    crate::symbol::SymbolKey::new(
-                                        enum_info.module_source,
-                                        case_data.ast_id,
-                                    ),
+                                    &enum_info.module_source,
+                                    case_data.ast_id,
                                 );
                             }
                             let _ = name_span;
@@ -1411,12 +1409,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         .find(|c| c.name == *variant_name)
                         .cloned()
                 {
-                    self.record_reference_to_key(
+                    self.record_reference_to_decl(
                         *id,
-                        crate::symbol::SymbolKey::new(
-                            variant_info.module_source.clone(),
-                            case_data.ast_id,
-                        ),
+                        &variant_info.module_source,
+                        case_data.ast_id,
                     );
                 }
                 let _ = name_span;

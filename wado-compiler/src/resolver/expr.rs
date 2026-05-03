@@ -6,7 +6,6 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::ast::{self, AstId, Condition, Expr, IfExpr, Item, Literal, MatchArm};
 use crate::compiler_host::CompilerHost;
 use crate::name::{LocalMethodName, MethodName, ModuleSource, mangle_generic_name};
-use crate::symbol::SymbolKey;
 use crate::tir::{
     CallArg, FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirField, TirMatchArm,
     TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirUnaryOp, TypeId, TypeTable,
@@ -786,8 +785,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         if let Some(info) = self.lookup_struct_fields(&struct_name, &module_source) {
             for ((fname, _, _), fid) in info.fields.iter().zip(info.field_ast_ids.iter()) {
                 if fname == field_name {
-                    let def_key = SymbolKey::new(module_source, *fid);
-                    self.record_reference_to_key(use_id, def_key);
+                    self.record_reference_to_decl(use_id, &module_source, *fid);
                     return;
                 }
             }
@@ -2293,8 +2291,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             })
             .unwrap_or_default();
         for (use_id, def_id) in field_refs {
-            let def_key = SymbolKey::new(struct_module_source.clone(), def_id);
-            self.record_reference_to_key(use_id, def_key);
+            self.record_reference_to_decl(use_id, &struct_module_source, def_id);
         }
 
         // Resolve field expressions, converting tuple literals to arrays when needed.

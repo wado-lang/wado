@@ -266,10 +266,26 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     }
 
     /// Record a use→def reference when the definition lives in a (possibly
-    /// different) module identified directly by a [`SymbolKey`].
+    /// different) module identified directly by a [`SymbolKey`]. Prefer
+    /// [`Self::record_reference_to_decl`] when the call site is constructing
+    /// the key from `(module, ast_id)` parts.
     pub(super) fn record_reference_to_key(&self, use_id: crate::ast::AstId, def_key: SymbolKey) {
         let use_key = SymbolKey::new(self.current_module_source.clone(), use_id);
         self.references.borrow_mut().insert(use_key, def_key);
+    }
+
+    /// Record a use→def reference where the defining declaration is
+    /// identified by its `(module, ast_id)` pair. Convenience over
+    /// [`Self::record_reference_to_key`] for call sites that would
+    /// otherwise construct a [`SymbolKey`] inline — keeps `SymbolKey::new`
+    /// confined to a single place.
+    pub(super) fn record_reference_to_decl(
+        &self,
+        use_id: crate::ast::AstId,
+        decl_module: &ModuleSource,
+        decl_ast_id: crate::ast::AstId,
+    ) {
+        self.record_reference_to_key(use_id, SymbolKey::new(decl_module.clone(), decl_ast_id));
     }
 
     /// Record that an identifier resolved to a declared symbol reachable from
@@ -308,10 +324,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             self.record_item_reference_by_name(prefix_seg.id, type_name);
         }
         if let Some(suffix_seg) = ident.segments.get(1) {
-            self.record_reference_to_key(
-                suffix_seg.id,
-                SymbolKey::new(case_module.clone(), case_ast_id),
-            );
+            self.record_reference_to_decl(suffix_seg.id, case_module, case_ast_id);
         }
     }
 
@@ -325,7 +338,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         case_ast_id: crate::ast::AstId,
     ) {
         if let Some(seg) = ident.segments.get(2) {
-            self.record_reference_to_key(seg.id, SymbolKey::new(case_module.clone(), case_ast_id));
+            self.record_reference_to_decl(seg.id, case_module, case_ast_id);
         }
     }
 

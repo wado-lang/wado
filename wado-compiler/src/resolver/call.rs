@@ -5,7 +5,6 @@ use crate::hashmap::IndexMap;
 use crate::ast::{self, Expr, Item, Type};
 use crate::compiler_host::CompilerHost;
 use crate::name::{LocalMethodName, MethodName, ModuleSource};
-use crate::symbol::SymbolKey;
 use crate::tir::{
     CallArg, FunctionRef, MonomorphInfo, ResolvedType, TirExpr, TirExprKind, TypeId, TypeTable,
 };
@@ -337,9 +336,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             if let Some(method_ast_id) =
                                 self.find_impl_method_ast_id(&method_module, prefix, suffix)
                             {
-                                self.record_reference_to_key(
+                                self.record_reference_to_decl(
                                     suffix_seg.id,
-                                    SymbolKey::new(method_module, method_ast_id),
+                                    &method_module,
+                                    method_ast_id,
                                 );
                             }
                         }
