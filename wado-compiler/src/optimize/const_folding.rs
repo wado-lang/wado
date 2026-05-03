@@ -10,11 +10,11 @@
 
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
-use crate::tir::{FunctionRef, TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind};
+use crate::tir::{FunctionRef, TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind, TypeTable};
 use crate::tir_visitor::{
     TirOptVisitor, TirRefVisitor, opt_walk_block, opt_walk_expr, opt_walk_stmt,
 };
-use crate::tiri::{CalleeMap, Interpreter, Lattice, is_ctfe_eligible};
+use crate::tiri::{CalleeMap, GlobalEnv, Interpreter, Lattice, is_ctfe_eligible};
 
 /// Apply constant folding to all functions in the project.
 pub fn fold_constants(project: &mut FlatPackage) -> bool {
@@ -26,10 +26,16 @@ pub fn fold_constants(project: &mut FlatPackage) -> bool {
     // holds `borrow_mut` on the same function (the case where we'd
     // try to fold a self-call inside the function being walked).
     let callees = build_callee_map(project);
+    // Build the GlobalEnv once per pass — every immutable global whose
+    // initializer reduces to a constant becomes a `GlobalVarGet`
+    // rewrite target. Subsumes the legacy `const_propagation` pass,
+    // which only recognized literal initializers.
+    let globals = build_global_env(project, &type_table, &callees);
     let mut visitor = ConstFoldVisitor {
         interpreter: Interpreter::new(&type_table),
     };
     visitor.interpreter.with_callees(&callees);
+    visitor.interpreter.with_globals(&globals);
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
         if let Some(ref mut body) = func.body {
@@ -61,6 +67,42 @@ fn build_callee_map(project: &FlatPackage) -> CalleeMap {
         map.insert((module_source, full_name), func_rc.clone());
     }
     map
+}
+
+/// Pre-build the [`GlobalEnv`] from every global in `project`. Each
+/// non-`mut` global's initializer is reduced through a fresh
+/// [`Interpreter`] (with `callees` installed so calls in initializers
+/// fold, and with the partially-built env installed so a later global
+/// initializer can read constants computed from earlier ones).
+/// Mutable globals are recorded as `NonConst` so a parent fold like
+/// `GLOBAL_MUT + 1` correctly reports `NonConst` instead of
+/// `Unevaluated`. Globals whose initializer doesn't reduce are left
+/// out of the map (absent → `Lattice::Unevaluated` by default).
+fn build_global_env(
+    project: &FlatPackage,
+    type_table: &TypeTable,
+    callees: &CalleeMap,
+) -> GlobalEnv {
+    let mut env = GlobalEnv::default();
+    for global in &project.globals {
+        let key = (global.module_source.clone(), global.name.clone());
+        let lattice = if global.mutable {
+            Lattice::NonConst
+        } else {
+            // The initializer runs at module scope: no local env, but
+            // it may call pure functions and read previously-declared
+            // globals. Threading `&env` in lets `global B = A + 1;`
+            // fold once `A` has been recorded earlier in this loop.
+            let mut interp = Interpreter::new(type_table);
+            interp.with_callees(callees);
+            interp.with_globals(&env);
+            interp.reduce_to_lattice(&global.initializer)
+        };
+        if !matches!(lattice, Lattice::Unevaluated) {
+            env.insert(key, lattice);
+        }
+    }
+    env
 }
 
 struct ConstFoldVisitor<'a> {

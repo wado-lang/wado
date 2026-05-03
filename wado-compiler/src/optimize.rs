@@ -28,7 +28,6 @@ mod condition_implication;
 mod const_branch_prune;
 mod const_folding;
 mod const_global_promotion;
-mod const_propagation;
 mod container_sroa;
 mod copy_prop;
 mod cse;
@@ -49,7 +48,6 @@ use condition_implication::eliminate_implied_conditions;
 use const_branch_prune::prune_constant_branches;
 use const_folding::fold_constants;
 use const_global_promotion::promote_constant_globals;
-use const_propagation::propagate_constants;
 use container_sroa::scalarize_containers;
 use copy_prop::propagate_copies;
 use cse::eliminate_common_subexprs;
@@ -317,9 +315,6 @@ fn run_optimization_passes(
         changed |= run_pass("tir/cse", project, profiler, eliminate_common_subexprs);
         changed |= run_pass("tir/store_load_forward", project, profiler, |p| {
             forward_stores_to_loads(p)
-        });
-        changed |= run_pass("tir/const_prop", project, profiler, |p| {
-            propagate_constants(p)
         });
         changed |= run_pass("tir/field_forward", project, profiler, |p| {
             forward_struct_field_constants(p)
