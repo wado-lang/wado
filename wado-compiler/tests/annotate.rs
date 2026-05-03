@@ -5,8 +5,8 @@
 mod common;
 
 use common::InMemoryHost;
-use wado_compiler::symbol::{SymbolKey, SymbolKind};
 use wado_compiler::annotate;
+use wado_compiler::symbol::{SymbolKey, SymbolKind};
 
 fn block_on<F: std::future::Future>(future: F) -> F::Output {
     tokio::runtime::Runtime::new().unwrap().block_on(future)

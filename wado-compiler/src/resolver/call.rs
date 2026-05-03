@@ -1196,7 +1196,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                     None
                                 }
                             })
-                            .unwrap_or_else(|| ModuleSource::wasi_filesystem());
+                            .unwrap_or_else(ModuleSource::wasi_filesystem);
                         self.type_table
                             .borrow_mut()
                             .make_resource(named.name.clone(), module_source)
@@ -1221,7 +1221,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                     .find_map(|(ms, map)| {
                                         map.contains_key(&named.name).then(|| ms.clone())
                                     })
-                                    .unwrap_or_else(|| ModuleSource::wasi_cli());
+                                    .unwrap_or_else(ModuleSource::wasi_cli);
                                 self.type_table
                                     .borrow_mut()
                                     .make_enum(named.name.clone(), module_source)
@@ -1236,7 +1236,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                     .find_map(|(ms, map)| {
                                         map.contains_key(&named.name).then(|| ms.clone())
                                     })
-                                    .unwrap_or_else(|| ModuleSource::wasi_clocks());
+                                    .unwrap_or_else(ModuleSource::wasi_clocks);
                                 self.type_table
                                     .borrow_mut()
                                     .make_struct(named.name.clone(), module_source)
@@ -1260,7 +1260,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                     None
                                 }
                             })
-                            .unwrap_or_else(|| ModuleSource::wasi_cli());
+                            .unwrap_or_else(ModuleSource::wasi_cli);
                         self.type_table
                             .borrow_mut()
                             .make_enum(named.name.clone(), module_source)
@@ -1280,7 +1280,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                     None
                                 }
                             })
-                            .unwrap_or_else(|| ModuleSource::wasi_clocks());
+                            .unwrap_or_else(ModuleSource::wasi_clocks);
                         self.type_table
                             .borrow_mut()
                             .make_struct(named.name.clone(), module_source)

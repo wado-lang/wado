@@ -545,8 +545,7 @@ fn try_lift_wasi_struct(
     // `wir_build::types::register_struct` registered.
     let struct_type_id = {
         let mut tt = ctx.type_table.borrow_mut();
-        let module_source =
-            module_source_for_cm_interface(&mut ctx.interner.borrow_mut(), source);
+        let module_source = module_source_for_cm_interface(&mut ctx.interner.borrow_mut(), source);
         tt.make_struct(named.name.clone(), module_source)
     };
 

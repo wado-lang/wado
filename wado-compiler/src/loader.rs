@@ -885,7 +885,7 @@ fn cached_stdlib() -> &'static IndexMap<String, Module> {
 
 /// Compute the cache key string used by [`cached_stdlib`] for a
 /// `ModuleSource`. Returns `None` for variants that the stdlib cache
-/// never holds (Local / Remote / EntryPoint / Redirected / Wasm).
+/// never holds (Local / Remote / `EntryPoint` / Redirected / Wasm).
 fn stdlib_cache_key(ms: &ModuleSource) -> Option<String> {
     match ms {
         ModuleSource::Core { name } => Some(format!("core:{name}")),
@@ -995,9 +995,8 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             self.parse_source(entry_source, &tentative_entry_source)?
         };
 
-        let entry_module_source =
-            parse_stdlib_identity_attribute(&mut self.interner, &entry_ast)
-                .unwrap_or(tentative_entry_source);
+        let entry_module_source = parse_stdlib_identity_attribute(&mut self.interner, &entry_ast)
+            .unwrap_or(tentative_entry_source);
         self.entry_module_source = Some(entry_module_source.clone());
         self.entry_canonical_name = Some(crate::name::canonicalize_entry_point(resolved_filename));
 
@@ -1047,8 +1046,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             let mod_name = module_source.to_string();
 
             // Use cached desugared module for core stdlib
-            if let Some(cached) =
-                stdlib_cache_key(&module_source).and_then(|k| core_cache.get(&k))
+            if let Some(cached) = stdlib_cache_key(&module_source).and_then(|k| core_cache.get(&k))
             {
                 let span_name = format!("load {mod_name} (cached)");
                 self.logger.span_start(&span_name);
@@ -1266,9 +1264,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                 continue;
             }
 
-            if let Some(cached) =
-                stdlib_cache_key(&module_source).and_then(|k| cache.get(&k))
-            {
+            if let Some(cached) = stdlib_cache_key(&module_source).and_then(|k| cache.get(&k)) {
                 // Load transitive dependencies from cache
                 let mut pending = VecDeque::new();
                 let mut wasm_imports = Vec::new();
@@ -1283,8 +1279,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                     if self.loaded.contains_key(&dep_ms) {
                         continue;
                     }
-                    if let Some(dep_cached) =
-                        stdlib_cache_key(&dep_ms).and_then(|k| cache.get(&k))
+                    if let Some(dep_cached) = stdlib_cache_key(&dep_ms).and_then(|k| cache.get(&k))
                     {
                         let _ = self.collect_imports(
                             dep_cached,
@@ -1368,7 +1363,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             if !decl_file.is_empty()
                 && let Some(entry_uri) = self.invocations.redirect(decl_file, import_source)
             {
-                return Ok(self.interner.redirected(&entry_uri));
+                return Ok(self.interner.redirected(entry_uri));
             }
         }
 

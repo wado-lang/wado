@@ -75,8 +75,7 @@ static CORE_PRELUDE_TYPES: LazyLock<Arc<str>> =
     LazyLock::new(|| Arc::<str>::from("prelude/types.wado"));
 static CORE_PRELUDE_TRAITS: LazyLock<Arc<str>> =
     LazyLock::new(|| Arc::<str>::from("prelude/traits.wado"));
-static CORE_PRELUDE_RANGE: LazyLock<Arc<str>> =
-    LazyLock::new(|| Arc::<str>::from("prelude/range"));
+static CORE_PRELUDE_RANGE: LazyLock<Arc<str>> = LazyLock::new(|| Arc::<str>::from("prelude/range"));
 static CORE_SERDE: LazyLock<Arc<str>> = LazyLock::new(|| Arc::<str>::from("serde"));
 
 // Well-known WASI interface names embedded in the compiler.
@@ -1545,7 +1544,7 @@ pub fn resolve_import_with_invocations(
             _ => "",
         };
         if let Some(entry_uri) = invocations.redirect(decl_file, import_source) {
-            return interner.redirected(&entry_uri);
+            return interner.redirected(entry_uri);
         }
     }
     resolve_import_with_entry(interner, from_module, import_source, entry_module)
@@ -1965,11 +1964,8 @@ mod tests {
             &["./geometry.wado".to_string()],
             "Point",
         );
-        let s3 = StructName::from_path_and_name(
-            &mut interner,
-            &["./other.wado".to_string()],
-            "Point",
-        );
+        let s3 =
+            StructName::from_path_and_name(&mut interner, &["./other.wado".to_string()], "Point");
 
         let mut set = IndexSet::default();
         set.insert(s1);

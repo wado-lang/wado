@@ -678,8 +678,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     };
 
     // Wrap the loader's interner for sharing across analyze + resolve.
-    let interner =
-        std::rc::Rc::new(std::cell::RefCell::new(load_result.interner));
+    let interner = std::rc::Rc::new(std::cell::RefCell::new(load_result.interner));
 
     // === Phase 6: Analyze all modules ===
     let symbols = {
@@ -745,7 +744,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
                 wasi_registry,
                 world_registry,
                 builtin_registry,
-                interner.clone(),
+                interner,
             );
 
             // Apply target world override (must be before synthesis)
