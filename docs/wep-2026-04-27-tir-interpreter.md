@@ -270,11 +270,16 @@ heap-aware return values stay deferred (call them Stage 3.5+).
       full_name)` to match `FunctionRef::full_name()` exactly. The
       driving visitor (`const_folding`) builds the map once per pass
       by walking `FlatPackage::functions` and admitting every function
-      that passes [`is_ctfe_eligible`]. Cloning the body up front
-      sidesteps the live `Rc<RefCell<TirFunction>>` borrow the visitor
-      holds over the function it is currently walking — a `try_borrow`
-      strategy would silently skip self-recursive calls and
-      misbehave.
+      that passes [`is_ctfe_eligible`]. Values are
+      `Rc<RefCell<TirFunction>>` handles aliased with
+      `FlatPackage::functions`, not body clones, so per-iteration
+      rebuild costs only refcount bumps. The interpreter reads each
+      callee body via `RefCell::try_borrow`; failure means the visitor
+      already holds `borrow_mut` on this same function (the
+      self-recursive-call-inside-the-walked-function case) and the
+      fold bails cleanly. CTFE-internal recursion across nested
+      folds is caught separately by `Interpreter::call_stack` since
+      `try_borrow` permits concurrent immutable borrows.
 - [x] [`is_ctfe_eligible`] gate: `effects.is_empty()`, has body, not
       `is_cm_binding` / `is_dispatch_wrapper` / `is_cm_export`, not
       `is_async`, no `task_return_type`, `stores.is_empty()`,

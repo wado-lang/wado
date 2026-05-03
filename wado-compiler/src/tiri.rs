@@ -68,7 +68,8 @@
 //!   never wrongly drop a later arm.
 //! - Pure-call inlining: a free `Call` whose args all reduce to
 //!   constants and whose callee was admitted to the [`CalleeMap`]
-//!   (pure, non-async, monomorphic, single-tail-expression body)
+//!   (pure, non-async, monomorphic — see [`is_ctfe_eligible`]) and
+//!   whose body is a single `Return { Some(_) }` or `Expr(_)`
 //!   evaluates the body's tail with the args bound into a fresh local
 //!   environment. The `call_stack` of in-flight callees blocks
 //!   recursive re-entry; a per-pass step budget caps total CTFE work;
@@ -261,8 +262,11 @@ pub type CalleeKey = (ModuleSource, String);
 /// separately by `Interpreter::call_stack`, since `try_borrow` permits
 /// concurrent immutable borrows.
 ///
-/// Eligibility is decided once, at map construction time, by [`is_ctfe_eligible`].
-/// The interpreter never re-checks: presence in the map is the witness.
+/// The purity / CTFE-safety gate is decided once at map construction
+/// time by [`is_ctfe_eligible`], and the interpreter never re-checks
+/// it. Body-shape and per-call validity (arity match, all args
+/// reduce, single recognized tail expression) are checked at fold
+/// time, not here.
 pub type CalleeMap = IndexMap<CalleeKey, Rc<RefCell<TirFunction>>>;
 
 /// Default per-pass CTFE step budget. Mirrors rustc's CTFE step counter
@@ -545,8 +549,8 @@ impl<'a> Interpreter<'a> {
     /// to slot tiri's local rewrites into each visited node. The rules
     /// are constant folding for Binary / Unary / Cast, short-circuit
     /// identity simplifications for `&&` / `||`, pure-call inlining,
-    /// and the `if` / `match` rewrites described on
-    /// [`Self::rewrite_if_expr`] / [`Self::rewrite_match_expr`].
+    /// constant-condition or both-arms-equal `if` collapse, and the
+    /// matching `match`-expression collapse.
     ///
     /// `Local` nodes themselves are never rewritten in place: their env
     /// values are read transparently when computing the parent
