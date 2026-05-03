@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777780554464,
+  "lastUpdate": 1777802575117,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -18625,6 +18625,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c7445176dbf0ccb85e62e0dcb74ceb7eb9f61df6"
         },
         "date": 1777780554261,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1775,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8776,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18520,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 515706,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d0d2ac4e58722feea23e36147ea958c79793e5cb",
+          "message": "Merge pull request #982 from wado-lang/claude/refactor-ast-annotation-ez5GD\n\nrefactor: AstIndex + Cursor query API for LSP-friendly annotation",
+          "timestamp": "2026-05-03T18:57:50+09:00",
+          "tree_id": "2b1eac6fb1053f28dceaea809acb5378944f9a51",
+          "url": "https://github.com/wado-lang/wado/commit/d0d2ac4e58722feea23e36147ea958c79793e5cb"
+        },
+        "date": 1777802574801,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
