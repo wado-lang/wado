@@ -755,6 +755,27 @@ fn parse_bind_desugar_stdlib(label: &str, source: &str) -> Module {
     desugar_module(&ast)
 }
 
+/// Resolve a `#![stdlib("…")]` declaration on `module` to a canonical
+/// `ModuleSource`.
+///
+/// Returns `None` if the attribute is absent or its argument is not a
+/// recognized `core:` / `wasi:` import path. The attribute is intended
+/// only for files inside `wado-compiler/lib/` — its sole effect on the
+/// pipeline is to pin an entry-loaded bundled stdlib source to the
+/// `Core { name }` / `Wasi { interface }` identity it occupies in the
+/// transitive load graph, so opening such a file in an editor doesn't
+/// produce a duplicate copy of every type the file defines.
+fn parse_stdlib_identity_attribute(module: &Module) -> Option<ModuleSource> {
+    let path = module.stdlib_identity()?;
+    if let Some(name) = path.strip_prefix("core:") {
+        Some(ModuleSource::core(name))
+    } else if let Some(interface) = path.strip_prefix("wasi:") {
+        Some(ModuleSource::wasi(interface))
+    } else {
+        None
+    }
+}
+
 /// Cached desugared AST modules for all stdlib modules (core + WASI).
 ///
 /// Each module is parsed, bound, and desugared exactly once per process.
@@ -894,21 +915,29 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
     ) -> Result<LoadResult, LoadError> {
         // Parse, bind, and desugar entry module
         // Use "<stdin>" as synthetic filename when no filename is provided (e.g., REPL, embedded code)
-        let entry_module_source =
-            ModuleSource::entry_point_with_filename(entry_filename.unwrap_or("<stdin>"));
+        let resolved_filename = entry_filename.unwrap_or("<stdin>");
+        let tentative_entry_source = ModuleSource::entry_point_with_filename(resolved_filename);
+
+        // Parse first; the parser only needs `module_source` for error
+        // reporting, so a tentative `EntryPoint` is fine. After parsing we
+        // consult `#![stdlib("…")]` to decide the entry's canonical
+        // identity — see `Module::stdlib_identity` for why bundled
+        // stdlib sources self-declare.
+        let entry_ast = {
+            let _span = self
+                .logger
+                .span(&format!("parse {tentative_entry_source}"));
+            self.parse_source(entry_source, &tentative_entry_source)?
+        };
+
+        let entry_module_source = parse_stdlib_identity_attribute(&entry_ast)
+            .unwrap_or(tentative_entry_source);
         self.entry_module_source = Some(entry_module_source.clone());
-        self.entry_canonical_name = Some(crate::name::canonicalize_entry_point(
-            entry_filename.unwrap_or("<stdin>"),
-        ));
+        self.entry_canonical_name =
+            Some(crate::name::canonicalize_entry_point(resolved_filename));
 
         let entry_name = entry_module_source.to_string();
         self.logger.span_start(&format!("load {entry_name}"));
-
-        // Parse first to collect imports before binding
-        let entry_ast = {
-            let _span = self.logger.span(&format!("parse {entry_name}"));
-            self.parse_source(entry_source, &entry_module_source)?
-        };
 
         // Collect imports from entry module (before bind/desugar)
         let mut pending: VecDeque<(ModuleSource, ModuleSource)> = VecDeque::new();

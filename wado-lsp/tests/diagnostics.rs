@@ -56,27 +56,25 @@ fn errors(diags: &[Diagnostic]) -> Vec<&Diagnostic> {
         .collect()
 }
 
-/// Opening `core:prelude/types.wado` no longer surfaces prelude-name
-/// collisions for the types it itself defines (Option, Result, Waitable, …)
-/// because the file carries `#![no_prelude]`. Some duplicate-definition
-/// noise still surfaces because the bundled cache loads the same file
-/// under its `core:` identity in addition to the entry — entry-identity
-/// declaration is tracked separately. The contract pinned here is that
-/// the call completes (no panic) and that no prelude-collision diagnostic
-/// is emitted.
+/// Opening `core:prelude/types.wado` is clean: the file declares both
+/// `#![no_prelude]` (gating the prelude-collision check) and
+/// `#![stdlib("core:prelude/types.wado")]` (pinning the entry's
+/// `ModuleSource` to its bundled identity, which dedups the entry against
+/// the cache and so eliminates the cross-module duplicate-definition
+/// errors on `Option` / `Waitable` / … that arise when an entry copy and a
+/// cached copy of the same module both define the same names).
 #[test]
-fn opening_prelude_types_no_collision_diagnostic() {
+fn opening_prelude_types_is_clean() {
     futures::executor::block_on(async {
         let path = "/work/wado-compiler/lib/core/prelude/types.wado";
         let source = include_str!("../../wado-compiler/lib/core/prelude/types.wado");
         let diags = diagnostics_for(path, source).await;
-        let collisions: Vec<_> = diags
-            .iter()
-            .filter(|d| d.severity == Severity::Error && d.message.contains("prelude type"))
-            .collect();
+        let errs = errors(&diags);
         assert!(
-            collisions.is_empty(),
-            "expected no prelude-collision errors when opening prelude/types.wado, got: {collisions:#?}",
+            errs.is_empty(),
+            "expected no errors, got {}: {:#?}",
+            errs.len(),
+            errs
         );
     });
 }
