@@ -2,13 +2,15 @@
 //!
 //! `Engine::diagnostics` runs only the `annotate` pipeline (parse → bind →
 //! desugar → load → analyze → resolve), deliberately stopping before
-//! codegen. These tests pin the resulting contract:
+//! codegen. These tests pin two contracts:
 //!
-//! - Inputs that cause downstream phases to panic (notably codegen
-//!   validation on unusual entry modules) must not propagate that panic to
-//!   the LSP layer.
-//! - User-actionable diagnostics that surface during annotation —
-//!   prelude-name collisions, undefined symbols — are still reported.
+//! - Bundled stdlib files carry `#![no_prelude]`, so opening them in an
+//!   editor produces a clean compile (no `PreludeTypeCollision` against
+//!   the types they themselves define for the prelude).
+//! - User code that redefines a prelude name without opting out via
+//!   `#![no_prelude]` still surfaces the collision diagnostic.
+//! - Inputs that historically panicked during codegen validation now
+//!   complete cleanly because `Engine::diagnostics` stops at `annotate`.
 
 use indexmap::IndexMap;
 use wado_compiler::{CompilerHost, Diagnostic as CompilerDiagnostic, SourceError};
@@ -47,32 +49,74 @@ async fn diagnostics_for(path: &str, source: &str) -> Vec<Diagnostic> {
     engine.diagnostics(&uri, &host).await
 }
 
-/// Bundled stdlib sources that, when fed to the full compile pipeline as the
-/// entry module, panic during codegen validation (the WIR emitted for them
-/// is not a valid component because they expose stdlib internals rather
-/// than a runnable world). `Engine::diagnostics` must complete without
-/// panicking by stopping at `annotate`.
+fn errors(diags: &[Diagnostic]) -> Vec<&Diagnostic> {
+    diags
+        .iter()
+        .filter(|d| d.severity == Severity::Error)
+        .collect()
+}
+
+/// Opening `core:prelude/types.wado` no longer surfaces prelude-name
+/// collisions for the types it itself defines (Option, Result, Waitable, …)
+/// because the file carries `#![no_prelude]`. Some duplicate-definition
+/// noise still surfaces because the bundled cache loads the same file
+/// under its `core:` identity in addition to the entry — entry-identity
+/// declaration is tracked separately. The contract pinned here is that
+/// the call completes (no panic) and that no prelude-collision diagnostic
+/// is emitted.
 #[test]
-fn opening_prelude_types_does_not_panic() {
+fn opening_prelude_types_no_collision_diagnostic() {
     futures::executor::block_on(async {
         let path = "/work/wado-compiler/lib/core/prelude/types.wado";
         let source = include_str!("../../wado-compiler/lib/core/prelude/types.wado");
-        let _ = diagnostics_for(path, source).await;
+        let diags = diagnostics_for(path, source).await;
+        let collisions: Vec<_> = diags
+            .iter()
+            .filter(|d| d.severity == Severity::Error && d.message.contains("prelude type"))
+            .collect();
+        assert!(
+            collisions.is_empty(),
+            "expected no prelude-collision errors when opening prelude/types.wado, got: {collisions:#?}",
+        );
     });
 }
 
+/// Top-level prelude module — purely re-exports — must compile clean too.
 #[test]
-fn opening_wasi_cli_stdout_does_not_panic() {
+fn opening_prelude_root_is_clean() {
+    futures::executor::block_on(async {
+        let path = "/work/wado-compiler/lib/core/prelude.wado";
+        let source = include_str!("../../wado-compiler/lib/core/prelude.wado");
+        let diags = diagnostics_for(path, source).await;
+        let errs = errors(&diags);
+        assert!(
+            errs.is_empty(),
+            "expected no errors, got {}: {:#?}",
+            errs.len(),
+            errs
+        );
+    });
+}
+
+/// Same for a wasi interface (which transitively depends on prelude).
+#[test]
+fn opening_wasi_cli_stdout_is_clean() {
     futures::executor::block_on(async {
         let path = "/work/wado-compiler/lib/wasi/cli/stdout.wado";
         let source = include_str!("../../wado-compiler/lib/wasi/cli/stdout.wado");
-        let _ = diagnostics_for(path, source).await;
+        let diags = diagnostics_for(path, source).await;
+        let errs = errors(&diags);
+        assert!(
+            errs.is_empty(),
+            "expected no errors, got {}: {:#?}",
+            errs.len(),
+            errs
+        );
     });
 }
 
-/// A user module that redefines a prelude type still surfaces the
-/// collision diagnostic. Guards against accidentally suppressing legitimate
-/// errors when the LSP layer is reworked.
+/// Plain user code redefining `Option` does *not* opt out of the prelude
+/// and must therefore still see the collision diagnostic.
 #[test]
 fn user_module_redefining_option_still_errors() {
     futures::executor::block_on(async {
@@ -85,6 +129,26 @@ fn user_module_redefining_option_still_errors() {
         assert!(
             saw_prelude_collision,
             "expected a prelude-collision error in user module, got: {diags:#?}",
+        );
+    });
+}
+
+/// User code that explicitly opts out via `#![no_prelude]` is allowed to
+/// reuse prelude names — the collision check is keyed off the attribute,
+/// not off the file's location or content.
+#[test]
+fn user_module_with_no_prelude_can_redefine_option() {
+    futures::executor::block_on(async {
+        let path = "/work/myapp/standalone.wado";
+        let source = "#![no_prelude]\npub variant Option<T> { Some(T), None }\n";
+        let diags = diagnostics_for(path, source).await;
+        let collisions: Vec<_> = diags
+            .iter()
+            .filter(|d| d.severity == Severity::Error && d.message.contains("prelude type"))
+            .collect();
+        assert!(
+            collisions.is_empty(),
+            "expected no prelude-collision errors with #![no_prelude], got: {collisions:#?}",
         );
     });
 }

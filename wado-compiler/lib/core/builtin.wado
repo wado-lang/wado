@@ -9,6 +9,10 @@
 //
 // Functions with #[canonical("namespace", "name")] are imported as CM canonical built-ins.
 // Functions without #[canonical(...)] compile to Wasm instructions directly.
+//
+// Part of the language processing system, not user code — opt out of the
+// prelude auto-import.
+#![no_prelude]
 
 // libm functions live in `core:libm` and are imported through
 // `pub use { libm_X as f64_X, ... } from "./libm.wat" with { type: "wat" };`.

@@ -4,6 +4,10 @@
 // operations like template string interpolation. These functions are
 // implemented in Wado itself rather than as inline Wasm instructions,
 // making the codegen simpler and the compiler more maintainable.
+//
+// Part of the language processing system, not user code — opt out of the
+// prelude auto-import.
+#![no_prelude]
 
 /// Copies bytes from linear memory to a new GC array.
 pub fn memory_to_gc_array(ptr: i32, len: i32) -> builtin::array<u8> {
