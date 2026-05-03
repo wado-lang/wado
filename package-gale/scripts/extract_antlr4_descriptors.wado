@@ -683,3 +683,146 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
     println(`extract:   {total_todo} marked #[TODO]`);
     println(`extract:   {total_skip} skipped`);
 }
+
+// ===== Stage B: descriptor [output] normaliser =====
+
+/// Decide whether a descriptor `[output]` block can be checked as a Stage B
+/// parse-tree shape. The descriptor format is documented in
+/// `vendor/antlr4/runtime-testsuite/test/.../RuntimeTestDescriptorParser.java`;
+/// in practice `[output]` carries one of:
+///
+/// - **a parse tree** in `to_string_tree()` form, e.g. `(s (declarator a))`.
+///   These are emitted by descriptors whose grammar prequel ends with
+///   `@after { <ToStringTree("$ctx"):writeln()> }`. Stage B can compare
+///   against `tree.to_string_tree()`.
+/// - **a host-language artefact** — lexer token-type names (one per
+///   line), `Lexer.next()` token dumps (`[@0,0:-1='<EOF>',<-1>,1:0]`),
+///   ATN decision traces (`Decision 0:\n s0-ID->:s1`), or arbitrary
+///   action-block prints. None of these reflect the parse tree, so they
+///   are not Stage B testable and must be triaged as `[stage_b_skip]`.
+///
+/// Returns `Some(tree)` for the parse-tree case, with ANTLR4's literal
+/// ` <EOF>` token stripped — Gale's `to_string_tree()` omits empty-text
+/// tokens (see `package-gale/CLAUDE.md` "Driver Tests"). Returns `None`
+/// for everything else.
+///
+/// The detector is intentionally conservative: any leftover `<…>` token
+/// in the output (after `<EOF>` stripping) is treated as a testsuite
+/// StringTemplate substitution (e.g. `<AltNum()>`) rather than a real
+/// parse-tree node, and the descriptor is rejected. Likewise, `${…}`
+/// always denotes an action-block reference. False rejections are
+/// triaged as `[stage_b_todo]` once the underlying capability lands.
+fn normalize_output_for_stage_b(raw: &String) -> Option<String> {
+    let s = raw.trim();
+    if s.is_empty() {
+        return null;
+    }
+    if !s.starts_with("(") {
+        return null;
+    }
+    let chars: Array<char> = s.chars().collect();
+    if chars.len() < 2 {
+        return null;
+    }
+    if !is_tree_node_name_start(chars[1]) {
+        return null;
+    }
+    if s.contains("${") {
+        return null;
+    }
+    let stripped = s.replace(" <EOF>", "");
+    if stripped.contains("<") || stripped.contains(">") {
+        return null;
+    }
+    return Option::<String>::Some(stripped);
+}
+
+fn is_tree_node_name_start(c: char) -> bool {
+    return ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z') || c == '_';
+}
+
+test "normalize: clean parse tree passes through trimmed" {
+    let result = normalize_output_for_stage_b(&"(a x y)\n");
+    assert result matches { Some(_) };
+    if let Some(s) = result {
+        assert s == "(a x y)", `expected '(a x y)', got '{s}'`;
+    }
+}
+
+test "normalize: trailing <EOF> token is stripped" {
+    // ANTLR4 emits the EOF token literally because `to_string_tree(rule)`
+    // includes every consumed terminal, but Gale's runtime drops empty-text
+    // tokens (CLAUDE.md "Driver Tests"). The normaliser bridges this gap
+    // so descriptor `[output]` blocks line up with Gale's actual emission.
+    let result = normalize_output_for_stage_b(&"(s (declarator a) <EOF>)");
+    assert result matches { Some(_) };
+    if let Some(s) = result {
+        assert s == "(s (declarator a))", `got '{s}'`;
+    }
+}
+
+test "normalize: nested tree with literal token text is preserved" {
+    // Bracket characters are legitimate token text from grammars whose
+    // alphabet contains them; the detector must not reject them.
+    let result = normalize_output_for_stage_b(&"(s (declarator (declarator a) [ ]) <EOF>)");
+    assert result matches { Some(_) };
+    if let Some(s) = result {
+        assert s == "(s (declarator (declarator a) [ ]))", `got '{s}'`;
+    }
+}
+
+test "normalize: empty output is not Stage B testable" {
+    assert normalize_output_for_stage_b(&"") matches { None };
+    assert normalize_output_for_stage_b(&"\n") matches { None };
+    assert normalize_output_for_stage_b(&"   ") matches { None };
+}
+
+test "normalize: action $text echo is not a tree" {
+    // `[output]` like `abc` comes from a grammar whose action prints
+    // `$text` after a successful parse — not a tree shape.
+    assert normalize_output_for_stage_b(&"abc") matches { None };
+    assert normalize_output_for_stage_b(&"alt 1") matches { None };
+    assert normalize_output_for_stage_b(&"alt 2\n") matches { None };
+}
+
+test "normalize: lexer token-type names are not a tree" {
+    // LexerExec descriptors print one token-type name per line.
+    assert normalize_output_for_stage_b(&"I\nI\n") matches { None };
+    assert normalize_output_for_stage_b(&"DASHBRACK\nDASHBRACK\n") matches { None };
+}
+
+test "normalize: lexer token dump is not a tree" {
+    // `[@0,0:-1='<EOF>',<-1>,1:0]` is `Token.toString()` from the runtime
+    // — looks like a tree at first glance because of the `[`, but starts
+    // with `[` rather than `(`.
+    assert normalize_output_for_stage_b(&"[@0,0:-1='<EOF>',<-1>,1:0]") matches { None };
+}
+
+test "normalize: ATN decision trace is not a tree" {
+    // FullContextParsing descriptors that exercise ATN decisions emit a
+    // `<DecisionInfo>`-style dump. It does not start with `(`.
+    assert normalize_output_for_stage_b(&"Decision 0:\ns0-ID->:s1^=>1") matches { None };
+}
+
+test "normalize: testsuite ${...} substitution is rejected" {
+    // `(s ${ (v ? a) ? })` from ParseTrees/ExtraTokensAndAltLabels carries
+    // an action-block reference the testsuite resolves at runtime. Not a
+    // self-contained parse tree.
+    assert normalize_output_for_stage_b(&"(s ${ (v ? a) ? })") matches { None };
+}
+
+test "normalize: leftover <...> substitution is rejected" {
+    // Any `<…>` other than the literal `<EOF>` token is a testsuite
+    // StringTemplate directive (e.g. `<AltNum()>` injects `:N`). After
+    // stripping `<EOF>` we should see no remaining angle brackets in a
+    // clean tree; if any do, the descriptor is not Stage B testable.
+    assert normalize_output_for_stage_b(&"(s <AltNum()> x)") matches { None };
+}
+
+test "normalize: line-noise output starting with paren but no name is rejected" {
+    // `()`, `( )`, or `(123 ...)` are not valid `to_string_tree()` output
+    // — every node starts with an identifier (the rule name).
+    assert normalize_output_for_stage_b(&"()") matches { None };
+    assert normalize_output_for_stage_b(&"( a)") matches { None };
+    assert normalize_output_for_stage_b(&"(123 abc)") matches { None };
+}
