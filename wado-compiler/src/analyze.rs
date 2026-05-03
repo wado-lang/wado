@@ -517,11 +517,17 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
     /// Check for type names that collide with prelude-exported types.
     ///
     /// Runs after pub use processing so that `is_prelude_type` can resolve
-    /// re-exports from `core:prelude`. Only non-core modules are checked.
+    /// re-exports from `core:prelude`. Skipped for modules carrying
+    /// `#![no_prelude]`: a module that opts out of the prelude auto-import
+    /// is also opting out of the prelude's name reservation, and the
+    /// bundled stdlib files that *implement* the prelude carry the
+    /// attribute precisely so they can define names like `Option`, `Eq`,
+    /// `Array` without being flagged as collisions with themselves.
     fn check_prelude_collisions(&mut self, module: &Module, module_source: &ModuleSource) {
-        if module_source.is_core() {
+        if module.has_no_prelude() {
             return;
         }
+        self.logger.set_file(module_source.diagnostic_filename());
         for item in &module.items {
             let (name, span) = match item {
                 Item::Struct(d) => (&d.name, d.span),

@@ -9,7 +9,7 @@ pub mod semantic_tokens;
 pub mod server;
 
 use indexmap::IndexMap;
-use wado_compiler::{CompilerHost, CompilerOptions, Diagnostic as CompilerDiagnostic, LogLevel};
+use wado_compiler::{CompilerHost, Diagnostic as CompilerDiagnostic};
 
 pub use definition::DefinitionResult;
 pub use diagnostics::{Diagnostic, Position, Range, Severity};
@@ -133,25 +133,22 @@ impl Engine {
 
     /// Compute diagnostics for the given document.
     ///
-    /// Runs the compiler with a silent host that collects diagnostics without printing.
-    /// The `host` is used to load imported modules from the filesystem (or any other source).
+    /// Runs the compiler's `annotate` pipeline (parse → bind → desugar → load
+    /// → analyze → resolve) with a silent host that collects diagnostics
+    /// without printing. Codegen and downstream phases are intentionally
+    /// skipped: they can panic on compiler-internal bugs (e.g. invalid Wasm
+    /// emitted from an unusual entry module) and produce nothing useful for
+    /// editor feedback even when they succeed. All user-actionable
+    /// diagnostics — type errors, undefined symbols, prelude collisions,
+    /// effect violations — surface during `annotate`.
     pub async fn diagnostics<H: CompilerHost>(&self, uri: &str, host: &H) -> Vec<Diagnostic> {
         let Some(source) = self.documents.get(uri) else {
             return Vec::new();
         };
 
         let filename = uri_to_filename(uri);
-        let options = CompilerOptions {
-            log_level: Some(LogLevel::Off),
-            ..CompilerOptions::default()
-        };
-
-        // Compile and collect diagnostics. We don't care about the result —
-        // errors are captured by the host via emit_diagnostic.
         let collecting_host = DiagnosticCollector::new(host);
-        let _ =
-            wado_compiler::compile_with_options(source, &collecting_host, Some(&filename), options)
-                .await;
+        let _ = wado_compiler::annotate(source, &collecting_host, Some(&filename)).await;
 
         collecting_host
             .take_diagnostics()

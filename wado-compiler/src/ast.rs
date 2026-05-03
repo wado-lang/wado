@@ -828,6 +828,23 @@ impl Module {
             .map(AttrArg::as_str)
     }
 
+    /// Returns the canonical bundled-stdlib import path declared by
+    /// `#![stdlib("core:...")]` / `#![stdlib("wasi:...")]`, if any.
+    ///
+    /// This attribute is intended for use only by files inside
+    /// `wado-compiler/lib/`. It declares the module's canonical identity
+    /// independent of how the file is loaded (entry vs. transitive
+    /// import), so the loader can pin the entry to its `Core`/`Wasi`
+    /// `ModuleSource` and dedup against the bundled cache when an editor
+    /// opens the file directly.
+    pub fn stdlib_identity(&self) -> Option<&str> {
+        self.inner_attributes
+            .iter()
+            .find(|a| a.name == "stdlib")
+            .and_then(|a| a.args.first())
+            .map(AttrArg::as_str)
+    }
+
     /// Returns the value of a scalar `key = "value"` argument on any
     /// `#![generated(...)]` inner attribute.
     ///
