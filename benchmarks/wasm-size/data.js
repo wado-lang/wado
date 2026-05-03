@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777822638891,
+  "lastUpdate": 1777835094235,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -18757,6 +18757,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c2d8a33cd6ac9ade5478d55942ef6172df0e5d90"
         },
         "date": 1777822638564,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1775,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8776,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18520,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 515706,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d0bbfbcdc2f5a665a31abd0728c4107036081445",
+          "message": "Merge pull request #984 from wado-lang/claude/enable-tiri-optimization-NoatT\n\ntiri: extend Stage 1 with project-wide GlobalEnv, retire const_propagation",
+          "timestamp": "2026-05-04T03:59:57+09:00",
+          "tree_id": "5133b09dc8874a64a0eebff41736db0dcac6828c",
+          "url": "https://github.com/wado-lang/wado/commit/d0bbfbcdc2f5a665a31abd0728c4107036081445"
+        },
+        "date": 1777835093922,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
