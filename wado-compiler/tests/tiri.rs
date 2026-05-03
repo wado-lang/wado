@@ -8,6 +8,9 @@
 //! give the interpreter a stable contract to refactor against, not to
 //! enumerate every operator.
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use wado_compiler::Span;
 use wado_compiler::hashmap::IndexSet;
 use wado_compiler::name::ModuleSource;
@@ -2913,7 +2916,7 @@ fn match_nonconst_scrut_guarded_wildcard_does_not_count_as_exhaustive() {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// Stage 3 — pure call inlining
+// Pure call inlining (try_call_fold)
 // ──────────────────────────────────────────────────────────────────────────────
 
 /// Build a minimal `TirFunction` with the supplied signature and a
@@ -3004,22 +3007,16 @@ fn call_expr(func: &TirFunction, args: Vec<TirExpr>) -> TirExpr {
     )
 }
 
-/// Build a `CalleeMap` from the supplied functions, keyed by the same
-/// `(module_source, full_name)` shape `try_call_fold` looks up.
+/// Build a `CalleeMap` from the supplied functions, wrapping each in
+/// `Rc<RefCell<...>>` to match the production map shape.
 fn build_callee_map_test(funcs: &[TirFunction]) -> CalleeMap {
     let mut map = CalleeMap::default();
     for f in funcs {
         let key = (
             f.module_source.clone(),
-            FunctionRef {
-                module_source: f.module_source.clone(),
-                name: f.name.clone(),
-                monomorph_info: None,
-                method_info: None,
-            }
-            .full_name(),
+            FunctionRef::from_resolved(f, f.module_source.clone()).full_name(),
         );
-        map.insert(key, f.clone());
+        map.insert(key, Rc::new(RefCell::new(f.clone())));
     }
     map
 }
@@ -3167,8 +3164,8 @@ fn non_pure_call_with_effect_left_intact() {
 #[test]
 fn multi_stmt_body_left_intact() {
     // fn f(x) { let y = x * 2; return y; }
-    // Two stmts — Stage 3's recognized shape is single-stmt only,
-    // so the fold declines.
+    // The recognized body shape is single-stmt only, so the fold
+    // declines.
     let body_block = TirBlock::new(
         vec![
             TirStmt::new(
@@ -3224,8 +3221,8 @@ fn multi_stmt_body_left_intact() {
 #[test]
 fn recursive_call_bails_via_call_stack() {
     // fn f(x) { return f(x); } — direct self-recursion. The
-    // recursion guard refuses re-entry on the same key, so the inner
-    // `f` evaluates to Unevaluated and the outer call therefore
+    // `call_stack` guard refuses re-entry on the same key, so the
+    // inner `f` evaluates to Unevaluated and the outer call therefore
     // stays unfolded as well.
     let body = TirStmtKind::Return {
         value: Some(TirExpr::new(

@@ -20,13 +20,11 @@ use crate::tiri::{CalleeMap, Interpreter, Lattice, is_ctfe_eligible};
 pub fn fold_constants(project: &mut FlatPackage) -> bool {
     let mut changed = false;
     let type_table = project.type_table.borrow();
-    // Stage 3: build the CalleeMap once per pass. Pre-clone every
-    // CTFE-eligible callee so the interpreter can read bodies without
-    // competing for the visitor's `borrow_mut` over the function it's
-    // currently walking. Cloning is cheap (a TirFunction is mostly Vecs
-    // of Boxed nodes); the alternative — try_borrow on the live Rc —
-    // would silently skip self-calls (the function being walked is
-    // borrow_mut'd) and so let recursion misbehave.
+    // Build the CalleeMap once per pass with Rc handles aliased with
+    // `project.functions`. The interpreter reads callee bodies via
+    // `try_borrow`, which bails cleanly when the visitor already
+    // holds `borrow_mut` on the same function (the case where we'd
+    // try to fold a self-call inside the function being walked).
     let callees = build_callee_map(project);
     let mut visitor = ConstFoldVisitor {
         interpreter: Interpreter::new(&type_table),
@@ -44,10 +42,12 @@ pub fn fold_constants(project: &mut FlatPackage) -> bool {
     changed
 }
 
-/// Pre-build the [`CalleeMap`] from every CTFE-eligible `TirFunction`
-/// in `project`. The key shape (`(module_source, full_name)`) mirrors
-/// what `try_call_fold` synthesises from a `Call` node's `FunctionRef`
-/// so the interpreter can look the callee up by direct lookup.
+/// Pre-build the [`CalleeMap`] from every CTFE-eligible function in
+/// `project`. The map stores `Rc<RefCell<TirFunction>>` handles
+/// aliased with `project.functions`, so rebuilding the map every
+/// optimizer iteration costs only refcount bumps. The key shape
+/// `(module_source, full_name)` mirrors what `try_call_fold`
+/// synthesises from a `Call` node's `FunctionRef`.
 fn build_callee_map(project: &FlatPackage) -> CalleeMap {
     let mut map = CalleeMap::default();
     for func_rc in &project.functions {
@@ -57,7 +57,8 @@ fn build_callee_map(project: &FlatPackage) -> CalleeMap {
         }
         let module_source = func.module_source.clone();
         let full_name = FunctionRef::from_resolved(&func, module_source.clone()).full_name();
-        map.insert((module_source, full_name), func.clone());
+        drop(func);
+        map.insert((module_source, full_name), func_rc.clone());
     }
     map
 }
