@@ -368,15 +368,20 @@ the underlying compiler / codegen bugs were both real:
 
 ### Future work
 
-- **Stage B for composite descriptors.** Descriptors with
-  `[slaveGrammar]` blocks are auto-skipped today because the
-  extractor's Stage B path emits a single-input Kiln directive
-  (`use ... with { generator: ... }`). Kiln itself already accepts
-  multiple inputs via `generator.inputs`, so closing this only needs
-  the extractor to (a) emit the `inputs` array with main + slave
-  paths and (b) drop the `parsed.slave_grammars.len() > 0`
-  short-circuit at the Stage B eligibility check. That unblocks the
-  CompositeLexers / CompositeParsers descriptors.
+- **Stage B for composite descriptors — Stage C dependency.** All
+  17 `CompositeLexers` / `CompositeParsers` descriptors are
+  auto-skipped today, but the bottleneck is _not_ multi-input
+  plumbing: every composite descriptor's `[output]` is a host-side
+  artefact rather than a parse tree. They split as `<writeln(...)>`
+  action-body prints (e.g. `S.a`, `M.b`, `T.y`), `Token.toString`
+  dumps (e.g. `[@0,0:2='abc',<1>,1:0]`), or empty `[output]`. None
+  of these survive `normalize_output_for_stage_b`. Even if the
+  extractor were updated to drop the `parsed.slave_grammars.len() > 0`
+  short-circuit and pass `inputs: [main, slave1, …]` to Kiln (which
+  already supports multi-input), every composite would land back at
+  the same auto-skip counter — the eligibility set stays at zero
+  until Stage C makes action bodies executable and the prints can be
+  reproduced. Re-evaluate this entry once Stage C lands.
 
 When Phase 2/3 surface further compiler bugs, follow the project
 rule from the top-level `CLAUDE.md`: write a minimum reproducible
