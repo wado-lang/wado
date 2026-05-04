@@ -987,7 +987,7 @@ fn synthesize_lift_tuple(
 ///
 /// For primitives: no-op.
 /// For String: frees the string data buffer.
-pub(super) fn synthesize_free_element(ty: &Type, addr: TirExpr) -> Vec<TirStmt> {
+fn synthesize_free_element(ty: &Type, addr: TirExpr) -> Vec<TirStmt> {
     match ty {
         Type::Named(named) if named.name == "String" => {
             let ptr = builtin_call("i32_load", vec![addr.clone()], TypeTable::I32);

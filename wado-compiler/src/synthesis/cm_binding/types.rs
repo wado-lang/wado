@@ -21,12 +21,11 @@ use crate::synthesis::common::{binary, i32_const, i64_const, synth_span};
 /// Context for lifting CM values to GC types, providing access to
 /// the WASI registry (for variant/enum case info) and type table (for `TypeIds`).
 ///
-/// Shared between the memory-based lift (`synthesize_lift_inner`) and
-/// the flat-parameter lift (`synthesize_lift_from_flat_params`). The
-/// latter grabs a `RefCell<TypeTable>` borrow transitively through
-/// `synthesize_lift_list`, so this struct is `Copy` to make it cheap
-/// to pass by value across the recursion sites without propagating a
-/// borrow.
+/// Shared between the memory-based lift in `lift.rs` and the
+/// flat-parameter lift in `export_adapter.rs`. Both paths recurse
+/// through helpers that take a `RefCell<TypeTable>` borrow, so this
+/// struct is `Copy` to make it cheap to pass by value across the
+/// recursion sites without propagating a borrow.
 #[derive(Clone, Copy)]
 pub struct LiftContext<'a> {
     pub wasi_registry: &'a WasiRegistry,
@@ -49,7 +48,7 @@ pub struct LiftContext<'a> {
     /// callers must not hold a `RefMut` to the same cell across calls
     /// into `synthesize_lift_with_context` or its helpers. The lift
     /// path itself only borrows transiently inside
-    /// [`module_source_for_cm_interface`].
+    /// `module_source_for_cm_interface`.
     pub interner: &'a RefCell<crate::name::ModuleSourceInterner>,
 }
 

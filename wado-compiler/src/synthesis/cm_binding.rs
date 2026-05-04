@@ -26,7 +26,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::name::ModuleSource;
 use crate::package::Package;
-use crate::tir::{TirFunction, TypeTable};
+use crate::tir::{ResolvedType, TirFunction, TirModule, TypeTable};
 
 pub use export_adapter::export_binding_func_name;
 use export_adapter::{
@@ -57,7 +57,7 @@ use types::{cm_val_type_to_type_id, compute_export_flat_return_types};
 /// collisions when two modules declare an effect or resource with the same
 /// name — `lookup_effect_owner` selects the canonical WASI module.
 fn effect_owner_module_sources(
-    modules: &IndexMap<ModuleSource, crate::tir::TirModule>,
+    modules: &IndexMap<ModuleSource, TirModule>,
 ) -> IndexMap<(ModuleSource, String), ()> {
     let mut out: IndexMap<(ModuleSource, String), ()> = IndexMap::default();
     for (module_source, module) in modules {
@@ -323,7 +323,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                             let tt = entry_type_table.borrow();
                             matches!(
                                 tt.get(user_func.return_type),
-                                crate::tir::ResolvedType::GenericInstance { name, .. }
+                                ResolvedType::GenericInstance { name, .. }
                                     if name == "Result"
                             )
                         };
@@ -358,7 +358,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                                 let tt = entry_type_table.borrow();
                                 matches!(
                                     tt.get(user_func.return_type),
-                                    crate::tir::ResolvedType::Unit
+                                    ResolvedType::Unit
                                 )
                             };
 
