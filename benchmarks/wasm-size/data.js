@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777871289456,
+  "lastUpdate": 1777880901391,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -18977,6 +18977,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/820f3224eb4162ddbf275668b7839dce2f9bed01"
         },
         "date": 1777871289091,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1775,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8776,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18520,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 515706,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d29978bfa42463023f2de50c7d80d2d3611340ce",
+          "message": "Merge pull request #989 from wado-lang/claude/optimize-wado-test-speed-5wZgC\n\nkiln: relocate per-invocation cache to <output_dir>/<primary>.kiln.json",
+          "timestamp": "2026-05-04T16:43:33+09:00",
+          "tree_id": "fc1d47031889cc04c055e3fb372c59cbf1498bac",
+          "url": "https://github.com/wado-lang/wado/commit/d29978bfa42463023f2de50c7d80d2d3611340ce"
+        },
+        "date": 1777880901228,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
