@@ -40,17 +40,17 @@ pub struct GenContext {
     /// self-ref runs with the precedence ANTLR4 assigns to that alt.
     /// 0 means no override (the default emission applies).
     pub prefix_self_ref_min_prec: i32,
-    /// When true, `gen_scan_element`'s RuleRef branch emits
-    /// `scan_<rule>_atom(...)` instead of `scan_<rule>(...)` for LR rules.
-    /// Set by `gen_bt_scan_if_possible` so that prediction-time bt-scans
-    /// don't follow an LR rule's suffix loop into tokens that the OUTER
-    /// LR loop would parse — mirroring ANTLR4's k-lookahead semantics
-    /// where the prediction stops at the differentiating prefix instead
-    /// of running the full LR cascade. False (the default) keeps
-    /// `scan_<rule>` for LR-helper sites that legitimately scan the
-    /// whole sub-expression (e.g. the right operand inside
-    /// `scan_<rule>_lr_N`).
-    pub scan_for_prediction: bool,
+    /// `min_prec` argument that `gen_scan_element` passes when emitting a
+    /// `scan_<rule>(tokens, pos, …)` call for a `RuleRef`. Default is 0
+    /// (full LR scan, matching the parser side). `gen_bt_scan_elements`
+    /// raises this to `i32::MAX` for the LAST element when it is a
+    /// self-reference to the current rule, so that prefix-alt scans
+    /// (`op expr`, etc.) short-circuit the LR suffix loop the OUTER
+    /// LR loop is going to consume — mirroring ANTLR4's k-lookahead.
+    /// Non-LR `scan_<rule>` accept an unused `min_prec` parameter so the
+    /// emitted call site is uniform regardless of whether the target rule
+    /// is left-recursive.
+    pub scan_ruleref_min_prec: i32,
     /// Maps single-alt group type name → the rule name that first defines it.
     /// Used to resolve general group type names inside shared single-alt groups.
     single_alt_owner: TreeMap<String, String>,
@@ -79,7 +79,7 @@ impl GenContext {
             group_counter: 0,
             alt_gc_starts: [],
             prefix_self_ref_min_prec: 0,
-            scan_for_prediction: false,
+            scan_ruleref_min_prec: 0,
             single_alt_owner,
             kind_set_registry: TreeMap::<String, KindSetEntry>::new(),
         };

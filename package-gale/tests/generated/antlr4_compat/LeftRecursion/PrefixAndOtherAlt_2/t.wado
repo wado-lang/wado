@@ -756,9 +756,9 @@ impl Parser {
     }
 }
 
-fn scan_s(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_s(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_expr(tokens, pos);
+    pos = scan_expr(tokens, pos, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_EOF { return -1; }
     pos += 1;
@@ -773,15 +773,15 @@ fn scan_expr_atom(tokens: &Array<Token>, pos: i32) -> i32 {
         if alt_kind == TK_LIT_MINUS {
             pos = start;
             try_0: {
-                pos = scan_literal(tokens, pos);
+                pos = scan_literal(tokens, pos, 0);
                 if pos < 0 { break try_0; }
                 break scan_alts;
             }
             pos = start;
             try_1: {
-                pos = scan_op(tokens, pos);
+                pos = scan_op(tokens, pos, 0);
                 if pos < 0 { break try_1; }
-                pos = scan_expr(tokens, pos);
+                pos = scan_expr(tokens, pos, 0);
                 if pos < 0 { break try_1; }
                 break scan_alts;
             }
@@ -789,7 +789,7 @@ fn scan_expr_atom(tokens: &Array<Token>, pos: i32) -> i32 {
         } else if alt_kind == TK_Integer {
             pos = start;
             try_0: {
-                pos = scan_literal(tokens, pos);
+                pos = scan_literal(tokens, pos, 0);
                 if pos < 0 { break try_0; }
                 break scan_alts;
             }
@@ -797,9 +797,9 @@ fn scan_expr_atom(tokens: &Array<Token>, pos: i32) -> i32 {
         } else if alt_kind == TK_LIT_PLUS {
             pos = start;
             try_1: {
-                pos = scan_op(tokens, pos);
+                pos = scan_op(tokens, pos, 0);
                 if pos < 0 { break try_1; }
-                pos = scan_expr(tokens, pos);
+                pos = scan_expr(tokens, pos, 0);
                 if pos < 0 { break try_1; }
                 break scan_alts;
             }
@@ -813,7 +813,7 @@ fn scan_expr_atom(tokens: &Array<Token>, pos: i32) -> i32 {
 
 fn scan_expr_lr_2(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    pos = scan_op(tokens, pos);
+    pos = scan_op(tokens, pos, 0);
     if pos < 0 { return -1; }
     pos = scan_expr(tokens, pos, 2);
     if pos < 0 { return -1; }
@@ -839,7 +839,7 @@ fn scan_expr(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_literal(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_literal(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos].kind == TK_LIT_MINUS {
         let sp = pos;
@@ -851,7 +851,7 @@ fn scan_literal(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_op(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_op(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     if pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) {
         return pos + 1;
     }
@@ -880,7 +880,7 @@ fn parse_expr_bt_0(p: &mut Parser) -> Result<ExprNode, ParseError> {
 
 fn parse_expr_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    pos = scan_literal(tokens, pos);
+    pos = scan_literal(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -898,9 +898,9 @@ fn parse_expr_bt_1(p: &mut Parser) -> Result<ExprNode, ParseError> {
 
 fn parse_expr_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    pos = scan_op(tokens, pos);
+    pos = scan_op(tokens, pos, 0);
     if pos < 0 { return -1; }
-    pos = scan_expr_atom(tokens, pos);
+    pos = scan_expr(tokens, pos, 2147483647);
     if pos < 0 { return -1; }
     return pos;
 }

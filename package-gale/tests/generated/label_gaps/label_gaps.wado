@@ -887,11 +887,11 @@ impl Parser {
     }
 }
 
-fn scan_program(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_program(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     while pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) {
         let sp = pos;
-        pos = scan_stmt(tokens, pos);
+        pos = scan_stmt(tokens, pos, 0);
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
@@ -900,7 +900,7 @@ fn scan_program(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_stmt(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -908,7 +908,7 @@ fn scan_stmt(tokens: &Array<Token>, pos: i32) -> i32 {
         if alt_kind == TK_ID {
             pos = start;
             try_0: {
-                pos = scan_assign_stmt(tokens, pos);
+                pos = scan_assign_stmt(tokens, pos, 0);
                 if pos < 0 { break try_0; }
                 break scan_alts;
             }
@@ -916,7 +916,7 @@ fn scan_stmt(tokens: &Array<Token>, pos: i32) -> i32 {
         } else if alt_kind == TK_PAIR {
             pos = start;
             try_1: {
-                pos = scan_pair_stmt(tokens, pos);
+                pos = scan_pair_stmt(tokens, pos, 0);
                 if pos < 0 { break try_1; }
                 break scan_alts;
             }
@@ -924,7 +924,7 @@ fn scan_stmt(tokens: &Array<Token>, pos: i32) -> i32 {
         } else if alt_kind == TK_LIST {
             pos = start;
             try_2: {
-                pos = scan_mix_stmt(tokens, pos);
+                pos = scan_mix_stmt(tokens, pos, 0);
                 if pos < 0 { break try_2; }
                 break scan_alts;
             }
@@ -936,7 +936,7 @@ fn scan_stmt(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_assign_stmt(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_assign_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_ID { return -1; }
     pos += 1;
@@ -949,11 +949,11 @@ fn scan_assign_stmt(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_pair_stmt(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_pair_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_PAIR { return -1; }
     pos += 1;
-    pos = scan_key_rule(tokens, pos);
+    pos = scan_key_rule(tokens, pos, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_COLON { return -1; }
     pos += 1;
@@ -964,14 +964,14 @@ fn scan_pair_stmt(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_key_rule(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_key_rule(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_ID { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_mix_stmt(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_mix_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIST { return -1; }
     pos += 1;
@@ -1005,7 +1005,7 @@ fn parse_program(p: &mut Parser) -> Result<ProgramNode, ParseError> {
         rep_scan: {
             let tokens = &p.tokens;
             let mut pos: i32 = p.pos;
-            pos = scan_stmt(tokens, pos);
+            pos = scan_stmt(tokens, pos, 0);
             if pos < 0 { break rep_scan; }
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;

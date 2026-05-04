@@ -818,9 +818,9 @@ impl Parser {
     }
 }
 
-fn scan_s(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_s(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_declarator(tokens, pos);
+    pos = scan_declarator(tokens, pos, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_EOF { return -1; }
     pos += 1;
@@ -837,7 +837,7 @@ fn scan_declarator_atom(tokens: &Array<Token>, pos: i32) -> i32 {
             try_0: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_LIT_STAR { break try_0; }
                 pos += 1;
-                pos = scan_declarator(tokens, pos);
+                pos = scan_declarator(tokens, pos, 0);
                 if pos < 0 { break try_0; }
                 break scan_alts;
             }
@@ -847,7 +847,7 @@ fn scan_declarator_atom(tokens: &Array<Token>, pos: i32) -> i32 {
             try_1: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { break try_1; }
                 pos += 1;
-                pos = scan_declarator(tokens, pos);
+                pos = scan_declarator(tokens, pos, 0);
                 if pos < 0 { break try_1; }
                 if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { break try_1; }
                 pos += 1;
@@ -873,7 +873,7 @@ fn scan_declarator_lr_0(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACKET { return -1; }
     pos += 1;
-    pos = scan_e(tokens, pos);
+    pos = scan_e(tokens, pos, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RBRACKET { return -1; }
     pos += 1;
@@ -936,7 +936,7 @@ fn scan_declarator(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_e(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_e(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_INT { return -1; }
     pos += 1;

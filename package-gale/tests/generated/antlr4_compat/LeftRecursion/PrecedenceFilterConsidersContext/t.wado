@@ -677,11 +677,11 @@ impl Parser {
     }
 }
 
-fn scan_prog(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_prog(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     while pos < tokens.len() && tokens[pos].kind == TK_LIT_A {
         let sp = pos;
-        pos = scan_statement(tokens, pos);
+        pos = scan_statement(tokens, pos, 0);
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
@@ -692,14 +692,14 @@ fn scan_prog(tokens: &Array<Token>, pos: i32) -> i32 {
 
 fn scan_statement_atom(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    pos = scan_letter_a(tokens, pos);
+    pos = scan_letter_a(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
 fn scan_statement_lr_1(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    pos = scan_letter_a(tokens, pos);
+    pos = scan_letter_a(tokens, pos, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_B { return -1; }
     pos += 1;
@@ -725,7 +725,7 @@ fn scan_statement(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_letter_a(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_letter_a(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_A { return -1; }
     pos += 1;
@@ -740,7 +740,7 @@ fn parse_prog(p: &mut Parser) -> Result<ProgNode, ParseError> {
         rep_scan: {
             let tokens = &p.tokens;
             let mut pos: i32 = p.pos;
-            pos = scan_statement(tokens, pos);
+            pos = scan_statement(tokens, pos, 0);
             if pos < 0 { break rep_scan; }
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;

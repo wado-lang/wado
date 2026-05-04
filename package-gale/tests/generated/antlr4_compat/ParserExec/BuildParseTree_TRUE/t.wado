@@ -692,23 +692,23 @@ impl Parser {
     }
 }
 
-fn scan_r(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_r(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_a(tokens, pos);
+    pos = scan_a(tokens, pos, 0);
     if pos < 0 { return -1; }
-    pos = scan_b(tokens, pos);
+    pos = scan_b(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_a(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_a(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_A { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_b(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_b(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_B { return -1; }
     pos += 1;

@@ -1645,18 +1645,18 @@ impl Parser {
     }
 }
 
-fn scan_s(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_s(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_e(tokens, pos);
+    pos = scan_e(tokens, pos, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_EOF { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_expression_list(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_expression_list(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_e(tokens, pos);
+    pos = scan_e(tokens, pos, 0);
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos].kind == TK_LIT_COMMA {
         let sp = pos;
@@ -1664,7 +1664,7 @@ fn scan_expression_list(tokens: &Array<Token>, pos: i32) -> i32 {
             sg_0: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break sg_0; }
                 pos += 1;
-                pos = scan_e(tokens, pos);
+                pos = scan_e(tokens, pos, 0);
                 if pos < 0 { break sg_0; }
                 break sg_0_done;
             }
@@ -1686,11 +1686,11 @@ fn scan_e_atom(tokens: &Array<Token>, pos: i32) -> i32 {
             try_7: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { break try_7; }
                 pos += 1;
-                pos = scan_typespec(tokens, pos);
+                pos = scan_typespec(tokens, pos, 0);
                 if pos < 0 { break try_7; }
                 if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { break try_7; }
                 pos += 1;
-                pos = scan_e(tokens, pos);
+                pos = scan_e(tokens, pos, 0);
                 if pos < 0 { break try_7; }
                 break scan_alts;
             }
@@ -1698,7 +1698,7 @@ fn scan_e_atom(tokens: &Array<Token>, pos: i32) -> i32 {
             try_0: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { break try_0; }
                 pos += 1;
-                pos = scan_e(tokens, pos);
+                pos = scan_e(tokens, pos, 0);
                 if pos < 0 { break try_0; }
                 if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { break try_0; }
                 pos += 1;
@@ -1732,7 +1732,7 @@ fn scan_e_atom(tokens: &Array<Token>, pos: i32) -> i32 {
         } else if alt_kind == TK_ID {
             pos = start;
             try_5: {
-                pos = scan_typespec(tokens, pos);
+                pos = scan_typespec(tokens, pos, 0);
                 if pos < 0 { break try_5; }
                 if pos >= tokens.len() || tokens[pos].kind != TK_LIT_DOT { break try_5; }
                 pos += 1;
@@ -1750,7 +1750,7 @@ fn scan_e_atom(tokens: &Array<Token>, pos: i32) -> i32 {
         } else if alt_kind == TK_LIT_INT {
             pos = start;
             try_5: {
-                pos = scan_typespec(tokens, pos);
+                pos = scan_typespec(tokens, pos, 0);
                 if pos < 0 { break try_5; }
                 if pos >= tokens.len() || tokens[pos].kind != TK_LIT_DOT { break try_5; }
                 pos += 1;
@@ -1764,7 +1764,7 @@ fn scan_e_atom(tokens: &Array<Token>, pos: i32) -> i32 {
             try_6: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_LIT_NEW { break try_6; }
                 pos += 1;
-                pos = scan_typespec(tokens, pos);
+                pos = scan_typespec(tokens, pos, 0);
                 if pos < 0 { break try_6; }
                 let gp_1 = pos;
                 let sgk_1 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -1776,7 +1776,7 @@ fn scan_e_atom(tokens: &Array<Token>, pos: i32) -> i32 {
                             pos += 1;
                             if pos < tokens.len() && _gale_kind_set_1(tokens[pos].kind) {
                                 let sp = pos;
-                                pos = scan_expression_list(tokens, pos);
+                                pos = scan_expression_list(tokens, pos, 0);
                                 if pos < 0 { pos = sp; }
                             }
                             if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { break sg_1_0; }
@@ -1789,7 +1789,7 @@ fn scan_e_atom(tokens: &Array<Token>, pos: i32) -> i32 {
                                 sg_2: {
                                     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACKET { break sg_2; }
                                     pos += 1;
-                                    pos = scan_e(tokens, pos);
+                                    pos = scan_e(tokens, pos, 0);
                                     if pos < 0 { break sg_2; }
                                     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RBRACKET { break sg_2; }
                                     pos += 1;
@@ -1803,7 +1803,7 @@ fn scan_e_atom(tokens: &Array<Token>, pos: i32) -> i32 {
                                     sg_3: {
                                         if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACKET { break sg_3; }
                                         pos += 1;
-                                        pos = scan_e(tokens, pos);
+                                        pos = scan_e(tokens, pos, 0);
                                         if pos < 0 { break sg_3; }
                                         if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RBRACKET { break sg_3; }
                                         pos += 1;
@@ -1853,7 +1853,7 @@ fn scan_e_atom(tokens: &Array<Token>, pos: i32) -> i32 {
                     }
                     break try_8;
                 }
-                pos = scan_e(tokens, pos);
+                pos = scan_e(tokens, pos, 0);
                 if pos < 0 { break try_8; }
                 break scan_alts;
             }
@@ -1877,7 +1877,7 @@ fn scan_e_atom(tokens: &Array<Token>, pos: i32) -> i32 {
                     }
                     break try_9;
                 }
-                pos = scan_e(tokens, pos);
+                pos = scan_e(tokens, pos, 0);
                 if pos < 0 { break try_9; }
                 break scan_alts;
             }
@@ -1917,7 +1917,7 @@ fn scan_e_lr_8(tokens: &Array<Token>, pos: i32) -> i32 {
     pos += 1;
     if pos < tokens.len() && _gale_kind_set_1(tokens[pos].kind) {
         let sp = pos;
-        pos = scan_expression_list(tokens, pos);
+        pos = scan_expression_list(tokens, pos, 0);
         if pos < 0 { pos = sp; }
     }
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { return -1; }
@@ -1937,7 +1937,7 @@ fn scan_e_lr_9(tokens: &Array<Token>, pos: i32) -> i32 {
     pos += 1;
     if pos < tokens.len() && _gale_kind_set_1(tokens[pos].kind) {
         let sp = pos;
-        pos = scan_expression_list(tokens, pos);
+        pos = scan_expression_list(tokens, pos, 0);
         if pos < 0 { pos = sp; }
     }
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { return -1; }
@@ -1983,7 +1983,7 @@ fn scan_e_lr_14(tokens: &Array<Token>, pos: i32) -> i32 {
     pos += 1;
     if pos < tokens.len() && _gale_kind_set_1(tokens[pos].kind) {
         let sp = pos;
-        pos = scan_expression_list(tokens, pos);
+        pos = scan_expression_list(tokens, pos, 0);
         if pos < 0 { pos = sp; }
     }
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { return -1; }
@@ -2437,7 +2437,7 @@ fn scan_e(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_typespec(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_typespec(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -2507,7 +2507,7 @@ fn parse_expression_list(p: &mut Parser) -> Result<ExpressionListNode, ParseErro
             let mut pos: i32 = p.pos;
             if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break rep_scan; }
             pos += 1;
-            pos = scan_e(tokens, pos);
+            pos = scan_e(tokens, pos, 0);
             if pos < 0 { break rep_scan; }
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
@@ -2547,11 +2547,11 @@ fn parse_e_scan_12(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { return -1; }
     pos += 1;
-    pos = scan_typespec(tokens, pos);
+    pos = scan_typespec(tokens, pos, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { return -1; }
     pos += 1;
-    pos = scan_e_atom(tokens, pos);
+    pos = scan_e(tokens, pos, 2147483647);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -2573,7 +2573,7 @@ fn parse_e_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { return -1; }
     pos += 1;
-    pos = scan_e(tokens, pos);
+    pos = scan_e(tokens, pos, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { return -1; }
     pos += 1;
@@ -2595,7 +2595,7 @@ fn parse_e_bt_5(p: &mut Parser) -> Result<ENode, ParseError> {
 
 fn parse_e_scan_5(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    pos = scan_typespec(tokens, pos);
+    pos = scan_typespec(tokens, pos, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_DOT { return -1; }
     pos += 1;
@@ -2724,7 +2724,7 @@ fn parse_e_atom(p: &mut Parser) -> Result<ENode, ParseError> {
                         let mut pos: i32 = p.pos;
                         if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACKET { break rep_scan; }
                         pos += 1;
-                        pos = scan_e(tokens, pos);
+                        pos = scan_e(tokens, pos, 0);
                         if pos < 0 { break rep_scan; }
                         if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RBRACKET { break rep_scan; }
                         pos += 1;

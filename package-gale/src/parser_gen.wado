@@ -1272,6 +1272,14 @@ fn gen_scan_function(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext
     let mut f = FnSpec::new(&fn_name);
     f.add_param("tokens", "&Array<Token>");
     f.add_param("pos", "i32");
+    // Accept (and ignore) min_prec so call sites pass it uniformly
+    // regardless of whether the target rule is left-recursive. See
+    // `GenContext.scan_ruleref_min_prec` for the bt-scan use case.
+    f.add_param_spec(ParamSpec {
+        name: "min_prec",
+        type_str: "i32",
+        default_value: Option::<String>::Some("0"),
+    });
     f.set_return_type("i32");
     f.emit_begin(w);
 
@@ -1928,22 +1936,22 @@ fn gen_bt_scan_elements(w: &mut CodeWriter, elements: &Array<Element>, start: i3
     for let mut i = start; i < end; i += 1 {
         let elem = &elements[i];
         let is_last_self_ref = i == end - 1 && is_self_ref_element(elem, &ctx.current_rule_name);
-        let saved = ctx.scan_for_prediction;
+        let saved = ctx.scan_ruleref_min_prec;
         if is_last_self_ref {
-            ctx.scan_for_prediction = true;
+            ctx.scan_ruleref_min_prec = i32::MAX;
         }
         if let Repeat(rep) = elem {
             if let Optional = rep.kind {
                 if is_ruleref_optional(&rep.element) {
                     let follow = ctx.first_of_elements_from(elements, i + 1);
                     gen_scan_repeat_optional_with_follow(w, rep, ctx, &follow);
-                    ctx.scan_for_prediction = saved;
+                    ctx.scan_ruleref_min_prec = saved;
                     continue;
                 }
             }
         }
         gen_scan_element(w, elem, ctx, &"return -1;");
-        ctx.scan_for_prediction = saved;
+        ctx.scan_ruleref_min_prec = saved;
     }
 }
 
@@ -2117,8 +2125,10 @@ fn gen_scan_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, fa
         return;
     }
     if let RuleRef(r) = elem {
-        let fn_name = scan_call_name_for_ruleref(&r.name, &r.snake_name, ctx);
-        w.line(`pos = {fn_name}(tokens, pos);`);
+        // Always pass min_prec — non-LR `scan_<rule>` accept and ignore it.
+        // bt-scan sets `ctx.scan_ruleref_min_prec` to `i32::MAX` so any LR
+        // suffix loop in the target rule short-circuits.
+        w.line(`pos = scan_{r.snake_name}(tokens, pos, {ctx.scan_ruleref_min_prec});`);
         w.line(`if pos < 0 \{ {*fail_stmt} \}`);
         return;
     }
@@ -2143,37 +2153,6 @@ fn gen_scan_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, fa
     }
 }
 
-/// Pick the right `scan_<rule>` function name based on whether we're emitting
-/// a scan for a prediction-time bt-scan or for the LR helper itself.
-///
-/// In prediction-time bt-scans (`ctx.scan_for_prediction == true`), an LR rule
-/// reference must use `scan_<rule>_atom` so the scan stops after one atom and
-/// does not wander into LR-suffix tokens that the OUTER LR loop is going to
-/// parse — otherwise `op expr` (alt 1 of `expr : literal | op expr | expr op
-/// expr`) would scan the whole binary-expression cascade and outpace the
-/// `literal` alt's scan, even though ANTLR4's prediction would treat them as
-/// equivalent and pick the earlier alt. For non-LR rules, `scan_<rule>` is
-/// already atom-only, and for LR-helper sites the full `scan_<rule>` is what
-/// we want for the right operand.
-fn scan_call_name_for_ruleref(rule_name: &String, snake_name: &String, ctx: &mut GenContext) -> String {
-    if ctx.scan_for_prediction && rule_has_lr_alt(rule_name, ctx) {
-        return `scan_{*snake_name}_atom`;
-    }
-    return `scan_{*snake_name}`;
-}
-
-fn rule_has_lr_alt(rule_name: &String, ctx: &GenContext) -> bool {
-    let r = ctx.find_rule(rule_name);
-    if let Some(rule) = r {
-        for let alt of &rule.alternatives {
-            if is_left_recursive(alt, rule_name) {
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
 /// Emit scan code for an element that assigns to `pos` (may set -1 on failure).
 /// Used inside optional/repetition blocks where failure means backtrack, not abort.
 fn gen_scan_element_assign(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext) {
@@ -2192,8 +2171,7 @@ fn gen_scan_element_assign(w: &mut CodeWriter, elem: &Element, ctx: &mut GenCont
         return;
     }
     if let RuleRef(r) = elem {
-        let fn_name = `scan_{r.snake_name}`;
-        w.line(`pos = {fn_name}(tokens, pos);`);
+        w.line(`pos = scan_{r.snake_name}(tokens, pos, {ctx.scan_ruleref_min_prec});`);
         return;
     }
     if let Wildcard(_) = elem {
@@ -5705,7 +5683,9 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
             let sname = `{strip_suffix(type_name, "Node")}{alt_case_names[*idx]}`;
             ctx.group_counter = ctx.alt_gc_starts[*idx];
             let saved_prefix_prec = ctx.prefix_self_ref_min_prec;
-            ctx.prefix_self_ref_min_prec = compute_prefix_self_ref_min_prec_alts(alts, &ctx.current_rule_name, *idx);
+            if let Some(rule) = ctx.find_rule(&ctx.current_rule_name) {
+                ctx.prefix_self_ref_min_prec = compute_prefix_self_ref_min_prec(rule, *idx);
+            }
             gen_alt_body_skip(
                 w,
                 type_name,
@@ -6121,15 +6101,13 @@ fn increment_count(counts: &mut Array<[String, i32]>, name: &String) {
 /// True iff the alternative is left-recursive: its first element references
 /// the enclosing rule by name. ANTLR4 treats labeled self-references like
 /// `a=e` at the start of an alt as left-recursive too (per
-/// `vendor/antlr4/doc/left-recursion.md`), so we unwrap one `Label`.
+/// `vendor/antlr4/doc/left-recursion.md`), so `is_self_ref_element`
+/// unwraps one `Label`.
 fn is_left_recursive(alt: &Alternative, rule_name: &String) -> bool {
     if alt.elements.len() == 0 {
         return false;
     }
-    if let RuleRef(r) = unwrap_label(&alt.elements[0]) {
-        return r.name == *rule_name;
-    }
-    return false;
+    return is_self_ref_element(&alt.elements[0], rule_name);
 }
 
 /// True iff the alternative matches ANTLR4's `prefix` shape from
@@ -6183,10 +6161,8 @@ fn is_self_ref_element(elem: &Element, rule_name: &String) -> bool {
 /// so setting `min_prec = N + 1` rejects all of them while still admitting
 /// LR alts that come before this prefix.
 fn compute_prefix_self_ref_min_prec(rule: &ParserRule, alt_idx: i32) -> i32 {
-    return compute_prefix_self_ref_min_prec_alts(&rule.alternatives, &rule.name, alt_idx);
-}
-
-fn compute_prefix_self_ref_min_prec_alts(alts: &Array<Alternative>, rule_name: &String, alt_idx: i32) -> i32 {
+    let alts = &rule.alternatives;
+    let rule_name = &rule.name;
     if alt_idx < 0 || alt_idx >= alts.len() {
         return 0;
     }

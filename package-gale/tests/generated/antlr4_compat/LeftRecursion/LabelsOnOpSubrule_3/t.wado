@@ -753,9 +753,9 @@ impl Parser {
     }
 }
 
-fn scan_s(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_s(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_e(tokens, pos);
+    pos = scan_e(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -778,7 +778,7 @@ fn scan_e_atom(tokens: &Array<Token>, pos: i32) -> i32 {
             try_1: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { break try_1; }
                 pos += 1;
-                pos = scan_e(tokens, pos);
+                pos = scan_e(tokens, pos, 0);
                 if pos < 0 { break try_1; }
                 if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { break try_1; }
                 pos += 1;
@@ -810,7 +810,7 @@ fn scan_e_lr_0(tokens: &Array<Token>, pos: i32) -> i32 {
         }
         return -1;
     }
-    pos = scan_e(tokens, pos);
+    pos = scan_e(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }

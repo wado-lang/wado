@@ -715,7 +715,7 @@ impl Parser {
     }
 }
 
-fn scan_stmt(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_IF { return -1; }
     pos += 1;
