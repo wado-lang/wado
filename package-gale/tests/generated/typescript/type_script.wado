@@ -15650,7 +15650,7 @@ fn parse_primary_type_scan_9(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_KeyOf { return -1; }
     pos += 1;
-    pos = scan_primary_type(tokens, pos);
+    pos = scan_primary_type_atom(tokens, pos);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -15706,7 +15706,7 @@ fn parse_primary_type_scan_8(tokens: &Array<Token>, pos: i32) -> i32 {
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_Is { return -1; }
     pos += 1;
-    pos = scan_primary_type(tokens, pos);
+    pos = scan_primary_type_atom(tokens, pos);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -15727,89 +15727,89 @@ fn parse_primary_type_atom(p: &mut Parser) -> Result<PrimaryTypeNode, ParseError
     }
     if _gale_kind_set_80(kind) {
         if p.peek_kind() == TK_KeyOf {
-            if _gale_kind_set_9(p.peek_at(1)) {
+            let _sd_tokens = &p.tokens;
+            let _sd_pos = p.pos;
+            let _sd_p_9 = parse_primary_type_scan_9(_sd_tokens, _sd_pos);
+            let _sd_p_2 = parse_primary_type_scan_2(_sd_tokens, _sd_pos);
+            let _sd_p_8 = parse_primary_type_scan_8(_sd_tokens, _sd_pos);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_9 > _sd_best_p {
+                _sd_best_p = _sd_p_9;
+                _sd_best_i = 9;
+            }
+            if _sd_p_2 > _sd_best_p {
+                _sd_best_p = _sd_p_2;
+                _sd_best_i = 2;
+            }
+            if _sd_p_8 > _sd_best_p {
+                _sd_best_p = _sd_p_8;
+                _sd_best_i = 8;
+            }
+            if _sd_best_i == 9 {
                 return parse_primary_type_bt_9(p);
-            } else if p.peek_at(1) == TK_Is {
+            }
+            if _sd_best_i == 2 {
+                return parse_primary_type_bt_2(p);
+            }
+            if _sd_best_i == 8 {
                 return parse_primary_type_bt_8(p);
             }
-        } else if p.peek_kind() == TK_Any {
-            if p.peek_at(1) == TK_Is {
+            return parse_primary_type_bt_8(p);
+        } else if _gale_kind_set_6(p.peek_kind()) {
+            let _sd_tokens = &p.tokens;
+            let _sd_pos = p.pos;
+            let _sd_p_1 = parse_primary_type_scan_1(_sd_tokens, _sd_pos);
+            let _sd_p_2 = parse_primary_type_scan_2(_sd_tokens, _sd_pos);
+            let _sd_p_8 = parse_primary_type_scan_8(_sd_tokens, _sd_pos);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_p_2 > _sd_best_p {
+                _sd_best_p = _sd_p_2;
+                _sd_best_i = 2;
+            }
+            if _sd_p_8 > _sd_best_p {
+                _sd_best_p = _sd_p_8;
+                _sd_best_i = 8;
+            }
+            if _sd_best_i == 1 {
+                return parse_primary_type_bt_1(p);
+            }
+            if _sd_best_i == 2 {
+                return parse_primary_type_bt_2(p);
+            }
+            if _sd_best_i == 8 {
                 return parse_primary_type_bt_8(p);
             }
+            return parse_primary_type_bt_8(p);
         } else if _gale_kind_set_7(p.peek_kind()) {
             return parse_primary_type_bt_1(p);
-        } else if p.peek_kind() == TK_Number {
-            if p.peek_at(1) == TK_Is {
+        } else if _gale_kind_set_8(p.peek_kind()) {
+            let _sd_tokens = &p.tokens;
+            let _sd_pos = p.pos;
+            let _sd_p_2 = parse_primary_type_scan_2(_sd_tokens, _sd_pos);
+            let _sd_p_8 = parse_primary_type_scan_8(_sd_tokens, _sd_pos);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_2 > _sd_best_p {
+                _sd_best_p = _sd_p_2;
+                _sd_best_i = 2;
+            }
+            if _sd_p_8 > _sd_best_p {
+                _sd_best_p = _sd_p_8;
+                _sd_best_i = 8;
+            }
+            if _sd_best_i == 2 {
+                return parse_primary_type_bt_2(p);
+            }
+            if _sd_best_i == 8 {
                 return parse_primary_type_bt_8(p);
             }
-        } else if p.peek_kind() == TK_Boolean {
-            if p.peek_at(1) == TK_Is {
-                return parse_primary_type_bt_8(p);
-            }
-        } else if p.peek_kind() == TK_String {
-            if p.peek_at(1) == TK_Is {
-                return parse_primary_type_bt_8(p);
-            }
-        } else if p.peek_kind() == TK_Unique {
-            if p.peek_at(1) == TK_Is {
-                return parse_primary_type_bt_8(p);
-            }
-        } else if p.peek_kind() == TK_Symbol {
-            if p.peek_at(1) == TK_Is {
-                return parse_primary_type_bt_8(p);
-            }
-        } else if p.peek_kind() == TK_Never {
-            if p.peek_at(1) == TK_Is {
-                return parse_primary_type_bt_8(p);
-            }
-        } else if p.peek_kind() == TK_Undefined {
-            if p.peek_at(1) == TK_Is {
-                return parse_primary_type_bt_8(p);
-            }
-        } else if p.peek_kind() == TK_Object {
-            if p.peek_at(1) == TK_Is {
-                return parse_primary_type_bt_8(p);
-            }
-        } else if p.peek_kind() == TK_Identifier {
-            if p.peek_at(1) == TK_Is {
-                return parse_primary_type_bt_8(p);
-            }
-        } else if p.peek_kind() == TK_Async {
-            if p.peek_at(1) == TK_Is {
-                return parse_primary_type_bt_8(p);
-            }
-        } else if p.peek_kind() == TK_As {
-            if p.peek_at(1) == TK_Is {
-                return parse_primary_type_bt_8(p);
-            }
-        } else if p.peek_kind() == TK_From {
-            if p.peek_at(1) == TK_Is {
-                return parse_primary_type_bt_8(p);
-            }
-        } else if p.peek_kind() == TK_Yield {
-            if p.peek_at(1) == TK_Is {
-                return parse_primary_type_bt_8(p);
-            }
-        } else if p.peek_kind() == TK_Of {
-            if p.peek_at(1) == TK_Is {
-                return parse_primary_type_bt_8(p);
-            }
-        } else if p.peek_kind() == TK_TypeAlias {
-            if p.peek_at(1) == TK_Is {
-                return parse_primary_type_bt_8(p);
-            }
-        } else if p.peek_kind() == TK_Constructor {
-            if p.peek_at(1) == TK_Is {
-                return parse_primary_type_bt_8(p);
-            }
-        } else if p.peek_kind() == TK_Namespace {
-            if p.peek_at(1) == TK_Is {
-                return parse_primary_type_bt_8(p);
-            }
-        } else if p.peek_kind() == TK_Abstract {
-            if p.peek_at(1) == TK_Is {
-                return parse_primary_type_bt_8(p);
-            }
+            return parse_primary_type_bt_8(p);
         }
     }
     if kind == TK_LIT_LBRACE {
@@ -23078,7 +23078,7 @@ fn parse_single_expression_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
 fn parse_single_expression_bt_6(p: &mut Parser) -> Result<SingleExpressionNode, ParseError> {
     let start = p.peek().span.start;
     let new = p.expect(TK_New)?;
-    let single_expression = parse_single_expression(p, 24)?;
+    let single_expression = parse_single_expression(p)?;
     let type_arguments: Option<TypeArgumentsNode> = if p.peek_kind() == TK_LIT_LT {
         let type_arguments = parse_type_arguments(p)?;
         Option::<TypeArgumentsNode>::Some(type_arguments)
@@ -23114,7 +23114,7 @@ fn parse_single_expression_scan_6(tokens: &Array<Token>, pos: i32) -> i32 {
 fn parse_single_expression_bt_7(p: &mut Parser) -> Result<SingleExpressionNode, ParseError> {
     let start = p.peek().span.start;
     let new = p.expect(TK_New)?;
-    let single_expression = parse_single_expression(p, 24)?;
+    let single_expression = parse_single_expression(p)?;
     let type_arguments: Option<TypeArgumentsNode> = if p.peek_kind() == TK_LIT_LT {
         let type_arguments = parse_type_arguments(p)?;
         Option::<TypeArgumentsNode>::Some(type_arguments)
@@ -23182,7 +23182,7 @@ fn parse_single_expression_scan_12(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Void { return -1; }
     pos += 1;
-    pos = scan_single_expression(tokens, pos);
+    pos = scan_single_expression_atom(tokens, pos);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -23202,7 +23202,7 @@ fn parse_single_expression_scan_13(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Typeof { return -1; }
     pos += 1;
-    pos = scan_single_expression(tokens, pos);
+    pos = scan_single_expression_atom(tokens, pos);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -23222,7 +23222,7 @@ fn parse_single_expression_scan_20(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Await { return -1; }
     pos += 1;
-    pos = scan_single_expression(tokens, pos);
+    pos = scan_single_expression_atom(tokens, pos);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -23242,7 +23242,7 @@ fn parse_single_expression_scan_11(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Delete { return -1; }
     pos += 1;
-    pos = scan_single_expression(tokens, pos);
+    pos = scan_single_expression_atom(tokens, pos);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -23331,7 +23331,7 @@ fn parse_single_expression_bt_44(p: &mut Parser) -> Result<SingleExpressionNode,
     let start = p.peek().span.start;
     let identifier_name = parse_identifier_name(p)?;
     let single_expression: Option<SingleExpressionNode> = if _gale_kind_set_42(p.peek_kind()) {
-        let single_expression = parse_single_expression(p, 3)?;
+        let single_expression = parse_single_expression(p)?;
         Option::<SingleExpressionNode>::Some(single_expression)
     } else {
         null

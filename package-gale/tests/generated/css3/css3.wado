@@ -35094,28 +35094,60 @@ fn parse_negation_arg(p: &mut Parser) -> Result<NegationArgNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_9(kind) {
-        if _gale_kind_set_9(p.peek_kind()) {
-            let _sd_tokens = &p.tokens;
-            let _sd_pos = p.pos;
-            let _sd_p_0 = parse_negation_arg_scan_0(_sd_tokens, _sd_pos);
-            let _sd_p_1 = parse_negation_arg_scan_1(_sd_tokens, _sd_pos);
-            let mut _sd_best_i: i32 = -1;
-            let mut _sd_best_p: i32 = -1;
-            if _sd_p_0 > _sd_best_p {
-                _sd_best_p = _sd_p_0;
-                _sd_best_i = 0;
-            }
-            if _sd_p_1 > _sd_best_p {
-                _sd_best_p = _sd_p_1;
-                _sd_best_i = 1;
-            }
-            if _sd_best_i == 0 {
+        if p.peek_kind() == TK_Ident {
+            if _gale_kind_set_3(p.peek_at(1)) {
                 return parse_negation_arg_bt_0(p);
-            }
-            if _sd_best_i == 1 {
+            } else if p.peek_at(1) == TK_LIT_STAR {
                 return parse_negation_arg_bt_1(p);
             }
-            return parse_negation_arg_bt_1(p);
+        } else if p.peek_kind() == TK_MediaOnly {
+            if _gale_kind_set_3(p.peek_at(1)) {
+                return parse_negation_arg_bt_0(p);
+            } else if p.peek_at(1) == TK_LIT_STAR {
+                return parse_negation_arg_bt_1(p);
+            }
+        } else if p.peek_kind() == TK_Not {
+            if _gale_kind_set_3(p.peek_at(1)) {
+                return parse_negation_arg_bt_0(p);
+            } else if p.peek_at(1) == TK_LIT_STAR {
+                return parse_negation_arg_bt_1(p);
+            }
+        } else if p.peek_kind() == TK_And {
+            if _gale_kind_set_3(p.peek_at(1)) {
+                return parse_negation_arg_bt_0(p);
+            } else if p.peek_at(1) == TK_LIT_STAR {
+                return parse_negation_arg_bt_1(p);
+            }
+        } else if p.peek_kind() == TK_Or {
+            if _gale_kind_set_3(p.peek_at(1)) {
+                return parse_negation_arg_bt_0(p);
+            } else if p.peek_at(1) == TK_LIT_STAR {
+                return parse_negation_arg_bt_1(p);
+            }
+        } else if p.peek_kind() == TK_From {
+            if _gale_kind_set_3(p.peek_at(1)) {
+                return parse_negation_arg_bt_0(p);
+            } else if p.peek_at(1) == TK_LIT_STAR {
+                return parse_negation_arg_bt_1(p);
+            }
+        } else if p.peek_kind() == TK_To {
+            if _gale_kind_set_3(p.peek_at(1)) {
+                return parse_negation_arg_bt_0(p);
+            } else if p.peek_at(1) == TK_LIT_STAR {
+                return parse_negation_arg_bt_1(p);
+            }
+        } else if p.peek_kind() == TK_LIT_STAR {
+            if _gale_kind_set_3(p.peek_at(1)) {
+                return parse_negation_arg_bt_0(p);
+            } else if p.peek_at(1) == TK_LIT_STAR {
+                return parse_negation_arg_bt_1(p);
+            }
+        } else if p.peek_kind() == TK_LIT_PIPE {
+            if _gale_kind_set_3(p.peek_at(1)) {
+                return parse_negation_arg_bt_0(p);
+            } else if p.peek_at(1) == TK_LIT_STAR {
+                return parse_negation_arg_bt_1(p);
+            }
         }
     }
     if kind == TK_Hash {
@@ -35764,83 +35796,23 @@ fn parse_term(p: &mut Parser) -> Result<TermNode, ParseError> {
     let kind = p.peek_kind();
     if _gale_kind_set_36(kind) {
         if p.peek_kind() == TK_Plus {
-            if _gale_kind_set_33(p.peek_at(1)) {
-                let _sd_tokens = &p.tokens;
-                let _sd_pos = p.pos;
-                let _sd_p_0 = parse_term_scan_0(_sd_tokens, _sd_pos);
-                let _sd_p_1 = parse_term_scan_1(_sd_tokens, _sd_pos);
-                let _sd_p_2 = parse_term_scan_2(_sd_tokens, _sd_pos);
-                let _sd_p_11 = parse_term_scan_11(_sd_tokens, _sd_pos);
-                let mut _sd_best_i: i32 = -1;
-                let mut _sd_best_p: i32 = -1;
-                if _sd_p_0 > _sd_best_p {
-                    _sd_best_p = _sd_p_0;
-                    _sd_best_i = 0;
-                }
-                if _sd_p_1 > _sd_best_p {
-                    _sd_best_p = _sd_p_1;
-                    _sd_best_i = 1;
-                }
-                if _sd_p_2 > _sd_best_p {
-                    _sd_best_p = _sd_p_2;
-                    _sd_best_i = 2;
-                }
-                if _sd_p_11 > _sd_best_p {
-                    _sd_best_p = _sd_p_11;
-                    _sd_best_i = 11;
-                }
-                if _sd_best_i == 0 {
-                    return parse_term_bt_0(p);
-                }
-                if _sd_best_i == 1 {
-                    return parse_term_bt_1(p);
-                }
-                if _sd_best_i == 2 {
-                    return parse_term_bt_2(p);
-                }
-                if _sd_best_i == 11 {
-                    return parse_term_bt_11(p);
-                }
+            if p.peek_at(1) == TK_Number {
+                return parse_term_bt_0(p);
+            } else if p.peek_at(1) == TK_Percentage {
+                return parse_term_bt_1(p);
+            } else if p.peek_at(1) == TK_Dimension {
+                return parse_term_bt_2(p);
+            } else if p.peek_at(1) == TK_UnknownDimension {
                 return parse_term_bt_11(p);
             }
         } else if p.peek_kind() == TK_Minus {
-            if _gale_kind_set_33(p.peek_at(1)) {
-                let _sd_tokens = &p.tokens;
-                let _sd_pos = p.pos;
-                let _sd_p_0 = parse_term_scan_0(_sd_tokens, _sd_pos);
-                let _sd_p_1 = parse_term_scan_1(_sd_tokens, _sd_pos);
-                let _sd_p_2 = parse_term_scan_2(_sd_tokens, _sd_pos);
-                let _sd_p_11 = parse_term_scan_11(_sd_tokens, _sd_pos);
-                let mut _sd_best_i: i32 = -1;
-                let mut _sd_best_p: i32 = -1;
-                if _sd_p_0 > _sd_best_p {
-                    _sd_best_p = _sd_p_0;
-                    _sd_best_i = 0;
-                }
-                if _sd_p_1 > _sd_best_p {
-                    _sd_best_p = _sd_p_1;
-                    _sd_best_i = 1;
-                }
-                if _sd_p_2 > _sd_best_p {
-                    _sd_best_p = _sd_p_2;
-                    _sd_best_i = 2;
-                }
-                if _sd_p_11 > _sd_best_p {
-                    _sd_best_p = _sd_p_11;
-                    _sd_best_i = 11;
-                }
-                if _sd_best_i == 0 {
-                    return parse_term_bt_0(p);
-                }
-                if _sd_best_i == 1 {
-                    return parse_term_bt_1(p);
-                }
-                if _sd_best_i == 2 {
-                    return parse_term_bt_2(p);
-                }
-                if _sd_best_i == 11 {
-                    return parse_term_bt_11(p);
-                }
+            if p.peek_at(1) == TK_Number {
+                return parse_term_bt_0(p);
+            } else if p.peek_at(1) == TK_Percentage {
+                return parse_term_bt_1(p);
+            } else if p.peek_at(1) == TK_Dimension {
+                return parse_term_bt_2(p);
+            } else if p.peek_at(1) == TK_UnknownDimension {
                 return parse_term_bt_11(p);
             }
         } else if p.peek_kind() == TK_Number {
@@ -36222,83 +36194,23 @@ fn parse_any_(p: &mut Parser) -> Result<AnyNode, ParseError> {
     }
     if _gale_kind_set_36(kind) {
         if p.peek_kind() == TK_Plus {
-            if _gale_kind_set_33(p.peek_at(1)) {
-                let _sd_tokens = &p.tokens;
-                let _sd_pos = p.pos;
-                let _sd_p_1 = parse_any__scan_1(_sd_tokens, _sd_pos);
-                let _sd_p_2 = parse_any__scan_2(_sd_tokens, _sd_pos);
-                let _sd_p_3 = parse_any__scan_3(_sd_tokens, _sd_pos);
-                let _sd_p_4 = parse_any__scan_4(_sd_tokens, _sd_pos);
-                let mut _sd_best_i: i32 = -1;
-                let mut _sd_best_p: i32 = -1;
-                if _sd_p_1 > _sd_best_p {
-                    _sd_best_p = _sd_p_1;
-                    _sd_best_i = 1;
-                }
-                if _sd_p_2 > _sd_best_p {
-                    _sd_best_p = _sd_p_2;
-                    _sd_best_i = 2;
-                }
-                if _sd_p_3 > _sd_best_p {
-                    _sd_best_p = _sd_p_3;
-                    _sd_best_i = 3;
-                }
-                if _sd_p_4 > _sd_best_p {
-                    _sd_best_p = _sd_p_4;
-                    _sd_best_i = 4;
-                }
-                if _sd_best_i == 1 {
-                    return parse_any__bt_1(p);
-                }
-                if _sd_best_i == 2 {
-                    return parse_any__bt_2(p);
-                }
-                if _sd_best_i == 3 {
-                    return parse_any__bt_3(p);
-                }
-                if _sd_best_i == 4 {
-                    return parse_any__bt_4(p);
-                }
+            if p.peek_at(1) == TK_Number {
+                return parse_any__bt_1(p);
+            } else if p.peek_at(1) == TK_Percentage {
+                return parse_any__bt_2(p);
+            } else if p.peek_at(1) == TK_Dimension {
+                return parse_any__bt_3(p);
+            } else if p.peek_at(1) == TK_UnknownDimension {
                 return parse_any__bt_4(p);
             }
         } else if p.peek_kind() == TK_Minus {
-            if _gale_kind_set_33(p.peek_at(1)) {
-                let _sd_tokens = &p.tokens;
-                let _sd_pos = p.pos;
-                let _sd_p_1 = parse_any__scan_1(_sd_tokens, _sd_pos);
-                let _sd_p_2 = parse_any__scan_2(_sd_tokens, _sd_pos);
-                let _sd_p_3 = parse_any__scan_3(_sd_tokens, _sd_pos);
-                let _sd_p_4 = parse_any__scan_4(_sd_tokens, _sd_pos);
-                let mut _sd_best_i: i32 = -1;
-                let mut _sd_best_p: i32 = -1;
-                if _sd_p_1 > _sd_best_p {
-                    _sd_best_p = _sd_p_1;
-                    _sd_best_i = 1;
-                }
-                if _sd_p_2 > _sd_best_p {
-                    _sd_best_p = _sd_p_2;
-                    _sd_best_i = 2;
-                }
-                if _sd_p_3 > _sd_best_p {
-                    _sd_best_p = _sd_p_3;
-                    _sd_best_i = 3;
-                }
-                if _sd_p_4 > _sd_best_p {
-                    _sd_best_p = _sd_p_4;
-                    _sd_best_i = 4;
-                }
-                if _sd_best_i == 1 {
-                    return parse_any__bt_1(p);
-                }
-                if _sd_best_i == 2 {
-                    return parse_any__bt_2(p);
-                }
-                if _sd_best_i == 3 {
-                    return parse_any__bt_3(p);
-                }
-                if _sd_best_i == 4 {
-                    return parse_any__bt_4(p);
-                }
+            if p.peek_at(1) == TK_Number {
+                return parse_any__bt_1(p);
+            } else if p.peek_at(1) == TK_Percentage {
+                return parse_any__bt_2(p);
+            } else if p.peek_at(1) == TK_Dimension {
+                return parse_any__bt_3(p);
+            } else if p.peek_at(1) == TK_UnknownDimension {
                 return parse_any__bt_4(p);
             }
         } else if p.peek_kind() == TK_Number {
@@ -37611,83 +37523,23 @@ fn parse_calc_value(p: &mut Parser) -> Result<CalcValueNode, ParseError> {
     let kind = p.peek_kind();
     if _gale_kind_set_36(kind) {
         if p.peek_kind() == TK_Plus {
-            if _gale_kind_set_33(p.peek_at(1)) {
-                let _sd_tokens = &p.tokens;
-                let _sd_pos = p.pos;
-                let _sd_p_0 = parse_calc_value_scan_0(_sd_tokens, _sd_pos);
-                let _sd_p_1 = parse_calc_value_scan_1(_sd_tokens, _sd_pos);
-                let _sd_p_2 = parse_calc_value_scan_2(_sd_tokens, _sd_pos);
-                let _sd_p_3 = parse_calc_value_scan_3(_sd_tokens, _sd_pos);
-                let mut _sd_best_i: i32 = -1;
-                let mut _sd_best_p: i32 = -1;
-                if _sd_p_0 > _sd_best_p {
-                    _sd_best_p = _sd_p_0;
-                    _sd_best_i = 0;
-                }
-                if _sd_p_1 > _sd_best_p {
-                    _sd_best_p = _sd_p_1;
-                    _sd_best_i = 1;
-                }
-                if _sd_p_2 > _sd_best_p {
-                    _sd_best_p = _sd_p_2;
-                    _sd_best_i = 2;
-                }
-                if _sd_p_3 > _sd_best_p {
-                    _sd_best_p = _sd_p_3;
-                    _sd_best_i = 3;
-                }
-                if _sd_best_i == 0 {
-                    return parse_calc_value_bt_0(p);
-                }
-                if _sd_best_i == 1 {
-                    return parse_calc_value_bt_1(p);
-                }
-                if _sd_best_i == 2 {
-                    return parse_calc_value_bt_2(p);
-                }
-                if _sd_best_i == 3 {
-                    return parse_calc_value_bt_3(p);
-                }
+            if p.peek_at(1) == TK_Number {
+                return parse_calc_value_bt_0(p);
+            } else if p.peek_at(1) == TK_Dimension {
+                return parse_calc_value_bt_1(p);
+            } else if p.peek_at(1) == TK_UnknownDimension {
+                return parse_calc_value_bt_2(p);
+            } else if p.peek_at(1) == TK_Percentage {
                 return parse_calc_value_bt_3(p);
             }
         } else if p.peek_kind() == TK_Minus {
-            if _gale_kind_set_33(p.peek_at(1)) {
-                let _sd_tokens = &p.tokens;
-                let _sd_pos = p.pos;
-                let _sd_p_0 = parse_calc_value_scan_0(_sd_tokens, _sd_pos);
-                let _sd_p_1 = parse_calc_value_scan_1(_sd_tokens, _sd_pos);
-                let _sd_p_2 = parse_calc_value_scan_2(_sd_tokens, _sd_pos);
-                let _sd_p_3 = parse_calc_value_scan_3(_sd_tokens, _sd_pos);
-                let mut _sd_best_i: i32 = -1;
-                let mut _sd_best_p: i32 = -1;
-                if _sd_p_0 > _sd_best_p {
-                    _sd_best_p = _sd_p_0;
-                    _sd_best_i = 0;
-                }
-                if _sd_p_1 > _sd_best_p {
-                    _sd_best_p = _sd_p_1;
-                    _sd_best_i = 1;
-                }
-                if _sd_p_2 > _sd_best_p {
-                    _sd_best_p = _sd_p_2;
-                    _sd_best_i = 2;
-                }
-                if _sd_p_3 > _sd_best_p {
-                    _sd_best_p = _sd_p_3;
-                    _sd_best_i = 3;
-                }
-                if _sd_best_i == 0 {
-                    return parse_calc_value_bt_0(p);
-                }
-                if _sd_best_i == 1 {
-                    return parse_calc_value_bt_1(p);
-                }
-                if _sd_best_i == 2 {
-                    return parse_calc_value_bt_2(p);
-                }
-                if _sd_best_i == 3 {
-                    return parse_calc_value_bt_3(p);
-                }
+            if p.peek_at(1) == TK_Number {
+                return parse_calc_value_bt_0(p);
+            } else if p.peek_at(1) == TK_Dimension {
+                return parse_calc_value_bt_1(p);
+            } else if p.peek_at(1) == TK_UnknownDimension {
+                return parse_calc_value_bt_2(p);
+            } else if p.peek_at(1) == TK_Percentage {
                 return parse_calc_value_bt_3(p);
             }
         } else if p.peek_kind() == TK_Number {

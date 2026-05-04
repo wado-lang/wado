@@ -16919,70 +16919,36 @@ fn parse_macro_invocation_semi(p: &mut Parser) -> Result<MacroInvocationSemiNode
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_9(kind) {
-        if p.peek_kind() == TK_PATHSEP {
-            if p.peek_at(1) == TK_LPAREN {
+        if _gale_kind_set_9(p.peek_kind()) {
+            let _sd_tokens = &p.tokens;
+            let _sd_pos = p.pos;
+            let _sd_p_0 = parse_macro_invocation_semi_scan_0(_sd_tokens, _sd_pos);
+            let _sd_p_1 = parse_macro_invocation_semi_scan_1(_sd_tokens, _sd_pos);
+            let _sd_p_2 = parse_macro_invocation_semi_scan_2(_sd_tokens, _sd_pos);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
+            }
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_p_2 > _sd_best_p {
+                _sd_best_p = _sd_p_2;
+                _sd_best_i = 2;
+            }
+            if _sd_best_i == 0 {
                 return parse_macro_invocation_semi_bt_0(p);
-            } else if p.peek_at(1) == TK_LSQUAREBRACKET {
+            }
+            if _sd_best_i == 1 {
                 return parse_macro_invocation_semi_bt_1(p);
-            } else if p.peek_at(1) == TK_LCURLYBRACE {
+            }
+            if _sd_best_i == 2 {
                 return parse_macro_invocation_semi_bt_2(p);
             }
-        } else if p.peek_kind() == TK_NON_KEYWORD_IDENTIFIER {
-            if p.peek_at(1) == TK_LPAREN {
-                return parse_macro_invocation_semi_bt_0(p);
-            } else if p.peek_at(1) == TK_LSQUAREBRACKET {
-                return parse_macro_invocation_semi_bt_1(p);
-            } else if p.peek_at(1) == TK_LCURLYBRACE {
-                return parse_macro_invocation_semi_bt_2(p);
-            }
-        } else if p.peek_kind() == TK_RAW_IDENTIFIER {
-            if p.peek_at(1) == TK_LPAREN {
-                return parse_macro_invocation_semi_bt_0(p);
-            } else if p.peek_at(1) == TK_LSQUAREBRACKET {
-                return parse_macro_invocation_semi_bt_1(p);
-            } else if p.peek_at(1) == TK_LCURLYBRACE {
-                return parse_macro_invocation_semi_bt_2(p);
-            }
-        } else if p.peek_kind() == TK_KW_MACRORULES {
-            if p.peek_at(1) == TK_LPAREN {
-                return parse_macro_invocation_semi_bt_0(p);
-            } else if p.peek_at(1) == TK_LSQUAREBRACKET {
-                return parse_macro_invocation_semi_bt_1(p);
-            } else if p.peek_at(1) == TK_LCURLYBRACE {
-                return parse_macro_invocation_semi_bt_2(p);
-            }
-        } else if p.peek_kind() == TK_KW_SUPER {
-            if p.peek_at(1) == TK_LPAREN {
-                return parse_macro_invocation_semi_bt_0(p);
-            } else if p.peek_at(1) == TK_LSQUAREBRACKET {
-                return parse_macro_invocation_semi_bt_1(p);
-            } else if p.peek_at(1) == TK_LCURLYBRACE {
-                return parse_macro_invocation_semi_bt_2(p);
-            }
-        } else if p.peek_kind() == TK_KW_SELFVALUE {
-            if p.peek_at(1) == TK_LPAREN {
-                return parse_macro_invocation_semi_bt_0(p);
-            } else if p.peek_at(1) == TK_LSQUAREBRACKET {
-                return parse_macro_invocation_semi_bt_1(p);
-            } else if p.peek_at(1) == TK_LCURLYBRACE {
-                return parse_macro_invocation_semi_bt_2(p);
-            }
-        } else if p.peek_kind() == TK_KW_CRATE {
-            if p.peek_at(1) == TK_LPAREN {
-                return parse_macro_invocation_semi_bt_0(p);
-            } else if p.peek_at(1) == TK_LSQUAREBRACKET {
-                return parse_macro_invocation_semi_bt_1(p);
-            } else if p.peek_at(1) == TK_LCURLYBRACE {
-                return parse_macro_invocation_semi_bt_2(p);
-            }
-        } else if p.peek_kind() == TK_KW_DOLLARCRATE {
-            if p.peek_at(1) == TK_LPAREN {
-                return parse_macro_invocation_semi_bt_0(p);
-            } else if p.peek_at(1) == TK_LSQUAREBRACKET {
-                return parse_macro_invocation_semi_bt_1(p);
-            } else if p.peek_at(1) == TK_LCURLYBRACE {
-                return parse_macro_invocation_semi_bt_2(p);
-            }
+            return parse_macro_invocation_semi_bt_2(p);
         }
     }
     return Result::<MacroInvocationSemiNode, ParseError>::Err(ParseError::new(
@@ -18264,54 +18230,28 @@ fn parse_use_tree(p: &mut Parser) -> Result<UseTreeNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_20(kind) {
-        if p.peek_kind() == TK_PATHSEP {
-            if p.peek_at(1) == TK_KW_AS {
-                return parse_use_tree_bt_1(p);
-            } else if _gale_kind_set_19(p.peek_at(1)) {
+        if _gale_kind_set_9(p.peek_kind()) {
+            let _sd_tokens = &p.tokens;
+            let _sd_pos = p.pos;
+            let _sd_p_0 = parse_use_tree_scan_0(_sd_tokens, _sd_pos);
+            let _sd_p_1 = parse_use_tree_scan_1(_sd_tokens, _sd_pos);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
+            }
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_best_i == 0 {
                 return parse_use_tree_bt_0(p);
             }
-        } else if p.peek_kind() == TK_NON_KEYWORD_IDENTIFIER {
-            if p.peek_at(1) == TK_KW_AS {
+            if _sd_best_i == 1 {
                 return parse_use_tree_bt_1(p);
-            } else if _gale_kind_set_19(p.peek_at(1)) {
-                return parse_use_tree_bt_0(p);
             }
-        } else if p.peek_kind() == TK_RAW_IDENTIFIER {
-            if p.peek_at(1) == TK_KW_AS {
-                return parse_use_tree_bt_1(p);
-            } else if _gale_kind_set_19(p.peek_at(1)) {
-                return parse_use_tree_bt_0(p);
-            }
-        } else if p.peek_kind() == TK_KW_MACRORULES {
-            if p.peek_at(1) == TK_KW_AS {
-                return parse_use_tree_bt_1(p);
-            } else if _gale_kind_set_19(p.peek_at(1)) {
-                return parse_use_tree_bt_0(p);
-            }
-        } else if p.peek_kind() == TK_KW_SUPER {
-            if p.peek_at(1) == TK_KW_AS {
-                return parse_use_tree_bt_1(p);
-            } else if _gale_kind_set_19(p.peek_at(1)) {
-                return parse_use_tree_bt_0(p);
-            }
-        } else if p.peek_kind() == TK_KW_SELFVALUE {
-            if p.peek_at(1) == TK_KW_AS {
-                return parse_use_tree_bt_1(p);
-            } else if _gale_kind_set_19(p.peek_at(1)) {
-                return parse_use_tree_bt_0(p);
-            }
-        } else if p.peek_kind() == TK_KW_CRATE {
-            if p.peek_at(1) == TK_KW_AS {
-                return parse_use_tree_bt_1(p);
-            } else if _gale_kind_set_19(p.peek_at(1)) {
-                return parse_use_tree_bt_0(p);
-            }
-        } else if p.peek_kind() == TK_KW_DOLLARCRATE {
-            if p.peek_at(1) == TK_KW_AS {
-                return parse_use_tree_bt_1(p);
-            } else if _gale_kind_set_19(p.peek_at(1)) {
-                return parse_use_tree_bt_0(p);
-            }
+            return parse_use_tree_bt_1(p);
         } else if _gale_kind_set_19(p.peek_kind()) {
             return parse_use_tree_bt_0(p);
         }
@@ -20766,7 +20706,7 @@ fn parse_expression_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    pos = scan_expression(tokens, pos);
+    pos = scan_expression_atom(tokens, pos);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -22418,60 +22358,36 @@ fn parse_struct_expression(p: &mut Parser) -> Result<StructExpressionNode, Parse
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_61(kind) {
-        if p.peek_kind() == TK_PATHSEP {
-            if p.peek_at(1) == TK_LCURLYBRACE {
+        if _gale_kind_set_61(p.peek_kind()) {
+            let _sd_tokens = &p.tokens;
+            let _sd_pos = p.pos;
+            let _sd_p_0 = parse_struct_expression_scan_0(_sd_tokens, _sd_pos);
+            let _sd_p_1 = parse_struct_expression_scan_1(_sd_tokens, _sd_pos);
+            let _sd_p_2 = parse_struct_expression_scan_2(_sd_tokens, _sd_pos);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
+            }
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_p_2 > _sd_best_p {
+                _sd_best_p = _sd_p_2;
+                _sd_best_i = 2;
+            }
+            if _sd_best_i == 0 {
                 return parse_struct_expression_bt_0(p);
-            } else if p.peek_at(1) == TK_LPAREN {
+            }
+            if _sd_best_i == 1 {
                 return parse_struct_expression_bt_1(p);
             }
-        } else if p.peek_kind() == TK_NON_KEYWORD_IDENTIFIER {
-            if p.peek_at(1) == TK_LCURLYBRACE {
-                return parse_struct_expression_bt_0(p);
-            } else if p.peek_at(1) == TK_LPAREN {
-                return parse_struct_expression_bt_1(p);
+            if _sd_best_i == 2 {
+                return parse_struct_expression_bt_2(p);
             }
-        } else if p.peek_kind() == TK_RAW_IDENTIFIER {
-            if p.peek_at(1) == TK_LCURLYBRACE {
-                return parse_struct_expression_bt_0(p);
-            } else if p.peek_at(1) == TK_LPAREN {
-                return parse_struct_expression_bt_1(p);
-            }
-        } else if p.peek_kind() == TK_KW_MACRORULES {
-            if p.peek_at(1) == TK_LCURLYBRACE {
-                return parse_struct_expression_bt_0(p);
-            } else if p.peek_at(1) == TK_LPAREN {
-                return parse_struct_expression_bt_1(p);
-            }
-        } else if p.peek_kind() == TK_KW_SUPER {
-            if p.peek_at(1) == TK_LCURLYBRACE {
-                return parse_struct_expression_bt_0(p);
-            } else if p.peek_at(1) == TK_LPAREN {
-                return parse_struct_expression_bt_1(p);
-            }
-        } else if p.peek_kind() == TK_KW_SELFVALUE {
-            if p.peek_at(1) == TK_LCURLYBRACE {
-                return parse_struct_expression_bt_0(p);
-            } else if p.peek_at(1) == TK_LPAREN {
-                return parse_struct_expression_bt_1(p);
-            }
-        } else if p.peek_kind() == TK_KW_SELFTYPE {
-            if p.peek_at(1) == TK_LCURLYBRACE {
-                return parse_struct_expression_bt_0(p);
-            } else if p.peek_at(1) == TK_LPAREN {
-                return parse_struct_expression_bt_1(p);
-            }
-        } else if p.peek_kind() == TK_KW_CRATE {
-            if p.peek_at(1) == TK_LCURLYBRACE {
-                return parse_struct_expression_bt_0(p);
-            } else if p.peek_at(1) == TK_LPAREN {
-                return parse_struct_expression_bt_1(p);
-            }
-        } else if p.peek_kind() == TK_KW_DOLLARCRATE {
-            if p.peek_at(1) == TK_LCURLYBRACE {
-                return parse_struct_expression_bt_0(p);
-            } else if p.peek_at(1) == TK_LPAREN {
-                return parse_struct_expression_bt_1(p);
-            }
+            return parse_struct_expression_bt_2(p);
         }
     }
     return Result::<StructExpressionNode, ParseError>::Err(ParseError::new(
@@ -22875,60 +22791,36 @@ fn parse_enumeration_variant_expression(p: &mut Parser) -> Result<EnumerationVar
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_61(kind) {
-        if p.peek_kind() == TK_PATHSEP {
-            if p.peek_at(1) == TK_LCURLYBRACE {
+        if _gale_kind_set_61(p.peek_kind()) {
+            let _sd_tokens = &p.tokens;
+            let _sd_pos = p.pos;
+            let _sd_p_0 = parse_enumeration_variant_expression_scan_0(_sd_tokens, _sd_pos);
+            let _sd_p_1 = parse_enumeration_variant_expression_scan_1(_sd_tokens, _sd_pos);
+            let _sd_p_2 = parse_enumeration_variant_expression_scan_2(_sd_tokens, _sd_pos);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
+            }
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_p_2 > _sd_best_p {
+                _sd_best_p = _sd_p_2;
+                _sd_best_i = 2;
+            }
+            if _sd_best_i == 0 {
                 return parse_enumeration_variant_expression_bt_0(p);
-            } else if p.peek_at(1) == TK_LPAREN {
+            }
+            if _sd_best_i == 1 {
                 return parse_enumeration_variant_expression_bt_1(p);
             }
-        } else if p.peek_kind() == TK_NON_KEYWORD_IDENTIFIER {
-            if p.peek_at(1) == TK_LCURLYBRACE {
-                return parse_enumeration_variant_expression_bt_0(p);
-            } else if p.peek_at(1) == TK_LPAREN {
-                return parse_enumeration_variant_expression_bt_1(p);
+            if _sd_best_i == 2 {
+                return parse_enumeration_variant_expression_bt_2(p);
             }
-        } else if p.peek_kind() == TK_RAW_IDENTIFIER {
-            if p.peek_at(1) == TK_LCURLYBRACE {
-                return parse_enumeration_variant_expression_bt_0(p);
-            } else if p.peek_at(1) == TK_LPAREN {
-                return parse_enumeration_variant_expression_bt_1(p);
-            }
-        } else if p.peek_kind() == TK_KW_MACRORULES {
-            if p.peek_at(1) == TK_LCURLYBRACE {
-                return parse_enumeration_variant_expression_bt_0(p);
-            } else if p.peek_at(1) == TK_LPAREN {
-                return parse_enumeration_variant_expression_bt_1(p);
-            }
-        } else if p.peek_kind() == TK_KW_SUPER {
-            if p.peek_at(1) == TK_LCURLYBRACE {
-                return parse_enumeration_variant_expression_bt_0(p);
-            } else if p.peek_at(1) == TK_LPAREN {
-                return parse_enumeration_variant_expression_bt_1(p);
-            }
-        } else if p.peek_kind() == TK_KW_SELFVALUE {
-            if p.peek_at(1) == TK_LCURLYBRACE {
-                return parse_enumeration_variant_expression_bt_0(p);
-            } else if p.peek_at(1) == TK_LPAREN {
-                return parse_enumeration_variant_expression_bt_1(p);
-            }
-        } else if p.peek_kind() == TK_KW_SELFTYPE {
-            if p.peek_at(1) == TK_LCURLYBRACE {
-                return parse_enumeration_variant_expression_bt_0(p);
-            } else if p.peek_at(1) == TK_LPAREN {
-                return parse_enumeration_variant_expression_bt_1(p);
-            }
-        } else if p.peek_kind() == TK_KW_CRATE {
-            if p.peek_at(1) == TK_LCURLYBRACE {
-                return parse_enumeration_variant_expression_bt_0(p);
-            } else if p.peek_at(1) == TK_LPAREN {
-                return parse_enumeration_variant_expression_bt_1(p);
-            }
-        } else if p.peek_kind() == TK_KW_DOLLARCRATE {
-            if p.peek_at(1) == TK_LCURLYBRACE {
-                return parse_enumeration_variant_expression_bt_0(p);
-            } else if p.peek_at(1) == TK_LPAREN {
-                return parse_enumeration_variant_expression_bt_1(p);
-            }
+            return parse_enumeration_variant_expression_bt_2(p);
         }
     }
     return Result::<EnumerationVariantExpressionNode, ParseError>::Err(ParseError::new(

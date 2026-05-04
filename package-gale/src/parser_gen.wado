@@ -1215,10 +1215,13 @@ fn gen_bt_scan_if_possible(w: &mut CodeWriter, alt: &Alternative, fn_name: &Stri
     f.emit_begin(w);
     w.line("let mut pos = pos;");
 
-    let saved_scan_for_prediction = ctx.scan_for_prediction;
-    ctx.scan_for_prediction = true;
-    gen_scan_elements(w, &alt.elements, 0, prefix_len, ctx);
-    ctx.scan_for_prediction = saved_scan_for_prediction;
+    // bt-scan should treat the LAST element as atom-only when it is a
+    // self-reference to the current rule — that is the prefix-alt case
+    // (`op expr` etc.) where the OUTER LR loop will consume what follows
+    // and including it here would over-match. Inner self-refs, by
+    // contrast, are bounded by surrounding tokens (e.g. `K_WHEN expr
+    // K_THEN expr` inside `case_expr`) and need a full scan.
+    gen_bt_scan_elements(w, &alt.elements, 0, prefix_len, ctx);
 
     w.line("return pos;");
     w.end();
@@ -1913,6 +1916,34 @@ fn gen_scan_elements(w: &mut CodeWriter, elements: &Array<Element>, start: i32, 
             }
         }
         gen_scan_element(w, elem, ctx, &"return -1;");
+    }
+}
+
+/// Specialisation of `gen_scan_elements` for bt-scan helpers. Toggles
+/// `ctx.scan_for_prediction` on for the LAST element only when it is a
+/// self-reference to the current rule, so that the inner scan emits
+/// `scan_<rule>_atom` (no LR suffix loop) — the prefix-alt scenario
+/// where the outer LR loop will consume the trailing tokens.
+fn gen_bt_scan_elements(w: &mut CodeWriter, elements: &Array<Element>, start: i32, end: i32, ctx: &mut GenContext) {
+    for let mut i = start; i < end; i += 1 {
+        let elem = &elements[i];
+        let is_last_self_ref = i == end - 1 && is_self_ref_element(elem, &ctx.current_rule_name);
+        let saved = ctx.scan_for_prediction;
+        if is_last_self_ref {
+            ctx.scan_for_prediction = true;
+        }
+        if let Repeat(rep) = elem {
+            if let Optional = rep.kind {
+                if is_ruleref_optional(&rep.element) {
+                    let follow = ctx.first_of_elements_from(elements, i + 1);
+                    gen_scan_repeat_optional_with_follow(w, rep, ctx, &follow);
+                    ctx.scan_for_prediction = saved;
+                    continue;
+                }
+            }
+        }
+        gen_scan_element(w, elem, ctx, &"return -1;");
+        ctx.scan_for_prediction = saved;
     }
 }
 

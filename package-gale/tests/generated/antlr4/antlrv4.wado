@@ -7120,18 +7120,28 @@ fn parse_element(p: &mut Parser) -> Result<ElementNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_20(kind) {
-        if p.peek_kind() == TK_RULE_REF {
-            if _gale_kind_set_21(p.peek_at(1)) {
+        if _gale_kind_set_1(p.peek_kind()) {
+            let _sd_tokens = &p.tokens;
+            let _sd_pos = p.pos;
+            let _sd_p_0 = parse_element_scan_0(_sd_tokens, _sd_pos);
+            let _sd_p_1 = parse_element_scan_1(_sd_tokens, _sd_pos);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
+            }
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_best_i == 0 {
                 return parse_element_bt_0(p);
-            } else if _gale_kind_set_10(p.peek_at(1)) {
+            }
+            if _sd_best_i == 1 {
                 return parse_element_bt_1(p);
             }
-        } else if p.peek_kind() == TK_TOKEN_REF {
-            if _gale_kind_set_21(p.peek_at(1)) {
-                return parse_element_bt_0(p);
-            } else if _gale_kind_set_10(p.peek_at(1)) {
-                return parse_element_bt_1(p);
-            }
+            return parse_element_bt_1(p);
         } else if _gale_kind_set_14(p.peek_kind()) {
             return parse_element_bt_1(p);
         }
@@ -7459,27 +7469,11 @@ fn parse_lexer_atom(p: &mut Parser) -> Result<LexerAtomNode, ParseError> {
     let kind = p.peek_kind();
     if _gale_kind_set_17(kind) {
         if p.peek_kind() == TK_STRING_LITERAL {
-            let _sd_tokens = &p.tokens;
-            let _sd_pos = p.pos;
-            let _sd_p_0 = parse_lexer_atom_scan_0(_sd_tokens, _sd_pos);
-            let _sd_p_1 = parse_lexer_atom_scan_1(_sd_tokens, _sd_pos);
-            let mut _sd_best_i: i32 = -1;
-            let mut _sd_best_p: i32 = -1;
-            if _sd_p_0 > _sd_best_p {
-                _sd_best_p = _sd_p_0;
-                _sd_best_i = 0;
-            }
-            if _sd_p_1 > _sd_best_p {
-                _sd_best_p = _sd_p_1;
-                _sd_best_i = 1;
-            }
-            if _sd_best_i == 0 {
+            if p.peek_at(1) == TK_RANGE {
                 return parse_lexer_atom_bt_0(p);
-            }
-            if _sd_best_i == 1 {
+            } else if p.peek_at(1) == TK_LT {
                 return parse_lexer_atom_bt_1(p);
             }
-            return parse_lexer_atom_bt_1(p);
         } else if p.peek_kind() == TK_TOKEN_REF {
             return parse_lexer_atom_bt_1(p);
         }
@@ -7611,7 +7605,7 @@ fn parse_not_set(p: &mut Parser) -> Result<NotSetNode, ParseError> {
     let kind = p.peek_kind();
     if kind == TK_NOT {
         let not = p.expect(TK_NOT)?;
-        if _gale_kind_set_22(p.peek_kind()) {
+        if _gale_kind_set_21(p.peek_kind()) {
             let set_element = parse_set_element(p)?;
             return Result::<NotSetNode, ParseError>::Ok(NotSetNode::Alt0(NotSetAlt0 {
                 span: Span::new(start, p.last_end()),
@@ -8060,14 +8054,28 @@ fn parse_element_option(p: &mut Parser) -> Result<ElementOptionNode, ParseError>
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_1(kind) {
-        if p.peek_kind() == TK_RULE_REF {
-            if p.peek_at(1) == TK_ASSIGN {
+        if _gale_kind_set_1(p.peek_kind()) {
+            let _sd_tokens = &p.tokens;
+            let _sd_pos = p.pos;
+            let _sd_p_0 = parse_element_option_scan_0(_sd_tokens, _sd_pos);
+            let _sd_p_1 = parse_element_option_scan_1(_sd_tokens, _sd_pos);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
+            }
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_best_i == 0 {
+                return parse_element_option_bt_0(p);
+            }
+            if _sd_best_i == 1 {
                 return parse_element_option_bt_1(p);
             }
-        } else if p.peek_kind() == TK_TOKEN_REF {
-            if p.peek_at(1) == TK_ASSIGN {
-                return parse_element_option_bt_1(p);
-            }
+            return parse_element_option_bt_1(p);
         }
     }
     return Result::<ElementOptionNode, ParseError>::Err(ParseError::new(
@@ -9245,10 +9253,6 @@ fn _gale_kind_set_20(k: i32) -> bool {
 }
 
 fn _gale_kind_set_21(k: i32) -> bool {
-    return k matches { TK_ASSIGN | TK_PLUS_ASSIGN };
-}
-
-fn _gale_kind_set_22(k: i32) -> bool {
     return k matches { TK_LEXER_CHAR_SET | TK_STRING_LITERAL | TK_TOKEN_REF };
 }
 
