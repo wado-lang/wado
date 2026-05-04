@@ -7,45 +7,119 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::{LocalMethodName, MethodName, ModuleSource};
 use crate::tir::{
     CallArg, ClosureFunctor, FunctionKind, FunctionRef, InlineHint, ResolvedType, TirBlock,
-    TirCapture, TirExpr, TirExprKind, TirField, TirFunction, TirImpl, TirLocal, TirMatchArm,
-    TirModule, TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField,
-    TirStructPatternField, TirUnaryOp, TypeId, TypeTable,
+    TirCapture, TirExpr, TirExprKind, TirField, TirFunction, TirImpl, TirLocal, TirModule,
+    TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirUnaryOp, TypeId,
+    TypeTable,
 };
+use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::token::Span;
 
-/// Information about a closure collected during the first pass
+/// `1` for instance methods (those whose first parameter is named `self`),
+/// `0` otherwise. Used to convert a 0-based call-site argument index into
+/// the corresponding 0-based parameter / local index inside the callee.
+fn self_param_offset(callee: &TirFunction) -> u32 {
+    u32::from(callee.params.first().is_some_and(|p| p.name == "self"))
+}
+
+/// Build the `__capture_<i>` struct-field list for a functor literal from
+/// the closure's captures. Each field reads the captured value from the
+/// outer scope at `cap.outer_index`.
+fn build_capture_fields(captures: &[TirCapture], span: Span) -> Vec<TirStructField> {
+    captures
+        .iter()
+        .enumerate()
+        .map(|(i, cap)| TirStructField {
+            name: format!("__capture_{i}"),
+            value: TirExpr::new(
+                TirExprKind::Local {
+                    index: cap.outer_index,
+                    name: cap.name.clone(),
+                },
+                cap.type_id,
+                span,
+            ),
+            field_index: i as u32,
+        })
+        .collect()
+}
+
+/// Build the `$__Closure_N` mangled-name suffix appended to a callee that
+/// has been specialised over the listed functor struct types.
+fn build_functor_suffix(functor_types: &[(u32, TypeId)], type_table: &TypeTable) -> String {
+    functor_types
+        .iter()
+        .fold(String::new(), |mut acc, (_, tid)| {
+            let _ = write!(acc, "${}", type_table.type_name(*tid));
+            acc
+        })
+}
+
+/// Pad raw call args out to a `CallArg` list whose `is_mut` flags match
+/// the `__call` method's parameter list (skipping `self`). Extra args
+/// beyond the parameter list default to `is_mut = false`.
+fn make_call_method_args(args: Vec<TirExpr>, call_method: &TirFunction) -> Vec<CallArg> {
+    let params_is_mut: Vec<bool> = call_method
+        .params
+        .iter()
+        .skip(1)
+        .map(|p| p.is_mut)
+        .collect();
+    args.into_iter()
+        .zip(params_is_mut.into_iter().chain(std::iter::repeat(false)))
+        .map(|(e, is_mut)| CallArg::new(e, is_mut))
+        .collect()
+}
+
+/// Build a `LocalMethodName` for a specialised method by appending the
+/// functor suffix to the original method's full name. The `method_type_args`
+/// are emptied because the type args have already been baked into the
+/// method name.
+fn build_specialized_method_info(info: &LocalMethodName, functor_suffix: &str) -> LocalMethodName {
+    LocalMethodName {
+        struct_name: info.struct_name.clone(),
+        base_struct_name: info.base_struct_name.clone(),
+        trait_name: info.trait_name.clone(),
+        base_trait_name: info.base_trait_name.clone(),
+        trait_type_args: info.trait_type_args.clone(),
+        method_name: format!("{}{}", info.full_method_name(), functor_suffix),
+        method_type_args: Vec::new(),
+        is_type_param_receiver: info.is_type_param_receiver,
+        is_ref_impl: false,
+        cm_name: info.cm_name.clone(),
+    }
+}
+
+/// Snapshot taken in Phase 1 for the functor-generation pass. `body` is a
+/// deep clone so the original AST can be mutated in place by later passes
+/// without disturbing the synthesised `__call` body.
 #[derive(Debug, Clone)]
 struct CollectedClosure {
-    /// Unique closure ID (assigned in order of collection)
     id: u32,
-    /// Parameters of the closure
     params: Vec<(String, TypeId)>,
-    /// The closure body expression (cloned for __call method generation)
     body: TirExpr,
-    /// Captures from the closure
     captures: Vec<TirCapture>,
-    /// Return type of the closure
+    /// `body.type_id`, retained for closures whose `func_type_id` resolves
+    /// to a non-Function (a fallback path in `generate_functor_items`).
     return_type: TypeId,
-    /// Original function type (for compatibility)
+    /// The closure expression's own type — a `fn(...)` type that carries
+    /// the canonical return type even when the body is a Block expr.
     func_type_id: TypeId,
-    /// Span of the original closure
     span: Span,
 }
 
-// FunctorInfo moved to tir::ClosureFunctor
-
-/// Function signature info for converting `FuncRef` to Closure.
+/// Signature of a top-level function or impl method, used by Phase 0 to
+/// turn a bare `FuncRef` into a forwarding zero-capture closure.
 struct FuncSig {
     params: Vec<(String, TypeId)>,
     return_type: TypeId,
 }
 
-/// Key for fn-param specialization: (callee function name, parameter index -> functor type ID)
+/// Identifies a specialised callee: original name plus the functor struct
+/// type bound at each fn-type parameter. Used as both a dedup key
+/// (Phase 2.5) and a lookup key at the call site (Phase 3).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct FnParamSpecKey {
-    /// Name of the callee function
     callee_name: String,
-    /// Map from parameter index to functor struct type ID (for fn-type params with closure args)
     functor_types: Vec<(u32, TypeId)>,
 }
 
@@ -64,27 +138,25 @@ struct FnParamSpecKey {
 /// - A specialized version of the callee is generated with functor struct params
 /// - The call is updated to use the specialized function with `StructLiteral` args
 pub(super) struct ClosureLowerer {
-    /// Sequential ID assigned to each `Closure` node during the pre-pass.
-    /// Each Closure's `functor_id` is set once and read by all later passes;
-    /// no counter is re-walked in lockstep with the AST.
+    /// Counter for the Phase 1 walk. Each visited `Closure` has its
+    /// `functor_id` populated from this — that ID is the stable index
+    /// every later pass uses to look up its `ClosureFunctor`.
     next_closure_id: u32,
-    /// Module source for generated items
     module_source: ModuleSource,
-    /// Collected closures during first pass
     collected_closures: Vec<CollectedClosure>,
-    /// Generated functor information (populated after struct/method generation)
-    /// These will be stored in `module.closure_functors` for the optimizer
+    /// Indexed by `functor_id`. Moved into `module.closure_functors` at the
+    /// end of `lower_module` so the optimizer can inline `__call` bodies.
     functor_infos: Vec<ClosureFunctor>,
-    /// Map from local variable index to closure ID (for tracking closures stored in locals)
+    /// Per-function map (cleared between functions) recording which locals
+    /// hold which closure. Read by Phase 2 (safety analysis) and Phase 3
+    /// (IndirectCall→MethodCall + `update_local_types`).
     local_to_closure: IndexMap<u32, u32>,
-    /// Closure IDs that can be specialized (stored in locals, called directly).
-    /// Non-specializable closures use `ClosureToCanonical` for type-erased representation.
+    /// Closure IDs safe for direct specialisation (the closure is stored
+    /// in a local and only used by direct calls). Non-specialisable ones
+    /// route through `ClosureToCanonical` instead.
     specializable: IndexSet<u32>,
-    /// Generated structs to add to module
     generated_structs: Vec<TirStruct>,
-    /// Generated functions to add to module
     generated_functions: Vec<Rc<RefCell<TirFunction>>>,
-    /// Map from fn-param spec key to specialized function name
     fn_param_specializations: IndexMap<FnParamSpecKey, String>,
 }
 
@@ -122,10 +194,14 @@ impl ClosureLowerer {
         self.collected_closures.clear();
 
         let func_refs: Vec<_> = module.functions.clone();
+        let mut collector = CollectClosuresVisitor {
+            next_closure_id: &mut self.next_closure_id,
+            collected_closures: &mut self.collected_closures,
+        };
         for func_rc in &func_refs {
             let mut func = func_rc.borrow_mut();
             if let Some(body) = &mut func.body {
-                self.collect_closures_in_block(body);
+                collector.visit_block(body);
             }
         }
 
@@ -133,7 +209,7 @@ impl ClosureLowerer {
         for impl_block in &mut module.impls {
             for method in &mut impl_block.methods {
                 if let Some(body) = &mut method.body {
-                    self.collect_closures_in_block(body);
+                    collector.visit_block(body);
                 }
             }
         }
@@ -150,14 +226,24 @@ impl ClosureLowerer {
             let func = func_rc.borrow();
             if let Some(body) = &func.body {
                 self.local_to_closure.clear();
-                self.analyze_closure_safety_block(body);
+                ClosureSafetyAnalyzer {
+                    local_to_closure: &mut self.local_to_closure,
+                    specializable: &mut self.specializable,
+                    in_arg_position: false,
+                }
+                .visit_block(body);
             }
         }
         for impl_block in &module.impls {
             for method in &impl_block.methods {
                 if let Some(body) = &method.body {
                     self.local_to_closure.clear();
-                    self.analyze_closure_safety_block(body);
+                    ClosureSafetyAnalyzer {
+                        local_to_closure: &mut self.local_to_closure,
+                        specializable: &mut self.specializable,
+                        in_arg_position: false,
+                    }
+                    .visit_block(body);
                 }
             }
         }
@@ -170,15 +256,14 @@ impl ClosureLowerer {
             &mut module.type_table.borrow_mut(),
         );
 
-        // Phase 3: transform closures to struct literals and IndirectCall to MethodCall.
-        //
-        // We walk the generated `__call` methods alongside the original
-        // module functions: a nested closure's body lives in its parent
-        // closure's __call method (cloned in by `transform_closure_body`),
-        // and that copy must be lowered too. Each function uses a fresh
-        // `local_to_closure` map (keyed by per-function local indices).
-        // `transform_expr` deliberately does NOT recurse into Closure
-        // bodies — those are visited via the corresponding __call method.
+        // Phase 3: lower closure call sites. We walk the generated `__call`
+        // methods alongside the original module functions because a nested
+        // closure's body was cloned into its parent's `__call` and that
+        // copy still contains call sites that need lowering. Each function
+        // gets a fresh `local_to_closure` map (keyed by per-function local
+        // indices). `ClosureCallSiteLowerer` deliberately does NOT recurse
+        // into Closure bodies — those are visited via the corresponding
+        // `__call` method.
         let lowered_funcs: Vec<_> = func_refs
             .iter()
             .cloned()
@@ -188,7 +273,16 @@ impl ClosureLowerer {
             let mut func = func_rc.borrow_mut();
             if let Some(body) = &mut func.body {
                 self.local_to_closure.clear();
-                self.transform_block(body, &mut module.type_table.borrow_mut());
+                let mut tt = module.type_table.borrow_mut();
+                ClosureCallSiteLowerer {
+                    local_to_closure: &mut self.local_to_closure,
+                    specializable: &self.specializable,
+                    functor_infos: &self.functor_infos,
+                    fn_param_specializations: &self.fn_param_specializations,
+                    module_source: &self.module_source,
+                    type_table: &mut tt,
+                }
+                .visit_block(body);
             }
             self.update_local_types(&mut func);
         }
@@ -196,7 +290,16 @@ impl ClosureLowerer {
             for method in &mut impl_block.methods {
                 if let Some(body) = &mut method.body {
                     self.local_to_closure.clear();
-                    self.transform_block(body, &mut module.type_table.borrow_mut());
+                    let mut tt = module.type_table.borrow_mut();
+                    ClosureCallSiteLowerer {
+                        local_to_closure: &mut self.local_to_closure,
+                        specializable: &self.specializable,
+                        functor_infos: &self.functor_infos,
+                        fn_param_specializations: &self.fn_param_specializations,
+                        module_source: &self.module_source,
+                        type_table: &mut tt,
+                    }
+                    .visit_block(body);
                 }
                 self.update_local_types(method);
             }
@@ -206,16 +309,20 @@ impl ClosureLowerer {
         // These are closures that weren't specialised (fn-param stored in
         // struct field). Walks the same set as phase 3 so cloned bodies in
         // `__call` methods are also covered.
+        let mut remaining = RemainingClosuresRewriter {
+            functor_infos: &self.functor_infos,
+            module_source: &self.module_source,
+        };
         for func_rc in &lowered_funcs {
             let mut func = func_rc.borrow_mut();
             if let Some(body) = &mut func.body {
-                self.transform_remaining_closures_block(body);
+                remaining.visit_block(body);
             }
         }
         for impl_block in &mut module.impls {
             for method in &mut impl_block.methods {
                 if let Some(body) = &mut method.body {
-                    self.transform_remaining_closures_block(body);
+                    remaining.visit_block(body);
                 }
             }
         }
@@ -269,389 +376,29 @@ impl ClosureLowerer {
             }
         }
 
-        let mut type_table = module.type_table.borrow_mut();
-        let module_source = module.module_source.clone();
-
-        for func_rc in &module.functions {
-            let mut func = func_rc.borrow_mut();
-            if let Some(body) = &mut func.body {
-                Self::convert_func_refs_in_block(body, &func_sigs, &mut type_table, &module_source);
+        {
+            let mut type_table = module.type_table.borrow_mut();
+            let mut rewriter = FuncRefToClosureRewriter {
+                func_sigs: &func_sigs,
+                type_table: &mut type_table,
+            };
+            for func_rc in &module.functions {
+                let mut func = func_rc.borrow_mut();
+                if let Some(body) = &mut func.body {
+                    rewriter.visit_block(body);
+                }
             }
         }
-        drop(type_table);
         for impl_block in &mut module.impls {
             let mut type_table = module.type_table.borrow_mut();
+            let mut rewriter = FuncRefToClosureRewriter {
+                func_sigs: &func_sigs,
+                type_table: &mut type_table,
+            };
             for method in &mut impl_block.methods {
                 if let Some(body) = &mut method.body {
-                    Self::convert_func_refs_in_block(
-                        body,
-                        &func_sigs,
-                        &mut type_table,
-                        &module_source,
-                    );
+                    rewriter.visit_block(body);
                 }
-            }
-        }
-    }
-
-    fn convert_func_refs_in_block(
-        block: &mut TirBlock,
-        func_sigs: &IndexMap<String, FuncSig>,
-        type_table: &mut TypeTable,
-        module_source: &ModuleSource,
-    ) {
-        for stmt in &mut block.stmts {
-            Self::convert_func_refs_in_stmt(stmt, func_sigs, type_table, module_source);
-        }
-    }
-
-    fn convert_func_refs_in_stmt(
-        stmt: &mut TirStmt,
-        func_sigs: &IndexMap<String, FuncSig>,
-        type_table: &mut TypeTable,
-        module_source: &ModuleSource,
-    ) {
-        match &mut stmt.kind {
-            TirStmtKind::Let { value, .. } | TirStmtKind::Expr(value) => {
-                Self::convert_func_refs_in_expr(value, func_sigs, type_table, module_source);
-            }
-            TirStmtKind::Return { value } => {
-                if let Some(v) = value {
-                    Self::convert_func_refs_in_expr(v, func_sigs, type_table, module_source);
-                }
-            }
-            TirStmtKind::If {
-                condition,
-                then_block,
-                else_block,
-            } => {
-                Self::convert_func_refs_in_expr(condition, func_sigs, type_table, module_source);
-                Self::convert_func_refs_in_block(then_block, func_sigs, type_table, module_source);
-                if let Some(else_blk) = else_block {
-                    Self::convert_func_refs_in_block(
-                        else_blk,
-                        func_sigs,
-                        type_table,
-                        module_source,
-                    );
-                }
-            }
-            TirStmtKind::Loop { body, .. } => {
-                Self::convert_func_refs_in_block(body, func_sigs, type_table, module_source);
-            }
-            TirStmtKind::Break { value, .. } => {
-                if let Some(v) = value {
-                    Self::convert_func_refs_in_expr(v, func_sigs, type_table, module_source);
-                }
-            }
-            TirStmtKind::Continue => {}
-            TirStmtKind::LabeledBlock { block, .. } => {
-                Self::convert_func_refs_in_block(block, func_sigs, type_table, module_source);
-            }
-            TirStmtKind::IfLet {
-                scrutinee,
-                then_block,
-                else_block,
-                ..
-            } => {
-                Self::convert_func_refs_in_expr(scrutinee, func_sigs, type_table, module_source);
-                Self::convert_func_refs_in_block(then_block, func_sigs, type_table, module_source);
-                if let Some(else_blk) = else_block {
-                    Self::convert_func_refs_in_block(
-                        else_blk,
-                        func_sigs,
-                        type_table,
-                        module_source,
-                    );
-                }
-            }
-            TirStmtKind::LetDestructure { value, .. } => {
-                Self::convert_func_refs_in_expr(value, func_sigs, type_table, module_source);
-            }
-            TirStmtKind::TaskReturn { .. } | TirStmtKind::VariadicForOf { .. } => {}
-        }
-    }
-
-    /// Convert a `FuncRef` expression (or `Ref(FuncRef)`) to a zero-capture `Closure`.
-    fn convert_func_refs_in_expr(
-        expr: &mut TirExpr,
-        func_sigs: &IndexMap<String, FuncSig>,
-        type_table: &mut TypeTable,
-        module_source: &ModuleSource,
-    ) {
-        // Handle `&FuncRef` → collapse to Closure (since &fn(...) = fn(...) for GC types)
-        if let TirExprKind::Unary {
-            op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
-            expr: inner,
-        } = &mut expr.kind
-            && matches!(inner.kind, TirExprKind::FuncRef { .. })
-        {
-            Self::convert_func_refs_in_expr(inner, func_sigs, type_table, module_source);
-            // If inner was converted to a Closure, collapse the Ref wrapper.
-            // Function values are GC references, so &fn(...) = fn(...).
-            if matches!(inner.kind, TirExprKind::Closure { .. }) {
-                let inner_owned = std::mem::replace(
-                    inner.as_mut(),
-                    TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, expr.span),
-                );
-                *expr = inner_owned;
-            }
-            return;
-        }
-
-        // Convert FuncRef to Closure
-        if let TirExprKind::FuncRef {
-            name,
-            module_source: func_module,
-        } = &expr.kind
-        {
-            if let Some(sig) = func_sigs.get(name.as_str()) {
-                let span = expr.span;
-                let func_name = name.clone();
-                let func_module = func_module.clone();
-
-                // Build closure params (synthetic names)
-                let closure_params: Vec<(String, TypeId)> = sig
-                    .params
-                    .iter()
-                    .enumerate()
-                    .map(|(i, (_, ty))| (format!("__fn_ref_p{i}"), *ty))
-                    .collect();
-
-                // Build call args: Local references to each closure param
-                let call_args: Vec<CallArg> = closure_params
-                    .iter()
-                    .enumerate()
-                    .map(|(i, (name, ty))| {
-                        CallArg::new(
-                            TirExpr::new(
-                                TirExprKind::Local {
-                                    index: i as u32,
-                                    name: name.clone(),
-                                },
-                                *ty,
-                                span,
-                            ),
-                            false,
-                        )
-                    })
-                    .collect();
-
-                // Build the body: Call to the original function
-                let body = TirExpr::new(
-                    TirExprKind::Call {
-                        func: FunctionRef {
-                            module_source: func_module,
-                            name: func_name,
-                            monomorph_info: None,
-                            method_info: None,
-                        },
-                        type_args: Vec::new(),
-                        args: call_args,
-                    },
-                    sig.return_type,
-                    span,
-                );
-
-                // Build the function type
-                let param_types: Vec<TypeId> = closure_params.iter().map(|(_, t)| *t).collect();
-                let func_type =
-                    type_table.make_function(param_types, sig.return_type, Vec::new(), Vec::new());
-
-                // Replace the FuncRef with a Closure. The synthetic body
-                // is a single `Call` that forwards to the named function;
-                // the closure's local namespace is exactly its parameters.
-                expr.kind = TirExprKind::Closure {
-                    params: closure_params,
-                    body: Box::new(body),
-                    captures: Vec::new(),
-                    functor_id: None,
-                    source_text: None,
-                    address_taken_locals: crate::hashmap::IndexSet::default(),
-                    body_locals: Vec::new(),
-                };
-                expr.type_id = func_type;
-            }
-            return;
-        }
-
-        // Recurse into sub-expressions (but NOT into Call.func / MethodCall.func which are
-        // FunctionRef, not TirExprKind::FuncRef)
-        match &mut expr.kind {
-            TirExprKind::Binary { left, right, .. } => {
-                Self::convert_func_refs_in_expr(left, func_sigs, type_table, module_source);
-                Self::convert_func_refs_in_expr(right, func_sigs, type_table, module_source);
-            }
-            TirExprKind::Unary { expr: inner, .. }
-            | TirExprKind::Cast { expr: inner, .. }
-            | TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::TupleSpread { expr: inner }
-            | TirExprKind::TupleZip { expr: inner }
-            | TirExprKind::TypePackExpansion {
-                call_expr: inner, ..
-            } => {
-                Self::convert_func_refs_in_expr(inner, func_sigs, type_table, module_source);
-            }
-            TirExprKind::Call { args, .. } => {
-                for arg in args {
-                    Self::convert_func_refs_in_expr(
-                        &mut arg.expr,
-                        func_sigs,
-                        type_table,
-                        module_source,
-                    );
-                }
-            }
-            TirExprKind::CmRawCall { args, .. } => {
-                for arg in args {
-                    Self::convert_func_refs_in_expr(arg, func_sigs, type_table, module_source);
-                }
-            }
-            TirExprKind::MethodCall {
-                receiver, args, ..
-            } => {
-                Self::convert_func_refs_in_expr(receiver, func_sigs, type_table, module_source);
-                for arg in args {
-                    Self::convert_func_refs_in_expr(
-                        &mut arg.expr,
-                        func_sigs,
-                        type_table,
-                        module_source,
-                    );
-                }
-            }
-            TirExprKind::IndirectCall { callee, args } => {
-                Self::convert_func_refs_in_expr(callee, func_sigs, type_table, module_source);
-                for arg in args {
-                    Self::convert_func_refs_in_expr(arg, func_sigs, type_table, module_source);
-                }
-            }
-            TirExprKind::Closure { body, .. } => {
-                Self::convert_func_refs_in_expr(body, func_sigs, type_table, module_source);
-            }
-            TirExprKind::ClosureToCanonical { functor, .. } => {
-                Self::convert_func_refs_in_expr(functor, func_sigs, type_table, module_source);
-            }
-            TirExprKind::StructLiteral { fields, .. } => {
-                for field in fields {
-                    Self::convert_func_refs_in_expr(
-                        &mut field.value,
-                        func_sigs,
-                        type_table,
-                        module_source,
-                    );
-                }
-            }
-            TirExprKind::TupleLiteral { elements } => {
-                for elem in elements {
-                    Self::convert_func_refs_in_expr(elem, func_sigs, type_table, module_source);
-                }
-            }
-            TirExprKind::Assign { target, value } => {
-                Self::convert_func_refs_in_expr(target, func_sigs, type_table, module_source);
-                Self::convert_func_refs_in_expr(value, func_sigs, type_table, module_source);
-            }
-            TirExprKind::Index {
-                expr: array,
-                index,
-            } => {
-                Self::convert_func_refs_in_expr(array, func_sigs, type_table, module_source);
-                Self::convert_func_refs_in_expr(index, func_sigs, type_table, module_source);
-            }
-            TirExprKind::If {
-                condition,
-                then_branch,
-                else_branch,
-            } => {
-                Self::convert_func_refs_in_expr(condition, func_sigs, type_table, module_source);
-                Self::convert_func_refs_in_block(
-                    then_branch,
-                    func_sigs,
-                    type_table,
-                    module_source,
-                );
-                if let Some(else_blk) = else_branch {
-                    Self::convert_func_refs_in_block(
-                        else_blk,
-                        func_sigs,
-                        type_table,
-                        module_source,
-                    );
-                }
-            }
-            TirExprKind::Block(block) => {
-                Self::convert_func_refs_in_block(block, func_sigs, type_table, module_source);
-            }
-            TirExprKind::LabeledBlock { block, .. } => {
-                Self::convert_func_refs_in_block(block, func_sigs, type_table, module_source);
-            }
-            TirExprKind::Match {
-                expr: scrutinee,
-                arms,
-            } => {
-                Self::convert_func_refs_in_expr(scrutinee, func_sigs, type_table, module_source);
-                for arm in arms {
-                    if let Some(guard) = &mut arm.guard {
-                        Self::convert_func_refs_in_expr(
-                            guard,
-                            func_sigs,
-                            type_table,
-                            module_source,
-                        );
-                    }
-                    Self::convert_func_refs_in_expr(
-                        &mut arm.body,
-                        func_sigs,
-                        type_table,
-                        module_source,
-                    );
-                }
-            }
-            TirExprKind::VariantConstruct { payload, .. } => {
-                if let Some(p) = payload {
-                    Self::convert_func_refs_in_expr(p, func_sigs, type_table, module_source);
-                }
-            }
-            TirExprKind::GlobalVarSet { value, .. } => {
-                Self::convert_func_refs_in_expr(value, func_sigs, type_table, module_source);
-            }
-            // Lowered pattern matching nodes
-            TirExprKind::VariantTag { expr: inner }
-            | TirExprKind::VariantTest { expr: inner, .. }
-            | TirExprKind::VariantPayload { expr: inner, .. } => {
-                Self::convert_func_refs_in_expr(inner, func_sigs, type_table, module_source);
-            }
-            TirExprKind::Switch {
-                scrutinee,
-                arms,
-                default,
-                ..
-            } => {
-                Self::convert_func_refs_in_expr(scrutinee, func_sigs, type_table, module_source);
-                for arm in arms {
-                    Self::convert_func_refs_in_block(arm, func_sigs, type_table, module_source);
-                }
-                Self::convert_func_refs_in_block(default, func_sigs, type_table, module_source);
-            }
-            // Terminals - nothing to do
-            TirExprKind::IntLiteral { .. }
-            | TirExprKind::FloatLiteral { .. }
-            | TirExprKind::BoolLiteral(_)
-            | TirExprKind::CharLiteral(_)
-            | TirExprKind::StringLiteral(_)
-            | TirExprKind::BytesLiteral(_)
-            | TirExprKind::Null
-            | TirExprKind::Unit
-            | TirExprKind::Local { .. }
-            | TirExprKind::FuncRef { .. } // FuncRef not in func_sigs (external) - leave as-is
-            | TirExprKind::GlobalVarGet { .. }
-            | TirExprKind::Capture { .. }
-            | TirExprKind::EnumConstruct { .. } => {}
-            TirExprKind::TemplateString { .. } => {
-                unreachable!("TemplateString should be expanded before this phase")
-            }
-            TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
-                unreachable!("WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase")
             }
         }
     }
@@ -671,517 +418,28 @@ impl ClosureLowerer {
         }
     }
 
-    fn collect_closures_in_block(&mut self, block: &mut TirBlock) {
-        for stmt in &mut block.stmts {
-            self.collect_closures_in_stmt(stmt);
-        }
-    }
-
-    fn collect_closures_in_stmt(&mut self, stmt: &mut TirStmt) {
-        match &mut stmt.kind {
-            TirStmtKind::Let { value, .. } => {
-                self.collect_closures_in_expr(value);
-            }
-            TirStmtKind::Expr(expr) | TirStmtKind::Return { value: Some(expr) } => {
-                self.collect_closures_in_expr(expr);
-            }
-            TirStmtKind::Return { value: None } | TirStmtKind::Continue => {}
-            TirStmtKind::Break { value, .. } => {
-                if let Some(value) = value {
-                    self.collect_closures_in_expr(value);
-                }
-            }
-            TirStmtKind::If {
-                condition,
-                then_block,
-                else_block,
-            } => {
-                self.collect_closures_in_expr(condition);
-                self.collect_closures_in_block(then_block);
-                if let Some(else_blk) = else_block {
-                    self.collect_closures_in_block(else_blk);
-                }
-            }
-            TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-                self.collect_closures_in_block(body);
-            }
-            TirStmtKind::IfLet {
-                scrutinee,
-                then_block,
-                else_block,
-                ..
-            } => {
-                self.collect_closures_in_expr(scrutinee);
-                self.collect_closures_in_block(then_block);
-                if let Some(else_blk) = else_block {
-                    self.collect_closures_in_block(else_blk);
-                }
-            }
-            TirStmtKind::LetDestructure { value, .. } => {
-                self.collect_closures_in_expr(value);
-            }
-            TirStmtKind::TaskReturn { .. } => {
-                unreachable!("TaskReturn should be eliminated by synthesis before this phase")
-            }
-            TirStmtKind::VariadicForOf { .. } => {
-                unreachable!("VariadicForOf should be expanded during monomorphization")
-            }
-        }
-    }
-
-    fn collect_closures_in_expr(&mut self, expr: &mut TirExpr) {
-        match &mut expr.kind {
-            TirExprKind::Closure {
-                params,
-                body,
-                captures,
-                functor_id,
-                ..
-            } => {
-                // Assign a stable functor_id to this Closure node. Every
-                // later pass reads the ID off the node directly.
-                let closure_id = self.next_closure_id;
-                self.next_closure_id += 1;
-                *functor_id = Some(closure_id);
-
-                // Recurse into the body FIRST so nested closures get IDs
-                // assigned before we clone the body into `__call`. The
-                // clone then carries the same IDs as the original.
-                self.collect_closures_in_expr(body);
-
-                let func_type_id = expr.type_id;
-                let span = expr.span;
-                self.collected_closures.push(CollectedClosure {
-                    id: closure_id,
-                    params: params.clone(),
-                    body: (**body).clone(),
-                    captures: captures.clone(),
-                    return_type: body.type_id,
-                    func_type_id,
-                    span,
-                });
-            }
-            TirExprKind::Binary { left, right, .. } => {
-                self.collect_closures_in_expr(left);
-                self.collect_closures_in_expr(right);
-            }
-            TirExprKind::Unary { expr: inner, .. }
-            | TirExprKind::Cast { expr: inner, .. }
-            | TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::TupleSpread { expr: inner }
-            | TirExprKind::TupleZip { expr: inner }
-            | TirExprKind::TypePackExpansion {
-                call_expr: inner, ..
-            } => {
-                self.collect_closures_in_expr(inner);
-            }
-            TirExprKind::Call { args, .. } => {
-                for arg in args {
-                    self.collect_closures_in_expr(&mut arg.expr);
-                }
-            }
-            TirExprKind::CmRawCall { args, .. } => {
-                for arg in args {
-                    self.collect_closures_in_expr(arg);
-                }
-            }
-            TirExprKind::MethodCall { receiver, args, .. } => {
-                self.collect_closures_in_expr(receiver);
-                for arg in args {
-                    self.collect_closures_in_expr(&mut arg.expr);
-                }
-            }
-            TirExprKind::Block(block) => {
-                self.collect_closures_in_block(block);
-            }
-            TirExprKind::If {
-                condition,
-                then_branch,
-                else_branch,
-            } => {
-                self.collect_closures_in_expr(condition);
-                self.collect_closures_in_block(then_branch);
-                if let Some(else_blk) = else_branch {
-                    self.collect_closures_in_block(else_blk);
-                }
-            }
-            TirExprKind::StructLiteral { fields, .. } => {
-                for field in fields {
-                    self.collect_closures_in_expr(&mut field.value);
-                }
-            }
-            TirExprKind::TupleLiteral { elements } => {
-                for elem in elements {
-                    self.collect_closures_in_expr(elem);
-                }
-            }
-            TirExprKind::Assign { target, value } => {
-                self.collect_closures_in_expr(target);
-                self.collect_closures_in_expr(value);
-            }
-            TirExprKind::Index { expr: array, index } => {
-                self.collect_closures_in_expr(array);
-                self.collect_closures_in_expr(index);
-            }
-            TirExprKind::Match {
-                expr: scrutinee,
-                arms,
-            } => {
-                self.collect_closures_in_expr(scrutinee);
-                for arm in arms {
-                    if let Some(guard) = &mut arm.guard {
-                        self.collect_closures_in_expr(guard);
-                    }
-                    self.collect_closures_in_expr(&mut arm.body);
-                }
-            }
-            TirExprKind::IndirectCall { callee, args } => {
-                self.collect_closures_in_expr(callee);
-                for arg in args {
-                    self.collect_closures_in_expr(arg);
-                }
-            }
-            TirExprKind::ClosureToCanonical { functor, .. } => {
-                self.collect_closures_in_expr(functor);
-            }
-            TirExprKind::VariantConstruct { payload, .. } => {
-                if let Some(payload_expr) = payload {
-                    self.collect_closures_in_expr(payload_expr);
-                }
-            }
-            TirExprKind::LabeledBlock { block, .. } => {
-                self.collect_closures_in_block(block);
-            }
-            TirExprKind::GlobalVarSet { value, .. } => {
-                self.collect_closures_in_expr(value);
-            }
-            // Lowered pattern matching nodes
-            TirExprKind::VariantTag { expr }
-            | TirExprKind::VariantTest { expr, .. }
-            | TirExprKind::VariantPayload { expr, .. } => {
-                self.collect_closures_in_expr(expr);
-            }
-            TirExprKind::Switch {
-                scrutinee,
-                arms,
-                default,
-                ..
-            } => {
-                self.collect_closures_in_expr(scrutinee);
-                for arm in arms {
-                    self.collect_closures_in_block(arm);
-                }
-                self.collect_closures_in_block(default);
-            }
-            // Terminals - no closures
-            TirExprKind::IntLiteral { .. }
-            | TirExprKind::FloatLiteral { .. }
-            | TirExprKind::BoolLiteral(_)
-            | TirExprKind::CharLiteral(_)
-            | TirExprKind::StringLiteral(_)
-            | TirExprKind::BytesLiteral(_)
-            | TirExprKind::Null
-            | TirExprKind::Unit
-            | TirExprKind::Local { .. }
-            | TirExprKind::FuncRef { .. }
-            | TirExprKind::GlobalVarGet { .. }
-            | TirExprKind::Capture { .. }
-            | TirExprKind::EnumConstruct { .. } => {}
-            TirExprKind::TemplateString { .. } => {
-                unreachable!("TemplateString should be expanded before this phase")
-            }
-            TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
-                unreachable!(
-                    "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
-                )
-            }
-        }
-    }
-
-    /// Analyze a block to identify which closures are safe to transform
-    fn analyze_closure_safety_block(&mut self, block: &TirBlock) {
-        for stmt in &block.stmts {
-            self.analyze_closure_safety_stmt(stmt);
-        }
-    }
-
-    fn analyze_closure_safety_stmt(&mut self, stmt: &TirStmt) {
-        match &stmt.kind {
-            TirStmtKind::Let {
-                local_index, value, ..
-            } => {
-                // If this local stores a closure, track it. The closure's
-                // ID was assigned during the collect pass and lives on the
-                // node; reading it here keeps every pass in sync without a
-                // separate counter.
-                if let TirExprKind::Closure {
-                    functor_id: Some(closure_id),
-                    ..
-                } = &value.kind
-                {
-                    self.local_to_closure.insert(*local_index, *closure_id);
-                    // Initially mark as safe; will be removed if passed as argument
-                    self.specializable.insert(*closure_id);
-                }
-                // Analyze the value expression
-                self.analyze_closure_safety_expr(value, false);
-            }
-            TirStmtKind::Expr(expr) | TirStmtKind::Return { value: Some(expr) } => {
-                self.analyze_closure_safety_expr(expr, false);
-            }
-            TirStmtKind::Return { value: None } | TirStmtKind::Continue => {}
-            TirStmtKind::Break { value, .. } => {
-                if let Some(value) = value {
-                    self.analyze_closure_safety_expr(value, false);
-                }
-            }
-            TirStmtKind::If {
-                condition,
-                then_block,
-                else_block,
-            } => {
-                self.analyze_closure_safety_expr(condition, false);
-                self.analyze_closure_safety_block(then_block);
-                if let Some(else_blk) = else_block {
-                    self.analyze_closure_safety_block(else_blk);
-                }
-            }
-            TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-                self.analyze_closure_safety_block(body);
-            }
-            TirStmtKind::IfLet {
-                scrutinee,
-                then_block,
-                else_block,
-                ..
-            } => {
-                self.analyze_closure_safety_expr(scrutinee, false);
-                self.analyze_closure_safety_block(then_block);
-                if let Some(else_blk) = else_block {
-                    self.analyze_closure_safety_block(else_blk);
-                }
-            }
-            TirStmtKind::LetDestructure { value, .. } => {
-                self.analyze_closure_safety_expr(value, false);
-            }
-            TirStmtKind::TaskReturn { .. } => {
-                unreachable!("TaskReturn should be eliminated by synthesis before this phase")
-            }
-            TirStmtKind::VariadicForOf { .. } => {
-                unreachable!("VariadicForOf should be expanded during monomorphization")
-            }
-        }
-    }
-
-    /// Analyze an expression for closure safety
-    /// `in_arg_position` is true when this expression is being passed as an argument
-    fn analyze_closure_safety_expr(&mut self, expr: &TirExpr, in_arg_position: bool) {
-        match &expr.kind {
-            TirExprKind::Closure {
-                body,
-                functor_id: Some(closure_id),
-                ..
-            } => {
-                // If a closure appears directly as an argument, it's not safe to transform
-                if in_arg_position {
-                    self.specializable.swap_remove(closure_id);
-                }
-
-                // The closure body uses a fresh local-index namespace
-                // starting at 0, so `local_to_closure` entries from the
-                // outer scope must not leak in: a `let inner = ||..`
-                // inside this body would otherwise insert at an index
-                // that collides with an outer-scope local. Save/restore
-                // the map across the descent so each closure scope is
-                // isolated.
-                let saved = std::mem::take(&mut self.local_to_closure);
-                self.analyze_closure_safety_expr(body, false);
-                self.local_to_closure = saved;
-            }
-            TirExprKind::Closure {
-                functor_id: None, ..
-            } => {
-                unreachable!(
-                    "Closure node missing functor_id; the collect pass should assign it (span: {:?}, kind: {:?})",
-                    expr.span, &expr.kind
-                )
-            }
-            TirExprKind::Local { index, .. } => {
-                // If a local that holds a closure is passed as an argument, mark it unsafe
-                if in_arg_position && let Some(closure_id) = self.local_to_closure.get(index) {
-                    self.specializable.swap_remove(closure_id);
-                }
-            }
-            TirExprKind::Call { args, .. } => {
-                // Arguments are in argument position
-                for arg in args {
-                    self.analyze_closure_safety_expr(&arg.expr, true);
-                }
-            }
-            TirExprKind::CmRawCall { args, .. } => {
-                // Arguments are in argument position
-                for arg in args {
-                    self.analyze_closure_safety_expr(arg, true);
-                }
-            }
-            TirExprKind::MethodCall { receiver, args, .. } => {
-                // Receiver is not in argument position for method calls
-                self.analyze_closure_safety_expr(receiver, false);
-                // Arguments are in argument position
-                for arg in args {
-                    self.analyze_closure_safety_expr(&arg.expr, true);
-                }
-            }
-            TirExprKind::IndirectCall { callee, args } => {
-                // Callee is not an argument (it's what's being called)
-                self.analyze_closure_safety_expr(callee, false);
-                // Arguments are in argument position
-                for arg in args {
-                    self.analyze_closure_safety_expr(arg, true);
-                }
-            }
-            TirExprKind::ClosureToCanonical { functor, .. } => {
-                self.analyze_closure_safety_expr(functor, in_arg_position);
-            }
-            TirExprKind::Binary { left, right, .. } => {
-                self.analyze_closure_safety_expr(left, false);
-                self.analyze_closure_safety_expr(right, false);
-            }
-            TirExprKind::Unary { expr: inner, .. }
-            | TirExprKind::Cast { expr: inner, .. }
-            | TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::TupleSpread { expr: inner }
-            | TirExprKind::TupleZip { expr: inner }
-            | TirExprKind::TypePackExpansion {
-                call_expr: inner, ..
-            } => {
-                self.analyze_closure_safety_expr(inner, false);
-            }
-            TirExprKind::Block(block) => {
-                self.analyze_closure_safety_block(block);
-            }
-            TirExprKind::If {
-                condition,
-                then_branch,
-                else_branch,
-            } => {
-                self.analyze_closure_safety_expr(condition, false);
-                self.analyze_closure_safety_block(then_branch);
-                if let Some(else_blk) = else_branch {
-                    self.analyze_closure_safety_block(else_blk);
-                }
-            }
-            TirExprKind::StructLiteral { fields, .. } => {
-                for field in fields {
-                    self.analyze_closure_safety_expr(&field.value, false);
-                }
-            }
-            TirExprKind::TupleLiteral { elements } => {
-                for elem in elements {
-                    self.analyze_closure_safety_expr(elem, false);
-                }
-            }
-            TirExprKind::Assign { target, value } => {
-                self.analyze_closure_safety_expr(target, false);
-                self.analyze_closure_safety_expr(value, false);
-            }
-            TirExprKind::Index { expr: array, index } => {
-                self.analyze_closure_safety_expr(array, false);
-                self.analyze_closure_safety_expr(index, false);
-            }
-            TirExprKind::Match {
-                expr: scrutinee,
-                arms,
-            } => {
-                self.analyze_closure_safety_expr(scrutinee, false);
-                for arm in arms {
-                    if let Some(guard) = &arm.guard {
-                        self.analyze_closure_safety_expr(guard, false);
-                    }
-                    self.analyze_closure_safety_expr(&arm.body, false);
-                }
-            }
-            TirExprKind::VariantConstruct { payload, .. } => {
-                if let Some(payload_expr) = payload {
-                    self.analyze_closure_safety_expr(payload_expr, false);
-                }
-            }
-            TirExprKind::LabeledBlock { block, .. } => {
-                self.analyze_closure_safety_block(block);
-            }
-            TirExprKind::GlobalVarSet { value, .. } => {
-                self.analyze_closure_safety_expr(value, false);
-            }
-            // Lowered pattern matching nodes
-            TirExprKind::VariantTag { expr }
-            | TirExprKind::VariantTest { expr, .. }
-            | TirExprKind::VariantPayload { expr, .. } => {
-                self.analyze_closure_safety_expr(expr, false);
-            }
-            TirExprKind::Switch {
-                scrutinee,
-                arms,
-                default,
-                ..
-            } => {
-                self.analyze_closure_safety_expr(scrutinee, false);
-                for arm in arms {
-                    self.analyze_closure_safety_block(arm);
-                }
-                self.analyze_closure_safety_block(default);
-            }
-            // Terminals
-            TirExprKind::IntLiteral { .. }
-            | TirExprKind::FloatLiteral { .. }
-            | TirExprKind::BoolLiteral(_)
-            | TirExprKind::CharLiteral(_)
-            | TirExprKind::StringLiteral(_)
-            | TirExprKind::BytesLiteral(_)
-            | TirExprKind::Null
-            | TirExprKind::Unit
-            | TirExprKind::FuncRef { .. }
-            | TirExprKind::GlobalVarGet { .. }
-            | TirExprKind::Capture { .. }
-            | TirExprKind::EnumConstruct { .. } => {}
-            TirExprKind::TemplateString { .. } => {
-                unreachable!("TemplateString should be expanded before this phase")
-            }
-            TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
-                unreachable!(
-                    "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
-                )
-            }
-        }
-    }
-
     fn generate_functor_items(&mut self, type_table: &mut TypeTable) {
-        // The collect pass pushes nested closures before their parents (it
-        // recurses into the body before pushing the outer, so the cloned
-        // body carries the nested IDs). Sort by id so `functor_infos[id]`
-        // is the functor for the closure with that id — every later pass
-        // uses index-by-id lookups.
+        // Sort by id so `functor_infos[id]` is the functor with that id —
+        // every later pass uses index-by-id lookups.
         //
-        // Move out of `self.collected_closures` to avoid cloning the bodies:
-        // the loop body needs `&mut self` to push to `generated_structs` and
-        // `functor_infos`, but the borrow checker would otherwise see one
-        // long borrow over `collected_closures`. The list isn't read again
-        // after this pass, so we drop it at the end.
+        // Move out of `self.collected_closures` to dodge a long borrow:
+        // the loop body needs `&mut self` to push to `generated_structs`
+        // and `functor_infos`. The list isn't read after this pass.
         let mut collected_closures = std::mem::take(&mut self.collected_closures);
         collected_closures.sort_by_key(|c| c.id);
         for collected in &collected_closures {
-            // Extract the actual return type from the closure's function type
-            // This is more reliable than body.type_id for closures with block bodies
+            // `collected.body.type_id` is unreliable for block bodies
+            // (it's the block's type, not the closure's), so prefer the
+            // function type's return slot when available.
             let return_type = match type_table.get(collected.func_type_id) {
                 ResolvedType::Function { return_type, .. } => *return_type,
-                _ => collected.return_type, // Fallback to body type
+                _ => collected.return_type,
             };
 
-            // Generate struct name and type
             let struct_name = format!("__Closure_{}", collected.id);
             let struct_type_id =
                 type_table.make_struct(struct_name.clone(), self.module_source.clone());
 
-            // Generate struct definition with capture fields
             let fields: Vec<TirField> = collected
                 .captures
                 .iter()
@@ -1199,7 +457,7 @@ impl ClosureLowerer {
                 })
                 .collect();
 
-            let tir_struct = TirStruct {
+            self.generated_structs.push(TirStruct {
                 name: struct_name.clone(),
                 module_source: self.module_source.clone(),
                 is_pub: false,
@@ -1208,17 +466,15 @@ impl ClosureLowerer {
                 fields,
                 span: collected.span,
                 serde_rename_all: None,
-            };
-            self.generated_structs.push(tir_struct);
+            });
 
-            // Generate __call method
-            // Use a qualified name for the function to avoid collisions in the inliner's candidate map
-            let simple_method_name = "__call".to_string();
+            // Use a qualified name to avoid collisions in the inliner's
+            // candidate map. `LocalMethodName` stays unqualified so codegen
+            // re-mangles it consistently with other methods.
             let qualified_method_name = MethodName::format_local(&struct_name, None, "__call");
             let self_ref_type = type_table.make_ref(struct_type_id);
 
-            // Parameters: self + closure params
-            let mut params = Vec::new();
+            let mut params = Vec::with_capacity(1 + collected.params.len());
             params.push(TirParam {
                 name: "self".to_string(),
                 type_id: self_ref_type,
@@ -1227,7 +483,6 @@ impl ClosureLowerer {
                 span: collected.span,
                 default_expr: None,
             });
-
             for (i, (name, type_id)) in collected.params.iter().enumerate() {
                 params.push(TirParam {
                     name: name.clone(),
@@ -1239,51 +494,38 @@ impl ClosureLowerer {
                 });
             }
 
-            // Transform the body: Capture { index } -> FieldAccess { self, __capture_{index} }
-            let transformed_body = self.transform_closure_body(
-                &collected.body,
-                &collected.captures,
-                struct_type_id,
+            // Rewrite Capture→FieldAccess and shift every Local / Let /
+            // Binding index by 1 to make room for the synthetic `self`.
+            let mut transformed_body = collected.body.clone();
+            ClosureBodyTransformer {
+                captures: &collected.captures,
                 self_ref_type,
-                &collected.span,
-            );
+                self_span: collected.span,
+            }
+            .visit_expr(&mut transformed_body);
 
-            // Handle body wrapping based on body type
-            // For block bodies, extract statements directly to preserve Return handling during inlining
-            // For expression bodies, wrap in Return
+            // Block bodies: keep the inner statements as-is so that any
+            // Return inside survives. The inliner's `remap_stmt_with_label`
+            // turns Return into Break only at the statement level, so a
+            // Return wrapped inside a Block expression would be missed.
             let body_stmts = match &transformed_body.kind {
-                TirExprKind::Block(block) => {
-                    // Block body: use statements directly (they already contain Return statements)
-                    // This is important for inlining: the inliner's remap_stmt_with_label
-                    // converts Return to Break, but only at the statement level, not inside
-                    // Block expressions.
-                    block.stmts.clone()
-                }
-                _ => {
-                    if return_type == TypeTable::UNIT {
-                        // Unit return: just evaluate the expression for side effects
-                        vec![TirStmt::new(
-                            TirStmtKind::Expr(transformed_body),
-                            collected.span,
-                        )]
-                    } else {
-                        // Expression body that returns a value
-                        vec![TirStmt::new(
-                            TirStmtKind::Return {
-                                value: Some(transformed_body),
-                            },
-                            collected.span,
-                        )]
-                    }
-                }
+                TirExprKind::Block(block) => block.stmts.clone(),
+                _ if return_type == TypeTable::UNIT => vec![TirStmt::new(
+                    TirStmtKind::Expr(transformed_body),
+                    collected.span,
+                )],
+                _ => vec![TirStmt::new(
+                    TirStmtKind::Return {
+                        value: Some(transformed_body),
+                    },
+                    collected.span,
+                )],
             };
 
             let body_block = TirBlock::new(body_stmts, collected.span);
 
-            // Collect locals: self + params + internal locals from body.
-            // Parameters are locals 0 (self) through params.len(); the
-            // closure-functor's `__call` method receives the env struct as
-            // self, so the first slot is the synthesised self ref.
+            // Locals layout: 0=self, 1..=params.len()=closure params,
+            // then any further locals introduced by `Let`s in the body.
             let param_count = 1 + collected.params.len() as u32;
             let mut locals: Vec<TirLocal> = Vec::with_capacity(param_count as usize);
             locals.push(TirLocal {
@@ -1299,20 +541,19 @@ impl ClosureLowerer {
                 });
             }
 
-            // Collect internal locals from the body (Let statements with index >= param_count)
             let mut body_locals: Vec<(u32, TypeId)> = Vec::new();
-            Self::collect_locals_from_block(&body_block, &mut body_locals);
+            LocalCollector {
+                locals: &mut body_locals,
+            }
+            .visit_block(&body_block);
 
-            // Extend `locals` with body locals, sorted by index. Body locals
-            // come from the closure body's `Let` statements; the source
-            // names are recovered later in `wir_build` via
-            // `TirFunction::locals[idx].name`, so here we only need stable
-            // synthetic placeholders.
+            // Body locals use synthetic placeholders here; `wir_build`
+            // recovers source names from `TirFunction::locals[idx].name`.
             body_locals.sort_by_key(|(idx, _)| *idx);
             for (idx, type_id) in &body_locals {
-                // Ensure we only add locals beyond parameter range
                 if *idx >= param_count {
-                    // Extend vector if needed to accommodate sparse indices
+                    // Pad sparse indices with placeholders so the slot the
+                    // body actually uses lands at the right index.
                     while locals.len() <= *idx as usize {
                         let placeholder_idx = locals.len() as u32;
                         locals.push(TirLocal::synth(placeholder_idx, TypeTable::UNKNOWN, false));
@@ -1321,15 +562,11 @@ impl ClosureLowerer {
                 }
             }
 
-            // local_count is the total number of locals
             let local_count = locals.len() as u32;
 
-            // method_info tells codegen how to register this function with the proper mangled name
-            let method_info = LocalMethodName::new(
-                struct_name.clone(),        // __Closure_0
-                None,                       // no trait
-                simple_method_name.clone(), // __call (just the method name)
-            );
+            // `method_info` carries the unmangled (struct, trait, method)
+            // triple so codegen can produce the canonical mangled name.
+            let method_info = LocalMethodName::new(struct_name.clone(), None, "__call".to_string());
 
             let call_method = TirFunction {
                 module_source: self.module_source.clone(),
@@ -1378,1726 +615,76 @@ impl ClosureLowerer {
         }
     }
 
-    /// Collect all local variable declarations from a block, including nested blocks.
-    /// Returns pairs of (`local_index`, `type_id`) for each Let statement found.
-    fn collect_locals_from_block(block: &TirBlock, locals: &mut Vec<(u32, TypeId)>) {
-        for stmt in &block.stmts {
-            Self::collect_locals_from_stmt(stmt, locals);
-        }
-    }
-
-    fn collect_locals_from_stmt(stmt: &TirStmt, locals: &mut Vec<(u32, TypeId)>) {
-        match &stmt.kind {
-            TirStmtKind::Let {
-                local_index,
-                type_id,
-                value,
-                ..
-            } => {
-                locals.push((*local_index, *type_id));
-                Self::collect_locals_from_expr(value, locals);
-            }
-            TirStmtKind::Expr(expr) | TirStmtKind::Return { value: Some(expr) } => {
-                Self::collect_locals_from_expr(expr, locals);
-            }
-            TirStmtKind::Return { value: None } | TirStmtKind::Continue => {}
-            TirStmtKind::Break { value, .. } => {
-                if let Some(value) = value {
-                    Self::collect_locals_from_expr(value, locals);
-                }
-            }
-            TirStmtKind::If {
-                condition,
-                then_block,
-                else_block,
-            } => {
-                Self::collect_locals_from_expr(condition, locals);
-                Self::collect_locals_from_block(then_block, locals);
-                if let Some(else_blk) = else_block {
-                    Self::collect_locals_from_block(else_blk, locals);
-                }
-            }
-            TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-                Self::collect_locals_from_block(body, locals);
-            }
-            TirStmtKind::IfLet {
-                scrutinee,
-                then_block,
-                else_block,
-                ..
-            } => {
-                Self::collect_locals_from_expr(scrutinee, locals);
-                Self::collect_locals_from_block(then_block, locals);
-                if let Some(else_blk) = else_block {
-                    Self::collect_locals_from_block(else_blk, locals);
-                }
-            }
-            TirStmtKind::LetDestructure { value, .. } => {
-                Self::collect_locals_from_expr(value, locals);
-            }
-            TirStmtKind::TaskReturn { .. } => {
-                unreachable!("TaskReturn should be eliminated by synthesis before this phase")
-            }
-            TirStmtKind::VariadicForOf { .. } => {
-                unreachable!("VariadicForOf should be expanded during monomorphization")
-            }
-        }
-    }
-
-    fn collect_locals_from_expr(expr: &TirExpr, locals: &mut Vec<(u32, TypeId)>) {
-        match &expr.kind {
-            TirExprKind::Block(block) => {
-                Self::collect_locals_from_block(block, locals);
-            }
-            TirExprKind::If {
-                condition,
-                then_branch,
-                else_branch,
-            } => {
-                Self::collect_locals_from_expr(condition, locals);
-                Self::collect_locals_from_block(then_branch, locals);
-                if let Some(else_blk) = else_branch {
-                    Self::collect_locals_from_block(else_blk, locals);
-                }
-            }
-            TirExprKind::Binary { left, right, .. } => {
-                Self::collect_locals_from_expr(left, locals);
-                Self::collect_locals_from_expr(right, locals);
-            }
-            TirExprKind::Unary { expr: inner, .. }
-            | TirExprKind::Cast { expr: inner, .. }
-            | TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::TupleSpread { expr: inner }
-            | TirExprKind::TupleZip { expr: inner }
-            | TirExprKind::TypePackExpansion {
-                call_expr: inner, ..
-            } => {
-                Self::collect_locals_from_expr(inner, locals);
-            }
-            TirExprKind::Call { args, .. } => {
-                for arg in args {
-                    Self::collect_locals_from_expr(&arg.expr, locals);
-                }
-            }
-            TirExprKind::CmRawCall { args, .. } => {
-                for arg in args {
-                    Self::collect_locals_from_expr(arg, locals);
-                }
-            }
-            TirExprKind::MethodCall { receiver, args, .. } => {
-                Self::collect_locals_from_expr(receiver, locals);
-                for arg in args {
-                    Self::collect_locals_from_expr(&arg.expr, locals);
-                }
-            }
-            TirExprKind::IndirectCall { callee, args } => {
-                Self::collect_locals_from_expr(callee, locals);
-                for arg in args {
-                    Self::collect_locals_from_expr(arg, locals);
-                }
-            }
-            TirExprKind::Index { expr: array, index } => {
-                Self::collect_locals_from_expr(array, locals);
-                Self::collect_locals_from_expr(index, locals);
-            }
-            TirExprKind::Assign { target, value } => {
-                Self::collect_locals_from_expr(target, locals);
-                Self::collect_locals_from_expr(value, locals);
-            }
-            TirExprKind::StructLiteral { fields, .. } => {
-                for field in fields {
-                    Self::collect_locals_from_expr(&field.value, locals);
-                }
-            }
-            TirExprKind::TupleLiteral { elements } => {
-                for elem in elements {
-                    Self::collect_locals_from_expr(elem, locals);
-                }
-            }
-            TirExprKind::Match {
-                expr: scrutinee,
-                arms,
-            } => {
-                Self::collect_locals_from_expr(scrutinee, locals);
-                for arm in arms {
-                    if let Some(guard) = &arm.guard {
-                        Self::collect_locals_from_expr(guard, locals);
-                    }
-                    Self::collect_locals_from_expr(&arm.body, locals);
-                }
-            }
-            TirExprKind::VariantConstruct { payload, .. } => {
-                if let Some(payload_expr) = payload {
-                    Self::collect_locals_from_expr(payload_expr, locals);
-                }
-            }
-            TirExprKind::LabeledBlock { block, .. } => {
-                Self::collect_locals_from_block(block, locals);
-            }
-            TirExprKind::Switch {
-                scrutinee,
-                arms,
-                default,
-                ..
-            } => {
-                Self::collect_locals_from_expr(scrutinee, locals);
-                for arm in arms {
-                    Self::collect_locals_from_block(arm, locals);
-                }
-                Self::collect_locals_from_block(default, locals);
-            }
-            TirExprKind::VariantTag { expr: inner }
-            | TirExprKind::VariantTest { expr: inner, .. }
-            | TirExprKind::VariantPayload { expr: inner, .. } => {
-                Self::collect_locals_from_expr(inner, locals);
-            }
-            TirExprKind::ClosureToCanonical { functor, .. } => {
-                Self::collect_locals_from_expr(functor, locals);
-            }
-            TirExprKind::GlobalVarSet { value, .. } => {
-                Self::collect_locals_from_expr(value, locals);
-            }
-            // Terminals - no locals to collect
-            _ => {}
-        }
-    }
-
-    /// Transform closure body: replace Capture with `FieldAccess` on self
-    fn transform_closure_body(
-        &self,
-        expr: &TirExpr,
-        captures: &[TirCapture],
-        struct_type_id: TypeId,
-        self_ref_type: TypeId,
-        span: &Span,
-    ) -> TirExpr {
-        match &expr.kind {
-            TirExprKind::Capture { index, name: _ } => {
-                // Transform: Capture { index } -> self.__capture_{index}
-                let self_expr = TirExpr::new(
-                    TirExprKind::Local {
-                        index: 0, // self is at local 0
-                        name: "self".to_string(),
-                    },
-                    self_ref_type,
-                    *span,
-                );
-
-                let field_name = format!("__capture_{index}");
-                let cap_type = captures
-                    .get(*index as usize)
-                    .map_or(TypeTable::UNKNOWN, |c| c.type_id);
-
-                TirExpr::new(
-                    TirExprKind::FieldAccess {
-                        expr: Box::new(self_expr),
-                        field_index: *index,
-                        field_name,
-                    },
-                    cap_type,
-                    *span,
-                )
-            }
-            TirExprKind::Binary { left, op, right } => TirExpr::new(
-                TirExprKind::Binary {
-                    left: Box::new(self.transform_closure_body(
-                        left,
-                        captures,
-                        struct_type_id,
-                        self_ref_type,
-                        span,
-                    )),
-                    op: *op,
-                    right: Box::new(self.transform_closure_body(
-                        right,
-                        captures,
-                        struct_type_id,
-                        self_ref_type,
-                        span,
-                    )),
-                },
-                expr.type_id,
-                expr.span,
-            ),
-            TirExprKind::Unary { op, expr: inner } => TirExpr::new(
-                TirExprKind::Unary {
-                    op: *op,
-                    expr: Box::new(self.transform_closure_body(
-                        inner,
-                        captures,
-                        struct_type_id,
-                        self_ref_type,
-                        span,
-                    )),
-                },
-                expr.type_id,
-                expr.span,
-            ),
-            TirExprKind::Local { index, name } => {
-                // Adjust local indices: closure params start at local 1 (after self)
-                // Original closure param 0 becomes local 1, etc.
-                TirExpr::new(
-                    TirExprKind::Local {
-                        index: index + 1,
-                        name: name.clone(),
-                    },
-                    expr.type_id,
-                    expr.span,
-                )
-            }
-            TirExprKind::Block(block) => {
-                let transformed_block = self.transform_closure_body_block(
-                    block,
-                    captures,
-                    struct_type_id,
-                    self_ref_type,
-                );
-                TirExpr::new(
-                    TirExprKind::Block(transformed_block),
-                    expr.type_id,
-                    expr.span,
-                )
-            }
-            TirExprKind::LabeledBlock {
-                label,
-                block,
-                result_type,
-            } => {
-                let transformed_block = self.transform_closure_body_block(
-                    block,
-                    captures,
-                    struct_type_id,
-                    self_ref_type,
-                );
-                TirExpr::new(
-                    TirExprKind::LabeledBlock {
-                        label: label.clone(),
-                        block: transformed_block,
-                        result_type: *result_type,
-                    },
-                    expr.type_id,
-                    expr.span,
-                )
-            }
-            TirExprKind::If {
-                condition,
-                then_branch,
-                else_branch,
-            } => TirExpr::new(
-                TirExprKind::If {
-                    condition: Box::new(self.transform_closure_body(
-                        condition,
-                        captures,
-                        struct_type_id,
-                        self_ref_type,
-                        span,
-                    )),
-                    then_branch: self.transform_closure_body_block(
-                        then_branch,
-                        captures,
-                        struct_type_id,
-                        self_ref_type,
-                    ),
-                    else_branch: else_branch.as_ref().map(|b| {
-                        self.transform_closure_body_block(
-                            b,
-                            captures,
-                            struct_type_id,
-                            self_ref_type,
-                        )
-                    }),
-                },
-                expr.type_id,
-                expr.span,
-            ),
-            TirExprKind::Cast {
-                expr: inner,
-                target_type,
-            } => TirExpr::new(
-                TirExprKind::Cast {
-                    expr: Box::new(self.transform_closure_body(
-                        inner,
-                        captures,
-                        struct_type_id,
-                        self_ref_type,
-                        span,
-                    )),
-                    target_type: *target_type,
-                },
-                expr.type_id,
-                expr.span,
-            ),
-            TirExprKind::StructLiteral {
-                struct_type,
-                struct_name,
-                fields,
-            } => {
-                let new_fields = fields
-                    .iter()
-                    .map(|f| TirStructField {
-                        name: f.name.clone(),
-                        value: self.transform_closure_body(
-                            &f.value,
-                            captures,
-                            struct_type_id,
-                            self_ref_type,
-                            span,
-                        ),
-                        field_index: f.field_index,
-                    })
-                    .collect();
-                TirExpr::new(
-                    TirExprKind::StructLiteral {
-                        struct_type: *struct_type,
-                        struct_name: struct_name.clone(),
-                        fields: new_fields,
-                    },
-                    expr.type_id,
-                    expr.span,
-                )
-            }
-            TirExprKind::Call {
-                func,
-                type_args,
-                args,
-            } => {
-                let new_args = args
-                    .iter()
-                    .map(|a| {
-                        CallArg::new(
-                            self.transform_closure_body(
-                                &a.expr,
-                                captures,
-                                struct_type_id,
-                                self_ref_type,
-                                span,
-                            ),
-                            a.is_mut,
-                        )
-                    })
-                    .collect();
-                TirExpr::new(
-                    TirExprKind::Call {
-                        func: func.clone(),
-                        type_args: type_args.clone(),
-                        args: new_args,
-                    },
-                    expr.type_id,
-                    expr.span,
-                )
-            }
-            TirExprKind::MethodCall {
-                receiver,
-                func,
-                type_args,
-                args,
-                ..
-            } => {
-                let new_receiver = self.transform_closure_body(
-                    receiver,
-                    captures,
-                    struct_type_id,
-                    self_ref_type,
-                    span,
-                );
-                let new_args = args
-                    .iter()
-                    .map(|a| {
-                        CallArg::new(
-                            self.transform_closure_body(
-                                &a.expr,
-                                captures,
-                                struct_type_id,
-                                self_ref_type,
-                                span,
-                            ),
-                            a.is_mut,
-                        )
-                    })
-                    .collect();
-                TirExpr::new(
-                    TirExprKind::method_call(
-                        Box::new(new_receiver),
-                        func.clone(),
-                        type_args.clone(),
-                        new_args,
-                    ),
-                    expr.type_id,
-                    expr.span,
-                )
-            }
-            TirExprKind::FieldAccess {
-                expr: inner,
-                field_index,
-                field_name,
-            } => {
-                let new_inner = self.transform_closure_body(
-                    inner,
-                    captures,
-                    struct_type_id,
-                    self_ref_type,
-                    span,
-                );
-                TirExpr::new(
-                    TirExprKind::FieldAccess {
-                        expr: Box::new(new_inner),
-                        field_index: *field_index,
-                        field_name: field_name.clone(),
-                    },
-                    expr.type_id,
-                    expr.span,
-                )
-            }
-            TirExprKind::Assign { target, value } => {
-                let new_target = self.transform_closure_body(
-                    target,
-                    captures,
-                    struct_type_id,
-                    self_ref_type,
-                    span,
-                );
-                let new_value = self.transform_closure_body(
-                    value,
-                    captures,
-                    struct_type_id,
-                    self_ref_type,
-                    span,
-                );
-                TirExpr::new(
-                    TirExprKind::Assign {
-                        target: Box::new(new_target),
-                        value: Box::new(new_value),
-                    },
-                    expr.type_id,
-                    expr.span,
-                )
-            }
-            TirExprKind::Index { expr: array, index } => {
-                let new_array = self.transform_closure_body(
-                    array,
-                    captures,
-                    struct_type_id,
-                    self_ref_type,
-                    span,
-                );
-                let new_index = self.transform_closure_body(
-                    index,
-                    captures,
-                    struct_type_id,
-                    self_ref_type,
-                    span,
-                );
-                TirExpr::new(
-                    TirExprKind::Index {
-                        expr: Box::new(new_array),
-                        index: Box::new(new_index),
-                    },
-                    expr.type_id,
-                    expr.span,
-                )
-            }
-            TirExprKind::TupleLiteral { elements } => {
-                let new_elements = elements
-                    .iter()
-                    .map(|e| {
-                        self.transform_closure_body(
-                            e,
-                            captures,
-                            struct_type_id,
-                            self_ref_type,
-                            span,
-                        )
-                    })
-                    .collect();
-                TirExpr::new(
-                    TirExprKind::TupleLiteral {
-                        elements: new_elements,
-                    },
-                    expr.type_id,
-                    expr.span,
-                )
-            }
-            TirExprKind::TupleSpread { expr: inner } => {
-                let new_inner = self.transform_closure_body(
-                    inner,
-                    captures,
-                    struct_type_id,
-                    self_ref_type,
-                    span,
-                );
-                TirExpr::new(
-                    TirExprKind::TupleSpread {
-                        expr: Box::new(new_inner),
-                    },
-                    expr.type_id,
-                    expr.span,
-                )
-            }
-            TirExprKind::TupleZip { expr: inner } => {
-                let new_inner = self.transform_closure_body(
-                    inner,
-                    captures,
-                    struct_type_id,
-                    self_ref_type,
-                    span,
-                );
-                TirExpr::new(
-                    TirExprKind::TupleZip {
-                        expr: Box::new(new_inner),
-                    },
-                    expr.type_id,
-                    expr.span,
-                )
-            }
-            TirExprKind::TypePackExpansion {
-                call_expr: inner,
-                pack_type_id,
-            } => {
-                let new_inner = self.transform_closure_body(
-                    inner,
-                    captures,
-                    struct_type_id,
-                    self_ref_type,
-                    span,
-                );
-                TirExpr::new(
-                    TirExprKind::TypePackExpansion {
-                        call_expr: Box::new(new_inner),
-                        pack_type_id: *pack_type_id,
-                    },
-                    expr.type_id,
-                    expr.span,
-                )
-            }
-            TirExprKind::CmRawCall { local_name, args } => {
-                let new_args = args
-                    .iter()
-                    .map(|a| {
-                        self.transform_closure_body(
-                            a,
-                            captures,
-                            struct_type_id,
-                            self_ref_type,
-                            span,
-                        )
-                    })
-                    .collect();
-                TirExpr::new(
-                    TirExprKind::CmRawCall {
-                        local_name: local_name.clone(),
-                        args: new_args,
-                    },
-                    expr.type_id,
-                    expr.span,
-                )
-            }
-            TirExprKind::IndirectCall { callee, args } => {
-                let new_callee = self.transform_closure_body(
-                    callee,
-                    captures,
-                    struct_type_id,
-                    self_ref_type,
-                    span,
-                );
-                let new_args = args
-                    .iter()
-                    .map(|a| {
-                        self.transform_closure_body(
-                            a,
-                            captures,
-                            struct_type_id,
-                            self_ref_type,
-                            span,
-                        )
-                    })
-                    .collect();
-                TirExpr::new(
-                    TirExprKind::IndirectCall {
-                        callee: Box::new(new_callee),
-                        args: new_args,
-                    },
-                    expr.type_id,
-                    expr.span,
-                )
-            }
-            TirExprKind::ClosureToCanonical {
-                functor,
-                functor_id,
-                target_fn_type,
-                closure_module,
-            } => TirExpr::new(
-                TirExprKind::ClosureToCanonical {
-                    functor: Box::new(self.transform_closure_body(
-                        functor,
-                        captures,
-                        struct_type_id,
-                        self_ref_type,
-                        span,
-                    )),
-                    functor_id: *functor_id,
-                    target_fn_type: *target_fn_type,
-                    closure_module: closure_module.clone(),
-                },
-                expr.type_id,
-                expr.span,
-            ),
-            TirExprKind::Match {
-                expr: scrutinee,
-                arms,
-            } => {
-                let new_scrutinee = self.transform_closure_body(
-                    scrutinee,
-                    captures,
-                    struct_type_id,
-                    self_ref_type,
-                    span,
-                );
-                let new_arms = arms
-                    .iter()
-                    .map(|arm| TirMatchArm {
-                        pattern: self.transform_closure_body_pattern(&arm.pattern),
-                        guard: arm.guard.as_ref().map(|g| {
-                            self.transform_closure_body(
-                                g,
-                                captures,
-                                struct_type_id,
-                                self_ref_type,
-                                span,
-                            )
-                        }),
-                        body: self.transform_closure_body(
-                            &arm.body,
-                            captures,
-                            struct_type_id,
-                            self_ref_type,
-                            span,
-                        ),
-                        span: arm.span,
-                    })
-                    .collect();
-                TirExpr::new(
-                    TirExprKind::Match {
-                        expr: Box::new(new_scrutinee),
-                        arms: new_arms,
-                    },
-                    expr.type_id,
-                    expr.span,
-                )
-            }
-            TirExprKind::Switch {
-                scrutinee,
-                min_value,
-                arms,
-                default,
-            } => {
-                let new_scrutinee = self.transform_closure_body(
-                    scrutinee,
-                    captures,
-                    struct_type_id,
-                    self_ref_type,
-                    span,
-                );
-                let new_arms = arms
-                    .iter()
-                    .map(|arm| {
-                        self.transform_closure_body_block(
-                            arm,
-                            captures,
-                            struct_type_id,
-                            self_ref_type,
-                        )
-                    })
-                    .collect();
-                let new_default = self.transform_closure_body_block(
-                    default,
-                    captures,
-                    struct_type_id,
-                    self_ref_type,
-                );
-                TirExpr::new(
-                    TirExprKind::Switch {
-                        scrutinee: Box::new(new_scrutinee),
-                        min_value: *min_value,
-                        arms: new_arms,
-                        default: new_default,
-                    },
-                    expr.type_id,
-                    expr.span,
-                )
-            }
-            TirExprKind::VariantConstruct {
-                variant_type,
-                case_index,
-                case_name,
-                payload,
-            } => TirExpr::new(
-                TirExprKind::VariantConstruct {
-                    variant_type: *variant_type,
-                    case_index: *case_index,
-                    case_name: case_name.clone(),
-                    payload: payload.as_ref().map(|p| {
-                        Box::new(self.transform_closure_body(
-                            p,
-                            captures,
-                            struct_type_id,
-                            self_ref_type,
-                            span,
-                        ))
-                    }),
-                },
-                expr.type_id,
-                expr.span,
-            ),
-            TirExprKind::VariantTag { expr: inner } => TirExpr::new(
-                TirExprKind::VariantTag {
-                    expr: Box::new(self.transform_closure_body(
-                        inner,
-                        captures,
-                        struct_type_id,
-                        self_ref_type,
-                        span,
-                    )),
-                },
-                expr.type_id,
-                expr.span,
-            ),
-            TirExprKind::VariantTest {
-                expr: inner,
-                case_index,
-                case_name,
-            } => TirExpr::new(
-                TirExprKind::VariantTest {
-                    expr: Box::new(self.transform_closure_body(
-                        inner,
-                        captures,
-                        struct_type_id,
-                        self_ref_type,
-                        span,
-                    )),
-                    case_index: *case_index,
-                    case_name: case_name.clone(),
-                },
-                expr.type_id,
-                expr.span,
-            ),
-            TirExprKind::VariantPayload {
-                expr: inner,
-                case_index,
-                payload_type,
-            } => TirExpr::new(
-                TirExprKind::VariantPayload {
-                    expr: Box::new(self.transform_closure_body(
-                        inner,
-                        captures,
-                        struct_type_id,
-                        self_ref_type,
-                        span,
-                    )),
-                    case_index: *case_index,
-                    payload_type: *payload_type,
-                },
-                expr.type_id,
-                expr.span,
-            ),
-            TirExprKind::GlobalVarSet {
-                module_source,
-                name,
-                value,
-            } => TirExpr::new(
-                TirExprKind::GlobalVarSet {
-                    module_source: module_source.clone(),
-                    name: name.clone(),
-                    value: Box::new(self.transform_closure_body(
-                        value,
-                        captures,
-                        struct_type_id,
-                        self_ref_type,
-                        span,
-                    )),
-                },
-                expr.type_id,
-                expr.span,
-            ),
-            // Terminals that don't need transformation
-            TirExprKind::IntLiteral { .. }
-            | TirExprKind::FloatLiteral { .. }
-            | TirExprKind::BoolLiteral(_)
-            | TirExprKind::CharLiteral(_)
-            | TirExprKind::StringLiteral(_)
-            | TirExprKind::BytesLiteral(_)
-            | TirExprKind::Null
-            | TirExprKind::Unit
-            | TirExprKind::FuncRef { .. }
-            | TirExprKind::GlobalVarGet { .. }
-            | TirExprKind::EnumConstruct { .. } => expr.clone(),
-            // Nested closures are a separate scope: their body uses its
-            // own local-index namespace and gets its own `__call` method
-            // generated in `generate_functor_items`. Don't recurse into
-            // the body or shift its locals here. Cloning preserves the
-            // `Closure` expression so the third pass
-            // (`transform_block`) can later rewrite it into a struct
-            // literal or `ClosureToCanonical`.
-            //
-            // Note: the nested closure's `captures[*].outer_index`
-            // references locals in *this* closure's pre-shift scope,
-            // not in the synthesized `__call`. Because nested-closure
-            // construction sites are themselves rewritten by the third
-            // pass to read capture values via the shifted local map,
-            // the outer-index field is treated as a logical reference
-            // to the source-level local rather than a raw shifted
-            // index — so we leave it alone here.
-            TirExprKind::Closure { .. } => expr.clone(),
-            // Constructs that are desugared / lowered before this pass.
-            // Reaching them here would silently drop sub-expressions (and any
-            // captured locals inside them), so make the failure explicit.
-            TirExprKind::TemplateString { .. }
-            | TirExprKind::WithHandler { .. }
-            | TirExprKind::Resume { .. } => {
-                unreachable!(
-                    "[lower/closure] unexpected expr kind in closure body during transform_closure_body at {:?}: {:?} — should be lowered earlier",
-                    expr.span, &expr.kind
-                )
-            }
-        }
-    }
-
-    /// Transform statements within a closure body block
-    fn transform_closure_body_block(
-        &self,
-        block: &TirBlock,
-        captures: &[TirCapture],
-        struct_type_id: TypeId,
-        self_ref_type: TypeId,
-    ) -> TirBlock {
-        let stmts: Vec<TirStmt> = block
-            .stmts
-            .iter()
-            .map(|stmt| {
-                self.transform_closure_body_stmt(stmt, captures, struct_type_id, self_ref_type)
-            })
-            .collect();
-        TirBlock::new(stmts, block.span)
-    }
-
-    /// Transform a statement within a closure body
-    fn transform_closure_body_stmt(
-        &self,
-        stmt: &TirStmt,
-        captures: &[TirCapture],
-        struct_type_id: TypeId,
-        self_ref_type: TypeId,
-    ) -> TirStmt {
-        let span = &stmt.span;
-        let kind = match &stmt.kind {
-            TirStmtKind::Let {
-                local_index,
-                name,
-                is_mut,
-                is_reactive,
-                type_id,
-                value,
-                ..
-            } => TirStmtKind::Let {
-                local_index: local_index + 1, // Shift by 1 for self parameter
-                name: name.clone(),
-                is_mut: *is_mut,
-                is_reactive: *is_reactive,
-                type_id: *type_id,
-                value: self.transform_closure_body(
-                    value,
-                    captures,
-                    struct_type_id,
-                    self_ref_type,
-                    span,
-                ),
-                skip_value_copy: false,
-            },
-            TirStmtKind::Expr(expr) => TirStmtKind::Expr(self.transform_closure_body(
-                expr,
-                captures,
-                struct_type_id,
-                self_ref_type,
-                span,
-            )),
-            TirStmtKind::Return { value } => TirStmtKind::Return {
-                value: value.as_ref().map(|v| {
-                    self.transform_closure_body(v, captures, struct_type_id, self_ref_type, span)
-                }),
-            },
-            TirStmtKind::If {
-                condition,
-                then_block,
-                else_block,
-            } => TirStmtKind::If {
-                condition: self.transform_closure_body(
-                    condition,
-                    captures,
-                    struct_type_id,
-                    self_ref_type,
-                    span,
-                ),
-                then_block: self.transform_closure_body_block(
-                    then_block,
-                    captures,
-                    struct_type_id,
-                    self_ref_type,
-                ),
-                else_block: else_block.as_ref().map(|b| {
-                    self.transform_closure_body_block(b, captures, struct_type_id, self_ref_type)
-                }),
-            },
-            TirStmtKind::Loop { body } => TirStmtKind::Loop {
-                body: self.transform_closure_body_block(
-                    body,
-                    captures,
-                    struct_type_id,
-                    self_ref_type,
-                ),
-            },
-            TirStmtKind::LabeledBlock { label, block } => TirStmtKind::LabeledBlock {
-                label: label.clone(),
-                block: self.transform_closure_body_block(
-                    block,
-                    captures,
-                    struct_type_id,
-                    self_ref_type,
-                ),
-            },
-            TirStmtKind::IfLet {
-                scrutinee,
-                pattern,
-                then_block,
-                else_block,
-            } => TirStmtKind::IfLet {
-                scrutinee: self.transform_closure_body(
-                    scrutinee,
-                    captures,
-                    struct_type_id,
-                    self_ref_type,
-                    span,
-                ),
-                pattern: self.transform_closure_body_pattern(pattern),
-                then_block: self.transform_closure_body_block(
-                    then_block,
-                    captures,
-                    struct_type_id,
-                    self_ref_type,
-                ),
-                else_block: else_block.as_ref().map(|b| {
-                    self.transform_closure_body_block(b, captures, struct_type_id, self_ref_type)
-                }),
-            },
-            TirStmtKind::LetDestructure {
-                pattern,
-                is_mut,
-                value,
-            } => TirStmtKind::LetDestructure {
-                pattern: self.transform_closure_body_pattern(pattern),
-                is_mut: *is_mut,
-                value: self.transform_closure_body(
-                    value,
-                    captures,
-                    struct_type_id,
-                    self_ref_type,
-                    span,
-                ),
-            },
-            TirStmtKind::Break { label, value } => TirStmtKind::Break {
-                label: label.clone(),
-                value: value.as_ref().map(|v| {
-                    self.transform_closure_body(v, captures, struct_type_id, self_ref_type, span)
-                }),
-            },
-            TirStmtKind::Continue => TirStmtKind::Continue,
-            TirStmtKind::TaskReturn { .. } => {
-                unreachable!("TaskReturn should be eliminated by synthesis before this phase")
-            }
-            TirStmtKind::VariadicForOf { .. } => {
-                unreachable!("VariadicForOf should be expanded during monomorphization")
-            }
-        };
-        TirStmt::new(kind, stmt.span)
-    }
-
-    /// Transform a pattern within a closure body, adjusting local indices by 1 for self parameter
-    fn transform_closure_body_pattern(&self, pattern: &TirPattern) -> TirPattern {
-        match pattern {
-            TirPattern::Wildcard => TirPattern::Wildcard,
-            TirPattern::Binding {
-                name,
-                local_index,
-                type_id,
-            } => TirPattern::Binding {
-                name: name.clone(),
-                local_index: local_index + 1, // Shift by 1 for self parameter
-                type_id: *type_id,
-            },
-            TirPattern::Literal(lit) => TirPattern::Literal(lit.clone()),
-            TirPattern::Tuple(patterns, has_rest) => TirPattern::Tuple(
-                patterns
-                    .iter()
-                    .map(|p| self.transform_closure_body_pattern(p))
-                    .collect(),
-                *has_rest,
-            ),
-            TirPattern::Variant {
-                enum_type,
-                variant_name,
-                bindings,
-                payload_type,
-            } => TirPattern::Variant {
-                enum_type: *enum_type,
-                variant_name: variant_name.clone(),
-                bindings: bindings
-                    .iter()
-                    .map(|p| self.transform_closure_body_pattern(p))
-                    .collect(),
-                payload_type: *payload_type,
-            },
-            TirPattern::Enum {
-                enum_type,
-                case_name,
-                case_index,
-            } => TirPattern::Enum {
-                enum_type: *enum_type,
-                case_name: case_name.clone(),
-                case_index: *case_index,
-            },
-            TirPattern::Struct {
-                struct_type,
-                fields,
-                has_rest,
-            } => TirPattern::Struct {
-                struct_type: *struct_type,
-                fields: fields
-                    .iter()
-                    .map(|f| TirStructPatternField {
-                        field_name: f.field_name.clone(),
-                        field_index: f.field_index,
-                        pattern: self.transform_closure_body_pattern(&f.pattern),
-                    })
-                    .collect(),
-                has_rest: *has_rest,
-            },
-            TirPattern::Or(alternatives) => TirPattern::Or(
-                alternatives
-                    .iter()
-                    .map(|p| self.transform_closure_body_pattern(p))
-                    .collect(),
-            ),
-            TirPattern::ConstantValue { expr } => TirPattern::ConstantValue { expr: expr.clone() },
-            TirPattern::Range {
-                start,
-                end,
-                inclusive,
-                is_unsigned,
-            } => TirPattern::Range {
-                start: *start,
-                end: *end,
-                inclusive: *inclusive,
-                is_unsigned: *is_unsigned,
-            },
-        }
-    }
-
-    /// Generate specialized functions for calls with closure arguments to fn-type parameters.
-    ///
-    /// This implements WEP Phase 3: when a function takes `fn(A) -> B` and is called with
-    /// a closure, we generate a specialized version where:
-    /// 1. The fn-type parameter becomes the functor struct type
-    /// 2. `IndirectCall` on that parameter becomes `MethodCall` on __call
+    /// Phase 2.5: when a function takes a `fn(A) -> B` parameter and is
+    /// called with a closure literal, generate a specialised callee whose
+    /// fn-type parameters are the functor struct types and whose
+    /// `IndirectCall`s become direct `MethodCall`s on `__call`.
     fn generate_fn_param_specializations(
         &mut self,
         func_refs: &[Rc<RefCell<TirFunction>>],
         impls: &[TirImpl],
         type_table: &mut TypeTable,
     ) {
-        // Build a map from function name to function for quick lookup
         let mut func_by_name: IndexMap<String, Rc<RefCell<TirFunction>>> = IndexMap::default();
         for func_rc in func_refs {
             let func = func_rc.borrow();
             func_by_name.insert(func.name.clone(), Rc::clone(func_rc));
         }
-        for impl_block in impls {
-            for method in &impl_block.methods {
-                let name = method.name.clone();
-                // We can't get an Rc from a TirFunction reference directly
-                // For impl methods, we'll handle them separately
-                // For now, just process top-level functions
-                drop(name);
-            }
-        }
-
-        // Collect specialization requests by scanning all function bodies.
-        // Each Closure node already carries its `functor_id` from the
-        // collect pass, so we don't need a separate counter.
         let mut spec_requests: Vec<(FnParamSpecKey, Rc<RefCell<TirFunction>>)> = Vec::new();
 
+        let mut collector = FnParamSpecCollector {
+            func_by_name: &func_by_name,
+            type_table,
+            functor_infos: &self.functor_infos,
+            requests: &mut spec_requests,
+        };
         for func_rc in func_refs {
             let func = func_rc.borrow();
             if let Some(body) = &func.body {
-                self.collect_fn_param_specs(body, &func_by_name, type_table, &mut spec_requests);
+                collector.visit_block(body);
             }
         }
-
-        // Also scan impl methods
         for impl_block in impls {
             for method in &impl_block.methods {
                 if let Some(body) = &method.body {
-                    self.collect_fn_param_specs(
-                        body,
-                        &func_by_name,
-                        type_table,
-                        &mut spec_requests,
-                    );
+                    collector.visit_block(body);
                 }
             }
         }
 
-        // Generate specialized functions for each unique key
         for (key, callee_rc) in spec_requests {
             if self.fn_param_specializations.contains_key(&key) {
-                continue; // Already generated
+                continue;
             }
 
-            // Skip specialization if any fn-param is stored in a struct field
-            // This would cause type mismatches since struct fields expect fn(...) not &__Closure_N
             let callee = callee_rc.borrow();
-            // Check if this is an instance method (has self parameter)
-            // Note: static methods have method_info but no self parameter
-            let has_self_param = callee.params.first().is_some_and(|p| p.name == "self");
-            let param_offset = u32::from(has_self_param);
+            // Static methods have `method_info` but no `self`, so we sniff
+            // the first parameter name instead of inspecting `method_info`.
+            let param_offset = self_param_offset(&callee);
             let fn_param_indices: Vec<u32> = key
                 .functor_types
                 .iter()
                 .map(|(arg_idx, _)| arg_idx + param_offset)
                 .collect();
 
-            if let Some(body) = &callee.body
-                && self.fn_param_stored_in_struct_field(body, &fn_param_indices)
-            {
-                // Skip this specialization - the closure is stored in a struct field
-                continue;
+            // Bail when a fn-param flows into a struct field — the field
+            // type stays `fn(...)`, so we can't retype the param to
+            // `&__Closure_N`.
+            if let Some(body) = &callee.body {
+                let mut check = StructFieldFnParamCheck {
+                    fn_param_indices: &fn_param_indices,
+                    found: false,
+                };
+                check.visit_block(body);
+                if check.found {
+                    continue;
+                }
             }
             drop(callee);
 
             let specialized_name = self.generate_specialized_function(&key, &callee_rc, type_table);
             self.fn_param_specializations.insert(key, specialized_name);
         }
-    }
-
-    /// Check if any of the given local indices (fn-params) are used as struct field values.
-    /// If so, we can't specialize because the struct field expects fn(...) not &__`Closure_N`.
-    fn fn_param_stored_in_struct_field(&self, block: &TirBlock, fn_param_indices: &[u32]) -> bool {
-        for stmt in &block.stmts {
-            if self.fn_param_in_struct_field_stmt(stmt, fn_param_indices) {
-                return true;
-            }
-        }
-        false
-    }
-
-    fn fn_param_in_struct_field_stmt(&self, stmt: &TirStmt, fn_param_indices: &[u32]) -> bool {
-        match &stmt.kind {
-            TirStmtKind::Let { value, .. } => {
-                self.fn_param_in_struct_field_expr(value, fn_param_indices)
-            }
-            TirStmtKind::Expr(expr) | TirStmtKind::Return { value: Some(expr) } => {
-                self.fn_param_in_struct_field_expr(expr, fn_param_indices)
-            }
-            TirStmtKind::Return { value: None } | TirStmtKind::Continue => false,
-            TirStmtKind::Break { value, .. } => value
-                .as_ref()
-                .is_some_and(|v| self.fn_param_in_struct_field_expr(v, fn_param_indices)),
-            TirStmtKind::If {
-                condition,
-                then_block,
-                else_block,
-            } => {
-                self.fn_param_in_struct_field_expr(condition, fn_param_indices)
-                    || self.fn_param_stored_in_struct_field(then_block, fn_param_indices)
-                    || else_block
-                        .as_ref()
-                        .is_some_and(|b| self.fn_param_stored_in_struct_field(b, fn_param_indices))
-            }
-            TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-                self.fn_param_stored_in_struct_field(body, fn_param_indices)
-            }
-            TirStmtKind::IfLet {
-                scrutinee,
-                then_block,
-                else_block,
-                ..
-            } => {
-                self.fn_param_in_struct_field_expr(scrutinee, fn_param_indices)
-                    || self.fn_param_stored_in_struct_field(then_block, fn_param_indices)
-                    || else_block
-                        .as_ref()
-                        .is_some_and(|b| self.fn_param_stored_in_struct_field(b, fn_param_indices))
-            }
-            TirStmtKind::LetDestructure { value, .. } => {
-                self.fn_param_in_struct_field_expr(value, fn_param_indices)
-            }
-            TirStmtKind::TaskReturn { .. } => {
-                unreachable!("TaskReturn should be eliminated by synthesis before this phase")
-            }
-            TirStmtKind::VariadicForOf { .. } => {
-                unreachable!("VariadicForOf should be expanded during monomorphization")
-            }
-        }
-    }
-
-    fn fn_param_in_struct_field_expr(&self, expr: &TirExpr, fn_param_indices: &[u32]) -> bool {
-        match &expr.kind {
-            // Key case: check if fn-param local is used as struct field value
-            TirExprKind::StructLiteral { fields, .. } => {
-                for field in fields {
-                    // Check if field value is a Local that is one of our fn-params
-                    if let TirExprKind::Local { index, .. } = &field.value.kind
-                        && fn_param_indices.contains(index)
-                    {
-                        return true;
-                    }
-                    // Also recurse into nested expressions
-                    if self.fn_param_in_struct_field_expr(&field.value, fn_param_indices) {
-                        return true;
-                    }
-                }
-                false
-            }
-            // Recurse into sub-expressions
-            TirExprKind::Binary { left, right, .. } => {
-                self.fn_param_in_struct_field_expr(left, fn_param_indices)
-                    || self.fn_param_in_struct_field_expr(right, fn_param_indices)
-            }
-            TirExprKind::Unary { expr: inner, .. }
-            | TirExprKind::Cast { expr: inner, .. }
-            | TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::TupleSpread { expr: inner }
-            | TirExprKind::TupleZip { expr: inner }
-            | TirExprKind::TypePackExpansion {
-                call_expr: inner, ..
-            } => self.fn_param_in_struct_field_expr(inner, fn_param_indices),
-            TirExprKind::Call { args, .. } => args
-                .iter()
-                .any(|a| self.fn_param_in_struct_field_expr(&a.expr, fn_param_indices)),
-            TirExprKind::CmRawCall { args, .. } => args
-                .iter()
-                .any(|a| self.fn_param_in_struct_field_expr(a, fn_param_indices)),
-            TirExprKind::MethodCall { receiver, args, .. } => {
-                self.fn_param_in_struct_field_expr(receiver, fn_param_indices)
-                    || args
-                        .iter()
-                        .any(|a| self.fn_param_in_struct_field_expr(&a.expr, fn_param_indices))
-            }
-            TirExprKind::IndirectCall { callee, args } => {
-                self.fn_param_in_struct_field_expr(callee, fn_param_indices)
-                    || args
-                        .iter()
-                        .any(|a| self.fn_param_in_struct_field_expr(a, fn_param_indices))
-            }
-            TirExprKind::ClosureToCanonical { functor, .. } => {
-                self.fn_param_in_struct_field_expr(functor, fn_param_indices)
-            }
-            TirExprKind::Block(block) => {
-                self.fn_param_stored_in_struct_field(block, fn_param_indices)
-            }
-            TirExprKind::If {
-                condition,
-                then_branch,
-                else_branch,
-            } => {
-                self.fn_param_in_struct_field_expr(condition, fn_param_indices)
-                    || self.fn_param_stored_in_struct_field(then_branch, fn_param_indices)
-                    || else_branch
-                        .as_ref()
-                        .is_some_and(|b| self.fn_param_stored_in_struct_field(b, fn_param_indices))
-            }
-            TirExprKind::TupleLiteral { elements } => elements
-                .iter()
-                .any(|e| self.fn_param_in_struct_field_expr(e, fn_param_indices)),
-            TirExprKind::Assign { target, value } => {
-                self.fn_param_in_struct_field_expr(target, fn_param_indices)
-                    || self.fn_param_in_struct_field_expr(value, fn_param_indices)
-            }
-            TirExprKind::Index { expr: array, index } => {
-                self.fn_param_in_struct_field_expr(array, fn_param_indices)
-                    || self.fn_param_in_struct_field_expr(index, fn_param_indices)
-            }
-            TirExprKind::Match {
-                expr: scrutinee,
-                arms,
-            } => {
-                self.fn_param_in_struct_field_expr(scrutinee, fn_param_indices)
-                    || arms.iter().any(|arm| {
-                        arm.guard.as_ref().is_some_and(|g| {
-                            self.fn_param_in_struct_field_expr(g, fn_param_indices)
-                        }) || self.fn_param_in_struct_field_expr(&arm.body, fn_param_indices)
-                    })
-            }
-            TirExprKind::VariantConstruct { payload, .. } => payload
-                .as_ref()
-                .is_some_and(|p| self.fn_param_in_struct_field_expr(p, fn_param_indices)),
-            TirExprKind::LabeledBlock { block, .. } => {
-                self.fn_param_stored_in_struct_field(block, fn_param_indices)
-            }
-            TirExprKind::Closure { body, .. } => {
-                self.fn_param_in_struct_field_expr(body, fn_param_indices)
-            }
-            TirExprKind::GlobalVarSet { value, .. } => {
-                self.fn_param_in_struct_field_expr(value, fn_param_indices)
-            }
-            // Lowered pattern matching nodes
-            TirExprKind::VariantTag { expr }
-            | TirExprKind::VariantTest { expr, .. }
-            | TirExprKind::VariantPayload { expr, .. } => {
-                self.fn_param_in_struct_field_expr(expr, fn_param_indices)
-            }
-            TirExprKind::Switch {
-                scrutinee,
-                arms,
-                default,
-                ..
-            } => {
-                self.fn_param_in_struct_field_expr(scrutinee, fn_param_indices)
-                    || arms
-                        .iter()
-                        .any(|arm| self.fn_param_stored_in_struct_field(arm, fn_param_indices))
-                    || self.fn_param_stored_in_struct_field(default, fn_param_indices)
-            }
-            // Terminals
-            TirExprKind::IntLiteral { .. }
-            | TirExprKind::FloatLiteral { .. }
-            | TirExprKind::BoolLiteral(_)
-            | TirExprKind::CharLiteral(_)
-            | TirExprKind::StringLiteral(_)
-            | TirExprKind::BytesLiteral(_)
-            | TirExprKind::Null
-            | TirExprKind::Unit
-            | TirExprKind::Local { .. }
-            | TirExprKind::FuncRef { .. }
-            | TirExprKind::GlobalVarGet { .. }
-            | TirExprKind::Capture { .. }
-            | TirExprKind::EnumConstruct { .. } => false,
-            TirExprKind::TemplateString { .. } => {
-                unreachable!("TemplateString should be expanded before this phase")
-            }
-            TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
-                unreachable!(
-                    "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
-                )
-            }
-        }
-    }
-
-    /// Collect fn-param specialization requests from a block
-    fn collect_fn_param_specs(
-        &mut self,
-        block: &TirBlock,
-        func_by_name: &IndexMap<String, Rc<RefCell<TirFunction>>>,
-        type_table: &TypeTable,
-        requests: &mut Vec<(FnParamSpecKey, Rc<RefCell<TirFunction>>)>,
-    ) {
-        for stmt in &block.stmts {
-            self.collect_fn_param_specs_stmt(stmt, func_by_name, type_table, requests);
-        }
-    }
-
-    fn collect_fn_param_specs_stmt(
-        &mut self,
-        stmt: &TirStmt,
-        func_by_name: &IndexMap<String, Rc<RefCell<TirFunction>>>,
-        type_table: &TypeTable,
-        requests: &mut Vec<(FnParamSpecKey, Rc<RefCell<TirFunction>>)>,
-    ) {
-        match &stmt.kind {
-            TirStmtKind::Let { value, .. } => {
-                self.collect_fn_param_specs_expr(value, func_by_name, type_table, requests);
-            }
-            TirStmtKind::Expr(expr) | TirStmtKind::Return { value: Some(expr) } => {
-                self.collect_fn_param_specs_expr(expr, func_by_name, type_table, requests);
-            }
-            TirStmtKind::Return { value: None } | TirStmtKind::Continue => {}
-            TirStmtKind::Break { value, .. } => {
-                if let Some(value) = value {
-                    self.collect_fn_param_specs_expr(value, func_by_name, type_table, requests);
-                }
-            }
-            TirStmtKind::If {
-                condition,
-                then_block,
-                else_block,
-            } => {
-                self.collect_fn_param_specs_expr(condition, func_by_name, type_table, requests);
-                self.collect_fn_param_specs(then_block, func_by_name, type_table, requests);
-                if let Some(else_blk) = else_block {
-                    self.collect_fn_param_specs(else_blk, func_by_name, type_table, requests);
-                }
-            }
-            TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-                self.collect_fn_param_specs(body, func_by_name, type_table, requests);
-            }
-            TirStmtKind::IfLet {
-                scrutinee,
-                then_block,
-                else_block,
-                ..
-            } => {
-                self.collect_fn_param_specs_expr(scrutinee, func_by_name, type_table, requests);
-                self.collect_fn_param_specs(then_block, func_by_name, type_table, requests);
-                if let Some(else_blk) = else_block {
-                    self.collect_fn_param_specs(else_blk, func_by_name, type_table, requests);
-                }
-            }
-            TirStmtKind::LetDestructure { value, .. } => {
-                self.collect_fn_param_specs_expr(value, func_by_name, type_table, requests);
-            }
-            TirStmtKind::TaskReturn { .. } => {
-                unreachable!("TaskReturn should be eliminated by synthesis before this phase")
-            }
-            TirStmtKind::VariadicForOf { .. } => {
-                unreachable!("VariadicForOf should be expanded during monomorphization")
-            }
-        }
-    }
-
-    fn collect_fn_param_specs_expr(
-        &mut self,
-        expr: &TirExpr,
-        func_by_name: &IndexMap<String, Rc<RefCell<TirFunction>>>,
-        type_table: &TypeTable,
-        requests: &mut Vec<(FnParamSpecKey, Rc<RefCell<TirFunction>>)>,
-    ) {
-        match &expr.kind {
-            TirExprKind::Closure { body, .. } => {
-                // Recursively scan the body. The Closure's own functor_id
-                // is read directly off the node by `create_fn_param_spec_key`
-                // when it appears in argument position.
-                self.collect_fn_param_specs_expr(body, func_by_name, type_table, requests);
-            }
-            // Check for calls with closure arguments
-            TirExprKind::Call {
-                func,
-                args,
-                type_args: _,
-                ..
-            } => {
-                // Check if this is a call to a known function with closure args
-                if let Some(callee_rc) = func_by_name.get(&func.name.clone()) {
-                    let callee = callee_rc.borrow();
-                    if let Some(key) = self.create_fn_param_spec_key(
-                        &callee.name,
-                        &callee.params,
-                        args,
-                        type_table,
-                    ) {
-                        requests.push((key, Rc::clone(callee_rc)));
-                    }
-                }
-                // Recursively scan args (this will increment counter for any closure args)
-                for arg in args {
-                    self.collect_fn_param_specs_expr(&arg.expr, func_by_name, type_table, requests);
-                }
-            }
-            TirExprKind::MethodCall {
-                receiver,
-                func,
-                args,
-                type_args: _,
-                ..
-            } => {
-                // Check if this is a method call with closure args
-                if let Some(callee_rc) = func_by_name.get(&func.name.clone()) {
-                    let callee = callee_rc.borrow();
-                    // Skip self parameter (first param)
-                    let params_without_self: Vec<_> =
-                        callee.params.iter().skip(1).cloned().collect();
-                    if let Some(key) = self.create_fn_param_spec_key(
-                        &callee.name,
-                        &params_without_self,
-                        args,
-                        type_table,
-                    ) {
-                        requests.push((key, Rc::clone(callee_rc)));
-                    }
-                }
-                // Recursively scan receiver first (important for counter sync)
-                self.collect_fn_param_specs_expr(receiver, func_by_name, type_table, requests);
-                // Then scan args (this will increment counter for any closure args)
-                for arg in args {
-                    self.collect_fn_param_specs_expr(&arg.expr, func_by_name, type_table, requests);
-                }
-            }
-            // Recurse into sub-expressions
-            TirExprKind::Binary { left, right, .. } => {
-                self.collect_fn_param_specs_expr(left, func_by_name, type_table, requests);
-                self.collect_fn_param_specs_expr(right, func_by_name, type_table, requests);
-            }
-            TirExprKind::Unary { expr: inner, .. }
-            | TirExprKind::Cast { expr: inner, .. }
-            | TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::TupleSpread { expr: inner }
-            | TirExprKind::TupleZip { expr: inner }
-            | TirExprKind::TypePackExpansion {
-                call_expr: inner, ..
-            } => {
-                self.collect_fn_param_specs_expr(inner, func_by_name, type_table, requests);
-            }
-            TirExprKind::CmRawCall { args, .. } => {
-                for arg in args {
-                    self.collect_fn_param_specs_expr(arg, func_by_name, type_table, requests);
-                }
-            }
-            TirExprKind::IndirectCall { callee, args } => {
-                self.collect_fn_param_specs_expr(callee, func_by_name, type_table, requests);
-                for arg in args {
-                    self.collect_fn_param_specs_expr(arg, func_by_name, type_table, requests);
-                }
-            }
-            TirExprKind::ClosureToCanonical { functor, .. } => {
-                self.collect_fn_param_specs_expr(functor, func_by_name, type_table, requests);
-            }
-            TirExprKind::Block(block) => {
-                self.collect_fn_param_specs(block, func_by_name, type_table, requests);
-            }
-            TirExprKind::If {
-                condition,
-                then_branch,
-                else_branch,
-            } => {
-                self.collect_fn_param_specs_expr(condition, func_by_name, type_table, requests);
-                self.collect_fn_param_specs(then_branch, func_by_name, type_table, requests);
-                if let Some(else_blk) = else_branch {
-                    self.collect_fn_param_specs(else_blk, func_by_name, type_table, requests);
-                }
-            }
-            TirExprKind::StructLiteral { fields, .. } => {
-                for field in fields {
-                    self.collect_fn_param_specs_expr(
-                        &field.value,
-                        func_by_name,
-                        type_table,
-                        requests,
-                    );
-                }
-            }
-            TirExprKind::TupleLiteral { elements } => {
-                for elem in elements {
-                    self.collect_fn_param_specs_expr(elem, func_by_name, type_table, requests);
-                }
-            }
-            TirExprKind::Assign { target, value } => {
-                self.collect_fn_param_specs_expr(target, func_by_name, type_table, requests);
-                self.collect_fn_param_specs_expr(value, func_by_name, type_table, requests);
-            }
-            TirExprKind::Index { expr: array, index } => {
-                self.collect_fn_param_specs_expr(array, func_by_name, type_table, requests);
-                self.collect_fn_param_specs_expr(index, func_by_name, type_table, requests);
-            }
-            TirExprKind::Match {
-                expr: scrutinee,
-                arms,
-            } => {
-                self.collect_fn_param_specs_expr(scrutinee, func_by_name, type_table, requests);
-                for arm in arms {
-                    if let Some(guard) = &arm.guard {
-                        self.collect_fn_param_specs_expr(guard, func_by_name, type_table, requests);
-                    }
-                    self.collect_fn_param_specs_expr(&arm.body, func_by_name, type_table, requests);
-                }
-            }
-            TirExprKind::VariantConstruct { payload, .. } => {
-                if let Some(payload_expr) = payload {
-                    self.collect_fn_param_specs_expr(
-                        payload_expr,
-                        func_by_name,
-                        type_table,
-                        requests,
-                    );
-                }
-            }
-            TirExprKind::LabeledBlock { block, .. } => {
-                self.collect_fn_param_specs(block, func_by_name, type_table, requests);
-            }
-            TirExprKind::GlobalVarSet { value, .. } => {
-                self.collect_fn_param_specs_expr(value, func_by_name, type_table, requests);
-            }
-            // Lowered pattern matching nodes
-            TirExprKind::VariantTag { expr }
-            | TirExprKind::VariantTest { expr, .. }
-            | TirExprKind::VariantPayload { expr, .. } => {
-                self.collect_fn_param_specs_expr(expr, func_by_name, type_table, requests);
-            }
-            TirExprKind::Switch {
-                scrutinee,
-                arms,
-                default,
-                ..
-            } => {
-                self.collect_fn_param_specs_expr(scrutinee, func_by_name, type_table, requests);
-                for arm in arms {
-                    self.collect_fn_param_specs(arm, func_by_name, type_table, requests);
-                }
-                self.collect_fn_param_specs(default, func_by_name, type_table, requests);
-            }
-            // Terminals
-            TirExprKind::IntLiteral { .. }
-            | TirExprKind::FloatLiteral { .. }
-            | TirExprKind::BoolLiteral(_)
-            | TirExprKind::CharLiteral(_)
-            | TirExprKind::StringLiteral(_)
-            | TirExprKind::BytesLiteral(_)
-            | TirExprKind::Null
-            | TirExprKind::Unit
-            | TirExprKind::Local { .. }
-            | TirExprKind::FuncRef { .. }
-            | TirExprKind::GlobalVarGet { .. }
-            | TirExprKind::Capture { .. }
-            | TirExprKind::EnumConstruct { .. } => {}
-            TirExprKind::TemplateString { .. } => {
-                unreachable!("TemplateString should be expanded before this phase")
-            }
-            TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
-                unreachable!(
-                    "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
-                )
-            }
-        }
-    }
-
-    /// Create a fn-param specialization key if there are closure arguments to fn-type parameters.
-    /// Reads each closure's `functor_id` directly off its `Closure` node — the
-    /// IDs were assigned by the collect pass.
-    fn create_fn_param_spec_key(
-        &mut self,
-        callee_name: &str,
-        params: &[TirParam],
-        args: &[CallArg],
-        type_table: &TypeTable,
-    ) -> Option<FnParamSpecKey> {
-        let mut functor_types = Vec::new();
-
-        for (i, (param, arg)) in params.iter().zip(args.iter()).enumerate() {
-            // Check if param is a function type and arg is a direct closure
-            if let ResolvedType::Function { .. } = type_table.get(param.type_id)
-                && let TirExprKind::Closure {
-                    functor_id: Some(closure_id),
-                    ..
-                } = &arg.expr.kind
-                && let Some(functor) = self.functor_infos.get(*closure_id as usize)
-            {
-                functor_types.push((i as u32, functor.struct_type_id));
-            }
-        }
-
-        if functor_types.is_empty() {
-            return None;
-        }
-
-        Some(FnParamSpecKey {
-            callee_name: callee_name.to_string(),
-            functor_types,
-        })
     }
 
     /// Generate a specialized function where fn-type params become functor struct types
@@ -3109,84 +696,48 @@ impl ClosureLowerer {
     ) -> String {
         let callee = callee_rc.borrow();
 
-        // Build specialized name: callee$__Closure_0$__Closure_1...
-        let functor_suffix: String =
-            key.functor_types
-                .iter()
-                .fold(String::new(), |mut acc, (_, tid)| {
-                    let name = type_table.type_name(*tid);
-                    let _ = write!(acc, "${name}");
-                    acc
-                });
+        let functor_suffix = build_functor_suffix(&key.functor_types, type_table);
         let specialized_name = format!("{}{}", callee.name, functor_suffix);
 
-        // Build map from argument index to functor type
-        // Note: key.functor_types contains argument indices (0 = first arg after receiver for methods)
+        // `key.functor_types` keys are argument indices (0 = first arg
+        // after the receiver for methods); shift by `param_offset` to land
+        // on the corresponding parameter / local slot.
+        let param_offset = self_param_offset(&callee);
         let arg_to_functor: IndexMap<u32, TypeId> = key.functor_types.iter().copied().collect();
 
-        // Determine if this is an instance method (has self parameter)
-        // Note: static methods have method_info but no self parameter
-        let has_self_param = callee.params.first().is_some_and(|p| p.name == "self");
-        let param_offset = u32::from(has_self_param);
-
-        // Clone and modify params
-        // For methods: params[0] is self, so argument index i maps to params[i + 1]
         let mut new_params = callee.params.clone();
-        for (arg_idx, &functor_type) in &arg_to_functor {
-            let param_idx = (*arg_idx + param_offset) as usize;
-            if param_idx < new_params.len() {
-                new_params[param_idx].type_id = type_table.make_ref(functor_type);
-            }
-        }
-
-        // Clone and modify locals (same indexing as params)
         let mut new_locals = callee.locals.clone();
         for (arg_idx, &functor_type) in &arg_to_functor {
-            let local_idx = (*arg_idx + param_offset) as usize;
-            if local_idx < new_locals.len() {
-                new_locals[local_idx].type_id = type_table.make_ref(functor_type);
+            let slot = (*arg_idx + param_offset) as usize;
+            if slot < new_params.len() {
+                new_params[slot].type_id = type_table.make_ref(functor_type);
+            }
+            if slot < new_locals.len() {
+                new_locals[slot].type_id = type_table.make_ref(functor_type);
             }
         }
 
-        // Build a map from param/local index to functor type for body transformation
-        // Inside the function body, locals are referenced by param index
         let local_to_functor: IndexMap<u32, TypeId> = arg_to_functor
             .iter()
             .map(|(arg_idx, functor_type)| (arg_idx + param_offset, *functor_type))
             .collect();
 
-        // Clone body and transform IndirectCall to MethodCall for fn-param locals
-        let new_body = callee
-            .body
-            .as_ref()
-            .map(|body| self.specialize_function_body(body, &local_to_functor, type_table));
-
-        // Build specialized method name: method<TypeArgs>$__Closure_0
-        // The functor suffix goes AFTER type args, so we use full_method_name()
-        // and then clear method_type_args to avoid duplication
-        let specialized_method_name = if let Some(ref info) = callee.method_info {
-            format!("{}{}", info.full_method_name(), functor_suffix)
-        } else {
-            // Should not happen for method calls
-            format!("{}{}", callee.name, functor_suffix)
-        };
-
-        // Update method_info with the specialized method name
-        // Note: method_type_args is empty because they're now part of method_name
-        let specialized_method_info = callee.method_info.as_ref().map(|info| {
-            LocalMethodName {
-                struct_name: info.struct_name.clone(),
-                base_struct_name: info.base_struct_name.clone(),
-                trait_name: info.trait_name.clone(),
-                base_trait_name: info.base_trait_name.clone(),
-                trait_type_args: info.trait_type_args.clone(),
-                method_name: specialized_method_name.clone(),
-                method_type_args: Vec::new(), // Type args are now in method_name
-                is_type_param_receiver: info.is_type_param_receiver,
-                is_ref_impl: false,
-                cm_name: info.cm_name.clone(),
+        let new_body = callee.body.as_ref().map(|body| {
+            let mut cloned = body.clone();
+            SpecializerTransformer {
+                param_to_functor: &local_to_functor,
+                functor_infos: &self.functor_infos,
+                module_source: &self.module_source,
+                type_table,
             }
+            .visit_block(&mut cloned);
+            cloned
         });
+
+        let specialized_method_info = callee
+            .method_info
+            .as_ref()
+            .map(|info| build_specialized_method_info(info, &functor_suffix));
 
         let specialized_func = TirFunction {
             module_source: self.module_source.clone(),
@@ -3224,912 +775,527 @@ impl ClosureLowerer {
             .push(Rc::new(RefCell::new(specialized_func)));
         specialized_name
     }
+}
 
-    /// Specialize a function body by transforming `IndirectCall` to `MethodCall` for fn-param locals
-    fn specialize_function_body(
-        &self,
-        block: &TirBlock,
-        param_to_functor: &IndexMap<u32, TypeId>,
-        type_table: &mut TypeTable,
-    ) -> TirBlock {
-        TirBlock::new(
-            block
-                .stmts
-                .iter()
-                .map(|stmt| self.specialize_stmt(stmt, param_to_functor, type_table))
-                .collect(),
-            block.span,
-        )
-    }
+/// Phase 4 rewriter: transform remaining `Closure` nodes (those not
+/// specialised) into `ClosureToCanonical`.
+struct RemainingClosuresRewriter<'a> {
+    functor_infos: &'a [ClosureFunctor],
+    module_source: &'a ModuleSource,
+}
 
-    fn specialize_stmt(
-        &self,
-        stmt: &TirStmt,
-        param_to_functor: &IndexMap<u32, TypeId>,
-        type_table: &mut TypeTable,
-    ) -> TirStmt {
-        let kind = match &stmt.kind {
-            TirStmtKind::Let {
-                name,
-                local_index,
-                is_mut,
-                is_reactive,
-                type_id,
-                value,
-                ..
-            } => TirStmtKind::Let {
-                name: name.clone(),
-                local_index: *local_index,
-                is_mut: *is_mut,
-                is_reactive: *is_reactive,
-                type_id: *type_id,
-                value: self.specialize_expr(value, param_to_functor, type_table),
-                skip_value_copy: false,
-            },
-            TirStmtKind::Expr(expr) => {
-                TirStmtKind::Expr(self.specialize_expr(expr, param_to_functor, type_table))
-            }
-            TirStmtKind::Return { value } => TirStmtKind::Return {
-                value: value
-                    .as_ref()
-                    .map(|e| self.specialize_expr(e, param_to_functor, type_table)),
-            },
-            TirStmtKind::If {
-                condition,
-                then_block,
-                else_block,
-            } => TirStmtKind::If {
-                condition: self.specialize_expr(condition, param_to_functor, type_table),
-                then_block: self.specialize_function_body(then_block, param_to_functor, type_table),
-                else_block: else_block
-                    .as_ref()
-                    .map(|b| self.specialize_function_body(b, param_to_functor, type_table)),
-            },
-            TirStmtKind::Loop { body } => TirStmtKind::Loop {
-                body: self.specialize_function_body(body, param_to_functor, type_table),
-            },
-            TirStmtKind::LabeledBlock { label, block } => TirStmtKind::LabeledBlock {
-                label: label.clone(),
-                block: self.specialize_function_body(block, param_to_functor, type_table),
-            },
-            TirStmtKind::Break { label, value } => TirStmtKind::Break {
-                label: label.clone(),
-                value: value
-                    .as_ref()
-                    .map(|v| self.specialize_expr(v, param_to_functor, type_table)),
-            },
-            TirStmtKind::Continue => TirStmtKind::Continue,
-            TirStmtKind::IfLet {
-                scrutinee,
-                pattern,
-                then_block,
-                else_block,
-            } => TirStmtKind::IfLet {
-                scrutinee: self.specialize_expr(scrutinee, param_to_functor, type_table),
-                pattern: pattern.clone(),
-                then_block: self.specialize_function_body(then_block, param_to_functor, type_table),
-                else_block: else_block
-                    .as_ref()
-                    .map(|b| self.specialize_function_body(b, param_to_functor, type_table)),
-            },
-            TirStmtKind::LetDestructure {
-                pattern,
-                is_mut,
-                value,
-            } => TirStmtKind::LetDestructure {
-                pattern: pattern.clone(),
-                is_mut: *is_mut,
-                value: self.specialize_expr(value, param_to_functor, type_table),
-            },
-            TirStmtKind::TaskReturn { .. } => {
-                unreachable!("TaskReturn should be eliminated by synthesis before this phase")
-            }
-            TirStmtKind::VariadicForOf { .. } => {
-                unreachable!("VariadicForOf should be expanded during monomorphization")
-            }
-        };
-        TirStmt::new(kind, stmt.span)
-    }
-
-    /// When a fn-param local has been specialized to a functor type and is forwarded
-    /// as an argument to another function expecting a function type, wrap it in
-    /// `ClosureToCanonical` to convert the functor back to a type-erased canonical closure.
-    ///
-    /// `original_type_id` is the `type_id` of the argument BEFORE specialization
-    /// (from the unmodified body), which retains the original function type.
-    fn maybe_wrap_functor_as_canonical(
-        &self,
-        specialized_arg: TirExpr,
-        original_type_id: TypeId,
-        param_to_functor: &IndexMap<u32, TypeId>,
-        type_table: &TypeTable,
-    ) -> TirExpr {
-        if let TirExprKind::Local { index, .. } = &specialized_arg.kind
-            && let Some(&functor_type) = param_to_functor.get(index)
-            && matches!(
-                type_table.get(original_type_id),
-                ResolvedType::Function { .. }
-            )
+impl TirMutVisitor for RemainingClosuresRewriter<'_> {
+    fn visit_expr(&mut self, expr: &mut TirExpr) {
+        // Pull captures out of the borrow before we mutate `expr.kind`.
+        let closure_data = if let TirExprKind::Closure {
+            captures,
+            functor_id: Some(closure_id),
+            ..
+        } = &expr.kind
         {
-            // Find the functor_id by matching struct_type_id
-            if let Some(functor) = self
-                .functor_infos
-                .iter()
-                .find(|f| f.struct_type_id == functor_type)
-            {
-                let span = specialized_arg.span;
-                return TirExpr::new(
-                    TirExprKind::ClosureToCanonical {
-                        functor: Box::new(specialized_arg),
-                        functor_id: functor.id,
-                        target_fn_type: original_type_id,
-                        closure_module: self.module_source.clone(),
-                    },
-                    original_type_id,
-                    span,
-                );
-            }
-        }
-        specialized_arg
-    }
+            Some((*closure_id, captures.clone()))
+        } else {
+            None
+        };
 
-    fn specialize_expr(
-        &self,
-        expr: &TirExpr,
-        param_to_functor: &IndexMap<u32, TypeId>,
-        type_table: &mut TypeTable,
-    ) -> TirExpr {
-        match &expr.kind {
-            // Transform IndirectCall on a fn-param local to MethodCall on __call
-            TirExprKind::IndirectCall { callee, args } => {
-                // Check if callee is a Local that maps to a fn-param with functor type
-                if let TirExprKind::Local { index, .. } = &callee.kind
-                    && let Some(&functor_type) = param_to_functor.get(index)
-                {
-                    // Get the functor info to find the __call method name
-                    if let Some(functor) = self
-                        .functor_infos
-                        .iter()
-                        .find(|f| f.struct_type_id == functor_type)
-                    {
-                        let call_method_name =
-                            MethodName::format_local(&functor.struct_name, None, "__call");
+        let Some((closure_id, captures)) = closure_data else {
+            // For non-closure nodes (and `Closure { functor_id: None, .. }`,
+            // which the original code recursed into), use the default walk.
+            self.walk_expr(expr);
+            return;
+        };
 
-                        // Transform to MethodCall
-                        let new_callee = self.specialize_expr(callee, param_to_functor, type_table);
-                        let new_args: Vec<_> = args
-                            .iter()
-                            .map(|a| self.specialize_expr(a, param_to_functor, type_table))
-                            .collect();
+        // Closure with functor_id but no functor info: leave untouched and
+        // do NOT recurse into the body — the original logic also stopped
+        // here (the body lives in the generated `__call` method).
+        let Some(functor) = self.functor_infos.get(closure_id as usize) else {
+            return;
+        };
 
-                        // Build method_info for the __call method
-                        let call_method_info = LocalMethodName::new(
-                            functor.struct_name.clone(), // __Closure_N
-                            None,                        // no trait
-                            "__call".to_string(),        // just the method name
-                        );
-
-                        // Use the call_method_name for External ref since codegen expects it
-                        let params_is_mut: Vec<bool> = functor
-                            .call_method
-                            .borrow()
-                            .params
-                            .iter()
-                            .skip(1) // skip self/env param
-                            .map(|p| p.is_mut)
-                            .collect();
-                        let call_args: Vec<CallArg> = new_args
-                            .into_iter()
-                            .zip(params_is_mut.into_iter().chain(std::iter::repeat(false)))
-                            .map(|(expr, is_mut)| CallArg::new(expr, is_mut))
-                            .collect();
-                        return TirExpr::new(
-                            TirExprKind::method_call(
-                                Box::new(new_callee),
-                                FunctionRef {
-                                    module_source: self.module_source.clone(),
-                                    name: call_method_name,
-                                    monomorph_info: None,
-                                    method_info: Some(call_method_info),
-                                },
-                                Vec::new(),
-                                call_args,
-                            ),
-                            expr.type_id,
-                            expr.span,
-                        );
-                    }
-                }
-                // Not a fn-param local, recurse normally
-                TirExpr::new(
-                    TirExprKind::IndirectCall {
-                        callee: Box::new(self.specialize_expr(
-                            callee,
-                            param_to_functor,
-                            type_table,
-                        )),
-                        args: args
-                            .iter()
-                            .map(|a| self.specialize_expr(a, param_to_functor, type_table))
-                            .collect(),
-                    },
-                    expr.type_id,
-                    expr.span,
-                )
-            }
-            TirExprKind::ClosureToCanonical {
-                functor,
-                functor_id,
-                target_fn_type,
-                closure_module,
-            } => TirExpr::new(
-                TirExprKind::ClosureToCanonical {
-                    functor: Box::new(self.specialize_expr(functor, param_to_functor, type_table)),
-                    functor_id: *functor_id,
-                    target_fn_type: *target_fn_type,
-                    closure_module: closure_module.clone(),
-                },
-                expr.type_id,
-                expr.span,
-            ),
-            // Recurse into sub-expressions
-            TirExprKind::Binary { left, op, right } => TirExpr::new(
-                TirExprKind::Binary {
-                    left: Box::new(self.specialize_expr(left, param_to_functor, type_table)),
-                    op: *op,
-                    right: Box::new(self.specialize_expr(right, param_to_functor, type_table)),
-                },
-                expr.type_id,
-                expr.span,
-            ),
-            TirExprKind::Unary { op, expr: inner } => TirExpr::new(
-                TirExprKind::Unary {
-                    op: *op,
-                    expr: Box::new(self.specialize_expr(inner, param_to_functor, type_table)),
-                },
-                expr.type_id,
-                expr.span,
-            ),
-            TirExprKind::Call {
-                func,
-                args,
-                type_args,
-            } => TirExpr::new(
-                TirExprKind::Call {
-                    func: func.clone(),
-                    args: args
-                        .iter()
-                        .map(|a| {
-                            let original_type_id = a.expr.type_id;
-                            let specialized =
-                                self.specialize_expr(&a.expr, param_to_functor, type_table);
-                            CallArg::new(
-                                self.maybe_wrap_functor_as_canonical(
-                                    specialized,
-                                    original_type_id,
-                                    param_to_functor,
-                                    type_table,
-                                ),
-                                a.is_mut,
-                            )
-                        })
-                        .collect(),
-                    type_args: type_args.clone(),
-                },
-                expr.type_id,
-                expr.span,
-            ),
-            TirExprKind::MethodCall {
-                receiver,
-                func,
-                args,
-                type_args,
-                ..
-            } => TirExpr::new(
-                TirExprKind::method_call(
-                    Box::new(self.specialize_expr(receiver, param_to_functor, type_table)),
-                    func.clone(),
-                    type_args.clone(),
-                    args.iter()
-                        .map(|a| {
-                            let original_type_id = a.expr.type_id;
-                            let specialized =
-                                self.specialize_expr(&a.expr, param_to_functor, type_table);
-                            CallArg::new(
-                                self.maybe_wrap_functor_as_canonical(
-                                    specialized,
-                                    original_type_id,
-                                    param_to_functor,
-                                    type_table,
-                                ),
-                                a.is_mut,
-                            )
-                        })
-                        .collect(),
-                ),
-                expr.type_id,
-                expr.span,
-            ),
-            TirExprKind::CmRawCall { local_name, args } => TirExpr::new(
-                TirExprKind::CmRawCall {
-                    local_name: local_name.clone(),
-                    args: args
-                        .iter()
-                        .map(|a| self.specialize_expr(a, param_to_functor, type_table))
-                        .collect(),
-                },
-                expr.type_id,
-                expr.span,
-            ),
-            TirExprKind::Block(block) => TirExpr::new(
-                TirExprKind::Block(self.specialize_function_body(
-                    block,
-                    param_to_functor,
-                    type_table,
-                )),
-                expr.type_id,
-                expr.span,
-            ),
-            TirExprKind::If {
-                condition,
-                then_branch,
-                else_branch,
-            } => TirExpr::new(
-                TirExprKind::If {
-                    condition: Box::new(self.specialize_expr(
-                        condition,
-                        param_to_functor,
-                        type_table,
-                    )),
-                    then_branch: self.specialize_function_body(
-                        then_branch,
-                        param_to_functor,
-                        type_table,
-                    ),
-                    else_branch: else_branch
-                        .as_ref()
-                        .map(|b| self.specialize_function_body(b, param_to_functor, type_table)),
-                },
-                expr.type_id,
-                expr.span,
-            ),
-            TirExprKind::Cast {
-                expr: inner,
-                target_type,
-            } => TirExpr::new(
-                TirExprKind::Cast {
-                    expr: Box::new(self.specialize_expr(inner, param_to_functor, type_table)),
-                    target_type: *target_type,
-                },
-                expr.type_id,
-                expr.span,
-            ),
-            TirExprKind::FieldAccess {
-                expr: inner,
-                field_index,
-                field_name,
-            } => TirExpr::new(
-                TirExprKind::FieldAccess {
-                    expr: Box::new(self.specialize_expr(inner, param_to_functor, type_table)),
-                    field_index: *field_index,
-                    field_name: field_name.clone(),
-                },
-                expr.type_id,
-                expr.span,
-            ),
-            TirExprKind::Index { expr: array, index } => TirExpr::new(
-                TirExprKind::Index {
-                    expr: Box::new(self.specialize_expr(array, param_to_functor, type_table)),
-                    index: Box::new(self.specialize_expr(index, param_to_functor, type_table)),
-                },
-                expr.type_id,
-                expr.span,
-            ),
-            TirExprKind::Assign { target, value } => TirExpr::new(
-                TirExprKind::Assign {
-                    target: Box::new(self.specialize_expr(target, param_to_functor, type_table)),
-                    value: Box::new(self.specialize_expr(value, param_to_functor, type_table)),
-                },
-                expr.type_id,
-                expr.span,
-            ),
-            TirExprKind::Match {
-                expr: scrutinee,
-                arms,
-            } => TirExpr::new(
-                TirExprKind::Match {
-                    expr: Box::new(self.specialize_expr(scrutinee, param_to_functor, type_table)),
-                    arms: arms
-                        .iter()
-                        .map(|arm| TirMatchArm {
-                            pattern: arm.pattern.clone(),
-                            guard: arm
-                                .guard
-                                .as_ref()
-                                .map(|g| self.specialize_expr(g, param_to_functor, type_table)),
-                            body: self.specialize_expr(&arm.body, param_to_functor, type_table),
-                            span: arm.span,
-                        })
-                        .collect(),
-                },
-                expr.type_id,
-                expr.span,
-            ),
-            TirExprKind::Closure {
-                params,
-                body,
-                captures,
-                functor_id,
-                source_text,
-                address_taken_locals,
-                body_locals,
-            } => TirExpr::new(
-                TirExprKind::Closure {
-                    params: params.clone(),
-                    body: Box::new(self.specialize_expr(body, param_to_functor, type_table)),
-                    captures: captures.clone(),
-                    functor_id: *functor_id,
-                    source_text: source_text.clone(),
-                    address_taken_locals: address_taken_locals.clone(),
-                    body_locals: body_locals.clone(),
-                },
-                expr.type_id,
-                expr.span,
-            ),
+        let target_fn_type = expr.type_id;
+        let span = expr.span;
+        let struct_literal = TirExpr::new(
             TirExprKind::StructLiteral {
-                struct_type,
-                struct_name,
-                fields,
-            } => TirExpr::new(
-                TirExprKind::StructLiteral {
-                    struct_type: *struct_type,
-                    struct_name: struct_name.clone(),
-                    fields: fields
-                        .iter()
-                        .map(|f| TirStructField {
-                            name: f.name.clone(),
-                            value: self.specialize_expr(&f.value, param_to_functor, type_table),
-                            field_index: f.field_index,
-                        })
-                        .collect(),
-                },
-                expr.type_id,
-                expr.span,
-            ),
-            TirExprKind::TupleLiteral { elements } => TirExpr::new(
-                TirExprKind::TupleLiteral {
-                    elements: elements
-                        .iter()
-                        .map(|e| self.specialize_expr(e, param_to_functor, type_table))
-                        .collect(),
-                },
-                expr.type_id,
-                expr.span,
-            ),
-            TirExprKind::TupleSpread { expr: inner } => TirExpr::new(
-                TirExprKind::TupleSpread {
-                    expr: Box::new(self.specialize_expr(inner, param_to_functor, type_table)),
-                },
-                expr.type_id,
-                expr.span,
-            ),
-            TirExprKind::TupleZip { expr: inner } => TirExpr::new(
-                TirExprKind::TupleZip {
-                    expr: Box::new(self.specialize_expr(inner, param_to_functor, type_table)),
-                },
-                expr.type_id,
-                expr.span,
-            ),
-            TirExprKind::TypePackExpansion {
-                call_expr: inner,
-                pack_type_id,
-            } => TirExpr::new(
-                TirExprKind::TypePackExpansion {
-                    call_expr: Box::new(self.specialize_expr(inner, param_to_functor, type_table)),
-                    pack_type_id: *pack_type_id,
-                },
-                expr.type_id,
-                expr.span,
-            ),
-            TirExprKind::VariantConstruct {
-                variant_type,
-                case_index,
-                case_name,
-                payload,
-            } => TirExpr::new(
-                TirExprKind::VariantConstruct {
-                    variant_type: *variant_type,
-                    case_index: *case_index,
-                    case_name: case_name.clone(),
-                    payload: payload
-                        .as_ref()
-                        .map(|p| Box::new(self.specialize_expr(p, param_to_functor, type_table))),
-                },
-                expr.type_id,
-                expr.span,
-            ),
-            TirExprKind::LabeledBlock {
-                label,
-                block,
-                result_type,
-            } => TirExpr::new(
-                TirExprKind::LabeledBlock {
-                    label: label.clone(),
-                    block: self.specialize_function_body(block, param_to_functor, type_table),
-                    result_type: *result_type,
-                },
-                expr.type_id,
-                expr.span,
-            ),
-            // Terminals - clone as-is
-            TirExprKind::Local { index, name } => {
-                // Update type if this local is a fn-param with functor type
-                let type_id = if let Some(&functor_type) = param_to_functor.get(index) {
-                    type_table.make_ref(functor_type)
-                } else {
-                    expr.type_id
-                };
-                TirExpr::new(
-                    TirExprKind::Local {
-                        index: *index,
-                        name: name.clone(),
+                struct_type: functor.struct_type_id,
+                struct_name: functor.struct_name.clone(),
+                fields: build_capture_fields(&captures, span),
+            },
+            functor.ref_type_id,
+            span,
+        );
+
+        expr.kind = TirExprKind::ClosureToCanonical {
+            functor: Box::new(struct_literal),
+            functor_id: closure_id,
+            target_fn_type,
+            closure_module: self.module_source.clone(),
+        };
+        // Keep expr.type_id as the original function type for type compatibility.
+    }
+}
+
+/// Phase 1 visitor: assign a stable `functor_id` to every `Closure` node and
+/// record a `CollectedClosure` snapshot for the functor-generation pass.
+///
+/// IDs are assigned in pre-order on the outer Closure but the snapshot is
+/// pushed in post-order (after recursing into the body), so the cloned body
+/// already carries the IDs that nested closures got assigned.
+struct CollectClosuresVisitor<'a> {
+    next_closure_id: &'a mut u32,
+    collected_closures: &'a mut Vec<CollectedClosure>,
+}
+
+impl TirMutVisitor for CollectClosuresVisitor<'_> {
+    fn visit_expr(&mut self, expr: &mut TirExpr) {
+        if !matches!(expr.kind, TirExprKind::Closure { .. }) {
+            self.walk_expr(expr);
+            return;
+        }
+
+        let closure_id = *self.next_closure_id;
+        *self.next_closure_id += 1;
+        let func_type_id = expr.type_id;
+        let span = expr.span;
+
+        if let TirExprKind::Closure { functor_id, .. } = &mut expr.kind {
+            *functor_id = Some(closure_id);
+        }
+
+        // Recurse into the body first so nested closures get IDs assigned
+        // before we clone the body for `CollectedClosure`. The clone then
+        // carries the same stable IDs as the originals.
+        self.walk_expr(expr);
+
+        if let TirExprKind::Closure {
+            params,
+            body,
+            captures,
+            ..
+        } = &expr.kind
+        {
+            self.collected_closures.push(CollectedClosure {
+                id: closure_id,
+                params: params.clone(),
+                body: (**body).clone(),
+                captures: captures.clone(),
+                return_type: body.type_id,
+                func_type_id,
+                span,
+            });
+        }
+    }
+}
+
+/// Phase 0 rewriter: turn `FuncRef` values into zero-capture `Closure`
+/// nodes so the rest of the closure pipeline handles them uniformly.
+///
+/// `&FuncRef` collapses to the converted Closure (function values are GC
+/// references, so `&fn(...) = fn(...)`). `FuncRefs` in callee position of
+/// `Call` / `MethodCall` aren't `TirExprKind::FuncRef`, so they're left
+/// alone by the default walk.
+struct FuncRefToClosureRewriter<'a> {
+    func_sigs: &'a IndexMap<String, FuncSig>,
+    type_table: &'a mut TypeTable,
+}
+
+impl TirMutVisitor for FuncRefToClosureRewriter<'_> {
+    fn visit_expr(&mut self, expr: &mut TirExpr) {
+        // `&FuncRef` / `&mut FuncRef` → recurse and collapse the wrapper if
+        // the inner became a Closure.
+        if let TirExprKind::Unary {
+            op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+            expr: inner,
+        } = &mut expr.kind
+            && matches!(inner.kind, TirExprKind::FuncRef { .. })
+        {
+            self.visit_expr(inner);
+            if matches!(inner.kind, TirExprKind::Closure { .. }) {
+                let inner_owned = std::mem::replace(
+                    inner.as_mut(),
+                    TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, expr.span),
+                );
+                *expr = inner_owned;
+            }
+            return;
+        }
+
+        // Bare `FuncRef` → zero-capture Closure if the function is known.
+        if let TirExprKind::FuncRef {
+            name,
+            module_source: func_module,
+        } = &expr.kind
+        {
+            let Some(sig) = self.func_sigs.get(name.as_str()) else {
+                return;
+            };
+            let span = expr.span;
+            let func_name = name.clone();
+            let func_module = func_module.clone();
+
+            let closure_params: Vec<(String, TypeId)> = sig
+                .params
+                .iter()
+                .enumerate()
+                .map(|(i, (_, ty))| (format!("__fn_ref_p{i}"), *ty))
+                .collect();
+
+            let call_args: Vec<CallArg> = closure_params
+                .iter()
+                .enumerate()
+                .map(|(i, (name, ty))| {
+                    CallArg::new(
+                        TirExpr::new(
+                            TirExprKind::Local {
+                                index: i as u32,
+                                name: name.clone(),
+                            },
+                            *ty,
+                            span,
+                        ),
+                        false,
+                    )
+                })
+                .collect();
+
+            let body = TirExpr::new(
+                TirExprKind::Call {
+                    func: FunctionRef {
+                        module_source: func_module,
+                        name: func_name,
+                        monomorph_info: None,
+                        method_info: None,
                     },
-                    type_id,
-                    expr.span,
-                )
+                    type_args: Vec::new(),
+                    args: call_args,
+                },
+                sig.return_type,
+                span,
+            );
+
+            let param_types: Vec<TypeId> = closure_params.iter().map(|(_, t)| *t).collect();
+            let func_type =
+                self.type_table
+                    .make_function(param_types, sig.return_type, Vec::new(), Vec::new());
+
+            expr.kind = TirExprKind::Closure {
+                params: closure_params,
+                body: Box::new(body),
+                captures: Vec::new(),
+                functor_id: None,
+                source_text: None,
+                address_taken_locals: IndexSet::default(),
+                body_locals: Vec::new(),
+            };
+            expr.type_id = func_type;
+            return;
+        }
+
+        self.walk_expr(expr);
+    }
+}
+
+/// Phase 1.5 helper: collect `(local_index, type_id)` for every `Let`
+/// statement in the closure body, including those nested in inner blocks.
+struct LocalCollector<'a> {
+    locals: &'a mut Vec<(u32, TypeId)>,
+}
+
+impl TirRefVisitor for LocalCollector<'_> {
+    fn visit_stmt(&mut self, stmt: &TirStmt) {
+        if let TirStmtKind::Let {
+            local_index,
+            type_id,
+            ..
+        } = &stmt.kind
+        {
+            self.locals.push((*local_index, *type_id));
+        }
+        self.walk_stmt(stmt);
+    }
+}
+
+/// Phase 2 visitor: decide which closures are safe to specialise. A closure
+/// is unsafe if it (or a local that holds it) appears directly in argument
+/// position — those are routed through `ClosureToCanonical` instead.
+///
+/// `in_arg_position` is tracked manually since the visitor traits don't
+/// propagate context. The flag is set true only on the direct child of an
+/// argument slot in `Call` / `MethodCall` / `IndirectCall` / `CmRawCall`,
+/// and reset to false everywhere else (statement boundaries, sub-expr
+/// wrappers, closure bodies).
+struct ClosureSafetyAnalyzer<'a> {
+    local_to_closure: &'a mut IndexMap<u32, u32>,
+    specializable: &'a mut IndexSet<u32>,
+    in_arg_position: bool,
+}
+
+impl TirRefVisitor for ClosureSafetyAnalyzer<'_> {
+    fn visit_stmt(&mut self, stmt: &TirStmt) {
+        if let TirStmtKind::Let {
+            local_index, value, ..
+        } = &stmt.kind
+            && let TirExprKind::Closure {
+                functor_id: Some(closure_id),
+                ..
+            } = &value.kind
+        {
+            self.local_to_closure.insert(*local_index, *closure_id);
+            // Initially mark as safe; will be removed if passed as argument.
+            self.specializable.insert(*closure_id);
+        }
+        let prev = std::mem::replace(&mut self.in_arg_position, false);
+        self.walk_stmt(stmt);
+        self.in_arg_position = prev;
+    }
+
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        match &expr.kind {
+            TirExprKind::Closure {
+                body,
+                functor_id: Some(closure_id),
+                ..
+            } => {
+                if self.in_arg_position {
+                    self.specializable.swap_remove(closure_id);
+                }
+                // The closure body uses a fresh local-index namespace, so
+                // outer-scope `local_to_closure` entries must not leak in.
+                // Save / restore across the descent.
+                let saved_l2c = std::mem::take(self.local_to_closure);
+                let prev_arg = std::mem::replace(&mut self.in_arg_position, false);
+                self.visit_expr(body);
+                self.in_arg_position = prev_arg;
+                *self.local_to_closure = saved_l2c;
             }
-            TirExprKind::IntLiteral { value, repr } => TirExpr::new(
-                TirExprKind::IntLiteral {
-                    value: *value,
-                    repr: repr.clone(),
-                },
-                expr.type_id,
-                expr.span,
-            ),
-            TirExprKind::FloatLiteral { value, repr } => TirExpr::new(
-                TirExprKind::FloatLiteral {
-                    value: *value,
-                    repr: repr.clone(),
-                },
-                expr.type_id,
-                expr.span,
-            ),
-            TirExprKind::BoolLiteral(v) => {
-                TirExpr::new(TirExprKind::BoolLiteral(*v), expr.type_id, expr.span)
-            }
-            TirExprKind::CharLiteral(c) => {
-                TirExpr::new(TirExprKind::CharLiteral(*c), expr.type_id, expr.span)
-            }
-            TirExprKind::StringLiteral(s) => TirExpr::new(
-                TirExprKind::StringLiteral(s.clone()),
-                expr.type_id,
-                expr.span,
-            ),
-            TirExprKind::BytesLiteral(b) => TirExpr::new(
-                TirExprKind::BytesLiteral(b.clone()),
-                expr.type_id,
-                expr.span,
-            ),
-            TirExprKind::Null => TirExpr::new(TirExprKind::Null, expr.type_id, expr.span),
-            TirExprKind::Unit => TirExpr::new(TirExprKind::Unit, expr.type_id, expr.span),
-            TirExprKind::FuncRef {
-                name,
-                module_source,
-            } => TirExpr::new(
-                TirExprKind::FuncRef {
-                    name: name.clone(),
-                    module_source: module_source.clone(),
-                },
-                expr.type_id,
-                expr.span,
-            ),
-            TirExprKind::GlobalVarGet {
-                name,
-                module_source,
-            } => TirExpr::new(
-                TirExprKind::GlobalVarGet {
-                    name: name.clone(),
-                    module_source: module_source.clone(),
-                },
-                expr.type_id,
-                expr.span,
-            ),
-            TirExprKind::GlobalVarSet {
-                name,
-                module_source,
-                value,
-            } => TirExpr::new(
-                TirExprKind::GlobalVarSet {
-                    name: name.clone(),
-                    module_source: module_source.clone(),
-                    value: Box::new(self.specialize_expr(value, param_to_functor, type_table)),
-                },
-                expr.type_id,
-                expr.span,
-            ),
-            TirExprKind::Capture { index, name } => TirExpr::new(
-                TirExprKind::Capture {
-                    index: *index,
-                    name: name.clone(),
-                },
-                expr.type_id,
-                expr.span,
-            ),
-            TirExprKind::EnumConstruct {
-                enum_type,
-                case_index,
-                case_name,
-            } => TirExpr::new(
-                TirExprKind::EnumConstruct {
-                    enum_type: *enum_type,
-                    case_index: *case_index,
-                    case_name: case_name.clone(),
-                },
-                expr.type_id,
-                expr.span,
-            ),
-            TirExprKind::VariantTag { expr: inner } => TirExpr::new(
-                TirExprKind::VariantTag {
-                    expr: Box::new(self.specialize_expr(inner, param_to_functor, type_table)),
-                },
-                expr.type_id,
-                expr.span,
-            ),
-            TirExprKind::VariantTest {
-                expr: inner,
-                case_index,
-                case_name,
-            } => TirExpr::new(
-                TirExprKind::VariantTest {
-                    expr: Box::new(self.specialize_expr(inner, param_to_functor, type_table)),
-                    case_index: *case_index,
-                    case_name: case_name.clone(),
-                },
-                expr.type_id,
-                expr.span,
-            ),
-            TirExprKind::VariantPayload {
-                expr: inner,
-                case_index,
-                payload_type,
-            } => TirExpr::new(
-                TirExprKind::VariantPayload {
-                    expr: Box::new(self.specialize_expr(inner, param_to_functor, type_table)),
-                    case_index: *case_index,
-                    payload_type: *payload_type,
-                },
-                expr.type_id,
-                expr.span,
-            ),
-            TirExprKind::Switch {
-                scrutinee,
-                min_value,
-                arms,
-                default,
-            } => TirExpr::new(
-                TirExprKind::Switch {
-                    scrutinee: Box::new(self.specialize_expr(
-                        scrutinee,
-                        param_to_functor,
-                        type_table,
-                    )),
-                    min_value: *min_value,
-                    arms: arms
-                        .iter()
-                        .map(|arm| self.specialize_function_body(arm, param_to_functor, type_table))
-                        .collect(),
-                    default: self.specialize_function_body(default, param_to_functor, type_table),
-                },
-                expr.type_id,
-                expr.span,
-            ),
-            TirExprKind::TemplateString { .. } => {
-                unreachable!("TemplateString should be expanded before this phase")
-            }
-            TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+            TirExprKind::Closure {
+                functor_id: None, ..
+            } => {
                 unreachable!(
-                    "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
+                    "Closure node missing functor_id; the collect pass should assign it (span: {:?}, kind: {:?})",
+                    expr.span, &expr.kind
                 )
             }
-        }
-    }
-
-    fn transform_block(&mut self, block: &mut TirBlock, type_table: &mut TypeTable) {
-        for stmt in &mut block.stmts {
-            self.transform_stmt(stmt, type_table);
-        }
-    }
-
-    fn transform_stmt(&mut self, stmt: &mut TirStmt, type_table: &mut TypeTable) {
-        match &mut stmt.kind {
-            TirStmtKind::Let {
-                local_index,
-                value,
-                type_id,
-                ..
-            } => {
-                // Track if this local stores a closure (read the stable ID
-                // off the Closure node).
-                let closure_id = if let TirExprKind::Closure {
-                    functor_id: Some(id),
-                    ..
-                } = &value.kind
+            TirExprKind::Local { index, .. } => {
+                if self.in_arg_position
+                    && let Some(closure_id) = self.local_to_closure.get(index)
                 {
-                    self.local_to_closure.insert(*local_index, *id);
-                    Some(*id)
-                } else {
-                    None
+                    self.specializable.swap_remove(closure_id);
+                }
+            }
+            TirExprKind::Call { args, .. } => {
+                let prev = std::mem::replace(&mut self.in_arg_position, true);
+                for arg in args {
+                    self.visit_expr(&arg.expr);
+                }
+                self.in_arg_position = prev;
+            }
+            TirExprKind::CmRawCall { args, .. } => {
+                let prev = std::mem::replace(&mut self.in_arg_position, true);
+                for arg in args {
+                    self.visit_expr(arg);
+                }
+                self.in_arg_position = prev;
+            }
+            TirExprKind::MethodCall { receiver, args, .. } => {
+                let prev = std::mem::replace(&mut self.in_arg_position, false);
+                self.visit_expr(receiver);
+                self.in_arg_position = true;
+                for arg in args {
+                    self.visit_expr(&arg.expr);
+                }
+                self.in_arg_position = prev;
+            }
+            TirExprKind::IndirectCall { callee, args } => {
+                let prev = std::mem::replace(&mut self.in_arg_position, false);
+                self.visit_expr(callee);
+                self.in_arg_position = true;
+                for arg in args {
+                    self.visit_expr(arg);
+                }
+                self.in_arg_position = prev;
+            }
+            TirExprKind::ClosureToCanonical { functor, .. } => {
+                // Pass-through: original preserved in_arg_position here.
+                self.visit_expr(functor);
+            }
+            _ => {
+                // Every other recursion site in the original passes
+                // `in_arg_position=false`, so reset before the default walk.
+                let prev = std::mem::replace(&mut self.in_arg_position, false);
+                self.walk_expr(expr);
+                self.in_arg_position = prev;
+            }
+        }
+    }
+}
+
+/// Phase 3: rewrite every closure call site:
+/// - `Closure` literal (specialisable) → struct literal of `__Closure_N`
+/// - `IndirectCall` on a closure-bearing local → `MethodCall` on `__call`
+/// - `Call` / `MethodCall` whose closure args have a matching specialised
+///   callee → redirected to that callee
+///
+/// Closure bodies live in their own local-index namespace, so this pass
+/// does NOT recurse into `Closure { body, .. }` — those bodies live in the
+/// generated `__call` methods, which `lower_module` walks separately.
+struct ClosureCallSiteLowerer<'a> {
+    local_to_closure: &'a mut IndexMap<u32, u32>,
+    specializable: &'a IndexSet<u32>,
+    functor_infos: &'a [ClosureFunctor],
+    fn_param_specializations: &'a IndexMap<FnParamSpecKey, String>,
+    module_source: &'a ModuleSource,
+    type_table: &'a mut TypeTable,
+}
+
+impl ClosureCallSiteLowerer<'_> {
+    fn try_redirect_to_specialized_callee(&mut self, func: &mut FunctionRef, args: &mut [CallArg]) {
+        // Closure args with `functor_id` that map to a known functor.
+        let mut functor_types = Vec::new();
+        for (i, arg) in args.iter().enumerate() {
+            if let TirExprKind::Closure {
+                functor_id: Some(id),
+                ..
+            } = &arg.expr.kind
+                && let Some(functor) = self.functor_infos.get(*id as usize)
+            {
+                functor_types.push((i as u32, functor.struct_type_id));
+            }
+        }
+        if functor_types.is_empty() {
+            return;
+        }
+
+        let key = FnParamSpecKey {
+            callee_name: func.name.clone(),
+            functor_types: functor_types.clone(),
+        };
+        let Some(specialized_name) = self.fn_param_specializations.get(&key) else {
+            return;
+        };
+
+        // Closure args → struct literals.
+        for (arg_idx, _) in &functor_types {
+            let arg = &mut args[*arg_idx as usize];
+            if let TirExprKind::Closure {
+                captures,
+                functor_id: Some(closure_id),
+                ..
+            } = &arg.expr.kind
+                && let Some(functor) = self.functor_infos.get(*closure_id as usize)
+            {
+                arg.expr.kind = TirExprKind::StructLiteral {
+                    struct_type: functor.struct_type_id,
+                    struct_name: functor.struct_name.clone(),
+                    fields: build_capture_fields(captures, arg.expr.span),
                 };
-
-                self.transform_expr(value, type_table);
-
-                // Update the Let statement's type_id for specializable closures
-                // (non-specializable closures keep their fn(...) type for ClosureToCanonical)
-                if let Some(id) = closure_id
-                    && self.specializable.contains(&id)
-                    && let Some(functor) = self.functor_infos.get(id as usize)
-                {
-                    *type_id = functor.ref_type_id;
-                }
-            }
-            TirStmtKind::Expr(expr) | TirStmtKind::Return { value: Some(expr) } => {
-                self.transform_expr(expr, type_table);
-            }
-            TirStmtKind::Return { value: None } | TirStmtKind::Continue => {}
-            TirStmtKind::Break { value, .. } => {
-                if let Some(value) = value {
-                    self.transform_expr(value, type_table);
-                }
-            }
-            TirStmtKind::If {
-                condition,
-                then_block,
-                else_block,
-            } => {
-                self.transform_expr(condition, type_table);
-                self.transform_block(then_block, type_table);
-                if let Some(else_blk) = else_block {
-                    self.transform_block(else_blk, type_table);
-                }
-            }
-            TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-                self.transform_block(body, type_table);
-            }
-            TirStmtKind::IfLet {
-                scrutinee,
-                then_block,
-                else_block,
-                ..
-            } => {
-                self.transform_expr(scrutinee, type_table);
-                self.transform_block(then_block, type_table);
-                if let Some(else_blk) = else_block {
-                    self.transform_block(else_blk, type_table);
-                }
-            }
-            TirStmtKind::LetDestructure { value, .. } => {
-                self.transform_expr(value, type_table);
-            }
-            TirStmtKind::TaskReturn { .. } => {
-                unreachable!("TaskReturn should be eliminated by synthesis before this phase")
-            }
-            TirStmtKind::VariadicForOf { .. } => {
-                unreachable!("VariadicForOf should be expanded during monomorphization")
+                arg.expr.type_id = functor.ref_type_id;
             }
         }
+
+        let functor_suffix = build_functor_suffix(&functor_types, self.type_table);
+        let specialized_method_info = func
+            .method_info
+            .as_ref()
+            .map(|info| build_specialized_method_info(info, &functor_suffix));
+
+        // Preserve monomorph_info so DCE can trace the call graph.
+        let orig_monomorph_info = func.monomorph_info.clone();
+        *func = FunctionRef {
+            module_source: self.module_source.clone(),
+            name: specialized_name.clone(),
+            monomorph_info: orig_monomorph_info,
+            method_info: specialized_method_info,
+        };
+    }
+}
+
+impl TirMutVisitor for ClosureCallSiteLowerer<'_> {
+    fn visit_stmt(&mut self, stmt: &mut TirStmt) {
+        if let TirStmtKind::Let {
+            local_index,
+            value,
+            type_id,
+            ..
+        } = &mut stmt.kind
+        {
+            // Track if this local stores a closure (read the stable ID off
+            // the Closure node).
+            let closure_id = if let TirExprKind::Closure {
+                functor_id: Some(id),
+                ..
+            } = &value.kind
+            {
+                self.local_to_closure.insert(*local_index, *id);
+                Some(*id)
+            } else {
+                None
+            };
+
+            self.visit_expr(value);
+
+            // Update the Let's `type_id` for specializable closures.
+            // Non-specializable ones keep their `fn(...)` type for
+            // ClosureToCanonical.
+            if let Some(id) = closure_id
+                && self.specializable.contains(&id)
+                && let Some(functor) = self.functor_infos.get(id as usize)
+            {
+                *type_id = functor.ref_type_id;
+            }
+            return;
+        }
+        self.walk_stmt(stmt);
     }
 
-    fn transform_expr(&mut self, expr: &mut TirExpr, type_table: &mut TypeTable) {
+    fn visit_expr(&mut self, expr: &mut TirExpr) {
         match &mut expr.kind {
             TirExprKind::Closure {
                 captures,
                 functor_id,
                 ..
             } => {
-                // The closure's ID was assigned in the collect pass and
-                // lives on the node. Reading it here means we don't have
-                // to keep a counter in sync with traversal order — which
-                // would break the moment we walk a different set of
-                // functions (e.g. the generated `__call` methods).
                 let closure_id = functor_id.unwrap_or_else(|| {
                     panic!(
                         "Closure node missing functor_id; the collect pass should assign it (span: {:?})",
                         expr.span,
                     )
                 });
-
-                // Don't recurse into the body. The body lives in *this*
-                // closure's local-index namespace, not the function we
-                // are walking, so descending here would corrupt
-                // `local_to_closure` (used by `update_local_types` and
-                // by IndirectCall→MethodCall rewriting). The closure's
-                // body lives independently in the generated `__call`
-                // method, which `lower_module` walks alongside the
-                // original module functions in this same pass.
-
-                // Specializable closures: transform to StructLiteral (stored in local, called directly)
-                // Non-specializable closures: set functor_id and leave as Closure for fn-param specialization
-                // The try_transform_fn_param_call will handle specialization. Any remaining
-                // Closure nodes after that are transformed to ClosureToCanonical in a final pass.
+                // Don't recurse into the body — its locals belong to a
+                // different namespace and are processed via the generated
+                // `__call` method.
                 if self.specializable.contains(&closure_id)
                     && let Some(functor) = self.functor_infos.get(closure_id as usize)
                 {
-                    // Transform Closure to StructLiteral
-                    let struct_name = functor.struct_name.clone();
-
-                    // Build field expressions from captures
-                    let fields: Vec<TirStructField> = captures
-                        .iter()
-                        .enumerate()
-                        .map(|(i, cap)| TirStructField {
-                            name: format!("__capture_{i}"),
-                            value: TirExpr::new(
-                                TirExprKind::Local {
-                                    index: cap.outer_index,
-                                    name: cap.name.clone(),
-                                },
-                                cap.type_id,
-                                expr.span,
-                            ),
-                            field_index: i as u32,
-                        })
-                        .collect();
-
-                    // Replace with StructLiteral
-                    // struct_type uses bare struct type for codegen
-                    // type_id uses ref type because functors are reference types
                     expr.kind = TirExprKind::StructLiteral {
                         struct_type: functor.struct_type_id,
-                        struct_name,
-                        fields,
+                        struct_name: functor.struct_name.clone(),
+                        fields: build_capture_fields(captures, expr.span),
                     };
                     expr.type_id = functor.ref_type_id;
                 }
-                // For non-specializable closures (passed as arguments), the
-                // node's pre-assigned `functor_id` already points at the
-                // corresponding ClosureFunctor — `try_transform_fn_param_call`
-                // and the phase-4 `ClosureToCanonical` rewrite both read it
-                // off the node directly.
             }
             TirExprKind::IndirectCall { callee, args } => {
-                // Transform callee and args first
-                self.transform_expr(callee, type_table);
+                self.visit_expr(callee);
                 for arg in &mut *args {
-                    self.transform_expr(arg, type_table);
+                    self.visit_expr(arg);
                 }
 
-                // Check if callee is a local that stores a safe-to-transform closure
+                // Specializable closure stored in local → MethodCall on __call.
                 if let TirExprKind::Local { index, .. } = &callee.kind
                     && let Some(closure_id) = self.local_to_closure.get(index)
                     && self.specializable.contains(closure_id)
                     && let Some(functor) = self.functor_infos.get(*closure_id as usize)
                 {
-                    // Transform IndirectCall to MethodCall
-                    // Update callee's type to the functor ref type (functors are reference types)
                     let mut callee_owned = std::mem::replace(
                         callee.as_mut(),
                         TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, expr.span),
                     );
                     callee_owned.type_id = functor.ref_type_id;
 
-                    // Get return type from the __call method
                     let return_type = functor.call_method.borrow().return_type;
-
-                    // Replace with MethodCall using FunctionRef::from_resolved
                     let args_owned: Vec<TirExpr> = std::mem::take(args);
-                    let params_is_mut: Vec<bool> = functor
-                        .call_method
-                        .borrow()
-                        .params
-                        .iter()
-                        .skip(1) // skip self/env param
-                        .map(|p| p.is_mut)
-                        .collect();
-                    let call_args: Vec<CallArg> = args_owned
-                        .into_iter()
-                        .zip(params_is_mut.into_iter().chain(std::iter::repeat(false)))
-                        .map(|(expr, is_mut)| CallArg::new(expr, is_mut))
-                        .collect();
+                    let call_args =
+                        make_call_method_args(args_owned, &functor.call_method.borrow());
                     expr.kind = TirExprKind::method_call(
                         Box::new(callee_owned),
                         FunctionRef::from_resolved(
@@ -4142,527 +1308,321 @@ impl ClosureLowerer {
                     expr.type_id = return_type;
                 }
             }
-            TirExprKind::ClosureToCanonical { functor, .. } => {
-                self.transform_expr(functor, type_table);
-            }
-            // Recursive cases - transform all sub-expressions
-            TirExprKind::Binary { left, right, .. } => {
-                self.transform_expr(left, type_table);
-                self.transform_expr(right, type_table);
-            }
-            TirExprKind::Unary { expr: inner, .. }
-            | TirExprKind::Cast { expr: inner, .. }
-            | TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::TupleSpread { expr: inner }
-            | TirExprKind::TupleZip { expr: inner }
-            | TirExprKind::TypePackExpansion {
-                call_expr: inner, ..
-            } => {
-                self.transform_expr(inner, type_table);
-            }
             TirExprKind::Call { func, args, .. } => {
                 for arg in &mut *args {
-                    self.transform_expr(&mut arg.expr, type_table);
+                    self.visit_expr(&mut arg.expr);
                 }
-                // Check if this call has closure arguments that need fn-param specialization
-                self.try_transform_fn_param_call(func, args, type_table);
+                self.try_redirect_to_specialized_callee(func, args);
             }
-            TirExprKind::CmRawCall { args, .. } => {
+            TirExprKind::MethodCall {
+                receiver,
+                func,
+                args,
+                ..
+            } => {
+                self.visit_expr(receiver);
+                for arg in &mut *args {
+                    self.visit_expr(&mut arg.expr);
+                }
+                self.try_redirect_to_specialized_callee(func, args);
+            }
+            _ => self.walk_expr(expr),
+        }
+    }
+}
+
+/// Phase 1.5 in-place body transformer for the synthesised `__call` method.
+///
+/// Operates on a clone of the original closure body and rewrites:
+/// - `Capture { index }` → `FieldAccess { self.__capture_<index> }`
+/// - `Local { index }` → `Local { index + 1 }` (shift past the synthetic `self`)
+/// - `Let { local_index }` → `Let { local_index + 1 }`
+/// - `Binding { local_index }` (in patterns) → shifted by +1
+///
+/// Nested `Closure` nodes are NOT recursed into: their body lives in a
+/// separate local-index namespace and gets its own `__call` method
+/// generated at the same level. Their `captures[*].outer_index` references
+/// locals in the outer pre-shift scope and are not rewritten here — the
+/// nested-closure construction site is rewritten by Phase 3 and reads
+/// capture values through the shifted local map at that point.
+struct ClosureBodyTransformer<'a> {
+    captures: &'a [TirCapture],
+    self_ref_type: TypeId,
+    self_span: Span,
+}
+
+impl TirMutVisitor for ClosureBodyTransformer<'_> {
+    fn visit_expr(&mut self, expr: &mut TirExpr) {
+        match &mut expr.kind {
+            TirExprKind::Capture { index, .. } => {
+                let index = *index;
+                let cap_type = self
+                    .captures
+                    .get(index as usize)
+                    .map_or(TypeTable::UNKNOWN, |c| c.type_id);
+                let span = self.self_span;
+                let self_expr = TirExpr::new(
+                    TirExprKind::Local {
+                        index: 0,
+                        name: "self".to_string(),
+                    },
+                    self.self_ref_type,
+                    span,
+                );
+                expr.kind = TirExprKind::FieldAccess {
+                    expr: Box::new(self_expr),
+                    field_index: index,
+                    field_name: format!("__capture_{index}"),
+                };
+                expr.type_id = cap_type;
+                expr.span = span;
+            }
+            TirExprKind::Local { index, .. } => {
+                *index += 1;
+            }
+            TirExprKind::Closure { .. } => {
+                // Don't recurse — see struct doc.
+            }
+            _ => self.walk_expr(expr),
+        }
+    }
+
+    fn visit_stmt(&mut self, stmt: &mut TirStmt) {
+        if let TirStmtKind::Let { local_index, .. } = &mut stmt.kind {
+            *local_index += 1;
+        }
+        self.walk_stmt(stmt);
+    }
+
+    fn visit_pattern(&mut self, pattern: &mut TirPattern) {
+        if let TirPattern::Binding { local_index, .. } = pattern {
+            *local_index += 1;
+        }
+        self.walk_pattern(pattern);
+    }
+}
+
+/// Phase 2.5 collector: scan function bodies and record every direct
+/// call (`Call` / `MethodCall`) whose closure args want a specialised
+/// callee. Closures embed their `functor_id` from Phase 1, so the key
+/// is reconstructible without any traversal-order counter.
+struct FnParamSpecCollector<'a> {
+    func_by_name: &'a IndexMap<String, Rc<RefCell<TirFunction>>>,
+    type_table: &'a TypeTable,
+    functor_infos: &'a [ClosureFunctor],
+    requests: &'a mut Vec<(FnParamSpecKey, Rc<RefCell<TirFunction>>)>,
+}
+
+impl FnParamSpecCollector<'_> {
+    fn create_key(
+        &self,
+        callee_name: &str,
+        params: &[TirParam],
+        args: &[CallArg],
+    ) -> Option<FnParamSpecKey> {
+        let mut functor_types = Vec::new();
+        for (i, (param, arg)) in params.iter().zip(args.iter()).enumerate() {
+            if let ResolvedType::Function { .. } = self.type_table.get(param.type_id)
+                && let TirExprKind::Closure {
+                    functor_id: Some(closure_id),
+                    ..
+                } = &arg.expr.kind
+                && let Some(functor) = self.functor_infos.get(*closure_id as usize)
+            {
+                functor_types.push((i as u32, functor.struct_type_id));
+            }
+        }
+        if functor_types.is_empty() {
+            return None;
+        }
+        Some(FnParamSpecKey {
+            callee_name: callee_name.to_string(),
+            functor_types,
+        })
+    }
+}
+
+impl TirRefVisitor for FnParamSpecCollector<'_> {
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        match &expr.kind {
+            TirExprKind::Call { func, args, .. } => {
+                if let Some(callee_rc) = self.func_by_name.get(&func.name) {
+                    let callee = callee_rc.borrow();
+                    if let Some(key) = self.create_key(&callee.name, &callee.params, args) {
+                        self.requests.push((key, Rc::clone(callee_rc)));
+                    }
+                }
                 for arg in args {
-                    self.transform_expr(arg, type_table);
+                    self.visit_expr(&arg.expr);
                 }
             }
             TirExprKind::MethodCall {
                 receiver,
                 func,
                 args,
-                type_args: _,
                 ..
             } => {
-                self.transform_expr(receiver, type_table);
-                for arg in &mut *args {
-                    self.transform_expr(&mut arg.expr, type_table);
-                }
-
-                // Check if this call has closure arguments that need fn-param specialization
-                self.try_transform_fn_param_call(func, args, type_table);
-            }
-            TirExprKind::Block(block) => {
-                self.transform_block(block, type_table);
-            }
-            TirExprKind::If {
-                condition,
-                then_branch,
-                else_branch,
-            } => {
-                self.transform_expr(condition, type_table);
-                self.transform_block(then_branch, type_table);
-                if let Some(else_blk) = else_branch {
-                    self.transform_block(else_blk, type_table);
-                }
-            }
-            TirExprKind::StructLiteral { fields, .. } => {
-                for field in fields {
-                    self.transform_expr(&mut field.value, type_table);
-                }
-            }
-            TirExprKind::TupleLiteral { elements } => {
-                for elem in elements {
-                    self.transform_expr(elem, type_table);
-                }
-            }
-            TirExprKind::Assign { target, value } => {
-                self.transform_expr(target, type_table);
-                self.transform_expr(value, type_table);
-            }
-            TirExprKind::Index { expr: array, index } => {
-                self.transform_expr(array, type_table);
-                self.transform_expr(index, type_table);
-            }
-            TirExprKind::Match {
-                expr: scrutinee,
-                arms,
-            } => {
-                self.transform_expr(scrutinee, type_table);
-                for arm in arms {
-                    if let Some(guard) = &mut arm.guard {
-                        self.transform_expr(guard, type_table);
+                if let Some(callee_rc) = self.func_by_name.get(&func.name) {
+                    let callee = callee_rc.borrow();
+                    let params_without_self: Vec<TirParam> =
+                        callee.params.iter().skip(1).cloned().collect();
+                    if let Some(key) = self.create_key(&callee.name, &params_without_self, args) {
+                        self.requests.push((key, Rc::clone(callee_rc)));
                     }
-                    self.transform_expr(&mut arm.body, type_table);
+                }
+                self.visit_expr(receiver);
+                for arg in args {
+                    self.visit_expr(&arg.expr);
                 }
             }
-            TirExprKind::VariantConstruct { payload, .. } => {
-                if let Some(payload_expr) = payload {
-                    self.transform_expr(payload_expr, type_table);
-                }
-            }
-            TirExprKind::LabeledBlock { block, .. } => {
-                self.transform_block(block, type_table);
-            }
-            TirExprKind::GlobalVarSet { value, .. } => {
-                self.transform_expr(value, type_table);
-            }
-            // Lowered pattern matching nodes
-            TirExprKind::VariantTag { expr }
-            | TirExprKind::VariantTest { expr, .. }
-            | TirExprKind::VariantPayload { expr, .. } => {
-                self.transform_expr(expr, type_table);
-            }
-            TirExprKind::Switch {
-                scrutinee,
-                arms,
-                default,
-                ..
-            } => {
-                self.transform_expr(scrutinee, type_table);
-                for arm in arms {
-                    self.transform_block(arm, type_table);
-                }
-                self.transform_block(default, type_table);
-            }
-            // Terminals - nothing to transform
-            TirExprKind::IntLiteral { .. }
-            | TirExprKind::FloatLiteral { .. }
-            | TirExprKind::BoolLiteral(_)
-            | TirExprKind::CharLiteral(_)
-            | TirExprKind::StringLiteral(_)
-            | TirExprKind::BytesLiteral(_)
-            | TirExprKind::Null
-            | TirExprKind::Unit
-            | TirExprKind::Local { .. }
-            | TirExprKind::FuncRef { .. }
-            | TirExprKind::GlobalVarGet { .. }
-            | TirExprKind::Capture { .. }
-            | TirExprKind::EnumConstruct { .. } => {}
-            TirExprKind::TemplateString { .. } => {
-                unreachable!("TemplateString should be expanded before this phase")
-            }
-            TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
-                unreachable!(
-                    "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
-                )
-            }
+            _ => self.walk_expr(expr),
         }
     }
+}
 
-    /// Try to transform a call with closure arguments to use a specialized function.
-    /// This handles fn-param monomorphization: when a closure is passed to a fn-type parameter,
-    /// we transform the closure to a struct literal and change the call to use the specialized function.
-    fn try_transform_fn_param_call(
-        &self,
-        func: &mut FunctionRef,
-        args: &mut [CallArg],
-        type_table: &mut TypeTable,
-    ) {
-        // Collect closure args that have functor_id (meaning they were passed as fn-type params)
-        let mut functor_types = Vec::new();
-        for (i, arg) in args.iter().enumerate() {
-            if let TirExprKind::Closure {
-                functor_id: Some(id),
-                ..
-            } = &arg.expr.kind
-                && let Some(functor) = self.functor_infos.get(*id as usize)
-            {
-                functor_types.push((i as u32, functor.struct_type_id));
-            }
-        }
+/// Phase 2.5 predicate visitor: report whether any of the listed
+/// fn-param locals appears as a direct struct-field value somewhere in
+/// the body. Such locals can't be specialised — the struct field type
+/// is `fn(...)`, not `&__Closure_N`.
+///
+/// Recurses through nested struct literals so a fn-param wrapped inside
+/// `Foo { inner: Bar { f: param } }` still counts. Once `found` flips to
+/// true, subsequent visits short-circuit cheaply.
+struct StructFieldFnParamCheck<'a> {
+    fn_param_indices: &'a [u32],
+    found: bool,
+}
 
-        if functor_types.is_empty() {
+impl TirRefVisitor for StructFieldFnParamCheck<'_> {
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        if self.found {
             return;
         }
-
-        // Build spec key and look up specialized function
-        let key = FnParamSpecKey {
-            callee_name: func.name.clone(),
-            functor_types: functor_types.clone(),
-        };
-
-        let Some(specialized_name) = self.fn_param_specializations.get(&key) else {
-            return;
-        };
-
-        // Transform closure args to struct literals
-        for (arg_idx, _functor_type_id) in &functor_types {
-            let arg = &mut args[*arg_idx as usize];
-            if let TirExprKind::Closure {
-                captures,
-                functor_id: Some(closure_id),
-                ..
-            } = &arg.expr.kind
-                && let Some(functor) = self.functor_infos.get(*closure_id as usize)
-            {
-                // Build struct fields from captures
-                let fields: Vec<TirStructField> = captures
-                    .iter()
-                    .enumerate()
-                    .map(|(i, cap)| TirStructField {
-                        name: format!("__capture_{i}"),
-                        value: TirExpr::new(
-                            TirExprKind::Local {
-                                index: cap.outer_index,
-                                name: cap.name.clone(),
-                            },
-                            cap.type_id,
-                            arg.expr.span,
-                        ),
-                        field_index: i as u32,
-                    })
-                    .collect();
-
-                // Transform to struct literal (functors are reference types, no Move needed)
-                arg.expr.kind = TirExprKind::StructLiteral {
-                    struct_type: functor.struct_type_id,
-                    struct_name: functor.struct_name.clone(),
-                    fields,
-                };
-                arg.expr.type_id = functor.ref_type_id;
+        if let TirExprKind::StructLiteral { fields, .. } = &expr.kind {
+            for field in fields {
+                if let TirExprKind::Local { index, .. } = &field.value.kind
+                    && self.fn_param_indices.contains(index)
+                {
+                    self.found = true;
+                    return;
+                }
             }
         }
+        self.walk_expr(expr);
+    }
+}
 
-        // Build the functor suffix for the specialized method name
-        let functor_suffix: String =
-            functor_types
+/// Phase 2.5 in-place transformer for the cloned body of a specialised
+/// callee. Rewrites:
+/// - `IndirectCall { callee: Local(fn-param), args }` → `MethodCall` on
+///   the corresponding `__call`.
+/// - `Local { fn-param }` → keep the Local but retag its `type_id` to the
+///   functor `&__Closure_N` so downstream code sees the new type.
+/// - `Call` / `MethodCall` arg slots: when a fn-param Local is forwarded
+///   into a callee that still expects `fn(...)`, wrap it in
+///   `ClosureToCanonical` so the callee sees the original function type.
+struct SpecializerTransformer<'a> {
+    param_to_functor: &'a IndexMap<u32, TypeId>,
+    functor_infos: &'a [ClosureFunctor],
+    module_source: &'a ModuleSource,
+    type_table: &'a mut TypeTable,
+}
+
+impl SpecializerTransformer<'_> {
+    fn wrap_arg_if_needed(&self, arg: &mut TirExpr, original_type_id: TypeId) {
+        if let TirExprKind::Local { index, .. } = &arg.kind
+            && let Some(&functor_type) = self.param_to_functor.get(index)
+            && matches!(
+                self.type_table.get(original_type_id),
+                ResolvedType::Function { .. }
+            )
+            && let Some(functor) = self
+                .functor_infos
                 .iter()
-                .fold(String::new(), |mut acc, (_, tid)| {
-                    let name = type_table.type_name(*tid);
-                    let _ = write!(acc, "${name}");
-                    acc
-                });
-
-        // Build specialized method_info with the specialized method name
-        // The functor suffix goes AFTER type args, so we use full_method_name()
-        // and then clear method_type_args to avoid duplication
-        let specialized_method_info = func.method_info.clone().map(|info| {
-            LocalMethodName {
-                struct_name: info.struct_name.clone(),
-                base_struct_name: info.base_struct_name.clone(),
-                trait_name: info.trait_name.clone(),
-                base_trait_name: info.base_trait_name.clone(),
-                trait_type_args: info.trait_type_args.clone(),
-                method_name: format!("{}{}", info.full_method_name(), functor_suffix),
-                method_type_args: Vec::new(), // Type args are now in method_name
-                is_type_param_receiver: info.is_type_param_receiver,
-                is_ref_impl: false,
-                cm_name: info.cm_name,
-            }
-        });
-
-        // Update the function reference to use the specialized name
-        // Use self.module_source so it matches the specialized function definition
-        // Preserve monomorph_info so DCE can trace the call graph correctly
-        let orig_monomorph_info = func.monomorph_info.clone();
-        *func = FunctionRef {
-            module_source: self.module_source.clone(),
-            name: specialized_name.clone(),
-            monomorph_info: orig_monomorph_info,
-            method_info: specialized_method_info,
-        };
-    }
-
-    /// Transform remaining Closure nodes to `ClosureToCanonical`.
-    /// This is called after fn-param specialization has had a chance to transform closures.
-    /// Any Closure nodes still remaining are those where specialization was skipped
-    /// (e.g., fn-param stored in struct field).
-    fn transform_remaining_closures_block(&self, block: &mut TirBlock) {
-        for stmt in &mut block.stmts {
-            self.transform_remaining_closures_stmt(stmt);
+                .find(|f| f.struct_type_id == functor_type)
+        {
+            let span = arg.span;
+            let inner =
+                std::mem::replace(arg, TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span));
+            *arg = TirExpr::new(
+                TirExprKind::ClosureToCanonical {
+                    functor: Box::new(inner),
+                    functor_id: functor.id,
+                    target_fn_type: original_type_id,
+                    closure_module: self.module_source.clone(),
+                },
+                original_type_id,
+                span,
+            );
         }
     }
+}
 
-    fn transform_remaining_closures_stmt(&self, stmt: &mut TirStmt) {
-        match &mut stmt.kind {
-            TirStmtKind::Let { value, .. } => {
-                self.transform_remaining_closures_expr(value);
-            }
-            TirStmtKind::Expr(expr) => {
-                self.transform_remaining_closures_expr(expr);
-            }
-            TirStmtKind::Return { value: Some(expr) } => {
-                self.transform_remaining_closures_expr(expr);
-            }
-            TirStmtKind::Return { value: None } | TirStmtKind::Continue => {}
-            TirStmtKind::Break { value, .. } => {
-                if let Some(value) = value {
-                    self.transform_remaining_closures_expr(value);
-                }
-            }
-            TirStmtKind::If {
-                condition,
-                then_block,
-                else_block,
-            } => {
-                self.transform_remaining_closures_expr(condition);
-                self.transform_remaining_closures_block(then_block);
-                if let Some(else_blk) = else_block {
-                    self.transform_remaining_closures_block(else_blk);
-                }
-            }
-            TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-                self.transform_remaining_closures_block(body);
-            }
-            TirStmtKind::IfLet {
-                scrutinee,
-                then_block,
-                else_block,
-                ..
-            } => {
-                self.transform_remaining_closures_expr(scrutinee);
-                self.transform_remaining_closures_block(then_block);
-                if let Some(else_blk) = else_block {
-                    self.transform_remaining_closures_block(else_blk);
-                }
-            }
-            TirStmtKind::LetDestructure { value, .. } => {
-                self.transform_remaining_closures_expr(value);
-            }
-            TirStmtKind::TaskReturn { .. } => {
-                unreachable!("TaskReturn should be eliminated by synthesis before this phase")
-            }
-            TirStmtKind::VariadicForOf { .. } => {
-                unreachable!("VariadicForOf should be expanded during monomorphization")
-            }
-        }
-    }
-
-    fn transform_remaining_closures_expr(&self, expr: &mut TirExpr) {
+impl TirMutVisitor for SpecializerTransformer<'_> {
+    fn visit_expr(&mut self, expr: &mut TirExpr) {
         match &mut expr.kind {
-            TirExprKind::Closure {
-                captures,
-                functor_id: Some(closure_id),
-                ..
-            } => {
-                // Don't recurse into the body — it lives in this closure's
-                // local-index namespace. Its own clone in the generated
-                // `__call` method is walked by `lower_module` in this same
-                // pass (see the `lowered_funcs` set).
-
-                // This closure wasn't specialized, transform to ClosureToCanonical
-                if let Some(functor) = self.functor_infos.get(*closure_id as usize) {
-                    let struct_name = functor.struct_name.clone();
-
-                    // Build field expressions from captures
-                    let fields: Vec<TirStructField> = captures
+            TirExprKind::IndirectCall { callee, args } => {
+                self.visit_expr(callee);
+                for arg in &mut *args {
+                    self.visit_expr(arg);
+                }
+                if let TirExprKind::Local { index, .. } = &callee.kind
+                    && let Some(&functor_type) = self.param_to_functor.get(index)
+                    && let Some(functor) = self
+                        .functor_infos
                         .iter()
-                        .enumerate()
-                        .map(|(i, cap)| TirStructField {
-                            name: format!("__capture_{i}"),
-                            value: TirExpr::new(
-                                TirExprKind::Local {
-                                    index: cap.outer_index,
-                                    name: cap.name.clone(),
-                                },
-                                cap.type_id,
-                                expr.span,
-                            ),
-                            field_index: i as u32,
-                        })
-                        .collect();
+                        .find(|f| f.struct_type_id == functor_type)
+                {
+                    let call_method_name =
+                        MethodName::format_local(&functor.struct_name, None, "__call");
+                    let callee_owned = std::mem::replace(
+                        callee.as_mut(),
+                        TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, expr.span),
+                    );
+                    let args_owned: Vec<TirExpr> = std::mem::take(args);
 
-                    // Build the StructLiteral (functors are reference types)
-                    let struct_literal = TirExpr::new(
-                        TirExprKind::StructLiteral {
-                            struct_type: functor.struct_type_id,
-                            struct_name,
-                            fields,
-                        },
-                        functor.ref_type_id,
-                        expr.span,
+                    let call_method_info = LocalMethodName::new(
+                        functor.struct_name.clone(),
+                        None,
+                        "__call".to_string(),
                     );
 
-                    // Wrap in ClosureToCanonical
-                    let target_fn_type = expr.type_id; // Original function type
-                    expr.kind = TirExprKind::ClosureToCanonical {
-                        functor: Box::new(struct_literal),
-                        functor_id: *closure_id,
-                        target_fn_type,
-                        closure_module: self.module_source.clone(),
-                    };
-                    // Keep original function type for type compatibility
+                    let call_args =
+                        make_call_method_args(args_owned, &functor.call_method.borrow());
+                    expr.kind = TirExprKind::method_call(
+                        Box::new(callee_owned),
+                        FunctionRef {
+                            module_source: self.module_source.clone(),
+                            name: call_method_name,
+                            monomorph_info: None,
+                            method_info: Some(call_method_info),
+                        },
+                        Vec::new(),
+                        call_args,
+                    );
                 }
             }
-            // Recurse into all expression kinds
             TirExprKind::Call { args, .. } => {
-                for arg in args {
-                    self.transform_remaining_closures_expr(&mut arg.expr);
-                }
-            }
-            TirExprKind::CmRawCall { args, .. } => {
-                for arg in args {
-                    self.transform_remaining_closures_expr(arg);
+                for arg in &mut *args {
+                    let original_type_id = arg.expr.type_id;
+                    self.visit_expr(&mut arg.expr);
+                    self.wrap_arg_if_needed(&mut arg.expr, original_type_id);
                 }
             }
             TirExprKind::MethodCall { receiver, args, .. } => {
-                self.transform_remaining_closures_expr(receiver);
-                for arg in args {
-                    self.transform_remaining_closures_expr(&mut arg.expr);
+                self.visit_expr(receiver);
+                for arg in &mut *args {
+                    let original_type_id = arg.expr.type_id;
+                    self.visit_expr(&mut arg.expr);
+                    self.wrap_arg_if_needed(&mut arg.expr, original_type_id);
                 }
             }
-            TirExprKind::Binary { left, right, .. } => {
-                self.transform_remaining_closures_expr(left);
-                self.transform_remaining_closures_expr(right);
-            }
-            TirExprKind::Unary { expr: inner, .. }
-            | TirExprKind::Cast { expr: inner, .. }
-            | TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::TupleSpread { expr: inner }
-            | TirExprKind::TupleZip { expr: inner }
-            | TirExprKind::TypePackExpansion {
-                call_expr: inner, ..
-            } => {
-                self.transform_remaining_closures_expr(inner);
-            }
-            TirExprKind::Assign { target, value } => {
-                self.transform_remaining_closures_expr(target);
-                self.transform_remaining_closures_expr(value);
-            }
-            TirExprKind::Index { expr: arr, index } => {
-                self.transform_remaining_closures_expr(arr);
-                self.transform_remaining_closures_expr(index);
-            }
-            TirExprKind::Block(block) => {
-                self.transform_remaining_closures_block(block);
-            }
-            TirExprKind::If {
-                condition,
-                then_branch,
-                else_branch,
-            } => {
-                self.transform_remaining_closures_expr(condition);
-                self.transform_remaining_closures_block(then_branch);
-                if let Some(else_blk) = else_branch {
-                    self.transform_remaining_closures_block(else_blk);
+            TirExprKind::Local { index, .. } => {
+                if let Some(&functor_type) = self.param_to_functor.get(index) {
+                    expr.type_id = self.type_table.make_ref(functor_type);
                 }
             }
-            TirExprKind::StructLiteral { fields, .. } => {
-                for field in fields {
-                    self.transform_remaining_closures_expr(&mut field.value);
-                }
-            }
-            TirExprKind::TupleLiteral { elements } => {
-                for elem in elements {
-                    self.transform_remaining_closures_expr(elem);
-                }
-            }
-            TirExprKind::IndirectCall { callee, args } => {
-                self.transform_remaining_closures_expr(callee);
-                for arg in args {
-                    self.transform_remaining_closures_expr(arg);
-                }
-            }
-            TirExprKind::Match {
-                expr: scrutinee,
-                arms,
-            } => {
-                self.transform_remaining_closures_expr(scrutinee);
-                for arm in arms {
-                    if let Some(guard) = &mut arm.guard {
-                        self.transform_remaining_closures_expr(guard);
-                    }
-                    self.transform_remaining_closures_expr(&mut arm.body);
-                }
-            }
-            TirExprKind::VariantConstruct {
-                payload: Some(p), ..
-            } => {
-                self.transform_remaining_closures_expr(p);
-            }
-            TirExprKind::LabeledBlock { block, .. } => {
-                self.transform_remaining_closures_block(block);
-            }
-            TirExprKind::GlobalVarSet { value, .. } => {
-                self.transform_remaining_closures_expr(value);
-            }
-            TirExprKind::ClosureToCanonical { functor, .. } => {
-                self.transform_remaining_closures_expr(functor);
-            }
-            TirExprKind::Closure {
-                body,
-                functor_id: None,
-                ..
-            } => {
-                // Closure without functor_id - just recurse into body
-                self.transform_remaining_closures_expr(body);
-            }
-            TirExprKind::VariantTag { expr: inner }
-            | TirExprKind::VariantTest { expr: inner, .. }
-            | TirExprKind::VariantPayload { expr: inner, .. } => {
-                self.transform_remaining_closures_expr(inner);
-            }
-            TirExprKind::Switch {
-                scrutinee,
-                arms,
-                default,
-                ..
-            } => {
-                self.transform_remaining_closures_expr(scrutinee);
-                for arm in arms {
-                    self.transform_remaining_closures_block(arm);
-                }
-                self.transform_remaining_closures_block(default);
-            }
-            // Leaf nodes - nothing to recurse into
-            TirExprKind::IntLiteral { .. }
-            | TirExprKind::FloatLiteral { .. }
-            | TirExprKind::BoolLiteral(_)
-            | TirExprKind::CharLiteral(_)
-            | TirExprKind::StringLiteral(_)
-            | TirExprKind::BytesLiteral(_)
-            | TirExprKind::Null
-            | TirExprKind::Unit
-            | TirExprKind::Local { .. }
-            | TirExprKind::FuncRef { .. }
-            | TirExprKind::GlobalVarGet { .. }
-            | TirExprKind::Capture { .. }
-            | TirExprKind::EnumConstruct { .. }
-            | TirExprKind::VariantConstruct { payload: None, .. } => {}
-            TirExprKind::TemplateString { .. } => {
-                unreachable!("TemplateString should be expanded before this phase")
-            }
-            TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
-                unreachable!(
-                    "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
-                )
-            }
+            _ => self.walk_expr(expr),
         }
     }
 }
