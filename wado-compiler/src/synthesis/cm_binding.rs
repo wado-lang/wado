@@ -356,10 +356,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                             let is_void_no_params = export.params.is_empty() && {
                                 let user_func = user_func_rc.borrow();
                                 let tt = entry_type_table.borrow();
-                                matches!(
-                                    tt.get(user_func.return_type),
-                                    ResolvedType::Unit
-                                )
+                                matches!(tt.get(user_func.return_type), ResolvedType::Unit)
                             };
 
                             if is_void_no_params {
