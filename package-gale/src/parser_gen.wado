@@ -2412,6 +2412,8 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext) {
                     f.emit_begin(w);
                     w.line("let start = p.peek().span.start;");
                     ctx.group_counter = ctx.alt_gc_starts[alt_idx];
+                    let saved_prefix_prec = ctx.prefix_self_ref_min_prec;
+                    ctx.prefix_self_ref_min_prec = compute_prefix_self_ref_min_prec(rule, alt_idx);
                     gen_alt_body(
                         w,
                         &type_name,
@@ -2420,6 +2422,7 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext) {
                         alt,
                         ctx,
                     );
+                    ctx.prefix_self_ref_min_prec = saved_prefix_prec;
                     w.end();
                     w.blank();
 
@@ -2592,6 +2595,8 @@ fn gen_multi_alt_body(w: &mut CodeWriter, rule: &ParserRule, type_name: &String,
         }
 
         ctx.group_counter = ctx.alt_gc_starts[alt_idx];
+        let saved_prefix_prec = ctx.prefix_self_ref_min_prec;
+        ctx.prefix_self_ref_min_prec = compute_prefix_self_ref_min_prec(rule, alt_idx);
         gen_alt_body(
             w,
             type_name,
@@ -2600,6 +2605,7 @@ fn gen_multi_alt_body(w: &mut CodeWriter, rule: &ParserRule, type_name: &String,
             alt,
             ctx,
         );
+        ctx.prefix_self_ref_min_prec = saved_prefix_prec;
         w.end();
     }
 
@@ -2685,7 +2691,11 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_co
     if let RuleRef(r) = elem {
         let fn_name = `parse_{r.snake_name}`;
         let field_name = dedup_name(&r.field_name, name_counts);
-        w.line(`let {field_name} = {fn_name}(p)?;`);
+        if ctx.prefix_self_ref_min_prec > 0 && r.name == ctx.current_rule_name {
+            w.line(`let {field_name} = {fn_name}(p, {ctx.prefix_self_ref_min_prec})?;`);
+        } else {
+            w.line(`let {field_name} = {fn_name}(p)?;`);
+        }
         return;
     }
     if let Wildcard(_) = elem {
@@ -5629,6 +5639,8 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
             let alt = &alts[*idx];
             let sname = `{strip_suffix(type_name, "Node")}{alt_case_names[*idx]}`;
             ctx.group_counter = ctx.alt_gc_starts[*idx];
+            let saved_prefix_prec = ctx.prefix_self_ref_min_prec;
+            ctx.prefix_self_ref_min_prec = compute_prefix_self_ref_min_prec_alts(alts, &ctx.current_rule_name, *idx);
             gen_alt_body_skip(
                 w,
                 type_name,
@@ -5638,6 +5650,7 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
                 ctx,
                 skip,
             );
+            ctx.prefix_self_ref_min_prec = saved_prefix_prec;
         }
         return;
     }
@@ -5856,6 +5869,8 @@ fn gen_multi_alt_body_bt(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
             let alt = &rule.alternatives[alt_idx];
             let sname = `{strip_suffix(type_name, "Node")}{case_names[alt_idx]}`;
             ctx.group_counter = ctx.alt_gc_starts[alt_idx];
+            let saved_prefix_prec = ctx.prefix_self_ref_min_prec;
+            ctx.prefix_self_ref_min_prec = compute_prefix_self_ref_min_prec(rule, alt_idx);
             gen_alt_body(
                 w,
                 type_name,
@@ -5864,6 +5879,7 @@ fn gen_multi_alt_body_bt(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
                 alt,
                 ctx,
             );
+            ctx.prefix_self_ref_min_prec = saved_prefix_prec;
         } else {
             // Sort group by specificity before building prediction tree.
             let mut sorted_group = group.sorted();
@@ -6049,6 +6065,84 @@ fn is_left_recursive(alt: &Alternative, rule_name: &String) -> bool {
         return r.name == *rule_name;
     }
     return false;
+}
+
+/// True iff the alternative matches ANTLR4's `prefix` shape from
+/// `LeftRecursiveRuleWalker.g`:
+///   prefix : ALT element+ recurse epsilonElement* ;
+/// i.e. the alt does NOT start with a self-reference but its LAST
+/// element IS a self-reference. Examples: `'-' e`, `('~'|'!') e`,
+/// `'(' typespec ')' e`. Counter-examples that look superficially
+/// similar but are NOT prefix alts in ANTLR4's classification:
+///   - `'(' e ')'` — last elem is `')'`, not self-ref → "other" alt
+///   - `'new' T ( ... e ... )` — last elem is a Group → "other" alt
+/// "Other" alts (`otherAlt`) are NOT given a precedence rewrite in
+/// ANTLR4: their inner self-refs run with `_p = 0`, accepting all
+/// LR operators inside.
+///
+/// Gale's IR has already stripped action bodies and semantic predicates,
+/// so the upstream `epsilonElement*` tail collapses to the empty case.
+fn is_prefix_alt(alt: &Alternative, rule_name: &String) -> bool {
+    if is_left_recursive(alt, rule_name) {
+        return false;
+    }
+    if alt.elements.len() == 0 {
+        return false;
+    }
+    let last_idx = alt.elements.len() - 1;
+    return is_self_ref_element(&alt.elements[last_idx], rule_name);
+}
+
+/// True iff the element is a direct RuleRef to `rule_name` (possibly
+/// wrapped in a single `Label`). Mirrors `is_left_recursive`'s use of
+/// `unwrap_label` so labeled self-refs at the alt tail (e.g. `b=e`)
+/// are still recognised.
+fn is_self_ref_element(elem: &Element, rule_name: &String) -> bool {
+    if let RuleRef(r) = unwrap_label(elem) {
+        return r.name == *rule_name;
+    }
+    return false;
+}
+
+/// Compute the `min_prec` value to pass into self-recursive RuleRef calls
+/// inside a prefix alt. ANTLR4's left-recursion transform calls the inner
+/// `e` of a prefix alt with the alt's own precedence (`e[precedence(alt)]`),
+/// so any LR suffix below the prefix alt in source order is excluded.
+///
+/// Returns 0 if the alt is not a prefix alt, or if the rule has no LR alts
+/// (in which case `parse_<rule>` has no `min_prec` parameter and the
+/// override would not be valid).
+///
+/// Formula: count the LR alts at positions strictly greater than `alt_idx`
+/// in `rule.alternatives`. Their `own_prec` values are 1..N (N = the count),
+/// so setting `min_prec = N + 1` rejects all of them while still admitting
+/// LR alts that come before this prefix.
+fn compute_prefix_self_ref_min_prec(rule: &ParserRule, alt_idx: i32) -> i32 {
+    return compute_prefix_self_ref_min_prec_alts(&rule.alternatives, &rule.name, alt_idx);
+}
+
+fn compute_prefix_self_ref_min_prec_alts(alts: &Array<Alternative>, rule_name: &String, alt_idx: i32) -> i32 {
+    if alt_idx < 0 || alt_idx >= alts.len() {
+        return 0;
+    }
+    let alt = &alts[alt_idx];
+    if !is_prefix_alt(alt, rule_name) {
+        return 0;
+    }
+    let mut lr_after = 0;
+    let mut has_any_lr = false;
+    for let mut i = 0; i < alts.len(); i += 1 {
+        if is_left_recursive(&alts[i], rule_name) {
+            has_any_lr = true;
+            if i > alt_idx {
+                lr_after += 1;
+            }
+        }
+    }
+    if !has_any_lr {
+        return 0;
+    }
+    return lr_after + 1;
 }
 
 fn compute_overlap_groups(first_sets: &Array<Array<String>>) -> Array<Array<i32>> {

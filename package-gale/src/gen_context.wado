@@ -32,6 +32,14 @@ pub struct GenContext {
     pub current_rule_name: String,
     pub group_counter: i32,
     pub alt_gc_starts: Array<i32>,
+    /// Override for self-recursive RuleRef calls inside a prefix alt body.
+    /// When non-zero, `gen_element`'s RuleRef branch emits
+    /// `parse_<rule>(p, prefix_self_ref_min_prec)` instead of the default
+    /// `parse_<rule>(p)`. Set by call sites that wrap `gen_alt_body` for
+    /// prefix alts (non-LR alts containing a self-ref) so the inner
+    /// self-ref runs with the precedence ANTLR4 assigns to that alt.
+    /// 0 means no override (the default emission applies).
+    pub prefix_self_ref_min_prec: i32,
     /// Maps single-alt group type name → the rule name that first defines it.
     /// Used to resolve general group type names inside shared single-alt groups.
     single_alt_owner: TreeMap<String, String>,
@@ -59,6 +67,7 @@ impl GenContext {
             current_rule_name: "",
             group_counter: 0,
             alt_gc_starts: [],
+            prefix_self_ref_min_prec: 0,
             single_alt_owner,
             kind_set_registry: TreeMap::<String, KindSetEntry>::new(),
         };
