@@ -675,13 +675,10 @@ mod tests {
 
     fn make_type_decl_index(local_names: &[&str]) -> IndexMap<String, ModuleSource> {
         let mut m = IndexMap::default();
+        let mut interner = crate::name::ModuleSourceInterner::new();
+        let entry = interner.entry_point("test.wado");
         for &name in local_names {
-            m.insert(
-                name.to_string(),
-                ModuleSource::EntryPoint {
-                    filename: "test.wado".to_string(),
-                },
-            );
+            m.insert(name.to_string(), entry.clone());
         }
         m
     }
@@ -705,37 +702,32 @@ mod tests {
 
     #[test]
     fn test_is_user_local_entry_point() {
-        assert!(is_user_local(&ModuleSource::EntryPoint {
-            filename: "main.wado".to_string()
-        }));
+        let mut interner = crate::name::ModuleSourceInterner::new();
+        assert!(is_user_local(&interner.entry_point("main.wado")));
     }
 
     #[test]
     fn test_is_user_local_local_path() {
-        assert!(is_user_local(&ModuleSource::Local {
-            path: "./lib.wado".to_string()
-        }));
+        let mut interner = crate::name::ModuleSourceInterner::new();
+        assert!(is_user_local(&interner.local("./lib.wado")));
     }
 
     #[test]
     fn test_is_user_local_core_is_foreign() {
-        assert!(!is_user_local(&ModuleSource::Core {
-            name: "prelude".to_string()
-        }));
+        assert!(!is_user_local(&ModuleSource::prelude()));
     }
 
     #[test]
     fn test_is_user_local_wasi_is_foreign() {
-        assert!(!is_user_local(&ModuleSource::Wasi {
-            interface: "cli".to_string()
-        }));
+        assert!(!is_user_local(&ModuleSource::wasi_cli()));
     }
 
     #[test]
     fn test_is_user_local_remote_is_foreign() {
-        assert!(!is_user_local(&ModuleSource::Remote {
-            url: "https://example.com/lib.wado".to_string()
-        }));
+        let mut interner = crate::name::ModuleSourceInterner::new();
+        assert!(!is_user_local(
+            &interner.remote("https://example.com/lib.wado")
+        ));
     }
 
     // --- classify_position ---

@@ -97,6 +97,14 @@ pub struct FlatPackage {
     /// "<export>")]` attributes). Consumed by
     /// `codegen::component::embed_imported_wasm_modules`.
     pub wasm_assets: IndexMap<String, crate::loader::WasmAsset>,
+
+    /// `ModuleSource` interner inherited from [`crate::package::Package`].
+    /// Kept alive through the lower phase because passes such as
+    /// `expand_cm_intrinsics` synthesise fresh `ModuleSource` values
+    /// when lifting WASI records and need them ptr-equal to the
+    /// resolver-registered counterparts. Dropped at the
+    /// `FlatPackage → WirPackage` boundary.
+    pub interner: std::rc::Rc<std::cell::RefCell<crate::name::ModuleSourceInterner>>,
 }
 
 impl FlatPackage {

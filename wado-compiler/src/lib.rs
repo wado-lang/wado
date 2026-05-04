@@ -359,6 +359,7 @@ fn compile_after_load<H: CompilerHost>(
         symbols,
         state,
         tir_modules,
+        interner,
         ..
     } = annotated;
 
@@ -371,6 +372,7 @@ fn compile_after_load<H: CompilerHost>(
         state.wasi_registry,
         state.world_registry,
         state.builtin_registry,
+        interner,
     );
 
     // Apply options to package (must be before synthesis)
@@ -675,10 +677,13 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             })?
     };
 
+    // Wrap the loader's interner for sharing across analyze + resolve.
+    let interner = std::rc::Rc::new(std::cell::RefCell::new(load_result.interner));
+
     // === Phase 6: Analyze all modules ===
     let symbols = {
         let _span = logger.span("analyze");
-        let mut analyzer = Analyzer::new(&logger);
+        let mut analyzer = Analyzer::new(&logger).with_interner(interner.clone());
         analyzer.analyze_loaded_modules(
             &load_result.modules,
             &load_result.entry_module_source,
@@ -697,6 +702,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             &logger,
             &load_result.included_files,
             load_result.invocations.clone(),
+            interner.clone(),
         )
         .ok()
     };
@@ -738,6 +744,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
                 wasi_registry,
                 world_registry,
                 builtin_registry,
+                interner,
             );
 
             // Apply target world override (must be before synthesis)

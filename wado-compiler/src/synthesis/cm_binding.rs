@@ -55,6 +55,18 @@ pub struct LiftContext<'a> {
     /// `wasi:http/ErrorCode` — or, across schemes,
     /// `wasi:http/types::Response` vs. `core:kiln/types::Response`.
     pub cm_package: &'a str,
+    /// `ModuleSource` interner shared with the package; used by
+    /// `module_source_for_cm_interface` to canonicalise the module
+    /// identity of synthesised types (e.g. `wasi:http/types`,
+    /// `core:kiln/types.wado`) so they match the resolver's registered
+    /// `StructName`s ptr-eq.
+    ///
+    /// Re-entrancy: the lift call chain may `borrow_mut()` this cell;
+    /// callers must not hold a `RefMut` to the same cell across calls
+    /// into [`synthesize_lift_with_context`] or its helpers. The lift
+    /// path itself only borrows transiently inside
+    /// [`module_source_for_cm_interface`].
+    pub interner: &'a RefCell<crate::name::ModuleSourceInterner>,
 }
 
 /// Convert a WASI AST `Type` to a `TypeId` in the type table.
@@ -210,11 +222,12 @@ fn wasi_interface_suffix(source_interface: &str) -> String {
 /// registering its types. Keeps the lift path's fabricated `TypeId`s
 /// matching the `StructName`s under which the WIR types pass registered
 /// them (see `wir_build::types::register_struct`).
-fn module_source_for_cm_interface(source_interface: &str) -> ModuleSource {
+fn module_source_for_cm_interface(
+    interner: &mut crate::name::ModuleSourceInterner,
+    source_interface: &str,
+) -> ModuleSource {
     if source_interface.starts_with("wasi:") {
-        return ModuleSource::Wasi {
-            interface: wasi_interface_suffix(source_interface),
-        };
+        return interner.wasi(&wasi_interface_suffix(source_interface));
     }
     if let Some(rest) = source_interface.strip_prefix("core:") {
         let without_version = rest.split('@').next().unwrap_or(rest);
@@ -223,7 +236,7 @@ fn module_source_for_cm_interface(source_interface: &str) -> ModuleSource {
         } else {
             format!("{without_version}.wado")
         };
-        return ModuleSource::Core { name };
+        return interner.core(&name);
     }
     ModuleSource::default()
 }
@@ -538,7 +551,8 @@ fn try_lift_wasi_struct(
     // `wir_build::types::register_struct` registered.
     let struct_type_id = {
         let mut tt = ctx.type_table.borrow_mut();
-        tt.make_struct(named.name.clone(), module_source_for_cm_interface(source))
+        let module_source = module_source_for_cm_interface(&mut ctx.interner.borrow_mut(), source);
+        tt.make_struct(named.name.clone(), module_source)
     };
 
     // Lift each field — Wado field names come directly from this interface's
@@ -2534,6 +2548,7 @@ fn synthesize_adapter(
     func_info: &WasiFunctionInfo,
     wasi_registry: &crate::component_model::WasiRegistry,
     type_table: &RefCell<TypeTable>,
+    interner: &RefCell<crate::name::ModuleSourceInterner>,
     owner_module: &ModuleSource,
 ) -> Rc<RefCell<TirFunction>> {
     let name = binding_func_name(&func_info.interface_name, &func_info.method_name);
@@ -3465,6 +3480,7 @@ fn synthesize_adapter(
             wasi_registry,
             type_table,
             cm_package: &func_info.package,
+            interner,
         };
         let lifted = synthesize_lift_with_context(
             &resolved,
@@ -3521,6 +3537,7 @@ fn synthesize_adapter(
                 wasi_registry,
                 type_table,
                 cm_package: &func_info.package,
+                interner,
             };
             let lifted = synthesize_lift_flat_result(
                 &resolved,
@@ -4956,6 +4973,7 @@ fn synthesize_result_export_binding(
     world_params: &[(String, Type)],
     wasi_registry: &WasiRegistry,
     cm_package: &str,
+    interner: &RefCell<crate::name::ModuleSourceInterner>,
 ) -> Rc<RefCell<TirFunction>> {
     let binding_name = export_binding_func_name(export_name);
     let mut body_stmts: Vec<TirStmt> = Vec::new();
@@ -4968,6 +4986,7 @@ fn synthesize_result_export_binding(
         wasi_registry,
         type_table,
         cm_package,
+        interner,
     };
 
     // Build adapter params and call args
@@ -5504,6 +5523,7 @@ fn synthesize_general_export_binding(
     world_params: &[(String, Type)],
     wasi_registry: &WasiRegistry,
     cm_package: &str,
+    interner: &RefCell<crate::name::ModuleSourceInterner>,
 ) -> Rc<RefCell<TirFunction>> {
     let binding_name = export_binding_func_name(export_name);
     let mut body_stmts: Vec<TirStmt> = Vec::new();
@@ -5516,6 +5536,7 @@ fn synthesize_general_export_binding(
         wasi_registry,
         type_table,
         cm_package,
+        interner,
     };
 
     // Build adapter params and call args
@@ -5733,6 +5754,7 @@ fn synthesize_async_export_binding(
     world_params: &[(String, Type)],
     wasi_registry: &WasiRegistry,
     cm_package: &str,
+    interner: &RefCell<crate::name::ModuleSourceInterner>,
 ) -> Rc<RefCell<TirFunction>> {
     let binding_name = export_binding_func_name(export_name);
     let mut body_stmts: Vec<TirStmt> = Vec::new();
@@ -5773,6 +5795,7 @@ fn synthesize_async_export_binding(
             wasi_registry,
             type_table,
             cm_package,
+            interner,
         };
         for (i, (_name, param_ty)) in world_params.iter().enumerate() {
             let user_type_id = user_func_ref
@@ -5878,6 +5901,7 @@ fn expand_task_returns_in_func(
     type_table: &Rc<RefCell<TypeTable>>,
     wasi_registry: &WasiRegistry,
     cm_package: &str,
+    interner: &RefCell<crate::name::ModuleSourceInterner>,
 ) {
     let mut func = user_func.borrow_mut();
     let mut next_local = func.local_count;
@@ -5895,6 +5919,7 @@ fn expand_task_returns_in_func(
         type_table,
         wasi_registry,
         cm_package,
+        interner,
     );
     func.body = Some(body);
     func.local_count = next_local;
@@ -5957,6 +5982,7 @@ fn expand_task_return_in_block(
     type_table: &Rc<RefCell<TypeTable>>,
     wasi_registry: &WasiRegistry,
     cm_package: &str,
+    interner: &RefCell<crate::name::ModuleSourceInterner>,
 ) {
     let stmts = std::mem::take(&mut blk.stmts);
     let mut new_stmts: Vec<TirStmt> = Vec::with_capacity(stmts.len());
@@ -5974,6 +6000,7 @@ fn expand_task_return_in_block(
                     type_table,
                     wasi_registry,
                     cm_package,
+                    interner,
                 );
                 new_stmts.extend(expanded);
             }
@@ -5987,6 +6014,7 @@ fn expand_task_return_in_block(
                 type_table,
                 wasi_registry,
                 cm_package,
+                interner,
             );
             new_stmts.push(stmt);
         }
@@ -6003,6 +6031,7 @@ fn expand_task_return_in_stmt(
     type_table: &Rc<RefCell<TypeTable>>,
     wasi_registry: &WasiRegistry,
     cm_package: &str,
+    interner: &RefCell<crate::name::ModuleSourceInterner>,
 ) {
     match &mut stmt.kind {
         TirStmtKind::If {
@@ -6019,6 +6048,7 @@ fn expand_task_return_in_stmt(
                 type_table,
                 wasi_registry,
                 cm_package,
+                interner,
             );
             if let Some(blk) = else_block {
                 expand_task_return_in_block(
@@ -6030,6 +6060,7 @@ fn expand_task_return_in_stmt(
                     type_table,
                     wasi_registry,
                     cm_package,
+                    interner,
                 );
             }
         }
@@ -6043,6 +6074,7 @@ fn expand_task_return_in_stmt(
                 type_table,
                 wasi_registry,
                 cm_package,
+                interner,
             );
         }
         TirStmtKind::IfLet {
@@ -6059,6 +6091,7 @@ fn expand_task_return_in_stmt(
                 type_table,
                 wasi_registry,
                 cm_package,
+                interner,
             );
             if let Some(blk) = else_block {
                 expand_task_return_in_block(
@@ -6070,6 +6103,7 @@ fn expand_task_return_in_stmt(
                     type_table,
                     wasi_registry,
                     cm_package,
+                    interner,
                 );
             }
         }
@@ -6093,11 +6127,13 @@ fn generate_inline_task_return(
     type_table: &Rc<RefCell<TypeTable>>,
     wasi_registry: &WasiRegistry,
     cm_package: &str,
+    interner: &RefCell<crate::name::ModuleSourceInterner>,
 ) -> Vec<TirStmt> {
     let lift_ctx = LiftContext {
         wasi_registry,
         type_table,
         cm_package,
+        interner,
     };
     let mut stmts: Vec<TirStmt> = Vec::new();
     let value_type_id = value.type_id;
@@ -6341,11 +6377,12 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                     &func_info.interface_name,
                     &func_info.package,
                 )
-                .unwrap_or_else(|| ModuleSource::wasi(&func_info.package));
+                .unwrap_or_else(|| project.interner.borrow_mut().wasi(&func_info.package));
                 let adapter = synthesize_adapter(
                     &func_info,
                     project.wasi_registry,
                     &entry_type_table,
+                    &project.interner,
                     &owner_module,
                 );
                 adapters.insert(qualified_name.clone(), adapter.clone());
@@ -6491,6 +6528,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                                 &entry_type_table,
                                 project.wasi_registry,
                                 &binding_cm_package,
+                                &project.interner,
                             );
                         }
                         synthesize_async_export_binding(
@@ -6502,6 +6540,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                             &export.params,
                             project.wasi_registry,
                             &binding_cm_package,
+                            &project.interner,
                         )
                     } else {
                         // Check the user function's actual return type (signature-driven)
@@ -6535,6 +6574,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                                 &export.params,
                                 project.wasi_registry,
                                 &binding_cm_package,
+                                &project.interner,
                             )
                         } else {
                             // Non-Result return: check if we can use the simple void adapter
@@ -6567,6 +6607,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                                     &export.params,
                                     project.wasi_registry,
                                     &binding_cm_package,
+                                    &project.interner,
                                 )
                             }
                         }
@@ -6744,6 +6785,7 @@ fn synthesize_record_stream_reads(project: &mut Package) {
             elem_align,
             wasi_registry,
             &type_table,
+            &project.interner,
         );
         new_functions.push(Rc::new(RefCell::new(func)));
     }
@@ -6869,6 +6911,7 @@ fn synthesize_stream_read_func(
     elem_align: i32,
     wasi_registry: &crate::component_model::WasiRegistry,
     type_table: &RefCell<TypeTable>,
+    interner: &RefCell<crate::name::ModuleSourceInterner>,
 ) -> TirFunction {
     use crate::synthesis::common::{
         assign, binary, break_stmt, builtin_call, cm_raw_call, expr_stmt, i32_const, if_stmt,
@@ -7074,6 +7117,7 @@ fn synthesize_stream_read_func(
         wasi_registry,
         type_table,
         cm_package: "filesystem",
+        interner,
     };
     let ast_type = crate::ast::Type::Named(crate::ast::NamedType {
         id: crate::ast::AstId::fresh(),
@@ -9835,7 +9879,7 @@ mod tests {
         let mut tt = TypeTable::new();
         let r = tt.intern(crate::tir::ResolvedType::Resource {
             name: "Request".to_string(),
-            module_source: ModuleSource::wasi("http"),
+            module_source: ModuleSource::wasi_http(),
         });
         assert!(!param_needs_lifting(r, &tt));
     }
@@ -9843,11 +9887,10 @@ mod tests {
     #[test]
     fn param_needs_lifting_enum() {
         let mut tt = TypeTable::new();
+        let mut interner = crate::name::ModuleSourceInterner::new();
         let e = tt.intern(crate::tir::ResolvedType::Enum {
             name: "Color".to_string(),
-            module_source: ModuleSource::EntryPoint {
-                filename: "<test>".to_string(),
-            },
+            module_source: interner.entry_point("<test>"),
         });
         assert!(!param_needs_lifting(e, &tt));
     }
@@ -9860,7 +9903,7 @@ mod tests {
         let mut tt = TypeTable::new();
         let opt = tt.intern(crate::tir::ResolvedType::GenericInstance {
             name: "Option".to_string(),
-            module_source: ModuleSource::core("types"),
+            module_source: ModuleSource::types(),
             type_args: vec![TypeTable::I32],
         });
         assert!(param_needs_lifting(opt, &tt));

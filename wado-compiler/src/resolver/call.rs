@@ -801,7 +801,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     // This covers Stdout::write(), etc.
                     else {
                         (
-                            Some(CalleeRef::local_namespace(prefix, suffix)),
+                            Some(CalleeRef::local_namespace(
+                                &mut self.interner.borrow_mut(),
+                                prefix,
+                                suffix,
+                            )),
                             ident.name.clone(),
                         )
                     }
@@ -860,7 +864,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 if let Expr::Ident(ident) = &field_access.expr {
                     (
                         Some(CalleeRef::local_namespace(
-                            ident.name.clone(),
+                            &mut self.interner.borrow_mut(),
+                            &ident.name,
                             field_access.field.clone(),
                         )),
                         format!("{}.{}", ident.name, field_access.field),
@@ -1037,6 +1042,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     || (IndexMap::default(), IndexMap::default()),
                     |m| {
                         Self::build_imported_type_sources(
+                            &mut self.interner.borrow_mut(),
                             m,
                             callee_module,
                             Some(&self.entry_module_source),
@@ -1166,7 +1172,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         let base_type = self.resolve_wasi_type_scoped(&aliased, wasi_package);
                         let newtype_id = self.type_table.borrow_mut().make_newtype(
                             named.name.clone(),
-                            ModuleSource::wasi("clocks"),
+                            ModuleSource::wasi_clocks(),
                             base_type,
                         );
                         // Cache the newtype for future lookups
@@ -1190,7 +1196,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                     None
                                 }
                             })
-                            .unwrap_or_else(|| ModuleSource::wasi("filesystem"));
+                            .unwrap_or_else(ModuleSource::wasi_filesystem);
                         self.type_table
                             .borrow_mut()
                             .make_resource(named.name.clone(), module_source)
@@ -1215,7 +1221,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                     .find_map(|(ms, map)| {
                                         map.contains_key(&named.name).then(|| ms.clone())
                                     })
-                                    .unwrap_or_else(|| ModuleSource::wasi("cli"));
+                                    .unwrap_or_else(ModuleSource::wasi_cli);
                                 self.type_table
                                     .borrow_mut()
                                     .make_enum(named.name.clone(), module_source)
@@ -1230,7 +1236,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                     .find_map(|(ms, map)| {
                                         map.contains_key(&named.name).then(|| ms.clone())
                                     })
-                                    .unwrap_or_else(|| ModuleSource::wasi("clocks"));
+                                    .unwrap_or_else(ModuleSource::wasi_clocks);
                                 self.type_table
                                     .borrow_mut()
                                     .make_struct(named.name.clone(), module_source)
@@ -1254,7 +1260,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                     None
                                 }
                             })
-                            .unwrap_or_else(|| ModuleSource::wasi("cli"));
+                            .unwrap_or_else(ModuleSource::wasi_cli);
                         self.type_table
                             .borrow_mut()
                             .make_enum(named.name.clone(), module_source)
@@ -1274,7 +1280,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                     None
                                 }
                             })
-                            .unwrap_or_else(|| ModuleSource::wasi("clocks"));
+                            .unwrap_or_else(ModuleSource::wasi_clocks);
                         self.type_table
                             .borrow_mut()
                             .make_struct(named.name.clone(), module_source)
@@ -1488,6 +1494,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         let (imported_type_sources, import_original_names) =
                             if let Some(module) = callee_module {
                                 Self::build_imported_type_sources(
+                                    &mut self.interner.borrow_mut(),
                                     module,
                                     &src,
                                     Some(&self.entry_module_source),

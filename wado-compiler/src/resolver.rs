@@ -189,6 +189,11 @@ pub struct Resolver<'a, H: CompilerHost> {
     /// by `Rc` so per-module Resolver instances can read the single
     /// compilation-unit-wide redirect map cheaply.
     pub(super) invocations: Rc<crate::kiln::InvocationIndex>,
+    /// `ModuleSource` interner shared with the loader and downstream
+    /// phases. Wrapped in `Rc<RefCell<>>` so per-module resolver
+    /// instances can `borrow_mut()` it from `&self` contexts (e.g.
+    /// `record_use_specifier_references`).
+    pub(super) interner: Rc<RefCell<crate::name::ModuleSourceInterner>>,
 }
 
 impl<'a, H: CompilerHost> Resolver<'a, H> {
@@ -225,8 +230,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             imported_functions: IndexSet::default(),
             namespace_imports: IndexMap::default(),
             logger,
-            current_module_source: ModuleSource::entry_point_with_filename("<uninitialized>"),
-            entry_module_source: ModuleSource::entry_point_with_filename("<uninitialized>"),
+            current_module_source: ModuleSource::entry_point_uninitialized(),
+            entry_module_source: ModuleSource::entry_point_uninitialized(),
             current_module_items: &[],
             effect_sources: IndexMap::default(),
             current_effect_params: IndexSet::default(),
@@ -256,6 +261,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             local_symbols: Rc::new(RefCell::new(IndexMap::default())),
             default_scope_module: None,
             invocations: Rc::new(crate::kiln::InvocationIndex::new()),
+            interner: Rc::new(RefCell::new(crate::name::ModuleSourceInterner::new())),
         }
     }
 
@@ -583,6 +589,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     /// For `use { Stdout } from "core:cli"`, maps "Stdout" → resolved("core:cli").
     /// For local effect declarations, maps name → current module source.
     fn build_effect_sources(
+        interner: &mut crate::name::ModuleSourceInterner,
         module: &Module,
         module_source: &ModuleSource,
         invocations: &crate::kiln::InvocationIndex,
@@ -592,6 +599,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             match item {
                 Item::Use(use_decl) => {
                     let source = name::resolve_import_with_invocations(
+                        interner,
                         module_source,
                         &use_decl.source,
                         None,
@@ -700,6 +708,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         for item in &module.items {
             let Item::Use(use_decl) = item else { continue };
             let source = name::resolve_import_with_invocations(
+                &mut self.interner.borrow_mut(),
                 &self.current_module_source,
                 &use_decl.source,
                 Some(&self.entry_module_source),
@@ -735,7 +744,12 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         // Clear trait lookup caches (current_module_items changed)
         self.indexing_trait_cache.clear();
         // Build effect source map from imports
-        self.effect_sources = Self::build_effect_sources(module, &module_source, &self.invocations);
+        self.effect_sources = Self::build_effect_sources(
+            &mut self.interner.borrow_mut(),
+            module,
+            &module_source,
+            &self.invocations,
+        );
 
         // Record use→def edges for names that appear inside `use { ... }` specifiers.
         // These power LSP jump-to-definition when the cursor is on an imported
@@ -769,6 +783,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         for item in &module.items {
             if let Item::Use(use_decl) = item {
                 let source_module_source = name::resolve_import_with_invocations(
+                    &mut self.interner.borrow_mut(),
                     &module_source,
                     &use_decl.source,
                     None,

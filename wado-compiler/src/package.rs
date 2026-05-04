@@ -77,6 +77,14 @@ pub struct Package {
         crate::synthesis::effect_dispatch::InstantiationKey,
         crate::synthesis::effect_dispatch::DispatchPlan,
     >,
+
+    /// `ModuleSource` interner shared with the resolver. Synthesis
+    /// passes (`cm_binding`, `effect_dispatch`) borrow this when they
+    /// need to construct fresh `ModuleSource` values for synthesised
+    /// items. Dropped at the `Package → FlatPackage` boundary —
+    /// downstream phases (link, monomorphize, lower, optimize, codegen)
+    /// only consume existing `ModuleSource` values.
+    pub interner: std::rc::Rc<std::cell::RefCell<crate::name::ModuleSourceInterner>>,
 }
 
 impl Package {
@@ -90,6 +98,7 @@ impl Package {
         wasi_registry: &'static WasiRegistry,
         world_registry: &'static WorldRegistry,
         builtin_registry: BuiltinRegistry,
+        interner: std::rc::Rc<std::cell::RefCell<crate::name::ModuleSourceInterner>>,
     ) -> Self {
         Self {
             entry_module_source,
@@ -100,6 +109,7 @@ impl Package {
             wasi_registry,
             world_registry,
             builtin_registry,
+            interner,
             // Usage analysis fields default to empty/false
             used_wasi_functions: IndexSet::default(),
             // Codegen options

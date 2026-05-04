@@ -94,8 +94,12 @@ fn file_path_definition(
 ) -> Option<DefinitionResult> {
     let ast_module = annotated.modules.get(module)?;
     let path = find_file_path_at_cursor(ast_module, line, col)?;
-    let target_module =
-        resolve_import_with_entry(module, &path, Some(&annotated.entry_module_source));
+    let target_module = resolve_import_with_entry(
+        &mut annotated.interner.borrow_mut(),
+        module,
+        &path,
+        Some(&annotated.entry_module_source),
+    );
     let target_uri = module_uri(annotated, &target_module, request_uri)?;
     Some(DefinitionResult {
         uri: target_uri,
