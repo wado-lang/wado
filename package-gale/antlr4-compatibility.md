@@ -315,7 +315,7 @@ Three independent pieces make up the wiring:
 1. **`normalize_output_for_stage_b`** in
    `scripts/extract_antlr4_descriptors.wado` — pure function that
    decides whether a descriptor's `[output]` is a parse-tree shape.
-   Strips ANTLR4's literal ` <EOF>` token (Gale omits empty-text
+   Strips ANTLR4's literal `<EOF>` token (Gale omits empty-text
    tokens), rejects `${...}` template substitutions and any leftover
    `<…>` directives, and requires the output to start with
    `(<start-rule>` so sub-tree prints are rejected.

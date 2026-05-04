@@ -109,10 +109,10 @@ Walk the pass pipeline like this:
 
 ## Pass-name conventions
 
-| Prefix       | Phase                                     |
-| ------------ | ----------------------------------------- |
-| `tir/<name>` | TIR-level pass (`optimize.rs`)            |
-| `wir/<name>` | WIR-level pass (`wir_optimize.rs`)        |
+| Prefix       | Phase                              |
+| ------------ | ---------------------------------- |
+| `tir/<name>` | TIR-level pass (`optimize.rs`)     |
+| `wir/<name>` | WIR-level pass (`wir_optimize.rs`) |
 
 `WADO_LIST_PASSES=1` is the source of truth — names there match exactly
 the strings the env vars want.

@@ -263,12 +263,16 @@ pub mod pass_dump {
 
     fn dump_before_list() -> &'static Vec<String> {
         static LIST: OnceLock<Vec<String>> = OnceLock::new();
-        LIST.get_or_init(|| crate::trace::parse_env_list(std::env::var(Phase::Before.env_var()).ok().as_deref()))
+        LIST.get_or_init(|| {
+            crate::trace::parse_env_list(std::env::var(Phase::Before.env_var()).ok().as_deref())
+        })
     }
 
     fn dump_after_list() -> &'static Vec<String> {
         static LIST: OnceLock<Vec<String>> = OnceLock::new();
-        LIST.get_or_init(|| crate::trace::parse_env_list(std::env::var(Phase::After.env_var()).ok().as_deref()))
+        LIST.get_or_init(|| {
+            crate::trace::parse_env_list(std::env::var(Phase::After.env_var()).ok().as_deref())
+        })
     }
 
     fn list_passes_enabled() -> bool {
