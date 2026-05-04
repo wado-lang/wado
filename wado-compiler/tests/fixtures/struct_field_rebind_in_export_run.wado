@@ -1,39 +1,9 @@
-// Regression: rebinding a field of a struct returned by a function in
-// an `export fn` body used to ICE the WIR pipeline with
-// "WIR pipeline generated invalid core Wasm module: type mismatch:
-//  expected (ref $type), found (ref (exact $type))".
-//
-// Minimum trigger (every clause is required — dropping any one makes the
-// ICE go away):
-//
-//   1. Caller is `export fn` (plain `fn` does not trigger).
-//   2. Caller binds the returned struct to a NAMED local, then reads a
-//      field. Inlining (`build(...).a`) does not trigger.
-//   3. The struct has at least TWO Array-typed fields. With one Array
-//      field plus an i32 (or two String fields with no Array), the ICE
-//      goes away — the trigger is specific to multiple GC-array fields
-//      sharing the same struct.
-//   4. The function body uses a divergent expression — `let _ = if cond
-//      { value } else { return EarlyReturn; };` — that returns the same
-//      struct shape from the early-return branch as from the trailing
-//      explicit `return`. A statement-form `if cond { ... }; return ...`
-//      that does not bind a value does not trigger.
-//
-// Root cause: the WIR `sroa_multi_value_returns` pass scalarised the
-// function's return signature (`Outer` → `(ref Array<i32>, ref Array<i32>)`)
-// and rewrote the trailing `return Outer { a, b }` into the multi-value
-// `return a, b`, but its rewrite walker stopped at `Block`, `If`, `Loop`,
-// `Seq`, and `Drop` — it never recursed into `LocalSet { value: ... }`,
-// where the early `return Outer { a, b }` lived as the divergent-`else`
-// arm of the `let _x: i32 = if flag { 1 } else { return ... };` binding.
-// The early Return was left emitting a one-value `struct.new $Outer; return`
-// against a function signature that now expected two values.
-//
-// Surfaced while wiring Stage B of the ANTLR4 descriptor extractor at
-// `package-gale/scripts/extract_antlr4_descriptors.wado`, where
-// `load_triage_maps` returned a `TriageMaps { stage_a, stage_b }` struct
-// and the export `run()` did `let m = load_triage_maps(...); let t =
-// m.stage_a;` — exactly the shape this fixture isolates.
+// Regression: `sroa_multi_value_returns` used to rewrite the function
+// signature but skip Returns hidden inside `LocalSet` values, leaving an
+// early `return Outer { a, b }` mismatched against the new multi-value
+// signature. Triggered by all four conditions together: `export fn`
+// caller, named-local field rebind, two-or-more Array fields, and a
+// divergent `let _ = if cond { value } else { return ...; };` body.
 
 use { Stdout } from "core:cli";
 

@@ -475,15 +475,9 @@ fn check_return_struct_new(instr: &WirInstr, expected_type_idx: u32) -> bool {
         }
         WirInstr::Seq(body) => all_returns_are_struct_new(body, expected_type_idx),
         WirInstr::Drop(inner) => check_return_struct_new(inner, expected_type_idx),
-        // Anything else (LocalSet, arithmetic, RefCast, …) may still hold
-        // boxed children whose subtrees contain `Return`. Walk every Box
-        // child looking purely for explicit Returns — `nested_returns_match`
-        // does not run the typed-block Br-exit check, which only applies
-        // when the Block is at function-tail position (its value flows to
-        // the function's return without an explicit Return). A nested
-        // `__seq_lit:` block inside a `LocalSet` value is by construction
-        // not tail-position; running the Br-exit check there would
-        // false-reject the function on every inner Array literal.
+        // Non-tail subtrees (LocalSet value, arithmetic operands, …) use
+        // `nested_returns_match` so the typed-block Br-exit check only
+        // fires at function-tail position.
         other => {
             let mut all_ok = true;
             other.for_each_child(&mut |child| {
@@ -496,12 +490,10 @@ fn check_return_struct_new(instr: &WirInstr, expected_type_idx: u32) -> bool {
     }
 }
 
-/// Walk an arbitrary subtree looking only for explicit `Return` instructions
-/// and verify each returns a `StructNew` of `expected_type_idx`. Unlike
-/// [`check_return_struct_new`], this helper deliberately does NOT enforce
-/// the typed-block Br-exit invariant — it is meant for non-tail positions
-/// (e.g. the value side of a `LocalSet`) where inner typed Blocks are
-/// expression scaffolding, not function-return carriers.
+/// Walk a non-tail subtree, asserting every explicit `Return` it contains
+/// returns a `StructNew` of `expected_type_idx`. Skips the typed-block
+/// Br-exit check that [`check_return_struct_new`] applies — that
+/// invariant is tail-position-only.
 fn nested_returns_match(instr: &WirInstr, expected_type_idx: u32) -> bool {
     match instr {
         WirInstr::Return { value: Some(v) } => value_expr_is_struct_new(v, expected_type_idx),
@@ -1430,11 +1422,9 @@ fn rewrite_returns_to_multi_value(instrs: &mut [WirInstr]) {
                     rewrite_returns_to_multi_value(std::slice::from_mut(inner.as_mut()));
                 }
             }
-            // Anything else may still hold a Box<WirInstr> (e.g. LocalSet,
-            // arithmetic ops, RefCast — see `WirInstr::for_each_boxed_child_mut`)
-            // whose subtree can contain a `Return` from a `let _x = if ... else
-            // { return ...; };` binding. Walk every Box child so the early
-            // return inside such a divergent value expression is rewritten too.
+            // Recurse into boxed children so Returns hidden inside non-tail
+            // value positions (LocalSet value, arithmetic operands, …) are
+            // rewritten alongside top-level Returns.
             other => {
                 other.for_each_boxed_child_mut(&mut |child| {
                     rewrite_returns_to_multi_value(std::slice::from_mut(child));

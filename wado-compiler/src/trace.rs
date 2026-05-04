@@ -43,6 +43,20 @@ pub fn filter() -> &'static TraceFilter {
     FILTER.get_or_init(|| parse_filter(std::env::var("WADO_TRACE").ok().as_deref()))
 }
 
+/// Parse a comma-separated env-var value into a Vec, dropping empty
+/// entries and trimming whitespace. Used by callers that cache the
+/// result themselves (typically a `OnceLock`); this helper exists so
+/// `trace::filter()`-style filters and `optimize::pass_dump`-style
+/// per-pass checks share the same parse rules.
+pub fn parse_env_list(raw: Option<&str>) -> Vec<String> {
+    raw.unwrap_or("")
+        .split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
 fn parse_filter(raw: Option<&str>) -> TraceFilter {
     let mut all = false;
     let mut targets = Vec::new();

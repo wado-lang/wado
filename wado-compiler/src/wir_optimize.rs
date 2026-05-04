@@ -64,19 +64,20 @@ use string::simplify_short_string_pushes;
 /// Run a single WIR optimization pass with profiling.
 ///
 /// Honours `WADO_LIST_PASSES`, `WADO_DUMP_PASS_BEFORE`, and
-/// `WADO_DUMP_PASS_AFTER` — see `crate::optimize` for the full list.
+/// `WADO_DUMP_PASS_AFTER` — see `crate::optimize::pass_dump`.
 fn wir_pass(
     name: &str,
     module: &mut WirPackage,
     profiler: &dyn SpanEmitter,
     f: impl FnOnce(&mut WirPackage),
 ) {
-    crate::optimize::list_pass(name);
-    crate::optimize::dump_wir_if_matches(name, module, "before");
+    use crate::optimize::pass_dump::{self, Phase};
+    pass_dump::list_pass(name);
+    pass_dump::dump_wir(name, module, Phase::Before);
     profiler.span_start(name);
     f(module);
     profiler.span_end(name);
-    crate::optimize::dump_wir_if_matches(name, module, "after");
+    pass_dump::dump_wir(name, module, Phase::After);
 }
 
 /// Run all WIR-level optimizations on the module (in-place).
