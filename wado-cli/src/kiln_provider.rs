@@ -306,10 +306,13 @@ impl CliGeneratorProvider {
 }
 
 /// Convert the absolute paths the recording host captured into project-
-/// relative paths anchored at `base`. Builtins and other paths that are
-/// not descendants of `base` are kept verbatim — they still hash to the
-/// same value and remain stable across runs as long as the toolchain is
-/// stable, so they participate in invalidation correctly.
+/// relative paths anchored at `base`. Stdlib modules (`core:*`, `wasi:*`)
+/// never reach `CompilerHost::load_source`, so the only paths that show
+/// up here are filesystem sources the inner compiler asked for. Anything
+/// outside `base` (e.g. `../shared/foo.wado` if the project layout puts
+/// the generator under a sibling directory, or a remote URL the host
+/// happens to fetch) is kept verbatim — its hash still pins content, so
+/// invalidation stays correct, but the relative-path layout is lost.
 fn make_relative_sources(base: &Path, raw: Vec<(String, [u8; 32])>) -> Vec<(String, [u8; 32])> {
     raw.into_iter()
         .map(|(path, hash)| {
@@ -373,9 +376,12 @@ fn stable_id_for_local(path_str: &str, content: &[u8]) -> String {
 /// provider surfaces a single `ProviderError::Compile` instead.
 ///
 /// Also records every `load_source` call into `loaded` (path + content
-/// hash) so the provider can persist the generator's transitive source
+/// hash) so the provider can persist the generator's transitive load
 /// closure into a sidecar file and invalidate the WASM cache when any
-/// of those files drifts on disk. The recording is best-effort: a
+/// of those files drifts on disk. "Load closure" is the right framing
+/// here: `CompilerHost::load_source` carries both `.wado` modules and
+/// raw assets pulled in via `#include_bytes`, so an edit to either kind
+/// of file drops the WASM cache. The recording is best-effort: a
 /// duplicate `load_source` for the same path appends a duplicate
 /// entry, which the dedup step in `compile_local` collapses.
 struct SilentHost {
@@ -425,12 +431,15 @@ fn sha256_of(bytes: &[u8]) -> [u8; 32] {
 }
 
 /// Sidecar file persisted next to a cached generator WASM, listing every
-/// `.wado` source file the inner compiler loaded while building the
-/// component. Each entry is a project-relative path + the SHA-256 of the
-/// file's bytes when the WASM was produced. The provider re-hashes these
-/// files on the next call and rebuilds the WASM if any drift, so an edit
-/// to a transitive import (e.g. `parser_gen.wado` for a generator entry
-/// at `generator.wado`) correctly invalidates the cache.
+/// file the inner compiler loaded while building the component — both
+/// `.wado` modules and binary assets routed through
+/// `CompilerHost::load_source` (e.g. `#include_bytes` payloads). Stdlib
+/// modules (`core:*`, `wasi:*`) are bypassed by the compiler and never
+/// appear here. Each entry is a project-relative path + the SHA-256 of
+/// the file's bytes when the WASM was produced. The provider re-hashes
+/// these files on the next call and rebuilds the WASM if any drift, so
+/// an edit to a transitive import (e.g. `parser_gen.wado` for a generator
+/// entry at `generator.wado`) correctly invalidates the cache.
 ///
 /// `combined_hash` is the SHA-256 of the canonical encoding of `sources`
 /// (sorted lex by path, hex-encoded). It is the value stored in

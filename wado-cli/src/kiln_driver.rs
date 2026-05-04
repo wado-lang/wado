@@ -732,11 +732,12 @@ pub struct GeneratorComponent {
 /// - A test provider that returns pre-built bytes.
 pub trait GeneratorProvider {
     /// Resolve `module` to component bytes plus a content-addressed
-    /// identity for the generator's source closure. The driver calls
-    /// this once per invocation in the pipeline (so a single module
-    /// shared by N invocations triggers N calls); implementations are
-    /// expected to honor their own internal cache so the steady-state
-    /// hit path is a small filesystem read rather than a recompile.
+    /// identity for the generator's source closure. The driver caches
+    /// the result by `GeneratorModule` for the duration of one
+    /// `run_pipeline`, so a module shared across N invocations triggers
+    /// at most one call here. Implementations should still honor their
+    /// own internal cache so the steady-state hit on a *cold* pipeline
+    /// is a small filesystem read rather than a recompile.
     fn get_component(
         &self,
         module: &GeneratorModule,
