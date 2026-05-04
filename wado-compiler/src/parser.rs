@@ -1263,15 +1263,12 @@ impl Parser {
     }
 
     /// Parse `stores[name1, name2]` — the `stores` keyword has already been peeked.
-    /// Requires at least one entry and rejects a trailing comma.
+    /// Empty lists (`stores[]`) and a trailing comma are allowed for syntactic
+    /// consistency with other comma-separated lists; both are no-ops semantically.
     fn parse_stores_list(&mut self) -> ParseResult<Vec<String>> {
         self.expect(&TokenKind::Stores)?;
         self.expect(&TokenKind::LBracket)?;
-        let mut names = vec![self.consume_ident()?];
-        while self.check(&TokenKind::Comma) {
-            self.advance();
-            names.push(self.consume_ident()?);
-        }
+        let names = self.parse_comma_separated(&TokenKind::RBracket, Self::consume_ident)?;
         self.expect(&TokenKind::RBracket)?;
         Ok(names)
     }
@@ -1318,15 +1315,12 @@ impl Parser {
     }
 
     /// Parse `stores[0, 1]` or `stores[name]` in function type position.
-    /// Requires at least one entry and rejects a trailing comma.
+    /// Empty lists and a trailing comma are allowed for syntactic consistency
+    /// with other comma-separated lists; both are no-ops semantically.
     fn parse_stores_list_for_fn_type(&mut self) -> ParseResult<Vec<StoresEntry>> {
         self.expect(&TokenKind::Stores)?;
         self.expect(&TokenKind::LBracket)?;
-        let mut entries = vec![self.parse_stores_entry()?];
-        while self.check(&TokenKind::Comma) {
-            self.advance();
-            entries.push(self.parse_stores_entry()?);
-        }
+        let entries = self.parse_comma_separated(&TokenKind::RBracket, Self::parse_stores_entry)?;
         self.expect(&TokenKind::RBracket)?;
         Ok(entries)
     }
