@@ -215,17 +215,70 @@ fn run_dce(project: &mut FlatPackage, profiler: &dyn SpanEmitter) {
 }
 
 /// Run a single optimization pass with profiling, returning whether it changed anything.
+///
+/// The function honours the developer-debug env vars
+/// `WADO_LIST_PASSES`, `WADO_DUMP_PASS_BEFORE`, and `WADO_DUMP_PASS_AFTER`
+/// — see [`run_pass_dump_dispatch`].
 fn run_pass(
     name: &str,
     project: &mut FlatPackage,
     profiler: &dyn SpanEmitter,
     f: impl FnOnce(&mut FlatPackage) -> bool,
 ) -> bool {
+    pass_dump::list_pass(name);
+    pass_dump::dump_tir_if_matches(name, project, "before");
     profiler.span_start(name);
     let changed = f(project);
     profiler.span_end(name);
+    pass_dump::dump_tir_if_matches(name, project, "after");
     changed
 }
+
+mod pass_dump {
+    use super::FlatPackage;
+    use crate::wir::WirPackage;
+
+    fn matches_var(var: &str, name: &str) -> bool {
+        std::env::var(var)
+            .ok()
+            .is_some_and(|v| v.split(',').map(str::trim).any(|p| p == name))
+    }
+
+    pub fn list_pass(name: &str) {
+        if std::env::var("WADO_LIST_PASSES").is_ok() {
+            eprintln!("[pass] {name}");
+        }
+    }
+
+    pub fn dump_tir_if_matches(name: &str, project: &FlatPackage, when: &str) {
+        let var = match when {
+            "before" => "WADO_DUMP_PASS_BEFORE",
+            "after" => "WADO_DUMP_PASS_AFTER",
+            _ => return,
+        };
+        if matches_var(var, name) {
+            eprintln!("=== TIR {when} {name} ===");
+            eprintln!("{}", crate::unparse::unparse_flat_package(project));
+            eprintln!("=== end TIR {when} {name} ===");
+        }
+    }
+
+    pub fn dump_wir_if_matches(name: &str, module: &WirPackage, when: &str) {
+        let var = match when {
+            "before" => "WADO_DUMP_PASS_BEFORE",
+            "after" => "WADO_DUMP_PASS_AFTER",
+            _ => return,
+        };
+        if matches_var(var, name) {
+            eprintln!("=== WIR {when} {name} ===");
+            eprintln!("{}", crate::wir_unparse::unparse_wir(module, None));
+            eprintln!("=== end WIR {when} {name} ===");
+        }
+    }
+}
+
+pub use pass_dump::dump_wir_if_matches as dump_wir_if_matches;
+pub use pass_dump::list_pass as list_pass;
 
 /// Run optimization passes with a fixed-point iteration strategy.
 ///
