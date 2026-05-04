@@ -295,11 +295,14 @@ invocation), runs the generated parser on `[input]`, and compares
 
 Current numbers (run `wado test package-gale/tests/antlr4-compat`):
 
-- **61 Stage B tests emitted** — 48 pass, 13 `#[TODO]` (known
+- **70 Stage B tests emitted** — 57 pass, 13 `#[TODO]` (known
   divergences tracked in `[stage_b_todo]` of `status.toml`).
-- **13 `[stage_b_skip]`** — generated parser would not compile
-  ("cannot redeclare X" when a label collides with a rule name in
-  the generated scope; Gale codegen bug, not a descriptor bug).
+- **4 `[stage_b_skip]`** — list-label LR alts
+  (`LeftRecursion/ReturnValueAndActionsList[12]_*`) where
+  `b+=expr ',' b+=expr` produces two distinct `Array<ExprNode>`
+  fields (`b` and `b_2`) instead of appending both to one list, and
+  the LR helper passes `left: ExprNode` into the array-typed field —
+  ANTLR4 `+=` semantic gap rather than a descriptor bug.
 - **185 auto-skip** — descriptor's `[output]` is not a parse tree at
   all (lexer token-type names, Token.toString dumps, ATN decision
   traces, action-block prints) or its `[output]` starts with a
@@ -326,8 +329,7 @@ Three independent pieces make up the wiring:
    generated code.
 
 The 13 `#[TODO]` entries are the natural Stage B backlog. They
-break down into four buckets that real follow-up work can chip away
-at:
+break down into three buckets:
 
 - **LR rewriting tree-shape divergence** —
   `LeftRecursion/{Expressions_7, PrefixAndOtherAlt_1,
@@ -337,15 +339,32 @@ at:
 - **Parse failures on left-recursion edge cases** —
   `LeftRecursion/JavaExpressions_{7,8,9,12}` and
   `LeftRecursion/PrecedenceFilterConsidersContext`.
-- **Codegen bug: identifier collision** — 13 descriptors fail
-  `wado test` compilation with "cannot redeclare X" when a label
-  shares its name with a rule. These are `[stage_b_skip]` (not
-  `[stage_b_todo]`) because there is no test to attach `#[TODO]`
-  to. Closing them re-emits the tests automatically.
 - **Predicates and full-context LL** —
-  `ParserExec/PredictionMode_LL`,
-  `SemPredEvalParser/PredFromAltTestedInLoopBack_{1,2}`. Both fall
+  `ParserExec/{BuildParseTree_TRUE, PredictionMode_LL}`,
+  `SemPredEvalParser/PredFromAltTestedInLoopBack_{1,2}`. All fall
   under Stage C (action-body translation) for a full fix.
+
+Two recent fixes that closed earlier `[stage_b_skip]` entries are
+worth noting because they each unblocked ~10 % of the bucket and
+the underlying compiler / codegen bugs were both real:
+
+- **Wado compiler ICE on struct-field rebind in `export fn`** — the
+  `sroa_multi_value_returns` WIR pass scalarised the function
+  signature but skipped Returns hidden inside `LocalSet` values
+  (`let _x = if cond { v } else { return ...; };`), leaving early
+  Returns producing a `struct.new` against the new multi-value
+  signature. Fixed by walking unhandled variants via
+  `for_each_boxed_child_mut`. Regression fixture at
+  `wado-compiler/tests/fixtures/struct_field_rebind_in_export_run.wado`.
+- **Gale codegen LR-detection missed labeled self-references** —
+  `is_left_recursive` only matched the bare `RuleRef(rule_name)`
+  shape, so `e : a=e ...` was misclassified as non-LR and routed
+  through the non-LR scan generator that emitted an infinitely
+  self-recursive `scan_e`. Fixed by unwrapping a single `Label`
+  layer (matching ANTLR4's left-recursion semantics) and threading
+  the label name through `gen_lr_suffix_helpers` so the LR helper's
+  struct-literal field name and field-assignment dedup counter
+  match the bt-side parser. Unblocked 9 LR descriptors.
 
 ### Future work
 
@@ -363,8 +382,8 @@ at:
 ## Compiler bugs surfaced during compatibility work
 
 Pursuing the descriptor corpus has shaken out compiler bugs that
-unrelated test paths missed. Both have landed in this branch with
-regression fixtures under `wado-compiler/tests/fixtures/`:
+unrelated test paths missed. All have landed with regression
+fixtures under `wado-compiler/tests/fixtures/`:
 
 - **`null` arm in `match` / `if`** —
   `match_null_arm_infers_option_inner.wado`. `Literal::Null` was
@@ -379,6 +398,21 @@ regression fixtures under `wado-compiler/tests/fixtures/`:
   representation depending on entry-filename order. Fixed by
   introducing `TypeTable::mangle_type_arg_for_generic` and threading
   it through the WIR layer's generic-instance fq computation.
+- **SROA missed Returns hidden inside `LocalSet` values** —
+  `struct_field_rebind_in_export_run.wado`. `sroa_multi_value_returns`
+  scalarised the function's return signature but its rewrite walker
+  stopped at `Block`/`If`/`Loop`/`Seq`/`Drop` and missed the early
+  Return inside `let _x: i32 = if flag { 1 } else { return Outer { a, b }; };`.
+  Fixed in `wir_optimize/sroa_return.rs` by recursing into all
+  boxed children for unhandled variants, with a
+  `nested_returns_match` helper that skips the typed-block
+  Br-exit invariant outside tail position.
+
+The diagnostic infrastructure that landed alongside the SROA fix is
+now documented as the `optimizer-debug` agent skill and exposed via
+three env vars (`WADO_TRACE`, `WADO_DUMP_PASS_BEFORE`,
+`WADO_DUMP_PASS_AFTER`) plus the `compiler_trace!` macro — reach
+for these the next time a pass produces a mysterious WIR.
 
 When Phase 2/3 surface further compiler bugs, follow the project
 rule from the top-level `CLAUDE.md`: write a minimum reproducible
