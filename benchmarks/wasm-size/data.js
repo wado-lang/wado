@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777893067458,
+  "lastUpdate": 1777916281418,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -19109,6 +19109,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/ab7b3eaace5ddfe5c71f7b224d33188c9efa524d"
         },
         "date": 1777893067247,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1775,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8776,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18520,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 503105,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "99f9663329cc38fc8cf2a56966b2b25c95299d86",
+          "message": "Merge pull request #992 from wado-lang/claude/fix-wasi-interface-expansion-Iizg3\n\nfeat(world): WIT-faithful bare import/export syntax",
+          "timestamp": "2026-05-05T02:33:15+09:00",
+          "tree_id": "ddca446d7f54bef2b4e97c21432dd0a338b88769",
+          "url": "https://github.com/wado-lang/wado/commit/99f9663329cc38fc8cf2a56966b2b25c95299d86"
+        },
+        "date": 1777916281077,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
