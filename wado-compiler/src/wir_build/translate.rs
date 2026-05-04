@@ -5,8 +5,8 @@
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::tir::{
-    PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirParam,
-    TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
+    PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction,
+    TirParam, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::wir::{CanonicalIntrinsic, WirInstr, WirName, WirType, WirTypeDef, WirTypeId};
 
@@ -69,10 +69,7 @@ fn collect_let_names(names: &mut IndexMap<u32, String>, stmts: &[TirStmt]) {
 ///   `_{local_index}`.
 /// - A non-param local that shadows a param-or-let keeps the original
 ///   name unchanged on the param/let and suffixes the non-param.
-fn resolve_local_names(
-    raw: &IndexMap<u32, String>,
-    params: &[TirParam],
-) -> IndexMap<u32, String> {
+fn resolve_local_names(raw: &IndexMap<u32, String>, params: &[TirParam]) -> IndexMap<u32, String> {
     let param_indices: IndexSet<u32> = params.iter().map(|p| p.local_index).collect();
 
     // Tally raw-name occurrences across all locals and within params only.
