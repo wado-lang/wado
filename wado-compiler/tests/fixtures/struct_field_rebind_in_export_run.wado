@@ -1,0 +1,66 @@
+#![TODO]
+
+// Pending bug: rebinding a field of a struct returned by a function in
+// an `export fn` body ICEs the WIR pipeline with
+// "WIR pipeline generated invalid core Wasm module: type mismatch:
+//  expected (ref $type), found (ref (exact $type))".
+//
+// Minimum trigger (every clause is required — dropping any one makes the
+// ICE go away):
+//
+//   1. Caller is `export fn` (plain `fn` does not trigger).
+//   2. Caller binds the returned struct to a NAMED local, then reads a
+//      field. Inlining (`build(...).a`) does not trigger.
+//   3. The struct has at least TWO Array-typed fields. With one Array
+//      field plus an i32 (or two String fields with no Array), the ICE
+//      goes away — the trigger is specific to multiple GC-array fields
+//      sharing the same struct.
+//   4. The function body uses a divergent expression — `let _ = if cond
+//      { value } else { return EarlyReturn; };` — that returns the same
+//      struct shape from the early-return branch as from the trailing
+//      explicit `return`. A statement-form `if cond { ... }; return ...`
+//      that does not bind a value does not trigger.
+//
+// Surfaced while wiring Stage B of the ANTLR4 descriptor extractor at
+// `package-gale/scripts/extract_antlr4_descriptors.wado`, where the
+// `load_triage_maps` function (returning a TriageMaps struct with
+// stage_a/stage_b TriageMap fields, each holding `Array<TriageEntry>`)
+// used `let text = match content { Some(t) => t, None => return
+// TriageMaps { stage_a, stage_b } }` and the export `run()` did
+// `let triage_maps = load_triage_maps(...); let triage_map =
+// triage_maps.stage_a;`.
+//
+// The expected (correct) behaviour is: the program compiles and runs to
+// completion with no output.
+//
+// The bug is opt-level-dependent — at -O0 the module compiles cleanly,
+// but at -O1 and above the WIR pipeline trips validation. The fixture
+// is scoped via `only_opt: ["O1", "O2", "O3", "Os"]` so the failing
+// levels run; at those levels the module's `#![TODO]` tag tells the e2e
+// harness to `catch_unwind` the panic and report the fixture as
+// expected failure (otherwise CI would break on every run). When the
+// underlying bug is fixed, drop both the `#![TODO]` and the `only_opt`
+// — the harness will then enforce that the fixture compiles cleanly at
+// every level and emits the empty stdout asserted below.
+
+use { Stdout } from "core:cli";
+
+struct Outer {
+    a: Array<i32>,
+    b: Array<i32>,
+}
+
+fn build(flag: bool) -> Outer {
+    let a: Array<i32> = [];
+    let b: Array<i32> = [];
+    let _x: i32 = if flag { 1 } else { return Outer { a, b }; };
+    return Outer { a, b };
+}
+
+export fn run() with Stdout {
+    let outer = build(true);
+    let _x = outer.a;
+}
+
+__DATA__
+{"stdout": "", "only_opt": ["O1", "O2", "O3", "Os"]}

@@ -329,12 +329,17 @@ fn load_triage_maps(content: &Option<String>) -> TriageMaps {
 
 /// Stage-A-only convenience wrapper. Retained as its own function (rather
 /// than inlining `load_triage_maps(...).stage_a` at every call site) to
-/// work around a Wado compiler ICE: in `run()`, `let m = load_triage_maps(...);
-/// let a = m.stage_a;` triggers
+/// work around a Wado compiler ICE — the trigger and minimum repro live
+/// at `wado-compiler/tests/fixtures/struct_field_rebind_in_export_run.wado`.
+/// In short: in `export fn run()`, `let m = load_triage_maps(...); let a
+/// = m.stage_a;` triggers
 /// "WIR pipeline generated invalid core Wasm module: type mismatch:
-/// expected (ref $type), found (ref (exact $type))".
-/// Bug fixture: TODO(record-once-isolated). The two-wrapper indirection
-/// is the agreed workaround for now.
+/// expected (ref $type), found (ref (exact $type))" when the inner
+/// function uses a divergent `let _ = if cond { v } else { return ... }`
+/// expression and the struct has multiple Array-typed fields. The
+/// two-wrapper indirection side-steps the bug because each wrapper's
+/// `load_triage_maps(content).stage_X` is a tail expression, not a
+/// named-local rebind.
 fn load_triage_map(content: &Option<String>) -> TriageMap {
     return load_triage_maps(content).stage_a;
 }
