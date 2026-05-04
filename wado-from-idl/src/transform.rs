@@ -136,19 +136,24 @@ impl<'a> Transformer<'a> {
         for (key, item) in &world.imports {
             if let WorldItem::Interface { id, .. } = item {
                 let iface = &self.resolve.interfaces[*id];
-                // WIT-faithful: emit bare `import Foo;` only for interfaces that
-                // have at least one freestanding/async function. Type-only
-                // interfaces (e.g. `wasi:filesystem/types`) carry no Wado-level
-                // `pub interface Foo` declaration; their resources/types are
-                // brought in by `use` at call sites, so the world declaration
-                // can omit them.
-                let has_callable_function = iface.functions.iter().any(|(_, func)| {
+                // WIT-faithful: emit bare `import Foo;` only for interfaces
+                // that have at least one freestanding (sync or async)
+                // function. Interfaces that contain only types and resource
+                // methods (e.g. `wasi:filesystem/types`,
+                // `wasi:sockets/types`) carry no Wado-level `pub interface
+                // Foo` declaration; their resources/types reach call sites
+                // through ordinary `use { Descriptor } from
+                // "wasi:filesystem/types.wado"`, so the world declaration
+                // can omit them. Resource constructors/methods/static
+                // functions are not freestanding and therefore do not
+                // qualify here.
+                let has_freestanding_function = iface.functions.iter().any(|(_, func)| {
                     matches!(
                         func.kind,
                         FunctionKind::Freestanding | FunctionKind::AsyncFreestanding
                     )
                 });
-                if !has_callable_function {
+                if !has_freestanding_function {
                     continue;
                 }
 

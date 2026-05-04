@@ -301,9 +301,20 @@ impl WorldRegistry {
                 }
                 WorldExport::Interface(iface) => {
                     let Some(lookup) = lookup_interface_export(&iface.interface_name) else {
-                        // Interface declaration not yet registered; skip
-                        // silently. Phase 2 may turn this into a warning once
-                        // the registration order is guaranteed.
+                        // The two-pass stdlib bootstrap registers every
+                        // `pub interface Foo` before any world, so a missing
+                        // lookup at this point is an actual problem
+                        // (mismatched name, missing `#[cm(...)]`, an
+                        // out-of-tree world that names an undeclared
+                        // interface). Warn so the failure is diagnosable;
+                        // the world is still registered with the rest of
+                        // its exports rather than aborting.
+                        eprintln!(
+                            "WorldRegistry: interface export `{}` in world `{fq_name}` \
+                             references an unknown interface; skipping. \
+                             Check for a missing `pub interface {}` or `#[cm(\"...\")]`.",
+                            iface.interface_name, iface.interface_name,
+                        );
                         continue;
                     };
                     for method in lookup.methods {

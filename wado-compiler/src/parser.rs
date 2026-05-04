@@ -4758,6 +4758,7 @@ impl Parser {
             None
         };
 
+        let close_span = self.peek().span;
         self.expect(&TokenKind::Semicolon)?;
 
         Ok(WorldExport::Function(WorldExportFn {
@@ -4765,7 +4766,7 @@ impl Parser {
             is_async,
             params,
             return_type,
-            span: start_span,
+            span: start_span.merge(&close_span),
         }))
     }
 

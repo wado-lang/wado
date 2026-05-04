@@ -577,6 +577,23 @@ fn collect_interface_decls(modules: &[(&'static str, crate::ast::Module)]) -> In
                 })
                 .collect();
 
+            // Same-name interfaces declared in multiple modules cannot be
+            // distinguished at world-registration time (`export Foo;` /
+            // `import Foo;` both look up by local name). Mirror
+            // `WorldRegistry::register`'s policy: keep the first registrant,
+            // log a warning, and ignore the rest. A duplicate here is a
+            // stdlib bug or a user-input collision; silent overwriting would
+            // make the earlier interface invisible to any world that
+            // references it.
+            if table.by_name.contains_key(&iface.name) {
+                eprintln!(
+                    "InterfaceDeclTable: duplicate interface `{}` (also at {cm_fq:?}). \
+                     Keeping the first registrant.",
+                    iface.name,
+                );
+                continue;
+            }
+
             table.by_name.insert(
                 iface.name.clone(),
                 InterfaceDeclEntry {
