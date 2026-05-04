@@ -564,7 +564,11 @@ fn synthesize_lift_wasi_enum(
 /// Lift a `list<T>` from linear memory at `addr`.
 ///
 /// Layout: `[base_ptr: i32, count: i32]` at addr.
-/// Elements at `base_ptr + i * cm_size(T)`.
+/// Elements at `base_ptr + i * cm_size(T)`. The element stride and the
+/// alignment passed to `realloc` are computed via the registry so that
+/// named WASI types (records / variants / enums / flags) walk the buffer
+/// at their true canonical-ABI size and align rather than the i32-handle
+/// fallback baked into `cm_abi::cm_size` / `cm_abi::cm_align`.
 fn synthesize_lift_list(
     elem_ty: &Type,
     addr: TirExpr,
@@ -573,7 +577,16 @@ fn synthesize_lift_list(
     locals: &mut Vec<TirLocal>,
     ctx: &LiftContext<'_>,
 ) -> TirExpr {
-    let elem_size = cm_abi::cm_size(elem_ty);
+    let elem_size = crate::component_model::cm_size_with_registry_scoped(
+        elem_ty,
+        ctx.wasi_registry,
+        Some(ctx.cm_package),
+    );
+    let elem_align = crate::component_model::cm_align_with_registry_scoped(
+        elem_ty,
+        ctx.wasi_registry,
+        Some(ctx.cm_package),
+    );
 
     // Resolve TypeIds for the element type and Array<ElemType>.
     // These are needed by the monomorphizer to instantiate Array::with_capacity and .push().
@@ -690,7 +703,7 @@ fn synthesize_lift_list(
 
     stmts.push(loop_stmt(block(loop_stmts)));
 
-    // Free list buffer: realloc(__base, __count * elem_size, 4, 0)
+    // Free list buffer: realloc(__base, __count * elem_size, elem_align, 0)
     stmts.push(if_stmt(
         binary(
             TirBinaryOp::Gt,
@@ -708,7 +721,7 @@ fn synthesize_lift_list(
                     i32_const(elem_size as i32),
                     TypeTable::I32,
                 ),
-                i32_const(4),
+                i32_const(elem_align as i32),
                 i32_const(0),
             ],
             TypeTable::I32,

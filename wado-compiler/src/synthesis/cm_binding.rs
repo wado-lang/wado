@@ -744,6 +744,58 @@ mod tests {
         assert_eq!(expr.type_id, TypeTable::I32);
     }
 
+    /// `Array<IpAddress>` lifts must walk the buffer at the variant's
+    /// canonical-ABI stride (1 byte disc + payload), not the 4-byte
+    /// i32-handle fallback. Regression for issue #997 (#1, #2).
+    #[test]
+    fn lift_list_named_variant_uses_registry_stride() {
+        let (registry, _) = WasiRegistry::build_from_stdlib();
+        let elem_ty = named_type("IpAddress");
+        let expected_size = crate::component_model::cm_size_with_registry_scoped(
+            &elem_ty,
+            registry,
+            Some("sockets"),
+        );
+        // Sanity: registry-derived size differs from the 4-byte fallback.
+        assert!(expected_size > 4, "registry size should exceed handle size");
+
+        let mut tt = TypeTable::new();
+        tt.register_comp_feature_variant(
+            crate::wir::COMP_FEATURE_OPTION | crate::wir::COMP_FEATURE_RESULT,
+            ModuleSource::prelude(),
+        );
+        let type_table = std::cell::RefCell::new(tt);
+        let interner = std::cell::RefCell::new(crate::name::ModuleSourceInterner::new());
+        let ctx = LiftContext {
+            wasi_registry: registry,
+            type_table: &type_table,
+            cm_package: "sockets",
+            interner: &interner,
+        };
+        let list_ty = cm_abi::generic_type("Array", vec![elem_ty]);
+        let mut stmts = Vec::new();
+        let mut locals = Vec::new();
+        let mut next_local = 0_u32;
+        let _ = synthesize_lift(
+            &list_ty,
+            i32_const(0),
+            &mut next_local,
+            &mut stmts,
+            &mut locals,
+            &ctx,
+        );
+        // Stride appears at element-addr offset (`i * elem_size`) and in
+        // the realloc free (`count * elem_size`). The registry-aware path
+        // should emit `IntLiteral { value: <expected_size> }` at both sites.
+        let dump = format!("{stmts:?}");
+        let needle = format!("value: {expected_size}");
+        assert!(
+            dump.matches(&needle).count() >= 2,
+            "expected `{needle}` at ≥ 2 sites, got: {}",
+            dump.matches(&needle).count()
+        );
+    }
+
     #[test]
     fn lower_i32() {
         let stmts = synthesize_lower(

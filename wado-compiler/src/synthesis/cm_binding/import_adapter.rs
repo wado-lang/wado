@@ -583,8 +583,19 @@ pub(super) fn synthesize_adapter(
             // General Array<T> param: lower to (ptr, len) in linear memory
             Type::Generic(g) if g.name == "Array" && g.args.len() == 1 => {
                 let elem_type = &g.args[0];
-                let elem_size = cm_abi::cm_size(elem_type) as i32;
-                let elem_align = cm_abi::cm_align(elem_type) as i32;
+                // Use registry-aware layout so named WASI struct/variant/enum/flags
+                // element types walk at their true CM stride/alignment instead of
+                // the i32-handle fallback in `cm_abi::cm_size`/`cm_align`.
+                let elem_size = crate::component_model::cm_size_with_registry_scoped(
+                    elem_type,
+                    wasi_registry,
+                    Some(&func_info.package),
+                ) as i32;
+                let elem_align = crate::component_model::cm_align_with_registry_scoped(
+                    elem_type,
+                    wasi_registry,
+                    Some(&func_info.package),
+                ) as i32;
 
                 // Resolve proper TypeIds for the element and array types
                 let (elem_type_id, array_type_id) = {
