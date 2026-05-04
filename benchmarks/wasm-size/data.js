@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777932569221,
+  "lastUpdate": 1777933828149,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -19241,6 +19241,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d715ccb01a4592967514895e7c6f2bd183d5dc67"
         },
         "date": 1777932568944,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1775,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8776,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18520,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 503688,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "96b62c8cc4ab9c66148d043a2ad939f07507fd52",
+          "message": "Merge pull request #995 from wado-lang/claude/refactor-unparse-boilerplate-aN73o\n\nrefactor(unparse): extract boilerplate, fix multi-line match scrutinee blank-line bug",
+          "timestamp": "2026-05-05T07:25:35+09:00",
+          "tree_id": "f8f46235433efd7bef6f9d1934f503f51173a886",
+          "url": "https://github.com/wado-lang/wado/commit/96b62c8cc4ab9c66148d043a2ad939f07507fd52"
+        },
+        "date": 1777933827814,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
