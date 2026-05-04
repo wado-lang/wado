@@ -60,6 +60,12 @@ pub struct LiftContext<'a> {
     /// identity of synthesised types (e.g. `wasi:http/types`,
     /// `core:kiln/types.wado`) so they match the resolver's registered
     /// `StructName`s ptr-eq.
+    ///
+    /// Re-entrancy: the lift call chain may `borrow_mut()` this cell;
+    /// callers must not hold a `RefMut` to the same cell across calls
+    /// into [`synthesize_lift_with_context`] or its helpers. The lift
+    /// path itself only borrows transiently inside
+    /// [`module_source_for_cm_interface`].
     pub interner: &'a RefCell<crate::name::ModuleSourceInterner>,
 }
 

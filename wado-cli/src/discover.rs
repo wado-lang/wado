@@ -9,10 +9,10 @@
 //! - `[test].exclude` glob patterns from the root manifest
 //! - symbolic links (followed once each, with cycle detection on canonical paths)
 
-use std::collections::HashSet;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use wado_compiler::hashmap::IndexSet;
 
 use glob::{MatchOptions, Pattern, PatternError};
 
@@ -133,9 +133,9 @@ pub fn discover_test_files(
     let submodules = read_submodule_paths(root)?
         .into_iter()
         .map(|rel| root.join(rel))
-        .collect::<HashSet<_>>();
+        .collect::<IndexSet<_>>();
 
-    let mut visited: HashSet<PathBuf> = HashSet::new();
+    let mut visited: IndexSet<PathBuf> = IndexSet::default();
     if let Ok(canon) = fs::canonicalize(root) {
         visited.insert(canon);
     }
@@ -162,9 +162,9 @@ fn walk_dir(
     dir: &Path,
     root: &Path,
     excludes: &ExcludeSet,
-    submodules: &HashSet<PathBuf>,
+    submodules: &IndexSet<PathBuf>,
     rules: &mut Vec<GitignoreRule>,
-    visited: &mut HashSet<PathBuf>,
+    visited: &mut IndexSet<PathBuf>,
     out: &mut DiscoveryResult,
 ) -> Result<(), WalkError> {
     let added_rules = load_gitignore(dir, rules)?;

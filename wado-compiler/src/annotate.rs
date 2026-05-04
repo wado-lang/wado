@@ -43,6 +43,13 @@ pub struct Annotated {
     /// LSP queries (definition / hover / references) borrow this when
     /// they need to resolve an import path the user clicked into a
     /// `ModuleSource`.
+    ///
+    /// Re-entrancy: only single-threaded callers, and only one
+    /// `borrow_mut` at a time. Do not hold a [`std::cell::RefMut`]
+    /// across calls into other [`Annotated`] / [`crate::Resolver`]
+    /// methods — a nested `borrow_mut` will panic. The intended
+    /// pattern is `annotated.interner.borrow_mut().<one method call>`,
+    /// dropping the borrow at the statement boundary.
     pub interner: std::rc::Rc<std::cell::RefCell<crate::name::ModuleSourceInterner>>,
     /// Per-module structural index (name spans, write targets, span lookup).
     /// Built once per [`Module`] in [`annotate_loaded`]. LSP queries (and

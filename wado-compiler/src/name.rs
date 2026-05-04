@@ -30,8 +30,8 @@
 //! - For projects with `wado.toml`: relative to the directory containing `wado.toml`
 //! - For standalone scripts: relative to the entry point's directory
 
+use crate::hashmap::IndexSet;
 use fluent_uri::UriRef;
-use std::collections::HashSet;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
@@ -90,8 +90,8 @@ static ENTRY_FILENAME_STDIN: LazyLock<Arc<str>> = LazyLock::new(|| Arc::<str>::f
 static ENTRY_FILENAME_UNINITIALIZED: LazyLock<Arc<str>> =
     LazyLock::new(|| Arc::<str>::from("<uninitialized>"));
 
-fn well_known_arcs() -> [Arc<str>; 22] {
-    [
+fn well_known_arcs() -> Vec<Arc<str>> {
+    vec![
         PLACEHOLDER_NAME.clone(),
         CORE_PRELUDE.clone(),
         CORE_BUILTIN.clone(),
@@ -141,10 +141,6 @@ impl InternedStr {
     }
 
     pub fn as_str(&self) -> &str {
-        &self.0
-    }
-
-    pub fn as_arc(&self) -> &Arc<str> {
         &self.0
     }
 }
@@ -202,13 +198,15 @@ impl PartialEq<&str> for InternedStr {
 /// therefore the same `InternedStr` as `ModuleSource::prelude()`.
 #[derive(Debug)]
 pub struct ModuleSourceInterner {
-    strings: HashSet<Arc<str>>,
+    strings: IndexSet<Arc<str>>,
 }
 
 impl ModuleSourceInterner {
     pub fn new() -> Self {
-        let mut strings = HashSet::new();
-        for arc in well_known_arcs() {
+        let well_known = well_known_arcs();
+        let mut strings =
+            IndexSet::with_capacity_and_hasher(well_known.len(), rustc_hash::FxBuildHasher);
+        for arc in well_known {
             strings.insert(arc);
         }
         Self { strings }
@@ -263,10 +261,8 @@ impl ModuleSourceInterner {
     /// Convert from the legacy `&[String]` module path representation.
     pub fn from_path(&mut self, segments: &[String]) -> ModuleSource {
         match segments {
-            // Legacy: empty path represents entry module
-            [] => ModuleSource::EntryPoint {
-                filename: InternedStr::from_arc(ENTRY_FILENAME_ENTRY.clone()),
-            },
+            // Legacy: empty path represents entry module.
+            [] => ModuleSource::entry_point_synthetic(),
             [first] if first.starts_with("./") || first.starts_with("../") => self.local(first),
             [first, rest @ ..] if first == "core" => self.core(&rest.join("/")),
             [first, rest @ ..] if first == "wasi" => self.wasi(&rest.join("/")),
@@ -312,18 +308,23 @@ impl WasmAssetKind {
 /// This enum provides a structured representation of module paths,
 /// replacing raw `Vec<String>` for better type safety and clearer semantics.
 ///
+/// String payloads are [`InternedStr`]; construct values via the
+/// well-known zero-arg constructors (e.g. [`ModuleSource::prelude`])
+/// or through [`ModuleSourceInterner`].
+///
 /// # Examples
 ///
 /// ```ignore
-/// // Core library modules
-/// ModuleSource::Core { name: "prelude".to_string() }  // core:prelude
-/// ModuleSource::Core { name: "cli".to_string() }      // core:cli
+/// // Well-known sources need no interner.
+/// let prelude = ModuleSource::prelude();           // core:prelude
+/// let cli     = ModuleSource::cli();               // core:cli
+/// let wasi    = ModuleSource::wasi_cli();          // wasi:cli
 ///
-/// // WASI modules
-/// ModuleSource::Wasi { interface: "cli".to_string() } // wasi:cli
-///
-/// // Local modules
-/// ModuleSource::Local { path: "./geometry.wado".to_string() }
+/// // Arbitrary content goes through the interner so identity is
+/// // canonicalised (`Arc::ptr_eq` on the inner string).
+/// let mut interner = ModuleSourceInterner::new();
+/// let local  = interner.local("./geometry.wado");
+/// let wasi_x = interner.wasi("io");
 /// ```
 ///
 /// Note: Two `EntryPoint` variants are considered equal regardless of their
@@ -450,173 +451,72 @@ impl Default for ModuleSource {
     }
 }
 
+/// Generate a zero-arg `ModuleSource` constructor that adopts a
+/// well-known `LazyLock<Arc<str>>` static. Keeps the constructor body
+/// regular so the only per-name input is the variant + field + static.
+macro_rules! well_known_module_sources {
+    (
+        $(
+            $(#[$meta:meta])*
+            $vis:vis fn $fn_name:ident() = $variant:ident { $field:ident: $arc:ident }
+        ),* $(,)?
+    ) => {
+        $(
+            $(#[$meta])*
+            #[must_use]
+            $vis fn $fn_name() -> Self {
+                Self::$variant { $field: InternedStr::from_arc($arc.clone()) }
+            }
+        )*
+    };
+}
+
 impl ModuleSource {
-    /// `core:prelude` — the prelude module.
-    #[must_use]
-    pub fn prelude() -> Self {
-        Self::Core {
-            name: InternedStr::from_arc(CORE_PRELUDE.clone()),
-        }
-    }
+    well_known_module_sources! {
+        /// `core:prelude` — the prelude module.
+        pub fn prelude() = Core { name: CORE_PRELUDE },
+        /// `core:prelude/string.wado` — the String type.
+        pub fn string() = Core { name: CORE_PRELUDE_STRING },
+        /// `core:prelude/array.wado` — the Array type.
+        pub fn array() = Core { name: CORE_PRELUDE_ARRAY },
+        /// `core:prelude/format.wado` — format trait helpers.
+        pub fn format() = Core { name: CORE_PRELUDE_FORMAT },
+        /// `core:prelude/int128.wado` — 128-bit integer types.
+        pub fn int128() = Core { name: CORE_PRELUDE_INT128 },
+        /// `core:prelude/primitive.wado` — primitive type methods.
+        pub fn primitive() = Core { name: CORE_PRELUDE_PRIMITIVE },
+        /// `core:prelude/types.wado` — core type definitions.
+        pub fn types() = Core { name: CORE_PRELUDE_TYPES },
+        /// `core:prelude/traits.wado` — builtin trait definitions.
+        pub fn traits() = Core { name: CORE_PRELUDE_TRAITS },
+        /// `core:prelude/range` — range types.
+        pub fn range() = Core { name: CORE_PRELUDE_RANGE },
+        /// `core:internal` — compiler internal functions.
+        pub fn internal() = Core { name: CORE_INTERNAL },
+        /// `core:allocator` — linear memory allocator (compiled into "mem" Wasm module).
+        pub fn allocator() = Core { name: CORE_ALLOCATOR },
+        /// `core:builtin` — builtin wasm instruction mappings.
+        pub fn builtin() = Core { name: CORE_BUILTIN },
+        /// `core:cli` — CLI output functions.
+        pub fn cli() = Core { name: CORE_CLI },
+        /// `core:serde` — serde framework.
+        pub fn serde() = Core { name: CORE_SERDE },
 
-    /// `core:prelude/string.wado` — the String type.
-    #[must_use]
-    pub fn string() -> Self {
-        Self::Core {
-            name: InternedStr::from_arc(CORE_PRELUDE_STRING.clone()),
-        }
-    }
+        /// `wasi:cli` — CLI interface root.
+        pub fn wasi_cli() = Wasi { interface: WASI_CLI },
+        /// `wasi:clocks` — clocks interface root.
+        pub fn wasi_clocks() = Wasi { interface: WASI_CLOCKS },
+        /// `wasi:filesystem` — filesystem interface root.
+        pub fn wasi_filesystem() = Wasi { interface: WASI_FILESYSTEM },
+        /// `wasi:http` — http interface root.
+        pub fn wasi_http() = Wasi { interface: WASI_HTTP },
 
-    /// `core:prelude/array.wado` — the Array type.
-    #[must_use]
-    pub fn array() -> Self {
-        Self::Core {
-            name: InternedStr::from_arc(CORE_PRELUDE_ARRAY.clone()),
-        }
-    }
-
-    /// `core:prelude/format.wado` — format trait helpers.
-    #[must_use]
-    pub fn format() -> Self {
-        Self::Core {
-            name: InternedStr::from_arc(CORE_PRELUDE_FORMAT.clone()),
-        }
-    }
-
-    /// `core:prelude/int128.wado` — 128-bit integer types.
-    #[must_use]
-    pub fn int128() -> Self {
-        Self::Core {
-            name: InternedStr::from_arc(CORE_PRELUDE_INT128.clone()),
-        }
-    }
-
-    /// `core:prelude/primitive.wado` — primitive type methods.
-    #[must_use]
-    pub fn primitive() -> Self {
-        Self::Core {
-            name: InternedStr::from_arc(CORE_PRELUDE_PRIMITIVE.clone()),
-        }
-    }
-
-    /// `core:prelude/types.wado` — core type definitions.
-    #[must_use]
-    pub fn types() -> Self {
-        Self::Core {
-            name: InternedStr::from_arc(CORE_PRELUDE_TYPES.clone()),
-        }
-    }
-
-    /// `core:prelude/traits.wado` — builtin trait definitions.
-    #[must_use]
-    pub fn traits() -> Self {
-        Self::Core {
-            name: InternedStr::from_arc(CORE_PRELUDE_TRAITS.clone()),
-        }
-    }
-
-    /// `core:prelude/range` — range types.
-    #[must_use]
-    pub fn range() -> Self {
-        Self::Core {
-            name: InternedStr::from_arc(CORE_PRELUDE_RANGE.clone()),
-        }
-    }
-
-    /// `core:internal` — compiler internal functions.
-    #[must_use]
-    pub fn internal() -> Self {
-        Self::Core {
-            name: InternedStr::from_arc(CORE_INTERNAL.clone()),
-        }
-    }
-
-    /// `core:allocator` — linear memory allocator (compiled into "mem" Wasm module).
-    #[must_use]
-    pub fn allocator() -> Self {
-        Self::Core {
-            name: InternedStr::from_arc(CORE_ALLOCATOR.clone()),
-        }
-    }
-
-    /// `core:builtin` — builtin wasm instruction mappings.
-    #[must_use]
-    pub fn builtin() -> Self {
-        Self::Core {
-            name: InternedStr::from_arc(CORE_BUILTIN.clone()),
-        }
-    }
-
-    /// `core:cli` — CLI output functions.
-    #[must_use]
-    pub fn cli() -> Self {
-        Self::Core {
-            name: InternedStr::from_arc(CORE_CLI.clone()),
-        }
-    }
-
-    /// `core:serde` — serde framework.
-    #[must_use]
-    pub fn serde() -> Self {
-        Self::Core {
-            name: InternedStr::from_arc(CORE_SERDE.clone()),
-        }
-    }
-
-    /// `wasi:cli` — CLI interface root.
-    #[must_use]
-    pub fn wasi_cli() -> Self {
-        Self::Wasi {
-            interface: InternedStr::from_arc(WASI_CLI.clone()),
-        }
-    }
-
-    /// `wasi:clocks` — clocks interface root.
-    #[must_use]
-    pub fn wasi_clocks() -> Self {
-        Self::Wasi {
-            interface: InternedStr::from_arc(WASI_CLOCKS.clone()),
-        }
-    }
-
-    /// `wasi:filesystem` — filesystem interface root.
-    #[must_use]
-    pub fn wasi_filesystem() -> Self {
-        Self::Wasi {
-            interface: InternedStr::from_arc(WASI_FILESYSTEM.clone()),
-        }
-    }
-
-    /// `wasi:http` — http interface root.
-    #[must_use]
-    pub fn wasi_http() -> Self {
-        Self::Wasi {
-            interface: InternedStr::from_arc(WASI_HTTP.clone()),
-        }
-    }
-
-    /// Synthetic `<entry>` placeholder used by `from_path(&[])`.
-    #[must_use]
-    pub fn entry_point_synthetic() -> Self {
-        Self::EntryPoint {
-            filename: InternedStr::from_arc(ENTRY_FILENAME_ENTRY.clone()),
-        }
-    }
-
-    /// `<uninitialized>` sentinel for resolver bootstrap.
-    #[must_use]
-    pub fn entry_point_uninitialized() -> Self {
-        Self::EntryPoint {
-            filename: InternedStr::from_arc(ENTRY_FILENAME_UNINITIALIZED.clone()),
-        }
-    }
-
-    /// `<stdin>` placeholder.
-    #[must_use]
-    pub fn entry_point_stdin() -> Self {
-        Self::EntryPoint {
-            filename: InternedStr::from_arc(ENTRY_FILENAME_STDIN.clone()),
-        }
+        /// Synthetic `<entry>` placeholder used by `from_path(&[])`.
+        pub fn entry_point_synthetic() = EntryPoint { filename: ENTRY_FILENAME_ENTRY },
+        /// `<uninitialized>` sentinel for resolver bootstrap.
+        pub fn entry_point_uninitialized() = EntryPoint { filename: ENTRY_FILENAME_UNINITIALIZED },
+        /// `<stdin>` placeholder.
+        pub fn entry_point_stdin() = EntryPoint { filename: ENTRY_FILENAME_STDIN },
     }
 
     /// Convert to the legacy `Vec<String>` module path representation.
