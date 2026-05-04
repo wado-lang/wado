@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777836363953,
+  "lastUpdate": 1777854982423,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -18845,6 +18845,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/3c4d4b742ab60c481ea6a5489e2704a8aaee9554"
         },
         "date": 1777836363633,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1775,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8776,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18520,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 515706,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a120328a60bbcc01dfebb7997372a9961fb1b83c",
+          "message": "Merge pull request #986 from wado-lang/claude/string-interning-strategies-LtuIe\n\nname: intern ModuleSource payloads with strict ptr-eq identity",
+          "timestamp": "2026-05-04T09:31:09+09:00",
+          "tree_id": "1eca99fe29fed34f6ca241252c6b2f4c38e419b1",
+          "url": "https://github.com/wado-lang/wado/commit/a120328a60bbcc01dfebb7997372a9961fb1b83c"
+        },
+        "date": 1777854982100,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
