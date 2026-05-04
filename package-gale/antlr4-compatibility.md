@@ -379,45 +379,14 @@ the underlying compiler / codegen bugs were both real:
   inlining slaves into the main grammar at extract time) would
   unblock CompositeLexers / CompositeParsers descriptors.
 
-## Compiler bugs surfaced during compatibility work
-
-Pursuing the descriptor corpus has shaken out compiler bugs that
-unrelated test paths missed. All have landed with regression
-fixtures under `wado-compiler/tests/fixtures/`:
-
-- **`null` arm in `match` / `if`** —
-  `match_null_arm_infers_option_inner.wado`. `Literal::Null` was
-  initially typed as `Option<UNKNOWN>` and never re-resolved when a
-  sibling arm produced `Option::Some(s)`. Fixed in
-  `wado-compiler/src/resolver/expr.rs`.
-- **Generic-instance fq collision on same-named CM types** —
-  `result_unit_cm_variant_passthrough.wado`. `mangle_type_name` was
-  not type-id-injective: `wasi:filesystem`'s `pub variant ErrorCode`
-  and `wasi:cli`'s `pub enum ErrorCode` collapsed onto the same WIR
-  fq, so `register_mono_variants` could register the wrong payload
-  representation depending on entry-filename order. Fixed by
-  introducing `TypeTable::mangle_type_arg_for_generic` and threading
-  it through the WIR layer's generic-instance fq computation.
-- **SROA missed Returns hidden inside `LocalSet` values** —
-  `struct_field_rebind_in_export_run.wado`. `sroa_multi_value_returns`
-  scalarised the function's return signature but its rewrite walker
-  stopped at `Block`/`If`/`Loop`/`Seq`/`Drop` and missed the early
-  Return inside `let _x: i32 = if flag { 1 } else { return Outer { a, b }; };`.
-  Fixed in `wir_optimize/sroa_return.rs` by recursing into all
-  boxed children for unhandled variants, with a
-  `nested_returns_match` helper that skips the typed-block
-  Br-exit invariant outside tail position.
-
-The diagnostic infrastructure that landed alongside the SROA fix is
-now documented as the `optimizer-debug` agent skill and exposed via
-three env vars (`WADO_TRACE`, `WADO_DUMP_PASS_BEFORE`,
-`WADO_DUMP_PASS_AFTER`) plus the `compiler_trace!` macro — reach
-for these the next time a pass produces a mysterious WIR.
-
 When Phase 2/3 surface further compiler bugs, follow the project
 rule from the top-level `CLAUDE.md`: write a minimum reproducible
-fixture first, fix the underlying compiler issue, _then_ update the
-descriptor triage.
+fixture under `wado-compiler/tests/fixtures/` first, fix the
+underlying compiler issue, _then_ update the descriptor triage.
+The `optimizer-debug` agent skill (`.claude/skills/optimizer-debug/`)
+documents the env vars (`WADO_TRACE`, `WADO_DUMP_PASS_BEFORE`,
+`WADO_DUMP_PASS_AFTER`) and the `compiler_trace!` macro that helped
+isolate the most recent of those bugs.
 
 ## See also
 
