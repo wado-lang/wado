@@ -24,11 +24,11 @@ use crate::synthesis::common::{
     let_stmt, local_ref,
 };
 
+use super::export_adapter::{synthesize_lower_to_flat, synthesize_variant_lower_to_flat};
 use super::types::{
     LiftContext, cm_val_type_to_type_id, cm_zero, find_variant_decl, flat_types_from_type_id,
     variant_payload, variant_test,
 };
-use super::{synthesize_lower_to_flat, synthesize_variant_lower_to_flat};
 
 /// Expand `TaskReturn` stmts in an `export async fn` user function into inline CM calls.
 ///
