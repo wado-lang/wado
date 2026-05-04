@@ -5238,12 +5238,14 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
         f.emit_begin(w);
 
         let mut name_counts: Array<[String, i32]> = [];
-        // The first element (the self-reference that becomes `left`) is
-        // either `RuleRef(rule_name)` directly or `Label(_, RuleRef(rule_name))`.
-        // Either way the binding it would have produced (rule_name or the
-        // label name) gets reserved here so subsequent dedup matches the
-        // bt-side parse function.
-        let first_binding = lr_first_binding_name(&alt.elements[0], &rule.field_name);
+        // Reserve the binding the bt-side parse function uses for the
+        // self-reference (the label name for `a=e`, the rule's own
+        // field_name for the bare `e` form) so subsequent dedup matches.
+        let first_binding = if let Label(lab) = &alt.elements[0] {
+            lab.field_name
+        } else {
+            rule.field_name
+        };
         dedup_name(&first_binding, &mut name_counts);
 
         ctx.group_counter = ctx.alt_gc_starts[lr_idx];
@@ -5313,12 +5315,8 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
         w.line(`{first_field}: left,`);
         ctx.group_counter = gc_lr;
         let mut field_counts: Array<[String, i32]> = [];
-        // Reserve the field name the `left` parameter occupies, using the
-        // same binding name `lr_first_binding_name` chose for emission.
-        // For `a=e ... b=e ... a=e ...` style alts, this prevents the
-        // second `a=e` from emitting plain `a` (clashing with the
-        // already-used field) — `dedup_name` will rightly return `a_2`
-        // for the second occurrence.
+        // Reserve the field that `left` occupies so a repeat occurrence
+        // (e.g. `a=e ... a=e`) deduplicates to `a_2` in the struct literal.
         dedup_name(&first_binding, &mut field_counts);
         for let mut ei = 1; ei < alt.elements.len(); ei += 1 {
             gen_field_assignment(w, &alt.elements[ei], &mut field_counts, ctx);
@@ -6040,47 +6038,17 @@ fn increment_count(counts: &mut Array<[String, i32]>, name: &String) {
 }
 
 /// True iff the alternative is left-recursive: its first element references
-/// the enclosing rule by name.
-///
-/// `Label`-wrapped rule refs (`a=e`, `b=e`) are unwrapped — ANTLR4 treats
-/// a labeled self-reference at the start of an alt as left-recursive
-/// (`vendor/antlr4/doc/left-recursion.md`). Without this unwrap, alts like
-/// `e : a=e op=('*'|'/') b=e` are misclassified as non-LR, which routes
-/// them through the non-LR scan generator and emits a `scan_<rule>` body
-/// that recurses on itself with no position advance — infinite loop at
-/// parse time.
+/// the enclosing rule by name. ANTLR4 treats labeled self-references like
+/// `a=e` at the start of an alt as left-recursive too (per
+/// `vendor/antlr4/doc/left-recursion.md`), so we unwrap one `Label`.
 fn is_left_recursive(alt: &Alternative, rule_name: &String) -> bool {
     if alt.elements.len() == 0 {
         return false;
     }
-    return element_is_self_rule_ref(&alt.elements[0], rule_name);
-}
-
-fn element_is_self_rule_ref(elem: &Element, rule_name: &String) -> bool {
-    if let RuleRef(r) = elem {
+    if let RuleRef(r) = unwrap_label(&alt.elements[0]) {
         return r.name == *rule_name;
     }
-    if let Label(lab) = elem {
-        return element_is_self_rule_ref(&lab.element, rule_name);
-    }
     return false;
-}
-
-/// Compute the binding name the bt-side parse function would have used
-/// for the LR alt's first element. The LR-suffix helper takes a `left`
-/// parameter and must store it under the same struct field name the
-/// bt-side parser would produce — that's the label name when the alt
-/// has `name=e ...`, or the rule's own field name for the bare
-/// `e ...` form. `default_field` is the fallback for the bare RuleRef
-/// case (typically the rule's `field_name`).
-fn lr_first_binding_name(elem: &Element, default_field: &String) -> String {
-    if let Label(lab) = elem {
-        return lab.field_name;
-    }
-    if let RuleRef(_) = elem {
-        return *default_field;
-    }
-    return *default_field;
 }
 
 fn compute_overlap_groups(first_sets: &Array<Array<String>>) -> Array<Array<i32>> {
