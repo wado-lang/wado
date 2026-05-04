@@ -233,7 +233,9 @@ fn expand_task_return_in_stmt(
 /// - Ok arm: flatten T → call task-return(0, ...`flat_ok_values`)
 /// - Err arm: flatten E → call task-return(1, ...`flat_err_values`)
 ///
-/// For other types, generates task-return(0, ...`flat_values`).
+/// For other types, flattens `value` to its CM ABI flat slots and emits
+/// `task-return(...flat_values)`. For unit-returning exports, the value
+/// is evaluated for its side effects and `task-return()` is emitted.
 fn generate_inline_task_return(
     value: TirExpr,
     flat_return_types: &[cm_abi::CmValType],
@@ -431,12 +433,52 @@ fn generate_inline_task_return(
         ));
     } else {
         drop(tt);
-        // Non-Result (or empty flat types): just emit task-return(0)
-        stmts.push(expr_stmt(cm_raw_call(
-            "task-return",
-            vec![i32_const(0)],
-            TypeTable::UNIT,
-        )));
+        // Non-Result task return — flatten the value and forward the flat
+        // slots verbatim. Unit-returning exports (`flat_return_types`
+        // empty) collapse to `task-return()` with the value evaluated for
+        // its side effects.
+        if flat_return_types.is_empty() {
+            // Evaluate `value` for side effects, then signal completion
+            // with no flat payload.
+            stmts.push(expr_stmt(value));
+            stmts.push(expr_stmt(cm_raw_call(
+                "task-return",
+                vec![],
+                TypeTable::UNIT,
+            )));
+        } else {
+            let lowered = synthesize_lower_to_flat(
+                value,
+                value_type_id,
+                next_local,
+                &mut stmts,
+                locals,
+                tir_modules,
+                lift_ctx,
+            );
+            assert_eq!(
+                lowered.len(),
+                flat_return_types.len(),
+                "non-Result task return: flat-lowered slot count {} != world flat-return-type count {}",
+                lowered.len(),
+                flat_return_types.len(),
+            );
+            let mut task_return_args: Vec<TirExpr> = Vec::with_capacity(lowered.len());
+            for (flat_val, &target_vt) in lowered.iter().zip(flat_return_types.iter()) {
+                let target_type = cm_val_type_to_type_id(target_vt);
+                let source_type = cm_val_type_to_type_id(flat_val.cm_type);
+                let mut arg = local_ref(flat_val.index, "__flat", source_type);
+                if flat_val.cm_type != target_vt {
+                    arg = cast(arg, target_type);
+                }
+                task_return_args.push(arg);
+            }
+            stmts.push(expr_stmt(cm_raw_call(
+                "task-return",
+                task_return_args,
+                TypeTable::UNIT,
+            )));
+        }
     }
 
     stmts
