@@ -327,26 +327,11 @@ fn load_triage_maps(content: &Option<String>) -> TriageMaps {
     return TriageMaps { stage_a, stage_b };
 }
 
-/// Stage-A-only convenience wrapper. Retained as its own function (rather
-/// than inlining `load_triage_maps(...).stage_a` at every call site) to
-/// work around a Wado compiler ICE — the trigger and minimum repro live
-/// at `wado-compiler/tests/fixtures/struct_field_rebind_in_export_run.wado`.
-/// In short: in `export fn run()`, `let m = load_triage_maps(...); let a
-/// = m.stage_a;` triggers
-/// "WIR pipeline generated invalid core Wasm module: type mismatch:
-/// expected (ref $type), found (ref (exact $type))" when the inner
-/// function uses a divergent `let _ = if cond { v } else { return ... }`
-/// expression and the struct has multiple Array-typed fields. The
-/// two-wrapper indirection side-steps the bug because each wrapper's
-/// `load_triage_maps(content).stage_X` is a tail expression, not a
-/// named-local rebind.
+/// Stage-A-only convenience wrapper retained so the test blocks at the
+/// bottom of this file can keep using a single map without destructuring
+/// `TriageMaps`.
 fn load_triage_map(content: &Option<String>) -> TriageMap {
     return load_triage_maps(content).stage_a;
-}
-
-/// Stage-B-only convenience wrapper. See `load_triage_map` for the rationale.
-fn load_stage_b_triage_map(content: &Option<String>) -> TriageMap {
-    return load_triage_maps(content).stage_b;
 }
 
 fn unquote(s: &String) -> String {
@@ -703,8 +688,9 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
         Ok(s) => Option::Some(s),
         Err(_) => null,
     };
-    let triage_map = load_triage_map(&status_text);
-    let stage_b_triage_map = load_stage_b_triage_map(&status_text);
+    let triage_maps = load_triage_maps(&status_text);
+    let triage_map = triage_maps.stage_a;
+    let stage_b_triage_map = triage_maps.stage_b;
 
     let grammars_dir = match ensure_dir(&compat_dir, &grammars_subdir()) {
         Ok(d) => d,
