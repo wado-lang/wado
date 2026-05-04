@@ -5238,7 +5238,13 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
         f.emit_begin(w);
 
         let mut name_counts: Array<[String, i32]> = [];
-        dedup_name(&rule.field_name, &mut name_counts);
+        // The first element (the self-reference that becomes `left`) is
+        // either `RuleRef(rule_name)` directly or `Label(_, RuleRef(rule_name))`.
+        // Either way the binding it would have produced (rule_name or the
+        // label name) gets reserved here so subsequent dedup matches the
+        // bt-side parse function.
+        let first_binding = lr_first_binding_name(&alt.elements[0], &rule.field_name);
+        dedup_name(&first_binding, &mut name_counts);
 
         ctx.group_counter = ctx.alt_gc_starts[lr_idx];
         let gc_lr = ctx.group_counter;
@@ -5263,6 +5269,26 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
                     let field_name = dedup_name(&rr.field_name, &mut name_counts);
                     w.line(`let {field_name} = {elem_fn}(p)?;`);
                 }
+            } else if let Label(lab) = elem {
+                // Labeled self-recursive call: use precedence the same way
+                // as the bare-RuleRef arm above, then re-bind to the label.
+                if let RuleRef(rr) = &lab.element {
+                    if rr.name == rule.name {
+                        let lab_name = dedup_name(&lab.field_name, &mut name_counts);
+                        let inner_name = dedup_name(&rr.field_name, &mut name_counts);
+                        let prec = compute_lr_self_ref_prec(
+                            alt,
+                            ei,
+                            last_self_ref_idx,
+                            inner_min_prec,
+                            &lr_suffix_first_tokens,
+                        );
+                        w.line(`let {inner_name} = {fn_name}(p, {prec})?;`);
+                        w.line(`let {lab_name} = {inner_name};`);
+                        continue;
+                    }
+                }
+                gen_element(w, elem, ctx, &mut name_counts);
             } else if let Group(grp) = elem {
                 let alts = &grp.alternatives;
                 if is_token_only_group(alts) {
@@ -5280,14 +5306,20 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
             }
         }
 
-        let first_field = rule.field_name;
+        let first_field = first_binding;
         w.line(`return Result::<{type_name}, ParseError>::Ok({type_name}::{case_names[lr_idx]}({sname} \{`);
         w.indent();
         w.line("span: Span::new(start, p.last_end()),");
         w.line(`{first_field}: left,`);
         ctx.group_counter = gc_lr;
         let mut field_counts: Array<[String, i32]> = [];
-        dedup_name(&rule.field_name, &mut field_counts);
+        // Reserve the field name the `left` parameter occupies, using the
+        // same binding name `lr_first_binding_name` chose for emission.
+        // For `a=e ... b=e ... a=e ...` style alts, this prevents the
+        // second `a=e` from emitting plain `a` (clashing with the
+        // already-used field) — `dedup_name` will rightly return `a_2`
+        // for the second occurrence.
+        dedup_name(&first_binding, &mut field_counts);
         for let mut ei = 1; ei < alt.elements.len(); ei += 1 {
             gen_field_assignment(w, &alt.elements[ei], &mut field_counts, ctx);
         }
@@ -6007,15 +6039,48 @@ fn increment_count(counts: &mut Array<[String, i32]>, name: &String) {
     counts.push([*name, 1]);
 }
 
+/// True iff the alternative is left-recursive: its first element references
+/// the enclosing rule by name.
+///
+/// `Label`-wrapped rule refs (`a=e`, `b=e`) are unwrapped — ANTLR4 treats
+/// a labeled self-reference at the start of an alt as left-recursive
+/// (`vendor/antlr4/doc/left-recursion.md`). Without this unwrap, alts like
+/// `e : a=e op=('*'|'/') b=e` are misclassified as non-LR, which routes
+/// them through the non-LR scan generator and emits a `scan_<rule>` body
+/// that recurses on itself with no position advance — infinite loop at
+/// parse time.
 fn is_left_recursive(alt: &Alternative, rule_name: &String) -> bool {
     if alt.elements.len() == 0 {
         return false;
     }
-    let first = &alt.elements[0];
-    if let RuleRef(r) = first {
+    return element_is_self_rule_ref(&alt.elements[0], rule_name);
+}
+
+fn element_is_self_rule_ref(elem: &Element, rule_name: &String) -> bool {
+    if let RuleRef(r) = elem {
         return r.name == *rule_name;
     }
+    if let Label(lab) = elem {
+        return element_is_self_rule_ref(&lab.element, rule_name);
+    }
     return false;
+}
+
+/// Compute the binding name the bt-side parse function would have used
+/// for the LR alt's first element. The LR-suffix helper takes a `left`
+/// parameter and must store it under the same struct field name the
+/// bt-side parser would produce — that's the label name when the alt
+/// has `name=e ...`, or the rule's own field name for the bare
+/// `e ...` form. `default_field` is the fallback for the bare RuleRef
+/// case (typically the rule's `field_name`).
+fn lr_first_binding_name(elem: &Element, default_field: &String) -> String {
+    if let Label(lab) = elem {
+        return lab.field_name;
+    }
+    if let RuleRef(_) = elem {
+        return *default_field;
+    }
+    return *default_field;
 }
 
 fn compute_overlap_groups(first_sets: &Array<Array<String>>) -> Array<Array<i32>> {

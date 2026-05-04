@@ -788,7 +788,7 @@ fn scan_s(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_e(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_e_atom(tokens: &Array<Token>, pos: i32) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -796,121 +796,97 @@ fn scan_e(tokens: &Array<Token>, pos: i32) -> i32 {
         if alt_kind == TK_INT {
             pos = start;
             try_0: {
-                pos = scan_e(tokens, pos);
-                if pos < 0 { break try_0; }
-                let gp_0 = pos;
-                sg_0: {
-                    pos = gp_0;
-                    sg_0_0: {
-                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_STAR { break sg_0_0; }
-                        pos += 1;
-                        break sg_0;
-                    }
-                    pos = gp_0;
-                    sg_0_1: {
-                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_SLASH { break sg_0_1; }
-                        pos += 1;
-                        break sg_0;
-                    }
-                    break try_0;
-                }
-                pos = scan_e(tokens, pos);
-                if pos < 0 { break try_0; }
-                break scan_alts;
-            }
-            pos = start;
-            try_1: {
-                pos = scan_e(tokens, pos);
-                if pos < 0 { break try_1; }
-                let gp_1 = pos;
-                sg_1: {
-                    pos = gp_1;
-                    sg_1_0: {
-                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_PLUS { break sg_1_0; }
-                        pos += 1;
-                        break sg_1;
-                    }
-                    pos = gp_1;
-                    sg_1_1: {
-                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_MINUS { break sg_1_1; }
-                        pos += 1;
-                        break sg_1;
-                    }
-                    break try_1;
-                }
-                pos = scan_e(tokens, pos);
-                if pos < 0 { break try_1; }
-                break scan_alts;
-            }
-            pos = start;
-            try_2: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_INT { break try_2; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_INT { break try_0; }
                 pos += 1;
                 break scan_alts;
             }
             return -1;
         } else if alt_kind == TK_LIT_LPAREN {
             pos = start;
-            try_3: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { break try_3; }
-                pos += 1;
-                pos = scan_e(tokens, pos);
-                if pos < 0 { break try_3; }
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { break try_3; }
-                pos += 1;
-                break scan_alts;
-            }
-            pos = start;
             try_1: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { break try_1; }
+                pos += 1;
                 pos = scan_e(tokens, pos);
                 if pos < 0 { break try_1; }
-                let gp_2 = pos;
-                sg_2: {
-                    pos = gp_2;
-                    sg_2_0: {
-                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_PLUS { break sg_2_0; }
-                        pos += 1;
-                        break sg_2;
-                    }
-                    pos = gp_2;
-                    sg_2_1: {
-                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_MINUS { break sg_2_1; }
-                        pos += 1;
-                        break sg_2;
-                    }
-                    break try_1;
-                }
-                pos = scan_e(tokens, pos);
-                if pos < 0 { break try_1; }
-                break scan_alts;
-            }
-            pos = start;
-            try_0: {
-                pos = scan_e(tokens, pos);
-                if pos < 0 { break try_0; }
-                let gp_3 = pos;
-                sg_3: {
-                    pos = gp_3;
-                    sg_3_0: {
-                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_STAR { break sg_3_0; }
-                        pos += 1;
-                        break sg_3;
-                    }
-                    pos = gp_3;
-                    sg_3_1: {
-                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_SLASH { break sg_3_1; }
-                        pos += 1;
-                        break sg_3;
-                    }
-                    break try_0;
-                }
-                pos = scan_e(tokens, pos);
-                if pos < 0 { break try_0; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { break try_1; }
+                pos += 1;
                 break scan_alts;
             }
             return -1;
         } else {
             return -1;
+        }
+    }
+    return pos;
+}
+
+fn scan_e_lr_0(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let gp_0 = pos;
+    sg_0: {
+        pos = gp_0;
+        sg_0_0: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_STAR { break sg_0_0; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_1: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_SLASH { break sg_0_1; }
+            pos += 1;
+            break sg_0;
+        }
+        return -1;
+    }
+    pos = scan_e(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_e_lr_1(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let gp_1 = pos;
+    sg_1: {
+        pos = gp_1;
+        sg_1_0: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_PLUS { break sg_1_0; }
+            pos += 1;
+            break sg_1;
+        }
+        pos = gp_1;
+        sg_1_1: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_MINUS { break sg_1_1; }
+            pos += 1;
+            break sg_1;
+        }
+        return -1;
+    }
+    pos = scan_e(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_e(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+    let mut pos = scan_e_atom(tokens, pos);
+    if pos < 0 { return -1; }
+    loop {
+        let suffix_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
+        if _gale_kind_set_0(suffix_kind) {
+            if 2 >= min_prec {
+                pos = scan_e_lr_0(tokens, pos);
+                if pos < 0 { return -1; }
+            } else {
+                break;
+            }
+        } else if _gale_kind_set_1(suffix_kind) {
+            if 1 >= min_prec {
+                pos = scan_e_lr_1(tokens, pos);
+                if pos < 0 { return -1; }
+            } else {
+                break;
+            }
+        } else {
+            break;
         }
     }
     return pos;
@@ -925,200 +901,83 @@ fn parse_s(p: &mut Parser) -> Result<SNode, ParseError> {
     });
 }
 
-fn parse_e_bt_3(p: &mut Parser) -> Result<ENode, ParseError> {
-    let start = p.peek().span.start;
-    let lparen = p.expect(TK_LIT_LPAREN)?;
-    let e = parse_e(p)?;
-    let x = e;
-    let rparen = p.expect(TK_LIT_RPAREN)?;
-    return Result::<ENode, ParseError>::Ok(ENode::Alt3(EAlt3 {
-        span: Span::new(start, p.last_end()),
-        lparen,
-        x,
-        rparen,
-    }));
-}
-
-fn parse_e_scan_3(tokens: &Array<Token>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { return -1; }
-    pos += 1;
-    pos = scan_e(tokens, pos);
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn parse_e_bt_0(p: &mut Parser) -> Result<ENode, ParseError> {
-    let start = p.peek().span.start;
-    let e = parse_e(p)?;
-    let a = e;
-    let star_or_slash = p.advance();
-    let op = star_or_slash;
-    let e_2 = parse_e(p)?;
-    let b = e_2;
-    return Result::<ENode, ParseError>::Ok(ENode::Alt0(EAlt0 {
-        span: Span::new(start, p.last_end()),
-        a,
-        op,
-        b,
-    }));
-}
-
-fn parse_e_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
-    let mut pos = pos;
-    pos = scan_e(tokens, pos);
-    if pos < 0 { return -1; }
-    let gp_4 = pos;
-    sg_4: {
-        pos = gp_4;
-        sg_4_0: {
-            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_STAR { break sg_4_0; }
-            pos += 1;
-            break sg_4;
-        }
-        pos = gp_4;
-        sg_4_1: {
-            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_SLASH { break sg_4_1; }
-            pos += 1;
-            break sg_4;
-        }
-        return -1;
-    }
-    pos = scan_e(tokens, pos);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn parse_e_bt_1(p: &mut Parser) -> Result<ENode, ParseError> {
-    let start = p.peek().span.start;
-    let e = parse_e(p)?;
-    let a = e;
-    let plus_or_minus = p.advance();
-    let op = plus_or_minus;
-    let e_2 = parse_e(p)?;
-    let b = e_2;
-    return Result::<ENode, ParseError>::Ok(ENode::Alt1(EAlt1 {
-        span: Span::new(start, p.last_end()),
-        a,
-        op,
-        b,
-    }));
-}
-
-fn parse_e_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
-    let mut pos = pos;
-    pos = scan_e(tokens, pos);
-    if pos < 0 { return -1; }
-    let gp_5 = pos;
-    sg_5: {
-        pos = gp_5;
-        sg_5_0: {
-            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_PLUS { break sg_5_0; }
-            pos += 1;
-            break sg_5;
-        }
-        pos = gp_5;
-        sg_5_1: {
-            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_MINUS { break sg_5_1; }
-            pos += 1;
-            break sg_5;
-        }
-        return -1;
-    }
-    pos = scan_e(tokens, pos);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn parse_e_bt_2(p: &mut Parser) -> Result<ENode, ParseError> {
-    let start = p.peek().span.start;
-    let int = p.expect(TK_INT)?;
-    return Result::<ENode, ParseError>::Ok(ENode::Alt2(EAlt2 {
-        span: Span::new(start, p.last_end()),
-        int,
-    }));
-}
-
-fn parse_e_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_INT { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn parse_e(p: &mut Parser) -> Result<ENode, ParseError> {
+fn parse_e_atom(p: &mut Parser) -> Result<ENode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
-    if _gale_kind_set_0(kind) {
-        if p.peek_kind() == TK_INT {
-            let _sd_tokens = &p.tokens;
-            let _sd_pos = p.pos;
-            let _sd_p_0 = parse_e_scan_0(_sd_tokens, _sd_pos);
-            let _sd_p_1 = parse_e_scan_1(_sd_tokens, _sd_pos);
-            let _sd_p_2 = parse_e_scan_2(_sd_tokens, _sd_pos);
-            let mut _sd_best_i: i32 = -1;
-            let mut _sd_best_p: i32 = -1;
-            if _sd_p_0 > _sd_best_p {
-                _sd_best_p = _sd_p_0;
-                _sd_best_i = 0;
-            }
-            if _sd_p_1 > _sd_best_p {
-                _sd_best_p = _sd_p_1;
-                _sd_best_i = 1;
-            }
-            if _sd_p_2 > _sd_best_p {
-                _sd_best_p = _sd_p_2;
-                _sd_best_i = 2;
-            }
-            if _sd_best_i == 0 {
-                return parse_e_bt_0(p);
-            }
-            if _sd_best_i == 1 {
-                return parse_e_bt_1(p);
-            }
-            if _sd_best_i == 2 {
-                return parse_e_bt_2(p);
-            }
-            return parse_e_bt_2(p);
-        } else if p.peek_kind() == TK_LIT_LPAREN {
-            let _sd_tokens = &p.tokens;
-            let _sd_pos = p.pos;
-            let _sd_p_3 = parse_e_scan_3(_sd_tokens, _sd_pos);
-            let _sd_p_1 = parse_e_scan_1(_sd_tokens, _sd_pos);
-            let _sd_p_0 = parse_e_scan_0(_sd_tokens, _sd_pos);
-            let mut _sd_best_i: i32 = -1;
-            let mut _sd_best_p: i32 = -1;
-            if _sd_p_3 > _sd_best_p {
-                _sd_best_p = _sd_p_3;
-                _sd_best_i = 3;
-            }
-            if _sd_p_1 > _sd_best_p {
-                _sd_best_p = _sd_p_1;
-                _sd_best_i = 1;
-            }
-            if _sd_p_0 > _sd_best_p {
-                _sd_best_p = _sd_p_0;
-                _sd_best_i = 0;
-            }
-            if _sd_best_i == 3 {
-                return parse_e_bt_3(p);
-            }
-            if _sd_best_i == 1 {
-                return parse_e_bt_1(p);
-            }
-            if _sd_best_i == 0 {
-                return parse_e_bt_0(p);
-            }
-            return parse_e_bt_0(p);
-        }
+    if kind == TK_INT {
+        let int = p.expect(TK_INT)?;
+        return Result::<ENode, ParseError>::Ok(ENode::Alt2(EAlt2 {
+            span: Span::new(start, p.last_end()),
+            int,
+        }));
+    }
+    if kind == TK_LIT_LPAREN {
+        let lparen = p.expect(TK_LIT_LPAREN)?;
+        let e = parse_e(p)?;
+        let x = e;
+        let rparen = p.expect(TK_LIT_RPAREN)?;
+        return Result::<ENode, ParseError>::Ok(ENode::Alt3(EAlt3 {
+            span: Span::new(start, p.last_end()),
+            lparen,
+            x,
+            rparen,
+        }));
     }
     return Result::<ENode, ParseError>::Err(ParseError::new(
         "expected e",
         p.peek().span,
         ["TK_INT", "TK_LIT_LPAREN"],
     ));
+}
+
+fn parse_e_lr_0(p: &mut Parser, left: ENode, start: i32) -> Result<ENode, ParseError> {
+    let star_or_slash = p.advance();
+    let op = star_or_slash;
+    let e = parse_e(p, 3)?;
+    let b = e;
+    return Result::<ENode, ParseError>::Ok(ENode::Alt0(EAlt0 {
+        span: Span::new(start, p.last_end()),
+        a: left,
+        op,
+        b,
+    }));
+}
+
+fn parse_e_lr_1(p: &mut Parser, left: ENode, start: i32) -> Result<ENode, ParseError> {
+    let plus_or_minus = p.advance();
+    let op = plus_or_minus;
+    let e = parse_e(p, 2)?;
+    let b = e;
+    return Result::<ENode, ParseError>::Ok(ENode::Alt1(EAlt1 {
+        span: Span::new(start, p.last_end()),
+        a: left,
+        op,
+        b,
+    }));
+}
+
+fn parse_e(p: &mut Parser, min_prec: i32 = 0) -> Result<ENode, ParseError> {
+    let start = p.peek().span.start;
+    let mut result = parse_e_atom(p)?;
+    loop {
+        let suffix_kind = p.peek_kind();
+        if _gale_kind_set_0(suffix_kind) {
+            if 2 >= min_prec {
+                result = parse_e_lr_0(p, result, start)?;
+            } else {
+                break;
+            }
+        } else if _gale_kind_set_1(suffix_kind) {
+            if 1 >= min_prec {
+                result = parse_e_lr_1(p, result, start)?;
+            } else {
+                break;
+            }
+        } else {
+            break;
+        }
+    }
+    return Result::<ENode, ParseError>::Ok(result);
 }
 
 pub fn parse(input: &String) -> Result<SNode, ParseError> {
@@ -1171,6 +1030,10 @@ pub fn to_tree(node: &SNode) -> CstNode {
 }
 
 fn _gale_kind_set_0(k: i32) -> bool {
-    return k matches { TK_INT | TK_LIT_LPAREN };
+    return k matches { TK_LIT_SLASH | TK_LIT_STAR };
+}
+
+fn _gale_kind_set_1(k: i32) -> bool {
+    return k matches { TK_LIT_MINUS | TK_LIT_PLUS };
 }
 

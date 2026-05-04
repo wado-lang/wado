@@ -1,0 +1,61 @@
+use { generate, GenerateOptions } from "./codegen.wado";
+use { parse_checked } from "./g4/parser.wado";
+
+// Regression: when a left-recursive rule's first element is a labeled
+// RuleRef like `a=e`, the LR detector used to look only at direct
+// `RuleRef(r)` and miss the recursion. The rule was then routed through
+// the non-LR scan generator, which emitted a `scan_X` body that started
+// with `scan_X(tokens, pos)` — infinite self-recursion when the rule
+// dispatched to that alt at parse time.
+//
+// The fix unwraps `Label` (and any other transparent wrapper) when
+// looking at an alt's first element. After the fix the rule goes through
+// `gen_scan_lr_functions`, which splits scan into `scan_X_atom` plus
+// `scan_X_lr_N` suffix helpers — neither of which recurse without
+// advancing the position.
+
+test "labeled left-recursive alt routes through gen_scan_lr_functions" {
+    // Smallest LR descriptor shape from the antlr4 runtime-testsuite —
+    // `LeftRecursion/MultipleActions_1` and friends all share this
+    // structure.
+    let g4 = "grammar T;
+e : a=e op=('*'|'/') b=e
+  | INT
+  | '(' x=e ')'
+  ;
+INT : '0'..'9'+ ;
+WS : (' '|'\\n') -> skip ;
+";
+    let mut grammar = match parse_checked(g4) {
+        Ok(g) => g,
+        Err(err) => panic(`parse_checked failed: {err.message}`),
+    };
+    let out = generate(&mut grammar, &GenerateOptions { highlight: false });
+
+    // After the fix the LR-aware codegen emits `scan_e_atom` and at
+    // least one `scan_e_lr_<N>`. The non-LR path emits a unified
+    // `scan_e` and never these helpers — its presence is a regression.
+    assert out.contains("fn scan_e_atom("),
+        "expected `scan_e_atom` in the generated parser; LR rule was misrouted to the non-LR scan generator";
+    assert out.contains("fn scan_e_lr_"),
+        "expected `scan_e_lr_<N>` suffix helper in the generated parser";
+
+    // The infinite-recursion bug pattern: a top-level `scan_e` that
+    // starts (after a few setup lines) with `pos = scan_e(tokens, pos);`.
+    // After the fix, the LR path replaces this with the atom/suffix
+    // split, so the bare `scan_e` body should not contain a recursive
+    // self-call as its FIRST scanning step. Search for the substring
+    // outside the labelled split helpers — the helpers don't recurse on
+    // their own name from position 0, but the broken unified form does.
+    if let Some(idx) = out.find("fn scan_e(") {
+        let after = out.substr_bytes(idx, out.len());
+        let body_end = if let Some(e) = after.find("\nfn ") {
+            idx + e
+        } else {
+            out.len()
+        };
+        let body = out.substr_bytes(idx, body_end);
+        assert !body.contains("pos = scan_e(tokens, pos);"),
+            `bare scan_e contains a self-call as its first step — infinite recursion: {body}`;
+    }
+}
