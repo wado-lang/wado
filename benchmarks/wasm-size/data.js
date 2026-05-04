@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777931811356,
+  "lastUpdate": 1777932569221,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -19217,6 +19217,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 503105,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d715ccb01a4592967514895e7c6f2bd183d5dc67",
+          "message": "Merge pull request #993 from wado-lang/claude/review-antlr4-compatibility-VojnJ\n\nFix Stage B LR JavaExpressions, Kiln cache invalidation, Stage A empty-file suppression",
+          "timestamp": "2026-05-05T07:05:03+09:00",
+          "tree_id": "148cb9a3516611ca00f3ab49404705a5dfbaa56e",
+          "url": "https://github.com/wado-lang/wado/commit/d715ccb01a4592967514895e7c6f2bd183d5dc67"
+        },
+        "date": 1777932568944,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1775,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8776,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18520,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 503688,
             "unit": "bytes"
           }
         ]
