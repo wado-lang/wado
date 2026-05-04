@@ -154,32 +154,30 @@ pub struct ResourceSymbol {
 /// World symbol data
 #[derive(Debug, Clone)]
 pub struct WorldSymbol {
-    /// Imported effects and their functions
+    /// Imported interfaces (bare interface refs)
     pub imports: Vec<WorldImportSymbol>,
-    /// Exported functions
+    /// Exported items (interface or function form)
     pub exports: Vec<WorldExportSymbol>,
 }
 
-/// An imported effect in a world
+/// An imported interface in a world
 #[derive(Debug, Clone)]
 pub struct WorldImportSymbol {
-    /// The effect name
     pub interface_name: String,
-    /// The imported function names
-    pub functions: Vec<String>,
 }
 
-/// An exported function in a world
+/// An exported item in a world
 #[derive(Debug, Clone)]
-pub struct WorldExportSymbol {
-    /// The function name
-    pub name: String,
-    /// Whether this is an async function
-    pub is_async: bool,
-    /// Parameter names
-    pub params: Vec<String>,
-    /// Return type (if specified)
-    pub return_type: Option<String>,
+pub enum WorldExportSymbol {
+    /// `export Foo;` — references a `pub interface Foo` declaration.
+    Interface { interface_name: String },
+    /// `export [async] fn name(...) -> ret;` — direct freestanding-function export.
+    Function {
+        name: String,
+        is_async: bool,
+        params: Vec<String>,
+        return_type: Option<String>,
+    },
 }
 
 /// A symbol in the symbol table

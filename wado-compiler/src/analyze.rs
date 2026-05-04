@@ -474,17 +474,32 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                             .iter()
                             .map(|i| WorldImportSymbol {
                                 interface_name: i.interface_name.clone(),
-                                functions: i.functions.clone(),
                             })
                             .collect(),
                         exports: world
                             .exports
                             .iter()
-                            .map(|e| WorldExportSymbol {
-                                name: e.name.clone(),
-                                is_async: e.is_async,
-                                params: e.params.iter().map(|p| p.name.clone()).collect(),
-                                return_type: e.return_type.as_ref().map(|_| "unknown".to_string()),
+                            .map(|e| match e {
+                                crate::ast::WorldExport::Interface(iface) => {
+                                    WorldExportSymbol::Interface {
+                                        interface_name: iface.interface_name.clone(),
+                                    }
+                                }
+                                crate::ast::WorldExport::Function(func) => {
+                                    WorldExportSymbol::Function {
+                                        name: func.name.clone(),
+                                        is_async: func.is_async,
+                                        params: func
+                                            .params
+                                            .iter()
+                                            .map(|p| p.name.clone())
+                                            .collect(),
+                                        return_type: func
+                                            .return_type
+                                            .as_ref()
+                                            .map(|_| "unknown".to_string()),
+                                    }
+                                }
                             })
                             .collect(),
                     });

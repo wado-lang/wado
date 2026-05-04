@@ -12,7 +12,7 @@ use crate::ast::{
     ResourceDecl, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StoresEntry, StructDecl,
     StructField, StructLiteralExpr, TemplateStringExpr, TestDecl, TraitDecl, TupleLiteralExpr,
     TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase,
-    VariantDecl, WhileStmt, WorldDecl,
+    VariantDecl, WhileStmt, WorldDecl, WorldExport,
 };
 use crate::comment::{Comment, CommentKind, CommentMap};
 use crate::hashmap::IndexSet;
@@ -1105,48 +1105,49 @@ impl<'a> Unparser<'a> {
             self.write_indent();
             self.output.push_str("import ");
             self.output.push_str(&imp.interface_name);
-            self.output.push_str(" {\n");
-
-            self.indent_level += 1;
-            for func in &imp.functions {
-                self.write_indent();
-                self.output.push_str(func);
-                self.output.push_str(",\n");
-            }
-            self.indent_level -= 1;
-
-            self.write_indent();
-            self.output.push_str("}\n");
+            self.output.push_str(";\n");
             self.last_source_line = imp.span.end_line();
         }
 
         for exp in &w.exports {
-            self.emit_blank_lines_to(exp.span.line);
-            self.write_indent();
-            self.output.push_str("export ");
-            if exp.is_async {
-                self.output.push_str("async ");
-            }
-            self.output.push_str("fn ");
-            self.output.push_str(&exp.name);
-            self.output.push('(');
-            for (i, param) in exp.params.iter().enumerate() {
-                if i > 0 {
-                    self.output.push_str(", ");
+            match exp {
+                WorldExport::Interface(iface) => {
+                    self.emit_blank_lines_to(iface.span.line);
+                    self.write_indent();
+                    self.output.push_str("export ");
+                    self.output.push_str(&iface.interface_name);
+                    self.output.push_str(";\n");
+                    self.last_source_line = iface.span.end_line();
                 }
-                self.output.push_str(&param.name);
-                self.output.push_str(": ");
-                self.unparse_type(&param.ty);
+                WorldExport::Function(func) => {
+                    self.emit_blank_lines_to(func.span.line);
+                    self.write_indent();
+                    self.output.push_str("export ");
+                    if func.is_async {
+                        self.output.push_str("async ");
+                    }
+                    self.output.push_str("fn ");
+                    self.output.push_str(&func.name);
+                    self.output.push('(');
+                    for (i, param) in func.params.iter().enumerate() {
+                        if i > 0 {
+                            self.output.push_str(", ");
+                        }
+                        self.output.push_str(&param.name);
+                        self.output.push_str(": ");
+                        self.unparse_type(&param.ty);
+                    }
+                    self.output.push(')');
+                    // Return type: skip `-> ()` (unit return is the default)
+                    if let Some(ret) = &func.return_type
+                        && !matches!(ret, Type::Named(n) if n.name == "()")
+                    {
+                        self.output.push_str(" -> ");
+                        self.unparse_type(ret);
+                    }
+                    self.output.push_str(";\n");
+                }
             }
-            self.output.push(')');
-            // Return type: skip `-> ()` (unit return is the default)
-            if let Some(ret) = &exp.return_type
-                && !matches!(ret, Type::Named(n) if n.name == "()")
-            {
-                self.output.push_str(" -> ");
-                self.unparse_type(ret);
-            }
-            self.output.push_str(";\n");
         }
 
         self.indent_level -= 1;

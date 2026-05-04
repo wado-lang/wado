@@ -15,6 +15,11 @@ pub struct WadoModule {
     pub package_name: String,
     pub package_version: String,
     pub source_files: Vec<String>,
+    /// Optional `#![stdlib("...")]` identity attribute. Set by the
+    /// directory-mode driver for bundled stdlib files (the loader reads it
+    /// to pin the entry's `ModuleSource` when an editor opens a stdlib
+    /// file directly). `None` means the attribute is not emitted.
+    pub stdlib_identity: Option<String>,
     /// Cross-interface `use` imports (e.g., `use { Instant } from "wasi:clocks/system-clock"`)
     pub imports: Vec<WadoImport>,
     pub types: Vec<WadoTypeDef>,
@@ -31,6 +36,7 @@ impl WadoModule {
             package_name,
             package_version,
             source_files: Vec::new(),
+            stdlib_identity: None,
             imports: Vec::new(),
             types: Vec::new(),
             resources: Vec::new(),
@@ -202,16 +208,35 @@ pub struct WadoWorld {
     pub exports: Vec<WadoWorldExport>,
 }
 
+/// World import: bare interface reference (`import Foo;`).
+///
+/// WIT-faithful: matches WIT's `import wasi:foo/bar;` form. Resolution to the
+/// CM FQ name happens via the referenced `pub interface Foo` declaration's
+/// `#[cm(...)]` attribute on the consumer side.
 #[derive(Debug, Clone)]
 pub struct WadoWorldImport {
     pub interface_name: String,
-    pub functions: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
-pub struct WadoWorldExport {
+pub enum WadoWorldExport {
+    /// `export Foo;` — interface export. Functions/resources are sourced from
+    /// the referenced interface declaration.
+    Interface(WadoWorldExportInterface),
+    /// `export [async] fn name(...) -> ret;` — direct function export. Used by
+    /// synthetic / user-authored worlds that don't go through `wado-from-idl`.
+    Function(WadoWorldExportFn),
+}
+
+#[derive(Debug, Clone)]
+pub struct WadoWorldExportInterface {
+    pub interface_name: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct WadoWorldExportFn {
     pub name: String,
-    pub is_async: bool, // Only world exports use async keyword
+    pub is_async: bool,
     pub params: Vec<WadoParam>,
     pub return_type: Option<WadoType>,
 }

@@ -93,26 +93,24 @@ not have in WIT.
   world is now a reference to an `interface Foo` declaration, which carries
   `#[cm(...)]`. The interface FQ name is preserved by construction.
 
-### Cross-package disambiguation
+### Cross-package disambiguation (resolved by omission)
 
-WIT distinguishes `wasi:filesystem/types` from `wasi:sockets/types` by package.
-Wado worlds need a syntax to do the same when a single world imports two
-interfaces with the same local name:
+WIT distinguishes `wasi:filesystem/types` from `wasi:sockets/types` by
+package. Wado handles this asymmetrically:
 
-```wado
-#[cm("wasi:cli/command@...")]
-pub world Command {
-    import Stdout;
-    import { Types } from "wasi:filesystem";
-    import { Types as SocketsTypes } from "wasi:sockets";
+- Function-bearing WIT interfaces have a Wado-side `pub interface Foo` with
+  `#[cm(...)]` carrying the FQ. Worlds reference them by bare name
+  (`import Stdout;`); the FQ is recovered from the interface declaration,
+  so there is no need for `from "..."` qualification.
+- Type-only WIT interfaces (e.g. `wasi:filesystem/types`,
+  `wasi:sockets/types`) have no Wado-side `pub interface` declaration; their
+  resources and types reach call sites via `use { Descriptor } from
+  "wasi:filesystem/types.wado"`. `wado-from-idl` omits these from world
+  declarations entirely. The previous `import Types { ... }` blocks (which
+  produced the cross-package collision) are gone.
 
-    export async fn run() -> Result<(), ()>;
-}
-```
-
-`from "..."` mirrors WIT's `import wasi:filesystem/types@...;`. `as` is the
-escape hatch for local name collisions. Bare `import Stdout` keeps working
-when the local name is unambiguous.
+Result: `import` / `export` in worlds is always bare and unambiguous, and
+the proposed `from "<package>"` / `as` qualifications are unnecessary.
 
 ### Pure interfaces
 
@@ -125,23 +123,44 @@ functions is conservatively treated as effectful by the call site.
 
 The migration runs on a single feature branch and lands as one merge:
 
-- Replace `effect <Name> { ... }` with `interface <Name> { ... }` across
-  `lib/wasi/**`, `lib/core/**`, `wado-compiler` internals, examples, fixtures,
-  and docs.
-- Update `wado-from-idl` so its generated stdlib emits `interface` blocks.
-- Keep the `effect` keyword in the parser for `<effect E>` polymorphic effect
-  parameters only. Remove `effect` as a declaration form.
-- Add `cm_interface_fq` to `WorldImportInfo` and populate it from the
-  referenced interface's `#[cm(...)]`. Remove the lazy `WasiRegistry` lookup
-  comment.
-- Add the `import { X } from "<package>"` and `import { X as Y }` world
-  syntax. Update the world parser, `WorldImportInfo`, and `wado-from-idl`.
-- Update WEP: WIT and Wado Mapping to mark the interface/effect split as
-  superseded.
+- [x] Replace `effect <Name> { ... }` with `interface <Name> { ... }` across
+      `lib/wasi/**`, `lib/core/**`, `wado-compiler` internals, examples, fixtures,
+      and docs.
+- [x] Update `wado-from-idl` so its generated stdlib emits `interface` blocks.
+- [x] Keep the `effect` keyword in the parser for `<effect E>` polymorphic effect
+      parameters only. Remove `effect` as a declaration form.
+- [x] Add `cm_interface_fq` to `WorldImportInfo` and populate it from the
+      referenced interface's `#[cm(...)]`.
+- [x] World imports/exports are bare WIT-faithful interface refs (`import Foo;`
+      / `export Foo;`); the brace-block form has been removed.
+- [ ] Update WEP: WIT and Wado Mapping to mark the interface/effect split as
+      superseded.
 
 There is no compatibility shim and no deprecation period. Wado is pre-stable
 and this is a source-level rename plus a small registry change; a single
 landing keeps the codebase consistent.
+
+### Why no `from "<package>"` / `as` qualifications
+
+The earlier draft of this WEP proposed cross-package qualifications
+(`import { Types } from "wasi:filesystem"`, `import { Types as SocketsTypes }
+from "wasi:sockets"`) for resolving local-name collisions in worlds. After
+auditing the stdlib and consumers, we removed that requirement:
+
+- The only collision in the current stdlib was `Types` (filesystem vs
+  sockets), and neither side declares `pub interface Types` in Wado: those
+  WIT interfaces are type-only, and their resources/types reach call sites
+  through ordinary `use { Descriptor } from "wasi:filesystem/types.wado"`.
+  `wado-from-idl` therefore omits `import Types;` from the world altogether,
+  collapsing the collision.
+- World imports inside `wado-compiler` are consumed exclusively by
+  `WorldInfo::imports_interface(name)` (e.g., the kiln gating). Aliases
+  would have no consumer; `from` would only restate information already
+  carried by the referenced `pub interface Foo`'s `#[cm(...)]`.
+
+If a future WIT file forces a non-removable collision (two `pub interface`
+declarations sharing a Wado-side name), reconsider; until then the bare
+form is unambiguous and minimal.
 
 ## Non-Goals
 
@@ -175,7 +194,9 @@ landing keeps the codebase consistent.
 - HTTP handler specialization in `codegen/component.rs` (`has_http_handler_export`,
   `append_http_handler_export`, gated paths in `emit_world_exports`). This is
   the largest world-specific block left in the compiler and is the main item
-  to design out as part of this work.
+  to design out as part of this work. With `WorldExportInfo::from_interface_fq`
+  now populated, a Phase 2 step can drive HTTP detection from the interface
+  FQ directly and retire `append_http_handler_export`.
 - `stdlib::ALL_WASI_MODULES` is an `include_str!`-driven static list. Adding a
   new WASI/CM library currently requires either putting the binding `.wado`
   in this list or feeding it through `CompilerHost`. Neither path reads
@@ -187,15 +208,6 @@ landing keeps the codebase consistent.
   in [WIT Bundling](./wep-2026-03-21-wit-bundling.md)) is designed but not
   yet implemented in codegen. Without it, a Wado-compiled component cannot
   be consumed via the embedded-WIT path described in this WEP's Goal.
-- `WorldImportInfo` (`world_registry.rs`) stores only the imported local name
-  and method list; it does not record the original WIT interface FQ. The
-  `wado-from-idl`-generated `worlds.wado` reflects the same loss: the original
-  `import wasi:filesystem/types@...;` becomes a bare `import Types { ... }`
-  with explicit method enumeration. The link to the WIT FQ name is recovered
-  lazily from `WasiRegistry`, which works today only because methods happen
-  to be unique enough to disambiguate. The `effect → interface` unification
-  fixes this by making `import Foo` a reference to an interface declaration
-  that carries `#[cm(...)]`.
 
 ### Stale items already cleaned up
 
@@ -237,15 +249,13 @@ WEP: World Conformance and Export Syntax defines the syntax. The parser does
 not implement it. Designing L2/L3 above means deciding the runtime behavior
 of `contract` before parser work starts.
 
-### "All methods" import form
+### "All methods" import form (resolved)
 
-WIT's `import stdout;` means "import the entire interface, all current and
-future methods". The current `wado-from-idl` output expands this to an
-explicit method list. The unified model with `import Stdout;` (bare, no
-brace block) maps directly to the WIT all-methods form and avoids
-regenerating the stdlib when a WIT interface gains a new method. The
-brace-block form `import Stdout { foo, bar }` is retained for the case where
-the user wants a strict subset. The world parser needs to support both.
+`wado-from-idl` now emits bare `import Foo;` (matching WIT's
+`import stdout;`), and the brace-block form has been removed from the
+parser. Per-method tree-shaking is driven by `used_wasi_functions`
+(populated from actual call sites), so nothing depends on the world
+declaration for which methods are eligible.
 
 ## Roadmap
 
@@ -253,19 +263,22 @@ This WEP is a roadmap document. Each item below either has its own WEP or
 will get one when work starts.
 
 - [x] Type-driven CM binding synthesis (WEP: TIR-Level CM Binding Synthesis).
-- [ ] Unify `effect` declarations into `interface` (single-branch migration;
+- [x] Unify `effect` declarations into `interface` (single-branch migration;
       see Migration Plan above). Retain `effect` keyword for `<effect E>`
       polymorphic effect parameters.
-- [ ] Augment `WorldImportInfo` with `cm_interface_fq`; teach the world
-      parser the `from "<package>"` and `as` qualifications.
+- [x] World imports/exports are bare WIT-faithful interface refs
+      (`import Foo;` / `export Foo;`); brace-form removed. `WorldImportInfo`
+      and `WorldExportInfo` carry `cm_interface_fq` resolved from the
+      referenced `pub interface Foo`'s `#[cm(...)]`.
 - [ ] Producer side: embed `component-type` in output (WEP: WIT Bundling).
       Designed but not implemented — required before round-trip Wado-to-Wado
       consumption via the embedded-WIT path can work.
 - [ ] Decide world structure faithfulness level (L2 vs L3) and document.
 - [ ] Implement `contract` declaration with the chosen scope rules (revise
       WEP: World Conformance accordingly).
-- [ ] Decouple HTTP handler specialization from codegen: drive it from world
-      metadata rather than hardcoded predicates.
+- [ ] Decouple HTTP handler specialization from codegen: drive it from
+      `WorldExportInfo::from_interface_fq` rather than the return-type sniffer
+      (`returns_http_response`) and the post-hoc `append_http_handler_export`.
 - [ ] Add `wit-parser` / `wit-component` as compiler dependencies, behind a
       use-resolver entry point that reads embedded `component-type` from
       external `.wasm` imports.
@@ -277,6 +290,9 @@ will get one when work starts.
       return-via-outptr when flat count exceeds `MAX_FLAT_RESULTS`.
 - [ ] Retire ad-hoc HTTP detection (`has_http_handler_export`,
       `append_http_handler_export`) once world-driven dispatch is in place.
+- [ ] Emit `wasi:cli/run@<v>` and `wasi:http/handler@<v>` as proper CM
+      instance exports in `emit_world_exports` (currently top-level
+      function exports + post-hoc wrap).
 
 ## Consequences
 
