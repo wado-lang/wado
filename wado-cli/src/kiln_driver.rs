@@ -333,6 +333,7 @@ pub fn build_metadata(
     invocation: &Invocation,
     run: &InvocationRun,
     options_hash: String,
+    generator_source_hash: String,
 ) -> Metadata {
     let generator = generator_identity(&invocation.module);
     let primary = to_meta_file_hash(&run.primary);
@@ -363,6 +364,7 @@ pub fn build_metadata(
         version: METADATA_VERSION,
         invocation: invocation_name.to_string(),
         generator,
+        generator_source_hash,
         primary,
         inputs,
         options_hash,
@@ -456,11 +458,19 @@ pub async fn cache_matches<H: CompilerHost>(
     invocation: &Invocation,
     manifest_root: &Path,
     host: &H,
+    current_generator_source_hash: &str,
 ) -> CacheCheck {
     if metadata.primary.path != invocation.from.as_str() {
         return CacheCheck::Miss;
     }
     if !matches_file(host, &invocation.from, &metadata.primary.hash).await {
+        return CacheCheck::Miss;
+    }
+    // Generator source closure must match. An empty `current` means the
+    // provider could not compute one (e.g. spec-form generators in v1);
+    // we only treat this as a match against an equally-empty record so
+    // hashed metadata never silently downgrades to "always hit".
+    if metadata.generator_source_hash != current_generator_source_hash {
         return CacheCheck::Miss;
     }
 
@@ -690,6 +700,26 @@ fn validate_rel_output_path(p: &str) -> Result<PathBuf, ExecuteError> {
     Ok(candidate.to_path_buf())
 }
 
+/// Component bytes returned by [`GeneratorProvider::get_component`],
+/// paired with a content-addressed hash of the generator's source
+/// closure. The hash flows into [`Metadata::generator_source_hash`] so
+/// the kiln-output cache invalidates when the generator changes — even
+/// when the consumer's primary `.g4` (or other inputs) is unchanged.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GeneratorComponent {
+    /// Component model `.wasm` bytes ready for `run_generator`.
+    pub bytes: Vec<u8>,
+    /// Hex-encoded SHA-256 of the generator's source closure (entry
+    /// `.wado` plus every transitively imported `.wado`). Empty when
+    /// the provider could not compute one (e.g. the spec-form path on
+    /// providers that have not implemented source-distribution
+    /// hashing). An empty string is recorded verbatim in the metadata
+    /// and matches another empty string only — the driver therefore
+    /// keeps caching consistent for generators that can never produce
+    /// a hash, while still invalidating once one is produced.
+    pub source_hash: String,
+}
+
 /// Resolves a generator's component bytes for execution.
 ///
 /// The runner is deliberately decoupled from how a given module becomes a
@@ -700,12 +730,16 @@ fn validate_rel_output_path(p: &str) -> Result<PathBuf, ExecuteError> {
 ///   when there is a real generator to compile).
 /// - A test provider that returns pre-built bytes.
 pub trait GeneratorProvider {
-    /// Resolve `module` to component bytes. Called at most once per unique
-    /// module in a pipeline run.
+    /// Resolve `module` to component bytes plus a content-addressed
+    /// identity for the generator's source closure. The driver calls
+    /// this once per invocation in the pipeline (so a single module
+    /// shared by N invocations triggers N calls); implementations are
+    /// expected to honor their own internal cache so the steady-state
+    /// hit path is a small filesystem read rather than a recompile.
     fn get_component(
         &self,
         module: &GeneratorModule,
-    ) -> impl std::future::Future<Output = Result<Vec<u8>, ProviderError>> + Send;
+    ) -> impl std::future::Future<Output = Result<GeneratorComponent, ProviderError>> + Send;
 
     /// Resolve `module` to its typed [`OptionsDescriptor`]. Used by the
     /// driver to validate a user-supplied options table before calling the
@@ -891,20 +925,73 @@ where
         let options_hash =
             wado_compiler::kiln::hash_options_canonical(&invocation.options_canonical);
 
+        // Resolve the component once per invocation. The provider is
+        // expected to honor its own internal cache, so on a steady-state
+        // hit this is a small filesystem read of the cached WASM plus
+        // sidecar re-validation. The bytes are needed if we miss; the
+        // `source_hash` is needed even on a hit to detect generator-only
+        // changes.
+        let component_result = provider.get_component(&invocation.module).await;
+
         let (entry, executed) =
             if let Some(prior) = existing.clone().filter(|m| m.options_hash == options_hash) {
-                match cache_matches(&prior, invocation, manifest_root, host).await {
-                    CacheCheck::Hit | CacheCheck::HitButModified => {
-                        outcome.cached.push(invocation_name.clone());
+                match component_result {
+                    Ok(component) => match cache_matches(
+                        &prior,
+                        invocation,
+                        manifest_root,
+                        host,
+                        &component.source_hash,
+                    )
+                    .await
+                    {
+                        CacheCheck::Hit | CacheCheck::HitButModified => {
+                            outcome.cached.push(invocation_name.clone());
+                            (Some(prior), false)
+                        }
+                        CacheCheck::Miss => match run_and_build_metadata(
+                            &invocation_name,
+                            invocation,
+                            manifest_root,
+                            host,
+                            &component,
+                            options_hash.clone(),
+                        )
+                        .await
+                        {
+                            Ok(metadata) => {
+                                outcome.executed.push(invocation_name.clone());
+                                (Some(metadata), true)
+                            }
+                            Err(e) if is_unsupported(&e) => {
+                                emit_stale_warning(host, &invocation_name);
+                                outcome.stale.push(invocation_name.clone());
+                                (Some(prior), false)
+                            }
+                            Err(e) => return Err(e),
+                        },
+                    },
+                    Err(ProviderError::Unsupported { .. }) => {
+                        emit_stale_warning(host, &invocation_name);
+                        outcome.stale.push(invocation_name.clone());
                         (Some(prior), false)
                     }
-                    CacheCheck::Miss => match run_and_build_metadata(
+                    Err(source) => {
+                        return Err(PipelineError::Provider {
+                            invocation: invocation_name.clone(),
+                            source,
+                        });
+                    }
+                }
+            } else {
+                match component_result {
+                    Ok(component) => match run_and_build_metadata(
                         &invocation_name,
                         invocation,
                         manifest_root,
                         host,
-                        provider,
-                        options_hash.clone(),
+                        &component,
+                        options_hash,
                     )
                     .await
                     {
@@ -915,32 +1002,21 @@ where
                         Err(e) if is_unsupported(&e) => {
                             emit_stale_warning(host, &invocation_name);
                             outcome.stale.push(invocation_name.clone());
-                            (Some(prior), false)
+                            (existing, false)
                         }
                         Err(e) => return Err(e),
                     },
-                }
-            } else {
-                match run_and_build_metadata(
-                    &invocation_name,
-                    invocation,
-                    manifest_root,
-                    host,
-                    provider,
-                    options_hash,
-                )
-                .await
-                {
-                    Ok(metadata) => {
-                        outcome.executed.push(invocation_name.clone());
-                        (Some(metadata), true)
-                    }
-                    Err(e) if is_unsupported(&e) => {
+                    Err(ProviderError::Unsupported { .. }) => {
                         emit_stale_warning(host, &invocation_name);
                         outcome.stale.push(invocation_name.clone());
                         (existing, false)
                     }
-                    Err(e) => return Err(e),
+                    Err(source) => {
+                        return Err(PipelineError::Provider {
+                            invocation: invocation_name.clone(),
+                            source,
+                        });
+                    }
                 }
             };
 
@@ -1063,7 +1139,7 @@ where
             })?;
         let run = execute_with_mode(
             invocation,
-            &component,
+            &component.bytes,
             manifest_root,
             host,
             ExecuteMode::DryRun,
@@ -1227,26 +1303,18 @@ async fn typed_encode_options<H, P>(
     }
 }
 
-async fn run_and_build_metadata<H, P>(
+async fn run_and_build_metadata<H>(
     invocation_name: &str,
     invocation: &Invocation,
     manifest_root: &Path,
     host: &H,
-    provider: &P,
+    component: &GeneratorComponent,
     options_hash: String,
 ) -> Result<Metadata, PipelineError>
 where
     H: CompilerHost,
-    P: GeneratorProvider,
 {
-    let component = provider
-        .get_component(&invocation.module)
-        .await
-        .map_err(|source| PipelineError::Provider {
-            invocation: invocation_name.to_string(),
-            source,
-        })?;
-    let run = execute(invocation, &component, manifest_root, host)
+    let run = execute(invocation, &component.bytes, manifest_root, host)
         .await
         .map_err(|source| PipelineError::Execute {
             invocation: invocation_name.to_string(),
@@ -1257,6 +1325,7 @@ where
         invocation,
         &run,
         options_hash,
+        component.source_hash.clone(),
     ))
 }
 
@@ -1635,6 +1704,7 @@ mod tests {
                 &sample_invocation(),
                 &run,
                 "sha256:optdigest".to_string(),
+                String::new(),
             );
 
             assert_eq!(entry.invocation, "proto");
@@ -1677,7 +1747,7 @@ mod tests {
                 response,
                 &[("schema.proto", b"p"), ("dep.proto", b"d")],
             );
-            let entry = build_metadata("proto", &sample_invocation(), &run, "sha256:o".to_string());
+            let entry = build_metadata("proto", &sample_invocation(), &run, "sha256:o".to_string(), String::new());
             assert_eq!(entry.reads.len(), 2);
             assert_eq!(entry.reads[0].path, "a.proto");
             assert_eq!(entry.reads[1].path, "z.proto");
@@ -1699,10 +1769,10 @@ mod tests {
                 response,
                 &[("schema.proto", b"p"), ("dep.proto", b"d")],
             );
-            let entry = build_metadata("proto", &sample_invocation(), &run, "sha256:o".to_string());
+            let entry = build_metadata("proto", &sample_invocation(), &run, "sha256:o".to_string(), String::new());
             let host = HashOnlyHost::new(&[("schema.proto", b"p"), ("dep.proto", b"d")]);
             let hit = runtime().block_on(async {
-                cache_matches(&entry, &sample_invocation(), tmp.path(), &host).await
+                cache_matches(&entry, &sample_invocation(), tmp.path(), &host, "").await
             });
             assert_eq!(hit, CacheCheck::Hit);
         }
@@ -1719,10 +1789,10 @@ mod tests {
                 response,
                 &[("schema.proto", b"p"), ("dep.proto", b"d")],
             );
-            let entry = build_metadata("proto", &sample_invocation(), &run, "sha256:o".to_string());
+            let entry = build_metadata("proto", &sample_invocation(), &run, "sha256:o".to_string(), String::new());
             let host = HashOnlyHost::new(&[("schema.proto", b"different"), ("dep.proto", b"d")]);
             let hit = runtime().block_on(async {
-                cache_matches(&entry, &sample_invocation(), tmp.path(), &host).await
+                cache_matches(&entry, &sample_invocation(), tmp.path(), &host, "").await
             });
             assert_eq!(hit, CacheCheck::Miss);
         }
@@ -1743,11 +1813,11 @@ mod tests {
                 response,
                 &[("schema.proto", b"p"), ("dep.proto", b"d")],
             );
-            let entry = build_metadata("proto", &sample_invocation(), &run, "sha256:o".to_string());
+            let entry = build_metadata("proto", &sample_invocation(), &run, "sha256:o".to_string(), String::new());
             std::fs::remove_file(tmp.path().join("build/kiln/proto/lib.wado")).unwrap();
             let host = HashOnlyHost::new(&[("schema.proto", b"p"), ("dep.proto", b"d")]);
             let hit = runtime().block_on(async {
-                cache_matches(&entry, &sample_invocation(), tmp.path(), &host).await
+                cache_matches(&entry, &sample_invocation(), tmp.path(), &host, "").await
             });
             assert_eq!(hit, CacheCheck::Miss);
         }
@@ -1768,7 +1838,7 @@ mod tests {
                 response,
                 &[("schema.proto", b"p"), ("dep.proto", b"d")],
             );
-            let entry = build_metadata("proto", &sample_invocation(), &run, "sha256:o".to_string());
+            let entry = build_metadata("proto", &sample_invocation(), &run, "sha256:o".to_string(), String::new());
             // Hand-edit the generated file after generation.
             std::fs::write(
                 tmp.path().join("build/kiln/proto/lib.wado"),
@@ -1777,7 +1847,7 @@ mod tests {
             .unwrap();
             let host = HashOnlyHost::new(&[("schema.proto", b"p"), ("dep.proto", b"d")]);
             let hit = runtime().block_on(async {
-                cache_matches(&entry, &sample_invocation(), tmp.path(), &host).await
+                cache_matches(&entry, &sample_invocation(), tmp.path(), &host, "").await
             });
             assert_eq!(hit, CacheCheck::HitButModified);
         }
@@ -1801,14 +1871,14 @@ mod tests {
                 response,
                 &[("schema.proto", b"p"), ("dep.proto", b"d")],
             );
-            let entry = build_metadata("proto", &sample_invocation(), &run, "sha256:o".to_string());
+            let entry = build_metadata("proto", &sample_invocation(), &run, "sha256:o".to_string(), String::new());
             let host = HashOnlyHost::new(&[
                 ("schema.proto", b"p"),
                 ("dep.proto", b"d"),
                 ("imported.proto", b"mutated"),
             ]);
             let hit = runtime().block_on(async {
-                cache_matches(&entry, &sample_invocation(), tmp.path(), &host).await
+                cache_matches(&entry, &sample_invocation(), tmp.path(), &host, "").await
             });
             assert_eq!(hit, CacheCheck::Miss);
         }

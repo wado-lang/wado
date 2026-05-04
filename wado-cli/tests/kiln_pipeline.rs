@@ -9,7 +9,9 @@ use std::path::Path;
 use std::sync::Mutex;
 
 use indexmap::IndexMap;
-use wado_cli::kiln_driver::{GeneratorProvider, PipelineOutcome, ProviderError, run_pipeline};
+use wado_cli::kiln_driver::{
+    GeneratorComponent, GeneratorProvider, PipelineOutcome, ProviderError, run_pipeline,
+};
 use wado_cli::kiln_metadata;
 use wado_compiler::compiler_host::{
     CompilerHost, Diagnostic, GeneratorOutputFile, GeneratorReadRecord, GeneratorRequest,
@@ -33,9 +35,18 @@ impl StubProvider {
 }
 
 impl GeneratorProvider for StubProvider {
-    async fn get_component(&self, _: &GeneratorModule) -> Result<Vec<u8>, ProviderError> {
+    async fn get_component(
+        &self,
+        _: &GeneratorModule,
+    ) -> Result<GeneratorComponent, ProviderError> {
         *self.calls.lock().unwrap() += 1;
-        Ok(self.bytes.clone())
+        Ok(GeneratorComponent {
+            bytes: self.bytes.clone(),
+            // Tests share a single fixed byte stream across calls; an
+            // empty source hash matches the legacy behaviour where the
+            // metadata's `generator_source_hash` was likewise empty.
+            source_hash: String::new(),
+        })
     }
 }
 
@@ -230,7 +241,18 @@ fn end_to_end_two_generators_execute_cache_and_reuse() {
     let outcome2 = run(&m, tmp.path(), &host2, &provider2, invs);
     assert_eq!(outcome2.cached.len(), 2);
     assert!(outcome2.executed.is_empty());
-    assert_eq!(*provider2.calls.lock().unwrap(), 0);
+    // The driver always queries the provider once per invocation to
+    // pick up the generator's current source hash for cache validation.
+    // For Stub the call is cheap (no inner compile); for Cli the
+    // provider's own cache short-circuits it. The assertion that
+    // matters here is that no `executed` flowed — the inner generator
+    // never ran on the cached path.
+    assert_eq!(
+        *provider2.calls.lock().unwrap(),
+        2,
+        "driver pre-fetches the component once per invocation to validate \
+         the generator's source hash against the recorded metadata"
+    );
 }
 
 #[test]
@@ -320,7 +342,9 @@ fn end_to_end_input_change_invalidates_exactly_that_invocation() {
     let outcome = run(&m, tmp.path(), &host2, &provider2, invs);
     assert_eq!(outcome.executed, vec!["kiln-alpha".to_string()]);
     assert_eq!(outcome.cached, vec!["kiln-beta".to_string()]);
-    assert_eq!(*provider2.calls.lock().unwrap(), 1);
+    // 2 = one provider call per invocation (alpha + beta) for source-hash
+    // pre-fetch; only alpha actually executes the generator.
+    assert_eq!(*provider2.calls.lock().unwrap(), 2);
 }
 
 #[test]
