@@ -147,7 +147,8 @@ pub fn optimize_wir(module: &mut WirPackage, opt_level: OptLevel, profiler: &dyn
     //
     // Run peephole optimizations (constant folding, copy elision, multi-value
     // struct elision), then flatten seq assignments to expose multi-field struct
-    // locals for elimination.
+    // locals for elimination. The Nops/dead locals these passes leave behind
+    // are picked up by phase 7's final `cleanup` before codegen.
     profiler.span_start("wir/phase5_peephole");
     let types = &module.types;
     for func in &mut module.functions {
@@ -155,25 +156,26 @@ pub fn optimize_wir(module: &mut WirPackage, opt_level: OptLevel, profiler: &dyn
             run_peephole(body, types);
         }
     }
-    cleanup(module);
     flatten_seq_assignments(module);
     elide_multi_field_struct_locals(module);
-    cleanup(module);
     profiler.span_end("wir/phase5_peephole");
 
     // Phase 6: Dead value elimination
     //
     // Eliminate dead arguments, dead return values, and write-only locals.
+    // No `cleanup` is needed afterwards: phase 7 only touches globals, and
+    // phase 7's final `cleanup` catches any Nops/dead locals left here.
     profiler.span_start("wir/phase6_dead_value_elim");
     eliminate_dead_arguments(module);
     eliminate_dead_return_values(module);
     elide_write_only_locals(module);
-    cleanup(module);
     profiler.span_end("wir/phase6_dead_value_elim");
 
     // Phase 7: Global cleanup
     //
-    // Remove trivial module-init guard globals that serve no purpose after DCE.
+    // Remove trivial module-init guard globals that serve no purpose after DCE,
+    // then run the final body cleanup before codegen sees the module: removes
+    // Nops, dead `DeclareLocal`s, and dead code after `Unreachable`.
     profiler.span_start("wir/phase7_global_cleanup");
     remove_trivial_init_globals(module);
     cleanup(module);
