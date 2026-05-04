@@ -2551,7 +2551,7 @@ fn parse_e_scan_12(tokens: &Array<Token>, pos: i32) -> i32 {
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { return -1; }
     pos += 1;
-    pos = scan_e(tokens, pos);
+    pos = scan_e_atom(tokens, pos);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -2573,7 +2573,7 @@ fn parse_e_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { return -1; }
     pos += 1;
-    pos = scan_e(tokens, pos);
+    pos = scan_e_atom(tokens, pos);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { return -1; }
     pos += 1;

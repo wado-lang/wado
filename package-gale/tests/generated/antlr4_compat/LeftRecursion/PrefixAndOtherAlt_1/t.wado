@@ -900,7 +900,7 @@ fn parse_expr_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_op(tokens, pos);
     if pos < 0 { return -1; }
-    pos = scan_expr(tokens, pos);
+    pos = scan_expr_atom(tokens, pos);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -910,9 +910,27 @@ fn parse_expr_atom(p: &mut Parser) -> Result<ExprNode, ParseError> {
     let kind = p.peek_kind();
     if _gale_kind_set_1(kind) {
         if p.peek_kind() == TK_LIT_MINUS {
-            if _gale_kind_set_1(p.peek_at(1)) {
+            let _sd_tokens = &p.tokens;
+            let _sd_pos = p.pos;
+            let _sd_p_0 = parse_expr_scan_0(_sd_tokens, _sd_pos);
+            let _sd_p_1 = parse_expr_scan_1(_sd_tokens, _sd_pos);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
+            }
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_best_i == 0 {
+                return parse_expr_bt_0(p);
+            }
+            if _sd_best_i == 1 {
                 return parse_expr_bt_1(p);
             }
+            return parse_expr_bt_1(p);
         } else if p.peek_kind() == TK_Integer {
             return parse_expr_bt_0(p);
         } else if p.peek_kind() == TK_LIT_PLUS {

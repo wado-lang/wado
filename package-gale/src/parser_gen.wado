@@ -1215,7 +1215,10 @@ fn gen_bt_scan_if_possible(w: &mut CodeWriter, alt: &Alternative, fn_name: &Stri
     f.emit_begin(w);
     w.line("let mut pos = pos;");
 
+    let saved_scan_for_prediction = ctx.scan_for_prediction;
+    ctx.scan_for_prediction = true;
     gen_scan_elements(w, &alt.elements, 0, prefix_len, ctx);
+    ctx.scan_for_prediction = saved_scan_for_prediction;
 
     w.line("return pos;");
     w.end();
@@ -2083,7 +2086,7 @@ fn gen_scan_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, fa
         return;
     }
     if let RuleRef(r) = elem {
-        let fn_name = `scan_{r.snake_name}`;
+        let fn_name = scan_call_name_for_ruleref(&r.name, &r.snake_name, ctx);
         w.line(`pos = {fn_name}(tokens, pos);`);
         w.line(`if pos < 0 \{ {*fail_stmt} \}`);
         return;
@@ -2107,6 +2110,37 @@ fn gen_scan_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, fa
         gen_scan_group(w, &g.alternatives, ctx, fail_stmt, is_lenient_group(&g.alternatives));
         return;
     }
+}
+
+/// Pick the right `scan_<rule>` function name based on whether we're emitting
+/// a scan for a prediction-time bt-scan or for the LR helper itself.
+///
+/// In prediction-time bt-scans (`ctx.scan_for_prediction == true`), an LR rule
+/// reference must use `scan_<rule>_atom` so the scan stops after one atom and
+/// does not wander into LR-suffix tokens that the OUTER LR loop is going to
+/// parse — otherwise `op expr` (alt 1 of `expr : literal | op expr | expr op
+/// expr`) would scan the whole binary-expression cascade and outpace the
+/// `literal` alt's scan, even though ANTLR4's prediction would treat them as
+/// equivalent and pick the earlier alt. For non-LR rules, `scan_<rule>` is
+/// already atom-only, and for LR-helper sites the full `scan_<rule>` is what
+/// we want for the right operand.
+fn scan_call_name_for_ruleref(rule_name: &String, snake_name: &String, ctx: &mut GenContext) -> String {
+    if ctx.scan_for_prediction && rule_has_lr_alt(rule_name, ctx) {
+        return `scan_{*snake_name}_atom`;
+    }
+    return `scan_{*snake_name}`;
+}
+
+fn rule_has_lr_alt(rule_name: &String, ctx: &GenContext) -> bool {
+    let r = ctx.find_rule(rule_name);
+    if let Some(rule) = r {
+        for let alt of &rule.alternatives {
+            if is_left_recursive(alt, rule_name) {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 /// Emit scan code for an element that assigns to `pos` (may set -1 on failure).
