@@ -89,10 +89,10 @@ fn first_run_compiles_second_run_hits_cache() {
         .block_on(async { provider.get_component(&module).await })
         .expect("first compile should succeed");
     assert!(
-        first.starts_with(b"\0asm"),
+        first.bytes.starts_with(b"\0asm"),
         "component must start with wasm magic"
     );
-    assert!(first.len() > 100, "component must be non-trivial");
+    assert!(first.bytes.len() > 100, "component must be non-trivial");
     assert_eq!(
         provider.compile_count(),
         1,
@@ -106,10 +106,21 @@ fn first_run_compiles_second_run_hits_cache() {
         .expect("cache dir should exist after first compile")
         .filter_map(|r| r.ok().map(|e| e.path()))
         .collect();
+    let wasm_files: Vec<&PathBuf> = cache_files
+        .iter()
+        .filter(|p| p.extension().is_some_and(|ext| ext == "wasm"))
+        .collect();
+    assert_eq!(wasm_files.len(), 1, "exactly one cached component expected");
+    // The compile path also persists a `.sources.json` sidecar listing
+    // the transitive `.wado` closure for cache invalidation.
+    let sidecar_files: Vec<&PathBuf> = cache_files
+        .iter()
+        .filter(|p| p.to_string_lossy().ends_with(".sources.json"))
+        .collect();
     assert_eq!(
-        cache_files.len(),
+        sidecar_files.len(),
         1,
-        "exactly one cached component expected"
+        "exactly one cached sources sidecar expected"
     );
 
     // Second call: same source, same stable-id → must hit the cache,
@@ -165,7 +176,7 @@ fn source_edit_invalidates_cache() {
     // verify it produced something on second compile, but don't require
     // bytewise divergence.
     assert!(
-        !second.is_empty() && second.starts_with(b"\0asm"),
+        !second.bytes.is_empty() && second.bytes.starts_with(b"\0asm"),
         "second compile should produce valid component bytes"
     );
     let _ = first;
@@ -184,15 +195,15 @@ fn adapter_generator_compiles_like_raw_request_generator() {
     let provider = CliGeneratorProvider::new(tmp.clone());
     let module = GeneratorModule::LocalPath(InvocationPath::normalize("./adapter_generator.wado"));
 
-    let wasm = runtime()
+    let component = runtime()
         .block_on(async { provider.get_component(&module).await })
         .expect("adapter-form generator must compile");
     assert!(
-        wasm.starts_with(b"\0asm"),
+        component.bytes.starts_with(b"\0asm"),
         "adapter generator must produce a valid wasm component"
     );
     assert!(
-        wasm.len() > 100,
+        component.bytes.len() > 100,
         "adapter generator must produce a non-trivial component"
     );
 
@@ -215,6 +226,106 @@ fn missing_local_path_surfaces_internal() {
         }
         _ => panic!("expected ProviderError::Internal, got {err:?}"),
     }
+}
+
+#[test]
+fn transitive_dep_edit_invalidates_cache() {
+    // Regression: the WASM cache key was previously
+    // `sha256(path || entry-file content)`, so an edit to a `.wado`
+    // file imported (transitively) by the generator entry left the
+    // cached bytes untouched. Local generator authors hit this
+    // constantly while iterating on a parser-gen library — the next
+    // `wado test` would happily reuse the previous WASM.
+    //
+    // The fix records every `.wado` file the inner compile loaded
+    // into a `<stable_id>.sources.json` sidecar; cache hits re-hash
+    // those entries and miss when any drift.
+    let tmp = unique_tmp("kiln-compile-transitive");
+    let _ = std::fs::remove_dir_all(&tmp);
+    std::fs::create_dir_all(&tmp).unwrap();
+
+    // Two-file generator: entry imports a sibling helper and uses one
+    // of its functions so the helper is part of the closure (not
+    // dead-import-stripped).
+    let helper_path = tmp.join("helper.wado");
+    std::fs::write(
+        &helper_path,
+        r"pub fn answer() -> i32 { return 42; }
+",
+    )
+    .unwrap();
+    let entry_src = r#"
+use { RawRequest, Response, Error, bind_request } from "core:kiln";
+use { answer } from "./helper.wado";
+
+pub struct Options {
+    pub verbose: bool,
+}
+
+export fn generate(raw: RawRequest) -> Result<Response, Error> {
+    let req = match bind_request::<Options>(raw) {
+        Ok(r) => r,
+        Err(e) => return Result::Err(e),
+    };
+    let _ = req.options.verbose;
+    let _ = answer();
+    return Result::Ok(Response { files: [] });
+}
+"#;
+    let gen_path = tmp.join("entry.wado");
+    std::fs::write(&gen_path, entry_src).unwrap();
+
+    let provider = CliGeneratorProvider::new(tmp.clone());
+    let module = GeneratorModule::LocalPath(InvocationPath::normalize("./entry.wado"));
+
+    let _first = runtime()
+        .block_on(async { provider.get_component(&module).await })
+        .expect("first compile should succeed");
+    assert_eq!(provider.compile_count(), 1);
+
+    // Cache hit on the entry file alone — the entry's SHA-256 is
+    // unchanged, so the v1 stable-id keeps pointing at the same WASM.
+    let _second = runtime()
+        .block_on(async { provider.get_component(&module).await })
+        .expect("second compile should succeed");
+    assert_eq!(
+        provider.compile_count(),
+        1,
+        "cache hit when no source drifted"
+    );
+
+    // Now edit the transitive helper. Without sidecar validation the
+    // cache would hit again (entry SHA-256 unchanged); with the fix the
+    // sidecar's recorded hash for `helper.wado` no longer matches the
+    // file on disk and the provider falls back to a fresh compile.
+    std::fs::write(
+        &helper_path,
+        r"pub fn answer() -> i32 { return 43; }
+",
+    )
+    .unwrap();
+
+    let _third = runtime()
+        .block_on(async { provider.get_component(&module).await })
+        .expect("third compile should succeed");
+    assert_eq!(
+        provider.compile_count(),
+        2,
+        "transitive dep edit must invalidate the WASM cache"
+    );
+
+    // After the rebuild the new sidecar should reflect the latest
+    // helper hash, so a fourth call hits cache cleanly.
+    let _fourth = runtime()
+        .block_on(async { provider.get_component(&module).await })
+        .expect("fourth compile should succeed");
+    assert_eq!(
+        provider.compile_count(),
+        2,
+        "post-rebuild cache hit when no further edit"
+    );
+
+    let _ = std::fs::remove_dir_all(&tmp);
 }
 
 #[test]

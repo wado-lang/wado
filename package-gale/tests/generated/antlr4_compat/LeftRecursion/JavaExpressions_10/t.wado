@@ -3256,22 +3256,50 @@ fn parse_typespec(p: &mut Parser) -> Result<TypespecNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_ID {
-        let id = p.expect(TK_ID)?;
-        if p.peek_kind() == TK_LIT_LBRACKET {
-            let lbracket = p.expect(TK_LIT_LBRACKET)?;
-            let rbracket = p.expect(TK_LIT_RBRACKET)?;
-            return Result::<TypespecNode, ParseError>::Ok(TypespecNode::Alt1(TypespecAlt1 {
-                span: Span::new(start, p.last_end()),
-                id,
-                lbracket,
-                rbracket,
-            }));
+        let _sd_tokens = &p.tokens;
+        let _sd_pos = p.pos;
+        let _sd_p_1 = parse_typespec_scan_1(_sd_tokens, _sd_pos);
+        let _sd_p_0 = parse_typespec_scan_0(_sd_tokens, _sd_pos);
+        let mut _sd_best_i: i32 = -1;
+        let mut _sd_best_p: i32 = -1;
+        if _sd_p_1 > _sd_best_p {
+            _sd_best_p = _sd_p_1;
+            _sd_best_i = 1;
         }
+        if _sd_p_0 > _sd_best_p {
+            _sd_best_p = _sd_p_0;
+            _sd_best_i = 0;
+        }
+        if _sd_best_i == 1 {
+            return parse_typespec_bt_1(p);
+        }
+        if _sd_best_i == 0 {
+            return parse_typespec_bt_0(p);
+        }
+        return parse_typespec_bt_0(p);
     }
     if kind == TK_LIT_INT {
-        if p.peek_kind() == TK_LIT_LBRACKET {
+        let _sd_tokens = &p.tokens;
+        let _sd_pos = p.pos;
+        let _sd_p_3 = parse_typespec_scan_3(_sd_tokens, _sd_pos);
+        let _sd_p_2 = parse_typespec_scan_2(_sd_tokens, _sd_pos);
+        let mut _sd_best_i: i32 = -1;
+        let mut _sd_best_p: i32 = -1;
+        if _sd_p_3 > _sd_best_p {
+            _sd_best_p = _sd_p_3;
+            _sd_best_i = 3;
+        }
+        if _sd_p_2 > _sd_best_p {
+            _sd_best_p = _sd_p_2;
+            _sd_best_i = 2;
+        }
+        if _sd_best_i == 3 {
             return parse_typespec_bt_3(p);
         }
+        if _sd_best_i == 2 {
+            return parse_typespec_bt_2(p);
+        }
+        return parse_typespec_bt_2(p);
     }
     return Result::<TypespecNode, ParseError>::Err(ParseError::new(
         "expected typespec",

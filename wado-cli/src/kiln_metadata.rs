@@ -21,7 +21,13 @@ use serde::{Deserialize, Serialize};
 /// Schema version of the `<primary>.kiln.json` file. Bumped only on
 /// incompatible changes; older files are silently ignored (treated as a
 /// cache miss) when the version differs.
-pub const METADATA_VERSION: u32 = 1;
+///
+/// v2 (current): added `generator_source_hash` so a change to the
+/// generator's `.wado` source closure invalidates the cache. v1 metadata
+/// has no record of the generator's identity beyond the `generator`
+/// string and silently survived edits to transitive generator imports —
+/// see `cache_matches` for the comparison.
+pub const METADATA_VERSION: u32 = 2;
 
 /// Suffix appended to the primary input's basename to form the metadata
 /// filename. Lives in `<manifest_root>/<output_dir>/`.
@@ -33,6 +39,15 @@ pub struct Metadata {
     pub version: u32,
     pub invocation: String,
     pub generator: String,
+    /// Hex-encoded SHA-256 of the generator's source closure (entry
+    /// `.wado` plus every transitively imported `.wado`). When the
+    /// stored value differs from the provider's current hash the
+    /// cache must miss — see `cache_matches`. An empty string is
+    /// recorded for providers that cannot compute one (currently the
+    /// spec-form path), which means cache validation falls back to
+    /// the file-hash checks alone.
+    #[serde(default)]
+    pub generator_source_hash: String,
     pub primary: FileHash,
     #[serde(default)]
     pub inputs: Vec<FileHash>,
@@ -175,9 +190,10 @@ mod tests {
 
     fn sample() -> Metadata {
         Metadata {
-            version: 1,
+            version: METADATA_VERSION,
             invocation: "kiln-deadbeef".to_string(),
             generator: "local:src/generator.wado".to_string(),
+            generator_source_hash: "sha256:gen".to_string(),
             primary: FileHash {
                 path: "schemas/x.proto".to_string(),
                 hash: "sha256:aa".to_string(),

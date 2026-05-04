@@ -9,7 +9,9 @@ use std::path::Path;
 use std::sync::Mutex;
 
 use indexmap::IndexMap;
-use wado_cli::kiln_driver::{GeneratorProvider, PipelineOutcome, ProviderError, run_pipeline};
+use wado_cli::kiln_driver::{
+    GeneratorComponent, GeneratorProvider, PipelineOutcome, ProviderError, run_pipeline,
+};
 use wado_cli::kiln_metadata;
 use wado_compiler::compiler_host::{
     CompilerHost, Diagnostic, GeneratorOutputFile, GeneratorReadRecord, GeneratorRequest,
@@ -33,9 +35,18 @@ impl StubProvider {
 }
 
 impl GeneratorProvider for StubProvider {
-    async fn get_component(&self, _: &GeneratorModule) -> Result<Vec<u8>, ProviderError> {
+    async fn get_component(
+        &self,
+        _: &GeneratorModule,
+    ) -> Result<GeneratorComponent, ProviderError> {
         *self.calls.lock().unwrap() += 1;
-        Ok(self.bytes.clone())
+        Ok(GeneratorComponent {
+            bytes: self.bytes.clone(),
+            // Tests share a single fixed byte stream across calls; an
+            // empty source hash matches the legacy behaviour where the
+            // metadata's `generator_source_hash` was likewise empty.
+            source_hash: String::new(),
+        })
     }
 }
 
@@ -230,7 +241,14 @@ fn end_to_end_two_generators_execute_cache_and_reuse() {
     let outcome2 = run(&m, tmp.path(), &host2, &provider2, invs);
     assert_eq!(outcome2.cached.len(), 2);
     assert!(outcome2.executed.is_empty());
-    assert_eq!(*provider2.calls.lock().unwrap(), 0);
+    // alpha and beta declare distinct `GeneratorModule` values, so each
+    // is fetched once through the driver's per-pipeline module cache.
+    // The pre-fetch is what feeds `cache_matches` the current
+    // `source_hash`; the cache itself never had to recompile, hence no
+    // entry in `executed`. (See
+    // `shared_module_across_invocations_calls_provider_once` for the
+    // case where a single module covers both invocations.)
+    assert_eq!(*provider2.calls.lock().unwrap(), 2);
 }
 
 #[test]
@@ -320,7 +338,9 @@ fn end_to_end_input_change_invalidates_exactly_that_invocation() {
     let outcome = run(&m, tmp.path(), &host2, &provider2, invs);
     assert_eq!(outcome.executed, vec!["kiln-alpha".to_string()]);
     assert_eq!(outcome.cached, vec!["kiln-beta".to_string()]);
-    assert_eq!(*provider2.calls.lock().unwrap(), 1);
+    // 2 = one provider call per invocation (alpha + beta) for source-hash
+    // pre-fetch; only alpha actually executes the generator.
+    assert_eq!(*provider2.calls.lock().unwrap(), 2);
 }
 
 #[test]
@@ -473,5 +493,51 @@ fn inline_invocation_populates_invocation_index_for_redirect() {
     assert!(
         redirect.ends_with("/build/kiln/kiln-deadbeef/sample.wado"),
         "redirect URI must point at the generated entry path, got `{redirect}`"
+    );
+}
+
+#[test]
+fn shared_module_across_invocations_calls_provider_once() {
+    // The pipeline caches the provider's `get_component` result by
+    // `GeneratorModule`. Two invocations targeting the same module
+    // should resolve to a single provider call — the second invocation
+    // reuses the already-fetched component (and its source hash).
+    let tmp = tempfile::tempdir().unwrap();
+    let m = empty_manifest();
+
+    // Two invocations sharing the same `Spec` module. (Spec doesn't
+    // resolve through `CliGeneratorProvider` in v1, but the driver-level
+    // cache is module-keyed and target-agnostic, so the test is valid.)
+    let shared_module = GeneratorModule::Spec("ns:proto@1.0.0".to_string());
+    let inv_a = invocation(
+        "entry.wado",
+        "kiln-a",
+        shared_module.clone(),
+        "./a.proto",
+        "build/kiln/kiln-a",
+    );
+    let inv_b = invocation(
+        "entry.wado",
+        "kiln-b",
+        shared_module,
+        "./b.proto",
+        "build/kiln/kiln-b",
+    );
+
+    let host = StubHost::new(
+        &[("a.proto", b"a-schema"), ("b.proto", b"b-schema")],
+        vec![
+            ("a.proto", simple_response("a.wado")),
+            ("b.proto", simple_response("b.wado")),
+        ],
+    );
+    let provider = StubProvider::new(b"component-bytes".to_vec());
+
+    let outcome = run(&m, tmp.path(), &host, &provider, vec![inv_a, inv_b]);
+    assert_eq!(outcome.executed.len(), 2);
+    assert_eq!(
+        *provider.calls.lock().unwrap(),
+        1,
+        "shared module across invocations must trigger exactly one provider call"
     );
 }

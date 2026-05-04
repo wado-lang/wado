@@ -238,6 +238,33 @@ fn sll_closure(configs: &Array<SllConfig>) -> Array<SllConfig> {
     return *configs;
 }
 
+/// True when the config has fully consumed its elements and has no return
+/// frame to pop into — i.e. the alt's body is finished and any further token
+/// belongs to the calling context. Opaque configs (`pos < 0`) are not at-end.
+///
+/// The check walks `return_stack` from the most-recently-pushed frame back
+/// to the oldest, mirroring what a sequence of `pop_return` calls would
+/// expose. Walking by index keeps this O(n); the previous recursive
+/// implementation was O(n^2) because each `pop_return` rebuilt the entire
+/// surviving prefix of `return_stack` into a fresh `Array`.
+fn config_is_at_end(c: &SllConfig) -> bool {
+    if c.pos < 0 {
+        return false;
+    }
+    if c.pos < c.elements.len() {
+        return false;
+    }
+    let mut i = c.return_stack.len();
+    while i > 0 {
+        i -= 1;
+        let frame = &c.return_stack[i];
+        if frame.pos < frame.elements.len() {
+            return false;
+        }
+    }
+    return true;
+}
+
 
 /// Compute FIRST set of the current position in a config.
 /// Includes tokens from nullable elements that were skipped by closure.
@@ -648,7 +675,37 @@ fn build_sll_node(configs: &Array<SllConfig>, depth: i32, max_depth: i32, ctx: &
         }
     }
 
+    // Detect at-end configs: their alts are fully consumed at this depth and
+    // would simply return to the caller. They have empty FIRST sets, so the
+    // per-token loop above silently dropped them — that left the dispatcher
+    // missing a "default" path for tokens belonging to the calling context.
+    //
+    // Two cases:
+    //  * No explicit branches but exactly one at-end alt → that alt is the
+    //    only valid match at this point. Return Leaf so the caller commits.
+    //  * Both explicit branches and at-end alts → ambiguous in general.
+    //    A token-dispatch on the explicit branch is unsafe because the
+    //    branch can fail at parse time (e.g. typespec `ID '[' ']'` matches
+    //    the lookahead `[` but the body `[ ]` won't match `[ <e> ]`),
+    //    leaving the at-end alt as the only correct choice. Fall back to
+    //    Backtrack so the codegen's longest-match scan dispatch picks the
+    //    alt whose body actually parses (cf. ANTLR4's adaptive prediction).
+    //  * Multiple at-end alts → true ambiguity → Backtrack.
+    let mut at_end_alts: Array<i32> = [];
+    for let c of &closed {
+        if config_is_at_end(c) && !array_contains_i32(&at_end_alts, c.alt_index) {
+            at_end_alts.push(c.alt_index);
+        }
+    }
+
+    if at_end_alts.len() >= 1 && branches.len() >= 1 {
+        return PredictionNode::Backtrack(alts);
+    }
+
     if branches.len() == 0 {
+        if at_end_alts.len() == 1 {
+            return PredictionNode::Leaf(at_end_alts[0]);
+        }
         return PredictionNode::Backtrack(alts);
     }
     return PredictionNode::Dispatch(PredictionDispatch { depth, branches });
