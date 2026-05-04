@@ -1,7 +1,5 @@
-#![TODO]
-
-// Pending bug: rebinding a field of a struct returned by a function in
-// an `export fn` body ICEs the WIR pipeline with
+// Regression: rebinding a field of a struct returned by a function in
+// an `export fn` body used to ICE the WIR pipeline with
 // "WIR pipeline generated invalid core Wasm module: type mismatch:
 //  expected (ref $type), found (ref (exact $type))".
 //
@@ -21,27 +19,21 @@
 //      explicit `return`. A statement-form `if cond { ... }; return ...`
 //      that does not bind a value does not trigger.
 //
+// Root cause: the WIR `sroa_multi_value_returns` pass scalarised the
+// function's return signature (`Outer` → `(ref Array<i32>, ref Array<i32>)`)
+// and rewrote the trailing `return Outer { a, b }` into the multi-value
+// `return a, b`, but its rewrite walker stopped at `Block`, `If`, `Loop`,
+// `Seq`, and `Drop` — it never recursed into `LocalSet { value: ... }`,
+// where the early `return Outer { a, b }` lived as the divergent-`else`
+// arm of the `let _x: i32 = if flag { 1 } else { return ... };` binding.
+// The early Return was left emitting a one-value `struct.new $Outer; return`
+// against a function signature that now expected two values.
+//
 // Surfaced while wiring Stage B of the ANTLR4 descriptor extractor at
-// `package-gale/scripts/extract_antlr4_descriptors.wado`, where the
-// `load_triage_maps` function (returning a TriageMaps struct with
-// stage_a/stage_b TriageMap fields, each holding `Array<TriageEntry>`)
-// used `let text = match content { Some(t) => t, None => return
-// TriageMaps { stage_a, stage_b } }` and the export `run()` did
-// `let triage_maps = load_triage_maps(...); let triage_map =
-// triage_maps.stage_a;`.
-//
-// The expected (correct) behaviour is: the program compiles and runs to
-// completion with no output.
-//
-// The bug is opt-level-dependent — at -O0 the module compiles cleanly,
-// but at -O1 and above the WIR pipeline trips validation. The fixture
-// is scoped via `only_opt: ["O1", "O2", "O3", "Os"]` so the failing
-// levels run; at those levels the module's `#![TODO]` tag tells the e2e
-// harness to `catch_unwind` the panic and report the fixture as
-// expected failure (otherwise CI would break on every run). When the
-// underlying bug is fixed, drop both the `#![TODO]` and the `only_opt`
-// — the harness will then enforce that the fixture compiles cleanly at
-// every level and emits the empty stdout asserted below.
+// `package-gale/scripts/extract_antlr4_descriptors.wado`, where
+// `load_triage_maps` returned a `TriageMaps { stage_a, stage_b }` struct
+// and the export `run()` did `let m = load_triage_maps(...); let t =
+// m.stage_a;` — exactly the shape this fixture isolates.
 
 use { Stdout } from "core:cli";
 
@@ -63,4 +55,4 @@ export fn run() with Stdout {
 }
 
 __DATA__
-{"stdout": "", "only_opt": ["O1", "O2", "O3", "Os"]}
+{"stdout": ""}
