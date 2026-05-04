@@ -1864,6 +1864,10 @@ fn test_format_match_multiline_scrutinee_no_extra_blanks() {
     // Regression: when the match scrutinee spans multiple source lines, the
     // blank-line tracker used to count those source lines as if they were
     // blank, inserting spurious blanks between `{` and the first arm.
+    //
+    // Asserting on the `{` → first-arm transition (rather than on the token
+    // that closes the scrutinee) keeps the test honest for scrutinee shapes
+    // that don't end with `)` — `] {`, `" {`, identifiers, method chains, etc.
     let source = r"
 fn caller(a: i32) -> i32 {
     return a;
@@ -1881,7 +1885,7 @@ fn foo() -> i32 {
 ";
     let formatted = wado_compiler::format(source).expect("format failed");
     assert!(
-        !formatted.contains(") {\n\n"),
-        "no blank line should appear between match `) {{` and the first arm:\n{formatted}"
+        formatted.contains("{\n        1 => 1,"),
+        "expected exactly one newline between match `{{` and first arm:\n{formatted}",
     );
 }
