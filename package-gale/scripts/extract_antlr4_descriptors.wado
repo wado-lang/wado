@@ -769,6 +769,12 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
 
         let txt_files = list_files_with_suffix(&cat_src_dir, &".txt");
         let mut entries: Array<DescriptorEntry> = [];
+        // Tracks per-category I/O / parse failures separately from triage
+        // skips. `entries.is_empty()` alone cannot distinguish "every
+        // descriptor was [skip]-triaged" (intentional, we want to drop
+        // the file) from "every descriptor errored out" (real failure;
+        // we must not silently delete the previous run's output).
+        let mut category_errors = 0;
 
         for let txt_name of &txt_files {
             // Strip ".txt" → descriptor name.
@@ -786,6 +792,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
                 Ok(s) => s,
                 Err(_) => {
                     eprintln(`extract: cannot read {key}`);
+                    category_errors += 1;
                     continue;
                 },
             };
@@ -793,6 +800,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
             let parsed = parse_descriptor_text(&raw);
             if parsed.grammar.is_empty() {
                 eprintln(`extract: {key} has no [grammar] section, skipping`);
+                category_errors += 1;
                 continue;
             }
 
@@ -800,6 +808,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
             let g4_filename = `{base}.g4`;
             if let Err(_) = write_file_string(&cat_out_dir, &g4_filename, &parsed.grammar) {
                 eprintln(`extract: cannot write {key}.g4`);
+                category_errors += 1;
                 continue;
             }
 
@@ -887,11 +896,19 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
         }
 
         // Emit the per-category test file. Skip when nothing would land in
-        // the file (every descriptor in this category was `[skip]`-triaged) —
-        // a header-only file is dead weight and a pointless `wado test` no-op.
-        // Mirrors the Stage B side, which already skips emission when empty.
+        // the file *and* no descriptor errored out along the way — i.e. the
+        // empty result is the intentional case where every descriptor was
+        // `[skip]`-triaged (currently only `Listeners`). When at least one
+        // descriptor failed to load / parse / write, leave any previous
+        // file in place: deleting it would silently hide the failure
+        // behind an `empty:` line, and rewriting it as a header-only stub
+        // would erase the last good run's coverage.
         let test_filename = `{category_to_snake(category)}_test.wado`;
         if entries.is_empty() {
+            if category_errors > 0 {
+                eprintln(`extract: {*category} had {category_errors} descriptor failure(s); leaving antlr4-compat/{test_filename} untouched`);
+                continue;
+            }
             if let Err(_) = remove_file(&compat_dir, &test_filename) {
                 // No prior file is fine; only a real I/O failure would surface here.
             }

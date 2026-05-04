@@ -241,6 +241,12 @@ fn sll_closure(configs: &Array<SllConfig>) -> Array<SllConfig> {
 /// True when the config has fully consumed its elements and has no return
 /// frame to pop into — i.e. the alt's body is finished and any further token
 /// belongs to the calling context. Opaque configs (`pos < 0`) are not at-end.
+///
+/// The check walks `return_stack` from the most-recently-pushed frame back
+/// to the oldest, mirroring what a sequence of `pop_return` calls would
+/// expose. Walking by index keeps this O(n); the previous recursive
+/// implementation was O(n^2) because each `pop_return` rebuilt the entire
+/// surviving prefix of `return_stack` into a fresh `Array`.
 fn config_is_at_end(c: &SllConfig) -> bool {
     if c.pos < 0 {
         return false;
@@ -248,10 +254,15 @@ fn config_is_at_end(c: &SllConfig) -> bool {
     if c.pos < c.elements.len() {
         return false;
     }
-    if c.return_stack.is_empty() {
-        return true;
+    let mut i = c.return_stack.len();
+    while i > 0 {
+        i -= 1;
+        let frame = &c.return_stack[i];
+        if frame.pos < frame.elements.len() {
+            return false;
+        }
     }
-    return config_is_at_end(&pop_return(c));
+    return true;
 }
 
 
