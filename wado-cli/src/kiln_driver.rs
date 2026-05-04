@@ -24,6 +24,7 @@
 //! WEP M9 — it does not contain any generator-cache rows.
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use wado_compiler::ast::AttrValue;
 use wado_compiler::compiler_host::{
@@ -906,6 +907,13 @@ where
 
     let mut outcome = PipelineOutcome::default();
     let mut kept_by_dir: indexmap::IndexMap<String, Vec<String>> = indexmap::IndexMap::new();
+    // Per-pipeline cache of provider results, keyed by `GeneratorModule`.
+    // Many invocations typically share a single generator module (one
+    // generator package emits parsers for every grammar in a project), so
+    // looking it up once per pipeline keeps the per-invocation hot path to
+    // an in-memory `Arc::clone` instead of a fresh sidecar walk + WASM read.
+    // Linear scan is fine: the unique-module count is O(1) in practice.
+    let mut module_cache: Vec<(GeneratorModule, Arc<GeneratorComponent>)> = Vec::new();
 
     for invocation in &planned.plan.order {
         let invocation_name = invocation_id(invocation);
@@ -925,13 +933,25 @@ where
         let options_hash =
             wado_compiler::kiln::hash_options_canonical(&invocation.options_canonical);
 
-        // Resolve the component once per invocation. The provider is
-        // expected to honor its own internal cache, so on a steady-state
-        // hit this is a small filesystem read of the cached WASM plus
-        // sidecar re-validation. The bytes are needed if we miss; the
-        // `source_hash` is needed even on a hit to detect generator-only
-        // changes.
-        let component_result = provider.get_component(&invocation.module).await;
+        // Resolve the component once per unique module. The provider's
+        // own internal cache makes a first call's hit path cheap; the
+        // pipeline-level cache here ensures we don't repeat that walk
+        // for every invocation that shares the same module.
+        let component_result: Result<Arc<GeneratorComponent>, ProviderError> =
+            match module_cache
+                .iter()
+                .find(|(m, _)| m == &invocation.module)
+            {
+                Some((_, cached)) => Ok(Arc::clone(cached)),
+                None => match provider.get_component(&invocation.module).await {
+                    Ok(c) => {
+                        let arc = Arc::new(c);
+                        module_cache.push((invocation.module.clone(), Arc::clone(&arc)));
+                        Ok(arc)
+                    }
+                    Err(e) => Err(e),
+                },
+            };
 
         let (entry, executed) =
             if let Some(prior) = existing.clone().filter(|m| m.options_hash == options_hash) {
@@ -954,7 +974,7 @@ where
                             invocation,
                             manifest_root,
                             host,
-                            &component,
+                            component.as_ref(),
                             options_hash.clone(),
                         )
                         .await
@@ -990,7 +1010,7 @@ where
                         invocation,
                         manifest_root,
                         host,
-                        &component,
+                        component.as_ref(),
                         options_hash,
                     )
                     .await
