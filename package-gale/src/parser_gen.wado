@@ -1927,10 +1927,12 @@ fn gen_scan_elements(w: &mut CodeWriter, elements: &Array<Element>, start: i32, 
     }
 }
 
-/// Specialisation of `gen_scan_elements` for bt-scan helpers. Toggles
-/// `ctx.scan_for_prediction` on for the LAST element only when it is a
-/// self-reference to the current rule, so that the inner scan emits
-/// `scan_<rule>_atom` (no LR suffix loop) — the prefix-alt scenario
+/// Specialisation of `gen_scan_elements` for bt-scan helpers. Raises
+/// `ctx.scan_ruleref_min_prec` to `i32::MAX` for the LAST element only
+/// when it is a self-reference to the current rule, so that
+/// `gen_scan_element` emits `scan_<rule>(tokens, pos, i32::MAX)` for
+/// that one position. The MAX guards short-circuit the LR suffix loop
+/// inside the target rule's `scan_<rule>` — the prefix-alt scenario
 /// where the outer LR loop will consume the trailing tokens.
 fn gen_bt_scan_elements(w: &mut CodeWriter, elements: &Array<Element>, start: i32, end: i32, ctx: &mut GenContext) {
     for let mut i = start; i < end; i += 1 {
