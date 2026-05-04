@@ -227,6 +227,11 @@ E2E: [pattern_match_exhaustive_variant_last_arm.wado](../wado-compiler/tests/fix
 
 Substitutes `StructGet(LocalGet(x), field)` with the inner value when `x` is defined by `LocalSet(x, StructNew { [inner] })`. Runs after parameter SROA so freshly exposed locals are caught.
 
+Two complementary variants run in sequence:
+
+- Re-evaluation-safe elision (`elide_single_field_struct_locals`) — substitutes when the inner field initializer is referentially transparent (no heap reads, no calls, no allocations). Safe regardless of how far apart def and use are.
+- Adjacent-use elision (`elide_adjacent_single_use_struct_locals`) — relaxes the purity check by relying on adjacency instead. Fires when the local has exactly one def + one use, the use is the immediately-following sibling instruction (skipping intervening `Nop`s), and the use is the leftmost-evaluated descendant of that instruction. Recovers the very common `Box<T>` boxing+inlining pattern (e.g. `Box<char> { value: <heap-reading block> }` followed by `.value`) where the inner reads heap state but no intervening operation could mutate it.
+
 ### Phase 3: Data Flow
 
 - Collapse array append sequences — merges consecutive `append` calls into `array.new_fixed`. E2E: [array_append_collapse.wado](../wado-compiler/tests/fixtures/array_append_collapse.wado).

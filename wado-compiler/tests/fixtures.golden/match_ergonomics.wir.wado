@@ -157,9 +157,7 @@ fn "wado-compiler/tests/fixtures/match_ergonomics.wado/match_ergonomics_if_let"(
     let f_32: ref "core:prelude/format.wado//Formatter";
     let inner: ref "core:prelude/types.wado//Box<i32>";
     let s: ref "core:prelude/string.wado//String";
-    let self_36: ref "core:prelude/types.wado//Box<i32>";
     let f_42: ref "core:prelude/format.wado//Formatter";
-    let self_47: ref "core:prelude/types.wado//Box<i32>";
     let f_54: ref "core:prelude/format.wado//Formatter";
     let f_59: ref "core:prelude/format.wado//Formatter";
     let f_65: ref "core:prelude/format.wado//Formatter";
@@ -197,8 +195,7 @@ condition: *x == 42
                 s = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("&"), used: 1 };
                 "core:prelude/string.wado/String::push_str"(f_32.buf, s);
                 inner = __v0_3;
-                self_36 = struct.new "core:prelude/types.wado//Box<i32>" { value: inner.value };
-                "core:prelude/primitive.wado/i32::fmt_decimal"(self_36.value, f_32);
+                "core:prelude/primitive.wado/i32::fmt_decimal"(inner.value, f_32);
                 "core:prelude/string.wado/String::push"(__local_14, 10);
                 "core:prelude/string.wado/String::push"(__local_14, 42);
                 "core:prelude/string.wado/String::push"(__local_14, 120);
@@ -221,8 +218,7 @@ condition: *x == 42
             "core:prelude/string.wado/String::push"(__local_16, 58);
             "core:prelude/string.wado/String::push"(__local_16, 32);
             __local_17 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_16 };
-            self_47 = struct.new "core:prelude/types.wado//Box<i32>" { value: x.value };
-            "core:prelude/primitive.wado/i32::fmt_decimal"(self_47.value, __local_17);
+            "core:prelude/primitive.wado/i32::fmt_decimal"(x.value, __local_17);
             break __tmpl: __local_16;
             unreachable;
         });
@@ -321,7 +317,6 @@ fn "wado-compiler/tests/fixtures/match_ergonomics.wado/match_ergonomics_match"()
     let name: ref "core:prelude/string.wado//String";
     let __v0_3: ref "core:prelude/string.wado//String";
     let __cond_4: bool;
-    let x_7: ref "core:prelude/types.wado//Box<i32>";
     let val: i32;
     let __cond_10: bool;
     let label: ref "core:prelude/string.wado//String";
@@ -387,8 +382,7 @@ condition: name == \"red\"
     val = (if ref.test "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_1) -> i32 {
         let __cast_1: ref "core:prelude/types.wado//Option<i32>::Some";
         __cast_1 = ref.cast "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_1);
-        x_7 = struct.new "core:prelude/types.wado//Box<i32>" { value: __cast_1.payload_0 };
-        x_7.value;
+        __cast_1.payload_0;
     } else {
         0;
     });

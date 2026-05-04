@@ -895,12 +895,10 @@ fn "wado-compiler/tests/fixtures/inspect_1.wado/__test_5_ref"() {
     let f_31: ref "core:prelude/format.wado//Formatter";
     let inner_32: ref "core:prelude/types.wado//Box<i32>";
     let s_34: ref "core:prelude/string.wado//String";
-    let self_35: ref "core:prelude/types.wado//Box<i32>";
     let self_47: ref "core:prelude/types.wado//Box<i32>";
     let f_48: ref "core:prelude/format.wado//Formatter";
     let inner_49: ref "core:prelude/types.wado//Box<i32>";
     let s_51: ref "core:prelude/string.wado//String";
-    let self_52: ref "core:prelude/types.wado//Box<i32>";
     let f_65: ref "core:prelude/format.wado//Formatter";
     let inner_66: ref "core:prelude/string.wado//String";
     let s_68: ref "core:prelude/string.wado//String";
@@ -917,8 +915,7 @@ fn "wado-compiler/tests/fixtures/inspect_1.wado/__test_5_ref"() {
         s_34 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("&"), used: 1 };
         "core:prelude/string.wado/String::push_str"(f_31.buf, s_34);
         inner_32 = r;
-        self_35 = struct.new "core:prelude/types.wado//Box<i32>" { value: inner_32.value };
-        "core:prelude/primitive.wado/i32::fmt_decimal"(self_35.value, f_31);
+        "core:prelude/primitive.wado/i32::fmt_decimal"(inner_32.value, f_31);
         break __tmpl: __local_12;
         unreachable;
     }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("&42"), used: 3 });
@@ -953,8 +950,7 @@ condition: `{r:?}` == \"&42\"
         s_51 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("&mut "), used: 5 };
         "core:prelude/string.wado/String::push_str"(f_48.buf, s_51);
         inner_49 = self_47;
-        self_52 = struct.new "core:prelude/types.wado//Box<i32>" { value: inner_49.value };
-        "core:prelude/primitive.wado/i32::fmt_decimal"(self_52.value, f_48);
+        "core:prelude/primitive.wado/i32::fmt_decimal"(inner_49.value, f_48);
         break __tmpl: __local_16;
         unreachable;
     }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("&mut 100"), used: 8 });
@@ -3516,7 +3512,6 @@ fn "wado-compiler/tests/fixtures/inspect_1.wado/InspColor^Inspect::inspect"(self
 
 fn "wado-compiler/tests/fixtures/inspect_1.wado/InspShape^Inspect::inspect"(self, f) {
     let s_3: ref "core:prelude/string.wado//String";
-    let self_4: ref "core:prelude/types.wado//Box<f64>";
     let s_7: ref "core:prelude/string.wado//String";
     let s_9: ref "core:prelude/string.wado//String";
     let s_11: ref "core:prelude/string.wado//String";
@@ -3524,8 +3519,7 @@ fn "wado-compiler/tests/fixtures/inspect_1.wado/InspShape^Inspect::inspect"(self
     if ref.test "wado-compiler/tests/fixtures/inspect_1.wado//InspShape::Circle"(self) {
         s_3 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("InspShape::Circle("), used: 18 };
         "core:prelude/string.wado/String::push_str"(f.buf, s_3);
-        self_4 = struct.new "core:prelude/types.wado//Box<f64>" { value: ref.cast "wado-compiler/tests/fixtures/inspect_1.wado//InspShape::Circle"(self).payload_0 };
-        "core:prelude/primitive.wado/f64::inspect_into"(self_4.value, f);
+        "core:prelude/primitive.wado/f64::inspect_into"(ref.cast "wado-compiler/tests/fixtures/inspect_1.wado//InspShape::Circle"(self).payload_0, f);
         s_7 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(")"), used: 1 };
         "core:prelude/string.wado/String::push_str"(f.buf, s_7);
     } else if ref.test "wado-compiler/tests/fixtures/inspect_1.wado//InspShape::Rectangle"(self) {

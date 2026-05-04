@@ -1,0 +1,37 @@
+// Test: adjacent-use single-field struct local elision (Box<char> pattern).
+//
+// When boxing+inlining wraps a `&char` argument as `Box<char> { value: <impure inner> }`
+// and the only use is the immediately-following sibling instruction's leftmost
+// descendant, the WIR optimizer should elide the LocalSet+StructNew and substitute
+// the inner expression directly at the use site.
+//
+// The trigger here is `eq_ignore_ascii_case`, which takes `&char` parameters
+// and is small enough to be inlined. After inlining, the parameter is wrapped
+// in `Box<char>` whose `value` field reads from an Array (a heap read inside
+// the inner block). The pre-existing `is_pure_for_elision`-gated pass refuses
+// to fold this; the new adjacent-use pass picks it up.
+
+use { Stdout } from "core:cli";
+
+fn count_a(chars: &Array<char>) -> i32 {
+    let mut n = 0;
+    for let mut i = 0; i < chars.len(); i += 1 {
+        if chars[i].eq_ignore_ascii_case(&'a') {
+            n += 1;
+        }
+    }
+    return n;
+}
+
+export fn run() with Stdout {
+    let chars: Array<char> = ['A', 'b', 'c', 'a', 'D', 'a'];
+    assert count_a(&chars) == 3;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_not_expect:O2": [
+        "struct.new \"core:prelude/types.wado//Box<char>\""
+    ]
+}

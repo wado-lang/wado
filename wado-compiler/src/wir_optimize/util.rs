@@ -60,26 +60,68 @@ pub(super) fn collect_local_gets_deep(instr: &WirInstr, names: &mut IndexSet<Str
     });
 }
 
-/// Returns true if `instr` has no observable side effects.
-/// Calls and memory/global stores are not side-effect-free.
-/// Memory loads are treated as side-effect-free (pure read with no mutation).
-pub(super) fn is_side_effect_free(instr: &WirInstr) -> bool {
-    match instr {
-        WirInstr::Call { .. } | WirInstr::CallIndirect { .. } | WirInstr::CallRef { .. } => false,
-        WirInstr::LocalSet { .. } | WirInstr::LocalTee { .. } | WirInstr::GlobalSet { .. } => false,
-        WirInstr::I32Store { .. }
+/// True if the *root* of `instr` would change observable program behavior on
+/// its own. Covers explicit state mutation (heap / global / local / table),
+/// calls (potentially I/O), the explicit [`WirInstr::Unreachable`] trap, and
+/// control-flow exits that bypass subsequent siblings. Does **not** classify
+/// implicit-trap ops (integer divide / remainder, float→int trunc, OOB heap
+/// reads / loads, null `ref.as_non_null` / `ref.cast`, etc.) as observable —
+/// preserving the long-standing semantics of [`is_side_effect_free`], which
+/// is intentionally permissive there to let passes like write-only-local
+/// elimination drop dead loads. Tightening that contract is out of scope
+/// here; it would affect every consumer.
+///
+/// Does not look at children; combine with recursion (see
+/// [`is_side_effect_free`]) for tree purity.
+pub(super) fn is_root_observable(instr: &WirInstr) -> bool {
+    matches!(
+        instr,
+        // Calls.
+        WirInstr::Call { .. }
+        | WirInstr::CallIndirect { .. }
+        | WirInstr::CallRef { .. }
+        // GC / local / global state mutation.
+        | WirInstr::LocalSet { .. }
+        | WirInstr::LocalTee { .. }
+        | WirInstr::GlobalSet { .. }
+        | WirInstr::StructSet { .. }
+        | WirInstr::ArraySet { .. }
+        | WirInstr::ArrayCopy { .. }
+        | WirInstr::ArrayFill { .. }
+        | WirInstr::TableSet { .. }
+        | WirInstr::MultiValueLocalBind { .. }
+        // Linear-memory writes.
+        | WirInstr::I32Store { .. }
         | WirInstr::I32Store8 { .. }
         | WirInstr::I32Store16 { .. }
-        | WirInstr::I64Store { .. } => false,
-        WirInstr::Unreachable => false,
-        _ => {
-            let mut ok = true;
-            instr.for_each_child(&mut |child| {
-                if ok && !is_side_effect_free(child) {
-                    ok = false;
-                }
-            });
-            ok
-        }
+        | WirInstr::I64Store { .. }
+        | WirInstr::V128Store { .. }
+        | WirInstr::MemoryGrow(_)
+        | WirInstr::MemoryFill { .. }
+        // Trap.
+        | WirInstr::Unreachable
+        // Control-flow exits — execution of a sub-expression that contains
+        // these is observable because the branch transfers control past
+        // siblings that would otherwise execute.
+        | WirInstr::Br { .. }
+        | WirInstr::BrIf { .. }
+        | WirInstr::BrTable { .. }
+        | WirInstr::Return { .. }
+    )
+}
+
+/// True if no node in `instr`'s sub-tree is observable. Pure loads
+/// (`StructGet`, `ArrayGet*`, memory loads, `LocalGet`, `GlobalGet`) and
+/// arithmetic / ref ops are treated as side-effect-free.
+pub(super) fn is_side_effect_free(instr: &WirInstr) -> bool {
+    if is_root_observable(instr) {
+        return false;
     }
+    let mut ok = true;
+    instr.for_each_child(&mut |child| {
+        if ok && !is_side_effect_free(child) {
+            ok = false;
+        }
+    });
+    ok
 }

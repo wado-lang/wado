@@ -115,7 +115,6 @@ fn "wado-compiler/tests/fixtures/field_forward_alias_group_invalidates.wado/run"
     let f_21: ref "core:prelude/format.wado//Formatter";
     let inner: ref "core:prelude/types.wado//Box<i32>";
     let s: ref "core:prelude/string.wado//String";
-    let self_25: ref "core:prelude/types.wado//Box<i32>";
     let f_31: ref "core:prelude/format.wado//Formatter";
     let f_37: ref "core:prelude/format.wado//Formatter";
     let f_42: ref "core:prelude/format.wado//Formatter";
@@ -155,8 +154,7 @@ condition: *r1 == 7
             s = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("&mut "), used: 5 };
             "core:prelude/string.wado/String::push_str"(f_21.buf, s);
             inner = self_20;
-            self_25 = struct.new "core:prelude/types.wado//Box<i32>" { value: inner.value };
-            "core:prelude/primitive.wado/i32::fmt_decimal"(self_25.value, f_21);
+            "core:prelude/primitive.wado/i32::fmt_decimal"(inner.value, f_21);
             "core:prelude/string.wado/String::push"(__local_8, 10);
             "core:prelude/string.wado/String::push"(__local_8, 42);
             "core:prelude/string.wado/String::push"(__local_8, 114);
