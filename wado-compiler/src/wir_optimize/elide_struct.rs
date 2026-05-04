@@ -17,6 +17,8 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::wir::{WirInstr, WirPackage, WirTypeDef};
 use crate::wir_visitor::WirMutVisitor;
 
+use super::util::is_root_observable;
+
 #[derive(Default)]
 struct LocalStats {
     /// Every `LocalGet(name)` anywhere in the tree (including those wrapped in `StructGet`).
@@ -579,34 +581,10 @@ fn walk_for_leftmost(instr: &WirInstr, name: &str, field_name: &str) -> Leftmost
     match instr {
         // Conditional control flow: bodies/branches execute conditionally.
         WirInstr::Loop { .. } | WirInstr::If { .. } => LeftmostWalk::Blocked,
-        // No-child control-flow exits: nothing to peer into.
-        WirInstr::Unreachable => LeftmostWalk::Blocked,
-        // Side-effecting roots and control flow with a value child: the root
-        // op (call / store / branch) fires *after* its children are evaluated,
-        // so a target found inside a child arrived first and is safe to elide;
-        // otherwise the next observable op is the side effect → Blocked.
-        WirInstr::Call { .. }
-        | WirInstr::CallIndirect { .. }
-        | WirInstr::CallRef { .. }
-        | WirInstr::StructSet { .. }
-        | WirInstr::ArraySet { .. }
-        | WirInstr::ArrayCopy { .. }
-        | WirInstr::ArrayFill { .. }
-        | WirInstr::GlobalSet { .. }
-        | WirInstr::LocalSet { .. }
-        | WirInstr::LocalTee { .. }
-        | WirInstr::I32Store { .. }
-        | WirInstr::I32Store8 { .. }
-        | WirInstr::I32Store16 { .. }
-        | WirInstr::I64Store { .. }
-        | WirInstr::V128Store { .. }
-        | WirInstr::MemoryGrow(_)
-        | WirInstr::MemoryFill { .. }
-        | WirInstr::MultiValueLocalBind { .. }
-        | WirInstr::Br { .. }
-        | WirInstr::BrIf { .. }
-        | WirInstr::BrTable { .. }
-        | WirInstr::Return { .. } => match walk_children_for_leftmost(instr, name, field_name) {
+        // Observable root ops fire *after* their children, so a target found
+        // inside a child arrived first and is safe to elide; otherwise the
+        // next observable op is the side effect → Blocked.
+        _ if is_root_observable(instr) => match walk_children_for_leftmost(instr, name, field_name) {
             LeftmostWalk::Found => LeftmostWalk::Found,
             _ => LeftmostWalk::Blocked,
         },
