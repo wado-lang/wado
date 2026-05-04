@@ -368,16 +368,15 @@ the underlying compiler / codegen bugs were both real:
 
 ### Future work
 
-- **Listeners category emit-suppression.** `Listeners` currently
-  emits a header-only Stage A test file with zero tests; once the
-  Stage A side gains the same tolerance Stage B already has
-  (auto-skip when nothing is left to emit), drop the empty files.
 - **Stage B for composite descriptors.** Descriptors with
-  `[slaveGrammar]` blocks are auto-skipped today because Kiln's
-  `use ... with { generator: ... }` directive only consumes one
-  `.g4` file. Adding multi-file pipeline support to Kiln (or
-  inlining slaves into the main grammar at extract time) would
-  unblock CompositeLexers / CompositeParsers descriptors.
+  `[slaveGrammar]` blocks are auto-skipped today because the
+  extractor's Stage B path emits a single-input Kiln directive
+  (`use ... with { generator: ... }`). Kiln itself already accepts
+  multiple inputs via `generator.inputs`, so closing this only needs
+  the extractor to (a) emit the `inputs` array with main + slave
+  paths and (b) drop the `parsed.slave_grammars.len() > 0`
+  short-circuit at the Stage B eligibility check. That unblocks the
+  CompositeLexers / CompositeParsers descriptors.
 
 When Phase 2/3 surface further compiler bugs, follow the project
 rule from the top-level `CLAUDE.md`: write a minimum reproducible
