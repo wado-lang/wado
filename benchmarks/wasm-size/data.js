@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777854982423,
+  "lastUpdate": 1777870462296,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -18889,6 +18889,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/a120328a60bbcc01dfebb7997372a9961fb1b83c"
         },
         "date": 1777854982100,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1775,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8776,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18520,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 515706,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "58641219c0d347848c1b88ac2e5b1010e5580386",
+          "message": "Merge pull request #987 from wado-lang/claude/optimize-wado-compiler-j01w1\n\nperf: speed up wir_build local naming and trim wir_optimize cleanup calls",
+          "timestamp": "2026-05-04T13:45:52+09:00",
+          "tree_id": "cd6ec5bd656561bc1a5e089f8710a0e5cd931f9b",
+          "url": "https://github.com/wado-lang/wado/commit/58641219c0d347848c1b88ac2e5b1010e5580386"
+        },
+        "date": 1777870462171,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
