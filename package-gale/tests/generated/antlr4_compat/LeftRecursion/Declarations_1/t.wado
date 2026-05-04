@@ -959,7 +959,7 @@ fn parse_declarator_atom(p: &mut Parser) -> Result<DeclaratorNode, ParseError> {
     let kind = p.peek_kind();
     if kind == TK_LIT_STAR {
         let star = p.expect(TK_LIT_STAR)?;
-        let declarator = parse_declarator(p)?;
+        let declarator = parse_declarator(p, 1)?;
         return Result::<DeclaratorNode, ParseError>::Ok(DeclaratorNode::Alt3(DeclaratorAlt3 {
             span: Span::new(start, p.last_end()),
             star,

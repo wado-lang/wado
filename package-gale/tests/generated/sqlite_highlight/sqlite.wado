@@ -15472,7 +15472,7 @@ fn parse_expr_bt_15(p: &mut Parser) -> Result<ExprNode, ParseError> {
     let start = p.peek().span.start;
     let k_cast = p.expect(TK_K_CAST)?;
     let lparen = p.expect(TK_LIT_LPAREN)?;
-    let expr = parse_expr(p)?;
+    let expr = parse_expr(p, 6)?;
     let k_as = p.expect(TK_K_AS)?;
     let type_name = parse_type_name(p)?;
     let rparen = p.expect(TK_LIT_RPAREN)?;
@@ -15508,7 +15508,7 @@ fn parse_expr_bt_22(p: &mut Parser) -> Result<ExprNode, ParseError> {
     let start = p.peek().span.start;
     let k_case = p.expect(TK_K_CASE)?;
     let expr: Option<ExprNode> = if _gale_kind_set_27(p.peek_kind()) {
-        let expr = parse_expr(p)?;
+        let expr = parse_expr(p, 1)?;
         Option::<ExprNode>::Some(expr)
     } else {
         null
@@ -15536,9 +15536,9 @@ fn parse_expr_bt_22(p: &mut Parser) -> Result<ExprNode, ParseError> {
         }
         _plus_first = false;
         let k_when = p.expect(TK_K_WHEN)?;
-        let expr = parse_expr(p)?;
+        let expr = parse_expr(p, 1)?;
         let k_then = p.expect(TK_K_THEN)?;
-        let expr_2 = parse_expr(p)?;
+        let expr_2 = parse_expr(p, 1)?;
         let k_when_expr_k_then_expr = KWhenExprKThenExprItem {
             k_when,
             expr,
@@ -15549,7 +15549,7 @@ fn parse_expr_bt_22(p: &mut Parser) -> Result<ExprNode, ParseError> {
     }
     let k_else_expr: Option<KElseExprItem> = if p.peek_kind() == TK_K_ELSE {
         let k_else = p.expect(TK_K_ELSE)?;
-        let expr = parse_expr(p)?;
+        let expr = parse_expr(p, 1)?;
         let k_else_expr = KElseExprItem {
             k_else,
             expr,
@@ -15689,7 +15689,7 @@ fn parse_expr_scan_21(tokens: &Array<Token>, pos: i32) -> i32 {
 fn parse_expr_bt_14(p: &mut Parser) -> Result<ExprNode, ParseError> {
     let start = p.peek().span.start;
     let lparen = p.expect(TK_LIT_LPAREN)?;
-    let expr = parse_expr(p)?;
+    let expr = parse_expr(p, 6)?;
     let rparen = p.expect(TK_LIT_RPAREN)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt14(ExprAlt14 {
         span: Span::new(start, p.last_end()),
@@ -15796,7 +15796,7 @@ fn parse_expr_bt_13(p: &mut Parser) -> Result<ExprNode, ParseError> {
             } else {
                 null
             };
-            let expr = parse_expr(p)?;
+            let expr = parse_expr(p, 6)?;
             let mut comma_expr_list: Array<CommaExprItem> = [];
             loop {
                 let mut rep_scan_pos: i32 = -1;
@@ -15898,7 +15898,7 @@ fn parse_expr_scan_13(tokens: &Array<Token>, pos: i32) -> i32 {
 fn parse_expr_bt_3(p: &mut Parser) -> Result<ExprNode, ParseError> {
     let start = p.peek().span.start;
     let unary_operator = parse_unary_operator(p)?;
-    let expr = parse_expr(p)?;
+    let expr = parse_expr(p, 15)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt3(ExprAlt3 {
         span: Span::new(start, p.last_end()),
         unary_operator,

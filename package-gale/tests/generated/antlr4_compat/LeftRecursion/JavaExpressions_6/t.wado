@@ -2533,7 +2533,7 @@ fn parse_e_bt_12(p: &mut Parser) -> Result<ENode, ParseError> {
     let lparen = p.expect(TK_LIT_LPAREN)?;
     let typespec = parse_typespec(p)?;
     let rparen = p.expect(TK_LIT_RPAREN)?;
-    let e = parse_e(p)?;
+    let e = parse_e(p, 16)?;
     return Result::<ENode, ParseError>::Ok(ENode::Alt12(EAlt12 {
         span: Span::new(start, p.last_end()),
         lparen,
@@ -2758,7 +2758,7 @@ fn parse_e_atom(p: &mut Parser) -> Result<ENode, ParseError> {
     }
     if _gale_kind_set_2(kind) {
         let plus_or_minus_or_lit_plusplus_or_lit_minusminus = p.advance();
-        let e = parse_e(p)?;
+        let e = parse_e(p, 14)?;
         return Result::<ENode, ParseError>::Ok(ENode::Alt15(EAlt15 {
             span: Span::new(start, p.last_end()),
             plus_or_minus_or_lit_plusplus_or_lit_minusminus,
@@ -2767,7 +2767,7 @@ fn parse_e_atom(p: &mut Parser) -> Result<ENode, ParseError> {
     }
     if _gale_kind_set_3(kind) {
         let tilde_or_bang = p.advance();
-        let e = parse_e(p)?;
+        let e = parse_e(p, 14)?;
         return Result::<ENode, ParseError>::Ok(ENode::Alt16(EAlt16 {
             span: Span::new(start, p.last_end()),
             tilde_or_bang,

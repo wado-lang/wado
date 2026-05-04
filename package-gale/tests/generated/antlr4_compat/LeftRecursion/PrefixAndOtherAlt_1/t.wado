@@ -888,7 +888,7 @@ fn parse_expr_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
 fn parse_expr_bt_1(p: &mut Parser) -> Result<ExprNode, ParseError> {
     let start = p.peek().span.start;
     let op = parse_op(p)?;
-    let expr = parse_expr(p)?;
+    let expr = parse_expr(p, 2)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt1(ExprAlt1 {
         span: Span::new(start, p.last_end()),
         op,

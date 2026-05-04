@@ -15638,7 +15638,7 @@ fn parse_union_or_intersection_or_primary_type(p: &mut Parser, min_prec: i32 = 0
 fn parse_primary_type_bt_9(p: &mut Parser) -> Result<PrimaryTypeNode, ParseError> {
     let start = p.peek().span.start;
     let keyof = p.expect(TK_KeyOf)?;
-    let primary_type = parse_primary_type(p)?;
+    let primary_type = parse_primary_type(p, 1)?;
     return Result::<PrimaryTypeNode, ParseError>::Ok(PrimaryTypeNode::KeyOfType(PrimaryTypeKeyOfType {
         span: Span::new(start, p.last_end()),
         keyof,
@@ -15691,7 +15691,7 @@ fn parse_primary_type_bt_8(p: &mut Parser) -> Result<PrimaryTypeNode, ParseError
     let start = p.peek().span.start;
     let type_reference = parse_type_reference(p)?;
     let is = p.expect(TK_Is)?;
-    let primary_type = parse_primary_type(p)?;
+    let primary_type = parse_primary_type(p, 1)?;
     return Result::<PrimaryTypeNode, ParseError>::Ok(PrimaryTypeNode::RedefinitionOfType(PrimaryTypeRedefinitionOfType {
         span: Span::new(start, p.last_end()),
         type_reference,
@@ -23078,7 +23078,7 @@ fn parse_single_expression_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
 fn parse_single_expression_bt_6(p: &mut Parser) -> Result<SingleExpressionNode, ParseError> {
     let start = p.peek().span.start;
     let new = p.expect(TK_New)?;
-    let single_expression = parse_single_expression(p)?;
+    let single_expression = parse_single_expression(p, 24)?;
     let type_arguments: Option<TypeArgumentsNode> = if p.peek_kind() == TK_LIT_LT {
         let type_arguments = parse_type_arguments(p)?;
         Option::<TypeArgumentsNode>::Some(type_arguments)
@@ -23114,7 +23114,7 @@ fn parse_single_expression_scan_6(tokens: &Array<Token>, pos: i32) -> i32 {
 fn parse_single_expression_bt_7(p: &mut Parser) -> Result<SingleExpressionNode, ParseError> {
     let start = p.peek().span.start;
     let new = p.expect(TK_New)?;
-    let single_expression = parse_single_expression(p)?;
+    let single_expression = parse_single_expression(p, 24)?;
     let type_arguments: Option<TypeArgumentsNode> = if p.peek_kind() == TK_LIT_LT {
         let type_arguments = parse_type_arguments(p)?;
         Option::<TypeArgumentsNode>::Some(type_arguments)
@@ -23170,7 +23170,7 @@ fn parse_single_expression_scan_49(tokens: &Array<Token>, pos: i32) -> i32 {
 fn parse_single_expression_bt_12(p: &mut Parser) -> Result<SingleExpressionNode, ParseError> {
     let start = p.peek().span.start;
     let void = p.expect(TK_Void)?;
-    let single_expression = parse_single_expression(p)?;
+    let single_expression = parse_single_expression(p, 21)?;
     return Result::<SingleExpressionNode, ParseError>::Ok(SingleExpressionNode::VoidExpression(SingleExpressionVoidExpression {
         span: Span::new(start, p.last_end()),
         void,
@@ -23190,7 +23190,7 @@ fn parse_single_expression_scan_12(tokens: &Array<Token>, pos: i32) -> i32 {
 fn parse_single_expression_bt_13(p: &mut Parser) -> Result<SingleExpressionNode, ParseError> {
     let start = p.peek().span.start;
     let typeof = p.expect(TK_Typeof)?;
-    let single_expression = parse_single_expression(p)?;
+    let single_expression = parse_single_expression(p, 21)?;
     return Result::<SingleExpressionNode, ParseError>::Ok(SingleExpressionNode::TypeofExpression(SingleExpressionTypeofExpression {
         span: Span::new(start, p.last_end()),
         typeof,
@@ -23210,7 +23210,7 @@ fn parse_single_expression_scan_13(tokens: &Array<Token>, pos: i32) -> i32 {
 fn parse_single_expression_bt_20(p: &mut Parser) -> Result<SingleExpressionNode, ParseError> {
     let start = p.peek().span.start;
     let await = p.expect(TK_Await)?;
-    let single_expression = parse_single_expression(p)?;
+    let single_expression = parse_single_expression(p, 21)?;
     return Result::<SingleExpressionNode, ParseError>::Ok(SingleExpressionNode::AwaitExpression(SingleExpressionAwaitExpression {
         span: Span::new(start, p.last_end()),
         await,
@@ -23230,7 +23230,7 @@ fn parse_single_expression_scan_20(tokens: &Array<Token>, pos: i32) -> i32 {
 fn parse_single_expression_bt_11(p: &mut Parser) -> Result<SingleExpressionNode, ParseError> {
     let start = p.peek().span.start;
     let delete = p.expect(TK_Delete)?;
-    let single_expression = parse_single_expression(p)?;
+    let single_expression = parse_single_expression(p, 21)?;
     return Result::<SingleExpressionNode, ParseError>::Ok(SingleExpressionNode::DeleteExpression(SingleExpressionDeleteExpression {
         span: Span::new(start, p.last_end()),
         delete,
@@ -23331,7 +23331,7 @@ fn parse_single_expression_bt_44(p: &mut Parser) -> Result<SingleExpressionNode,
     let start = p.peek().span.start;
     let identifier_name = parse_identifier_name(p)?;
     let single_expression: Option<SingleExpressionNode> = if _gale_kind_set_42(p.peek_kind()) {
-        let single_expression = parse_single_expression(p)?;
+        let single_expression = parse_single_expression(p, 3)?;
         Option::<SingleExpressionNode>::Some(single_expression)
     } else {
         null
@@ -23873,7 +23873,7 @@ fn parse_single_expression_atom(p: &mut Parser) -> Result<SingleExpressionNode, 
     }
     if kind == TK_LIT_PLUSPLUS {
         let lit_plusplus = p.expect(TK_LIT_PLUSPLUS)?;
-        let single_expression = parse_single_expression(p)?;
+        let single_expression = parse_single_expression(p, 21)?;
         return Result::<SingleExpressionNode, ParseError>::Ok(SingleExpressionNode::PreIncrementExpression(SingleExpressionPreIncrementExpression {
             span: Span::new(start, p.last_end()),
             lit_plusplus,
@@ -23882,7 +23882,7 @@ fn parse_single_expression_atom(p: &mut Parser) -> Result<SingleExpressionNode, 
     }
     if kind == TK_LIT_MINUSMINUS {
         let lit_minusminus = p.expect(TK_LIT_MINUSMINUS)?;
-        let single_expression = parse_single_expression(p)?;
+        let single_expression = parse_single_expression(p, 21)?;
         return Result::<SingleExpressionNode, ParseError>::Ok(SingleExpressionNode::PreDecreaseExpression(SingleExpressionPreDecreaseExpression {
             span: Span::new(start, p.last_end()),
             lit_minusminus,
@@ -23891,7 +23891,7 @@ fn parse_single_expression_atom(p: &mut Parser) -> Result<SingleExpressionNode, 
     }
     if kind == TK_LIT_PLUS {
         let plus = p.expect(TK_LIT_PLUS)?;
-        let single_expression = parse_single_expression(p)?;
+        let single_expression = parse_single_expression(p, 21)?;
         return Result::<SingleExpressionNode, ParseError>::Ok(SingleExpressionNode::UnaryPlusExpression(SingleExpressionUnaryPlusExpression {
             span: Span::new(start, p.last_end()),
             plus,
@@ -23900,7 +23900,7 @@ fn parse_single_expression_atom(p: &mut Parser) -> Result<SingleExpressionNode, 
     }
     if kind == TK_LIT_MINUS {
         let minus = p.expect(TK_LIT_MINUS)?;
-        let single_expression = parse_single_expression(p)?;
+        let single_expression = parse_single_expression(p, 21)?;
         return Result::<SingleExpressionNode, ParseError>::Ok(SingleExpressionNode::UnaryMinusExpression(SingleExpressionUnaryMinusExpression {
             span: Span::new(start, p.last_end()),
             minus,
@@ -23909,7 +23909,7 @@ fn parse_single_expression_atom(p: &mut Parser) -> Result<SingleExpressionNode, 
     }
     if kind == TK_LIT_TILDE {
         let tilde = p.expect(TK_LIT_TILDE)?;
-        let single_expression = parse_single_expression(p)?;
+        let single_expression = parse_single_expression(p, 21)?;
         return Result::<SingleExpressionNode, ParseError>::Ok(SingleExpressionNode::BitNotExpression(SingleExpressionBitNotExpression {
             span: Span::new(start, p.last_end()),
             tilde,
@@ -23918,7 +23918,7 @@ fn parse_single_expression_atom(p: &mut Parser) -> Result<SingleExpressionNode, 
     }
     if kind == TK_LIT_BANG {
         let bang = p.expect(TK_LIT_BANG)?;
-        let single_expression = parse_single_expression(p)?;
+        let single_expression = parse_single_expression(p, 21)?;
         return Result::<SingleExpressionNode, ParseError>::Ok(SingleExpressionNode::NotExpression(SingleExpressionNotExpression {
             span: Span::new(start, p.last_end()),
             bang,

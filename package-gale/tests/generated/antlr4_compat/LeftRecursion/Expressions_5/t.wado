@@ -982,7 +982,7 @@ fn parse_e_atom(p: &mut Parser) -> Result<ENode, ParseError> {
     let kind = p.peek_kind();
     if kind == TK_LIT_MINUS {
         let minus = p.expect(TK_LIT_MINUS)?;
-        let e = parse_e(p)?;
+        let e = parse_e(p, 3)?;
         return Result::<ENode, ParseError>::Ok(ENode::Alt2(EAlt2 {
             span: Span::new(start, p.last_end()),
             minus,
