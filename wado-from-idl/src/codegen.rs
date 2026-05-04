@@ -67,6 +67,9 @@ impl WadoCodeGenerator {
             parts.push(format!("sources = [{}]", quoted.join(", ")));
         }
         self.writeln(&format!("#![generated({})]", parts.join(", ")));
+        if let Some(identity) = &module.stdlib_identity {
+            self.writeln(&format!("#![stdlib(\"{identity}\")]"));
+        }
         self.writeln("");
 
         // Cross-interface use imports

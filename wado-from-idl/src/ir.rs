@@ -15,6 +15,11 @@ pub struct WadoModule {
     pub package_name: String,
     pub package_version: String,
     pub source_files: Vec<String>,
+    /// Optional `#![stdlib("...")]` identity attribute. Set by the
+    /// directory-mode driver for bundled stdlib files (the loader reads it
+    /// to pin the entry's `ModuleSource` when an editor opens a stdlib
+    /// file directly). `None` means the attribute is not emitted.
+    pub stdlib_identity: Option<String>,
     /// Cross-interface `use` imports (e.g., `use { Instant } from "wasi:clocks/system-clock"`)
     pub imports: Vec<WadoImport>,
     pub types: Vec<WadoTypeDef>,
@@ -31,6 +36,7 @@ impl WadoModule {
             package_name,
             package_version,
             source_files: Vec::new(),
+            stdlib_identity: None,
             imports: Vec::new(),
             types: Vec::new(),
             resources: Vec::new(),
