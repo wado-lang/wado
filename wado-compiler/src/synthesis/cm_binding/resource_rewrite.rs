@@ -1007,7 +1007,7 @@ fn is_stream_cm_method(cm_name: &str) -> bool {
 ///
 /// Prefers the canonical CM name registered via `#[cm("…")]` so that
 /// non-mechanical mappings (e.g., `DNSRecord` → `dns-record`) and
-/// preserved acronyms aren't mangled. Falls back to a PascalCase →
+/// preserved acronyms aren't mangled. Falls back to a `PascalCase` →
 /// kebab-case conversion only for receiver element types not in the
 /// registry (user-authored streams).
 fn parameterize_stream_cm_name(
@@ -1054,7 +1054,7 @@ fn registered_cm_name(name: &str, registry: &WasiRegistry) -> Option<String> {
         .map(str::to_string)
 }
 
-/// Mechanical PascalCase → kebab-case fallback for stream element types
+/// Mechanical `PascalCase` → kebab-case fallback for stream element types
 /// not registered with a `#[cm("…")]` name (i.e., user-authored types).
 fn pascal_to_kebab(name: &str) -> String {
     name.chars().fold(String::new(), |mut s, c| {

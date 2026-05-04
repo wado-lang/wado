@@ -31,9 +31,7 @@ use crate::synthesis::common::{
     local_ref, loop_stmt, null_expr, return_stmt, synth_span,
 };
 
-use super::lift::{
-    materialize_if_needed, synthesize_lift, try_lift_wasi_variant_or_enum,
-};
+use super::lift::{materialize_if_needed, synthesize_lift, try_lift_wasi_variant_or_enum};
 use super::lower::{
     synthesize_flatten_option_to_flat_args, synthesize_flatten_value_to_flat_args,
     synthesize_lower, synthesize_lower_option_to_memory, synthesize_lower_tuple,
