@@ -58,7 +58,13 @@
 "SemPredEvalParser/PredFromAltTestedInLoopBack_2" = "Stage B test parse fails with Result::Err — semantic predicate enforcement is Stage C"
 
 [stage_b_skip]
-"LeftRecursion/ReturnValueAndActionsList1_1" = "list-label LR alt: `b+=expr ',' b+=expr` produces two separate Array<ExprNode> fields (`b` and `b_2`) instead of appending both to one — and the LR helper passes `left: ExprNode` to the Array<ExprNode> field, type-mismatch at codegen"
-"LeftRecursion/ReturnValueAndActionsList1_3" = "list-label LR alt: `b+=expr ',' b+=expr` produces two separate Array<ExprNode> fields (`b` and `b_2`) instead of appending both to one — and the LR helper passes `left: ExprNode` to the Array<ExprNode> field, type-mismatch at codegen"
-"LeftRecursion/ReturnValueAndActionsList2_1" = "list-label LR alt: `b+=expr ',' b+=expr` produces two separate Array<ExprNode> fields (`b` and `b_2`) instead of appending both to one — and the LR helper passes `left: ExprNode` to the Array<ExprNode> field, type-mismatch at codegen"
-"LeftRecursion/ReturnValueAndActionsList2_3" = "list-label LR alt: `b+=expr ',' b+=expr` produces two separate Array<ExprNode> fields (`b` and `b_2`) instead of appending both to one — and the LR helper passes `left: ExprNode` to the Array<ExprNode> field, type-mismatch at codegen"
+# All four LeftRecursion/ReturnValueAndActionsList* entries below share
+# one root cause: list-label LR alts (`b+=expr ',' b+=expr`) compile each
+# `+=` occurrence into its own Array<ExprNode> field (`b` and `b_2`)
+# instead of appending both to a single list, and the LR helper then
+# passes `left: ExprNode` into the Array<ExprNode> field — type mismatch
+# at codegen. Fixing this needs ANTLR4 `+=` semantics in the IR.
+"LeftRecursion/ReturnValueAndActionsList1_1" = "list-label LR alt: see [stage_b_skip] header"
+"LeftRecursion/ReturnValueAndActionsList1_3" = "list-label LR alt: see [stage_b_skip] header"
+"LeftRecursion/ReturnValueAndActionsList2_1" = "list-label LR alt: see [stage_b_skip] header"
+"LeftRecursion/ReturnValueAndActionsList2_3" = "list-label LR alt: see [stage_b_skip] header"

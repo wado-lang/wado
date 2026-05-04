@@ -32,17 +32,10 @@ WS : (' '|'\\n') -> skip ;
         Err(e) => panic(`parse_checked failed: {e.message}`),
     };
     let out = generate(&mut grammar, &GenerateOptions { highlight: false });
-    // The generated parser must not declare the same temporary name
-    // twice in any function body. Before the fix the alt `a=e ... b=e`
-    // emitted two back-to-back `let e = parse_e(p)?;` lines (the inner
-    // RuleRef's binding was deduped against a fresh, empty name_counts
-    // instead of the outer alt's one), failing compilation with
-    // "cannot redeclare e".
-    // The bug emitted two `let e = parse_e(p)?;` lines back-to-back
-    // inside the SAME function body. Different functions can each have
-    // their own — that's a separate scope. Detect by scanning for the
-    // first occurrence and checking no second occurrence appears
-    // before the next `fn ` boundary.
+    // The buggy codegen emitted two `let e = parse_e(p)?;` lines in the
+    // same function body for the alt `a=e ... b=e`. Different functions
+    // each having their own copy is fine; the failure mode is the same
+    // line repeated before the next `fn ` boundary.
     let parse_e_decl = "let e = parse_e(p)?;";
     let mut pos = 0;
     loop {
@@ -58,19 +51,4 @@ WS : (' '|'\\n') -> skip ;
             `two 'let e = parse_e(p)?;' in same function body — bug repro at offset {abs}`;
         pos = abs + parse_e_decl.len();
     }
-}
-
-fn count_substring(haystack: &String, needle: &String) -> i32 {
-    let mut count = 0;
-    let mut pos = 0;
-    loop {
-        let rest = haystack.substr_bytes(pos, haystack.len());
-        if let Some(i) = rest.find(*needle) {
-            count += 1;
-            pos = pos + i + needle.len();
-        } else {
-            break;
-        }
-    }
-    return count;
 }
