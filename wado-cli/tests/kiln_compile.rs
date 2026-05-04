@@ -110,11 +110,7 @@ fn first_run_compiles_second_run_hits_cache() {
         .iter()
         .filter(|p| p.extension().is_some_and(|ext| ext == "wasm"))
         .collect();
-    assert_eq!(
-        wasm_files.len(),
-        1,
-        "exactly one cached component expected"
-    );
+    assert_eq!(wasm_files.len(), 1, "exactly one cached component expected");
     // The compile path also persists a `.sources.json` sidecar listing
     // the transitive `.wado` closure for cache invalidation.
     let sidecar_files: Vec<&PathBuf> = cache_files
@@ -254,8 +250,8 @@ fn transitive_dep_edit_invalidates_cache() {
     let helper_path = tmp.join("helper.wado");
     std::fs::write(
         &helper_path,
-        r#"pub fn answer() -> i32 { return 42; }
-"#,
+        r"pub fn answer() -> i32 { return 42; }
+",
     )
     .unwrap();
     let entry_src = r#"
@@ -304,8 +300,8 @@ export fn generate(raw: RawRequest) -> Result<Response, Error> {
     // file on disk and the provider falls back to a fresh compile.
     std::fs::write(
         &helper_path,
-        r#"pub fn answer() -> i32 { return 43; }
-"#,
+        r"pub fn answer() -> i32 { return 43; }
+",
     )
     .unwrap();
 

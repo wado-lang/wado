@@ -310,10 +310,7 @@ impl CliGeneratorProvider {
 /// not descendants of `base` are kept verbatim — they still hash to the
 /// same value and remain stable across runs as long as the toolchain is
 /// stable, so they participate in invalidation correctly.
-fn make_relative_sources(
-    base: &Path,
-    raw: Vec<(String, [u8; 32])>,
-) -> Vec<(String, [u8; 32])> {
+fn make_relative_sources(base: &Path, raw: Vec<(String, [u8; 32])>) -> Vec<(String, [u8; 32])> {
     raw.into_iter()
         .map(|(path, hash)| {
             let p = Path::new(&path);
@@ -390,8 +387,7 @@ impl CompilerHost for SilentHost {
     fn load_source(
         &self,
         path: &str,
-    ) -> impl std::future::Future<Output = Result<Vec<u8>, wado_compiler::SourceError>> + Send
-    {
+    ) -> impl std::future::Future<Output = Result<Vec<u8>, wado_compiler::SourceError>> + Send {
         let path_owned = path.to_string();
         let loaded = self.loaded.clone();
         let inner_fut = self.inner.load_source(path);

@@ -938,10 +938,7 @@ where
         // pipeline-level cache here ensures we don't repeat that walk
         // for every invocation that shares the same module.
         let component_result: Result<Arc<GeneratorComponent>, ProviderError> =
-            match module_cache
-                .iter()
-                .find(|(m, _)| m == &invocation.module)
-            {
+            match module_cache.iter().find(|(m, _)| m == &invocation.module) {
                 Some((_, cached)) => Ok(Arc::clone(cached)),
                 None => match provider.get_component(&invocation.module).await {
                     Ok(c) => {
@@ -1767,7 +1764,13 @@ mod tests {
                 response,
                 &[("schema.proto", b"p"), ("dep.proto", b"d")],
             );
-            let entry = build_metadata("proto", &sample_invocation(), &run, "sha256:o".to_string(), String::new());
+            let entry = build_metadata(
+                "proto",
+                &sample_invocation(),
+                &run,
+                "sha256:o".to_string(),
+                String::new(),
+            );
             assert_eq!(entry.reads.len(), 2);
             assert_eq!(entry.reads[0].path, "a.proto");
             assert_eq!(entry.reads[1].path, "z.proto");
@@ -1789,7 +1792,13 @@ mod tests {
                 response,
                 &[("schema.proto", b"p"), ("dep.proto", b"d")],
             );
-            let entry = build_metadata("proto", &sample_invocation(), &run, "sha256:o".to_string(), String::new());
+            let entry = build_metadata(
+                "proto",
+                &sample_invocation(),
+                &run,
+                "sha256:o".to_string(),
+                String::new(),
+            );
             let host = HashOnlyHost::new(&[("schema.proto", b"p"), ("dep.proto", b"d")]);
             let hit = runtime().block_on(async {
                 cache_matches(&entry, &sample_invocation(), tmp.path(), &host, "").await
@@ -1809,7 +1818,13 @@ mod tests {
                 response,
                 &[("schema.proto", b"p"), ("dep.proto", b"d")],
             );
-            let entry = build_metadata("proto", &sample_invocation(), &run, "sha256:o".to_string(), String::new());
+            let entry = build_metadata(
+                "proto",
+                &sample_invocation(),
+                &run,
+                "sha256:o".to_string(),
+                String::new(),
+            );
             let host = HashOnlyHost::new(&[("schema.proto", b"different"), ("dep.proto", b"d")]);
             let hit = runtime().block_on(async {
                 cache_matches(&entry, &sample_invocation(), tmp.path(), &host, "").await
@@ -1833,7 +1848,13 @@ mod tests {
                 response,
                 &[("schema.proto", b"p"), ("dep.proto", b"d")],
             );
-            let entry = build_metadata("proto", &sample_invocation(), &run, "sha256:o".to_string(), String::new());
+            let entry = build_metadata(
+                "proto",
+                &sample_invocation(),
+                &run,
+                "sha256:o".to_string(),
+                String::new(),
+            );
             std::fs::remove_file(tmp.path().join("build/kiln/proto/lib.wado")).unwrap();
             let host = HashOnlyHost::new(&[("schema.proto", b"p"), ("dep.proto", b"d")]);
             let hit = runtime().block_on(async {
@@ -1858,7 +1879,13 @@ mod tests {
                 response,
                 &[("schema.proto", b"p"), ("dep.proto", b"d")],
             );
-            let entry = build_metadata("proto", &sample_invocation(), &run, "sha256:o".to_string(), String::new());
+            let entry = build_metadata(
+                "proto",
+                &sample_invocation(),
+                &run,
+                "sha256:o".to_string(),
+                String::new(),
+            );
             // Hand-edit the generated file after generation.
             std::fs::write(
                 tmp.path().join("build/kiln/proto/lib.wado"),
@@ -1891,7 +1918,13 @@ mod tests {
                 response,
                 &[("schema.proto", b"p"), ("dep.proto", b"d")],
             );
-            let entry = build_metadata("proto", &sample_invocation(), &run, "sha256:o".to_string(), String::new());
+            let entry = build_metadata(
+                "proto",
+                &sample_invocation(),
+                &run,
+                "sha256:o".to_string(),
+                String::new(),
+            );
             let host = HashOnlyHost::new(&[
                 ("schema.proto", b"p"),
                 ("dep.proto", b"d"),
