@@ -12,7 +12,8 @@ use wit_parser::{
 use crate::ir::{
     WadoEnum, WadoEnumVariant, WadoField, WadoFlagMember, WadoFlags, WadoFunction, WadoImport,
     WadoInterface, WadoModule, WadoNewtype, WadoParam, WadoResource, WadoStruct, WadoType,
-    WadoTypeDef, WadoVariant, WadoVariantCase, WadoWorld, WadoWorldExport, WadoWorldImport,
+    WadoTypeDef, WadoVariant, WadoVariantCase, WadoWorld, WadoWorldExport, WadoWorldExportFn,
+    WadoWorldExportInterface, WadoWorldImport,
 };
 use crate::naming::{to_snake_case, to_upper_camel_case};
 
@@ -135,25 +136,30 @@ impl<'a> Transformer<'a> {
         for (key, item) in &world.imports {
             if let WorldItem::Interface { id, .. } = item {
                 let iface = &self.resolve.interfaces[*id];
+                // WIT-faithful: emit bare `import Foo;` only for interfaces that
+                // have at least one freestanding/async function. Type-only
+                // interfaces (e.g. `wasi:filesystem/types`) carry no Wado-level
+                // `pub interface Foo` declaration; their resources/types are
+                // brought in by `use` at call sites, so the world declaration
+                // can omit them.
+                let has_callable_function = iface.functions.iter().any(|(_, func)| {
+                    matches!(
+                        func.kind,
+                        FunctionKind::Freestanding | FunctionKind::AsyncFreestanding
+                    )
+                });
+                if !has_callable_function {
+                    continue;
+                }
+
                 let iface_name = match key {
                     WorldKey::Name(n) => n.clone(),
                     WorldKey::Interface(id) => self.get_interface_name(*id),
                 };
 
-                let functions: Vec<String> = iface
-                    .functions
-                    .iter()
-                    .map(|(func_name, func)| {
-                        self.format_world_import_function_name(func_name, func)
-                    })
-                    .collect();
-
-                if !functions.is_empty() {
-                    imports.push(WadoWorldImport {
-                        interface_name: to_upper_camel_case(&iface_name),
-                        functions,
-                    });
-                }
+                imports.push(WadoWorldImport {
+                    interface_name: to_upper_camel_case(&iface_name),
+                });
             }
         }
 
@@ -168,32 +174,21 @@ impl<'a> Transformer<'a> {
                     let params = self.transform_params(&func.params)?;
                     let return_type = self.transform_result(func.result.as_ref())?;
 
-                    exports.push(WadoWorldExport {
+                    exports.push(WadoWorldExport::Function(WadoWorldExportFn {
                         name,
                         is_async: matches!(func.kind, FunctionKind::AsyncFreestanding),
                         params,
                         return_type,
-                    });
+                    }));
                 }
-                WorldItem::Interface { id, .. } => {
-                    // When exporting an interface, export all its functions
-                    let iface = &self.resolve.interfaces[*id];
-                    for (func_name, func) in &iface.functions {
-                        if matches!(
-                            func.kind,
-                            FunctionKind::Freestanding | FunctionKind::AsyncFreestanding
-                        ) {
-                            let params = self.transform_params(&func.params)?;
-                            let return_type = self.transform_result(func.result.as_ref())?;
-
-                            exports.push(WadoWorldExport {
-                                name: to_snake_case(func_name),
-                                is_async: matches!(func.kind, FunctionKind::AsyncFreestanding),
-                                params,
-                                return_type,
-                            });
-                        }
-                    }
+                WorldItem::Interface { .. } => {
+                    let iface_name = match key {
+                        WorldKey::Name(n) => n.clone(),
+                        WorldKey::Interface(id) => self.get_interface_name(*id),
+                    };
+                    exports.push(WadoWorldExport::Interface(WadoWorldExportInterface {
+                        interface_name: to_upper_camel_case(&iface_name),
+                    }));
                 }
                 WorldItem::Type { .. } => {}
             }
@@ -206,36 +201,6 @@ impl<'a> Transformer<'a> {
             imports,
             exports,
         })
-    }
-
-    /// Format a function name for use in world import lists.
-    ///
-    /// For resource methods, uses `ResourceName::method_name` format.
-    /// For freestanding functions, uses plain `snake_case`.
-    fn format_world_import_function_name(&self, func_name: &str, func: &Function) -> String {
-        match &func.kind {
-            FunctionKind::Constructor(resource_id) => {
-                let resource_name = self.resolve.types[*resource_id]
-                    .name
-                    .as_ref()
-                    .map_or_else(|| "Unknown".to_string(), |n| to_upper_camel_case(n));
-                format!("{resource_name}::new")
-            }
-            FunctionKind::Method(resource_id)
-            | FunctionKind::Static(resource_id)
-            | FunctionKind::AsyncMethod(resource_id)
-            | FunctionKind::AsyncStatic(resource_id) => {
-                let resource_name = self.resolve.types[*resource_id]
-                    .name
-                    .as_ref()
-                    .map_or_else(|| "Unknown".to_string(), |n| to_upper_camel_case(n));
-                let method_name = func_name.split('.').next_back().unwrap_or(func_name);
-                format!("{}::{}", resource_name, to_snake_case(method_name))
-            }
-            FunctionKind::Freestanding | FunctionKind::AsyncFreestanding => {
-                to_snake_case(func_name)
-            }
-        }
     }
 
     fn get_interface_path(&self, iface_id: InterfaceId) -> (String, String, String, String) {

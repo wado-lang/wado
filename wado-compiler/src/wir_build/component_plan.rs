@@ -183,6 +183,7 @@ fn build_world_export_plans(
             is_async: true,
             params: vec![],
             return_type: None,
+            from_interface_fq: None,
         }]
     });
 

@@ -518,7 +518,18 @@ async fn run_single(opts: &DumpOptions, input: &str) {
                 wado_compiler::symbol::SymbolKind::World(w) => {
                     let imports: Vec<_> =
                         w.imports.iter().map(|i| i.interface_name.clone()).collect();
-                    let exports: Vec<_> = w.exports.iter().map(|e| e.name.clone()).collect();
+                    let exports: Vec<_> = w
+                        .exports
+                        .iter()
+                        .map(|e| match e {
+                            wado_compiler::symbol::WorldExportSymbol::Interface {
+                                interface_name,
+                            } => interface_name.clone(),
+                            wado_compiler::symbol::WorldExportSymbol::Function { name, .. } => {
+                                name.clone()
+                            }
+                        })
+                        .collect();
                     format!(
                         "world{{ imports: [{}], exports: [{}] }}",
                         imports.join(", "),

@@ -202,16 +202,35 @@ pub struct WadoWorld {
     pub exports: Vec<WadoWorldExport>,
 }
 
+/// World import: bare interface reference (`import Foo;`).
+///
+/// WIT-faithful: matches WIT's `import wasi:foo/bar;` form. Resolution to the
+/// CM FQ name happens via the referenced `pub interface Foo` declaration's
+/// `#[cm(...)]` attribute on the consumer side.
 #[derive(Debug, Clone)]
 pub struct WadoWorldImport {
     pub interface_name: String,
-    pub functions: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
-pub struct WadoWorldExport {
+pub enum WadoWorldExport {
+    /// `export Foo;` — interface export. Functions/resources are sourced from
+    /// the referenced interface declaration.
+    Interface(WadoWorldExportInterface),
+    /// `export [async] fn name(...) -> ret;` — direct function export. Used by
+    /// synthetic / user-authored worlds that don't go through `wado-from-idl`.
+    Function(WadoWorldExportFn),
+}
+
+#[derive(Debug, Clone)]
+pub struct WadoWorldExportInterface {
+    pub interface_name: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct WadoWorldExportFn {
     pub name: String,
-    pub is_async: bool, // Only world exports use async keyword
+    pub is_async: bool,
     pub params: Vec<WadoParam>,
     pub return_type: Option<WadoType>,
 }
