@@ -254,12 +254,17 @@ fn run_directory_mode(
                 flat_reexports.push((iface_name.clone(), names));
             }
 
-            let code = generator.generate(&module);
-
             // Write per-interface file. WIT kebab-case interface names
             // are converted to Wado's snake_case filename convention
             // (e.g. `kiln-host` -> `kiln_host.wado`).
             let file_stem = to_snake_case(iface_name);
+            module.stdlib_identity = stdlib_identity_for(
+                &pkg.name.namespace,
+                pkg_name,
+                Some(&format!("{file_stem}.wado")),
+            );
+            let code = generator.generate(&module);
+
             let output_path = pkg_dir.join(format!("{file_stem}.wado"));
             fs::write(&output_path, code)
                 .with_context(|| format!("Failed to write {}", output_path.display()))?;
@@ -279,6 +284,8 @@ fn run_directory_mode(
 
         if !worlds_module.worlds.is_empty() {
             worlds_module.source_files = sources;
+            worlds_module.stdlib_identity =
+                stdlib_identity_for(&pkg.name.namespace, pkg_name, Some("worlds.wado"));
 
             let code = generator.generate(&worlds_module);
 
@@ -311,6 +318,13 @@ fn write_flat_reexport_file(
 
     let mut flat_code = String::new();
     flat_code.push_str("#![generated(by = \"wado-from-idl\")]\n");
+    // The package-level facade (e.g. `wasi/cli.wado`) is reachable as the
+    // bundled module `wasi:cli` (no `.wado` suffix). Pin its identity so the
+    // loader resolves an editor-opened facade to the same `ModuleSource` that
+    // the rest of the compile uses.
+    if let Some(identity) = stdlib_identity_for(namespace, pkg_name, None) {
+        flat_code.push_str(&format!("#![stdlib(\"{identity}\")]\n"));
+    }
     flat_code.push('\n');
 
     let mut exported_names: IndexSet<String> = IndexSet::new();
@@ -343,6 +357,26 @@ fn write_flat_reexport_file(
         .with_context(|| format!("Failed to write {}", output_path.display()))?;
     eprintln!("Generated: {}", output_path.display());
     Ok(())
+}
+
+/// Build the `#![stdlib("...")]` identity string for a generated file, or
+/// `None` when the file lives outside the bundled stdlib namespaces and
+/// therefore must not declare an identity.
+///
+/// `wado-compiler::loader::parse_stdlib_identity_attribute` panics when an
+/// identity does not match any registered stdlib path; `wasmtime:wasi-http`
+/// and other wrapper packages never get registered, so emitting an identity
+/// for them would turn an LSP "open file" into a panic. The bundled stdlib
+/// is the union of `wasi:*` and `core:*` modules — restrict identity
+/// emission to those namespaces.
+fn stdlib_identity_for(namespace: &str, pkg_name: &str, file: Option<&str>) -> Option<String> {
+    if namespace != "wasi" && namespace != "core" {
+        return None;
+    }
+    Some(match file {
+        Some(file) => format!("{namespace}:{pkg_name}/{file}"),
+        None => format!("{namespace}:{pkg_name}"),
+    })
 }
 
 fn package_sources(

@@ -1108,32 +1108,58 @@ pub struct WorldDecl {
     pub span: Span,
 }
 
-/// A world import group
+/// A world import declaration (bare interface reference, WIT-faithful).
+///
 /// ```wado
-/// import EffectName {
-///     function_name_1,
-///     function_name_2,
-/// }
+/// import Stdout;
 /// ```
+///
+/// Wado does not support `from "<package>"` or `as` qualifications: every
+/// importable interface is a `pub interface Foo` declaration whose
+/// `#[cm("...")]` attribute is the source of truth for its CM FQ name.
+/// Resource methods and types reach call sites through ordinary `use`
+/// statements.
 #[derive(Debug, Clone)]
 pub struct WorldImport {
     pub interface_name: String,
-    pub functions: Vec<String>,
     pub span: Span,
 }
 
-/// A world export declaration
-/// ```wado
-/// export async fn run() -> Result<(), ()>;
-/// export fn get_version() -> string;
-/// ```
+/// A world export declaration. Two shapes:
+/// - Interface export (`export Foo;`) — references a `pub interface Foo`
+///   declaration; the CM-side instance export is materialized by codegen
+///   from the interface's functions and `#[cm("...")]`.
+/// - Function export (`export [async] fn name(...) -> ret;`) — a direct
+///   freestanding-function export. Used by synthetic worlds (test world)
+///   and for WIT worlds whose export is a bare freestanding function.
 #[derive(Debug, Clone)]
-pub struct WorldExport {
+pub enum WorldExport {
+    Interface(WorldExportInterface),
+    Function(WorldExportFn),
+}
+
+#[derive(Debug, Clone)]
+pub struct WorldExportInterface {
+    pub interface_name: String,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct WorldExportFn {
     pub name: String,
     pub is_async: bool,
     pub params: Vec<Param>,
     pub return_type: Option<Type>,
     pub span: Span,
+}
+
+impl WorldExport {
+    pub fn span(&self) -> Span {
+        match self {
+            WorldExport::Interface(i) => i.span,
+            WorldExport::Function(f) => f.span,
+        }
+    }
 }
 
 /// Use declaration item with optional renaming

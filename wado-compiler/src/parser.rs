@@ -15,7 +15,8 @@ use crate::ast::{
     StoresEntry, StructDecl, StructField, StructLiteralExpr, StructLiteralField,
     StructPatternField, TaskReturnStmt, TestDecl, TraitDecl, TryOpExpr, TupleLiteralExpr,
     TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase,
-    VariantDecl, WhileStmt, WorldDecl, WorldExport, WorldImport,
+    VariantDecl, WhileStmt, WorldDecl, WorldExport, WorldExportFn, WorldExportInterface,
+    WorldImport,
 };
 use crate::token::{Span, Token, TokenKind};
 
@@ -4694,55 +4695,46 @@ impl Parser {
         })
     }
 
-    /// Parse a world import group
+    /// Parse a world import declaration (bare WIT-faithful form).
     /// ```wado
-    /// import Stdout {
-    ///     write_via_stream,
-    /// }
+    /// import Stdout;
     /// ```
     fn parse_world_import(&mut self) -> ParseResult<WorldImport> {
         let start_span = self.peek().span;
         self.expect(&TokenKind::Import)?;
         let interface_name = self.consume_ident()?;
-        self.expect(&TokenKind::LBrace)?;
-
-        let functions =
-            self.parse_comma_separated(&TokenKind::RBrace, Self::consume_world_import_name)?;
-
         let close_span = self.peek().span;
-        self.expect(&TokenKind::RBrace)?;
+        self.expect(&TokenKind::Semicolon)?;
 
         Ok(WorldImport {
             interface_name,
-            functions,
             span: start_span.merge(&close_span),
         })
     }
 
-    /// Consume a world import function name, which can be either:
-    /// - A simple identifier: `write_via_stream`
-    /// - A qualified path: `Fields::new`
-    fn consume_world_import_name(&mut self) -> ParseResult<String> {
-        let name = self.consume_ident()?;
-        if self.check(&TokenKind::ColonColon) {
-            self.advance();
-            let method = self.consume_ident()?;
-            Ok(format!("{name}::{method}"))
-        } else {
-            Ok(name)
-        }
-    }
-
-    /// Parse a world export declaration
+    /// Parse a world export declaration.
     /// ```wado
-    /// export async fn run() -> Result<(), ()>;
+    /// export Run;                                 // interface export
+    /// export async fn run() -> Result<(), ()>;    // freestanding function export
     /// export fn get_version() -> string;
     /// ```
     fn parse_world_export(&mut self) -> ParseResult<WorldExport> {
         let start_span = self.peek().span;
         self.expect(&TokenKind::Export)?;
 
-        // Check for async keyword
+        // Distinguish interface export (`export Foo;`) from function export
+        // (`export [async] fn ...;`). `async` and `fn` start function form;
+        // a plain identifier starts interface form.
+        if !self.check(&TokenKind::Async) && !self.check(&TokenKind::Fn) {
+            let interface_name = self.consume_ident()?;
+            let close_span = self.peek().span;
+            self.expect(&TokenKind::Semicolon)?;
+            return Ok(WorldExport::Interface(WorldExportInterface {
+                interface_name,
+                span: start_span.merge(&close_span),
+            }));
+        }
+
         let is_async = if self.check(&TokenKind::Async) {
             self.advance();
             true
@@ -4766,15 +4758,16 @@ impl Parser {
             None
         };
 
+        let close_span = self.peek().span;
         self.expect(&TokenKind::Semicolon)?;
 
-        Ok(WorldExport {
+        Ok(WorldExport::Function(WorldExportFn {
             name,
             is_async,
             params,
             return_type,
-            span: start_span,
-        })
+            span: start_span.merge(&close_span),
+        }))
     }
 
     /// Parse structured template token parts into AST template parts.
@@ -5244,9 +5237,7 @@ mod tests {
     fn test_world_decl() {
         let source = r"
             world CliCommand {
-                import Stdout {
-                    write_via_stream,
-                }
+                import Stdout;
 
                 export async fn run() -> Result<(), ()>;
             }
@@ -5263,10 +5254,11 @@ mod tests {
             // Check import
             let import = &world.imports[0];
             assert_eq!(import.interface_name, "Stdout");
-            assert_eq!(import.functions, vec!["write_via_stream"]);
 
             // Check export
-            let export = &world.exports[0];
+            let WorldExport::Function(export) = &world.exports[0] else {
+                panic!("expected function export");
+            };
             assert_eq!(export.name, "run");
             assert!(export.is_async);
             assert!(export.params.is_empty());
@@ -5277,21 +5269,35 @@ mod tests {
     }
 
     #[test]
+    fn test_world_interface_export() {
+        let source = r"
+            world Service {
+                import Stdout;
+
+                export Handler;
+            }
+        ";
+
+        let module = parse(source).unwrap();
+        if let Item::World(world) = &module.items[0] {
+            assert_eq!(world.name, "Service");
+            assert_eq!(world.exports.len(), 1);
+            let WorldExport::Interface(iface) = &world.exports[0] else {
+                panic!("expected interface export");
+            };
+            assert_eq!(iface.interface_name, "Handler");
+        } else {
+            panic!("expected world declaration");
+        }
+    }
+
+    #[test]
     fn test_world_multiple_imports_exports() {
         let source = r"
             world TestWorld {
-                import Stdout {
-                    write_via_stream,
-                }
-
-                import Stderr {
-                    write_via_stream,
-                }
-
-                import Environment {
-                    get_arguments,
-                    get_environment,
-                }
+                import Stdout;
+                import Stderr;
+                import Environment;
 
                 export async fn run() -> Result<(), ()>;
                 export fn get_version() -> string;
@@ -5305,17 +5311,11 @@ mod tests {
             assert_eq!(world.imports.len(), 3);
             assert_eq!(world.exports.len(), 2);
 
-            // Check Environment import has multiple functions
-            let env_import = &world.imports[2];
-            assert_eq!(env_import.interface_name, "Environment");
-            assert_eq!(env_import.functions.len(), 2);
-            assert_eq!(
-                env_import.functions,
-                vec!["get_arguments", "get_environment"]
-            );
+            assert_eq!(world.imports[2].interface_name, "Environment");
 
-            // Check sync export
-            let sync_export = &world.exports[1];
+            let WorldExport::Function(sync_export) = &world.exports[1] else {
+                panic!("expected function export");
+            };
             assert_eq!(sync_export.name, "get_version");
             assert!(!sync_export.is_async);
         } else {
@@ -5397,7 +5397,9 @@ mod tests {
 
         if let Item::World(world) = &module.items[0] {
             assert_eq!(world.exports.len(), 1);
-            let export = &world.exports[0];
+            let WorldExport::Function(export) = &world.exports[0] else {
+                panic!("expected function export");
+            };
             assert_eq!(export.name, "process");
             assert!(!export.is_async);
             assert_eq!(export.params.len(), 2);

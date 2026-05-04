@@ -4,7 +4,8 @@ use std::fmt::Write;
 
 use crate::ir::{
     WadoEnum, WadoFlags, WadoFunction, WadoInterface, WadoModule, WadoParam, WadoResource,
-    WadoStruct, WadoType, WadoTypeDef, WadoVariant, WadoWorld,
+    WadoStruct, WadoType, WadoTypeDef, WadoVariant, WadoWorld, WadoWorldExport, WadoWorldExportFn,
+    WadoWorldExportInterface, WadoWorldImport,
 };
 
 pub struct WadoCodeGenerator {
@@ -66,6 +67,9 @@ impl WadoCodeGenerator {
             parts.push(format!("sources = [{}]", quoted.join(", ")));
         }
         self.writeln(&format!("#![generated({})]", parts.join(", ")));
+        if let Some(identity) = &module.stdlib_identity {
+            self.writeln(&format!("#![stdlib(\"{identity}\")]"));
+        }
         self.writeln("");
 
         // Cross-interface use imports
@@ -275,34 +279,49 @@ impl WadoCodeGenerator {
         self.indent += 1;
 
         for import in &world.imports {
-            self.writeln(&format!("import {} {{", import.interface_name));
-            self.indent += 1;
-            for func in &import.functions {
-                self.writeln(&format!("{func},"));
-            }
-            self.indent -= 1;
-            self.writeln("}");
+            self.write_world_import(import);
+        }
+
+        if !world.imports.is_empty() && !world.exports.is_empty() {
             self.writeln("");
         }
 
         for export in &world.exports {
-            // World exports keep async keyword as it's part of the ABI specification
-            let async_kw = if export.is_async { "async " } else { "" };
-            let params = Self::format_params(&export.params);
-            let return_type = export
-                .return_type
-                .as_ref()
-                .map(|ty| format!(" -> {}", Self::format_type(ty)))
-                .unwrap_or_default();
-
-            self.writeln(&format!(
-                "export {}fn {}({}){};",
-                async_kw, export.name, params, return_type
-            ));
+            self.write_world_export(export);
         }
 
         self.indent -= 1;
         self.writeln("}");
+    }
+
+    fn write_world_import(&mut self, import: &WadoWorldImport) {
+        self.writeln(&format!("import {};", import.interface_name));
+    }
+
+    fn write_world_export(&mut self, export: &WadoWorldExport) {
+        match export {
+            WadoWorldExport::Interface(iface) => self.write_world_export_interface(iface),
+            WadoWorldExport::Function(func) => self.write_world_export_fn(func),
+        }
+    }
+
+    fn write_world_export_interface(&mut self, iface: &WadoWorldExportInterface) {
+        self.writeln(&format!("export {};", iface.interface_name));
+    }
+
+    fn write_world_export_fn(&mut self, func: &WadoWorldExportFn) {
+        // World function exports keep `async` because it is part of the ABI.
+        let async_kw = if func.is_async { "async " } else { "" };
+        let params = Self::format_params(&func.params);
+        let return_type = func
+            .return_type
+            .as_ref()
+            .map(|ty| format!(" -> {}", Self::format_type(ty)))
+            .unwrap_or_default();
+        self.writeln(&format!(
+            "export {}fn {}({}){};",
+            async_kw, func.name, params, return_type
+        ));
     }
 
     fn format_params(params: &[WadoParam]) -> String {

@@ -8,7 +8,7 @@
 
 use crate::hashmap::IndexMap;
 
-use crate::ast::{Type, WorldDecl, WorldExport, WorldImport};
+use crate::ast::{Type, WorldDecl, WorldExport, WorldExportFn, WorldImport};
 
 /// Well-known world name for the test world.
 ///
@@ -18,10 +18,16 @@ use crate::ast::{Type, WorldDecl, WorldExport, WorldImport};
 /// dynamically from the entry module's `TirTest` declarations).
 pub const TEST_WORLD: &str = "test";
 
-/// Information about a world export function
+/// Information about a world export function.
+///
+/// World exports take two AST shapes (`export Foo;` interface form and
+/// `export fn name(...);` function form). Both are normalized into this
+/// flat struct: an `export Foo;` is expanded by the registry into one
+/// `WorldExportInfo` per interface method, with [`from_interface_fq`]
+/// populated. Bare function exports leave `from_interface_fq` as `None`.
 #[derive(Debug, Clone)]
 pub struct WorldExportInfo {
-    /// Function name (e.g., "run")
+    /// Function name (e.g., `"run"`, `"handle"`)
     pub name: String,
     /// Whether this is an async function
     pub is_async: bool,
@@ -29,11 +35,18 @@ pub struct WorldExportInfo {
     pub params: Vec<(String, Type)>,
     /// Return type (if any)
     pub return_type: Option<Type>,
+    /// CM FQ of the parent interface when this export was synthesized from
+    /// an `export Foo;` interface reference (e.g.,
+    /// `"wasi:http/handler@0.3.0-rc-2026-03-15"`). `None` for direct
+    /// `export fn ...` declarations.
+    pub from_interface_fq: Option<String>,
 }
 
 impl WorldExportInfo {
-    /// Create from a parsed `WorldExport`
-    pub fn from_ast(export: &WorldExport) -> Self {
+    /// Build a `WorldExportInfo` from a function-form AST export. Interface
+    /// exports are not handled here; they are expanded at registration time
+    /// using interface signatures provided to [`WorldRegistry::register`].
+    fn from_function_ast(export: &WorldExportFn) -> Self {
         let params = export
             .params
             .iter()
@@ -45,6 +58,7 @@ impl WorldExportInfo {
             is_async: export.is_async,
             params,
             return_type: export.return_type.clone(),
+            from_interface_fq: None,
         }
     }
 
@@ -67,21 +81,38 @@ impl WorldExportInfo {
     }
 }
 
-/// Information about a world's imported interface (a single `import Interface { ... }`
-/// block in a Wado world declaration).
+/// Resolved view of an interface's exported methods, supplied by the caller
+/// when registering a world. Contains everything `WorldRegistry` needs to
+/// expand `export Foo;` into per-method `WorldExportInfo` entries.
+#[derive(Debug, Clone)]
+pub struct InterfaceExportLookup {
+    pub cm_interface_fq: String,
+    pub methods: Vec<InterfaceExportMethod>,
+}
+
+#[derive(Debug, Clone)]
+pub struct InterfaceExportMethod {
+    pub name: String,
+    pub is_async: bool,
+    pub params: Vec<(String, Type)>,
+    pub return_type: Option<Type>,
+}
+
+/// Information about a world's imported interface
+/// (a single `import Foo;` line in a Wado world declaration).
 ///
-/// Mirrors the [`crate::ast::WorldImport`] AST node but lives outside the AST
-/// graph so codegen can ask "does this world import `KilnHost`?" without
-/// re-parsing the world declaration. The `interface_name` is the locally-bound
-/// name (the one written in `import Foo { ... }`); resolving it to a CM
-/// interface FQ requires the [`crate::component_model::WasiRegistry`] and is
-/// done lazily by the consumer.
+/// World imports are bare interface references (WIT-faithful). The
+/// `interface_name` is the locally-bound name; resolving it to a CM interface
+/// FQ goes through the referenced `pub interface Foo` declaration's
+/// `#[cm("...")]` attribute and is captured here as `cm_interface_fq` when
+/// known.
 #[derive(Debug, Clone)]
 pub struct WorldImportInfo {
-    /// Imported interface name (e.g., `"Stdout"`, `"Types"`, `"KilnHost"`).
+    /// Imported interface name (e.g., `"Stdout"`, `"KilnHost"`).
     pub interface_name: String,
-    /// Functions / methods picked from the interface.
-    pub functions: Vec<String>,
+    /// CM FQ name resolved from the referenced interface declaration, when
+    /// known. `None` while the interface has not been registered.
+    pub cm_interface_fq: Option<String>,
 }
 
 impl WorldImportInfo {
@@ -89,7 +120,7 @@ impl WorldImportInfo {
     pub fn from_ast(import: &WorldImport) -> Self {
         Self {
             interface_name: import.interface_name.clone(),
-            functions: import.functions.clone(),
+            cm_interface_fq: None,
         }
     }
 }
@@ -230,12 +261,27 @@ impl WorldRegistry {
     /// The world is keyed by its fully-qualified name from the `#[cm("...")]` attribute.
     /// If no attribute is present, the `PascalCase` name is used as fallback.
     ///
+    /// `lookup_interface_export` resolves an `export Foo;` interface reference
+    /// to the interface's CM FQ and methods. Interface exports for which the
+    /// callback returns `None` are silently skipped (the world will be
+    /// registered without that export); this happens when the referenced
+    /// interface declaration is not yet known.
+    ///
+    /// `lookup_interface_import` is the analogous resolver for `import Foo;`
+    /// and only needs to surface the CM FQ (the methods are tree-shaken from
+    /// usage). Returning `None` leaves `cm_interface_fq` unfilled.
+    ///
     /// If another world is already registered under the same `fq_name`, the
     /// first registrant is kept and this registration is skipped (with a
     /// warning logged to stderr). Two distinct worlds sharing a fully-qualified
     /// name is a bug in the stdlib or user input — silently overwriting would
     /// make the earlier world invisible to the code generator.
-    pub fn register(&mut self, world: &WorldDecl) {
+    pub fn register(
+        &mut self,
+        world: &WorldDecl,
+        lookup_interface_export: impl Fn(&str) -> Option<InterfaceExportLookup>,
+        lookup_interface_import: impl Fn(&str) -> Option<String>,
+    ) {
         let fq_name = fq_name_from_attrs(&world.attrs).unwrap_or_else(|| world.name.clone());
 
         if self.worlds.contains_key(&fq_name) {
@@ -247,15 +293,50 @@ impl WorldRegistry {
             return;
         }
 
-        let exports = world
-            .exports
-            .iter()
-            .map(WorldExportInfo::from_ast)
-            .collect();
-        let imports = world
+        let mut exports: Vec<WorldExportInfo> = Vec::new();
+        for export in &world.exports {
+            match export {
+                WorldExport::Function(func) => {
+                    exports.push(WorldExportInfo::from_function_ast(func));
+                }
+                WorldExport::Interface(iface) => {
+                    let Some(lookup) = lookup_interface_export(&iface.interface_name) else {
+                        // The two-pass stdlib bootstrap registers every
+                        // `pub interface Foo` before any world, so a missing
+                        // lookup at this point is an actual problem
+                        // (mismatched name, missing `#[cm(...)]`, an
+                        // out-of-tree world that names an undeclared
+                        // interface). Warn so the failure is diagnosable;
+                        // the world is still registered with the rest of
+                        // its exports rather than aborting.
+                        eprintln!(
+                            "WorldRegistry: interface export `{}` in world `{fq_name}` \
+                             references an unknown interface; skipping. \
+                             Check for a missing `pub interface {}` or `#[cm(\"...\")]`.",
+                            iface.interface_name, iface.interface_name,
+                        );
+                        continue;
+                    };
+                    for method in lookup.methods {
+                        exports.push(WorldExportInfo {
+                            name: method.name,
+                            is_async: method.is_async,
+                            params: method.params,
+                            return_type: method.return_type,
+                            from_interface_fq: Some(lookup.cm_interface_fq.clone()),
+                        });
+                    }
+                }
+            }
+        }
+
+        let imports: Vec<WorldImportInfo> = world
             .imports
             .iter()
-            .map(WorldImportInfo::from_ast)
+            .map(|imp| WorldImportInfo {
+                interface_name: imp.interface_name.clone(),
+                cm_interface_fq: lookup_interface_import(&imp.interface_name),
+            })
             .collect();
 
         let info = WorldInfo {
@@ -320,7 +401,7 @@ mod tests {
                 span: make_span(),
             }],
             imports: vec![],
-            exports: vec![WorldExport {
+            exports: vec![WorldExport::Function(crate::ast::WorldExportFn {
                 name: "run".to_string(),
                 is_async: true,
                 params: vec![],
@@ -331,11 +412,11 @@ mod tests {
                     span: make_span(),
                 })),
                 span: make_span(),
-            }],
+            })],
             span: make_span(),
         };
 
-        registry.register(&world);
+        registry.register(&world, |_| None, |_| None);
 
         assert!(registry.has_world("wasi:cli/command"));
         assert!(!registry.has_world("Command"));
@@ -350,41 +431,33 @@ mod tests {
         assert!(run_export.is_async);
         assert!(run_export.params.is_empty());
         assert!(run_export.return_type.is_some());
+        assert!(run_export.from_interface_fq.is_none());
     }
 
     #[test]
     fn test_parse_cli_wado() {
-        use crate::ast::Item;
-        use crate::lexer::Lexer;
-        use crate::parser::Parser;
-        use crate::stdlib::WASI_CLI_WORLDS;
+        // Use the full stdlib bootstrap so that the `Run` interface is known
+        // when registering the `wasi:cli/command` world. Without it,
+        // `export Run;` would expand to zero methods (lookup callback returns
+        // `None`).
+        let (_registry, world_registry) = crate::component_model::WasiRegistry::build_from_stdlib();
 
-        // Parse cli/worlds.wado (worlds moved to per-interface sub-files)
-        let mut lexer = Lexer::new(WASI_CLI_WORLDS);
-        let tokens = lexer.tokenize().expect("lexer error");
-        let mut parser = Parser::new(tokens);
-        let module = parser.parse().expect("parser error");
-
-        // Build registry
-        let mut registry = WorldRegistry::new();
-        for item in &module.items {
-            if let Item::World(world) = item {
-                registry.register(world);
-            }
-        }
-
-        // Verify Command world is registered by fq name
         assert!(
-            registry.has_world("wasi:cli/command"),
+            world_registry.has_world("wasi:cli/command"),
             "wasi:cli/command world not found"
         );
 
-        // Verify run export
-        let run_export = registry
+        // `export Run;` expands to the `run` method.
+        let run_export = world_registry
             .get_export("wasi:cli/command", "run")
             .expect("run export not found");
         assert!(run_export.is_async, "run should be async");
         assert!(run_export.params.is_empty(), "run should have no params");
+        assert_eq!(
+            run_export.from_interface_fq.as_deref(),
+            Some("wasi:cli/run@0.3.0-rc-2026-03-15"),
+            "run should be tagged with its parent interface FQ"
+        );
     }
 
     #[test]
@@ -402,6 +475,10 @@ mod tests {
             generate.is_async,
             "generate is declared `async func` — the CM lift uses task.return \
              and the wasmtime runtime drives the call through Accessor"
+        );
+        assert!(
+            generate.from_interface_fq.is_none(),
+            "kiln generate is a freestanding world export, not from an interface"
         );
     }
 
