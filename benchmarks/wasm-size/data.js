@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777916281418,
+  "lastUpdate": 1777931811356,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -19153,6 +19153,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/99f9663329cc38fc8cf2a56966b2b25c95299d86"
         },
         "date": 1777916281077,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1775,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8776,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18520,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 503105,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6b6374c9d41e3393c77208b1156fa4addcecd8dc",
+          "message": "Merge pull request #994 from wado-lang/claude/refactor-closure-rs-7TNJh\n\nrefactor(lower/closure): port walks to TirMutVisitor and trim duplication",
+          "timestamp": "2026-05-05T06:51:05+09:00",
+          "tree_id": "925473436654025e2242827411f2c499bf051e41",
+          "url": "https://github.com/wado-lang/wado/commit/6b6374c9d41e3393c77208b1156fa4addcecd8dc"
+        },
+        "date": 1777931811211,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
