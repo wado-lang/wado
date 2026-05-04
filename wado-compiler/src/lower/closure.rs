@@ -14,39 +14,112 @@ use crate::tir::{
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::token::Span;
 
-/// Information about a closure collected during the first pass
+/// `1` for instance methods (those whose first parameter is named `self`),
+/// `0` otherwise. Used to convert a 0-based call-site argument index into
+/// the corresponding 0-based parameter / local index inside the callee.
+fn self_param_offset(callee: &TirFunction) -> u32 {
+    u32::from(callee.params.first().is_some_and(|p| p.name == "self"))
+}
+
+/// Build the `__capture_<i>` struct-field list for a functor literal from
+/// the closure's captures. Each field reads the captured value from the
+/// outer scope at `cap.outer_index`.
+fn build_capture_fields(captures: &[TirCapture], span: Span) -> Vec<TirStructField> {
+    captures
+        .iter()
+        .enumerate()
+        .map(|(i, cap)| TirStructField {
+            name: format!("__capture_{i}"),
+            value: TirExpr::new(
+                TirExprKind::Local {
+                    index: cap.outer_index,
+                    name: cap.name.clone(),
+                },
+                cap.type_id,
+                span,
+            ),
+            field_index: i as u32,
+        })
+        .collect()
+}
+
+/// Build the `$__Closure_N` mangled-name suffix appended to a callee that
+/// has been specialised over the listed functor struct types.
+fn build_functor_suffix(functor_types: &[(u32, TypeId)], type_table: &TypeTable) -> String {
+    functor_types
+        .iter()
+        .fold(String::new(), |mut acc, (_, tid)| {
+            let _ = write!(acc, "${}", type_table.type_name(*tid));
+            acc
+        })
+}
+
+/// Pad raw call args out to a `CallArg` list whose `is_mut` flags match
+/// the `__call` method's parameter list (skipping `self`). Extra args
+/// beyond the parameter list default to `is_mut = false`.
+fn make_call_method_args(args: Vec<TirExpr>, call_method: &TirFunction) -> Vec<CallArg> {
+    let params_is_mut: Vec<bool> = call_method
+        .params
+        .iter()
+        .skip(1)
+        .map(|p| p.is_mut)
+        .collect();
+    args.into_iter()
+        .zip(params_is_mut.into_iter().chain(std::iter::repeat(false)))
+        .map(|(e, is_mut)| CallArg::new(e, is_mut))
+        .collect()
+}
+
+/// Build a `LocalMethodName` for a specialised method by appending the
+/// functor suffix to the original method's full name. The `method_type_args`
+/// are emptied because the type args have already been baked into the
+/// method name.
+fn build_specialized_method_info(info: &LocalMethodName, functor_suffix: &str) -> LocalMethodName {
+    LocalMethodName {
+        struct_name: info.struct_name.clone(),
+        base_struct_name: info.base_struct_name.clone(),
+        trait_name: info.trait_name.clone(),
+        base_trait_name: info.base_trait_name.clone(),
+        trait_type_args: info.trait_type_args.clone(),
+        method_name: format!("{}{}", info.full_method_name(), functor_suffix),
+        method_type_args: Vec::new(),
+        is_type_param_receiver: info.is_type_param_receiver,
+        is_ref_impl: false,
+        cm_name: info.cm_name.clone(),
+    }
+}
+
+/// Snapshot taken in Phase 1 for the functor-generation pass. `body` is a
+/// deep clone so the original AST can be mutated in place by later passes
+/// without disturbing the synthesised `__call` body.
 #[derive(Debug, Clone)]
 struct CollectedClosure {
-    /// Unique closure ID (assigned in order of collection)
     id: u32,
-    /// Parameters of the closure
     params: Vec<(String, TypeId)>,
-    /// The closure body expression (cloned for __call method generation)
     body: TirExpr,
-    /// Captures from the closure
     captures: Vec<TirCapture>,
-    /// Return type of the closure
+    /// `body.type_id`, retained for closures whose `func_type_id` resolves
+    /// to a non-Function (a fallback path in `generate_functor_items`).
     return_type: TypeId,
-    /// Original function type (for compatibility)
+    /// The closure expression's own type — a `fn(...)` type that carries
+    /// the canonical return type even when the body is a Block expr.
     func_type_id: TypeId,
-    /// Span of the original closure
     span: Span,
 }
 
-// FunctorInfo moved to tir::ClosureFunctor
-
-/// Function signature info for converting `FuncRef` to Closure.
+/// Signature of a top-level function or impl method, used by Phase 0 to
+/// turn a bare `FuncRef` into a forwarding zero-capture closure.
 struct FuncSig {
     params: Vec<(String, TypeId)>,
     return_type: TypeId,
 }
 
-/// Key for fn-param specialization: (callee function name, parameter index -> functor type ID)
+/// Identifies a specialised callee: original name plus the functor struct
+/// type bound at each fn-type parameter. Used as both a dedup key
+/// (Phase 2.5) and a lookup key at the call site (Phase 3).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct FnParamSpecKey {
-    /// Name of the callee function
     callee_name: String,
-    /// Map from parameter index to functor struct type ID (for fn-type params with closure args)
     functor_types: Vec<(u32, TypeId)>,
 }
 
@@ -65,27 +138,25 @@ struct FnParamSpecKey {
 /// - A specialized version of the callee is generated with functor struct params
 /// - The call is updated to use the specialized function with `StructLiteral` args
 pub(super) struct ClosureLowerer {
-    /// Sequential ID assigned to each `Closure` node during the pre-pass.
-    /// Each Closure's `functor_id` is set once and read by all later passes;
-    /// no counter is re-walked in lockstep with the AST.
+    /// Counter for the Phase 1 walk. Each visited `Closure` has its
+    /// `functor_id` populated from this — that ID is the stable index
+    /// every later pass uses to look up its `ClosureFunctor`.
     next_closure_id: u32,
-    /// Module source for generated items
     module_source: ModuleSource,
-    /// Collected closures during first pass
     collected_closures: Vec<CollectedClosure>,
-    /// Generated functor information (populated after struct/method generation)
-    /// These will be stored in `module.closure_functors` for the optimizer
+    /// Indexed by `functor_id`. Moved into `module.closure_functors` at the
+    /// end of `lower_module` so the optimizer can inline `__call` bodies.
     functor_infos: Vec<ClosureFunctor>,
-    /// Map from local variable index to closure ID (for tracking closures stored in locals)
+    /// Per-function map (cleared between functions) recording which locals
+    /// hold which closure. Read by Phase 2 (safety analysis) and Phase 3
+    /// (IndirectCall→MethodCall + `update_local_types`).
     local_to_closure: IndexMap<u32, u32>,
-    /// Closure IDs that can be specialized (stored in locals, called directly).
-    /// Non-specializable closures use `ClosureToCanonical` for type-erased representation.
+    /// Closure IDs safe for direct specialisation (the closure is stored
+    /// in a local and only used by direct calls). Non-specialisable ones
+    /// route through `ClosureToCanonical` instead.
     specializable: IndexSet<u32>,
-    /// Generated structs to add to module
     generated_structs: Vec<TirStruct>,
-    /// Generated functions to add to module
     generated_functions: Vec<Rc<RefCell<TirFunction>>>,
-    /// Map from fn-param spec key to specialized function name
     fn_param_specializations: IndexMap<FnParamSpecKey, String>,
 }
 
@@ -185,15 +256,14 @@ impl ClosureLowerer {
             &mut module.type_table.borrow_mut(),
         );
 
-        // Phase 3: transform closures to struct literals and IndirectCall to MethodCall.
-        //
-        // We walk the generated `__call` methods alongside the original
-        // module functions: a nested closure's body lives in its parent
-        // closure's __call method (cloned in by `transform_closure_body`),
-        // and that copy must be lowered too. Each function uses a fresh
-        // `local_to_closure` map (keyed by per-function local indices).
-        // `transform_expr` deliberately does NOT recurse into Closure
-        // bodies — those are visited via the corresponding __call method.
+        // Phase 3: lower closure call sites. We walk the generated `__call`
+        // methods alongside the original module functions because a nested
+        // closure's body was cloned into its parent's `__call` and that
+        // copy still contains call sites that need lowering. Each function
+        // gets a fresh `local_to_closure` map (keyed by per-function local
+        // indices). `ClosureCallSiteLowerer` deliberately does NOT recurse
+        // into Closure bodies — those are visited via the corresponding
+        // `__call` method.
         let lowered_funcs: Vec<_> = func_refs
             .iter()
             .cloned()
@@ -204,7 +274,7 @@ impl ClosureLowerer {
             if let Some(body) = &mut func.body {
                 self.local_to_closure.clear();
                 let mut tt = module.type_table.borrow_mut();
-                Phase3Transformer {
+                ClosureCallSiteLowerer {
                     local_to_closure: &mut self.local_to_closure,
                     specializable: &self.specializable,
                     functor_infos: &self.functor_infos,
@@ -221,7 +291,7 @@ impl ClosureLowerer {
                 if let Some(body) = &mut method.body {
                     self.local_to_closure.clear();
                     let mut tt = module.type_table.borrow_mut();
-                    Phase3Transformer {
+                    ClosureCallSiteLowerer {
                         local_to_closure: &mut self.local_to_closure,
                         specializable: &self.specializable,
                         functor_infos: &self.functor_infos,
@@ -349,33 +419,27 @@ impl ClosureLowerer {
     }
 
     fn generate_functor_items(&mut self, type_table: &mut TypeTable) {
-        // The collect pass pushes nested closures before their parents (it
-        // recurses into the body before pushing the outer, so the cloned
-        // body carries the nested IDs). Sort by id so `functor_infos[id]`
-        // is the functor for the closure with that id — every later pass
-        // uses index-by-id lookups.
+        // Sort by id so `functor_infos[id]` is the functor with that id —
+        // every later pass uses index-by-id lookups.
         //
-        // Move out of `self.collected_closures` to avoid cloning the bodies:
-        // the loop body needs `&mut self` to push to `generated_structs` and
-        // `functor_infos`, but the borrow checker would otherwise see one
-        // long borrow over `collected_closures`. The list isn't read again
-        // after this pass, so we drop it at the end.
+        // Move out of `self.collected_closures` to dodge a long borrow:
+        // the loop body needs `&mut self` to push to `generated_structs`
+        // and `functor_infos`. The list isn't read after this pass.
         let mut collected_closures = std::mem::take(&mut self.collected_closures);
         collected_closures.sort_by_key(|c| c.id);
         for collected in &collected_closures {
-            // Extract the actual return type from the closure's function type
-            // This is more reliable than body.type_id for closures with block bodies
+            // `collected.body.type_id` is unreliable for block bodies
+            // (it's the block's type, not the closure's), so prefer the
+            // function type's return slot when available.
             let return_type = match type_table.get(collected.func_type_id) {
                 ResolvedType::Function { return_type, .. } => *return_type,
-                _ => collected.return_type, // Fallback to body type
+                _ => collected.return_type,
             };
 
-            // Generate struct name and type
             let struct_name = format!("__Closure_{}", collected.id);
             let struct_type_id =
                 type_table.make_struct(struct_name.clone(), self.module_source.clone());
 
-            // Generate struct definition with capture fields
             let fields: Vec<TirField> = collected
                 .captures
                 .iter()
@@ -393,7 +457,7 @@ impl ClosureLowerer {
                 })
                 .collect();
 
-            let tir_struct = TirStruct {
+            self.generated_structs.push(TirStruct {
                 name: struct_name.clone(),
                 module_source: self.module_source.clone(),
                 is_pub: false,
@@ -402,17 +466,15 @@ impl ClosureLowerer {
                 fields,
                 span: collected.span,
                 serde_rename_all: None,
-            };
-            self.generated_structs.push(tir_struct);
+            });
 
-            // Generate __call method
-            // Use a qualified name for the function to avoid collisions in the inliner's candidate map
-            let simple_method_name = "__call".to_string();
+            // Use a qualified name to avoid collisions in the inliner's
+            // candidate map. `LocalMethodName` stays unqualified so codegen
+            // re-mangles it consistently with other methods.
             let qualified_method_name = MethodName::format_local(&struct_name, None, "__call");
             let self_ref_type = type_table.make_ref(struct_type_id);
 
-            // Parameters: self + closure params
-            let mut params = Vec::new();
+            let mut params = Vec::with_capacity(1 + collected.params.len());
             params.push(TirParam {
                 name: "self".to_string(),
                 type_id: self_ref_type,
@@ -421,7 +483,6 @@ impl ClosureLowerer {
                 span: collected.span,
                 default_expr: None,
             });
-
             for (i, (name, type_id)) in collected.params.iter().enumerate() {
                 params.push(TirParam {
                     name: name.clone(),
@@ -433,8 +494,8 @@ impl ClosureLowerer {
                 });
             }
 
-            // Transform the body: Capture { index } -> FieldAccess { self, __capture_{index} }
-            // and shift every Local / Let / Binding index by 1 to make room for `self`.
+            // Rewrite Capture→FieldAccess and shift every Local / Let /
+            // Binding index by 1 to make room for the synthetic `self`.
             let mut transformed_body = collected.body.clone();
             ClosureBodyTransformer {
                 captures: &collected.captures,
@@ -443,42 +504,28 @@ impl ClosureLowerer {
             }
             .visit_expr(&mut transformed_body);
 
-            // Handle body wrapping based on body type
-            // For block bodies, extract statements directly to preserve Return handling during inlining
-            // For expression bodies, wrap in Return
+            // Block bodies: keep the inner statements as-is so that any
+            // Return inside survives. The inliner's `remap_stmt_with_label`
+            // turns Return into Break only at the statement level, so a
+            // Return wrapped inside a Block expression would be missed.
             let body_stmts = match &transformed_body.kind {
-                TirExprKind::Block(block) => {
-                    // Block body: use statements directly (they already contain Return statements)
-                    // This is important for inlining: the inliner's remap_stmt_with_label
-                    // converts Return to Break, but only at the statement level, not inside
-                    // Block expressions.
-                    block.stmts.clone()
-                }
-                _ => {
-                    if return_type == TypeTable::UNIT {
-                        // Unit return: just evaluate the expression for side effects
-                        vec![TirStmt::new(
-                            TirStmtKind::Expr(transformed_body),
-                            collected.span,
-                        )]
-                    } else {
-                        // Expression body that returns a value
-                        vec![TirStmt::new(
-                            TirStmtKind::Return {
-                                value: Some(transformed_body),
-                            },
-                            collected.span,
-                        )]
-                    }
-                }
+                TirExprKind::Block(block) => block.stmts.clone(),
+                _ if return_type == TypeTable::UNIT => vec![TirStmt::new(
+                    TirStmtKind::Expr(transformed_body),
+                    collected.span,
+                )],
+                _ => vec![TirStmt::new(
+                    TirStmtKind::Return {
+                        value: Some(transformed_body),
+                    },
+                    collected.span,
+                )],
             };
 
             let body_block = TirBlock::new(body_stmts, collected.span);
 
-            // Collect locals: self + params + internal locals from body.
-            // Parameters are locals 0 (self) through params.len(); the
-            // closure-functor's `__call` method receives the env struct as
-            // self, so the first slot is the synthesised self ref.
+            // Locals layout: 0=self, 1..=params.len()=closure params,
+            // then any further locals introduced by `Let`s in the body.
             let param_count = 1 + collected.params.len() as u32;
             let mut locals: Vec<TirLocal> = Vec::with_capacity(param_count as usize);
             locals.push(TirLocal {
@@ -494,23 +541,19 @@ impl ClosureLowerer {
                 });
             }
 
-            // Collect internal locals from the body (Let statements with index >= param_count)
             let mut body_locals: Vec<(u32, TypeId)> = Vec::new();
             LocalCollector {
                 locals: &mut body_locals,
             }
             .visit_block(&body_block);
 
-            // Extend `locals` with body locals, sorted by index. Body locals
-            // come from the closure body's `Let` statements; the source
-            // names are recovered later in `wir_build` via
-            // `TirFunction::locals[idx].name`, so here we only need stable
-            // synthetic placeholders.
+            // Body locals use synthetic placeholders here; `wir_build`
+            // recovers source names from `TirFunction::locals[idx].name`.
             body_locals.sort_by_key(|(idx, _)| *idx);
             for (idx, type_id) in &body_locals {
-                // Ensure we only add locals beyond parameter range
                 if *idx >= param_count {
-                    // Extend vector if needed to accommodate sparse indices
+                    // Pad sparse indices with placeholders so the slot the
+                    // body actually uses lands at the right index.
                     while locals.len() <= *idx as usize {
                         let placeholder_idx = locals.len() as u32;
                         locals.push(TirLocal::synth(placeholder_idx, TypeTable::UNKNOWN, false));
@@ -519,15 +562,11 @@ impl ClosureLowerer {
                 }
             }
 
-            // local_count is the total number of locals
             let local_count = locals.len() as u32;
 
-            // method_info tells codegen how to register this function with the proper mangled name
-            let method_info = LocalMethodName::new(
-                struct_name.clone(),        // __Closure_0
-                None,                       // no trait
-                simple_method_name.clone(), // __call (just the method name)
-            );
+            // `method_info` carries the unmangled (struct, trait, method)
+            // triple so codegen can produce the canonical mangled name.
+            let method_info = LocalMethodName::new(struct_name.clone(), None, "__call".to_string());
 
             let call_method = TirFunction {
                 module_source: self.module_source.clone(),
@@ -576,37 +615,21 @@ impl ClosureLowerer {
         }
     }
 
-    /// Generate specialized functions for calls with closure arguments to fn-type parameters.
-    ///
-    /// This implements WEP Phase 3: when a function takes `fn(A) -> B` and is called with
-    /// a closure, we generate a specialized version where:
-    /// 1. The fn-type parameter becomes the functor struct type
-    /// 2. `IndirectCall` on that parameter becomes `MethodCall` on __call
+    /// Phase 2.5: when a function takes a `fn(A) -> B` parameter and is
+    /// called with a closure literal, generate a specialised callee whose
+    /// fn-type parameters are the functor struct types and whose
+    /// `IndirectCall`s become direct `MethodCall`s on `__call`.
     fn generate_fn_param_specializations(
         &mut self,
         func_refs: &[Rc<RefCell<TirFunction>>],
         impls: &[TirImpl],
         type_table: &mut TypeTable,
     ) {
-        // Build a map from function name to function for quick lookup
         let mut func_by_name: IndexMap<String, Rc<RefCell<TirFunction>>> = IndexMap::default();
         for func_rc in func_refs {
             let func = func_rc.borrow();
             func_by_name.insert(func.name.clone(), Rc::clone(func_rc));
         }
-        for impl_block in impls {
-            for method in &impl_block.methods {
-                let name = method.name.clone();
-                // We can't get an Rc from a TirFunction reference directly
-                // For impl methods, we'll handle them separately
-                // For now, just process top-level functions
-                drop(name);
-            }
-        }
-
-        // Collect specialization requests by scanning all function bodies.
-        // Each Closure node already carries its `functor_id` from the
-        // collect pass, so we don't need a separate counter.
         let mut spec_requests: Vec<(FnParamSpecKey, Rc<RefCell<TirFunction>>)> = Vec::new();
 
         let mut collector = FnParamSpecCollector {
@@ -629,25 +652,24 @@ impl ClosureLowerer {
             }
         }
 
-        // Generate specialized functions for each unique key
         for (key, callee_rc) in spec_requests {
             if self.fn_param_specializations.contains_key(&key) {
-                continue; // Already generated
+                continue;
             }
 
-            // Skip specialization if any fn-param is stored in a struct field
-            // This would cause type mismatches since struct fields expect fn(...) not &__Closure_N
             let callee = callee_rc.borrow();
-            // Check if this is an instance method (has self parameter)
-            // Note: static methods have method_info but no self parameter
-            let has_self_param = callee.params.first().is_some_and(|p| p.name == "self");
-            let param_offset = u32::from(has_self_param);
+            // Static methods have `method_info` but no `self`, so we sniff
+            // the first parameter name instead of inspecting `method_info`.
+            let param_offset = self_param_offset(&callee);
             let fn_param_indices: Vec<u32> = key
                 .functor_types
                 .iter()
                 .map(|(arg_idx, _)| arg_idx + param_offset)
                 .collect();
 
+            // Bail when a fn-param flows into a struct field — the field
+            // type stays `fn(...)`, so we can't retype the param to
+            // `&__Closure_N`.
             if let Some(body) = &callee.body {
                 let mut check = StructFieldFnParamCheck {
                     fn_param_indices: &fn_param_indices,
@@ -655,8 +677,6 @@ impl ClosureLowerer {
                 };
                 check.visit_block(body);
                 if check.found {
-                    // Skip this specialization - the closure is stored in
-                    // a struct field, which expects fn(...) not &__Closure_N.
                     continue;
                 }
             }
@@ -676,53 +696,32 @@ impl ClosureLowerer {
     ) -> String {
         let callee = callee_rc.borrow();
 
-        // Build specialized name: callee$__Closure_0$__Closure_1...
-        let functor_suffix: String =
-            key.functor_types
-                .iter()
-                .fold(String::new(), |mut acc, (_, tid)| {
-                    let name = type_table.type_name(*tid);
-                    let _ = write!(acc, "${name}");
-                    acc
-                });
+        let functor_suffix = build_functor_suffix(&key.functor_types, type_table);
         let specialized_name = format!("{}{}", callee.name, functor_suffix);
 
-        // Build map from argument index to functor type
-        // Note: key.functor_types contains argument indices (0 = first arg after receiver for methods)
+        // `key.functor_types` keys are argument indices (0 = first arg
+        // after the receiver for methods); shift by `param_offset` to land
+        // on the corresponding parameter / local slot.
+        let param_offset = self_param_offset(&callee);
         let arg_to_functor: IndexMap<u32, TypeId> = key.functor_types.iter().copied().collect();
 
-        // Determine if this is an instance method (has self parameter)
-        // Note: static methods have method_info but no self parameter
-        let has_self_param = callee.params.first().is_some_and(|p| p.name == "self");
-        let param_offset = u32::from(has_self_param);
-
-        // Clone and modify params
-        // For methods: params[0] is self, so argument index i maps to params[i + 1]
         let mut new_params = callee.params.clone();
-        for (arg_idx, &functor_type) in &arg_to_functor {
-            let param_idx = (*arg_idx + param_offset) as usize;
-            if param_idx < new_params.len() {
-                new_params[param_idx].type_id = type_table.make_ref(functor_type);
-            }
-        }
-
-        // Clone and modify locals (same indexing as params)
         let mut new_locals = callee.locals.clone();
         for (arg_idx, &functor_type) in &arg_to_functor {
-            let local_idx = (*arg_idx + param_offset) as usize;
-            if local_idx < new_locals.len() {
-                new_locals[local_idx].type_id = type_table.make_ref(functor_type);
+            let slot = (*arg_idx + param_offset) as usize;
+            if slot < new_params.len() {
+                new_params[slot].type_id = type_table.make_ref(functor_type);
+            }
+            if slot < new_locals.len() {
+                new_locals[slot].type_id = type_table.make_ref(functor_type);
             }
         }
 
-        // Build a map from param/local index to functor type for body transformation
-        // Inside the function body, locals are referenced by param index
         let local_to_functor: IndexMap<u32, TypeId> = arg_to_functor
             .iter()
             .map(|(arg_idx, functor_type)| (arg_idx + param_offset, *functor_type))
             .collect();
 
-        // Clone body and transform IndirectCall to MethodCall for fn-param locals.
         let new_body = callee.body.as_ref().map(|body| {
             let mut cloned = body.clone();
             SpecializerTransformer {
@@ -735,32 +734,10 @@ impl ClosureLowerer {
             cloned
         });
 
-        // Build specialized method name: method<TypeArgs>$__Closure_0
-        // The functor suffix goes AFTER type args, so we use full_method_name()
-        // and then clear method_type_args to avoid duplication
-        let specialized_method_name = if let Some(ref info) = callee.method_info {
-            format!("{}{}", info.full_method_name(), functor_suffix)
-        } else {
-            // Should not happen for method calls
-            format!("{}{}", callee.name, functor_suffix)
-        };
-
-        // Update method_info with the specialized method name
-        // Note: method_type_args is empty because they're now part of method_name
-        let specialized_method_info = callee.method_info.as_ref().map(|info| {
-            LocalMethodName {
-                struct_name: info.struct_name.clone(),
-                base_struct_name: info.base_struct_name.clone(),
-                trait_name: info.trait_name.clone(),
-                base_trait_name: info.base_trait_name.clone(),
-                trait_type_args: info.trait_type_args.clone(),
-                method_name: specialized_method_name.clone(),
-                method_type_args: Vec::new(), // Type args are now in method_name
-                is_type_param_receiver: info.is_type_param_receiver,
-                is_ref_impl: false,
-                cm_name: info.cm_name.clone(),
-            }
-        });
+        let specialized_method_info = callee
+            .method_info
+            .as_ref()
+            .map(|info| build_specialized_method_info(info, &functor_suffix));
 
         let specialized_func = TirFunction {
             module_source: self.module_source.clone(),
@@ -837,28 +814,11 @@ impl TirMutVisitor for RemainingClosuresRewriter<'_> {
 
         let target_fn_type = expr.type_id;
         let span = expr.span;
-        let fields: Vec<TirStructField> = captures
-            .iter()
-            .enumerate()
-            .map(|(i, cap)| TirStructField {
-                name: format!("__capture_{i}"),
-                value: TirExpr::new(
-                    TirExprKind::Local {
-                        index: cap.outer_index,
-                        name: cap.name.clone(),
-                    },
-                    cap.type_id,
-                    span,
-                ),
-                field_index: i as u32,
-            })
-            .collect();
-
         let struct_literal = TirExpr::new(
             TirExprKind::StructLiteral {
                 struct_type: functor.struct_type_id,
                 struct_name: functor.struct_name.clone(),
-                fields,
+                fields: build_capture_fields(&captures, span),
             },
             functor.ref_type_id,
             span,
@@ -1169,17 +1129,16 @@ impl TirRefVisitor for ClosureSafetyAnalyzer<'_> {
     }
 }
 
-/// Phase 3 transformer: rewrites `Closure` literals into struct literals
-/// (for specializable closures), `IndirectCall` on a closure-bearing local
-/// into a direct `MethodCall` on `__call`, and `Call`/`MethodCall` whose
-/// closure args have a matching specialised callee into a call to the
-/// specialised function.
+/// Phase 3: rewrite every closure call site:
+/// - `Closure` literal (specialisable) → struct literal of `__Closure_N`
+/// - `IndirectCall` on a closure-bearing local → `MethodCall` on `__call`
+/// - `Call` / `MethodCall` whose closure args have a matching specialised
+///   callee → redirected to that callee
 ///
-/// Closure bodies live in their own local-index namespace and are visited
-/// independently via the generated `__call` methods (already in
-/// `lowered_funcs` at the call site), so this pass does NOT recurse into
-/// `Closure { body, .. }`.
-struct Phase3Transformer<'a> {
+/// Closure bodies live in their own local-index namespace, so this pass
+/// does NOT recurse into `Closure { body, .. }` — those bodies live in the
+/// generated `__call` methods, which `lower_module` walks separately.
+struct ClosureCallSiteLowerer<'a> {
     local_to_closure: &'a mut IndexMap<u32, u32>,
     specializable: &'a IndexSet<u32>,
     functor_infos: &'a [ClosureFunctor],
@@ -1188,8 +1147,8 @@ struct Phase3Transformer<'a> {
     type_table: &'a mut TypeTable,
 }
 
-impl Phase3Transformer<'_> {
-    fn try_transform_fn_param_call(&mut self, func: &mut FunctionRef, args: &mut [CallArg]) {
+impl ClosureCallSiteLowerer<'_> {
+    fn try_redirect_to_specialized_callee(&mut self, func: &mut FunctionRef, args: &mut [CallArg]) {
         // Closure args with `functor_id` that map to a known functor.
         let mut functor_types = Vec::new();
         for (i, arg) in args.iter().enumerate() {
@@ -1224,54 +1183,20 @@ impl Phase3Transformer<'_> {
             } = &arg.expr.kind
                 && let Some(functor) = self.functor_infos.get(*closure_id as usize)
             {
-                let fields: Vec<TirStructField> = captures
-                    .iter()
-                    .enumerate()
-                    .map(|(i, cap)| TirStructField {
-                        name: format!("__capture_{i}"),
-                        value: TirExpr::new(
-                            TirExprKind::Local {
-                                index: cap.outer_index,
-                                name: cap.name.clone(),
-                            },
-                            cap.type_id,
-                            arg.expr.span,
-                        ),
-                        field_index: i as u32,
-                    })
-                    .collect();
                 arg.expr.kind = TirExprKind::StructLiteral {
                     struct_type: functor.struct_type_id,
                     struct_name: functor.struct_name.clone(),
-                    fields,
+                    fields: build_capture_fields(captures, arg.expr.span),
                 };
                 arg.expr.type_id = functor.ref_type_id;
             }
         }
 
-        // Functor suffix lives AFTER the type args, so use `full_method_name()`
-        // and clear `method_type_args` to avoid duplication.
-        let functor_suffix: String =
-            functor_types
-                .iter()
-                .fold(String::new(), |mut acc, (_, tid)| {
-                    let name = self.type_table.type_name(*tid);
-                    let _ = write!(acc, "${name}");
-                    acc
-                });
-
-        let specialized_method_info = func.method_info.clone().map(|info| LocalMethodName {
-            struct_name: info.struct_name.clone(),
-            base_struct_name: info.base_struct_name.clone(),
-            trait_name: info.trait_name.clone(),
-            base_trait_name: info.base_trait_name.clone(),
-            trait_type_args: info.trait_type_args.clone(),
-            method_name: format!("{}{}", info.full_method_name(), functor_suffix),
-            method_type_args: Vec::new(),
-            is_type_param_receiver: info.is_type_param_receiver,
-            is_ref_impl: false,
-            cm_name: info.cm_name,
-        });
+        let functor_suffix = build_functor_suffix(&functor_types, self.type_table);
+        let specialized_method_info = func
+            .method_info
+            .as_ref()
+            .map(|info| build_specialized_method_info(info, &functor_suffix));
 
         // Preserve monomorph_info so DCE can trace the call graph.
         let orig_monomorph_info = func.monomorph_info.clone();
@@ -1284,7 +1209,7 @@ impl Phase3Transformer<'_> {
     }
 }
 
-impl TirMutVisitor for Phase3Transformer<'_> {
+impl TirMutVisitor for ClosureCallSiteLowerer<'_> {
     fn visit_stmt(&mut self, stmt: &mut TirStmt) {
         if let TirStmtKind::Let {
             local_index,
@@ -1341,26 +1266,10 @@ impl TirMutVisitor for Phase3Transformer<'_> {
                 if self.specializable.contains(&closure_id)
                     && let Some(functor) = self.functor_infos.get(closure_id as usize)
                 {
-                    let fields: Vec<TirStructField> = captures
-                        .iter()
-                        .enumerate()
-                        .map(|(i, cap)| TirStructField {
-                            name: format!("__capture_{i}"),
-                            value: TirExpr::new(
-                                TirExprKind::Local {
-                                    index: cap.outer_index,
-                                    name: cap.name.clone(),
-                                },
-                                cap.type_id,
-                                expr.span,
-                            ),
-                            field_index: i as u32,
-                        })
-                        .collect();
                     expr.kind = TirExprKind::StructLiteral {
                         struct_type: functor.struct_type_id,
                         struct_name: functor.struct_name.clone(),
-                        fields,
+                        fields: build_capture_fields(captures, expr.span),
                     };
                     expr.type_id = functor.ref_type_id;
                 }
@@ -1385,19 +1294,8 @@ impl TirMutVisitor for Phase3Transformer<'_> {
 
                     let return_type = functor.call_method.borrow().return_type;
                     let args_owned: Vec<TirExpr> = std::mem::take(args);
-                    let params_is_mut: Vec<bool> = functor
-                        .call_method
-                        .borrow()
-                        .params
-                        .iter()
-                        .skip(1)
-                        .map(|p| p.is_mut)
-                        .collect();
-                    let call_args: Vec<CallArg> = args_owned
-                        .into_iter()
-                        .zip(params_is_mut.into_iter().chain(std::iter::repeat(false)))
-                        .map(|(e, is_mut)| CallArg::new(e, is_mut))
-                        .collect();
+                    let call_args =
+                        make_call_method_args(args_owned, &functor.call_method.borrow());
                     expr.kind = TirExprKind::method_call(
                         Box::new(callee_owned),
                         FunctionRef::from_resolved(
@@ -1414,7 +1312,7 @@ impl TirMutVisitor for Phase3Transformer<'_> {
                 for arg in &mut *args {
                     self.visit_expr(&mut arg.expr);
                 }
-                self.try_transform_fn_param_call(func, args);
+                self.try_redirect_to_specialized_callee(func, args);
             }
             TirExprKind::MethodCall {
                 receiver,
@@ -1426,7 +1324,7 @@ impl TirMutVisitor for Phase3Transformer<'_> {
                 for arg in &mut *args {
                     self.visit_expr(&mut arg.expr);
                 }
-                self.try_transform_fn_param_call(func, args);
+                self.try_redirect_to_specialized_callee(func, args);
             }
             _ => self.walk_expr(expr),
         }
@@ -1689,19 +1587,8 @@ impl TirMutVisitor for SpecializerTransformer<'_> {
                         "__call".to_string(),
                     );
 
-                    let params_is_mut: Vec<bool> = functor
-                        .call_method
-                        .borrow()
-                        .params
-                        .iter()
-                        .skip(1)
-                        .map(|p| p.is_mut)
-                        .collect();
-                    let call_args: Vec<CallArg> = args_owned
-                        .into_iter()
-                        .zip(params_is_mut.into_iter().chain(std::iter::repeat(false)))
-                        .map(|(e, is_mut)| CallArg::new(e, is_mut))
-                        .collect();
+                    let call_args =
+                        make_call_method_args(args_owned, &functor.call_method.borrow());
                     expr.kind = TirExprKind::method_call(
                         Box::new(callee_owned),
                         FunctionRef {
