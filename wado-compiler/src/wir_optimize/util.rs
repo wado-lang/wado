@@ -80,6 +80,7 @@ pub(super) fn is_root_observable(instr: &WirInstr) -> bool {
         | WirInstr::ArraySet { .. }
         | WirInstr::ArrayCopy { .. }
         | WirInstr::ArrayFill { .. }
+        | WirInstr::TableSet { .. }
         | WirInstr::MultiValueLocalBind { .. }
         // Linear-memory writes.
         | WirInstr::I32Store { .. }
