@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777933828149,
+  "lastUpdate": 1777934390369,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -19285,6 +19285,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/96b62c8cc4ab9c66148d043a2ad939f07507fd52"
         },
         "date": 1777933827814,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1775,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8776,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18520,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 503688,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0c5536db603255a28ae81670510055d4dbb316af",
+          "message": "Merge pull request #996 from wado-lang/claude/refactor-cm-binding-RmXOb\n\nrefactor(wado-compiler): split cm_binding.rs (10K LOC) into 8 submodules",
+          "timestamp": "2026-05-05T07:34:59+09:00",
+          "tree_id": "42eeb9e2cb600a300e0ec0da6273cb4e030b3067",
+          "url": "https://github.com/wado-lang/wado/commit/0c5536db603255a28ae81670510055d4dbb316af"
+        },
+        "date": 1777934390217,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
