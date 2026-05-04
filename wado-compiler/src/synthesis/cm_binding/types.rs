@@ -46,9 +46,8 @@ pub struct LiftContext<'a> {
     ///
     /// Re-entrancy: the lift call chain may `borrow_mut()` this cell;
     /// callers must not hold a `RefMut` to the same cell across calls
-    /// into `synthesize_lift_with_context` or its helpers. The lift
-    /// path itself only borrows transiently inside
-    /// `module_source_for_cm_interface`.
+    /// into `synthesize_lift` or its helpers. The lift path itself only
+    /// borrows transiently inside `module_source_for_cm_interface`.
     pub interner: &'a RefCell<crate::name::ModuleSourceInterner>,
 }
 

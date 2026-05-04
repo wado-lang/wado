@@ -32,7 +32,7 @@ use crate::synthesis::common::{
 };
 
 use super::lift::{
-    materialize_if_needed, synthesize_lift_with_context, try_lift_wasi_variant_or_enum,
+    materialize_if_needed, synthesize_lift, try_lift_wasi_variant_or_enum,
 };
 use super::lower::{
     synthesize_flatten_option_to_flat_args, synthesize_flatten_value_to_flat_args,
@@ -1207,7 +1207,7 @@ pub(super) fn synthesize_adapter(
             cm_package: &func_info.package,
             interner,
         };
-        let lifted = synthesize_lift_with_context(
+        let lifted = synthesize_lift(
             &resolved,
             local_ref(outptr_local, "__outptr", TypeTable::I32),
             &mut next_local,

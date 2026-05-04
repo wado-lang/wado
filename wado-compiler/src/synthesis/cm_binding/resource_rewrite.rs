@@ -29,7 +29,7 @@ use crate::synthesis::common::{
     if_stmt, internal_call, let_mut_stmt, let_stmt, local_ref, loop_stmt, return_stmt, synth_span,
 };
 
-use super::synthesize_lift_with_context;
+use super::synthesize_lift;
 use super::types::{LiftContext, binary_add};
 
 /// Generate binding functions for Stream<T>.`read()` where T is a non-u8 WASI record type.
@@ -439,7 +439,7 @@ fn synthesize_stream_read_func(
         span: synth_span(),
         source_interface: None,
     });
-    let lifted_elem = synthesize_lift_with_context(
+    let lifted_elem = synthesize_lift(
         &ast_type,
         local_ref(addr_idx, "addr", TypeTable::I32),
         &mut next_local,

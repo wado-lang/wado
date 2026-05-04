@@ -1,11 +1,11 @@
 //! CM ABI lift: load a Wado value from linear memory.
 //!
-//! [`synthesize_lift`] (and the WASI-aware [`synthesize_lift_with_context`])
-//! produces TIR that materialises a Wado value at a given linear-memory
-//! address. Composite types (lists, options, results, tuples, WASI
-//! variants/enums/records) materialise into mutable locals; primitives stay
-//! as plain `*_load` builtins. The list and tuple paths free the underlying
-//! buffers as they read, so callers don't need to clean up after a lift.
+//! [`synthesize_lift`] produces TIR that materialises a Wado value at a given
+//! linear-memory address. Composite types (lists, options, results, tuples,
+//! WASI variants/enums/records) materialise into mutable locals; primitives
+//! stay as plain `*_load` builtins. The list and tuple paths free the
+//! underlying buffers as they read, so callers don't need to clean up after a
+//! lift.
 
 use crate::ast::{NamedType, Type};
 use crate::cm_abi;
@@ -31,22 +31,12 @@ use super::types::{
 ///
 /// For primitives, returns a single expression (no setup statements).
 /// For composites (list, option, result), emits setup statements into `stmts`
-/// and returns a local reference to the lifted value.
+/// and returns a local reference to the lifted value. The CM/WASI registry on
+/// `ctx` is used to resolve named struct/variant/enum/flags types and to
+/// compute their canonical-ABI layout.
 ///
 /// `next_local` / `locals` track local variable allocation.
-/// Callers that don't need composite support may pass empty `&mut vec![]`.
 pub fn synthesize_lift(
-    ty: &Type,
-    addr: TirExpr,
-    next_local: &mut u32,
-    stmts: &mut Vec<TirStmt>,
-    locals: &mut Vec<TirLocal>,
-) -> TirExpr {
-    synthesize_lift_inner(ty, addr, next_local, stmts, locals, None)
-}
-
-/// Lift with WASI context, enabling proper variant/enum construction.
-pub fn synthesize_lift_with_context(
     ty: &Type,
     addr: TirExpr,
     next_local: &mut u32,
@@ -54,7 +44,7 @@ pub fn synthesize_lift_with_context(
     locals: &mut Vec<TirLocal>,
     ctx: &LiftContext<'_>,
 ) -> TirExpr {
-    synthesize_lift_inner(ty, addr, next_local, stmts, locals, Some(ctx))
+    synthesize_lift_inner(ty, addr, next_local, stmts, locals, ctx)
 }
 
 /// Ensure a lifted expression is evaluated before subsequent memory operations.
@@ -99,7 +89,7 @@ fn synthesize_lift_inner(
     next_local: &mut u32,
     stmts: &mut Vec<TirStmt>,
     locals: &mut Vec<TirLocal>,
-    ctx: Option<&LiftContext<'_>>,
+    ctx: &LiftContext<'_>,
 ) -> TirExpr {
     match ty {
         Type::Named(named) => match named.name.as_str() {
@@ -121,11 +111,10 @@ fn synthesize_lift_inner(
                     vec![binary_add(addr, i32_const(4))],
                     TypeTable::I32,
                 );
-                let string_type_id = ctx.map_or(TypeTable::I32, |c| {
-                    c.type_table
-                        .borrow_mut()
-                        .make_struct("String".to_string(), ModuleSource::string())
-                });
+                let string_type_id = ctx
+                    .type_table
+                    .borrow_mut()
+                    .make_struct("String".to_string(), ModuleSource::string());
                 internal_call("memory_to_gc_string", vec![ptr, len], string_type_id)
             }
             _ => {
@@ -135,11 +124,10 @@ fn synthesize_lift_inner(
                 // current binding's WASI package, then to `core:kiln/*` for
                 // generator-world bindings). Non-CM references fall through
                 // to the i32-handle default.
-                if let Some(ctx) = ctx
-                    && let Some(source) = ctx
-                        .wasi_registry
-                        .resolve_cm_source_for(named, Some(ctx.cm_package))
-                        .map(str::to_string)
+                if let Some(source) = ctx
+                    .wasi_registry
+                    .resolve_cm_source_for(named, Some(ctx.cm_package))
+                    .map(str::to_string)
                 {
                     let source = source.as_str();
                     if let Some(lifted) = try_lift_wasi_variant_or_enum(
@@ -251,7 +239,7 @@ pub(super) fn try_lift_wasi_variant_or_enum(
             next_local,
             stmts,
             locals,
-            Some(ctx),
+            ctx,
         ));
     }
     if let Some(case_names) = ctx
@@ -344,7 +332,7 @@ fn try_lift_wasi_struct(
             binary_add(addr.clone(), i32_const(offsets[i] as i32))
         };
         let lifted_field =
-            synthesize_lift_inner(field_ty, field_addr, next_local, stmts, locals, Some(ctx));
+            synthesize_lift_inner(field_ty, field_addr, next_local, stmts, locals, ctx);
         let lifted_field = materialize_if_needed(lifted_field, next_local, stmts, locals);
         let field_name = &wado_fields[i];
         tir_fields.push(TirStructField {
@@ -393,7 +381,7 @@ fn synthesize_lift_wasi_variant(
     next_local: &mut u32,
     stmts: &mut Vec<TirStmt>,
     locals: &mut Vec<TirLocal>,
-    ctx: Option<&LiftContext<'_>>,
+    ctx: &LiftContext<'_>,
 ) -> TirExpr {
     // Load discriminant: 1 byte (u8) for variants with ≤ 256 cases
     let disc_local = alloc_local(next_local, locals, TypeTable::I32);
@@ -414,20 +402,15 @@ fn synthesize_lift_wasi_variant(
     ));
 
     // Compute max payload alignment for payload offset calculation
-    let wasi_package = ctx.map(|c| c.cm_package);
     let max_payload_align = cases
         .iter()
         .filter_map(|case| case.payload.as_ref())
         .map(|ty| {
-            if let Some(c) = ctx {
-                crate::component_model::cm_align_with_registry_scoped(
-                    ty,
-                    c.wasi_registry,
-                    wasi_package,
-                )
-            } else {
-                cm_abi::cm_align(ty)
-            }
+            crate::component_model::cm_align_with_registry_scoped(
+                ty,
+                ctx.wasi_registry,
+                Some(ctx.cm_package),
+            )
         })
         .max()
         .unwrap_or(1);
@@ -588,20 +571,17 @@ fn synthesize_lift_list(
     next_local: &mut u32,
     stmts: &mut Vec<TirStmt>,
     locals: &mut Vec<TirLocal>,
-    ctx: Option<&LiftContext<'_>>,
+    ctx: &LiftContext<'_>,
 ) -> TirExpr {
     let elem_size = cm_abi::cm_size(elem_ty);
 
     // Resolve TypeIds for the element type and Array<ElemType>.
     // These are needed by the monomorphizer to instantiate Array::with_capacity and .push().
-    let (elem_type_id, array_type_id) = if let Some(ctx) = ctx {
+    let (elem_type_id, array_type_id) = {
         let mut tt = ctx.type_table.borrow_mut();
         let elem_tid = wasi_type_to_type_id(elem_ty, &mut tt, ctx.wasi_registry, ctx.cm_package);
         let array_tid = tt.make_array(elem_tid);
         (elem_tid, array_tid)
-    } else {
-        // Fallback: use placeholder types (existing behavior for callers without context)
-        (TypeTable::I32, TypeTable::I32)
     };
 
     let base_local = alloc_local(next_local, locals, TypeTable::I32);
@@ -748,23 +728,22 @@ fn synthesize_lift_option_inner(
     next_local: &mut u32,
     stmts: &mut Vec<TirStmt>,
     locals: &mut Vec<TirLocal>,
-    ctx: Option<&LiftContext<'_>>,
+    ctx: &LiftContext<'_>,
 ) -> TirExpr {
-    let layout = if let Some(c) = ctx {
-        cm_abi::layout_option_with_registry_scoped(inner_ty, c.wasi_registry, Some(c.cm_package))
-    } else {
-        cm_abi::layout_option(inner_ty)
-    };
+    let layout = cm_abi::layout_option_with_registry_scoped(
+        inner_ty,
+        ctx.wasi_registry,
+        Some(ctx.cm_package),
+    );
     let payload_offset = layout.offsets[1];
 
     // Resolve the concrete Option<T> TypeId so the local and null/some exprs
-    // use the correct GC reference type rather than an i32 placeholder.
-    let option_type_id = if let Some(c) = ctx {
-        let mut tt = c.type_table.borrow_mut();
-        let inner_type_id = wasi_type_to_type_id(inner_ty, &mut tt, c.wasi_registry, c.cm_package);
+    // use the correct GC reference type.
+    let option_type_id = {
+        let mut tt = ctx.type_table.borrow_mut();
+        let inner_type_id =
+            wasi_type_to_type_id(inner_ty, &mut tt, ctx.wasi_registry, ctx.cm_package);
         tt.make_option(inner_type_id)
-    } else {
-        TypeTable::I32 // placeholder when no context
     };
 
     let disc_local = alloc_local(next_local, locals, TypeTable::I32);
@@ -824,18 +803,14 @@ fn synthesize_lift_result_inner(
     next_local: &mut u32,
     stmts: &mut Vec<TirStmt>,
     locals: &mut Vec<TirLocal>,
-    ctx: Option<&LiftContext<'_>>,
+    ctx: &LiftContext<'_>,
 ) -> TirExpr {
-    let layout = if let Some(c) = ctx {
-        cm_abi::layout_result_with_registry_scoped(
-            ok_ty,
-            err_ty,
-            c.wasi_registry,
-            Some(c.cm_package),
-        )
-    } else {
-        cm_abi::layout_result(ok_ty, err_ty)
-    };
+    let layout = cm_abi::layout_result_with_registry_scoped(
+        ok_ty,
+        err_ty,
+        ctx.wasi_registry,
+        Some(ctx.cm_package),
+    );
     let payload_offset = layout.offsets[1];
 
     let disc_local = alloc_local(next_local, locals, TypeTable::I32);
@@ -848,16 +823,12 @@ fn synthesize_lift_result_inner(
     ));
 
     // Determine the proper variant TypeId for Result<ok_ty, err_ty> so that the
-    // mutable local is typed as a GC reference (not i32). Using TypeTable::I32 as a
-    // placeholder would cause a wasm validation error: the local would be declared as
-    // i32 but initialized with `ref.null none` (a reference type).
-    let result_type_id = if let Some(ctx) = ctx {
+    // mutable local is typed as a GC reference (not i32).
+    let result_type_id = {
         let mut tt = ctx.type_table.borrow_mut();
         let ok_type_id = wasi_type_to_type_id(ok_ty, &mut tt, ctx.wasi_registry, ctx.cm_package);
         let err_type_id = wasi_type_to_type_id(err_ty, &mut tt, ctx.wasi_registry, ctx.cm_package);
         tt.make_result(ok_type_id, err_type_id)
-    } else {
-        TypeTable::I32 // placeholder when no context
     };
 
     let result_local = alloc_local(next_local, locals, result_type_id);
@@ -951,7 +922,7 @@ fn synthesize_lift_tuple(
     next_local: &mut u32,
     stmts: &mut Vec<TirStmt>,
     locals: &mut Vec<TirLocal>,
-    ctx: Option<&LiftContext<'_>>,
+    ctx: &LiftContext<'_>,
 ) -> TirExpr {
     let layout = cm_abi::layout_tuple(elems);
     let mut elem_exprs = Vec::new();
@@ -963,16 +934,13 @@ fn synthesize_lift_tuple(
         let lifted = materialize_if_needed(lifted, next_local, stmts, locals);
         elem_exprs.push(lifted);
     }
-    // Resolve the tuple TypeId if we have a type table context.
-    let tuple_type_id = if let Some(ctx) = ctx {
+    let tuple_type_id = {
         let mut tt = ctx.type_table.borrow_mut();
         let elem_type_ids: Vec<TypeId> = elems
             .iter()
             .map(|t| wasi_type_to_type_id(t, &mut tt, ctx.wasi_registry, ctx.cm_package))
             .collect();
         tt.make_tuple(elem_type_ids)
-    } else {
-        TypeTable::I32
     };
     TirExpr::new(
         TirExprKind::TupleLiteral {
