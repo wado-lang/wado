@@ -1858,3 +1858,30 @@ fn foo(x: Option<i32>) -> i32 {
         "match with 2 arms must be multiline:\n{formatted}"
     );
 }
+
+#[test]
+fn test_format_match_multiline_scrutinee_no_extra_blanks() {
+    // Regression: when the match scrutinee spans multiple source lines, the
+    // blank-line tracker used to count those source lines as if they were
+    // blank, inserting spurious blanks between `{` and the first arm.
+    let source = r"
+fn caller(a: i32) -> i32 {
+    return a;
+}
+
+fn foo() -> i32 {
+    let x = match caller(
+        1,
+    ) {
+        1 => 1,
+        _ => 0,
+    };
+    return x;
+}
+";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        !formatted.contains(") {\n\n"),
+        "no blank line should appear between match `) {{` and the first arm:\n{formatted}"
+    );
+}

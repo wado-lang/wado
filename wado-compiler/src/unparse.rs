@@ -123,7 +123,6 @@ impl<'a> Unparser<'a> {
     }
 
     pub fn unparse(mut self, module: &Module) -> String {
-        // Output shebang if present
         if let Some(shebang) = module.shebang() {
             self.output.push_str(shebang);
             self.output.push('\n');
@@ -131,7 +130,6 @@ impl<'a> Unparser<'a> {
 
         self.unparse_module(module);
 
-        // Append data section if present
         if let Some(data) = module.data_section() {
             if !self.output.ends_with('\n') {
                 self.output.push('\n');
@@ -151,8 +149,8 @@ impl<'a> Unparser<'a> {
                 self.delimited("(", ")", &attr.args, Unparser::unparse_attr_arg);
             }
             self.output.push_str("]\n");
-            // Track the line so blank lines between inner attrs and the first
-            // item are preserved by emit_blank_lines_to.
+            // Anchor `last_source_line` to the inner attr so blank lines
+            // between it and the first item are preserved.
             self.last_source_line = attr.span.end_line();
         }
 
@@ -166,14 +164,12 @@ impl<'a> Unparser<'a> {
     fn unparse_item(&mut self, item: &Item) {
         let span = get_item_span(item);
 
-        // Emit leading comments (handles blank lines before comments)
         let last_comment_was_doc = self.emit_leading_comments_and_check_doc(&span);
 
-        // Emit blank lines before the item itself.
-        // Use the first attribute line (if any) to avoid growing blank lines
-        // between doc comments and attrs on repeated formatting passes.
-        // Skip blank-line insertion when the last leading comment was a doc comment,
-        // because doc comments belong to the item and shouldn't be separated by blank lines.
+        // Anchor the leading-blank computation to the first attribute, not to
+        // the item's own line — otherwise repeated formatting passes would grow
+        // blank lines between doc comments and attrs. A trailing doc comment
+        // belongs to the item, so don't insert any blanks above it either.
         if !last_comment_was_doc {
             self.emit_blank_lines_to(get_item_first_line(item));
         }
@@ -196,7 +192,6 @@ impl<'a> Unparser<'a> {
             Item::TupleTypeDecl(d) => self.unparse_tuple_type_decl(d),
         }
 
-        // Emit trailing comments
         self.emit_trailing_comments(&span);
     }
 
@@ -207,7 +202,6 @@ impl<'a> Unparser<'a> {
             self.output.push_str("pub ");
         }
 
-        // Check for wildcard or namespace import
         let is_wildcard = u.items.len() == 1 && matches!(u.items.first(), Some(UseItem::Wildcard));
         let namespace_name = if u.items.len() == 1 {
             match u.items.first() {
@@ -224,14 +218,12 @@ impl<'a> Unparser<'a> {
         } else if is_wildcard {
             self.output.push_str("use _");
         } else {
-            // Try single-line first
             let snap = self.snapshot();
             self.output.push_str("use { ");
             self.comma_sep(&u.items, Unparser::unparse_use_item);
             self.output.push_str(" }");
 
             if self.exceeds_width_since(snap) {
-                // Rollback and format multi-line
                 self.rollback(snap);
                 self.output.push_str("use {\n");
                 self.indent_level += 1;
@@ -585,7 +577,6 @@ impl<'a> Unparser<'a> {
         // Always emit explicit type params: `impl<T> Foo<T>`, not compact `impl Foo<T>`
         self.unparse_generic_params(&i.type_params);
 
-        // Handle `impl Trait for Type` vs `impl Type`
         if let Some(trait_type) = &i.trait_type {
             self.output.push(' ');
             self.unparse_type(trait_type);
@@ -848,28 +839,22 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_block(&mut self, block: &Block) {
-        // Save and reset last_source_line for this block context
         let saved_line = self.last_source_line;
         self.last_source_line = block.span.line;
 
         for stmt in &block.stmts {
             let stmt_span = get_stmt_span(stmt);
-
-            // Emit leading comments (handles blank lines before comments)
             self.emit_leading_comments(&stmt_span);
-
-            // Emit blank lines before the statement itself
             self.emit_blank_lines_to(stmt_span.line);
-
             self.unparse_stmt(stmt);
             self.emit_trailing_comments(&stmt_span);
             self.last_source_line = stmt_span.end_line();
         }
 
-        // Emit trailing comments in the block (between last statement and closing brace)
+        // Comments that landed after the last stmt but before the closing brace
+        // would otherwise be dropped — flush them here.
         self.emit_dangling_comments_in_block(block);
 
-        // Restore for parent context
         self.last_source_line = saved_line.max(block.span.end_line());
     }
 
@@ -916,7 +901,7 @@ impl<'a> Unparser<'a> {
             self.output.push_str("mut ");
         }
 
-        self.unparse_let_pattern(&l.pattern);
+        self.unparse_pattern(&l.pattern);
 
         if let Some(ty) = &l.ty {
             self.output.push_str(": ");
@@ -1100,7 +1085,7 @@ impl<'a> Unparser<'a> {
             self.output.push_str("mut ");
         }
 
-        self.unparse_let_pattern(&f.binding);
+        self.unparse_pattern(&f.binding);
         self.output.push_str(" of ");
         self.unparse_expr(&f.iterable);
         self.output.push_str(" {\n");
@@ -1120,7 +1105,7 @@ impl<'a> Unparser<'a> {
                 if l.is_mut {
                     self.output.push_str("mut ");
                 }
-                self.unparse_let_pattern(&l.pattern);
+                self.unparse_pattern(&l.pattern);
                 if let Some(ty) = &l.ty {
                     self.output.push_str(": ");
                     self.unparse_type(ty);
@@ -1296,7 +1281,6 @@ impl<'a> Unparser<'a> {
             return;
         }
 
-        // Try single-line first
         let snap = self.snapshot();
         self.delimited("[", "]", elements, Unparser::unparse_expr);
 
@@ -1400,7 +1384,7 @@ impl<'a> Unparser<'a> {
 
     fn unparse_binary_inline(&mut self, b: &BinaryExpr) {
         self.with_parens_if(needs_parens(&b.left, b.op, true), |s| {
-            s.unparse_expr(&b.left)
+            s.unparse_expr(&b.left);
         });
 
         self.output.push(' ');
@@ -1600,7 +1584,6 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_if_expr(&mut self, i: &IfExpr) {
-        // Try inline format: `if cond { expr } else { expr }`
         if self.try_inline_if_expr(i) {
             return;
         }
@@ -1669,15 +1652,14 @@ impl<'a> Unparser<'a> {
         self.output.push('}');
 
         if let Some(else_block) = &i.else_block {
-            // Check for else-if: block contains single if expression statement
+            // Render `else { if ... }` as `else if ...` and stay on the multiline
+            // path so the whole chain shares one layout decision.
             if else_block.stmts.len() == 1
                 && let Stmt::Expr(ExprStmt {
                     expr: Expr::If(nested_if),
                     ..
                 }) = &else_block.stmts[0]
             {
-                // Output as `else if` instead of `else { if ... }`
-                // Use multiline directly to keep the entire chain consistent
                 self.output.push_str(" else ");
                 self.unparse_if_expr_multiline(nested_if);
                 return;
@@ -1692,7 +1674,6 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_match(&mut self, m: &MatchExpr) {
-        // Try inline format: `match expr { P1 => e1, P2 => e2 }`
         if self.try_inline_match(m) {
             return;
         }
@@ -1749,7 +1730,11 @@ impl<'a> Unparser<'a> {
 
         self.indent_level += 1;
         let saved_line = self.last_source_line;
-        self.last_source_line = m.span.line;
+        // Anchor blank-line tracking to the scrutinee's last line, not the
+        // `match` keyword's line: a multi-line scrutinee otherwise leaves
+        // `blank_lines_between` thinking the lines occupied by the scrutinee
+        // were blank source lines, and conjures spurious blanks before arm 0.
+        self.last_source_line = m.expr.span().end_line();
 
         for arm in &m.arms {
             self.emit_leading_comments(&arm.span);
@@ -1773,20 +1758,6 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_pattern(&mut self, pattern: &Pattern) {
-        self.unparse_pattern_with(pattern, Self::unparse_pattern);
-    }
-
-    /// Unparse a pattern for let statements (uses brackets for tuples).
-    /// Currently identical to `unparse_pattern`; kept as a separate entry point
-    /// because the semantics historically differed and may diverge again.
-    fn unparse_let_pattern(&mut self, pattern: &Pattern) {
-        self.unparse_pattern_with(pattern, Self::unparse_let_pattern);
-    }
-
-    /// Shared implementation of `unparse_pattern` / `unparse_let_pattern`. The
-    /// `recurse` parameter controls which entry point handles nested patterns,
-    /// so each variant's recursive case stays internally consistent.
-    fn unparse_pattern_with(&mut self, pattern: &Pattern, recurse: fn(&mut Self, &Pattern)) {
         match pattern {
             Pattern::Ident { name, .. } => self.output.push_str(name),
             Pattern::MutIdent { name, .. } => {
@@ -1797,7 +1768,7 @@ impl<'a> Unparser<'a> {
             Pattern::Wildcard => self.output.push('_'),
             Pattern::Tuple(patterns, has_rest) => {
                 self.output.push('[');
-                self.comma_sep(patterns, &recurse);
+                self.comma_sep(patterns, Unparser::unparse_pattern);
                 if *has_rest {
                     if !patterns.is_empty() {
                         self.output.push_str(", ");
@@ -1813,7 +1784,7 @@ impl<'a> Unparser<'a> {
             } => {
                 self.output.push_str(variant_name);
                 if !bindings.is_empty() {
-                    self.delimited("(", ")", bindings, &recurse);
+                    self.delimited("(", ")", bindings, Unparser::unparse_pattern);
                 }
             }
             Pattern::Struct {
@@ -1834,7 +1805,7 @@ impl<'a> Unparser<'a> {
                         && matches!(&field.pattern, Pattern::Ident { name: n, .. } if n == &field.field_name);
                     if !is_shorthand {
                         s.output.push_str(": ");
-                        recurse(s, &field.pattern);
+                        s.unparse_pattern(&field.pattern);
                     }
                 });
                 if *has_rest {
@@ -1846,13 +1817,11 @@ impl<'a> Unparser<'a> {
                 self.output.push_str(" }");
             }
             Pattern::Or(alternatives) => {
-                self.comma_sep_with(" | ", alternatives, recurse);
+                self.comma_sep_with(" | ", alternatives, Unparser::unparse_pattern);
             }
             Pattern::Range {
                 start, end, kind, ..
             } => {
-                // Range bounds always use the simple pattern grammar regardless
-                // of the outer caller — they cannot be `let`-pattern shapes.
                 self.unparse_pattern(start);
                 match kind {
                     crate::ast::RangeKind::Exclusive => self.output.push_str("..<"),
@@ -1933,7 +1902,6 @@ impl<'a> Unparser<'a> {
             self.rollback(snap);
         }
 
-        // Multi-line layout
         self.output.push_str("{\n");
         self.indent_level += 1;
         for field in &s.fields {
@@ -1953,8 +1921,6 @@ impl<'a> Unparser<'a> {
             self.unparse_expr(&field.value);
         }
     }
-
-    // Helper methods
 
     fn write_indent(&mut self) {
         for _ in 0..self.indent_level {
@@ -2189,8 +2155,6 @@ impl<'a> Unparser<'a> {
         }
     }
 }
-
-// Helper functions
 
 pub fn get_item_span(item: &Item) -> Span {
     match item {
@@ -2473,55 +2437,52 @@ fn format_spec_to_string(spec: &crate::tir::TemplateFormatSpec) -> String {
 /// Used by the desugar phase for generating error messages.
 pub fn unparse_expr_simple(expr: &Expr) -> String {
     let mut output = String::new();
-    unparse_expr_into(expr, &mut output, false);
+    unparse_expr_into(expr, &mut output);
     output
 }
 
-/// Unparse an expression into a string.
-/// For error messages, we don't add parentheses to keep output readable.
-fn unparse_expr_into(expr: &Expr, output: &mut String, _parens_for_binary: bool) {
+/// Unparse an expression to a string without preserving comments. The output
+/// drops disambiguating parentheses around nested binary expressions: callers
+/// (error messages, simple symbol previews) prioritise readability over
+/// round-trip fidelity.
+fn unparse_expr_into(expr: &Expr, output: &mut String) {
     match expr {
         Expr::Ident(i) => output.push_str(&i.name),
         Expr::Literal(l) => unparse_literal_into(&l.value, output),
         Expr::Binary(b) => {
-            // Don't add parentheses - keep output readable for error messages
-            unparse_expr_into(&b.left, output, false);
+            unparse_expr_into(&b.left, output);
             output.push(' ');
             output.push_str(binary_op_str(b.op));
             output.push(' ');
-            unparse_expr_into(&b.right, output, false);
+            unparse_expr_into(&b.right, output);
         }
         Expr::Unary(u) => {
             output.push_str(unary_op_str(u.op));
-            unparse_expr_into(&u.expr, output, true);
+            unparse_expr_into(&u.expr, output);
         }
         Expr::Call(c) => {
-            unparse_expr_into(&c.callee, output, true);
-            delimited_into("(", ")", &c.args, output, |a, o| {
-                unparse_expr_into(a, o, false)
-            });
+            unparse_expr_into(&c.callee, output);
+            delimited_into("(", ")", &c.args, output, unparse_expr_into);
         }
         Expr::MethodCall(m) => {
-            unparse_expr_into(&m.receiver, output, true);
+            unparse_expr_into(&m.receiver, output);
             output.push('.');
             output.push_str(&m.method);
-            delimited_into("(", ")", &m.args, output, |a, o| {
-                unparse_expr_into(a, o, false)
-            });
+            delimited_into("(", ")", &m.args, output, unparse_expr_into);
         }
         Expr::FieldAccess(f) => {
-            unparse_expr_into(&f.expr, output, true);
+            unparse_expr_into(&f.expr, output);
             output.push('.');
             output.push_str(&f.field);
         }
         Expr::Index(i) => {
-            unparse_expr_into(&i.expr, output, true);
+            unparse_expr_into(&i.expr, output);
             output.push('[');
-            unparse_expr_into(&i.index, output, false);
+            unparse_expr_into(&i.index, output);
             output.push(']');
         }
         Expr::Cast(c) => {
-            unparse_expr_into(&c.expr, output, true);
+            unparse_expr_into(&c.expr, output);
             output.push_str(" as ");
             unparse_type_into(&c.target_type, output);
         }
@@ -2532,9 +2493,7 @@ fn unparse_expr_into(expr: &Expr, output: &mut String, _parens_for_binary: bool)
             if !s.type_args.is_empty() {
                 delimited_into("::<", ">", &s.type_args, output, unparse_type_into);
             }
-            delimited_into("(", ")", &s.args, output, |a, o| {
-                unparse_expr_into(a, o, false)
-            });
+            delimited_into("(", ")", &s.args, output, unparse_expr_into);
         }
         Expr::Closure(c) => unparse_closure_into(c, output),
         Expr::TemplateString(t) => unparse_template_string_into(t, output),
@@ -2542,22 +2501,22 @@ fn unparse_expr_into(expr: &Expr, output: &mut String, _parens_for_binary: bool)
         Expr::If(i) => unparse_if_expr_into(i, output),
         Expr::Match(m) => unparse_match_into(m, output),
         Expr::Matches(m) => {
-            unparse_expr_into(&m.expr, output, false);
+            unparse_expr_into(&m.expr, output);
             output.push_str(" matches { ");
             unparse_pattern_into(&m.pattern, output);
             if let Some(guard) = &m.guard {
                 output.push_str(" && ");
-                unparse_expr_into(guard, output, false);
+                unparse_expr_into(guard, output);
             }
             output.push_str(" }");
         }
         Expr::Assign(a) => {
-            unparse_expr_into(&a.target, output, false);
+            unparse_expr_into(&a.target, output);
             output.push_str(" = ");
-            unparse_expr_into(&a.value, output, false);
+            unparse_expr_into(&a.value, output);
         }
         Expr::CompoundAssign(ca) => {
-            unparse_expr_into(&ca.target, output, false);
+            unparse_expr_into(&ca.target, output);
             output.push_str(match ca.op {
                 CompoundAssignOp::Add => " += ",
                 CompoundAssignOp::Sub => " -= ",
@@ -2570,15 +2529,15 @@ fn unparse_expr_into(expr: &Expr, output: &mut String, _parens_for_binary: bool)
                 CompoundAssignOp::Shl => " <<= ",
                 CompoundAssignOp::Shr => " >>= ",
             });
-            unparse_expr_into(&ca.value, output, false);
+            unparse_expr_into(&ca.value, output);
         }
         Expr::ComparisonChain(chain) => {
-            unparse_expr_into(&chain.first, output, false);
+            unparse_expr_into(&chain.first, output);
             for cmp in &chain.comparisons {
                 output.push(' ');
                 output.push_str(binary_op_str(cmp.op));
                 output.push(' ');
-                unparse_expr_into(&cmp.right, output, false);
+                unparse_expr_into(&cmp.right, output);
             }
         }
         Expr::StructLiteral(s) => {
@@ -2594,33 +2553,31 @@ fn unparse_expr_into(expr: &Expr, output: &mut String, _parens_for_binary: bool)
                     o.push_str(&f.name);
                     if !f.is_shorthand {
                         o.push_str(": ");
-                        unparse_expr_into(&f.value, o, false);
+                        unparse_expr_into(&f.value, o);
                     }
                 });
                 output.push_str(" }");
             }
         }
         Expr::TupleLiteral(t) => {
-            delimited_into("[", "]", &t.elements, output, |e, o| {
-                unparse_expr_into(e, o, false);
-            });
+            delimited_into("[", "]", &t.elements, output, unparse_expr_into);
         }
         Expr::LabeledBlock(_) => output.push_str("<labeled-block>"),
         Expr::TryOp(qm) => {
-            unparse_expr_into(&qm.expr, output, false);
+            unparse_expr_into(&qm.expr, output);
             output.push('?');
         }
         Expr::Spread(inner, _) => {
             output.push_str("..");
-            unparse_expr_into(inner, output, false);
+            unparse_expr_into(inner, output);
         }
         Expr::Range(range) => {
-            unparse_expr_into(&range.start, output, false);
+            unparse_expr_into(&range.start, output);
             match range.kind {
                 crate::ast::RangeKind::Exclusive => output.push_str("..<"),
                 crate::ast::RangeKind::Inclusive => output.push_str("..="),
             }
-            unparse_expr_into(&range.end, output, false);
+            unparse_expr_into(&range.end, output);
         }
         Expr::WithHandler(w) => {
             output.push_str("with ");
@@ -2629,14 +2586,14 @@ fn unparse_expr_into(expr: &Expr, output: &mut String, _parens_for_binary: bool)
                     unparse_type_into(effect, o);
                     o.push_str(" => ");
                 }
-                unparse_expr_into(&binding.handler, o, false);
+                unparse_expr_into(&binding.handler, o);
             });
             output.push_str(" do ");
             unparse_block_expr_into(&w.body, output);
         }
         Expr::Resume(r) => {
             output.push_str("resume ");
-            unparse_expr_into(&r.value, output, false);
+            unparse_expr_into(&r.value, output);
         }
     }
 }
@@ -2652,7 +2609,7 @@ fn unparse_closure_into(c: &ClosureExpr, output: &mut String) {
             unparse_type_into(ty, o);
         }
     });
-    unparse_expr_into(&c.body, output, false);
+    unparse_expr_into(&c.body, output);
 }
 
 fn escape_template_literal_into(s: &str, output: &mut String) {
@@ -2671,7 +2628,7 @@ fn unparse_template_string_into(t: &TemplateStringExpr, output: &mut String) {
             }
             TemplatePart::Interpolation { expr, format } => {
                 output.push('{');
-                unparse_expr_into(expr, output, false);
+                unparse_expr_into(expr, output);
                 if let Some(fmt) = format {
                     output.push(':');
                     output.push_str(&fmt.spec);
@@ -2714,19 +2671,19 @@ fn unparse_stmt_into(stmt: &Stmt, output: &mut String) {
             }
             if let Some(ref v) = l.value {
                 output.push_str(" = ");
-                unparse_expr_into(v, output, false);
+                unparse_expr_into(v, output);
             }
             output.push(';');
         }
         Stmt::Expr(e) => {
-            unparse_expr_into(&e.expr, output, false);
+            unparse_expr_into(&e.expr, output);
             output.push(';');
         }
         Stmt::Return(r) => {
             output.push_str("return");
             if let Some(v) = &r.value {
                 output.push(' ');
-                unparse_expr_into(v, output, false);
+                unparse_expr_into(v, output);
             }
             output.push(';');
         }
@@ -2757,7 +2714,7 @@ fn unparse_stmt_into(stmt: &Stmt, output: &mut String) {
             }
             output.push_str("; ");
             if let Some(update) = &f.update {
-                unparse_expr_into(update, output, false);
+                unparse_expr_into(update, output);
             }
             output.push(' ');
             unparse_block_expr_into(&f.body, output);
@@ -2769,7 +2726,7 @@ fn unparse_stmt_into(stmt: &Stmt, output: &mut String) {
             }
             unparse_pattern_into(&f.binding, output);
             output.push_str(" of ");
-            unparse_expr_into(&f.iterable, output, false);
+            unparse_expr_into(&f.iterable, output);
             output.push(' ');
             unparse_block_expr_into(&f.body, output);
         }
@@ -2784,16 +2741,16 @@ fn unparse_stmt_into(stmt: &Stmt, output: &mut String) {
         Stmt::Continue(_) => output.push_str("continue;"),
         Stmt::Assert(a) => {
             output.push_str("assert ");
-            unparse_expr_into(&a.condition, output, false);
+            unparse_expr_into(&a.condition, output);
             if let Some(msg) = &a.message {
                 output.push_str(", ");
-                unparse_expr_into(msg, output, false);
+                unparse_expr_into(msg, output);
             }
             output.push(';');
         }
         Stmt::TaskReturn(tr) => {
             output.push_str("task return ");
-            unparse_expr_into(&tr.value, output, false);
+            unparse_expr_into(&tr.value, output);
             output.push(';');
         }
         Stmt::LabeledBlock(lb) => {
@@ -2806,14 +2763,14 @@ fn unparse_stmt_into(stmt: &Stmt, output: &mut String) {
 
 fn unparse_condition_into(cond: &Condition, output: &mut String) {
     match cond {
-        Condition::Expr(e) => unparse_expr_into(e, output, false),
+        Condition::Expr(e) => unparse_expr_into(e, output),
         Condition::LetChain { elements, .. } => {
             comma_sep_with_into(" && ", elements, output, |elem, output| match elem {
                 ConditionElement::Let { pattern, expr, .. } => {
                     output.push_str("let ");
                     unparse_pattern_into(pattern, output);
                     output.push_str(" = ");
-                    unparse_expr_into(expr, output, false);
+                    unparse_expr_into(expr, output);
                 }
                 ConditionElement::Expr(expr) => {
                     let needs_parens = matches!(
@@ -2823,7 +2780,7 @@ fn unparse_condition_into(cond: &Condition, output: &mut String) {
                     if needs_parens {
                         output.push('(');
                     }
-                    unparse_expr_into(expr, output, false);
+                    unparse_expr_into(expr, output);
                     if needs_parens {
                         output.push(')');
                     }
@@ -2921,16 +2878,16 @@ fn unparse_if_expr_into(i: &IfExpr, output: &mut String) {
 
 fn unparse_match_into(m: &MatchExpr, output: &mut String) {
     output.push_str("match ");
-    unparse_expr_into(&m.expr, output, false);
+    unparse_expr_into(&m.expr, output);
     output.push_str(" { ");
     comma_sep_into(&m.arms, output, |arm, o| {
         unparse_pattern_into(&arm.pattern, o);
         if let Some(guard) = &arm.guard {
             o.push_str(" && ");
-            unparse_expr_into(guard, o, false);
+            unparse_expr_into(guard, o);
         }
         o.push_str(" => ");
-        unparse_expr_into(&arm.body, o, false);
+        unparse_expr_into(&arm.body, o);
     });
     output.push_str(" }");
 }
@@ -3142,7 +3099,7 @@ pub fn unparse_param_into(param: &Param, output: &mut String) {
     unparse_type_into(&param.ty, output);
     if let Some(default) = &param.default {
         output.push_str(" = ");
-        unparse_expr_into(default, output, false);
+        unparse_expr_into(default, output);
     }
 }
 
@@ -3338,7 +3295,6 @@ impl<'a> TirUnparser<'a> {
     }
 
     fn unparse_module(&mut self, module: &TirModule) {
-        // Imports
         if !module.imports.is_empty() {
             self.output.push_str("// Imports\n");
             for import in &module.imports {
@@ -3351,38 +3307,32 @@ impl<'a> TirUnparser<'a> {
             self.output.push('\n');
         }
 
-        // Globals
         for g in &module.globals {
             self.unparse_tir_global(g);
             self.output.push('\n');
         }
 
-        // Structs
         for s in &module.structs {
             self.unparse_struct(s);
             self.output.push('\n');
         }
 
-        // Enums
         for e in &module.enums {
             self.unparse_enum(e);
             self.output.push('\n');
         }
 
-        // Flags
         for f in &module.flags {
             self.unparse_flags_tir(f);
             self.output.push('\n');
         }
 
-        // Functions
         for f_rc in &module.functions {
             let f = f_rc.borrow();
             self.unparse_function(&f);
             self.output.push('\n');
         }
 
-        // Data section
         if let Some(data) = &module.data_section {
             self.output.push_str("__DATA__\n");
             self.output.push_str(data);
@@ -3722,35 +3672,21 @@ impl<'a> TirUnparser<'a> {
         }
     }
 
-    /// Render a TIR pattern with bracket-style tuple syntax (`[a, b]`). This is
-    /// the canonical form used in most TIR contexts.
     fn unparse_tir_pattern(&mut self, pattern: &TirPattern) {
-        self.emit_tir_pattern(pattern, "[", "]");
-    }
-
-    /// Render a TIR pattern with paren-style tuple syntax (`(a, b)`). Used in
-    /// `match` arms where the older debug renderer favored parens.
-    fn unparse_pattern(&mut self, pattern: &TirPattern) {
-        self.emit_tir_pattern(pattern, "(", ")");
-    }
-
-    fn emit_tir_pattern(&mut self, pattern: &TirPattern, tuple_open: &str, tuple_close: &str) {
         match pattern {
             TirPattern::Wildcard => self.output.push('_'),
             TirPattern::Binding { name, .. } => self.output.push_str(name),
             TirPattern::Literal(lit) => emit_tir_literal_pattern(lit, &mut self.output),
             TirPattern::Tuple(patterns, has_rest) => {
-                self.output.push_str(tuple_open);
-                self.comma_sep(patterns, |s, p| {
-                    s.emit_tir_pattern(p, tuple_open, tuple_close);
-                });
+                self.output.push('[');
+                self.comma_sep(patterns, TirUnparser::unparse_tir_pattern);
                 if *has_rest {
                     if !patterns.is_empty() {
                         self.output.push_str(", ");
                     }
                     self.output.push_str("..");
                 }
-                self.output.push_str(tuple_close);
+                self.output.push(']');
             }
             TirPattern::Variant {
                 variant_name,
@@ -3759,11 +3695,7 @@ impl<'a> TirUnparser<'a> {
             } => {
                 self.output.push_str(variant_name);
                 if !bindings.is_empty() {
-                    self.output.push('(');
-                    self.comma_sep(bindings, |s, p| {
-                        s.emit_tir_pattern(p, tuple_open, tuple_close);
-                    });
-                    self.output.push(')');
+                    self.delimited("(", ")", bindings, TirUnparser::unparse_tir_pattern);
                 }
             }
             TirPattern::Enum { case_name, .. } => self.output.push_str(case_name),
@@ -3774,15 +3706,13 @@ impl<'a> TirUnparser<'a> {
                     if !matches!(&field.pattern, TirPattern::Binding { name, .. } if name == &field.field_name)
                     {
                         s.output.push_str(": ");
-                        s.emit_tir_pattern(&field.pattern, tuple_open, tuple_close);
+                        s.unparse_tir_pattern(&field.pattern);
                     }
                 });
                 self.output.push_str(" }");
             }
             TirPattern::Or(alternatives) => {
-                self.comma_sep_with(" | ", alternatives, |s, p| {
-                    s.emit_tir_pattern(p, tuple_open, tuple_close);
-                });
+                self.comma_sep_with(" | ", alternatives, TirUnparser::unparse_tir_pattern);
             }
             TirPattern::ConstantValue { expr } => self.unparse_expr(expr),
             TirPattern::Range {
@@ -4017,7 +3947,7 @@ impl<'a> TirUnparser<'a> {
                 self.emit_indented_block(|this| {
                     for arm in arms {
                         this.write_indent();
-                        this.unparse_pattern(&arm.pattern);
+                        this.unparse_tir_pattern(&arm.pattern);
                         if let Some(guard) = &arm.guard {
                             this.output.push_str(" && ");
                             this.unparse_expr(guard);
