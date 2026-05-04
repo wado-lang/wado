@@ -545,7 +545,6 @@ fn "wado-compiler/tests/fixtures/http-error-code-comprehensive.wado/handle"() {
     let code: u16;
     let __cond_61: bool;
     let dns_empty: ref "wasi:http/types.wado//DnsErrorPayload";
-    let dns_err2: ref "core:prelude/types.wado//Box<ErrorCode>";
     let __v0_64: ref "core:prelude/string.wado//String";
     let __cond_65: bool;
     let tls_payload: ref "wasi:http/types.wado//TlsAlertReceivedPayload";
@@ -559,31 +558,22 @@ fn "wado-compiler/tests/fixtures/http-error-code-comprehensive.wado/handle"() {
     let __v0_75: ref "core:prelude/string.wado//String";
     let __cond_76: bool;
     let field_payload: ref "wasi:http/types.wado//FieldSizePayload";
-    let header_err: ref "core:prelude/types.wado//Box<ErrorCode>";
     let __v0_79: ref "core:prelude/string.wado//String";
     let __cond_80: bool;
-    let trailer_err: ref "core:prelude/types.wado//Box<ErrorCode>";
     let __v0_82: ref "core:prelude/string.wado//String";
     let __cond_83: bool;
-    let body_err: ref "core:prelude/types.wado//Box<ErrorCode>";
     let __v0_85: ref "core:prelude/string.wado//String";
     let __cond_86: bool;
-    let body_err_none: ref "core:prelude/types.wado//Box<ErrorCode>";
     let __v0_88: ref "core:prelude/string.wado//String";
     let __cond_89: bool;
-    let resp_body_err: ref "core:prelude/types.wado//Box<ErrorCode>";
     let __v0_91: ref "core:prelude/string.wado//String";
     let __cond_92: bool;
-    let transfer_err: ref "core:prelude/types.wado//Box<ErrorCode>";
     let __v0_94: ref "core:prelude/string.wado//String";
     let __cond_95: bool;
-    let content_err: ref "core:prelude/types.wado//Box<ErrorCode>";
     let __v0_97: ref "core:prelude/string.wado//String";
     let __cond_98: bool;
-    let internal: ref "core:prelude/types.wado//Box<ErrorCode>";
     let __v0_100: ref "core:prelude/string.wado//String";
     let __cond_101: bool;
-    let internal_none: ref "core:prelude/types.wado//Box<ErrorCode>";
     let __v0_103: ref "core:prelude/string.wado//String";
     let __cond_104: bool;
     let he1: ref "wasi:http/types.wado//HeaderError";
@@ -1882,8 +1872,7 @@ condition: code == 3
         }
     }
     dns_empty = struct.new "wasi:http/types.wado//DnsErrorPayload" { rcode: ref.null none, info_code: struct.new "core:prelude/types.wado//Option<u16>" { 1 } };
-    dns_err2 = struct.new "core:prelude/types.wado//Box<ErrorCode>" { value: struct.new "wasi:http/types.wado//ErrorCode::DnsError" { discriminant: 1, payload_0: dns_empty } };
-    __v0_64 = "wado-compiler/tests/fixtures/http-error-code-comprehensive.wado/error_tag"(dns_err2.value);
+    __v0_64 = "wado-compiler/tests/fixtures/http-error-code-comprehensive.wado/error_tag"(struct.new "wasi:http/types.wado//ErrorCode::DnsError" { discriminant: 1, payload_0: dns_empty });
     __cond_65 = "core:prelude/string.wado/String^Eq::eq"(__v0_64, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("dns-error"), used: 9 });
     if __cond_65 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -2037,8 +2026,7 @@ condition: msg == \"handshake failure\"
         }
     }
     field_payload = struct.new "wasi:http/types.wado//FieldSizePayload" { field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("content-length"), used: 14 }, field_size: struct.new "core:prelude/types.wado//Option<u32>::Some" { discriminant: 0, payload_0: 1048576 } };
-    header_err = struct.new "core:prelude/types.wado//Box<ErrorCode>" { value: struct.new "wasi:http/types.wado//ErrorCode::HttpRequestHeaderSize" { discriminant: 22, payload_0: field_payload } };
-    __v0_79 = "wado-compiler/tests/fixtures/http-error-code-comprehensive.wado/error_tag"(header_err.value);
+    __v0_79 = "wado-compiler/tests/fixtures/http-error-code-comprehensive.wado/error_tag"(struct.new "wasi:http/types.wado//ErrorCode::HttpRequestHeaderSize" { discriminant: 22, payload_0: field_payload });
     __cond_80 = "core:prelude/string.wado/String^Eq::eq"(__v0_79, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("http-request-header-size"), used: 24 });
     if __cond_80 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -2071,8 +2059,7 @@ condition: error_tag(&header_err) == \"http-request-header-size\"
         });
         unreachable;
     }
-    trailer_err = struct.new "core:prelude/types.wado//Box<ErrorCode>" { value: struct.new "wasi:http/types.wado//ErrorCode::HttpRequestTrailerSize" { discriminant: 24, payload_0: struct.new "wasi:http/types.wado//FieldSizePayload" { field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-large"), used: 7 }, field_size: struct.new "core:prelude/types.wado//Option<u32>::Some" { discriminant: 0, payload_0: 999 } } } };
-    __v0_82 = "wado-compiler/tests/fixtures/http-error-code-comprehensive.wado/error_tag"(trailer_err.value);
+    __v0_82 = "wado-compiler/tests/fixtures/http-error-code-comprehensive.wado/error_tag"(struct.new "wasi:http/types.wado//ErrorCode::HttpRequestTrailerSize" { discriminant: 24, payload_0: struct.new "wasi:http/types.wado//FieldSizePayload" { field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-large"), used: 7 }, field_size: struct.new "core:prelude/types.wado//Option<u32>::Some" { discriminant: 0, payload_0: 999 } } });
     __cond_83 = "core:prelude/string.wado/String^Eq::eq"(__v0_82, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("http-request-trailer-size"), used: 25 });
     if __cond_83 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -2105,8 +2092,7 @@ condition: error_tag(&trailer_err) == \"http-request-trailer-size\"
         });
         unreachable;
     }
-    body_err = struct.new "core:prelude/types.wado//Box<ErrorCode>" { value: struct.new "wasi:http/types.wado//ErrorCode::HttpRequestBodySize" { discriminant: 17, payload_0: struct.new "core:prelude/types.wado//Option<u64>::Some" { discriminant: 0, payload_0: 1024_i64 } } };
-    __v0_85 = "wado-compiler/tests/fixtures/http-error-code-comprehensive.wado/error_tag"(body_err.value);
+    __v0_85 = "wado-compiler/tests/fixtures/http-error-code-comprehensive.wado/error_tag"(struct.new "wasi:http/types.wado//ErrorCode::HttpRequestBodySize" { discriminant: 17, payload_0: struct.new "core:prelude/types.wado//Option<u64>::Some" { discriminant: 0, payload_0: 1024_i64 } });
     __cond_86 = "core:prelude/string.wado/String^Eq::eq"(__v0_85, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("http-request-body-size"), used: 22 });
     if __cond_86 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -2139,8 +2125,7 @@ condition: error_tag(&body_err) == \"http-request-body-size\"
         });
         unreachable;
     }
-    body_err_none = struct.new "core:prelude/types.wado//Box<ErrorCode>" { value: struct.new "wasi:http/types.wado//ErrorCode::HttpRequestBodySize" { discriminant: 17, payload_0: struct.new "core:prelude/types.wado//Option<u64>" { 1 } } };
-    __v0_88 = "wado-compiler/tests/fixtures/http-error-code-comprehensive.wado/error_tag"(body_err_none.value);
+    __v0_88 = "wado-compiler/tests/fixtures/http-error-code-comprehensive.wado/error_tag"(struct.new "wasi:http/types.wado//ErrorCode::HttpRequestBodySize" { discriminant: 17, payload_0: struct.new "core:prelude/types.wado//Option<u64>" { 1 } });
     __cond_89 = "core:prelude/string.wado/String^Eq::eq"(__v0_88, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("http-request-body-size"), used: 22 });
     if __cond_89 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -2173,8 +2158,7 @@ condition: error_tag(&body_err_none) == \"http-request-body-size\"
         });
         unreachable;
     }
-    resp_body_err = struct.new "core:prelude/types.wado//Box<ErrorCode>" { value: struct.new "wasi:http/types.wado//ErrorCode::HttpResponseBodySize" { discriminant: 28, payload_0: struct.new "core:prelude/types.wado//Option<u64>::Some" { discriminant: 0, payload_0: 2048_i64 } } };
-    __v0_91 = "wado-compiler/tests/fixtures/http-error-code-comprehensive.wado/error_tag"(resp_body_err.value);
+    __v0_91 = "wado-compiler/tests/fixtures/http-error-code-comprehensive.wado/error_tag"(struct.new "wasi:http/types.wado//ErrorCode::HttpResponseBodySize" { discriminant: 28, payload_0: struct.new "core:prelude/types.wado//Option<u64>::Some" { discriminant: 0, payload_0: 2048_i64 } });
     __cond_92 = "core:prelude/string.wado/String^Eq::eq"(__v0_91, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("http-response-body-size"), used: 23 });
     if __cond_92 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -2207,8 +2191,7 @@ condition: error_tag(&resp_body_err) == \"http-response-body-size\"
         });
         unreachable;
     }
-    transfer_err = struct.new "core:prelude/types.wado//Box<ErrorCode>" { value: struct.new "wasi:http/types.wado//ErrorCode::HttpResponseTransferCoding" { discriminant: 31, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("chunked"), used: 7 } } };
-    __v0_94 = "wado-compiler/tests/fixtures/http-error-code-comprehensive.wado/error_tag"(transfer_err.value);
+    __v0_94 = "wado-compiler/tests/fixtures/http-error-code-comprehensive.wado/error_tag"(struct.new "wasi:http/types.wado//ErrorCode::HttpResponseTransferCoding" { discriminant: 31, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("chunked"), used: 7 } });
     __cond_95 = "core:prelude/string.wado/String^Eq::eq"(__v0_94, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("http-response-transfer-coding"), used: 29 });
     if __cond_95 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -2241,8 +2224,7 @@ condition: error_tag(&transfer_err) == \"http-response-transfer-coding\"
         });
         unreachable;
     }
-    content_err = struct.new "core:prelude/types.wado//Box<ErrorCode>" { value: struct.new "wasi:http/types.wado//ErrorCode::HttpResponseContentCoding" { discriminant: 32, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("gzip"), used: 4 } } };
-    __v0_97 = "wado-compiler/tests/fixtures/http-error-code-comprehensive.wado/error_tag"(content_err.value);
+    __v0_97 = "wado-compiler/tests/fixtures/http-error-code-comprehensive.wado/error_tag"(struct.new "wasi:http/types.wado//ErrorCode::HttpResponseContentCoding" { discriminant: 32, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("gzip"), used: 4 } });
     __cond_98 = "core:prelude/string.wado/String^Eq::eq"(__v0_97, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("http-response-content-coding"), used: 28 });
     if __cond_98 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -2275,8 +2257,7 @@ condition: error_tag(&content_err) == \"http-response-content-coding\"
         });
         unreachable;
     }
-    internal = struct.new "core:prelude/types.wado//Box<ErrorCode>" { value: struct.new "wasi:http/types.wado//ErrorCode::InternalError" { discriminant: 38, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test"), used: 4 } } };
-    __v0_100 = "wado-compiler/tests/fixtures/http-error-code-comprehensive.wado/error_tag"(internal.value);
+    __v0_100 = "wado-compiler/tests/fixtures/http-error-code-comprehensive.wado/error_tag"(struct.new "wasi:http/types.wado//ErrorCode::InternalError" { discriminant: 38, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test"), used: 4 } });
     __cond_101 = "core:prelude/string.wado/String^Eq::eq"(__v0_100, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("internal-error"), used: 14 });
     if __cond_101 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -2309,8 +2290,7 @@ condition: error_tag(&internal) == \"internal-error\"
         });
         unreachable;
     }
-    internal_none = struct.new "core:prelude/types.wado//Box<ErrorCode>" { value: struct.new "wasi:http/types.wado//ErrorCode::InternalError" { discriminant: 38, payload_0: ref.null none } };
-    __v0_103 = "wado-compiler/tests/fixtures/http-error-code-comprehensive.wado/error_tag"(internal_none.value);
+    __v0_103 = "wado-compiler/tests/fixtures/http-error-code-comprehensive.wado/error_tag"(struct.new "wasi:http/types.wado//ErrorCode::InternalError" { discriminant: 38, payload_0: ref.null none });
     __cond_104 = "core:prelude/string.wado/String^Eq::eq"(__v0_103, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("internal-error"), used: 14 });
     if __cond_104 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {

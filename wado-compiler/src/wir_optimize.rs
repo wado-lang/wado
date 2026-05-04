@@ -52,7 +52,8 @@ use dae::eliminate_dead_arguments;
 use drve::eliminate_dead_return_values;
 use elide_local::elide_write_only_locals;
 use elide_struct::{
-    elide_multi_field_struct_locals, elide_single_field_struct_locals, flatten_seq_assignments,
+    elide_adjacent_single_use_struct_locals, elide_multi_field_struct_locals,
+    elide_single_field_struct_locals, flatten_seq_assignments,
 };
 use init_guard::remove_trivial_init_globals;
 use nullable_ref::optimize_nullable_refs;
@@ -127,6 +128,14 @@ pub fn optimize_wir(module: &mut WirPackage, opt_level: OptLevel, profiler: &dyn
     // where every use of `x` is via StructGet. Substitute `inner` directly.
     wir_pass("wir/elide_single_field_struct", module, profiler, |m| {
         elide_single_field_struct_locals(m);
+    });
+    // Adjacent-use elision: handles the common Box<T> pattern produced by
+    // boxing+inlining where the inner field initializer reads heap state and
+    // the only use is the immediately-following sibling instruction's leftmost
+    // descendant. Conservative wrt re-evaluation safety; relies on adjacency
+    // and leftmost-evaluation rather than referential transparency.
+    wir_pass("wir/elide_adjacent_struct", module, profiler, |m| {
+        elide_adjacent_single_use_struct_locals(m);
     });
 
     // Phase 3: Data flow

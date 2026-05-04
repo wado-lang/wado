@@ -113,8 +113,6 @@ fn "wado-compiler/tests/fixtures/trait_bound_3.wado/trait_bound_method_on_type_p
     let __local_1: ref "core:prelude/format.wado//Formatter";
     let __local_2: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/format.wado//Formatter";
-    let self_6: ref "core:prelude/types.wado//Box<i32>";
-    let self_14: ref "core:prelude/types.wado//Box<i32>";
     let self_20: ref "core:prelude/types.wado//Box<i32>";
     let self_21: ref "core:prelude/types.wado//Box<i32>";
     let self_22: ref "core:prelude/types.wado//Box<bool>";
@@ -122,7 +120,7 @@ fn "wado-compiler/tests/fixtures/trait_bound_3.wado/trait_bound_method_on_type_p
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_1 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_0 };
-        self_6 = struct.new "core:prelude/types.wado//Box<i32>" { value: __inline_i32_ToNum__to_num_0: block -> i32 {
+        "core:prelude/primitive.wado/i32::fmt_decimal"(__inline_i32_ToNum__to_num_0: block -> i32 {
             self_20 = struct.new "core:prelude/types.wado//Box<i32>" { value: 10 };
             break __inline_i32_ToNum__to_num_0: 10;
             unreachable;
@@ -130,15 +128,14 @@ fn "wado-compiler/tests/fixtures/trait_bound_3.wado/trait_bound_method_on_type_p
             self_21 = struct.new "core:prelude/types.wado//Box<i32>" { value: 20 };
             break __inline_i32_ToNum__to_num_1: 20;
             unreachable;
-        } };
-        "core:prelude/primitive.wado/i32::fmt_decimal"(self_6.value, __local_1);
+        }, __local_1);
         break __tmpl: __local_0;
         unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };
-        self_14 = struct.new "core:prelude/types.wado//Box<i32>" { value: __inline_bool_ToNum__to_num_2: block -> i32 {
+        "core:prelude/primitive.wado/i32::fmt_decimal"(__inline_bool_ToNum__to_num_2: block -> i32 {
             self_22 = struct.new "core:prelude/types.wado//Box<bool>" { value: 1 };
             break __inline_bool_ToNum__to_num_2: 1;
             break __inline_bool_ToNum__to_num_2: 0;
@@ -147,8 +144,7 @@ fn "wado-compiler/tests/fixtures/trait_bound_3.wado/trait_bound_method_on_type_p
             self_23 = struct.new "core:prelude/types.wado//Box<bool>" { value: 0 };
             break __inline_bool_ToNum__to_num_3: 0;
             unreachable;
-        } };
-        "core:prelude/primitive.wado/i32::fmt_decimal"(self_14.value, __local_3);
+        }, __local_3);
         break __tmpl: __local_2;
         unreachable;
     });
@@ -169,15 +165,13 @@ fn "wado-compiler/tests/fixtures/trait_bound_3.wado/__cm_export__run"() {
 fn "wado-compiler/tests/fixtures/trait_bound_3.wado/describe<Player>"(x) {
     let __local_1: ref "core:prelude/string.wado//String";
     let __local_2: ref "core:prelude/format.wado//Formatter";
-    let self_6: ref "core:prelude/types.wado//Box<i32>";
     return __tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 };
         "core:prelude/string.wado/String::push_str"(__local_1, x.player_name);
         "core:prelude/string.wado/String::push"(__local_1, 58);
         "core:prelude/string.wado/String::push"(__local_1, 32);
         __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
-        self_6 = struct.new "core:prelude/types.wado//Box<i32>" { value: x.player_score };
-        "core:prelude/primitive.wado/i32::fmt_decimal"(self_6.value, __local_2);
+        "core:prelude/primitive.wado/i32::fmt_decimal"(x.player_score, __local_2);
         break __tmpl: __local_1;
         unreachable;
     };

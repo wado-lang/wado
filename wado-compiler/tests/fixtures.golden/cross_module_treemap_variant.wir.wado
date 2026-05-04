@@ -174,7 +174,6 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 
 fn "wado-compiler/tests/fixtures/cross_module_treemap_variant.wado/run"() with Stdout {
     let map: ref "core:collections//TreeMap<String,Value>";
-    let obj: ref "core:prelude/types.wado//Box<Value>";
     let __b_3: ref "core:prelude//Array<TreeMapEntry<String,Value>>";
     let key: ref "core:prelude/string.wado//String";
     let value: ref "./sub/cross_module_treemap_variant_helper.wado//Value";
@@ -186,8 +185,7 @@ fn "wado-compiler/tests/fixtures/cross_module_treemap_variant.wado/run"() with S
     key = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
     value = struct.new "./sub/cross_module_treemap_variant_helper.wado//Value::Str" { discriminant: 0, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 } };
     "core:collections/TreeMap<String,Value>::insert"(map, key, value);
-    obj = struct.new "core:prelude/types.wado//Box<Value>" { value: struct.new "./sub/cross_module_treemap_variant_helper.wado//Value::Obj" { discriminant: 1, payload_0: map } };
-    "core:cli/println"("./sub/cross_module_treemap_variant_helper.wado/stringify"(obj.value));
+    "core:cli/println"("./sub/cross_module_treemap_variant_helper.wado/stringify"(struct.new "./sub/cross_module_treemap_variant_helper.wado//Value::Obj" { discriminant: 1, payload_0: map }));
 }
 
 fn "wado-compiler/tests/fixtures/cross_module_treemap_variant.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
