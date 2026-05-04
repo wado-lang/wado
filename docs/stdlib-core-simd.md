@@ -10,11 +10,11 @@ All types are newtypes of the primitive `v128` and can be freely reinterpreted v
 
 ## Types
 
-| Category         | Types                              |
-| ---------------- | ---------------------------------- |
-| Signed integer   | `i8x16`, `i16x8`, `i32x4`, `i64x2` |
+| Category | Types |
+|----------|-------|
+| Signed integer | `i8x16`, `i16x8`, `i32x4`, `i64x2` |
 | Unsigned integer | `u8x16`, `u16x8`, `u32x4`, `u64x2` |
-| Floating-point   | `f32x4`, `f64x2`                   |
+| Floating-point | `f32x4`, `f64x2` |
 
 ## Construction
 

@@ -29,24 +29,24 @@ use crate::package::Package;
 use crate::tir::{TirFunction, TypeTable};
 
 pub use export_adapter::export_binding_func_name;
-pub use import_adapter::binding_func_name;
-pub use lift::{synthesize_lift, synthesize_lift_with_context};
-pub use lower::synthesize_lower;
-pub use types::{
-    LiftContext, cm_enum_byte_size, cm_flags_byte_align, cm_flags_byte_size, flatten_param_type,
-    wasi_type_to_type_id,
-};
 use export_adapter::{
     synthesize_async_export_binding, synthesize_general_export_binding,
     synthesize_result_export_binding, synthesize_void_export_binding, synthesize_void_stub_adapter,
 };
+pub use import_adapter::binding_func_name;
 use import_adapter::synthesize_adapter;
+pub use lift::{synthesize_lift, synthesize_lift_with_context};
+pub use lower::synthesize_lower;
 use resource_rewrite::{rewrite_cm_resource_methods, synthesize_record_stream_reads};
 use task_return::{expand_task_returns_in_func, strip_task_returns_in_func};
-use type_fixup::{collect_effect_calls_in_block, collect_local_type_updates, rewrite_calls_in_block};
+use type_fixup::{
+    collect_effect_calls_in_block, collect_local_type_updates, rewrite_calls_in_block,
+};
+pub use types::{
+    LiftContext, cm_enum_byte_size, cm_flags_byte_align, cm_flags_byte_size, flatten_param_type,
+    wasi_type_to_type_id,
+};
 use types::{cm_val_type_to_type_id, compute_export_flat_return_types};
-
-
 
 /// Build a `(module_source, name)` set for every effect/resource declared in
 /// the loaded TIR modules. The CM binding synthesizer uses this to attach the

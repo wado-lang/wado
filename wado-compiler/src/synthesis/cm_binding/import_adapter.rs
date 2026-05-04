@@ -31,7 +31,9 @@ use crate::synthesis::common::{
     local_ref, loop_stmt, null_expr, return_stmt, synth_span,
 };
 
-use super::lift::{materialize_if_needed, synthesize_lift_with_context, try_lift_wasi_variant_or_enum};
+use super::lift::{
+    materialize_if_needed, synthesize_lift_with_context, try_lift_wasi_variant_or_enum,
+};
 use super::lower::{
     synthesize_flatten_option_to_flat_args, synthesize_flatten_value_to_flat_args,
     synthesize_lower, synthesize_lower_option_to_memory, synthesize_lower_tuple,
@@ -158,12 +160,7 @@ fn synthesize_lift_flat_result(
         };
 
         stmts.push(if_stmt(
-            binary(
-                TirBinaryOp::Eq,
-                disc_expr,
-                i32_const(0),
-                TypeTable::BOOL,
-            ),
+            binary(TirBinaryOp::Eq, disc_expr, i32_const(0), TypeTable::BOOL),
             block(vec![expr_stmt(assign(
                 local_ref(result_local, "__result_val", TypeTable::I32),
                 ok_construct,
