@@ -1,0 +1,76 @@
+// Regression: label-on-rule-ref where the same rule appears under two
+// different labels in one alternative used to emit a duplicate
+// `let <rule> = parse_<rule>(p)?;` binding, failing compilation with
+// "cannot redeclare X" once Stage B exercised the generated parser.
+//
+// Smallest grammar exhibiting the bug:
+//   e : a=e op=('+'|'-') b=e ;
+//
+// The inner `gen_element` for the labeled element used a fresh
+// name_counts, so the RuleRef binding `e` did not dedup against the
+// outer alt's bindings. Both `a=e` and `b=e` emitted a top-level
+// `let e = parse_e(p)?;` — the second redeclared the first.
+
+use { generate, GenerateOptions } from "./codegen.wado";
+use { parse_checked } from "./g4/parser.wado";
+
+test "label binding on repeated rule ref dedups against outer scope" {
+    // Grammar shape from antlr4 runtime-testsuite descriptors
+    // (LeftRecursion/MultipleActions_1) — three alts, action blocks
+    // present, multi-alt path triggers the `parse_X_bt_*` backtrack
+    // helpers where the bug originally reproduced.
+    let g4 = "grammar T;
+e : a=e op=('*'|'/') b=e
+  | INT
+  | '(' x=e ')'
+  ;
+INT : '0'..'9'+ ;
+WS : (' '|'\\n') -> skip ;
+";
+    let mut grammar = match parse_checked(g4) {
+        Ok(g) => g,
+        Err(e) => panic(`parse_checked failed: {e.message}`),
+    };
+    let out = generate(&mut grammar, &GenerateOptions { highlight: false });
+    // The generated parser must not declare the same temporary name
+    // twice in any function body. Before the fix the alt `a=e ... b=e`
+    // emitted two back-to-back `let e = parse_e(p)?;` lines (the inner
+    // RuleRef's binding was deduped against a fresh, empty name_counts
+    // instead of the outer alt's one), failing compilation with
+    // "cannot redeclare e".
+    // The bug emitted two `let e = parse_e(p)?;` lines back-to-back
+    // inside the SAME function body. Different functions can each have
+    // their own — that's a separate scope. Detect by scanning for the
+    // first occurrence and checking no second occurrence appears
+    // before the next `fn ` boundary.
+    let parse_e_decl = "let e = parse_e(p)?;";
+    let mut pos = 0;
+    loop {
+        let rest = out.substr_bytes(pos, out.len());
+        let opt_i = rest.find(parse_e_decl);
+        if opt_i matches { None } { break; }
+        let i = if let Some(j) = opt_i { j } else { 0 };
+        let abs = pos + i;
+        let after = out.substr_bytes(abs + parse_e_decl.len(), out.len());
+        let next_fn = if let Some(j) = after.find("\nfn ") { j } else { after.len() };
+        let next_decl = if let Some(j) = after.find(parse_e_decl) { j } else { after.len() };
+        assert next_decl >= next_fn,
+            `two 'let e = parse_e(p)?;' in same function body — bug repro at offset {abs}`;
+        pos = abs + parse_e_decl.len();
+    }
+}
+
+fn count_substring(haystack: &String, needle: &String) -> i32 {
+    let mut count = 0;
+    let mut pos = 0;
+    loop {
+        let rest = haystack.substr_bytes(pos, haystack.len());
+        if let Some(i) = rest.find(*needle) {
+            count += 1;
+            pos = pos + i + needle.len();
+        } else {
+            break;
+        }
+    }
+    return count;
+}

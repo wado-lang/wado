@@ -914,8 +914,8 @@ fn parse_expr_bt_1(p: &mut Parser) -> Result<ExprNode, ParseError> {
         comma_b_list.push(comma_b);
     }
     let lit_gtgt = p.expect(TK_LIT_GTGT)?;
-    let expr = parse_expr(p)?;
-    let c = expr;
+    let expr_2 = parse_expr(p)?;
+    let c = expr_2;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Send(ExprSend {
         span: Span::new(start, p.last_end()),
         b,
@@ -956,13 +956,13 @@ fn parse_expr_bt_0(p: &mut Parser) -> Result<ExprNode, ParseError> {
     let expr = parse_expr(p)?;
     let a = expr;
     let star = p.expect(TK_LIT_STAR)?;
-    let expr = parse_expr(p)?;
-    let a_2 = expr;
+    let expr_2 = parse_expr(p)?;
+    let a_2 = expr_2;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Factor(ExprFactor {
         span: Span::new(start, p.last_end()),
         a,
         star,
-        a,
+        a_2,
     }));
 }
 
