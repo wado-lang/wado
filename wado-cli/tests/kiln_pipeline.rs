@@ -200,12 +200,15 @@ fn end_to_end_two_generators_execute_cache_and_reuse() {
     assert!(tmp.path().join("build/kiln/kiln-alpha/alpha.wado").exists());
     assert!(tmp.path().join("build/kiln/kiln-beta/beta.wado").exists());
 
-    let alpha_meta = kiln_metadata::load(tmp.path(), "kiln-alpha")
+    let alpha = alpha_inv();
+    let beta = beta_inv();
+    let alpha_meta =
+        kiln_metadata::load(tmp.path(), alpha.output_dir.as_str(), alpha.from.as_str())
+            .unwrap()
+            .expect("kiln-alpha metadata should be written after run");
+    let beta_meta = kiln_metadata::load(tmp.path(), beta.output_dir.as_str(), beta.from.as_str())
         .unwrap()
-        .expect("kiln-alpha metadata.json should be written after run");
-    let beta_meta = kiln_metadata::load(tmp.path(), "kiln-beta")
-        .unwrap()
-        .expect("kiln-beta metadata.json should be written after run");
+        .expect("kiln-beta metadata should be written after run");
     assert_eq!(alpha_meta.invocation, "kiln-alpha");
     assert_eq!(beta_meta.invocation, "kiln-beta");
 
@@ -270,13 +273,15 @@ fn each_invocation_writes_its_own_metadata_file() {
         ],
     );
     let provider = StubProvider::new(b"component-bytes".to_vec());
-    run(&m, tmp.path(), &host, &provider, vec![z_inv, a_inv, m_inv]);
+    let invs = vec![z_inv, a_inv, m_inv];
+    run(&m, tmp.path(), &host, &provider, invs.clone());
 
-    for id in ["kiln-zebra", "kiln-alpha", "kiln-mango"] {
-        let m = kiln_metadata::load(tmp.path(), id)
+    for inv in &invs {
+        let id = inv.decl_site.synthetic_id.as_str();
+        let meta = kiln_metadata::load(tmp.path(), inv.output_dir.as_str(), inv.from.as_str())
             .unwrap()
-            .unwrap_or_else(|| panic!("missing metadata.json for {id}"));
-        assert_eq!(m.invocation, id);
+            .unwrap_or_else(|| panic!("missing metadata for {id}"));
+        assert_eq!(meta.invocation, id);
     }
     assert!(
         !tmp.path().join("wado.lock").exists(),

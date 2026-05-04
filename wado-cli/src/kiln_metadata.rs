@@ -1,26 +1,31 @@
-//! Per-invocation Kiln cache state, stored at
-//! `<manifest_root>/build/kiln/<invocation_id>/metadata.json`.
+//! Per-invocation Kiln cache state, stored next to the generated outputs
+//! at `<manifest_root>/<output_dir>/<primary_basename>.kiln.json`.
 //!
 //! See [WEP: Kiln](../../docs/wep-2026-04-12-kiln.md), section
-//! "Caching and `metadata.json`", for the design.
+//! "Caching and the `<primary>.kiln.json` cache file", for the design.
 //!
-//! Always lives under `build/kiln/` regardless of where `output_dir`
-//! points the generated `.wado` source — keeps cache state gitignored
-//! even for committed-source workflows. Deleting the file (or the whole
-//! `build/kiln/` tree) is not an error: the next compile rebuilds from
-//! scratch.
+//! The location is derived deterministically from `Invocation::output_dir`
+//! and the basename of `Invocation::from` (the primary input file). For
+//! invocations that opt into a committed `output_dir` (e.g.
+//! `tests/generated/sqlite`), this means the cache state can be committed
+//! alongside the generated `.wado` so a fresh checkout hits the cache and
+//! skips the generator. For default invocations (`output_dir` under
+//! `build/kiln/<synthetic_id>`), the file lives in that gitignored tree
+//! and behaves like before. Deleting the file is not an error: the next
+//! compile rebuilds from scratch.
 
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-/// Schema version of the `metadata.json` file. Bumped only on
+/// Schema version of the `<primary>.kiln.json` file. Bumped only on
 /// incompatible changes; older files are silently ignored (treated as a
 /// cache miss) when the version differs.
 pub const METADATA_VERSION: u32 = 1;
 
-const METADATA_FILE: &str = "metadata.json";
-const KILN_DIR: &str = "build/kiln";
+/// Suffix appended to the primary input's basename to form the metadata
+/// filename. Lives in `<manifest_root>/<output_dir>/`.
+const METADATA_SUFFIX: &str = ".kiln.json";
 
 /// Per-invocation cache state recorded between Kiln runs.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -51,12 +56,22 @@ pub struct OutputEntry {
 }
 
 /// Path to the metadata file for an invocation.
+///
+/// `output_dir` is the relative `Invocation::output_dir` (e.g.
+/// `tests/generated/sqlite` or `build/kiln/<synthetic_id>`). `primary`
+/// is `Invocation::from` — the metadata's basename uses
+/// `Path::file_name(primary)` so two invocations sharing one
+/// `output_dir` collide only if they share both primary basename and
+/// options, which would already make them the same invocation under
+/// [`crate::kiln_driver::invocation_id`].
 #[must_use]
-pub fn metadata_path(manifest_root: &Path, invocation_id: &str) -> PathBuf {
+pub fn metadata_path(manifest_root: &Path, output_dir: &str, primary: &str) -> PathBuf {
+    let basename = Path::new(primary)
+        .file_name()
+        .map_or_else(|| primary.to_string(), |s| s.to_string_lossy().into_owned());
     manifest_root
-        .join(KILN_DIR)
-        .join(invocation_id)
-        .join(METADATA_FILE)
+        .join(output_dir)
+        .join(format!("{basename}{METADATA_SUFFIX}"))
 }
 
 /// Read the metadata file for an invocation, if present.
@@ -68,8 +83,12 @@ pub fn metadata_path(manifest_root: &Path, invocation_id: &str) -> PathBuf {
 /// schema bumps do not require any manual intervention from the user.
 ///
 /// Returns `Err` only on real I/O failure or syntactically broken JSON.
-pub fn load(manifest_root: &Path, invocation_id: &str) -> Result<Option<Metadata>, MetadataError> {
-    let path = metadata_path(manifest_root, invocation_id);
+pub fn load(
+    manifest_root: &Path,
+    output_dir: &str,
+    primary: &str,
+) -> Result<Option<Metadata>, MetadataError> {
+    let path = metadata_path(manifest_root, output_dir, primary);
     let content = match std::fs::read_to_string(&path) {
         Ok(s) => s,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
@@ -90,13 +109,14 @@ pub fn load(manifest_root: &Path, invocation_id: &str) -> Result<Option<Metadata
     Ok(Some(metadata))
 }
 
-/// Write metadata.json, creating the parent directory if needed.
+/// Write the metadata file, creating the parent directory if needed.
 pub fn save(
     manifest_root: &Path,
-    invocation_id: &str,
+    output_dir: &str,
+    primary: &str,
     metadata: &Metadata,
 ) -> Result<(), MetadataError> {
-    let path = metadata_path(manifest_root, invocation_id);
+    let path = metadata_path(manifest_root, output_dir, primary);
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|source| MetadataError::Io {
             path: parent.to_path_buf(),
@@ -176,49 +196,67 @@ mod tests {
         }
     }
 
+    const OUTPUT_DIR: &str = "tests/generated/x";
+    const PRIMARY: &str = "schemas/x.proto";
+
     #[test]
     fn roundtrip_save_load() {
         let tmp = tempfile::tempdir().unwrap();
         let m = sample();
-        save(tmp.path(), &m.invocation, &m).unwrap();
-        let loaded = load(tmp.path(), &m.invocation).unwrap().unwrap();
+        save(tmp.path(), OUTPUT_DIR, PRIMARY, &m).unwrap();
+        let loaded = load(tmp.path(), OUTPUT_DIR, PRIMARY).unwrap().unwrap();
         assert_eq!(loaded, m);
     }
 
     #[test]
     fn missing_file_is_cache_miss() {
         let tmp = tempfile::tempdir().unwrap();
-        let result = load(tmp.path(), "kiln-nope").unwrap();
+        let result = load(tmp.path(), OUTPUT_DIR, PRIMARY).unwrap();
         assert!(result.is_none());
     }
 
     #[test]
     fn version_mismatch_is_cache_miss() {
         let tmp = tempfile::tempdir().unwrap();
-        let m = sample();
-        let path = metadata_path(tmp.path(), &m.invocation);
+        let mut bumped = sample();
+        let path = metadata_path(tmp.path(), OUTPUT_DIR, PRIMARY);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         // Write with an unsupported version.
-        let mut bumped = m.clone();
         bumped.version = u32::MAX;
         let json = serde_json::to_string(&bumped).unwrap();
         std::fs::write(&path, json).unwrap();
-        assert!(load(tmp.path(), &m.invocation).unwrap().is_none());
+        assert!(load(tmp.path(), OUTPUT_DIR, PRIMARY).unwrap().is_none());
     }
 
     #[test]
     fn parse_error_propagates() {
         let tmp = tempfile::tempdir().unwrap();
-        let path = metadata_path(tmp.path(), "kiln-broken");
+        let path = metadata_path(tmp.path(), OUTPUT_DIR, PRIMARY);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(&path, "{ not json").unwrap();
-        let err = load(tmp.path(), "kiln-broken").unwrap_err();
+        let err = load(tmp.path(), OUTPUT_DIR, PRIMARY).unwrap_err();
         assert!(matches!(err, MetadataError::Parse { .. }), "{err}");
     }
 
     #[test]
-    fn metadata_path_layout() {
-        let p = metadata_path(Path::new("/proj"), "kiln-abc");
-        assert_eq!(p, PathBuf::from("/proj/build/kiln/kiln-abc/metadata.json"));
+    fn metadata_path_uses_primary_basename_in_output_dir() {
+        let p = metadata_path(
+            Path::new("/proj"),
+            "tests/generated/sqlite",
+            "tests/grammars/SQLite.g4",
+        );
+        assert_eq!(
+            p,
+            PathBuf::from("/proj/tests/generated/sqlite/SQLite.g4.kiln.json")
+        );
+    }
+
+    #[test]
+    fn metadata_path_handles_bare_primary_filename() {
+        let p = metadata_path(Path::new("/proj"), "build/kiln/synth-id", "schema.proto");
+        assert_eq!(
+            p,
+            PathBuf::from("/proj/build/kiln/synth-id/schema.proto.kiln.json")
+        );
     }
 }

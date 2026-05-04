@@ -7,10 +7,11 @@ use serde::Deserialize;
 ///
 /// As of WEP M9, `wado.lock` is dependency-pin-only: it contains
 /// `[[package]]` and `[[build-dependency]]` entries but no Kiln
-/// generator-cache state. Per-invocation cache state lives in
-/// `build/kiln/<id>/metadata.json`. Older lockfiles that contain
-/// `[[generator-cache]]` sections still parse cleanly — the unknown
-/// table is ignored — but newly written lockfiles never emit it.
+/// generator-cache state. Per-invocation cache state lives next to the
+/// generated outputs as `<output_dir>/<primary>.kiln.json`. Older
+/// lockfiles that contain `[[generator-cache]]` sections still parse
+/// cleanly — the unknown table is ignored — but newly written lockfiles
+/// never emit it.
 #[derive(Debug, Clone)]
 pub struct LockFile {
     /// Lock file format version.
@@ -86,7 +87,7 @@ impl FromStr for LockFile {
 
         // `[[generator-cache]]` sections from older lockfiles are tolerated
         // but ignored — the new design (WEP M9) records that state in
-        // `build/kiln/<id>/metadata.json`.
+        // `<output_dir>/<primary>.kiln.json`.
 
         Ok(LockFile {
             version,

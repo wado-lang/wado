@@ -142,8 +142,9 @@ pub enum Code {
     /// the required `with { generator: { ... } }` clause.
     KilnMissingWith,
     /// A generated `.wado` file on disk has been modified after generation
-    /// (cache key matches metadata.json but on-disk content does not). The
-    /// edit is honored — compilation proceeds against the on-disk content.
+    /// (cache key matches the per-invocation `<primary>.kiln.json` cache file
+    /// but on-disk content does not). The edit is honored — compilation
+    /// proceeds against the on-disk content.
     KilnGeneratedModified,
     /// On a cache miss, the generator produced bytes that differ from the
     /// pre-existing file at the same path. The new bytes overwrite the old.

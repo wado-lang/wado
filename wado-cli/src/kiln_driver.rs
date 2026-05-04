@@ -14,12 +14,12 @@
 //!    file — see [`execute`].
 //! 3. Convert an [`InvocationRun`] into a [`crate::kiln_metadata::Metadata`]
 //!    record for persistence (`build_metadata`), check a recorded
-//!    `metadata.json` for freshness against the current filesystem +
+//!    `<primary>.kiln.json` for freshness against the current filesystem +
 //!    sources (`cache_matches`), and delete orphaned `#![generated]`
 //!    files left over from an earlier run (`reconcile_outputs`).
 //!
 //! Per-invocation cache state lives at
-//! `<manifest_root>/build/kiln/<invocation_id>/metadata.json` (see
+//! `<manifest_root>/<output_dir>/<primary>.kiln.json` (see
 //! [`crate::kiln_metadata`]). `wado.lock` is dependency-pin-only since
 //! WEP M9 — it does not contain any generator-cache rows.
 
@@ -316,11 +316,11 @@ pub async fn execute_with_mode<H: CompilerHost>(
 }
 
 /// Convert an [`InvocationRun`] into a [`Metadata`] record ready to be
-/// written to `build/kiln/<invocation_id>/metadata.json`.
+/// written to `<output_dir>/<primary>.kiln.json`.
 ///
 /// `invocation_name` is the synthesized id derived from `(decl_file,
-/// from)` for inline clauses, used both as the directory name and as
-/// the metadata's own `invocation` field. `options_hash` is the hex
+/// from)` for inline clauses; it is recorded in the metadata's own
+/// `invocation` field for diagnostics. `options_hash` is the hex
 /// SHA-256 of the canonical options encoding — produced by
 /// [`wado_compiler::kiln::hash_options_canonical`] so it stays stable
 /// across the M3 provisional encoder and the M4 lifted-form encoder.
@@ -431,8 +431,8 @@ pub enum CacheCheck {
     Miss,
 }
 
-/// Check whether a recorded `metadata.json` is still valid for the given
-/// invocation.
+/// Check whether a recorded `<primary>.kiln.json` is still valid for the
+/// given invocation.
 ///
 /// Re-hashes the primary + declared inputs via `host.load_source`, then
 /// re-hashes every `reads` entry the same way, then re-hashes every output
@@ -795,7 +795,7 @@ pub enum PipelineError {
         path: PathBuf,
         source: std::io::Error,
     },
-    /// Writing per-invocation `metadata.json` failed.
+    /// Writing per-invocation `<primary>.kiln.json` failed.
     MetadataSave {
         invocation: String,
         source: kiln_metadata::MetadataError,
@@ -876,7 +876,11 @@ where
     for invocation in &planned.plan.order {
         let invocation_name = invocation_id(invocation);
 
-        let existing = match kiln_metadata::load(manifest_root, &invocation_name) {
+        let existing = match kiln_metadata::load(
+            manifest_root,
+            invocation.output_dir.as_str(),
+            invocation.from.as_str(),
+        ) {
             Ok(m) => m,
             Err(source) => {
                 emit_metadata_load_warning(host, &invocation_name, &source);
@@ -965,7 +969,12 @@ where
                     .insert(&decl_file, invocation.from.as_str(), &uri);
             }
             if executed
-                && let Err(source) = kiln_metadata::save(manifest_root, &invocation_name, &metadata)
+                && let Err(source) = kiln_metadata::save(
+                    manifest_root,
+                    invocation.output_dir.as_str(),
+                    invocation.from.as_str(),
+                    &metadata,
+                )
             {
                 return Err(PipelineError::MetadataSave {
                     invocation: invocation_name.clone(),
@@ -1011,12 +1020,12 @@ pub struct CheckOutcome {
 }
 
 /// Run the Kiln pipeline in `wado check` mode: re-run every invocation
-/// from scratch (ignoring `metadata.json`), byte-compare each output
-/// against the on-disk file, and surface
+/// from scratch (ignoring `<primary>.kiln.json`), byte-compare each
+/// output against the on-disk file, and surface
 /// [`Code::KilnGeneratedStaleOnDisk`] diagnostics for mismatches.
 ///
 /// Does not write generator outputs to disk and does not touch
-/// `metadata.json`. Suitable for CI: a clean checkout of a
+/// `<primary>.kiln.json`. Suitable for CI: a clean checkout of a
 /// committed-source project should produce zero divergence.
 pub async fn check_pipeline<H, P>(
     manifest: &Manifest,
@@ -1265,7 +1274,7 @@ fn emit_metadata_load_warning<H: CompilerHost>(
         severity: Severity::Warning,
         code: Code::Log,
         message: format!(
-            "kiln[{invocation}]: failed to read metadata.json ({source}); \
+            "kiln[{invocation}]: failed to read cache file ({source}); \
              treating as cache miss and re-running generator",
         ),
         span: None,
