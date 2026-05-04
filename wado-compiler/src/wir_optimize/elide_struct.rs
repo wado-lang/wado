@@ -405,30 +405,57 @@ pub(super) fn elide_adjacent_single_use_struct_locals(module: &mut WirPackage) {
         let Some(body) = &mut func.body else {
             continue;
         };
-        // Function-wide def/use counts.
         let mut stats: IndexMap<String, LocalStats> = IndexMap::default();
-        let mut dummy_candidates: IndexMap<String, Candidate> = IndexMap::default();
         for instr in body.iter() {
-            collect_stats(instr, &mut stats, &mut dummy_candidates, 1, 1);
+            collect_local_stats(instr, &mut stats);
         }
-        // Run until a fixed point: each successful elision may expose a new
-        // adjacent pair when the use was wrapping another candidate.
+        // Stats are computed once and reused across the fixed-point iterations.
+        // This is sound because every successful elision (a) replaces the
+        // candidate's `LocalSet` and `StructGet` with `Nop` + the inner
+        // expression, leaving the candidate's stats stale-but-unused (its name
+        // is gone), and (b) preserves def/use counts for every other local —
+        // the substitution only relocates the inner expression in the tree.
         while elide_adjacent_in_body(body, &stats) {}
     }
 }
 
-/// Recurse into nested block bodies and process adjacent pairs at each level.
-/// Returns `true` if any elision happened.
-fn elide_adjacent_in_body(body: &mut Vec<WirInstr>, stats: &IndexMap<String, LocalStats>) -> bool {
+/// Stats-only walker — same shape as [`collect_stats`] but skips candidate
+/// recording, so the per-`LocalSet` `StructNew` field clone is avoided.
+fn collect_local_stats(instr: &WirInstr, stats: &mut IndexMap<String, LocalStats>) {
+    match instr {
+        WirInstr::LocalGet { name, .. } => {
+            stats.entry(name.clone()).or_default().total_localgets += 1;
+        }
+        WirInstr::LocalSet { name, value } | WirInstr::LocalTee { name, value } => {
+            stats.entry(name.clone()).or_default().defs += 1;
+            collect_local_stats(value, stats);
+        }
+        WirInstr::StructGet {
+            expr, field_name, ..
+        } => {
+            if let WirInstr::LocalGet { name, .. } = expr.as_ref() {
+                let s = stats.entry(name.clone()).or_default();
+                s.total_localgets += 1;
+                s.structget_uses += 1;
+                *s.field_uses.entry(field_name.clone()).or_insert(0) += 1;
+            } else {
+                collect_local_stats(expr, stats);
+            }
+        }
+        _ => {
+            instr.for_each_child(&mut |child| collect_local_stats(child, stats));
+        }
+    }
+}
+
+fn elide_adjacent_in_body(body: &mut [WirInstr], stats: &IndexMap<String, LocalStats>) -> bool {
     let mut changed = false;
-    // First, recurse into nested bodies.
     for instr in body.iter_mut() {
         changed |= elide_adjacent_in_nested(instr, stats);
     }
-    // Then process adjacent pairs at this level. We skip over `Nop`
-    // placeholders (left behind by earlier elision passes) when locating the
-    // "next" sibling so that `LocalSet; nop; nop; use` is treated identically
-    // to `LocalSet; use`.
+    // Skip `Nop` placeholders (left by earlier elision passes) when locating
+    // the next sibling so `LocalSet; nop; nop; use` is treated identically to
+    // `LocalSet; use`.
     let mut i = 0;
     while i < body.len() {
         if let Some(j) = next_non_nop(body, i + 1)
@@ -457,8 +484,6 @@ fn elide_adjacent_in_nested(instr: &mut WirInstr, stats: &IndexMap<String, Local
             else_body,
             ..
         } => {
-            // The condition is a single expression that may itself be a Block
-            // wrapping the candidate pair (e.g. `__inline_..._block -> bool { LocalSet; break; }`).
             changed |= elide_adjacent_in_nested(condition, stats);
             changed |= elide_adjacent_in_body(then_body, stats);
             if let Some(eb) = else_body {
@@ -466,9 +491,11 @@ fn elide_adjacent_in_nested(instr: &mut WirInstr, stats: &IndexMap<String, Local
             }
         }
         _ => {
-            // Generic recursion: look for nested bodies inside any other
-            // expression carrier (e.g. `LocalSet { value: Block { body } }`,
-            // `Call { args: [..., Block { body }, ...] }`).
+            // The candidate pair lives inside a `Vec<WirInstr>` body, which
+            // only `Block`/`Loop`/`Seq`/`If` carry — but those bodies can be
+            // wrapped by any expression carrier (e.g. `LocalSet { value: Block }`,
+            // `Call { args: [..., Block, ...] }`), so the generic arm walks
+            // every boxed child looking for one of those four.
             instr.for_each_boxed_child_mut(&mut |child| {
                 changed |= elide_adjacent_in_nested(child, stats);
             });
@@ -486,63 +513,43 @@ fn try_elide_adjacent_pair(
     j: usize,
     stats: &IndexMap<String, LocalStats>,
 ) -> bool {
-    // Match: body[i] = LocalSet { name, value: StructNew { fields: [_inner] } }
-    let (name, _struct_type, _field_count) = match &body[i] {
-        WirInstr::LocalSet { name, value } => match value.as_ref() {
-            WirInstr::StructNew { type_id, fields } if fields.len() == 1 => {
-                (name.clone(), type_id.clone(), 1usize)
-            }
-            _ => return false,
-        },
+    let name = match &body[i] {
+        WirInstr::LocalSet { name, value }
+            if matches!(value.as_ref(), WirInstr::StructNew { fields, .. } if fields.len() == 1) =>
+        {
+            name.clone()
+        }
         _ => return false,
     };
-    // Local must have exactly one def and one StructGet use across the function,
-    // and nothing else.
-    let s = match stats.get(&name) {
-        Some(s) => s,
-        None => return false,
+    let Some(s) = stats.get(&name) else {
+        return false;
     };
     if s.defs != 1 || s.structget_uses != 1 || s.total_localgets != 1 {
         return false;
     }
-    // Discover the field name (the only entry in field_uses).
     if s.field_uses.len() != 1 {
         return false;
     }
     let field_name = s.field_uses.keys().next().unwrap().clone();
-    // The use must be the leftmost-evaluated descendant of body[j].
     if !use_is_leftmost(&body[j], &name, &field_name) {
         return false;
     }
-    // All checks passed. Take the inner initializer and substitute it at the
-    // StructGet position; nop the LocalSet.
     let inner = match std::mem::replace(&mut body[i], WirInstr::Nop) {
         WirInstr::LocalSet { value, .. } => match *value {
             WirInstr::StructNew { mut fields, .. } => fields.remove(0),
-            other => {
-                // Restore — should be unreachable per the match above.
-                body[i] = WirInstr::LocalSet {
-                    name: name.clone(),
-                    value: Box::new(other),
-                };
-                return false;
-            }
+            _ => unreachable!("guarded by name match above"),
         },
-        other => {
-            body[i] = other;
-            return false;
-        }
+        _ => unreachable!("guarded by name match above"),
     };
     substitute_first_use(&mut body[j], &name, &field_name, inner);
     true
 }
 
-/// Walk `instr` in evaluation order. Returns `true` iff the very first
-/// "observable" sub-expression encountered is `StructGet(LocalGet(name), field)`
-/// for the given `name` and `field`. Side-effect-free containers (`LocalGet`,
-/// constants, arithmetic, ref ops, struct/array reads, …) are walked through.
-/// Side-effecting containers (Call, `StructSet`, `ArraySet`, `GlobalSet`, `LocalSet`,
-/// stores, control flow) abort the walk before the target.
+/// Walk `instr` in evaluation order. Returns `Found` iff the first observable
+/// sub-expression encountered is `StructGet(LocalGet(name), field_name)`.
+/// Side-effect-free containers (constants, `LocalGet`, arithmetic, ref ops,
+/// struct/array reads, …) are walked through; side-effecting roots (calls,
+/// stores, sets) and conditional control flow (`Loop`, `If`) abort the walk.
 fn use_is_leftmost(instr: &WirInstr, name: &str, field_name: &str) -> bool {
     matches!(
         walk_for_leftmost(instr, name, field_name),
@@ -552,16 +559,12 @@ fn use_is_leftmost(instr: &WirInstr, name: &str, field_name: &str) -> bool {
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum LeftmostWalk {
-    /// Found the target `StructGet` first (in eval order).
     Found,
-    /// Walked through pure code; target not encountered.
     Pure,
-    /// Hit a side-effecting op or control-flow boundary before the target.
     Blocked,
 }
 
 fn walk_for_leftmost(instr: &WirInstr, name: &str, field_name: &str) -> LeftmostWalk {
-    // Direct match on the target.
     if let WirInstr::StructGet {
         field_name: f,
         expr,
@@ -573,18 +576,15 @@ fn walk_for_leftmost(instr: &WirInstr, name: &str, field_name: &str) -> Leftmost
     {
         return LeftmostWalk::Found;
     }
-    // Containers / opaque control flow that prevent us from peering past them.
     match instr {
-        // Loop bodies execute conditionally (back-edges); If's branches are
-        // conditional. Don't try to look through these.
+        // Conditional control flow: bodies/branches execute conditionally.
         WirInstr::Loop { .. } | WirInstr::If { .. } => LeftmostWalk::Blocked,
-        // Control-flow exits occur after their (optional) value child.
-        WirInstr::Br { .. }
-        | WirInstr::BrIf { .. }
-        | WirInstr::BrTable { .. }
-        | WirInstr::Return { .. }
-        | WirInstr::Unreachable => LeftmostWalk::Blocked,
-        // Side-effecting roots.
+        // No-child control-flow exits: nothing to peer into.
+        WirInstr::Unreachable => LeftmostWalk::Blocked,
+        // Side-effecting roots and control flow with a value child: the root
+        // op (call / store / branch) fires *after* its children are evaluated,
+        // so a target found inside a child arrived first and is safe to elide;
+        // otherwise the next observable op is the side effect → Blocked.
         WirInstr::Call { .. }
         | WirInstr::CallIndirect { .. }
         | WirInstr::CallRef { .. }
@@ -602,17 +602,14 @@ fn walk_for_leftmost(instr: &WirInstr, name: &str, field_name: &str) -> Leftmost
         | WirInstr::V128Store { .. }
         | WirInstr::MemoryGrow(_)
         | WirInstr::MemoryFill { .. }
-        | WirInstr::MultiValueLocalBind { .. } => {
-            // Walking the children first might still find the target before the
-            // root side effect fires — that's fine, but if children are pure we
-            // must report Blocked because the root is the next observable op.
-            let result = walk_children_for_leftmost(instr, name, field_name);
-            if matches!(result, LeftmostWalk::Found) {
-                LeftmostWalk::Found
-            } else {
-                LeftmostWalk::Blocked
-            }
-        }
+        | WirInstr::MultiValueLocalBind { .. }
+        | WirInstr::Br { .. }
+        | WirInstr::BrIf { .. }
+        | WirInstr::BrTable { .. }
+        | WirInstr::Return { .. } => match walk_children_for_leftmost(instr, name, field_name) {
+            LeftmostWalk::Found => LeftmostWalk::Found,
+            _ => LeftmostWalk::Blocked,
+        },
         _ => walk_children_for_leftmost(instr, name, field_name),
     }
 }
@@ -639,9 +636,9 @@ fn walk_children_for_leftmost(instr: &WirInstr, name: &str, field_name: &str) ->
     result
 }
 
-/// Replace the first encountered `StructGet(LocalGet(name), field_name)` in
-/// `instr`'s tree with `replacement` (consuming it). Walks in eval order so
-/// the pre-validated leftmost match is the one that gets rewritten.
+/// Replace the first `StructGet(LocalGet(name), field_name)` reached in eval
+/// order with `replacement` (consumed). The pre-validated leftmost match is
+/// guaranteed to be that first hit.
 fn substitute_first_use(instr: &mut WirInstr, name: &str, field_name: &str, replacement: WirInstr) {
     let mut slot = Some(replacement);
     do_substitute_first_use(instr, name, field_name, &mut slot);
