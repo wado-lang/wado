@@ -1263,10 +1263,15 @@ impl Parser {
     }
 
     /// Parse `stores[name1, name2]` — the `stores` keyword has already been peeked.
+    /// Requires at least one entry and rejects a trailing comma.
     fn parse_stores_list(&mut self) -> ParseResult<Vec<String>> {
         self.expect(&TokenKind::Stores)?;
         self.expect(&TokenKind::LBracket)?;
-        let names = self.parse_comma_separated(&TokenKind::RBracket, Self::consume_ident)?;
+        let mut names = vec![self.consume_ident()?];
+        while self.check(&TokenKind::Comma) {
+            self.advance();
+            names.push(self.consume_ident()?);
+        }
         self.expect(&TokenKind::RBracket)?;
         Ok(names)
     }
@@ -1313,10 +1318,15 @@ impl Parser {
     }
 
     /// Parse `stores[0, 1]` or `stores[name]` in function type position.
+    /// Requires at least one entry and rejects a trailing comma.
     fn parse_stores_list_for_fn_type(&mut self) -> ParseResult<Vec<StoresEntry>> {
         self.expect(&TokenKind::Stores)?;
         self.expect(&TokenKind::LBracket)?;
-        let entries = self.parse_comma_separated(&TokenKind::RBracket, Self::parse_stores_entry)?;
+        let mut entries = vec![self.parse_stores_entry()?];
+        while self.check(&TokenKind::Comma) {
+            self.advance();
+            entries.push(self.parse_stores_entry()?);
+        }
         self.expect(&TokenKind::RBracket)?;
         Ok(entries)
     }
