@@ -1,0 +1,28 @@
+// Regression: `sroa_multi_value_returns` used to rewrite the function
+// signature but skip Returns hidden inside `LocalSet` values, leaving an
+// early `return Outer { a, b }` mismatched against the new multi-value
+// signature. Triggered by all four conditions together: `export fn`
+// caller, named-local field rebind, two-or-more Array fields, and a
+// divergent `let _ = if cond { value } else { return ...; };` body.
+
+use { Stdout } from "core:cli";
+
+struct Outer {
+    a: Array<i32>,
+    b: Array<i32>,
+}
+
+fn build(flag: bool) -> Outer {
+    let a: Array<i32> = [];
+    let b: Array<i32> = [];
+    let _x: i32 = if flag { 1 } else { return Outer { a, b }; };
+    return Outer { a, b };
+}
+
+export fn run() with Stdout {
+    let outer = build(true);
+    let _x = outer.a;
+}
+
+__DATA__
+{"stdout": ""}

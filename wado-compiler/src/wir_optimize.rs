@@ -62,15 +62,22 @@ use sroa_return::sroa_multi_value_returns;
 use string::simplify_short_string_pushes;
 
 /// Run a single WIR optimization pass with profiling.
+///
+/// Honours `WADO_LIST_PASSES`, `WADO_DUMP_PASS_BEFORE`, and
+/// `WADO_DUMP_PASS_AFTER` — see `crate::optimize::pass_dump`.
 fn wir_pass(
     name: &str,
     module: &mut WirPackage,
     profiler: &dyn SpanEmitter,
     f: impl FnOnce(&mut WirPackage),
 ) {
+    use crate::optimize::pass_dump::{self, Phase};
+    pass_dump::list_pass(name);
+    pass_dump::dump_wir(name, module, Phase::Before);
     profiler.span_start(name);
     f(module);
     profiler.span_end(name);
+    pass_dump::dump_wir(name, module, Phase::After);
 }
 
 /// Run all WIR-level optimizations on the module (in-place).
@@ -103,9 +110,15 @@ pub fn optimize_wir(module: &mut WirPackage, opt_level: OptLevel, profiler: &dyn
     profiler.span_start("wir/phase1_type_repr");
     // Pre-SROA copy propagation: inline trivial copies like `alias = source`
     // so that SROA can see direct variant access patterns (RefTest/RefCast on source).
-    peephole::propagate_trivial_copies(module);
-    sroa_multi_value_returns(module);
-    sroa_single_field_parameters(module);
+    wir_pass("wir/propagate_trivial_copies", module, profiler, |m| {
+        peephole::propagate_trivial_copies(m);
+    });
+    wir_pass("wir/sroa_multi_value_returns", module, profiler, |m| {
+        sroa_multi_value_returns(m);
+    });
+    wir_pass("wir/sroa_single_field_parameters", module, profiler, |m| {
+        sroa_single_field_parameters(m);
+    });
     profiler.span_end("wir/phase1_type_repr");
 
     // Phase 2: Struct local elimination (round 1)

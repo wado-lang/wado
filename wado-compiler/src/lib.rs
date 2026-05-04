@@ -34,6 +34,7 @@ pub mod tir;
 pub mod tir_visitor;
 pub mod tiri;
 pub mod token;
+pub mod trace;
 pub mod unparse;
 pub mod wir;
 pub mod wir_build;

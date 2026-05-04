@@ -215,16 +215,102 @@ fn run_dce(project: &mut FlatPackage, profiler: &dyn SpanEmitter) {
 }
 
 /// Run a single optimization pass with profiling, returning whether it changed anything.
+///
+/// Honours the `WADO_LIST_PASSES`, `WADO_DUMP_PASS_BEFORE`, and
+/// `WADO_DUMP_PASS_AFTER` developer-debug env vars (see `pass_dump`).
 fn run_pass(
     name: &str,
     project: &mut FlatPackage,
     profiler: &dyn SpanEmitter,
     f: impl FnOnce(&mut FlatPackage) -> bool,
 ) -> bool {
+    pass_dump::list_pass(name);
+    pass_dump::dump_tir(name, project, pass_dump::Phase::Before);
     profiler.span_start(name);
     let changed = f(project);
     profiler.span_end(name);
+    pass_dump::dump_tir(name, project, pass_dump::Phase::After);
     changed
+}
+
+pub mod pass_dump {
+    use std::sync::OnceLock;
+
+    use super::FlatPackage;
+    use crate::wir::WirPackage;
+
+    #[derive(Copy, Clone)]
+    pub enum Phase {
+        Before,
+        After,
+    }
+
+    impl Phase {
+        fn env_var(self) -> &'static str {
+            match self {
+                Self::Before => "WADO_DUMP_PASS_BEFORE",
+                Self::After => "WADO_DUMP_PASS_AFTER",
+            }
+        }
+
+        fn label(self) -> &'static str {
+            match self {
+                Self::Before => "before",
+                Self::After => "after",
+            }
+        }
+    }
+
+    fn dump_before_list() -> &'static Vec<String> {
+        static LIST: OnceLock<Vec<String>> = OnceLock::new();
+        LIST.get_or_init(|| {
+            crate::trace::parse_env_list(std::env::var(Phase::Before.env_var()).ok().as_deref())
+        })
+    }
+
+    fn dump_after_list() -> &'static Vec<String> {
+        static LIST: OnceLock<Vec<String>> = OnceLock::new();
+        LIST.get_or_init(|| {
+            crate::trace::parse_env_list(std::env::var(Phase::After.env_var()).ok().as_deref())
+        })
+    }
+
+    fn list_passes_enabled() -> bool {
+        static FLAG: OnceLock<bool> = OnceLock::new();
+        *FLAG.get_or_init(|| std::env::var("WADO_LIST_PASSES").is_ok())
+    }
+
+    fn matches(name: &str, phase: Phase) -> bool {
+        let list = match phase {
+            Phase::Before => dump_before_list(),
+            Phase::After => dump_after_list(),
+        };
+        list.iter().any(|n| n == name)
+    }
+
+    pub fn list_pass(name: &str) {
+        if list_passes_enabled() {
+            eprintln!("[pass] {name}");
+        }
+    }
+
+    pub fn dump_tir(name: &str, project: &FlatPackage, phase: Phase) {
+        if matches(name, phase) {
+            let label = phase.label();
+            eprintln!("=== TIR {label} {name} ===");
+            eprintln!("{}", crate::unparse::unparse_flat_package(project));
+            eprintln!("=== end TIR {label} {name} ===");
+        }
+    }
+
+    pub fn dump_wir(name: &str, module: &WirPackage, phase: Phase) {
+        if matches(name, phase) {
+            let label = phase.label();
+            eprintln!("=== WIR {label} {name} ===");
+            eprintln!("{}", crate::wir_unparse::unparse_wir(module, None));
+            eprintln!("=== end WIR {label} {name} ===");
+        }
+    }
 }
 
 /// Run optimization passes with a fixed-point iteration strategy.

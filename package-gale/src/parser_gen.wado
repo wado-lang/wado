@@ -2724,21 +2724,42 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_co
             let inner_info = element_field_info(&lab.element, ctx);
             let lab_name = dedup_name(&lab.field_name, name_counts);
             w.line(`let mut {lab_name}: Array<{inner_info.1}> = [];`);
-            let mut nc: Array<[String, i32]> = [];
-            gen_element(w, &lab.element, ctx, &mut nc);
-            w.line(`{lab_name}.push({inner_info.0});`);
+            let predicted_inner = peek_dedup_name(&inner_info.0, name_counts);
+            gen_element(w, &lab.element, ctx, name_counts);
+            w.line(`{lab_name}.push({predicted_inner});`);
             return;
         }
-        // Scalar label `name = element`: parse the inner element into a
-        // private binding, then re-bind it under the label name so the
-        // struct initializer (which uses the label name) resolves.
+        // Scalar label `name = element`: parse the inner element with the
+        // shared `name_counts` so its emitted binding dedups against the
+        // outer alt's scope (otherwise `a=e ... b=e` would emit two
+        // top-level `let e = parse_e(p)?;` and the second would fail
+        // compilation with "cannot redeclare e"). Then re-bind under the
+        // label name so the struct initializer resolves.
+        //
+        // We need to know the dedup'd inner name to write the alias; peek
+        // the dedup result before calling `gen_element`, which performs
+        // the actual increment with the same base name.
         let lab_name = dedup_name(&lab.field_name, name_counts);
         let inner_info = element_field_info(&lab.element, ctx);
-        let mut nc: Array<[String, i32]> = [];
-        gen_element(w, &lab.element, ctx, &mut nc);
-        w.line(`let {lab_name} = {inner_info.0};`);
+        let predicted_inner = peek_dedup_name(&inner_info.0, name_counts);
+        gen_element(w, &lab.element, ctx, name_counts);
+        w.line(`let {lab_name} = {predicted_inner};`);
         return;
     }
+}
+
+/// Predict what `dedup_name(base, counts)` would return without
+/// incrementing the count. Used by the `Label` case in `gen_element` to
+/// alias the inner element's emitted binding under the label name —
+/// the inner emission performs the actual `dedup_name` (which both
+/// computes and increments), and we need to know the resulting name
+/// before that to emit the alias.
+fn peek_dedup_name(base: &String, counts: &Array<[String, i32]>) -> String {
+    let count = get_count(counts, base);
+    if count > 0 {
+        return `{base}_{count + 1}`;
+    }
+    return *base;
 }
 
 fn gen_repeat(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, outer_follow: &Array<String>) {
@@ -4097,8 +4118,12 @@ fn gen_field_assignment(w: &mut CodeWriter, elem: &Element, name_counts: &mut Ar
     }
     if let Label(lab) = elem {
         if has_field(&lab.element) {
-            let field_name = lab.field_name;
-            dedup_name(&field_name, name_counts);
+            // Match `gen_element`'s Label dedup: when the same label name
+            // appears twice (e.g. `a=expr '*' a=expr`) the struct field is
+            // `a` then `a_2`, and the binding the parse body created is
+            // `a` then `a_2` too — so the assignment must use the deduped
+            // name, not the bare one.
+            let field_name = dedup_name(&lab.field_name, name_counts);
             w.line(`{field_name},`);
         }
         return;
@@ -5213,7 +5238,15 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
         f.emit_begin(w);
 
         let mut name_counts: Array<[String, i32]> = [];
-        dedup_name(&rule.field_name, &mut name_counts);
+        // Reserve the binding the bt-side parse function uses for the
+        // self-reference (the label name for `a=e`, the rule's own
+        // field_name for the bare `e` form) so subsequent dedup matches.
+        let first_binding = if let Label(lab) = &alt.elements[0] {
+            lab.field_name
+        } else {
+            rule.field_name
+        };
+        dedup_name(&first_binding, &mut name_counts);
 
         ctx.group_counter = ctx.alt_gc_starts[lr_idx];
         let gc_lr = ctx.group_counter;
@@ -5238,6 +5271,26 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
                     let field_name = dedup_name(&rr.field_name, &mut name_counts);
                     w.line(`let {field_name} = {elem_fn}(p)?;`);
                 }
+            } else if let Label(lab) = elem {
+                // Labeled self-recursive call: use precedence the same way
+                // as the bare-RuleRef arm above, then re-bind to the label.
+                if let RuleRef(rr) = &lab.element {
+                    if rr.name == rule.name {
+                        let lab_name = dedup_name(&lab.field_name, &mut name_counts);
+                        let inner_name = dedup_name(&rr.field_name, &mut name_counts);
+                        let prec = compute_lr_self_ref_prec(
+                            alt,
+                            ei,
+                            last_self_ref_idx,
+                            inner_min_prec,
+                            &lr_suffix_first_tokens,
+                        );
+                        w.line(`let {inner_name} = {fn_name}(p, {prec})?;`);
+                        w.line(`let {lab_name} = {inner_name};`);
+                        continue;
+                    }
+                }
+                gen_element(w, elem, ctx, &mut name_counts);
             } else if let Group(grp) = elem {
                 let alts = &grp.alternatives;
                 if is_token_only_group(alts) {
@@ -5255,14 +5308,16 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
             }
         }
 
-        let first_field = rule.field_name;
+        let first_field = first_binding;
         w.line(`return Result::<{type_name}, ParseError>::Ok({type_name}::{case_names[lr_idx]}({sname} \{`);
         w.indent();
         w.line("span: Span::new(start, p.last_end()),");
         w.line(`{first_field}: left,`);
         ctx.group_counter = gc_lr;
         let mut field_counts: Array<[String, i32]> = [];
-        dedup_name(&rule.field_name, &mut field_counts);
+        // Reserve the field that `left` occupies so a repeat occurrence
+        // (e.g. `a=e ... a=e`) deduplicates to `a_2` in the struct literal.
+        dedup_name(&first_binding, &mut field_counts);
         for let mut ei = 1; ei < alt.elements.len(); ei += 1 {
             gen_field_assignment(w, &alt.elements[ei], &mut field_counts, ctx);
         }
@@ -5982,12 +6037,15 @@ fn increment_count(counts: &mut Array<[String, i32]>, name: &String) {
     counts.push([*name, 1]);
 }
 
+/// True iff the alternative is left-recursive: its first element references
+/// the enclosing rule by name. ANTLR4 treats labeled self-references like
+/// `a=e` at the start of an alt as left-recursive too (per
+/// `vendor/antlr4/doc/left-recursion.md`), so we unwrap one `Label`.
 fn is_left_recursive(alt: &Alternative, rule_name: &String) -> bool {
     if alt.elements.len() == 0 {
         return false;
     }
-    let first = &alt.elements[0];
-    if let RuleRef(r) = first {
+    if let RuleRef(r) = unwrap_label(&alt.elements[0]) {
         return r.name == *rule_name;
     }
     return false;

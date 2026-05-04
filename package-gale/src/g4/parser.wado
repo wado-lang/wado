@@ -952,6 +952,20 @@ impl G4Parser {
                 if self.is_kind(G4Token::Question) {
                     self.advance();
                 }
+                // ANTLR4 attaches element options to action blocks and
+                // semantic predicates: `{ ... }<p=3>` and `{ ... }?<fail='…'>`.
+                // The action/predicate body itself is host-language code that
+                // Gale skips (Stage C territory), so the action element has no
+                // IR slot of its own. Promote the options up to the enclosing
+                // alternative — that is where ANTLR4's left-recursion rewriter
+                // also reads them from (e.g. `<p=N>` overriding alt precedence,
+                // `<fail='…'>` providing a custom predicate failure message).
+                if self.is_kind(G4Token::LAngle) {
+                    let opts = self.parse_angle_options()?;
+                    for let o of opts {
+                        options.push(o);
+                    }
+                }
                 continue;
             }
             // Element options `<key=value, ...>` appearing before any element

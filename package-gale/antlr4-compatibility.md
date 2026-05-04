@@ -26,12 +26,9 @@ diverges, that is a bug in Gale.
 
 Today the contract is met as follows:
 
-- **Stage A (syntactic)** — broadly green across the full upstream
-  descriptor corpus (14 categories, 345 descriptors). 4 known
-  `[todo]` entries flag a single real gap: element options
-  (`<p=N>`, `<fail='…'>`) on alternatives and semantic predicates.
-  See [TODO.md](./TODO.md) and the [Current state](#current-state)
-  section below.
+- **Stage A (syntactic)** — green across the full upstream
+  descriptor corpus (14 categories, 345 descriptors, 0 `[todo]`).
+  See the [Current state](#current-state) section below.
 - **Stage B (semantic)** — _partial_; only hand-curated driver
   fixtures participate. Lifting the descriptor corpus into Stage B
   is [Phase 3](#phase-3-next--stage-b-tree-shape-equivalence).
@@ -282,99 +279,114 @@ Once a Gale gap is fixed:
 ### Phase 1 + Phase 2 (landed) — every descriptor category
 
 All 14 categories under `vendor/antlr4/.../descriptors/` are
-extracted: **345 descriptors** emitted, **341 pass**, **4 `[todo]`**
-(all `LeftRecursion`, all the element-options gap — `<p=N>`,
-`<fail='…'>`), **12 `[skip]`** (testsuite StringTemplate artefacts).
-See `tests/antlr4-compat/status.toml` for the per-descriptor reasons.
+extracted: **345 descriptors** emitted, **all pass**, **0 `[todo]`**,
+**12 `[skip]`** (testsuite StringTemplate artefacts). See
+`tests/antlr4-compat/status.toml` for the per-descriptor `[skip]`
+reasons.
 
-### Phase 3 (next) — Stage B tree-shape equivalence
+### Phase 3 (landed) — Stage B tree-shape equivalence
 
-Stage A is now broadly green (modulo the 4 `LeftRecursion` TODOs and
-the 12 testsuite-template skips). The natural next step is to feed
-the `[input]` blocks through the _generated_ parser and check
-`to_string_tree()` against a normalised form of `[output]`.
-Mechanically this is the same machinery as the existing driver
-fixtures, but driven systematically off the descriptor corpus
-instead of hand-written cases.
+For each descriptor whose `[output]` is a clean parse tree, the
+extractor emits a per-descriptor driver test under
+`tests/antlr4-compat/stage_b/<Category>/<Name>_test.wado`. The test
+imports the descriptor's `.g4` through Gale's generator (Kiln inline
+invocation), runs the generated parser on `[input]`, and compares
+`to_string_tree()` against the normalised `[output]`.
 
-This requires three pieces, each landable independently:
+Current numbers (run `wado test package-gale/tests/antlr4-compat`):
 
-1. **A second extractor pass.** For each descriptor that carries an
-   `[output]` block, emit a Wado driver test under
-   `tests/antlr4-compat/stage_b/<category>_test.wado` of roughly the
-   shape:
-   ```wado
-   use t from "../grammars/<Category>/<Name>.g4"
-       with { generator: { module: "../../../src/generator.wado" } };
-   use { normalize_tree } from "../grammars/<Category>/<Name>.g4";
+- **70 Stage B tests emitted** — 57 pass, 13 `#[TODO]` (known
+  divergences tracked in `[stage_b_todo]` of `status.toml`).
+- **4 `[stage_b_skip]`** — list-label LR alts
+  (`LeftRecursion/ReturnValueAndActionsList[12]_*`) where
+  `b+=expr ',' b+=expr` produces two distinct `Array<ExprNode>`
+  fields (`b` and `b_2`) instead of appending both to one list, and
+  the LR helper passes `left: ExprNode` into the array-typed field —
+  ANTLR4 `+=` semantic gap rather than a descriptor bug.
+- **185 auto-skip** — descriptor's `[output]` is not a parse tree at
+  all (lexer token-type names, Token.toString dumps, ATN decision
+  traces, action-block prints) or its `[output]` starts with a
+  rule other than `[start]` (the descriptor's `@after` action prints
+  a sub-tree via `<ToStringTree("$X.ctx"):writeln()>`; Gale's
+  `t::parse(input)` always returns the start rule's full tree).
 
-   test "<Category>/<Name>" {
-       let root = t::parse(INPUT).unwrap();
-       let actual = t::to_tree(&root).to_string_tree();
-       assert actual == normalize_tree(EXPECTED);
-   }
-   ```
-   The extractor already reads `[input]` and `[output]` from the
-   descriptor — Phase 3 just needs to thread them through to a new
-   emitter alongside the existing parse-only one.
-2. **An `[output]` normaliser.** Most descriptors' `[output]` is a
-   mix of `to_string_tree()` shape and host-language side-effect
-   prints (e.g. `<writeln(...)>` outputs). The normaliser strips the
-   prints and keeps only the parse-tree shape, so we can compare
-   what Gale's generated parser produces. Where the entire `[output]`
-   is host-language prints (no tree shape), the descriptor goes into
-   a new `[stage_b_skip]` bucket.
-3. **A new triage bucket — `[stage_b_skip]` and `[stage_b_todo]`.**
-   Stage B has different failure modes from Stage A: a descriptor can
-   parse cleanly under Stage A and still produce the wrong tree.
-   Reusing the Stage A `[todo]`/`[skip]` keys would conflate the two,
-   so Phase 3 introduces parallel buckets in the same `status.toml`.
+Three independent pieces make up the wiring:
 
-There is no Stage B descriptor automation today; only the Phase 1+2
-parse-only layer is wired.
+1. **`normalize_output_for_stage_b`** in
+   `scripts/extract_antlr4_descriptors.wado` — pure function that
+   decides whether a descriptor's `[output]` is a parse-tree shape.
+   Strips ANTLR4's literal `<EOF>` token (Gale omits empty-text
+   tokens), rejects `${...}` template substitutions and any leftover
+   `<…>` directives, and requires the output to start with
+   `(<start-rule>` so sub-tree prints are rejected.
+2. **`[stage_b_todo]` / `[stage_b_skip]`** in the same
+   `status.toml`, parsed into a parallel `TriageMap` independent
+   from Stage A's `[todo]` / `[skip]` buckets — a descriptor can be
+   Stage A green and Stage B skipped, or vice versa.
+3. **The per-descriptor emitter** writes one Wado file per
+   eligible descriptor so each grammar gets its own Kiln
+   `output_dir`, avoiding cross-grammar name collisions in
+   generated code.
 
-### Pre-requisites that should land before Phase 3
+The 13 `#[TODO]` entries are the natural Stage B backlog. They
+break down into three buckets:
 
-These are surfacable now and worth doing first because Stage B
-amplifies their cost:
+- **LR rewriting tree-shape divergence** —
+  `LeftRecursion/{Expressions_7, PrefixAndOtherAlt_1,
+  PrefixAndOtherAlt_2}` plus `LeftRecursion/SemPredFailOption`
+  (where the failing predicate guard is silently dropped because
+  action bodies are skipped — Stage C territory).
+- **Parse failures on left-recursion edge cases** —
+  `LeftRecursion/JavaExpressions_{7,8,9,12}` and
+  `LeftRecursion/PrecedenceFilterConsidersContext`.
+- **Predicates and full-context LL** —
+  `ParserExec/{BuildParseTree_TRUE, PredictionMode_LL}`,
+  `SemPredEvalParser/PredFromAltTestedInLoopBack_{1,2}`. All fall
+  under Stage C (action-body translation) for a full fix.
 
-- **Element options on alternatives and semantic predicates.** The
-  4 `LeftRecursion` TODOs all want `<p=N>` (precedence override) and
-  `<fail='…'>` (custom predicate failure message). Stage B will hit
-  the same gap multiplied by every descriptor that uses these
-  options. Closing this is a localised change to the g4 parser's
-  alternative / semantic-predicate handling. See
-  [TODO.md](./TODO.md).
+Two recent fixes that closed earlier `[stage_b_skip]` entries are
+worth noting because they each unblocked ~10 % of the bucket and
+the underlying compiler / codegen bugs were both real:
+
+- **Wado compiler ICE on struct-field rebind in `export fn`** — the
+  `sroa_multi_value_returns` WIR pass scalarised the function
+  signature but skipped Returns hidden inside `LocalSet` values
+  (`let _x = if cond { v } else { return ...; };`), leaving early
+  Returns producing a `struct.new` against the new multi-value
+  signature. Fixed by walking unhandled variants via
+  `for_each_boxed_child_mut`. Regression fixture at
+  `wado-compiler/tests/fixtures/struct_field_rebind_in_export_run.wado`.
+- **Gale codegen LR-detection missed labeled self-references** —
+  `is_left_recursive` only matched the bare `RuleRef(rule_name)`
+  shape, so `e : a=e ...` was misclassified as non-LR and routed
+  through the non-LR scan generator that emitted an infinitely
+  self-recursive `scan_e`. Fixed by unwrapping a single `Label`
+  layer (matching ANTLR4's left-recursion semantics) and threading
+  the label name through `gen_lr_suffix_helpers` so the LR helper's
+  struct-literal field name and field-assignment dedup counter
+  match the bt-side parser. Unblocked 9 LR descriptors.
+
+### Future work
+
 - **Listeners category emit-suppression.** `Listeners` currently
-  emits a header-only test file with zero tests; once Phase 3 lands
-  the same shape will likely apply to other categories. Either drop
-  empty files or keep them as a marker — decide before Phase 3 so
-  we don't churn fixture lists.
-
-## Compiler bugs surfaced during compatibility work
-
-Pursuing the descriptor corpus has shaken out compiler bugs that
-unrelated test paths missed. Both have landed in this branch with
-regression fixtures under `wado-compiler/tests/fixtures/`:
-
-- **`null` arm in `match` / `if`** —
-  `match_null_arm_infers_option_inner.wado`. `Literal::Null` was
-  initially typed as `Option<UNKNOWN>` and never re-resolved when a
-  sibling arm produced `Option::Some(s)`. Fixed in
-  `wado-compiler/src/resolver/expr.rs`.
-- **Generic-instance fq collision on same-named CM types** —
-  `result_unit_cm_variant_passthrough.wado`. `mangle_type_name` was
-  not type-id-injective: `wasi:filesystem`'s `pub variant ErrorCode`
-  and `wasi:cli`'s `pub enum ErrorCode` collapsed onto the same WIR
-  fq, so `register_mono_variants` could register the wrong payload
-  representation depending on entry-filename order. Fixed by
-  introducing `TypeTable::mangle_type_arg_for_generic` and threading
-  it through the WIR layer's generic-instance fq computation.
+  emits a header-only Stage A test file with zero tests; once the
+  Stage A side gains the same tolerance Stage B already has
+  (auto-skip when nothing is left to emit), drop the empty files.
+- **Stage B for composite descriptors.** Descriptors with
+  `[slaveGrammar]` blocks are auto-skipped today because Kiln's
+  `use ... with { generator: ... }` directive only consumes one
+  `.g4` file. Adding multi-file pipeline support to Kiln (or
+  inlining slaves into the main grammar at extract time) would
+  unblock CompositeLexers / CompositeParsers descriptors.
 
 When Phase 2/3 surface further compiler bugs, follow the project
 rule from the top-level `CLAUDE.md`: write a minimum reproducible
-fixture first, fix the underlying compiler issue, _then_ update the
-descriptor triage.
+fixture under `wado-compiler/tests/fixtures/` first, fix the
+underlying compiler issue, _then_ update the descriptor triage.
+The `optimizer-debug` agent skill (`.claude/skills/optimizer-debug/`)
+documents the env vars (`WADO_TRACE`, `WADO_DUMP_PASS_BEFORE`,
+`WADO_DUMP_PASS_AFTER`) and the `compiler_trace!` macro that helped
+isolate the most recent of those bugs.
 
 ## See also
 
