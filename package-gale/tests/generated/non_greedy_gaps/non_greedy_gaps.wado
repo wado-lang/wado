@@ -831,7 +831,7 @@ impl Parser {
     }
 }
 
-fn scan_file(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_file(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     while pos < tokens.len() && true {
         let sp = pos;
@@ -841,7 +841,7 @@ fn scan_file(tokens: &Array<Token>, pos: i32) -> i32 {
     }
     sg_0_done: {
         sg_0: {
-            pos = scan_constant(tokens, pos);
+            pos = scan_constant(tokens, pos, 0);
             if pos < 0 { break sg_0; }
             while pos < tokens.len() && true {
                 let sp = pos;
@@ -857,7 +857,7 @@ fn scan_file(tokens: &Array<Token>, pos: i32) -> i32 {
         let sp = pos;
         sg_1_done: {
             sg_1: {
-                pos = scan_constant(tokens, pos);
+                pos = scan_constant(tokens, pos, 0);
                 if pos < 0 { break sg_1; }
                 while pos < tokens.len() && true {
                     let sp = pos;
@@ -877,7 +877,7 @@ fn scan_file(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_constant(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_constant(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_PUBLIC { return -1; }
     pos += 1;
@@ -907,7 +907,7 @@ fn parse_file(p: &mut Parser) -> Result<FileNode, ParseError> {
             rep_scan: {
                 let tokens = &p.tokens;
                 let mut pos: i32 = p.pos;
-                pos = scan_constant(tokens, pos);
+                pos = scan_constant(tokens, pos, 0);
                 if pos < 0 { break rep_scan; }
                 while pos < tokens.len() && true {
                     let sp = pos;

@@ -824,9 +824,9 @@ impl Parser {
     }
 }
 
-fn scan_s(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_s(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_e(tokens, pos);
+    pos = scan_e(tokens, pos, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_EOF { return -1; }
     pos += 1;
@@ -843,7 +843,7 @@ fn scan_e_atom(tokens: &Array<Token>, pos: i32) -> i32 {
             try_0: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_LIT_MINUS { break try_0; }
                 pos += 1;
-                pos = scan_e(tokens, pos);
+                pos = scan_e(tokens, pos, 0);
                 if pos < 0 { break try_0; }
                 break scan_alts;
             }
@@ -982,7 +982,7 @@ fn parse_e_atom(p: &mut Parser) -> Result<ENode, ParseError> {
     let kind = p.peek_kind();
     if kind == TK_LIT_MINUS {
         let minus = p.expect(TK_LIT_MINUS)?;
-        let e = parse_e(p)?;
+        let e = parse_e(p, 3)?;
         return Result::<ENode, ParseError>::Ok(ENode::Alt2(EAlt2 {
             span: Span::new(start, p.last_end()),
             minus,

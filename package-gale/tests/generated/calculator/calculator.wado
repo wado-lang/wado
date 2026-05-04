@@ -1452,22 +1452,22 @@ impl Parser {
     }
 }
 
-fn scan_equation(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_equation(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_expression(tokens, pos);
+    pos = scan_expression(tokens, pos, 0);
     if pos < 0 { return -1; }
-    pos = scan_relop(tokens, pos);
+    pos = scan_relop(tokens, pos, 0);
     if pos < 0 { return -1; }
-    pos = scan_expression(tokens, pos);
+    pos = scan_expression(tokens, pos, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_EOF { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_expression(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_expression(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_multiplying_expression(tokens, pos);
+    pos = scan_multiplying_expression(tokens, pos, 0);
     if pos < 0 { return -1; }
     while pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) {
         let sp = pos;
@@ -1489,7 +1489,7 @@ fn scan_expression(tokens: &Array<Token>, pos: i32) -> i32 {
                     }
                     break sg_0;
                 }
-                pos = scan_multiplying_expression(tokens, pos);
+                pos = scan_multiplying_expression(tokens, pos, 0);
                 if pos < 0 { break sg_0; }
                 break sg_0_done;
             }
@@ -1501,9 +1501,9 @@ fn scan_expression(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_multiplying_expression(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_multiplying_expression(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_pow_expression(tokens, pos);
+    pos = scan_pow_expression(tokens, pos, 0);
     if pos < 0 { return -1; }
     while pos < tokens.len() && _gale_kind_set_1(tokens[pos].kind) {
         let sp = pos;
@@ -1525,7 +1525,7 @@ fn scan_multiplying_expression(tokens: &Array<Token>, pos: i32) -> i32 {
                     }
                     break sg_2;
                 }
-                pos = scan_pow_expression(tokens, pos);
+                pos = scan_pow_expression(tokens, pos, 0);
                 if pos < 0 { break sg_2; }
                 break sg_2_done;
             }
@@ -1537,9 +1537,9 @@ fn scan_multiplying_expression(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_pow_expression(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_pow_expression(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_signed_atom(tokens, pos);
+    pos = scan_signed_atom(tokens, pos, 0);
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos].kind == TK_POW {
         let sp = pos;
@@ -1547,7 +1547,7 @@ fn scan_pow_expression(tokens: &Array<Token>, pos: i32) -> i32 {
             sg_4: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_POW { break sg_4; }
                 pos += 1;
-                pos = scan_signed_atom(tokens, pos);
+                pos = scan_signed_atom(tokens, pos, 0);
                 if pos < 0 { break sg_4; }
                 break sg_4_done;
             }
@@ -1559,7 +1559,7 @@ fn scan_pow_expression(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_signed_atom(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_signed_atom(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -1569,7 +1569,7 @@ fn scan_signed_atom(tokens: &Array<Token>, pos: i32) -> i32 {
             try_0: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_PLUS { break try_0; }
                 pos += 1;
-                pos = scan_signed_atom(tokens, pos);
+                pos = scan_signed_atom(tokens, pos, 0);
                 if pos < 0 { break try_0; }
                 break scan_alts;
             }
@@ -1579,7 +1579,7 @@ fn scan_signed_atom(tokens: &Array<Token>, pos: i32) -> i32 {
             try_1: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_MINUS { break try_1; }
                 pos += 1;
-                pos = scan_signed_atom(tokens, pos);
+                pos = scan_signed_atom(tokens, pos, 0);
                 if pos < 0 { break try_1; }
                 break scan_alts;
             }
@@ -1587,7 +1587,7 @@ fn scan_signed_atom(tokens: &Array<Token>, pos: i32) -> i32 {
         } else if _gale_kind_set_2(alt_kind) {
             pos = start;
             try_2: {
-                pos = scan_func_(tokens, pos);
+                pos = scan_func_(tokens, pos, 0);
                 if pos < 0 { break try_2; }
                 break scan_alts;
             }
@@ -1595,7 +1595,7 @@ fn scan_signed_atom(tokens: &Array<Token>, pos: i32) -> i32 {
         } else if _gale_kind_set_3(alt_kind) {
             pos = start;
             try_3: {
-                pos = scan_atom(tokens, pos);
+                pos = scan_atom(tokens, pos, 0);
                 if pos < 0 { break try_3; }
                 break scan_alts;
             }
@@ -1607,7 +1607,7 @@ fn scan_signed_atom(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_atom(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_atom(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -1615,7 +1615,7 @@ fn scan_atom(tokens: &Array<Token>, pos: i32) -> i32 {
         if alt_kind == TK_SCIENTIFIC_NUMBER {
             pos = start;
             try_0: {
-                pos = scan_scientific(tokens, pos);
+                pos = scan_scientific(tokens, pos, 0);
                 if pos < 0 { break try_0; }
                 break scan_alts;
             }
@@ -1623,7 +1623,7 @@ fn scan_atom(tokens: &Array<Token>, pos: i32) -> i32 {
         } else if alt_kind == TK_VARIABLE {
             pos = start;
             try_1: {
-                pos = scan_variable(tokens, pos);
+                pos = scan_variable(tokens, pos, 0);
                 if pos < 0 { break try_1; }
                 break scan_alts;
             }
@@ -1631,7 +1631,7 @@ fn scan_atom(tokens: &Array<Token>, pos: i32) -> i32 {
         } else if _gale_kind_set_4(alt_kind) {
             pos = start;
             try_2: {
-                pos = scan_constant(tokens, pos);
+                pos = scan_constant(tokens, pos, 0);
                 if pos < 0 { break try_2; }
                 break scan_alts;
             }
@@ -1641,7 +1641,7 @@ fn scan_atom(tokens: &Array<Token>, pos: i32) -> i32 {
             try_3: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_LPAREN { break try_3; }
                 pos += 1;
-                pos = scan_expression(tokens, pos);
+                pos = scan_expression(tokens, pos, 0);
                 if pos < 0 { break try_3; }
                 if pos >= tokens.len() || tokens[pos].kind != TK_RPAREN { break try_3; }
                 pos += 1;
@@ -1655,34 +1655,34 @@ fn scan_atom(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_scientific(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_scientific(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_SCIENTIFIC_NUMBER { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_constant(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_constant(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     if pos < tokens.len() && _gale_kind_set_4(tokens[pos].kind) {
         return pos + 1;
     }
     return -1;
 }
 
-fn scan_variable(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_variable(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_VARIABLE { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_func_(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_func_(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_funcname(tokens, pos);
+    pos = scan_funcname(tokens, pos, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_LPAREN { return -1; }
     pos += 1;
-    pos = scan_expression(tokens, pos);
+    pos = scan_expression(tokens, pos, 0);
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos].kind == TK_COMMA {
         let sp = pos;
@@ -1690,7 +1690,7 @@ fn scan_func_(tokens: &Array<Token>, pos: i32) -> i32 {
             sg_5: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_COMMA { break sg_5; }
                 pos += 1;
-                pos = scan_expression(tokens, pos);
+                pos = scan_expression(tokens, pos, 0);
                 if pos < 0 { break sg_5; }
                 break sg_5_done;
             }
@@ -1704,14 +1704,14 @@ fn scan_func_(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_funcname(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_funcname(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     if pos < tokens.len() && _gale_kind_set_2(tokens[pos].kind) {
         return pos + 1;
     }
     return -1;
 }
 
-fn scan_relop(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_relop(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     if pos < tokens.len() && _gale_kind_set_5(tokens[pos].kind) {
         return pos + 1;
     }
@@ -1758,7 +1758,7 @@ fn parse_expression(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
                 }
                 break rep_scan;
             }
-            pos = scan_multiplying_expression(tokens, pos);
+            pos = scan_multiplying_expression(tokens, pos, 0);
             if pos < 0 { break rep_scan; }
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
@@ -1804,7 +1804,7 @@ fn parse_multiplying_expression(p: &mut Parser) -> Result<MultiplyingExpressionN
                 }
                 break rep_scan;
             }
-            pos = scan_pow_expression(tokens, pos);
+            pos = scan_pow_expression(tokens, pos, 0);
             if pos < 0 { break rep_scan; }
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
@@ -1836,7 +1836,7 @@ fn parse_pow_expression(p: &mut Parser) -> Result<PowExpressionNode, ParseError>
             let mut pos: i32 = p.pos;
             if pos >= tokens.len() || tokens[pos].kind != TK_POW { break rep_scan; }
             pos += 1;
-            pos = scan_signed_atom(tokens, pos);
+            pos = scan_signed_atom(tokens, pos, 0);
             if pos < 0 { break rep_scan; }
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
@@ -2003,7 +2003,7 @@ fn parse_func_(p: &mut Parser) -> Result<FuncNode, ParseError> {
             let mut pos: i32 = p.pos;
             if pos >= tokens.len() || tokens[pos].kind != TK_COMMA { break rep_scan; }
             pos += 1;
-            pos = scan_expression(tokens, pos);
+            pos = scan_expression(tokens, pos, 0);
             if pos < 0 { break rep_scan; }
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;

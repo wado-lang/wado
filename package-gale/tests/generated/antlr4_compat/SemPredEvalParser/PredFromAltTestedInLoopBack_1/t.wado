@@ -701,20 +701,20 @@ impl Parser {
     }
 }
 
-fn scan_file_(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_file_(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_para(tokens, pos);
+    pos = scan_para(tokens, pos, 0);
     if pos < 0 { return -1; }
-    pos = scan_para(tokens, pos);
+    pos = scan_para(tokens, pos, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_EOF { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_para(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_para(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_para_content(tokens, pos);
+    pos = scan_para_content(tokens, pos, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_NL { return -1; }
     pos += 1;
@@ -723,7 +723,7 @@ fn scan_para(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_para_content(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_para_content(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     let gp_0 = pos;
     sg_0: {
@@ -777,7 +777,7 @@ fn scan_para_content(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_s(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_s(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_S { return -1; }
     pos += 1;

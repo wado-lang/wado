@@ -742,9 +742,9 @@ impl Parser {
     }
 }
 
-fn scan_file_(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_file_(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_item(tokens, pos);
+    pos = scan_item(tokens, pos, 0);
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos].kind == TK_SEMICOLON {
         let sp = pos;
@@ -752,7 +752,7 @@ fn scan_file_(tokens: &Array<Token>, pos: i32) -> i32 {
             sg_0: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_SEMICOLON { break sg_0; }
                 pos += 1;
-                pos = scan_item(tokens, pos);
+                pos = scan_item(tokens, pos, 0);
                 if pos < 0 { break sg_0; }
                 break sg_0_done;
             }
@@ -771,7 +771,7 @@ fn scan_file_(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_item(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_item(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_A { return -1; }
     pos += 1;
@@ -794,7 +794,7 @@ fn parse_file_(p: &mut Parser) -> Result<FileNode, ParseError> {
             let mut pos: i32 = p.pos;
             if pos >= tokens.len() || tokens[pos].kind != TK_SEMICOLON { break rep_scan; }
             pos += 1;
-            pos = scan_item(tokens, pos);
+            pos = scan_item(tokens, pos, 0);
             if pos < 0 { break rep_scan; }
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;

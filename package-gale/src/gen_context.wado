@@ -32,6 +32,25 @@ pub struct GenContext {
     pub current_rule_name: String,
     pub group_counter: i32,
     pub alt_gc_starts: Array<i32>,
+    /// Override for self-recursive RuleRef calls inside a prefix alt body.
+    /// When non-zero, `gen_element`'s RuleRef branch emits
+    /// `parse_<rule>(p, prefix_self_ref_min_prec)` instead of the default
+    /// `parse_<rule>(p)`. Set by call sites that wrap `gen_alt_body` for
+    /// prefix alts (non-LR alts containing a self-ref) so the inner
+    /// self-ref runs with the precedence ANTLR4 assigns to that alt.
+    /// 0 means no override (the default emission applies).
+    pub prefix_self_ref_min_prec: i32,
+    /// `min_prec` argument that `gen_scan_element` passes when emitting a
+    /// `scan_<rule>(tokens, pos, …)` call for a `RuleRef`. Default is 0
+    /// (full LR scan, matching the parser side). `gen_bt_scan_elements`
+    /// raises this to `i32::MAX` for the LAST element when it is a
+    /// self-reference to the current rule, so that prefix-alt scans
+    /// (`op expr`, etc.) short-circuit the LR suffix loop the OUTER
+    /// LR loop is going to consume — mirroring ANTLR4's k-lookahead.
+    /// Non-LR `scan_<rule>` accept an unused `min_prec` parameter so the
+    /// emitted call site is uniform regardless of whether the target rule
+    /// is left-recursive.
+    pub scan_ruleref_min_prec: i32,
     /// Maps single-alt group type name → the rule name that first defines it.
     /// Used to resolve general group type names inside shared single-alt groups.
     single_alt_owner: TreeMap<String, String>,
@@ -59,6 +78,8 @@ impl GenContext {
             current_rule_name: "",
             group_counter: 0,
             alt_gc_starts: [],
+            prefix_self_ref_min_prec: 0,
+            scan_ruleref_min_prec: 0,
             single_alt_owner,
             kind_set_registry: TreeMap::<String, KindSetEntry>::new(),
         };
@@ -336,9 +357,16 @@ impl GenContext {
             for let alt of &rule.alternatives {
                 let mut non_nullable_count = 0;
                 let mut single_ok = false;
+                let mut has_nullable = false;
                 for let elem of &alt.elements {
                     if is_nullable(elem) {
-                        continue;
+                        // A nullable element (Star/Optional Repeat) can consume
+                        // additional tokens when its inner matches. e.g.
+                        // `'-'? Integer` is 1 token without `-` but 2 with `-`.
+                        // Treat any nullable element as disqualifying so the
+                        // rule isn't misclassified as strictly single-token.
+                        has_nullable = true;
+                        break;
                     }
                     non_nullable_count += 1;
                     if non_nullable_count > 1 {
@@ -350,7 +378,7 @@ impl GenContext {
                         single_ok = self.rule_is_single_token(&r.name, visiting);
                     }
                 }
-                if non_nullable_count != 1 || !single_ok {
+                if has_nullable || non_nullable_count != 1 || !single_ok {
                     all_alts_ok = false;
                     break;
                 }

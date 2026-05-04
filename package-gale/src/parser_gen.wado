@@ -1215,7 +1215,13 @@ fn gen_bt_scan_if_possible(w: &mut CodeWriter, alt: &Alternative, fn_name: &Stri
     f.emit_begin(w);
     w.line("let mut pos = pos;");
 
-    gen_scan_elements(w, &alt.elements, 0, prefix_len, ctx);
+    // bt-scan should treat the LAST element as atom-only when it is a
+    // self-reference to the current rule — that is the prefix-alt case
+    // (`op expr` etc.) where the OUTER LR loop will consume what follows
+    // and including it here would over-match. Inner self-refs, by
+    // contrast, are bounded by surrounding tokens (e.g. `K_WHEN expr
+    // K_THEN expr` inside `case_expr`) and need a full scan.
+    gen_bt_scan_elements(w, &alt.elements, 0, prefix_len, ctx);
 
     w.line("return pos;");
     w.end();
@@ -1266,6 +1272,14 @@ fn gen_scan_function(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext
     let mut f = FnSpec::new(&fn_name);
     f.add_param("tokens", "&Array<Token>");
     f.add_param("pos", "i32");
+    // Accept (and ignore) min_prec so call sites pass it uniformly
+    // regardless of whether the target rule is left-recursive. See
+    // `GenContext.scan_ruleref_min_prec` for the bt-scan use case.
+    f.add_param_spec(ParamSpec {
+        name: "min_prec",
+        type_str: "i32",
+        default_value: Option::<String>::Some("0"),
+    });
     f.set_return_type("i32");
     f.emit_begin(w);
 
@@ -1913,6 +1927,36 @@ fn gen_scan_elements(w: &mut CodeWriter, elements: &Array<Element>, start: i32, 
     }
 }
 
+/// Specialisation of `gen_scan_elements` for bt-scan helpers. Raises
+/// `ctx.scan_ruleref_min_prec` to `i32::MAX` for the LAST element only
+/// when it is a self-reference to the current rule, so that
+/// `gen_scan_element` emits `scan_<rule>(tokens, pos, i32::MAX)` for
+/// that one position. The MAX guards short-circuit the LR suffix loop
+/// inside the target rule's `scan_<rule>` — the prefix-alt scenario
+/// where the outer LR loop will consume the trailing tokens.
+fn gen_bt_scan_elements(w: &mut CodeWriter, elements: &Array<Element>, start: i32, end: i32, ctx: &mut GenContext) {
+    for let mut i = start; i < end; i += 1 {
+        let elem = &elements[i];
+        let is_last_self_ref = i == end - 1 && is_self_ref_element(elem, &ctx.current_rule_name);
+        let saved = ctx.scan_ruleref_min_prec;
+        if is_last_self_ref {
+            ctx.scan_ruleref_min_prec = i32::MAX;
+        }
+        if let Repeat(rep) = elem {
+            if let Optional = rep.kind {
+                if is_ruleref_optional(&rep.element) {
+                    let follow = ctx.first_of_elements_from(elements, i + 1);
+                    gen_scan_repeat_optional_with_follow(w, rep, ctx, &follow);
+                    ctx.scan_ruleref_min_prec = saved;
+                    continue;
+                }
+            }
+        }
+        gen_scan_element(w, elem, ctx, &"return -1;");
+        ctx.scan_ruleref_min_prec = saved;
+    }
+}
+
 /// `gen_scan_elements` variant that routes non-Optional failures through
 /// `break {label};` so the sequence lives inside a labeled block.
 fn gen_scan_elements_in_block(w: &mut CodeWriter, elements: &Array<Element>, start: i32, end: i32, ctx: &mut GenContext, label: &String) {
@@ -2083,8 +2127,10 @@ fn gen_scan_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, fa
         return;
     }
     if let RuleRef(r) = elem {
-        let fn_name = `scan_{r.snake_name}`;
-        w.line(`pos = {fn_name}(tokens, pos);`);
+        // Always pass min_prec — non-LR `scan_<rule>` accept and ignore it.
+        // bt-scan sets `ctx.scan_ruleref_min_prec` to `i32::MAX` so any LR
+        // suffix loop in the target rule short-circuits.
+        w.line(`pos = scan_{r.snake_name}(tokens, pos, {ctx.scan_ruleref_min_prec});`);
         w.line(`if pos < 0 \{ {*fail_stmt} \}`);
         return;
     }
@@ -2127,8 +2173,7 @@ fn gen_scan_element_assign(w: &mut CodeWriter, elem: &Element, ctx: &mut GenCont
         return;
     }
     if let RuleRef(r) = elem {
-        let fn_name = `scan_{r.snake_name}`;
-        w.line(`pos = {fn_name}(tokens, pos);`);
+        w.line(`pos = scan_{r.snake_name}(tokens, pos, {ctx.scan_ruleref_min_prec});`);
         return;
     }
     if let Wildcard(_) = elem {
@@ -2412,6 +2457,8 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext) {
                     f.emit_begin(w);
                     w.line("let start = p.peek().span.start;");
                     ctx.group_counter = ctx.alt_gc_starts[alt_idx];
+                    let saved_prefix_prec = ctx.prefix_self_ref_min_prec;
+                    ctx.prefix_self_ref_min_prec = compute_prefix_self_ref_min_prec(rule, alt_idx);
                     gen_alt_body(
                         w,
                         &type_name,
@@ -2420,6 +2467,7 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext) {
                         alt,
                         ctx,
                     );
+                    ctx.prefix_self_ref_min_prec = saved_prefix_prec;
                     w.end();
                     w.blank();
 
@@ -2592,6 +2640,8 @@ fn gen_multi_alt_body(w: &mut CodeWriter, rule: &ParserRule, type_name: &String,
         }
 
         ctx.group_counter = ctx.alt_gc_starts[alt_idx];
+        let saved_prefix_prec = ctx.prefix_self_ref_min_prec;
+        ctx.prefix_self_ref_min_prec = compute_prefix_self_ref_min_prec(rule, alt_idx);
         gen_alt_body(
             w,
             type_name,
@@ -2600,6 +2650,7 @@ fn gen_multi_alt_body(w: &mut CodeWriter, rule: &ParserRule, type_name: &String,
             alt,
             ctx,
         );
+        ctx.prefix_self_ref_min_prec = saved_prefix_prec;
         w.end();
     }
 
@@ -2685,7 +2736,11 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_co
     if let RuleRef(r) = elem {
         let fn_name = `parse_{r.snake_name}`;
         let field_name = dedup_name(&r.field_name, name_counts);
-        w.line(`let {field_name} = {fn_name}(p)?;`);
+        if ctx.prefix_self_ref_min_prec > 0 && r.name == ctx.current_rule_name {
+            w.line(`let {field_name} = {fn_name}(p, {ctx.prefix_self_ref_min_prec})?;`);
+        } else {
+            w.line(`let {field_name} = {fn_name}(p)?;`);
+        }
         return;
     }
     if let Wildcard(_) = elem {
@@ -5629,6 +5684,10 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
             let alt = &alts[*idx];
             let sname = `{strip_suffix(type_name, "Node")}{alt_case_names[*idx]}`;
             ctx.group_counter = ctx.alt_gc_starts[*idx];
+            let saved_prefix_prec = ctx.prefix_self_ref_min_prec;
+            if let Some(rule) = ctx.find_rule(&ctx.current_rule_name) {
+                ctx.prefix_self_ref_min_prec = compute_prefix_self_ref_min_prec(rule, *idx);
+            }
             gen_alt_body_skip(
                 w,
                 type_name,
@@ -5638,6 +5697,7 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
                 ctx,
                 skip,
             );
+            ctx.prefix_self_ref_min_prec = saved_prefix_prec;
         }
         return;
     }
@@ -5856,6 +5916,8 @@ fn gen_multi_alt_body_bt(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
             let alt = &rule.alternatives[alt_idx];
             let sname = `{strip_suffix(type_name, "Node")}{case_names[alt_idx]}`;
             ctx.group_counter = ctx.alt_gc_starts[alt_idx];
+            let saved_prefix_prec = ctx.prefix_self_ref_min_prec;
+            ctx.prefix_self_ref_min_prec = compute_prefix_self_ref_min_prec(rule, alt_idx);
             gen_alt_body(
                 w,
                 type_name,
@@ -5864,6 +5926,7 @@ fn gen_multi_alt_body_bt(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
                 alt,
                 ctx,
             );
+            ctx.prefix_self_ref_min_prec = saved_prefix_prec;
         } else {
             // Sort group by specificity before building prediction tree.
             let mut sorted_group = group.sorted();
@@ -6040,15 +6103,89 @@ fn increment_count(counts: &mut Array<[String, i32]>, name: &String) {
 /// True iff the alternative is left-recursive: its first element references
 /// the enclosing rule by name. ANTLR4 treats labeled self-references like
 /// `a=e` at the start of an alt as left-recursive too (per
-/// `vendor/antlr4/doc/left-recursion.md`), so we unwrap one `Label`.
+/// `vendor/antlr4/doc/left-recursion.md`), so `is_self_ref_element`
+/// unwraps one `Label`.
 fn is_left_recursive(alt: &Alternative, rule_name: &String) -> bool {
     if alt.elements.len() == 0 {
         return false;
     }
-    if let RuleRef(r) = unwrap_label(&alt.elements[0]) {
+    return is_self_ref_element(&alt.elements[0], rule_name);
+}
+
+/// True iff the alternative matches ANTLR4's `prefix` shape from
+/// `LeftRecursiveRuleWalker.g`:
+///   prefix : ALT element+ recurse epsilonElement* ;
+/// i.e. the alt does NOT start with a self-reference but its LAST
+/// element IS a self-reference. Examples: `'-' e`, `('~'|'!') e`,
+/// `'(' typespec ')' e`. Counter-examples that look superficially
+/// similar but are NOT prefix alts in ANTLR4's classification:
+///   - `'(' e ')'` — last elem is `')'`, not self-ref → "other" alt
+///   - `'new' T ( ... e ... )` — last elem is a Group → "other" alt
+/// "Other" alts (`otherAlt`) are NOT given a precedence rewrite in
+/// ANTLR4: their inner self-refs run with `_p = 0`, accepting all
+/// LR operators inside.
+///
+/// Gale's IR has already stripped action bodies and semantic predicates,
+/// so the upstream `epsilonElement*` tail collapses to the empty case.
+fn is_prefix_alt(alt: &Alternative, rule_name: &String) -> bool {
+    if is_left_recursive(alt, rule_name) {
+        return false;
+    }
+    if alt.elements.len() == 0 {
+        return false;
+    }
+    let last_idx = alt.elements.len() - 1;
+    return is_self_ref_element(&alt.elements[last_idx], rule_name);
+}
+
+/// True iff the element is a direct RuleRef to `rule_name` (possibly
+/// wrapped in a single `Label`). Mirrors `is_left_recursive`'s use of
+/// `unwrap_label` so labeled self-refs at the alt tail (e.g. `b=e`)
+/// are still recognised.
+fn is_self_ref_element(elem: &Element, rule_name: &String) -> bool {
+    if let RuleRef(r) = unwrap_label(elem) {
         return r.name == *rule_name;
     }
     return false;
+}
+
+/// Compute the `min_prec` value to pass into self-recursive RuleRef calls
+/// inside a prefix alt. ANTLR4's left-recursion transform calls the inner
+/// `e` of a prefix alt with the alt's own precedence (`e[precedence(alt)]`),
+/// so any LR suffix below the prefix alt in source order is excluded.
+///
+/// Returns 0 if the alt is not a prefix alt, or if the rule has no LR alts
+/// (in which case `parse_<rule>` has no `min_prec` parameter and the
+/// override would not be valid).
+///
+/// Formula: count the LR alts at positions strictly greater than `alt_idx`
+/// in `rule.alternatives`. Their `own_prec` values are 1..N (N = the count),
+/// so setting `min_prec = N + 1` rejects all of them while still admitting
+/// LR alts that come before this prefix.
+fn compute_prefix_self_ref_min_prec(rule: &ParserRule, alt_idx: i32) -> i32 {
+    let alts = &rule.alternatives;
+    let rule_name = &rule.name;
+    if alt_idx < 0 || alt_idx >= alts.len() {
+        return 0;
+    }
+    let alt = &alts[alt_idx];
+    if !is_prefix_alt(alt, rule_name) {
+        return 0;
+    }
+    let mut lr_after = 0;
+    let mut has_any_lr = false;
+    for let mut i = 0; i < alts.len(); i += 1 {
+        if is_left_recursive(&alts[i], rule_name) {
+            has_any_lr = true;
+            if i > alt_idx {
+                lr_after += 1;
+            }
+        }
+    }
+    if !has_any_lr {
+        return 0;
+    }
+    return lr_after + 1;
 }
 
 fn compute_overlap_groups(first_sets: &Array<Array<String>>) -> Array<Array<i32>> {
