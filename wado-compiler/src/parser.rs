@@ -2881,14 +2881,13 @@ impl Parser {
             let (method, method_span) = self.consume_ident_with_span()?;
 
             // Method-level turbofish: method::<U>(...)
-            let method_type_args = if self.check(&TokenKind::ColonColon)
-                && self.peek_nth(1).kind == TokenKind::Lt
-            {
-                self.advance(); // consume ::
-                self.parse_call_type_args()?
-            } else {
-                Vec::new()
-            };
+            let method_type_args =
+                if self.check(&TokenKind::ColonColon) && self.peek_nth(1).kind == TokenKind::Lt {
+                    self.advance(); // consume ::
+                    self.parse_call_type_args()?
+                } else {
+                    Vec::new()
+                };
 
             self.expect(&TokenKind::LParen)?;
             let (args, has_trailing_comma) = self.parse_arg_list()?;
@@ -3016,7 +3015,9 @@ impl Parser {
         }
 
         match self.peek_kind().clone() {
-            TokenKind::NumberLit(repr) => Ok(self.consume_literal(Literal::Number(repr), start_span)),
+            TokenKind::NumberLit(repr) => {
+                Ok(self.consume_literal(Literal::Number(repr), start_span))
+            }
             TokenKind::StringLit(raw) => Ok(self.consume_literal(Literal::String(raw), start_span)),
             TokenKind::TemplateStringLit(parts) => {
                 self.advance();
@@ -3160,9 +3161,7 @@ impl Parser {
                 }
                 _ => {
                     return Err(ParseError {
-                        message: format!(
-                            "expected string literal path argument for `#{name}`"
-                        ),
+                        message: format!("expected string literal path argument for `#{name}`"),
                         span: self.peek().span,
                     });
                 }
