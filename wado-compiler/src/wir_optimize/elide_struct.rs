@@ -516,9 +516,7 @@ fn try_elide_adjacent_pair(
     stats: &IndexMap<String, LocalStats>,
 ) -> bool {
     let name = match &body[i] {
-        WirInstr::LocalSet { name, value }
-            if matches!(value.as_ref(), WirInstr::StructNew { fields, .. } if fields.len() == 1) =>
-        {
+        WirInstr::LocalSet { name, value } if matches!(value.as_ref(), WirInstr::StructNew { fields, .. } if fields.len() == 1) => {
             name.clone()
         }
         _ => return false,
@@ -584,7 +582,8 @@ fn walk_for_leftmost(instr: &WirInstr, name: &str, field_name: &str) -> Leftmost
         // Observable root ops fire *after* their children, so a target found
         // inside a child arrived first and is safe to elide; otherwise the
         // next observable op is the side effect → Blocked.
-        _ if is_root_observable(instr) => match walk_children_for_leftmost(instr, name, field_name) {
+        _ if is_root_observable(instr) => match walk_children_for_leftmost(instr, name, field_name)
+        {
             LeftmostWalk::Found => LeftmostWalk::Found,
             _ => LeftmostWalk::Blocked,
         },
