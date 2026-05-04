@@ -14,8 +14,6 @@ use t from "../../grammars/LeftRecursion/JavaExpressions_12.g4"
     };
 use { normalize_tree } from "../../grammars/LeftRecursion/JavaExpressions_12.g4";
 
-#[TODO]
-// triage: Stage B test parse fails with Result::Err — investigation pending
 test "stage_b: LeftRecursion/JavaExpressions_12" {
     let input = "new T[((n-1) * x) + 1]";
     let expected = "(s (e new (typespec T) [ (e (e ( (e (e ( (e (e n) - (e 1)) )) * (e x)) )) + (e 1)) ]))";

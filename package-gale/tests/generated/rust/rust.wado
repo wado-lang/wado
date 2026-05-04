@@ -22959,18 +22959,28 @@ fn parse_enum_expr_field(p: &mut Parser) -> Result<EnumExprFieldNode, ParseError
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_65(kind) {
-        if p.peek_kind() == TK_NON_KEYWORD_IDENTIFIER {
-            if p.peek_at(1) == TK_COLON {
+        if _gale_kind_set_17(p.peek_kind()) {
+            let _sd_tokens = &p.tokens;
+            let _sd_pos = p.pos;
+            let _sd_p_0 = parse_enum_expr_field_scan_0(_sd_tokens, _sd_pos);
+            let _sd_p_1 = parse_enum_expr_field_scan_1(_sd_tokens, _sd_pos);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
+            }
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_best_i == 0 {
+                return parse_enum_expr_field_bt_0(p);
+            }
+            if _sd_best_i == 1 {
                 return parse_enum_expr_field_bt_1(p);
             }
-        } else if p.peek_kind() == TK_RAW_IDENTIFIER {
-            if p.peek_at(1) == TK_COLON {
-                return parse_enum_expr_field_bt_1(p);
-            }
-        } else if p.peek_kind() == TK_KW_MACRORULES {
-            if p.peek_at(1) == TK_COLON {
-                return parse_enum_expr_field_bt_1(p);
-            }
+            return parse_enum_expr_field_bt_1(p);
         } else if p.peek_kind() == TK_INTEGER_LITERAL {
             return parse_enum_expr_field_bt_1(p);
         }

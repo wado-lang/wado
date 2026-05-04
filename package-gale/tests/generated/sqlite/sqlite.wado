@@ -19004,15 +19004,27 @@ fn parse_compound_operator(p: &mut Parser) -> Result<CompoundOperatorNode, Parse
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_K_UNION {
-        let k_union = p.expect(TK_K_UNION)?;
-        if p.peek_kind() == TK_K_ALL {
-            let k_all = p.expect(TK_K_ALL)?;
-            return Result::<CompoundOperatorNode, ParseError>::Ok(CompoundOperatorNode::Alt1(CompoundOperatorAlt1 {
-                span: Span::new(start, p.last_end()),
-                k_union,
-                k_all,
-            }));
+        let _sd_tokens = &p.tokens;
+        let _sd_pos = p.pos;
+        let _sd_p_1 = parse_compound_operator_scan_1(_sd_tokens, _sd_pos);
+        let _sd_p_0 = parse_compound_operator_scan_0(_sd_tokens, _sd_pos);
+        let mut _sd_best_i: i32 = -1;
+        let mut _sd_best_p: i32 = -1;
+        if _sd_p_1 > _sd_best_p {
+            _sd_best_p = _sd_p_1;
+            _sd_best_i = 1;
         }
+        if _sd_p_0 > _sd_best_p {
+            _sd_best_p = _sd_p_0;
+            _sd_best_i = 0;
+        }
+        if _sd_best_i == 1 {
+            return parse_compound_operator_bt_1(p);
+        }
+        if _sd_best_i == 0 {
+            return parse_compound_operator_bt_0(p);
+        }
+        return parse_compound_operator_bt_0(p);
     }
     if kind == TK_K_INTERSECT {
         let k_intersect = p.expect(TK_K_INTERSECT)?;

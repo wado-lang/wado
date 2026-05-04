@@ -16577,86 +16577,28 @@ fn parse_type_query_expression(p: &mut Parser) -> Result<TypeQueryExpressionNode
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_16(kind) {
-        if p.peek_kind() == TK_Identifier {
-            if _gale_kind_set_16(p.peek_at(1)) {
+        if _gale_kind_set_2(p.peek_kind()) {
+            let _sd_tokens = &p.tokens;
+            let _sd_pos = p.pos;
+            let _sd_p_0 = parse_type_query_expression_scan_0(_sd_tokens, _sd_pos);
+            let _sd_p_1 = parse_type_query_expression_scan_1(_sd_tokens, _sd_pos);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
+            }
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_best_i == 0 {
+                return parse_type_query_expression_bt_0(p);
+            }
+            if _sd_best_i == 1 {
                 return parse_type_query_expression_bt_1(p);
             }
-        } else if p.peek_kind() == TK_Async {
-            if _gale_kind_set_16(p.peek_at(1)) {
-                return parse_type_query_expression_bt_1(p);
-            }
-        } else if p.peek_kind() == TK_As {
-            if _gale_kind_set_16(p.peek_at(1)) {
-                return parse_type_query_expression_bt_1(p);
-            }
-        } else if p.peek_kind() == TK_From {
-            if _gale_kind_set_16(p.peek_at(1)) {
-                return parse_type_query_expression_bt_1(p);
-            }
-        } else if p.peek_kind() == TK_Yield {
-            if _gale_kind_set_16(p.peek_at(1)) {
-                return parse_type_query_expression_bt_1(p);
-            }
-        } else if p.peek_kind() == TK_Of {
-            if _gale_kind_set_16(p.peek_at(1)) {
-                return parse_type_query_expression_bt_1(p);
-            }
-        } else if p.peek_kind() == TK_Any {
-            if _gale_kind_set_16(p.peek_at(1)) {
-                return parse_type_query_expression_bt_1(p);
-            }
-        } else if p.peek_kind() == TK_Number {
-            if _gale_kind_set_16(p.peek_at(1)) {
-                return parse_type_query_expression_bt_1(p);
-            }
-        } else if p.peek_kind() == TK_Boolean {
-            if _gale_kind_set_16(p.peek_at(1)) {
-                return parse_type_query_expression_bt_1(p);
-            }
-        } else if p.peek_kind() == TK_String {
-            if _gale_kind_set_16(p.peek_at(1)) {
-                return parse_type_query_expression_bt_1(p);
-            }
-        } else if p.peek_kind() == TK_Unique {
-            if _gale_kind_set_16(p.peek_at(1)) {
-                return parse_type_query_expression_bt_1(p);
-            }
-        } else if p.peek_kind() == TK_Symbol {
-            if _gale_kind_set_16(p.peek_at(1)) {
-                return parse_type_query_expression_bt_1(p);
-            }
-        } else if p.peek_kind() == TK_Never {
-            if _gale_kind_set_16(p.peek_at(1)) {
-                return parse_type_query_expression_bt_1(p);
-            }
-        } else if p.peek_kind() == TK_Undefined {
-            if _gale_kind_set_16(p.peek_at(1)) {
-                return parse_type_query_expression_bt_1(p);
-            }
-        } else if p.peek_kind() == TK_Object {
-            if _gale_kind_set_16(p.peek_at(1)) {
-                return parse_type_query_expression_bt_1(p);
-            }
-        } else if p.peek_kind() == TK_KeyOf {
-            if _gale_kind_set_16(p.peek_at(1)) {
-                return parse_type_query_expression_bt_1(p);
-            }
-        } else if p.peek_kind() == TK_TypeAlias {
-            if _gale_kind_set_16(p.peek_at(1)) {
-                return parse_type_query_expression_bt_1(p);
-            }
-        } else if p.peek_kind() == TK_Constructor {
-            if _gale_kind_set_16(p.peek_at(1)) {
-                return parse_type_query_expression_bt_1(p);
-            }
-        } else if p.peek_kind() == TK_Namespace {
-            if _gale_kind_set_16(p.peek_at(1)) {
-                return parse_type_query_expression_bt_1(p);
-            }
-        } else if p.peek_kind() == TK_Abstract {
-            if _gale_kind_set_16(p.peek_at(1)) {
-                return parse_type_query_expression_bt_1(p);
-            }
+            return parse_type_query_expression_bt_1(p);
         } else if _gale_kind_set_17(p.peek_kind()) {
             return parse_type_query_expression_bt_1(p);
         }

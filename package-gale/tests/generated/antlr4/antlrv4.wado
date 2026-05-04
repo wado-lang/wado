@@ -5957,14 +5957,28 @@ fn parse_delegate_grammar(p: &mut Parser) -> Result<DelegateGrammarNode, ParseEr
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_1(kind) {
-        if p.peek_kind() == TK_RULE_REF {
-            if p.peek_at(1) == TK_ASSIGN {
+        if _gale_kind_set_1(p.peek_kind()) {
+            let _sd_tokens = &p.tokens;
+            let _sd_pos = p.pos;
+            let _sd_p_1 = parse_delegate_grammar_scan_1(_sd_tokens, _sd_pos);
+            let _sd_p_0 = parse_delegate_grammar_scan_0(_sd_tokens, _sd_pos);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
+            }
+            if _sd_best_i == 1 {
+                return parse_delegate_grammar_bt_1(p);
+            }
+            if _sd_best_i == 0 {
                 return parse_delegate_grammar_bt_0(p);
             }
-        } else if p.peek_kind() == TK_TOKEN_REF {
-            if p.peek_at(1) == TK_ASSIGN {
-                return parse_delegate_grammar_bt_0(p);
-            }
+            return parse_delegate_grammar_bt_0(p);
         }
     }
     return Result::<DelegateGrammarNode, ParseError>::Err(ParseError::new(
@@ -6876,18 +6890,28 @@ fn parse_lexer_command(p: &mut Parser) -> Result<LexerCommandNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_11(kind) {
-        if p.peek_kind() == TK_RULE_REF {
-            if p.peek_at(1) == TK_LPAREN {
+        if _gale_kind_set_11(p.peek_kind()) {
+            let _sd_tokens = &p.tokens;
+            let _sd_pos = p.pos;
+            let _sd_p_1 = parse_lexer_command_scan_1(_sd_tokens, _sd_pos);
+            let _sd_p_0 = parse_lexer_command_scan_0(_sd_tokens, _sd_pos);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
+            }
+            if _sd_best_i == 1 {
+                return parse_lexer_command_bt_1(p);
+            }
+            if _sd_best_i == 0 {
                 return parse_lexer_command_bt_0(p);
             }
-        } else if p.peek_kind() == TK_TOKEN_REF {
-            if p.peek_at(1) == TK_LPAREN {
-                return parse_lexer_command_bt_0(p);
-            }
-        } else if p.peek_kind() == TK_MODE {
-            if p.peek_at(1) == TK_LPAREN {
-                return parse_lexer_command_bt_0(p);
-            }
+            return parse_lexer_command_bt_0(p);
         }
     }
     return Result::<LexerCommandNode, ParseError>::Err(ParseError::new(
