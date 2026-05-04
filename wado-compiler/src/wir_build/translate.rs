@@ -5,8 +5,8 @@
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::tir::{
-    PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt,
-    TirStmtKind, TirUnaryOp, TypeId, TypeTable,
+    PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction,
+    TirParam, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::wir::{CanonicalIntrinsic, WirInstr, WirName, WirType, WirTypeDef, WirTypeId};
 
@@ -56,6 +56,47 @@ fn collect_let_names(names: &mut IndexMap<u32, String>, stmts: &[TirStmt]) {
             _ => {}
         }
     }
+}
+
+/// Pre-compute the WIR-side name for every TIR local index, applying the
+/// same shadow / param-collision rules `local_name` used to compute on the
+/// fly. The live formulation iterated `params` and the entire `local_names`
+/// map per call, which is O(N) per local reference; doing it once up front
+/// keeps `local_name` to an O(1) hash lookup at every visit site.
+///
+/// Rules (mirrored from the original `local_name`):
+/// - When two params share a raw name, every such param is suffixed with
+///   `_{local_index}`.
+/// - A non-param local that shadows a param-or-let keeps the original
+///   name unchanged on the param/let and suffixes the non-param.
+fn resolve_local_names(raw: &IndexMap<u32, String>, params: &[TirParam]) -> IndexMap<u32, String> {
+    let param_indices: IndexSet<u32> = params.iter().map(|p| p.local_index).collect();
+
+    // Tally raw-name occurrences across all locals and within params only.
+    let mut total_per_name: IndexMap<&str, u32> = IndexMap::default();
+    let mut param_per_name: IndexMap<&str, u32> = IndexMap::default();
+    for (idx, name) in raw {
+        *total_per_name.entry(name.as_str()).or_default() += 1;
+        if param_indices.contains(idx) {
+            *param_per_name.entry(name.as_str()).or_default() += 1;
+        }
+    }
+
+    let mut out = IndexMap::default();
+    for (idx, name) in raw {
+        let needs_suffix = if param_indices.contains(idx) {
+            param_per_name.get(name.as_str()).copied().unwrap_or(0) > 1
+        } else {
+            total_per_name.get(name.as_str()).copied().unwrap_or(0) > 1
+        };
+        let final_name = if needs_suffix {
+            format!("{name}_{idx}")
+        } else {
+            name.clone()
+        };
+        out.insert(*idx, final_name);
+    }
+    out
 }
 
 /// Register canonical closure wrapper functions for all closure functors.
@@ -216,6 +257,7 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
                 let key = u32::try_from(idx).unwrap();
                 local_names.entry(key).or_insert_with(|| local.name.clone());
             }
+            let resolved_local_names = resolve_local_names(&local_names, &tir_func.params);
 
             // Translate inside a nested block so the translator (and its reborrow of ctx)
             // is dropped before we write back to ctx.functions below.
@@ -227,7 +269,7 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
                     label_stack: Vec::new(),
                     match_counter: 0,
                     local_counter: 0,
-                    local_names,
+                    resolved_local_names,
                     immutable_locals: IndexSet::default(),
                 };
                 translator.translate_block(body)
@@ -260,8 +302,12 @@ pub(super) struct FunctionTranslator<'a, 'b> {
     pub(super) match_counter: u32,
     /// Counter for generating unique temporary local names.
     pub(super) local_counter: u32,
-    /// Map from local index to variable name (built from params + Let stmts).
-    pub(super) local_names: IndexMap<u32, String>,
+    /// WIR-side local names indexed by TIR local index, with shadow / param
+    /// collisions already disambiguated. Pre-computed once per function so
+    /// `local_name` stays O(1) — the live formulation scanned the entire
+    /// `local_names` map on every visit, which is O(N) per call and fired
+    /// for every `LocalGet`/`LocalSet`/`LocalTee`/match-binding in the body.
+    pub(super) resolved_local_names: IndexMap<u32, String>,
     /// Set of local indices declared as immutable (`let`, not `let mut`).
     /// Used to skip unnecessary value copies when an immutable binding
     /// is initialized from another immutable local.
@@ -288,38 +334,10 @@ impl FunctionTranslator<'_, '_> {
     ///   just because a `let self = ...` happens to shadow them in the
     ///   body.
     pub(super) fn local_name(&self, index: u32) -> String {
-        let Some(name) = self.local_names.get(&index) else {
-            return format!("__local_{index}");
-        };
-
-        let is_param = self.tir_func.params.iter().any(|p| p.local_index == index);
-        if is_param {
-            // Duplicate PARAM names are unambiguous in TIR (each carries its
-            // local_index) but share a single bucket in WIR's name-keyed
-            // `current_locals`, so suffix every collision with the index.
-            let param_count = self
-                .tir_func
-                .params
-                .iter()
-                .filter(|p| {
-                    self.local_names
-                        .get(&p.local_index)
-                        .is_some_and(|n| n == name)
-                })
-                .count();
-            if param_count > 1 {
-                return format!("{name}_{index}");
-            }
-            return name.clone();
-        }
-
-        // Non-param: shadow a param-or-let by suffixing the non-param.
-        let total = self.local_names.values().filter(|n| *n == name).count();
-        if total > 1 {
-            format!("{name}_{index}")
-        } else {
-            name.clone()
-        }
+        self.resolved_local_names
+            .get(&index)
+            .cloned()
+            .unwrap_or_else(|| format!("__local_{index}"))
     }
 
     /// Build a `LocalGet` with the WIR type resolved from a TIR local index.
