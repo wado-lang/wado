@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777887368145,
+  "lastUpdate": 1777893067458,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -19085,6 +19085,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 503101,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ab7b3eaace5ddfe5c71f7b224d33188c9efa524d",
+          "message": "Merge pull request #991 from wado-lang/claude/antlr4-compatibility-G2bLC\n\npackage-gale: ANTLR4 prefix-alt prediction & bt-scan fixes",
+          "timestamp": "2026-05-04T20:06:03+09:00",
+          "tree_id": "664ffd39053d68b0a6f6330d3739ab7a2a0b9399",
+          "url": "https://github.com/wado-lang/wado/commit/ab7b3eaace5ddfe5c71f7b224d33188c9efa524d"
+        },
+        "date": 1777893067247,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1775,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8776,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18520,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 503105,
             "unit": "bytes"
           }
         ]
