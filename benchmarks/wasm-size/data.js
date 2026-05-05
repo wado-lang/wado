@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777940134253,
+  "lastUpdate": 1777941255278,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -19373,6 +19373,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/6ba717bcfe559ae407c41ca38dd8584ad506b891"
         },
         "date": 1777940134145,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1775,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8776,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18520,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 503688,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "18671d5e61ba89854c9e692377ef9199cfe69061",
+          "message": "Merge pull request #999 from wado-lang/claude/plan-issue-997-fix-iz1yK\n\nfix(cm_binding): address #997 follow-up bugs from #996 review",
+          "timestamp": "2026-05-05T09:29:22+09:00",
+          "tree_id": "30ebd3528e5f6f762684cc20550dd22ea7a86064",
+          "url": "https://github.com/wado-lang/wado/commit/18671d5e61ba89854c9e692377ef9199cfe69061"
+        },
+        "date": 1777941255161,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
