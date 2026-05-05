@@ -17,19 +17,9 @@ use crate::hashmap::IndexSet;
 use crate::name::{LocalMethodName, MethodName, ModuleSource};
 use crate::package::Package;
 use crate::tir::{
-<<<<<<< HEAD
     CallArg, FnDispatchTrait, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ResolvedType,
     TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirModule, TirParam,
-    TirStmt, TirStmtKind, TirTypeParam, TirUnaryOp, TypeId, TypeTable,
-||||||| 18671d5
-    CallArg, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ResolvedType, TirBinaryOp,
-    TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirModule, TirParam, TirStmt,
-    TirStmtKind, TirTypeParam, TirUnaryOp, TypeId, TypeTable,
-=======
-    CallArg, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ResolvedType, TirBinaryOp,
-    TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirModule, TirParam, TirStmt,
-    TirStmtKind, TirTypeParam, TypeId, TypeTable,
->>>>>>> origin/main
+    TirStmt, TirStmtKind, TirTypeParam, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -1567,58 +1557,17 @@ fn generate_fn_canonical_dispatch_stub(
     fmt_type: TypeId,
     span: Span,
 ) -> TirFunction {
-<<<<<<< HEAD
-    let method_info = LocalMethodName::new(
-        "Fn".to_string(),
-        Some(trait_name.to_string()),
-        method_name.to_string(),
-    )
-    .with_struct_type_args(type_arg_names);
-||||||| 18671d5
-    let method_info = LocalMethodName::new(
-        "Fn".to_string(),
-        Some("Inspect".to_string()),
-        "inspect".to_string(),
-    )
-    .with_struct_type_args(type_arg_names);
-=======
     let method_info =
-        trait_method_info("Fn", "Inspect", "inspect").with_struct_type_args(type_arg_names);
->>>>>>> origin/main
+        trait_method_info("Fn", trait_name, method_name).with_struct_type_args(type_arg_names);
     let qualified_name = method_info.to_mangled_name();
 
-<<<<<<< HEAD
     let mut func = make_synthetic_method(
-||||||| 18671d5
-    // Build the signature string at compile time: "|i32, String| -> bool"
-    let param_names: Vec<String> = param_types.iter().map(|t| tt.type_name(*t)).collect();
-    let ret_name = tt.type_name(return_type);
-    let sig = format!("|{}| -> {}", param_names.join(", "), ret_name);
-
-    let fmt = || local_expr(1, "f", fmt_type, span);
-    let body = TirBlock::new(vec![write_str_stmt(sig, fmt(), string_type, span)], span);
-
-    make_synthetic_method(
-=======
-    let param_names: Vec<String> = param_types.iter().map(|t| tt.type_name(*t)).collect();
-    let ret_name = tt.type_name(return_type);
-    let sig = format!("|{}| -> {}", param_names.join(", "), ret_name);
-
-    let fmt = local_expr(1, "f", fmt_type, span);
-    let body = TirBlock::new(vec![write_str_stmt(sig, fmt, string_type, span)], span);
-
-    make_synthetic_method(
->>>>>>> origin/main
         qualified_name,
         method_info,
         inspect_params(ref_fn_type, fmt_type, span),
         TypeTable::UNIT,
-<<<<<<< HEAD
         TirBlock::new(vec![], span),
-        vec![
-            param_local("self", ref_fn_type, false),
-            param_local("f", fmt_type, false),
-        ],
+        inspect_locals(ref_fn_type, fmt_type),
     );
     // No TIR body: the real instructions are supplied at WIR build
     // time via the `FnCanonicalDispatch` arm in `translate_function_bodies`.
@@ -1631,18 +1580,6 @@ fn generate_fn_canonical_dispatch_stub(
         return_type,
     };
     func
-||||||| 18671d5
-        body,
-        vec![
-            param_local("self", ref_fn_type, false),
-            param_local("f", fmt_type, false),
-        ],
-    )
-=======
-        body,
-        inspect_locals(ref_fn_type, fmt_type),
-    )
->>>>>>> origin/main
 }
 
 /// Generate Inspect for opaque/resource types (Future, Stream, etc.).
@@ -1890,21 +1827,22 @@ fn generate_inspect_alt_impls(module: &mut TirModule) {
         let resolved = tt.get(type_id).clone();
         if matches!(resolved, ResolvedType::GenericInstance { ref name, ref module_source, .. } if TypeTable::is_tuple_type(name, module_source))
         {
-<<<<<<< HEAD
             // Tuple InspectAlt is provided by variadic impl in core:prelude/tuple.wado
+            continue;
         } else if let ResolvedType::Function {
             params,
             return_type,
             ..
         } = &resolved
         {
-            // Function: emit a stand-alone InspectAlt stub. Crucially,
-            // do NOT use the `display_fallback` Inspect-delegate: WIR
-            // build supplies the real body — `call_ref
+            // Function: emit a stand-alone InspectAlt dispatch stub.
+            // Crucially, do NOT use the `display_fallback` Inspect-
+            // delegate: WIR build supplies the real body — `call_ref
             // (self.inspect_alt)` for InspectAlt, `call_ref
             // (self.inspect)` for Inspect — and a delegate would let
             // the optimizer collapse InspectAlt to Inspect before WIR
             // build runs, defeating the per-literal source dispatch.
+            let ref_type = tt.make_ref(type_id);
             generated.push(Rc::new(RefCell::new(generate_fn_inspect_alt_fn(
                 &type_arg_names,
                 params.len(),
@@ -1913,60 +1851,11 @@ fn generate_inspect_alt_impls(module: &mut TirModule) {
                 fmt_type,
                 span,
             ))));
-        } else {
-            // Opaque resource types (Future, Stream, etc.): delegate
-            // to Inspect (no per-literal data to dispatch through).
-            let di = LocalMethodName::new(
-                base_name.clone(),
-                Some("InspectAlt".to_string()),
-                "inspect_alt".to_string(),
-            )
-            .with_struct_type_args(&type_arg_names);
-            let ii = LocalMethodName::new(
-                base_name,
-                Some("Inspect".to_string()),
-                "inspect".to_string(),
-            )
-            .with_struct_type_args(&type_arg_names);
-            generated.push(Rc::new(RefCell::new(generate_display_fallback(
-                di,
-                ii,
-                ref_type,
-                fmt_type,
-                &module_source,
-                vec![],
-                span,
-            ))));
-||||||| 18671d5
-            // Tuple InspectAlt is provided by variadic impl in core:prelude/tuple.wado
-        } else {
-            // Function types, opaque types: delegate to Inspect
-            let di = LocalMethodName::new(
-                base_name.clone(),
-                Some("InspectAlt".to_string()),
-                "inspect_alt".to_string(),
-            )
-            .with_struct_type_args(&type_arg_names);
-            let ii = LocalMethodName::new(
-                base_name,
-                Some("Inspect".to_string()),
-                "inspect".to_string(),
-            )
-            .with_struct_type_args(&type_arg_names);
-            generated.push(Rc::new(RefCell::new(generate_display_fallback(
-                di,
-                ii,
-                ref_type,
-                fmt_type,
-                &module_source,
-                vec![],
-                span,
-            ))));
-=======
             continue;
->>>>>>> origin/main
         }
         let ref_type = tt.make_ref(type_id);
+        // Opaque resource types (Future, Stream, etc.): delegate to
+        // Inspect via the stock `display_fallback`.
         generated.push(Rc::new(RefCell::new(generate_display_fallback(
             trait_method_info(&base_name, "InspectAlt", "inspect_alt")
                 .with_struct_type_args(&type_arg_names),
