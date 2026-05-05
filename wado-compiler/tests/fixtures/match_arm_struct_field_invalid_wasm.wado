@@ -1,30 +1,24 @@
-// Compiler regression: WIR pipeline produces invalid Wasm for a `match`
-// arm that constructs a struct local and then reads a field of it, when
-// embedded in a `while` loop body.
+// Regression test: WIR pipeline used to emit invalid core Wasm for a `match` arm that
+// `let _ = ...` discarded a struct field, when embedded in a `while` loop.
 //
-// Discovered while investigating a `null reference` trap inside
-// `core:json/JsonDeserializer::read_json_string`. With the optimizer's
-// inline threshold raised to 33+ on the json-catalog benchmark, deserializing
-// any JSON string with a backslash escape (e.g. `"a\nb"`) trapped at runtime;
-// the TIR dump showed the `field_scalarize` (HFS) pass hoisting `__r.used`
-// and `__r.repr` out of the slow-path loop, where `__r` is a local
-// constructed only inside a deeply nested `match _ => {...}` arm (the
-// inlined `panic!("invalid escape '\\{esc}'")` template).
+// Background: discovered while investigating a `null reference` trap inside
+// `core:json/JsonDeserializer::read_json_string` with the optimizer's
+// inline threshold raised to 33+ on the json-catalog benchmark — that trap
+// turned out to be a separate `field_scalarize` (HFS) bug, but minimizing
+// the repro produced this independent compiler bug.
 //
-// Minimizing further (no `core:json`, no `--optimize-inline-threshold`)
-// produced the standalone repro below: a tiny `while`+`match` where one
-// arm constructs `S` and reads `s.a`. At all default opt levels the WIR
-// pipeline emits an invalid module (`type mismatch: expected i32 but
-// nothing on stack`).
+// Root cause: the resolver lowered `let _ = expr;` to `TirStmtKind::Expr(expr)`,
+// losing the "discard the value" semantic. The block resolver then took the
+// last statement's `Expr(s.a)` as the trailing expression, typing the arm
+// body (and therefore the whole match) as `i32` — producing a Wasm
+// `(if (result i32) ...)` whose `_ => {}` arm left nothing on the stack.
 //
-// The matching arm without the loop only ICE's at -O0 (the optimizer
-// "happens to clean it up" at -O1+), so the loop is essential to
-// surface the bug post-optimization.
-//
-// `#![TODO]` marks this as a known compiler failure; once fixed, remove
-// the attribute and the test framework will warn that the file should
-// be promoted to a normal regression test.
-#![TODO]
+// Fix: lower `let _ = expr;` to `TirStmtKind::LetDestructure { pattern:
+// Wildcard, value, .. }` instead. The block resolver only considers
+// `TirStmtKind::Expr` / `Return` as a trailing-expression, so the match arm
+// is now correctly typed as unit. The WIR builder gained a `Wildcard` arm
+// in `translate_let_pattern` that wraps non-unit values in `Drop` so the
+// expression's side effects still execute.
 
 struct S {
     a: i32,

@@ -440,8 +440,21 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 )
             }
             ast::Pattern::Wildcard => {
-                // Wildcard pattern: let _ = expr; - evaluate but don't bind
-                TirStmt::new(TirStmtKind::Expr(value), let_stmt.span)
+                // `let _ = expr;` — evaluate the value for side effects, then
+                // discard the result. Lower to LetDestructure with a Wildcard
+                // pattern (rather than a bare `TirStmtKind::Expr(value)`) so
+                // that the surrounding block's type inference does not treat
+                // the discarded expression as a trailing block-value
+                // (`Expr::Block` resolver picks up trailing `TirStmtKind::Expr`
+                // as the block's type).
+                TirStmt::new(
+                    TirStmtKind::LetDestructure {
+                        pattern: TirPattern::Wildcard,
+                        is_mut: let_stmt.is_mut,
+                        value,
+                    },
+                    let_stmt.span,
+                )
             }
             _ => {
                 self.check_irrefutable_pattern(&let_stmt.pattern, let_stmt.span);

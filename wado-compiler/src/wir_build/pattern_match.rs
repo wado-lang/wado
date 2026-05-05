@@ -239,6 +239,17 @@ impl FunctionTranslator<'_, '_> {
                     value: Box::new(value_instr),
                 })
             }
+            TirPattern::Wildcard => {
+                // `let _ = expr;` — evaluate the value for side effects and
+                // drop the result. We must wrap in `Drop` (rather than
+                // discarding `value_instr` outright) so the side effects of
+                // `expr` actually execute.
+                if value.type_id == TypeTable::UNIT || value.type_id == TypeTable::NEVER {
+                    Some(value_instr)
+                } else {
+                    Some(WirInstr::Drop(Box::new(value_instr)))
+                }
+            }
             _ => None,
         }
     }
