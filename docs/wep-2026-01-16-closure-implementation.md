@@ -801,6 +801,48 @@ This requires a resource table mapping handles to closure structs.
 
 **For Wado MVP: Use Option A** (disallow closures at CM boundary). This can be relaxed later.
 
+#### Canonical Closure as Vtable
+
+When a closure value escapes its literal scope (passed as a `fn(...)` argument, stored in a struct field, returned from a function, etc.) the per-literal `__Closure_N` ref is wrapped in a canonical, signature-keyed struct so that any holder of a `Fn<N, Ret>` value can dispatch through a uniform shape. This struct is the runtime carrier for any trait method dispatched on a `Fn<N, Ret>` value.
+
+Slim shape (default — `Fn::call` only):
+
+```wat
+(type $CanonicalClosure_K (struct
+  (field $env  (ref null struct))
+  (field $func (ref $canonical_fn_K))
+))
+```
+
+`$canonical_fn_K` has signature `(param $env (ref null struct)) (param $p_0 ...) ... (result ...)`. Each per-literal functor registers a small `__closure_wrapper_N` that casts `env` back to `(ref $__Closure_N)` and forwards to `__call`.
+
+Inspectable shape (extended — `Fn^Inspect` / `Fn^InspectAlt` reachable for this signature):
+
+```wat
+(type $CanonicalClosure_K (struct
+  (field $env         (ref null struct))
+  (field $func        (ref $canonical_fn_K))
+  (field $inspect     (ref $canonical_inspect_fn))
+  (field $inspect_alt (ref $canonical_inspect_alt_fn))
+))
+```
+
+`$canonical_inspect_fn` has signature `(param $env (ref null struct)) (param $f (ref $Formatter))`. Each per-literal functor registers two extra wrappers (`__closure_inspect_wrapper_N`, `__closure_inspect_alt_wrapper_N`) that cast `env` and forward to the literal's `__Closure_N^Inspect::inspect` / `__Closure_N^InspectAlt::inspect_alt` impls. Those impls write the per-literal signature string and TIR-unparsed source body, respectively.
+
+Trait dispatch via the canonical struct:
+
+```wat
+;; Fn<N, Ret>^InspectAlt::inspect_alt(self, f)
+(call_ref $canonical_inspect_alt_fn
+  (struct.get $CanonicalClosure_K $env         (local.get $self))
+  (local.get $f)
+  (struct.get $CanonicalClosure_K $inspect_alt (local.get $self)))
+```
+
+Schema selection is a whole-program lowering decision, not a DCE result: a pre-WIR usage scan tags each `(N, Ret)` whose `Fn^Inspect` / `Fn^InspectAlt` is reachable, and `get_or_create_canonical_closure_type` reads the tag to choose between the two shapes. Programs that never inspect closures emit the slim shape and pay no extra fields, wrappers, or source strings. Programs that do inspect closures pay two refs per canonical value plus per-literal wrappers and source-string constants for the affected `(N, Ret)` only.
+
+The specialized path (closure local stays as `&__Closure_N`) does not use the vtable: trait dispatch resolves directly to the per-literal `__Closure_N^Inspect` / `__Closure_N^InspectAlt` impls, and standard DCE removes them when unused.
+
 ## Consequences
 
 ### Positive

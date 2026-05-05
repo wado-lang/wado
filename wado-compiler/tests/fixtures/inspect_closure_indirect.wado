@@ -1,0 +1,46 @@
+// Closure inspect/inspect_alt must work for indirect dispatch:
+// when the closure value is held behind a function parameter, struct field,
+// or global, `{f:?}` and `{f:#?}` should still produce the correct
+// signature and per-literal source.
+
+fn fmt_def(f: fn(i32) -> i32) -> String {
+    return `{f:?}`;
+}
+
+fn fmt_alt(f: fn(i32) -> i32) -> String {
+    return `{f:#?}`;
+}
+
+struct Holder {
+    cb: fn(i32) -> i32,
+}
+
+global mut g_cb: fn(i32) -> i32 = |x: i32| x;
+
+test "closure passed as fn param keeps signature for :?" {
+    let add_one = |x: i32| x + 1;
+    assert fmt_def(add_one) == "|i32| -> i32";
+}
+
+test "closure passed as fn param keeps source for :#?" {
+    let add_one = |x: i32| x + 1;
+    assert fmt_alt(add_one) == "|x: i32| x + 1";
+}
+
+test "literal-site :#? still works" {
+    let add_one = |x: i32| x + 1;
+    assert `{add_one:#?}` == "|x: i32| x + 1";
+}
+
+test "closure stored in struct field keeps source for :#?" {
+    let h = Holder { cb: |y: i32| y * 2 };
+    assert `{h.cb:#?}` == "|y: i32| y * 2";
+}
+
+test "closure stored in global keeps source for :#?" {
+    g_cb = |z: i32| z - 7;
+    assert `{g_cb:#?}` == "|z: i32| z - 7";
+}
+
+__DATA__
+{"test": {}}
