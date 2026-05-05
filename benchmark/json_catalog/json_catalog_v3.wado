@@ -1,0 +1,861 @@
+// JSON benchmark v3 (Stage 2 PoC): tape-based parser.
+//
+// NEGATIVE RESULT: this approach is ~17% slower than Stage 1B (v2) on Wado.
+//   Stage 1B (v2) integrated parse: ~23 ms
+//   Stage 2  (v3) tape-based:       ~27 ms (median, with high variance)
+//
+// Phase 1 (tokenize): single linear scan over input, emits packed u64 tokens
+//   into Array<u64>. The 64-bit token packs:
+//     bits 56-63: kind (TOKEN_*)
+//     bits 28-55: start (28 bits, up to 256MB inputs)
+//     bits  0-27: end   (28 bits, exclusive)
+//
+// Phase 2 (materialize): walks the tape sequentially, no whitespace skipping,
+//   no input bounds checks. Uses the same length-first key dispatch as v2.
+//
+// Output types are identical to v1/v2 for fair comparison.
+//
+// Why it doesn't help on Wado (today):
+//   1. Tape construction (~12ms standalone, 36% self time) does the same
+//      per-byte scan as integrated parse — no algorithmic saving.
+//   2. The 85K-entry Array<u64> tape causes GC variance (12-25ms spread).
+//   3. Phase 2 still per-token dispatches and re-parses numbers from ranges,
+//      so the savings from skipping whitespace are offset by tape cursor work.
+//   4. Wado's `Array<struct>` lowers to `(array (ref Struct))` — boxed; only
+//      `Array<u64>` packs inline. We picked u64 packing to mitigate, but the
+//      array still has per-push bounds + grow checks.
+//
+// Useful for future work: this file documents what's needed to make tape pay:
+//   - Specialized `(array u64)` with no Wasm bounds check (raw memory)
+//   - Tape-aware `parse_i64` that pre-parses during Phase 1
+//   - Eliminate Phase 2 boxing of struct values (return-via-out-param)
+
+use { Stdout } from "core:cli";
+use { TreeMap } from "core:collections";
+use { MonotonicClock } from "wasi:clocks";
+use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
+use { Benchmark } from "core:benchmark";
+
+struct Event {
+    description: Option<String>,
+    id: i64,
+    logo: Option<String>,
+    name: String,
+    sub_topic_ids: Array<i64>,
+    subject_code: Option<String>,
+    subtitle: Option<String>,
+    topic_ids: Array<i64>,
+}
+
+struct Price {
+    amount: i64,
+    audience_sub_category_id: i64,
+    seat_category_id: i64,
+}
+
+struct Area {
+    area_id: i64,
+    block_ids: Array<i64>,
+}
+
+struct SeatCategory {
+    areas: Array<Area>,
+    seat_category_id: i64,
+}
+
+struct Performance {
+    event_id: i64,
+    id: i64,
+    logo: Option<String>,
+    name: Option<String>,
+    prices: Array<Price>,
+    seat_categories: Array<SeatCategory>,
+    seat_map_image: Option<String>,
+    start: i64,
+    venue_code: String,
+}
+
+struct CitmCatalog {
+    area_names: TreeMap<String, String>,
+    audience_sub_category_names: TreeMap<String, String>,
+    block_names: TreeMap<String, String>,
+    events: TreeMap<String, Event>,
+    performances: Array<Performance>,
+    seat_category_names: TreeMap<String, String>,
+    sub_topic_names: TreeMap<String, String>,
+    subject_names: TreeMap<String, String>,
+    topic_names: TreeMap<String, String>,
+    topic_sub_topics: TreeMap<String, Array<i64>>,
+    venue_names: TreeMap<String, String>,
+}
+
+// Token kinds (use globals; Wado const is impl-scoped only)
+global TOK_OBJECT_START: u64 = 1 as u64;
+global TOK_OBJECT_END:   u64 = 2 as u64;
+global TOK_ARRAY_START:  u64 = 3 as u64;
+global TOK_ARRAY_END:    u64 = 4 as u64;
+global TOK_KEY:          u64 = 5 as u64;
+global TOK_STRING:       u64 = 6 as u64;
+global TOK_NUMBER:       u64 = 7 as u64;
+global TOK_TRUE:         u64 = 8 as u64;
+global TOK_FALSE:        u64 = 9 as u64;
+global TOK_NULL:         u64 = 10 as u64;
+
+#[inline(always)]
+fn pack_token(kind: u64, start: i32, end: i32) -> u64 {
+    return (kind << 56) | ((start as u64) << 28) | (end as u64 & 0xFFFFFFF);
+}
+
+#[inline(always)]
+fn tok_kind(t: u64) -> i32 {
+    return (t >> 56) as i32;
+}
+
+#[inline(always)]
+fn tok_start(t: u64) -> i32 {
+    return ((t >> 28) & 0xFFFFFFF) as i32;
+}
+
+#[inline(always)]
+fn tok_end(t: u64) -> i32 {
+    return (t & 0xFFFFFFF) as i32;
+}
+
+// Phase 1: tokenize
+fn tokenize(input: String) -> Array<u64> {
+    let raw = input.internal_raw_bytes();
+    let len = input.len();
+    let mut pos = 0;
+    let mut tape: Array<u64> = Array::with_capacity(len / 6);
+    // expect_key tracks whether the next string token is a KEY (after { or , inside object).
+    // Stack of bools: 0 bit = inside object, 1 = next-string-is-key.
+    // For simplicity use a single bool stack via i32 bitmask (max 32 nesting depth).
+    let mut depth: i32 = 0;
+    let mut obj_mask: i32 = 0;       // bit i = 1 if depth i is object (vs array)
+    let mut next_is_key: bool = false;
+
+    loop {
+        // skip ws
+        while pos < len {
+            let b = builtin::array_get_u8(raw, pos) as i32;
+            if b > 32 { break; }
+            if b == 32 || b == 10 || b == 13 || b == 9 { pos += 1; } else { break; }
+        }
+        if pos >= len {
+            return tape;
+        }
+
+        let b = builtin::array_get_u8(raw, pos) as i32;
+        if b == '{' as i32 {
+            tape.push(pack_token(TOK_OBJECT_START, pos, pos + 1));
+            pos += 1;
+            obj_mask = obj_mask | (1 << depth);
+            depth += 1;
+            next_is_key = true;
+        } else if b == '}' as i32 {
+            tape.push(pack_token(TOK_OBJECT_END, pos, pos + 1));
+            pos += 1;
+            depth -= 1;
+            obj_mask = obj_mask & ~(1 << depth);
+            // After closing, value position (parent expects ',' or ']')
+            if depth > 0 && ((obj_mask >> (depth - 1)) & 1) == 1 {
+                next_is_key = false; // we just emitted a value to parent
+            }
+        } else if b == '[' as i32 {
+            tape.push(pack_token(TOK_ARRAY_START, pos, pos + 1));
+            pos += 1;
+            obj_mask = obj_mask & ~(1 << depth);
+            depth += 1;
+            next_is_key = false;
+        } else if b == ']' as i32 {
+            tape.push(pack_token(TOK_ARRAY_END, pos, pos + 1));
+            pos += 1;
+            depth -= 1;
+            if depth > 0 && ((obj_mask >> (depth - 1)) & 1) == 1 {
+                next_is_key = false;
+            }
+        } else if b == ',' as i32 {
+            pos += 1;
+            // Inside object, next is key; inside array, next is value
+            if depth > 0 && ((obj_mask >> (depth - 1)) & 1) == 1 {
+                next_is_key = true;
+            }
+        } else if b == ':' as i32 {
+            pos += 1;
+            next_is_key = false;
+        } else if b == '"' as i32 {
+            let s = pos + 1;
+            pos = s;
+            // scan for closing " (handle escapes by skipping next byte after \)
+            while pos < len {
+                let bb = builtin::array_get_u8(raw, pos) as i32;
+                if bb == '"' as i32 { break; }
+                if bb == '\\' as i32 { pos += 2; continue; }
+                pos += 1;
+            }
+            let kind = if next_is_key { TOK_KEY } else { TOK_STRING };
+            tape.push(pack_token(kind, s, pos));
+            pos += 1; // skip closing "
+        } else if b == '-' as i32 || ('0' as i32 <= b <= '9' as i32) {
+            let s = pos;
+            if b == '-' as i32 { pos += 1; }
+            while pos < len {
+                let bb = builtin::array_get_u8(raw, pos) as i32;
+                if ('0' as i32 <= bb <= '9' as i32) || bb == '.' as i32 || bb == 'e' as i32 || bb == 'E' as i32 || bb == '+' as i32 || bb == '-' as i32 {
+                    pos += 1;
+                } else {
+                    break;
+                }
+            }
+            tape.push(pack_token(TOK_NUMBER, s, pos));
+        } else if b == 't' as i32 {
+            tape.push(pack_token(TOK_TRUE, pos, pos + 4));
+            pos += 4;
+        } else if b == 'f' as i32 {
+            tape.push(pack_token(TOK_FALSE, pos, pos + 5));
+            pos += 5;
+        } else if b == 'n' as i32 {
+            tape.push(pack_token(TOK_NULL, pos, pos + 4));
+            pos += 4;
+        } else {
+            panic(`tokenize: unexpected byte at {pos}`);
+        }
+    }
+    unreachable();
+}
+
+fn read_file(path: String) -> String with Preopens {
+    let dirs = Preopens::get_directories();
+    let root = dirs[0].0;
+    let open_result = root.open_at(PathFlags::none(), path, OpenFlags::none(), DescriptorFlags::Read).wait();
+    if let Err(_) = open_result {
+        panic(`failed to open {path}`);
+    }
+    let file = match open_result {
+        Ok(f) => f,
+        Err(_) => unreachable(),
+    };
+    let [stream, _done] = file.read_via_stream(0 as Filesize);
+    let mut buf = String::with_capacity(2 * 1024 * 1024);
+    loop {
+        let chunk = stream.read(4096);
+        if chunk.len() == 0 {
+            break;
+        }
+        let start = buf.internal_reserve_uninit(chunk.len());
+        for let mut i = 0; i < chunk.len(); i += 1 {
+            buf.set_byte(start + i, chunk[i]);
+        }
+    }
+    stream.drop();
+    return buf;
+}
+
+// ============================================================================
+// Phase 2: materialize from tape
+// ============================================================================
+
+struct Cursor {
+    tape: Array<u64>,
+    input: String,
+    repr: builtin::array<u8>,
+    idx: i32,
+}
+
+impl Cursor {
+    #[inline(always)]
+    fn advance(&mut self) -> u64 {
+        let t = self.tape[self.idx];
+        self.idx += 1;
+        return t;
+    }
+
+    #[inline(always)]
+    fn peek(&self) -> u64 {
+        return self.tape[self.idx];
+    }
+
+    fn parse_i64(&mut self) -> i64 {
+        let t = self.advance();
+        let raw = self.repr;
+        let mut pos = tok_start(t);
+        let end = tok_end(t);
+        let mut neg = false;
+        if pos < end && builtin::array_get_u8(raw, pos) as i32 == '-' as i32 {
+            neg = true;
+            pos += 1;
+        }
+        let mut result: i64 = 0;
+        while pos < end {
+            let b = builtin::array_get_u8(raw, pos) as i32;
+            if '0' as i32 <= b <= '9' as i32 {
+                result = result * 10 + (b - '0' as i32) as i64;
+                pos += 1;
+            } else {
+                break;
+            }
+        }
+        if neg {
+            return -result;
+        }
+        return result;
+    }
+
+    fn read_string_value(&mut self) -> String {
+        let t = self.advance();
+        let s = tok_start(t);
+        let e = tok_end(t);
+        // Fast path: no escapes detected during tokenize? We need to check.
+        // For simplicity scan for '\\' here; if none, use substr_bytes.
+        let raw = self.repr;
+        let mut p = s;
+        while p < e {
+            if builtin::array_get_u8(raw, p) as i32 == '\\' as i32 {
+                return self.read_string_with_escapes(s, e);
+            }
+            p += 1;
+        }
+        return self.input.substr_bytes(s, e);
+    }
+
+    fn read_string_with_escapes(&self, s: i32, e: i32) -> String {
+        let raw = self.repr;
+        let mut result = String::with_capacity(e - s);
+        let mut pos = s;
+        while pos < e {
+            let b = builtin::array_get_u8(raw, pos) as i32;
+            if b == '\\' as i32 {
+                pos += 1;
+                if pos >= e { panic("EOF after \\"); }
+                let esc = builtin::array_get_u8(raw, pos) as u8 as char;
+                pos += 1;
+                match esc {
+                    '"' => result.push('"'),
+                    '\\' => result.push('\\'),
+                    '/' => result.push('/'),
+                    'n' => result.push('\n'),
+                    'r' => result.push('\r'),
+                    't' => result.push('\t'),
+                    'b' => result.push(8 as u8 as char),
+                    'f' => result.push(12 as u8 as char),
+                    'u' => {
+                        if pos + 4 > e { panic("EOF in \\u"); }
+                        let mut code: u32 = 0;
+                        for let mut i = 0; i < 4; i += 1 {
+                            let ch = builtin::array_get_u8(raw, pos + i) as u8 as char;
+                            code = code * 16 + ch.hex_digit_value() as u32;
+                        }
+                        pos += 4;
+                        if let Some(c) = char::from_u32(code) {
+                            result.push(c);
+                        } else {
+                            panic("bad unicode codepoint");
+                        }
+                    },
+                    _ => panic(`invalid escape \\{esc}`),
+                }
+            } else {
+                result.push(b as u8 as char);
+                pos += 1;
+            }
+        }
+        return result;
+    }
+
+    fn parse_optional_string(&mut self) -> Option<String> {
+        let t = self.peek();
+        if tok_kind(t) == TOK_NULL as i32 {
+            self.idx += 1;
+            return null;
+        }
+        return Option::Some(self.read_string_value());
+    }
+
+    fn skip_value(&mut self) {
+        let t = self.advance();
+        let kind = tok_kind(t);
+        if kind == TOK_OBJECT_START as i32 {
+            let mut depth = 1;
+            while depth > 0 {
+                let k = tok_kind(self.advance());
+                if k == TOK_OBJECT_START as i32 || k == TOK_ARRAY_START as i32 {
+                    depth += 1;
+                } else if k == TOK_OBJECT_END as i32 || k == TOK_ARRAY_END as i32 {
+                    depth -= 1;
+                }
+            }
+        } else if kind == TOK_ARRAY_START as i32 {
+            let mut depth = 1;
+            while depth > 0 {
+                let k = tok_kind(self.advance());
+                if k == TOK_OBJECT_START as i32 || k == TOK_ARRAY_START as i32 {
+                    depth += 1;
+                } else if k == TOK_OBJECT_END as i32 || k == TOK_ARRAY_END as i32 {
+                    depth -= 1;
+                }
+            }
+        }
+        // scalar tokens are already consumed via advance()
+    }
+
+    fn parse_array_i64(&mut self) -> Array<i64> {
+        let t = self.advance();
+        if tok_kind(t) != TOK_ARRAY_START as i32 {
+            panic("expected '['");
+        }
+        let mut arr: Array<i64> = Array::with_capacity(4);
+        loop {
+            let next = self.peek();
+            if tok_kind(next) == TOK_ARRAY_END as i32 {
+                self.idx += 1;
+                return arr;
+            }
+            arr.push(self.parse_i64());
+        }
+        unreachable();
+    }
+
+    fn parse_event(&mut self) -> Event {
+        let t = self.advance();
+        if tok_kind(t) != TOK_OBJECT_START as i32 {
+            panic("event: expected '{'");
+        }
+        let mut description: Option<String> = null;
+        let mut id: i64 = 0;
+        let mut logo: Option<String> = null;
+        let mut name: String = "";
+        let mut sub_topic_ids: Array<i64> = [];
+        let mut subject_code: Option<String> = null;
+        let mut subtitle: Option<String> = null;
+        let mut topic_ids: Array<i64> = [];
+
+        loop {
+            let key_tok = self.peek();
+            let kk = tok_kind(key_tok);
+            if kk == TOK_OBJECT_END as i32 {
+                self.idx += 1;
+                return Event { description, id, logo, name, sub_topic_ids, subject_code, subtitle, topic_ids };
+            }
+            if kk != TOK_KEY as i32 {
+                panic("event: expected key");
+            }
+            self.idx += 1;
+            let ks = tok_start(key_tok);
+            let klen = tok_end(key_tok) - ks;
+            let g0 = builtin::array_get_u8(self.repr, ks) as i32;
+            let mut handled = false;
+            if klen == 2 {
+                if g0 == 'i' as i32 && builtin::array_get_u8(self.repr, ks + 1) as i32 == 'd' as i32 {
+                    id = self.parse_i64();
+                    handled = true;
+                }
+            } else if klen == 4 {
+                if g0 == 'n' as i32 {
+                    name = self.read_string_value();
+                    handled = true;
+                } else if g0 == 'l' as i32 {
+                    logo = self.parse_optional_string();
+                    handled = true;
+                }
+            } else if klen == 8 {
+                if g0 == 's' as i32 {
+                    subtitle = self.parse_optional_string();
+                    handled = true;
+                } else if g0 == 't' as i32 {
+                    topic_ids = self.parse_array_i64();
+                    handled = true;
+                }
+            } else if klen == 11 {
+                if g0 == 'd' as i32 {
+                    description = self.parse_optional_string();
+                    handled = true;
+                } else if g0 == 's' as i32 {
+                    let g3 = builtin::array_get_u8(self.repr, ks + 3) as i32;
+                    if g3 == 'T' as i32 {
+                        sub_topic_ids = self.parse_array_i64();
+                        handled = true;
+                    } else if g3 == 'e' as i32 {
+                        subject_code = self.parse_optional_string();
+                        handled = true;
+                    }
+                }
+            }
+            if !handled {
+                self.skip_value();
+            }
+        }
+        unreachable();
+    }
+
+    fn parse_price(&mut self) -> Price {
+        let t = self.advance();
+        if tok_kind(t) != TOK_OBJECT_START as i32 { panic("price: expected '{'"); }
+        let mut amount: i64 = 0;
+        let mut audience_sub_category_id: i64 = 0;
+        let mut seat_category_id: i64 = 0;
+        loop {
+            let key_tok = self.peek();
+            let kk = tok_kind(key_tok);
+            if kk == TOK_OBJECT_END as i32 {
+                self.idx += 1;
+                return Price { amount, audience_sub_category_id, seat_category_id };
+            }
+            self.idx += 1;
+            let ks = tok_start(key_tok);
+            let klen = tok_end(key_tok) - ks;
+            let g0 = builtin::array_get_u8(self.repr, ks) as i32;
+            let mut handled = false;
+            if klen == 6 && g0 == 'a' as i32 {
+                amount = self.parse_i64();
+                handled = true;
+            } else if klen == 14 && g0 == 's' as i32 {
+                seat_category_id = self.parse_i64();
+                handled = true;
+            } else if klen == 21 && g0 == 'a' as i32 {
+                audience_sub_category_id = self.parse_i64();
+                handled = true;
+            }
+            if !handled { self.skip_value(); }
+        }
+        unreachable();
+    }
+
+    fn parse_array_price(&mut self) -> Array<Price> {
+        let t = self.advance();
+        if tok_kind(t) != TOK_ARRAY_START as i32 { panic("array<Price>: expected '['"); }
+        let mut arr: Array<Price> = Array::with_capacity(8);
+        loop {
+            let next = self.peek();
+            if tok_kind(next) == TOK_ARRAY_END as i32 {
+                self.idx += 1;
+                return arr;
+            }
+            arr.push(self.parse_price());
+        }
+        unreachable();
+    }
+
+    fn parse_area(&mut self) -> Area {
+        let t = self.advance();
+        if tok_kind(t) != TOK_OBJECT_START as i32 { panic("area: expected '{'"); }
+        let mut area_id: i64 = 0;
+        let mut block_ids: Array<i64> = [];
+        loop {
+            let key_tok = self.peek();
+            let kk = tok_kind(key_tok);
+            if kk == TOK_OBJECT_END as i32 {
+                self.idx += 1;
+                return Area { area_id, block_ids };
+            }
+            self.idx += 1;
+            let ks = tok_start(key_tok);
+            let klen = tok_end(key_tok) - ks;
+            let g0 = builtin::array_get_u8(self.repr, ks) as i32;
+            let mut handled = false;
+            if klen == 6 && g0 == 'a' as i32 {
+                area_id = self.parse_i64();
+                handled = true;
+            } else if klen == 8 && g0 == 'b' as i32 {
+                block_ids = self.parse_array_i64();
+                handled = true;
+            }
+            if !handled { self.skip_value(); }
+        }
+        unreachable();
+    }
+
+    fn parse_array_area(&mut self) -> Array<Area> {
+        let t = self.advance();
+        if tok_kind(t) != TOK_ARRAY_START as i32 { panic("array<Area>: expected '['"); }
+        let mut arr: Array<Area> = Array::with_capacity(4);
+        loop {
+            let next = self.peek();
+            if tok_kind(next) == TOK_ARRAY_END as i32 {
+                self.idx += 1;
+                return arr;
+            }
+            arr.push(self.parse_area());
+        }
+        unreachable();
+    }
+
+    fn parse_seat_category(&mut self) -> SeatCategory {
+        let t = self.advance();
+        if tok_kind(t) != TOK_OBJECT_START as i32 { panic("seat_category: expected '{'"); }
+        let mut areas: Array<Area> = [];
+        let mut seat_category_id: i64 = 0;
+        loop {
+            let key_tok = self.peek();
+            let kk = tok_kind(key_tok);
+            if kk == TOK_OBJECT_END as i32 {
+                self.idx += 1;
+                return SeatCategory { areas, seat_category_id };
+            }
+            self.idx += 1;
+            let ks = tok_start(key_tok);
+            let klen = tok_end(key_tok) - ks;
+            let g0 = builtin::array_get_u8(self.repr, ks) as i32;
+            let mut handled = false;
+            if klen == 5 && g0 == 'a' as i32 {
+                areas = self.parse_array_area();
+                handled = true;
+            } else if klen == 14 && g0 == 's' as i32 {
+                seat_category_id = self.parse_i64();
+                handled = true;
+            }
+            if !handled { self.skip_value(); }
+        }
+        unreachable();
+    }
+
+    fn parse_array_seat_category(&mut self) -> Array<SeatCategory> {
+        let t = self.advance();
+        if tok_kind(t) != TOK_ARRAY_START as i32 { panic("array<SeatCategory>: expected '['"); }
+        let mut arr: Array<SeatCategory> = Array::with_capacity(8);
+        loop {
+            let next = self.peek();
+            if tok_kind(next) == TOK_ARRAY_END as i32 {
+                self.idx += 1;
+                return arr;
+            }
+            arr.push(self.parse_seat_category());
+        }
+        unreachable();
+    }
+
+    fn parse_performance(&mut self) -> Performance {
+        let t = self.advance();
+        if tok_kind(t) != TOK_OBJECT_START as i32 { panic("performance: expected '{'"); }
+        let mut event_id: i64 = 0;
+        let mut id: i64 = 0;
+        let mut logo: Option<String> = null;
+        let mut name: Option<String> = null;
+        let mut prices: Array<Price> = [];
+        let mut seat_categories: Array<SeatCategory> = [];
+        let mut seat_map_image: Option<String> = null;
+        let mut start: i64 = 0;
+        let mut venue_code: String = "";
+
+        loop {
+            let key_tok = self.peek();
+            let kk = tok_kind(key_tok);
+            if kk == TOK_OBJECT_END as i32 {
+                self.idx += 1;
+                return Performance { event_id, id, logo, name, prices, seat_categories, seat_map_image, start, venue_code };
+            }
+            self.idx += 1;
+            let ks = tok_start(key_tok);
+            let klen = tok_end(key_tok) - ks;
+            let g0 = builtin::array_get_u8(self.repr, ks) as i32;
+            let mut handled = false;
+            if klen == 2 && g0 == 'i' as i32 {
+                id = self.parse_i64();
+                handled = true;
+            } else if klen == 4 {
+                if g0 == 'l' as i32 {
+                    logo = self.parse_optional_string();
+                    handled = true;
+                } else if g0 == 'n' as i32 {
+                    name = self.parse_optional_string();
+                    handled = true;
+                }
+            } else if klen == 5 && g0 == 's' as i32 {
+                start = self.parse_i64();
+                handled = true;
+            } else if klen == 6 && g0 == 'p' as i32 {
+                prices = self.parse_array_price();
+                handled = true;
+            } else if klen == 7 && g0 == 'e' as i32 {
+                event_id = self.parse_i64();
+                handled = true;
+            } else if klen == 9 && g0 == 'v' as i32 {
+                venue_code = self.read_string_value();
+                handled = true;
+            } else if klen == 12 && g0 == 's' as i32 {
+                seat_map_image = self.parse_optional_string();
+                handled = true;
+            } else if klen == 14 && g0 == 's' as i32 {
+                seat_categories = self.parse_array_seat_category();
+                handled = true;
+            }
+            if !handled { self.skip_value(); }
+        }
+        unreachable();
+    }
+
+    fn parse_array_performance(&mut self) -> Array<Performance> {
+        let t = self.advance();
+        if tok_kind(t) != TOK_ARRAY_START as i32 { panic("array<Performance>: expected '['"); }
+        let mut arr: Array<Performance> = Array::with_capacity(256);
+        loop {
+            let next = self.peek();
+            if tok_kind(next) == TOK_ARRAY_END as i32 {
+                self.idx += 1;
+                return arr;
+            }
+            arr.push(self.parse_performance());
+        }
+        unreachable();
+    }
+
+    fn parse_string_map(&mut self) -> TreeMap<String, String> {
+        let t = self.advance();
+        if tok_kind(t) != TOK_OBJECT_START as i32 { panic("string_map: expected '{'"); }
+        let mut m: TreeMap<String, String> = {};
+        loop {
+            let key_tok = self.peek();
+            if tok_kind(key_tok) == TOK_OBJECT_END as i32 {
+                self.idx += 1;
+                return m;
+            }
+            self.idx += 1;
+            let key = self.input.substr_bytes(tok_start(key_tok), tok_end(key_tok));
+            let val = self.read_string_value();
+            m[key] = val;
+        }
+        unreachable();
+    }
+
+    fn parse_event_map(&mut self) -> TreeMap<String, Event> {
+        let t = self.advance();
+        if tok_kind(t) != TOK_OBJECT_START as i32 { panic("event_map: expected '{'"); }
+        let mut m: TreeMap<String, Event> = {};
+        loop {
+            let key_tok = self.peek();
+            if tok_kind(key_tok) == TOK_OBJECT_END as i32 {
+                self.idx += 1;
+                return m;
+            }
+            self.idx += 1;
+            let key = self.input.substr_bytes(tok_start(key_tok), tok_end(key_tok));
+            let val = self.parse_event();
+            m[key] = val;
+        }
+        unreachable();
+    }
+
+    fn parse_topic_subtopics(&mut self) -> TreeMap<String, Array<i64>> {
+        let t = self.advance();
+        if tok_kind(t) != TOK_OBJECT_START as i32 { panic("topic_subtopics: expected '{'"); }
+        let mut m: TreeMap<String, Array<i64>> = {};
+        loop {
+            let key_tok = self.peek();
+            if tok_kind(key_tok) == TOK_OBJECT_END as i32 {
+                self.idx += 1;
+                return m;
+            }
+            self.idx += 1;
+            let key = self.input.substr_bytes(tok_start(key_tok), tok_end(key_tok));
+            let val = self.parse_array_i64();
+            m[key] = val;
+        }
+        unreachable();
+    }
+
+    fn parse_citm_catalog(&mut self) -> CitmCatalog {
+        let t = self.advance();
+        if tok_kind(t) != TOK_OBJECT_START as i32 { panic("catalog: expected '{'"); }
+        let mut area_names: TreeMap<String, String> = {};
+        let mut audience_sub_category_names: TreeMap<String, String> = {};
+        let mut block_names: TreeMap<String, String> = {};
+        let mut events: TreeMap<String, Event> = {};
+        let mut performances: Array<Performance> = [];
+        let mut seat_category_names: TreeMap<String, String> = {};
+        let mut sub_topic_names: TreeMap<String, String> = {};
+        let mut subject_names: TreeMap<String, String> = {};
+        let mut topic_names: TreeMap<String, String> = {};
+        let mut topic_sub_topics: TreeMap<String, Array<i64>> = {};
+        let mut venue_names: TreeMap<String, String> = {};
+
+        loop {
+            let key_tok = self.peek();
+            if tok_kind(key_tok) == TOK_OBJECT_END as i32 {
+                self.idx += 1;
+                return CitmCatalog {
+                    area_names, audience_sub_category_names, block_names, events,
+                    performances, seat_category_names, sub_topic_names,
+                    subject_names, topic_names, topic_sub_topics, venue_names,
+                };
+            }
+            self.idx += 1;
+            let ks = tok_start(key_tok);
+            let klen = tok_end(key_tok) - ks;
+            let g0 = builtin::array_get_u8(self.repr, ks) as i32;
+            let mut handled = false;
+            if klen == 6 && g0 == 'e' as i32 {
+                events = self.parse_event_map();
+                handled = true;
+            } else if klen == 9 && g0 == 'a' as i32 {
+                area_names = self.parse_string_map();
+                handled = true;
+            } else if klen == 10 {
+                if g0 == 'b' as i32 { block_names = self.parse_string_map(); handled = true; }
+                else if g0 == 't' as i32 { topic_names = self.parse_string_map(); handled = true; }
+                else if g0 == 'v' as i32 { venue_names = self.parse_string_map(); handled = true; }
+            } else if klen == 12 {
+                if g0 == 'p' as i32 { performances = self.parse_array_performance(); handled = true; }
+                else if g0 == 's' as i32 { subject_names = self.parse_string_map(); handled = true; }
+            } else if klen == 13 && g0 == 's' as i32 {
+                sub_topic_names = self.parse_string_map();
+                handled = true;
+            } else if klen == 14 && g0 == 't' as i32 {
+                topic_sub_topics = self.parse_topic_subtopics();
+                handled = true;
+            } else if klen == 17 && g0 == 's' as i32 {
+                seat_category_names = self.parse_string_map();
+                handled = true;
+            } else if klen == 24 && g0 == 'a' as i32 {
+                audience_sub_category_names = self.parse_string_map();
+                handled = true;
+            }
+            if !handled { self.skip_value(); }
+        }
+        unreachable();
+    }
+}
+
+struct CatalogCounts {
+    events: i32,
+    performances: i32,
+}
+
+fn parse_counts_v3(json_data: String) -> CatalogCounts {
+    let tape = tokenize(json_data);
+    let mut c = Cursor {
+        tape,
+        input: json_data,
+        repr: json_data.internal_raw_bytes(),
+        idx: 0,
+    };
+    let catalog = c.parse_citm_catalog();
+    return CatalogCounts {
+        events: catalog.events.len(),
+        performances: catalog.performances.len(),
+    };
+}
+
+test "phase1 smoke" {
+    let tape = tokenize("{\"a\":1,\"b\":[2,3]}");
+    assert tape.len() == 9;
+    assert tok_kind(tape[0]) == TOK_OBJECT_START as i32;
+    assert tok_kind(tape[1]) == TOK_KEY as i32;
+    assert tok_kind(tape[2]) == TOK_NUMBER as i32;
+}
+
+test "smoke" {
+    let counts = parse_counts_v3("{\"areaNames\":{},\"audienceSubCategoryNames\":{},\"blockNames\":{},\"events\":{},\"performances\":[],\"seatCategoryNames\":{},\"subTopicNames\":{},\"subjectNames\":{},\"topicNames\":{},\"topicSubTopics\":{},\"venueNames\":{}}");
+    assert counts.events == 0;
+    assert counts.performances == 0;
+}
+
+export fn run() with Stdout, MonotonicClock, Preopens {
+    let json_data = read_file("json_catalog/citm_catalog.json");
+    let mut b = Benchmark::new("json-catalog-v3");
+    b.input_size = Option::Some(json_data.len());
+    b.iterations = 5;
+
+    let counts = b.run("", || parse_counts_v3(json_data));
+    assert counts.events == 184;
+    assert counts.performances == 243;
+    b.println(`parsed {counts.events} events, {counts.performances} performances`);
+}
