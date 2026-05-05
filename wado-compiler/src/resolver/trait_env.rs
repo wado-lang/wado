@@ -54,12 +54,20 @@ pub(super) type StaticMethodIndex = IndexMap<String, Vec<(String, ModuleSource, 
 pub(super) type ResourceStaticMethodIndex =
     IndexMap<String, Vec<(String, ModuleSource, usize, usize)>>;
 
+/// Pre-built index of (`type_name`, `trait_name`) → `ModuleSource` for non-blanket
+/// trait impls. Lets downstream phases (template synthesis, etc.) ask "where
+/// does the impl live?" without re-scanning AST modules. Blanket impls are
+/// excluded — they apply structurally and don't have a concrete receiver
+/// type name.
+pub(crate) type TraitImplModuleIndex = IndexMap<(String, String), ModuleSource>;
+
 /// Immutable global knowledge base for trait resolution.
 ///
 /// Contains pre-built indices for fast lookup of trait implementations,
 /// trait declarations, and blanket impls. Built once before resolution
 /// begins and shared (via `Arc`) across all module resolvers.
-pub(crate) struct TraitEnv {
+#[derive(Debug)]
+pub struct TraitEnv {
     /// Type name → impl blocks that implement traits for that type.
     pub(super) impl_index: TraitImplIndex,
     /// Trait name → trait declaration location.
@@ -76,6 +84,12 @@ pub(crate) struct TraitEnv {
     pub(super) static_method_index: StaticMethodIndex,
     /// `type_name` → `[(method_name, ModuleSource, item_idx, method_idx)]` for resource static methods.
     pub(super) resource_static_method_index: ResourceStaticMethodIndex,
+    /// `(type_name, trait_name)` → `ModuleSource` of the non-blanket impl.
+    /// Consumed by template synthesis to route trait-method calls to the
+    /// module that actually defines the impl, regardless of where the
+    /// receiver type is declared (e.g. `impl Display for String` lives in
+    /// `core:prelude/format`, not the module that declares `String`).
+    pub(crate) trait_impl_modules: TraitImplModuleIndex,
 }
 
 impl TraitEnv {
@@ -90,6 +104,7 @@ impl TraitEnv {
         let mut effect_decl_index: EffectDeclIndex = IndexMap::default();
         let mut resource_decl_index: ResourceDeclIndex = IndexMap::default();
         let mut blanket_impl_index: BlanketTraitImplIndex = Vec::new();
+        let mut trait_impl_modules: TraitImplModuleIndex = IndexMap::default();
         // type name → module source, for orphan rule "is this type local?" checks
         let mut type_decl_index: IndexMap<String, ModuleSource> = IndexMap::default();
 
@@ -108,6 +123,11 @@ impl TraitEnv {
                             .any(|tp| tp.name == type_name && !tp.bounds.is_empty());
                         if is_blanket {
                             blanket_impl_index.push((module_source.clone(), item_idx));
+                        } else if let Some(trait_type) = &impl_block.trait_type {
+                            let trait_name = get_type_name_static(trait_type);
+                            trait_impl_modules
+                                .entry((type_name.clone(), trait_name))
+                                .or_insert_with(|| module_source.clone());
                         }
                         impl_index
                             .entry(type_name)
@@ -243,9 +263,22 @@ impl TraitEnv {
                 blanket_impl_index,
                 static_method_index,
                 resource_static_method_index,
+                trait_impl_modules,
             }),
             violations,
         )
+    }
+
+    /// Look up the module that defines `impl <trait_name> for <type_name>`.
+    /// Returns `None` for blanket impls, auto-derived/synthesized impls, and
+    /// types not declared in the loaded AST (e.g. anonymous function types).
+    pub(crate) fn impl_module_for(
+        &self,
+        type_name: &str,
+        trait_name: &str,
+    ) -> Option<&ModuleSource> {
+        self.trait_impl_modules
+            .get(&(type_name.to_string(), trait_name.to_string()))
     }
 }
 

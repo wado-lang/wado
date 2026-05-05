@@ -20,7 +20,6 @@ pub mod template;
 pub mod traits;
 
 use crate::package::Package;
-use template::{TraitMethodLocations, trait_method_location_key};
 
 /// Run pre-monomorphize synthesis phases on the project.
 ///
@@ -50,10 +49,10 @@ pub fn synthesize(project: Package) -> Result<Package, String> {
     // Expand template strings into Display/Inspect trait calls.
     // This must run after traits synthesis (which generates the impls)
     // but before monomorphization (which resolves the trait calls).
-    let trait_method_locations = collect_trait_method_locations(&project);
+    let trait_env = project.trait_env.clone();
     for module in project.tir_modules.values_mut() {
         let tt = module.type_table.clone();
-        template::expand_templates(module, &tt, &trait_method_locations);
+        template::expand_templates(module, &tt, &trait_env);
     }
 
     // Effect-dispatch wrapper synthesis + call-site rewriting must
@@ -73,38 +72,4 @@ pub fn synthesize(project: Package) -> Result<Package, String> {
 
     let project = cm_binding::generate_adapters(project)?;
     Ok(project)
-}
-
-/// Build a project-wide index of trait-method definition locations from
-/// every TIR module, keyed by [`trait_method_location_key`]. Template
-/// expansion uses this to emit calls that point at the module containing
-/// the impl, regardless of where the receiver type is declared.
-fn collect_trait_method_locations(project: &Package) -> TraitMethodLocations {
-    let mut locations = TraitMethodLocations::default();
-    for tir_module in project.tir_modules.values() {
-        let module_source = &tir_module.module_source;
-        for func_rc in &tir_module.functions {
-            let func = func_rc.borrow();
-            if let Some(ref info) = func.method_info
-                && info.trait_name.is_some()
-                && let Some(key) = trait_method_location_key(info)
-            {
-                locations.entry(key).or_insert_with(|| module_source.clone());
-            }
-        }
-        for impl_block in &tir_module.impls {
-            if impl_block.trait_name.is_none() {
-                continue;
-            }
-            for method in &impl_block.methods {
-                if let Some(ref info) = method.method_info
-                    && info.trait_name.is_some()
-                    && let Some(key) = trait_method_location_key(info)
-                {
-                    locations.entry(key).or_insert_with(|| module_source.clone());
-                }
-            }
-        }
-    }
-    locations
 }

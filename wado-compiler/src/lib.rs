@@ -364,10 +364,12 @@ fn compile_after_load<H: CompilerHost>(
         ..
     } = annotated;
 
+    let trait_env = state.trait_env.clone();
     let package = Package::new(
         entry_module_source,
         tir_modules,
         symbols,
+        trait_env,
         implicit_modules,
         module_name,
         state.wasi_registry,
@@ -694,7 +696,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     };
 
     // === Phase 7: Resolve all modules to TIR ===
-    let tir_modules = {
+    let resolve_output = {
         let _span = logger.span("resolve");
         Resolver::resolve_all_modules(
             &symbols,
@@ -707,11 +709,13 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         )
         .ok()
     };
+    let tir_modules = resolve_output.as_ref().map(|(modules, _)| modules);
+    let trait_env = resolve_output.as_ref().map(|(_, env)| env.clone());
 
     // Snapshot resolved TIR with an independent TypeTable clone so that
     // later optimization passes (which call TypeTable::retain) cannot mutate it.
     let tir_modules_by_source: Option<IndexMap<ModuleSource, tir::TirModule>> =
-        tir_modules.as_ref().map(snapshot_tir_modules);
+        tir_modules.map(snapshot_tir_modules);
 
     // === Phase 7b+8+9+10: Build Package and run remaining phases ===
     // Create Package early so CM binding synthesis runs before monomorphize,
@@ -740,6 +744,9 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
                 load_result.entry_module_source.clone(),
                 resolved_modules,
                 symbols.clone(),
+                trait_env
+                    .clone()
+                    .expect("trait_env is set when resolve succeeded"),
                 load_result.implicit_modules.clone(),
                 module_name,
                 wasi_registry,

@@ -12,22 +12,16 @@
 
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::Arc;
 
-use crate::hashmap::IndexMap;
 use crate::name::{LocalMethodName, ModuleSource};
+use crate::resolver::trait_env::TraitEnv;
 use crate::tir::{
     CallArg, FunctionRef, MonomorphInfo, ResolvedType, TemplateFormatSpec, TirBlock, TirExpr,
     TirExprKind, TirLocal, TirModule, TirStmt, TirStmtKind, TirStructField, TirTemplatePart,
     TirUnaryOp, TypeId, TypeTable,
 };
 use crate::token::Span;
-
-/// Mapping from a base trait-method key (`BaseStruct^Trait::method`) to the
-/// `ModuleSource` of the impl that defines it. Built once across all modules
-/// so template expansion can locate user-written impls regardless of which
-/// module they live in (e.g. `impl Display for String` in `core:prelude/format`,
-/// not the module that declares `String`).
-pub type TraitMethodLocations = IndexMap<String, ModuleSource>;
 
 /// Expand all `TemplateString` nodes in a module.
 ///
@@ -37,12 +31,12 @@ pub type TraitMethodLocations = IndexMap<String, ModuleSource>;
 pub fn expand_templates(
     module: &mut TirModule,
     tt: &Rc<RefCell<TypeTable>>,
-    trait_method_locations: &TraitMethodLocations,
+    trait_env: &Arc<TraitEnv>,
 ) {
     let ctx = TemplateCtx {
         tt,
         module_src: module.module_source.clone(),
-        trait_method_locations,
+        trait_env,
     };
     for func_rc in &module.functions {
         let mut func = func_rc.borrow_mut();
@@ -79,22 +73,11 @@ pub fn expand_templates(
     }
 }
 
-/// Build the key used in [`TraitMethodLocations`] from a method's parsed
-/// name. Uses base names (no type args) so that monomorphized callers and
-/// the generic impl share a single entry.
-pub fn trait_method_location_key(info: &LocalMethodName) -> Option<String> {
-    let trait_name = info.base_trait_name.as_deref().or(info.trait_name.as_deref())?;
-    Some(format!(
-        "{}^{}::{}",
-        info.base_struct_name, trait_name, info.method_name
-    ))
-}
-
 /// Read-only context shared across all template-expansion helpers.
 struct TemplateCtx<'a> {
     tt: &'a Rc<RefCell<TypeTable>>,
     module_src: ModuleSource,
-    trait_method_locations: &'a TraitMethodLocations,
+    trait_env: &'a Arc<TraitEnv>,
 }
 
 struct FuncLocalAlloc {
@@ -993,22 +976,33 @@ fn trait_impl_module(
     type_id: TypeId,
     ctx: &TemplateCtx,
 ) -> ModuleSource {
-    // Preferred path: consult the project-wide trait method index built in
-    // `synthesize`. This finds the impl regardless of which module the user
-    // wrote it in (e.g. `impl Display for String` lives in
-    // `core:prelude/format`, not `core:prelude/string`).
-    if let Some(key) = trait_method_location_key(local_name)
-        && let Some(loc) = ctx.trait_method_locations.get(&key)
+    // Preferred path: consult the resolver's `TraitEnv`, which knows where
+    // every user-written `impl Trait for Type` block lives. This handles
+    // cross-module impls like `impl Display for String` (defined in
+    // `core:prelude/format`, not the module that declares `String`).
+    if let Some(trait_name) = local_name
+        .base_trait_name
+        .as_deref()
+        .or(local_name.trait_name.as_deref())
+        && let Some(loc) = ctx
+            .trait_env
+            .impl_module_for(&local_name.base_struct_name, trait_name)
     {
         return loc.clone();
     }
-    // Fallback: function types are anonymous and have no defining module,
-    // so their `Fn<N, Ret>^Inspect` / `^InspectAlt` impls are auto-derived
-    // per-module by `synthesize_traits` (no cross-module dedup, since
-    // `collect_existing_trait_methods` is per-module). After `link()` every
-    // function's `module_source` is rewritten to its hosting module, so the
-    // impl callable from this template lives under the current module's
-    // namespace.
+    // Fallbacks for impls `TraitEnv` cannot index:
+    //
+    // - Auto-derived/synthesized impls (Inspect / Display fallbacks for
+    //   structs, enums, variants, newtypes, flags). `synthesize_traits`
+    //   places these in the same module as the receiver type, so the
+    //   type's `module_source` is correct.
+    // - Function types are anonymous and have no defining module, so
+    //   their `Fn<N, Ret>^Inspect` / `^InspectAlt` impls are auto-derived
+    //   per-module (no cross-module dedup, since
+    //   `collect_existing_trait_methods` is per-module). After `link()`
+    //   every function's `module_source` is rewritten to its hosting
+    //   module, so the impl callable from this template lives under the
+    //   current module's namespace.
     match ctx.tt.borrow().get(type_id).clone() {
         ResolvedType::Primitive(_) => ModuleSource::primitive(),
         ResolvedType::Struct { module_source, .. }

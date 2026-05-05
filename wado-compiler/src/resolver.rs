@@ -23,7 +23,7 @@ mod operators;
 pub(crate) mod orchestration;
 mod stmt;
 mod template;
-mod trait_env;
+pub(crate) mod trait_env;
 mod trait_query;
 mod type_resolution;
 mod typecheck;
