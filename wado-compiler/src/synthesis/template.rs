@@ -803,11 +803,8 @@ fn deref_to_inner(expr: TirExpr, target_type: TypeId, span: Span) -> TirExpr {
 
 /// Unified format trait dispatch.
 ///
-/// Handles ALL type kinds for both Display and Inspect format traits:
-/// - `Tuple`: writes `[elem1, elem2, ...]` with per-element Inspect recursion.
-/// - `Function`: writes the type signature `|params| -> ret` (Inspect only).
-/// - All other types (including `Unit`, `Ref(T)` / `MutRef(T)`): emits a trait method call,
-///   delegating to the Wado-level trait implementation (including blanket impls).
+/// Emits a trait method call, delegating to the Wado-level trait implementation
+/// (including blanket impls).
 fn trait_fmt_call(
     type_id: TypeId,
     val: TirExpr,
@@ -818,79 +815,39 @@ fn trait_fmt_call(
     span: Span,
     module_src: &ModuleSource,
 ) -> Vec<TirStmt> {
-    let resolved = tt.borrow().get(type_id).clone();
-    match resolved {
-        ResolvedType::GenericInstance {
-            ref name,
-            ref type_args,
-            ref module_source,
-        } if TypeTable::is_tuple_type(name, module_source) => {
-            let elements = type_args.clone();
-            let mut stmts = Vec::new();
-            stmts.push(write_str_stmt("[", fmt.clone(), tt, span));
-            for (i, elem_type) in elements.iter().enumerate() {
-                if i > 0 {
-                    stmts.push(write_str_stmt(", ", fmt.clone(), tt, span));
-                }
-                let field_access = TirExpr::new(
-                    TirExprKind::FieldAccess {
-                        expr: Box::new(val.clone()),
-                        field_index: i as u32,
-                        field_name: i.to_string(),
-                    },
-                    *elem_type,
-                    span,
-                );
-                stmts.extend(trait_fmt_call(
-                    *elem_type,
-                    field_access,
-                    fmt.clone(),
-                    "Inspect",
-                    "inspect",
-                    tt,
-                    span,
-                    module_src,
-                ));
-            }
-            stmts.push(write_str_stmt("]", fmt, tt, span));
-            stmts
-        }
-        _ => {
-            let MethodCallInfo {
-                local_name,
+    let MethodCallInfo {
+        local_name,
+        monomorph_info,
+        impl_module,
+    } = method_call_info_for_type(type_id, trait_name, method_name, tt, module_src);
+    let mangled = local_name.to_mangled_name();
+
+    let ref_type = tt.borrow_mut().make_ref(type_id);
+    let receiver = TirExpr::new(
+        TirExprKind::Unary {
+            op: TirUnaryOp::Ref,
+            expr: Box::new(val),
+        },
+        ref_type,
+        span,
+    );
+
+    let call = TirExpr::new(
+        TirExprKind::method_call(
+            Box::new(receiver),
+            FunctionRef {
+                module_source: impl_module,
+                name: mangled,
                 monomorph_info,
-                impl_module,
-            } = method_call_info_for_type(type_id, trait_name, method_name, tt, module_src);
-            let mangled = local_name.to_mangled_name();
-
-            let ref_type = tt.borrow_mut().make_ref(type_id);
-            let receiver = TirExpr::new(
-                TirExprKind::Unary {
-                    op: TirUnaryOp::Ref,
-                    expr: Box::new(val),
-                },
-                ref_type,
-                span,
-            );
-
-            let call = TirExpr::new(
-                TirExprKind::method_call(
-                    Box::new(receiver),
-                    FunctionRef {
-                        module_source: impl_module,
-                        name: mangled,
-                        monomorph_info,
-                        method_info: Some(local_name),
-                    },
-                    vec![],
-                    vec![CallArg::new(fmt, false)],
-                ),
-                TypeTable::UNIT,
-                span,
-            );
-            vec![TirStmt::new(TirStmtKind::Expr(call), span)]
-        }
-    }
+                method_info: Some(local_name),
+            },
+            vec![],
+            vec![CallArg::new(fmt, false)],
+        ),
+        TypeTable::UNIT,
+        span,
+    );
+    vec![TirStmt::new(TirStmtKind::Expr(call), span)]
 }
 
 /// All information needed to build a `FunctionRef` for a trait method call on a given type.
@@ -1037,36 +994,3 @@ fn trait_impl_module(
     }
 }
 
-/// Build a `f.write_str("text")` statement using the Formatter's `write_str` method.
-fn write_str_stmt(text: &str, fmt: TirExpr, tt: &Rc<RefCell<TypeTable>>, span: Span) -> TirStmt {
-    let string_type = tt
-        .borrow_mut()
-        .make_struct("String".to_string(), ModuleSource::string());
-    let call = TirExpr::new(
-        TirExprKind::method_call(
-            Box::new(fmt),
-            FunctionRef {
-                module_source: ModuleSource::format(),
-                name: "Formatter::write_str".to_string(),
-                monomorph_info: None,
-                method_info: Some(LocalMethodName::new(
-                    "Formatter".into(),
-                    None,
-                    "write_str".into(),
-                )),
-            },
-            vec![],
-            vec![CallArg::new(
-                TirExpr::new(
-                    TirExprKind::StringLiteral(text.to_string()),
-                    string_type,
-                    span,
-                ),
-                false,
-            )],
-        ),
-        TypeTable::UNIT,
-        span,
-    );
-    TirStmt::new(TirStmtKind::Expr(call), span)
-}
