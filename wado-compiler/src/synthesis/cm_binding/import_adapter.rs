@@ -31,9 +31,7 @@ use crate::synthesis::common::{
     local_ref, loop_stmt, null_expr, return_stmt, synth_span,
 };
 
-use super::lift::{
-    materialize_if_needed, synthesize_lift_with_context, try_lift_wasi_variant_or_enum,
-};
+use super::lift::{materialize_if_needed, synthesize_lift, try_lift_wasi_variant_or_enum};
 use super::lower::{
     synthesize_flatten_option_to_flat_args, synthesize_flatten_value_to_flat_args,
     synthesize_lower, synthesize_lower_option_to_memory, synthesize_lower_tuple,
@@ -56,10 +54,15 @@ const MAX_FLAT_RESULTS: usize = 1;
 ///
 /// For `Result<(), ()>`: disc==0 → Ok, disc==1 → Err (no payloads)
 /// For `Result<(), ErrorCode>`: disc==0 → Ok, disc!=0 → `Err(lift_error)`
+///
+/// `result_type_id` is the resolved `Result<T, E>` `TypeId` shared with
+/// the caller's `result_local`; the emitted `VariantConstruct` exprs use
+/// it directly so no `TypeTable::I32` placeholder leaks downstream.
 fn synthesize_lift_flat_result(
     ty: &Type,
     disc_expr: TirExpr,
     result_local: u32,
+    result_type_id: TypeId,
     next_local: &mut u32,
     stmts: &mut Vec<TirStmt>,
     locals: &mut Vec<TirLocal>,
@@ -80,12 +83,12 @@ fn synthesize_lift_flat_result(
         let ok_construct = if ok_is_unit {
             TirExpr::new(
                 TirExprKind::VariantConstruct {
-                    variant_type: TypeTable::I32,
+                    variant_type: result_type_id,
                     case_index: 0,
                     case_name: "Ok".to_string(),
                     payload: None,
                 },
-                TypeTable::I32,
+                result_type_id,
                 synth_span(),
             )
         } else {
@@ -93,12 +96,12 @@ fn synthesize_lift_flat_result(
             // This shouldn't happen, but handle gracefully
             TirExpr::new(
                 TirExprKind::VariantConstruct {
-                    variant_type: TypeTable::I32,
+                    variant_type: result_type_id,
                     case_index: 0,
                     case_name: "Ok".to_string(),
                     payload: None,
                 },
-                TypeTable::I32,
+                result_type_id,
                 synth_span(),
             )
         };
@@ -106,12 +109,12 @@ fn synthesize_lift_flat_result(
         let err_construct = if err_is_unit {
             TirExpr::new(
                 TirExprKind::VariantConstruct {
-                    variant_type: TypeTable::I32,
+                    variant_type: result_type_id,
                     case_index: 1,
                     case_name: "Err".to_string(),
                     payload: None,
                 },
-                TypeTable::I32,
+                result_type_id,
                 synth_span(),
             )
         } else {
@@ -137,23 +140,23 @@ fn synthesize_lift_flat_result(
             if let Some(lifted) = lifted_variant {
                 TirExpr::new(
                     TirExprKind::VariantConstruct {
-                        variant_type: TypeTable::I32,
+                        variant_type: result_type_id,
                         case_index: 1,
                         case_name: "Err".to_string(),
                         payload: Some(Box::new(lifted)),
                     },
-                    TypeTable::I32,
+                    result_type_id,
                     synth_span(),
                 )
             } else {
                 TirExpr::new(
                     TirExprKind::VariantConstruct {
-                        variant_type: TypeTable::I32,
+                        variant_type: result_type_id,
                         case_index: 1,
                         case_name: "Err".to_string(),
                         payload: None,
                     },
-                    TypeTable::I32,
+                    result_type_id,
                     synth_span(),
                 )
             }
@@ -162,16 +165,16 @@ fn synthesize_lift_flat_result(
         stmts.push(if_stmt(
             binary(TirBinaryOp::Eq, disc_expr, i32_const(0), TypeTable::BOOL),
             block(vec![expr_stmt(assign(
-                local_ref(result_local, "__result_val", TypeTable::I32),
+                local_ref(result_local, "__result_val", result_type_id),
                 ok_construct,
             ))]),
             Some(block(vec![expr_stmt(assign(
-                local_ref(result_local, "__result_val", TypeTable::I32),
+                local_ref(result_local, "__result_val", result_type_id),
                 err_construct,
             ))])),
         ));
 
-        return local_ref(result_local, "__result_val", TypeTable::I32);
+        return local_ref(result_local, "__result_val", result_type_id);
     }
 
     // Fallback: just return the discriminant as-is
@@ -583,8 +586,19 @@ pub(super) fn synthesize_adapter(
             // General Array<T> param: lower to (ptr, len) in linear memory
             Type::Generic(g) if g.name == "Array" && g.args.len() == 1 => {
                 let elem_type = &g.args[0];
-                let elem_size = cm_abi::cm_size(elem_type) as i32;
-                let elem_align = cm_abi::cm_align(elem_type) as i32;
+                // Use registry-aware layout so named WASI struct/variant/enum/flags
+                // element types walk at their true CM stride/alignment instead of
+                // the i32-handle fallback in `cm_abi::cm_size`/`cm_align`.
+                let elem_size = crate::component_model::cm_size_with_registry_scoped(
+                    elem_type,
+                    wasi_registry,
+                    Some(&func_info.package),
+                ) as i32;
+                let elem_align = crate::component_model::cm_align_with_registry_scoped(
+                    elem_type,
+                    wasi_registry,
+                    Some(&func_info.package),
+                ) as i32;
 
                 // Resolve proper TypeIds for the element and array types
                 let (elem_type_id, array_type_id) = {
@@ -1207,7 +1221,7 @@ pub(super) fn synthesize_adapter(
             cm_package: &func_info.package,
             interner,
         };
-        let lifted = synthesize_lift_with_context(
+        let lifted = synthesize_lift(
             &resolved,
             local_ref(outptr_local, "__outptr", TypeTable::I32),
             &mut next_local,
@@ -1250,12 +1264,21 @@ pub(super) fn synthesize_adapter(
                 raw_call_expr,
             ));
 
-            let result_local = alloc_local(&mut next_local, &mut locals, TypeTable::I32);
+            // Resolve the concrete `Result<T, E>` TypeId so the binding's
+            // intermediate local and `VariantConstruct` exprs match the
+            // declared return type. Without this, the local was declared as
+            // `TypeTable::I32` and back-patched later by `type_fixup`,
+            // which produced invalid TIR if any consumer ran first.
+            let result_type_id = {
+                let mut tt = type_table.borrow_mut();
+                wasi_type_to_type_id(&resolved, &mut tt, wasi_registry, &func_info.package)
+            };
+            let result_local = alloc_local(&mut next_local, &mut locals, result_type_id);
             body_stmts.push(let_mut_stmt(
                 "__result_val",
                 result_local,
-                TypeTable::I32,
-                null_expr(TypeTable::I32),
+                result_type_id,
+                null_expr(result_type_id),
             ));
 
             let lift_ctx = LiftContext {
@@ -1268,6 +1291,7 @@ pub(super) fn synthesize_adapter(
                 &resolved,
                 local_ref(disc_local, "__disc", TypeTable::I32),
                 result_local,
+                result_type_id,
                 &mut next_local,
                 &mut body_stmts,
                 &mut locals,
@@ -1275,7 +1299,7 @@ pub(super) fn synthesize_adapter(
             );
             let lifted_type_id = lifted.type_id;
             body_stmts.push(return_stmt(Some(lifted)));
-            adapter_return_type = lifted_type_id; // real type, fixed up at call site if needed
+            adapter_return_type = lifted_type_id;
         } else {
             // Truly flat return (primitive): cm_raw_call directly returns the value
             body_stmts.push(return_stmt(Some(raw_call_expr)));

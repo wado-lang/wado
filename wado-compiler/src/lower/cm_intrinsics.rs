@@ -7,7 +7,7 @@
 //! type, but the call itself remains a generic builtin — it cannot be
 //! lowered to Wasm directly. This module walks the monomorphised TIR,
 //! finds the calls, and replaces each with the equivalent inline lift
-//! code produced by [`synthesize_lift_with_context`], parameterised by
+//! code produced by [`synthesize_lift`], parameterised by
 //! the concrete return type of that call site.
 //!
 //! The pass runs as part of `lower` (after monomorphise, before boxing
@@ -24,7 +24,7 @@ use std::cell::RefCell;
 use crate::ast::{self, Type};
 use crate::component_model::WasiRegistry;
 use crate::name::ModuleSource;
-use crate::synthesis::cm_binding::{LiftContext, synthesize_lift_with_context};
+use crate::synthesis::cm_binding::{LiftContext, synthesize_lift};
 use crate::tir::{
     FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirLocal, TirModule, TirStmt,
     TirStmtKind, TypeId, TypeTable,
@@ -113,7 +113,7 @@ impl TirMutVisitor for Rewriter<'_> {
             }
         };
         let mut stmts: Vec<TirStmt> = Vec::new();
-        let lifted = synthesize_lift_with_context(
+        let lifted = synthesize_lift(
             &ast_type,
             addr_expr,
             self.next_local,
@@ -263,8 +263,8 @@ fn type_id_to_ast_type_resolved(
 ///
 /// Used to disambiguate WASI types that share a name across packages —
 /// for example `wasi:cli/ErrorCode` vs `wasi:http/ErrorCode`. Without
-/// a package hint, `synthesize_lift_with_context` falls back to
-/// unscoped lookup and picks an arbitrary match.
+/// a package hint, `synthesize_lift` falls back to unscoped lookup
+/// and picks an arbitrary match.
 fn infer_wasi_package(type_id: TypeId, type_table: &TypeTable) -> Option<String> {
     let resolved = type_table.get(type_id).clone();
     match resolved {

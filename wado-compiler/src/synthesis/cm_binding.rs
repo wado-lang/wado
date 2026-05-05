@@ -35,7 +35,7 @@ use export_adapter::{
 };
 pub use import_adapter::binding_func_name;
 use import_adapter::synthesize_adapter;
-pub use lift::{synthesize_lift, synthesize_lift_with_context};
+pub use lift::synthesize_lift;
 pub use lower::synthesize_lower;
 use resource_rewrite::{rewrite_cm_resource_methods, synthesize_record_stream_reads};
 use task_return::{expand_task_returns_in_func, strip_task_returns_in_func};
@@ -505,6 +505,43 @@ mod tests {
         })
     }
 
+    /// Test fixture: empty registry + fresh type table + empty interner.
+    /// Mirrors the production `LiftContext` shape so the lift code paths
+    /// run end-to-end in unit tests.
+    struct LiftCtxFixture {
+        registry: WasiRegistry,
+        type_table: std::cell::RefCell<TypeTable>,
+        interner: std::cell::RefCell<crate::name::ModuleSourceInterner>,
+    }
+
+    impl LiftCtxFixture {
+        fn new() -> Self {
+            // Register the Option/Result comp-features so `make_option` /
+            // `make_result` succeed during unit-test lifts. Production
+            // gets these registered when the stdlib resolver visits
+            // `core:prelude`.
+            let mut tt = TypeTable::new();
+            tt.register_comp_feature_variant(
+                crate::wir::COMP_FEATURE_OPTION | crate::wir::COMP_FEATURE_RESULT,
+                ModuleSource::prelude(),
+            );
+            Self {
+                registry: WasiRegistry::new(),
+                type_table: std::cell::RefCell::new(tt),
+                interner: std::cell::RefCell::new(crate::name::ModuleSourceInterner::new()),
+            }
+        }
+
+        fn ctx(&self) -> LiftContext<'_> {
+            LiftContext {
+                wasi_registry: &self.registry,
+                type_table: &self.type_table,
+                cm_package: "",
+                interner: &self.interner,
+            }
+        }
+    }
+
     #[test]
     fn flatten_param_i32() {
         let reg = WasiRegistry::new();
@@ -579,6 +616,7 @@ mod tests {
 
     #[test]
     fn lift_i32() {
+        let fix = LiftCtxFixture::new();
         let mut stmts = Vec::new();
         let mut locals = Vec::new();
         let expr = synthesize_lift(
@@ -587,6 +625,7 @@ mod tests {
             &mut 0,
             &mut stmts,
             &mut locals,
+            &fix.ctx(),
         );
         assert!(matches!(expr.kind, TirExprKind::Call { .. }));
         assert_eq!(expr.type_id, TypeTable::I32);
@@ -595,6 +634,7 @@ mod tests {
 
     #[test]
     fn lift_bool() {
+        let fix = LiftCtxFixture::new();
         let mut stmts = Vec::new();
         let mut locals = Vec::new();
         let expr = synthesize_lift(
@@ -603,6 +643,7 @@ mod tests {
             &mut 0,
             &mut stmts,
             &mut locals,
+            &fix.ctx(),
         );
         assert!(matches!(expr.kind, TirExprKind::Binary { .. }));
         assert_eq!(expr.type_id, TypeTable::BOOL);
@@ -610,6 +651,7 @@ mod tests {
 
     #[test]
     fn lift_string() {
+        let fix = LiftCtxFixture::new();
         let mut stmts = Vec::new();
         let mut locals = Vec::new();
         let expr = synthesize_lift(
@@ -618,12 +660,14 @@ mod tests {
             &mut 0,
             &mut stmts,
             &mut locals,
+            &fix.ctx(),
         );
         assert!(matches!(expr.kind, TirExprKind::Call { .. }));
     }
 
     #[test]
     fn lift_list_i32() {
+        let fix = LiftCtxFixture::new();
         let mut stmts = Vec::new();
         let mut locals = Vec::new();
         let mut next_local = 0_u32;
@@ -634,6 +678,7 @@ mod tests {
             &mut next_local,
             &mut stmts,
             &mut locals,
+            &fix.ctx(),
         );
         // Should produce setup stmts and return a local ref
         assert!(!stmts.is_empty());
@@ -643,6 +688,7 @@ mod tests {
 
     #[test]
     fn lift_option_i32() {
+        let fix = LiftCtxFixture::new();
         let mut stmts = Vec::new();
         let mut locals = Vec::new();
         let mut next_local = 0_u32;
@@ -653,6 +699,7 @@ mod tests {
             &mut next_local,
             &mut stmts,
             &mut locals,
+            &fix.ctx(),
         );
         assert!(!stmts.is_empty());
         assert!(matches!(expr.kind, TirExprKind::Local { .. }));
@@ -661,6 +708,7 @@ mod tests {
 
     #[test]
     fn lift_result_unit_unit() {
+        let fix = LiftCtxFixture::new();
         let mut stmts = Vec::new();
         let mut locals = Vec::new();
         let mut next_local = 0_u32;
@@ -672,6 +720,7 @@ mod tests {
             &mut next_local,
             &mut stmts,
             &mut locals,
+            &fix.ctx(),
         );
         assert!(!stmts.is_empty());
         assert!(matches!(expr.kind, TirExprKind::Local { .. }));
@@ -679,12 +728,129 @@ mod tests {
 
     #[test]
     fn lift_resource_handle() {
+        let fix = LiftCtxFixture::new();
         let mut stmts = Vec::new();
         let mut locals = Vec::new();
         let own_ty = cm_abi::generic_type("Own", vec![named_type("Fields")]);
-        let expr = synthesize_lift(&own_ty, i32_const(100), &mut 0, &mut stmts, &mut locals);
+        let expr = synthesize_lift(
+            &own_ty,
+            i32_const(100),
+            &mut 0,
+            &mut stmts,
+            &mut locals,
+            &fix.ctx(),
+        );
         assert!(matches!(expr.kind, TirExprKind::Call { .. }));
         assert_eq!(expr.type_id, TypeTable::I32);
+    }
+
+    /// `Array<IpAddress>` lifts must walk the buffer at the variant's
+    /// canonical-ABI stride (1 byte disc + payload), not the 4-byte
+    /// i32-handle fallback. Regression for issue #997 (#1, #2).
+    #[test]
+    fn lift_list_named_variant_uses_registry_stride() {
+        use crate::tir::TirStmt;
+
+        // Visit every TIR sub-expression and count `IntLiteral { value: target }`
+        // occurrences. Walks through the structural recursion sites that
+        // `synthesize_lift_list` emits (Let init, If condition, Loop body,
+        // realloc args). Built as a semantic check so it doesn't depend on
+        // any `Debug` output formatting.
+        fn count_int_literals(stmts: &[TirStmt], target: u64) -> usize {
+            fn visit_expr(e: &TirExpr, target: u64) -> usize {
+                let mut n = match &e.kind {
+                    TirExprKind::IntLiteral { value, .. } if *value == target => 1,
+                    _ => 0,
+                };
+                match &e.kind {
+                    TirExprKind::Binary { left, right, .. } => {
+                        n += visit_expr(left, target) + visit_expr(right, target);
+                    }
+                    TirExprKind::Call { args, .. } | TirExprKind::MethodCall { args, .. } => {
+                        for a in args {
+                            n += visit_expr(&a.expr, target);
+                        }
+                    }
+                    TirExprKind::Unary { expr: inner, .. }
+                    | TirExprKind::Cast { expr: inner, .. } => n += visit_expr(inner, target),
+                    TirExprKind::Assign { target: t, value } => {
+                        n += visit_expr(t, target) + visit_expr(value, target);
+                    }
+                    _ => {}
+                }
+                n
+            }
+            fn visit_stmt(s: &TirStmt, target: u64) -> usize {
+                match &s.kind {
+                    TirStmtKind::Let { value, .. } | TirStmtKind::Expr(value) => {
+                        visit_expr(value, target)
+                    }
+                    TirStmtKind::If {
+                        condition,
+                        then_block,
+                        else_block,
+                    } => {
+                        let mut n = visit_expr(condition, target)
+                            + visit_block(then_block.stmts.as_slice(), target);
+                        if let Some(b) = else_block {
+                            n += visit_block(b.stmts.as_slice(), target);
+                        }
+                        n
+                    }
+                    TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+                        visit_block(body.stmts.as_slice(), target)
+                    }
+                    _ => 0,
+                }
+            }
+            fn visit_block(stmts: &[TirStmt], target: u64) -> usize {
+                stmts.iter().map(|s| visit_stmt(s, target)).sum()
+            }
+            visit_block(stmts, target)
+        }
+
+        let (registry, _) = WasiRegistry::build_from_stdlib();
+        let elem_ty = named_type("IpAddress");
+        let expected_size = u64::from(crate::component_model::cm_size_with_registry_scoped(
+            &elem_ty,
+            registry,
+            Some("sockets"),
+        ));
+        // Sanity: registry-derived size differs from the 4-byte fallback.
+        assert!(expected_size > 4, "registry size should exceed handle size");
+
+        let mut tt = TypeTable::new();
+        tt.register_comp_feature_variant(
+            crate::wir::COMP_FEATURE_OPTION | crate::wir::COMP_FEATURE_RESULT,
+            ModuleSource::prelude(),
+        );
+        let type_table = std::cell::RefCell::new(tt);
+        let interner = std::cell::RefCell::new(crate::name::ModuleSourceInterner::new());
+        let ctx = LiftContext {
+            wasi_registry: registry,
+            type_table: &type_table,
+            cm_package: "sockets",
+            interner: &interner,
+        };
+        let list_ty = cm_abi::generic_type("Array", vec![elem_ty]);
+        let mut stmts = Vec::new();
+        let mut locals = Vec::new();
+        let mut next_local = 0_u32;
+        let _ = synthesize_lift(
+            &list_ty,
+            i32_const(0),
+            &mut next_local,
+            &mut stmts,
+            &mut locals,
+            &ctx,
+        );
+        // Stride appears at element-addr offset (`i * elem_size`) and in
+        // the realloc free (`count * elem_size`).
+        let occurrences = count_int_literals(&stmts, expected_size);
+        assert!(
+            occurrences >= 2,
+            "expected ≥2 `IntLiteral {{ value: {expected_size} }}` occurrences, got {occurrences}"
+        );
     }
 
     #[test]
@@ -1003,10 +1169,10 @@ mod tests {
 
     #[test]
     fn lift_from_flat_i32() {
+        let fix = LiftCtxFixture::new();
         let mut stmts = Vec::new();
         let mut locals = Vec::new();
         let mut next_local = 1_u32;
-        let type_table = std::cell::RefCell::new(TypeTable::new());
         let tir_modules = IndexMap::default();
         let (expr, consumed) = synthesize_lift_from_flat_params(
             &named_type("i32"),
@@ -1017,8 +1183,8 @@ mod tests {
             &mut stmts,
             &mut locals,
             &tir_modules,
-            &type_table,
-            None,
+            &fix.type_table,
+            fix.ctx(),
         );
         assert_eq!(consumed, 1);
         assert!(matches!(expr.kind, TirExprKind::Local { .. }));
@@ -1027,10 +1193,10 @@ mod tests {
 
     #[test]
     fn lift_from_flat_string() {
+        let fix = LiftCtxFixture::new();
         let mut stmts = Vec::new();
         let mut locals = Vec::new();
         let mut next_local = 2_u32;
-        let type_table = std::cell::RefCell::new(TypeTable::new());
         let tir_modules = IndexMap::default();
         let (expr, consumed) = synthesize_lift_from_flat_params(
             &named_type("String"),
@@ -1041,8 +1207,8 @@ mod tests {
             &mut stmts,
             &mut locals,
             &tir_modules,
-            &type_table,
-            None,
+            &fix.type_table,
+            fix.ctx(),
         );
         assert_eq!(consumed, 2);
         // Should be a call to memory_to_gc_string
@@ -1051,10 +1217,10 @@ mod tests {
 
     #[test]
     fn lift_from_flat_bool() {
+        let fix = LiftCtxFixture::new();
         let mut stmts = Vec::new();
         let mut locals = Vec::new();
         let mut next_local = 1_u32;
-        let type_table = std::cell::RefCell::new(TypeTable::new());
         let tir_modules = IndexMap::default();
         let (expr, consumed) = synthesize_lift_from_flat_params(
             &named_type("bool"),
@@ -1065,8 +1231,8 @@ mod tests {
             &mut stmts,
             &mut locals,
             &tir_modules,
-            &type_table,
-            None,
+            &fix.type_table,
+            fix.ctx(),
         );
         assert_eq!(consumed, 1);
         assert!(matches!(expr.kind, TirExprKind::Binary { .. }));
@@ -1075,10 +1241,10 @@ mod tests {
 
     #[test]
     fn lift_from_flat_unit() {
+        let fix = LiftCtxFixture::new();
         let mut stmts = Vec::new();
         let mut locals = Vec::new();
         let mut next_local = 0_u32;
-        let type_table = std::cell::RefCell::new(TypeTable::new());
         let tir_modules = IndexMap::default();
         let (expr, consumed) = synthesize_lift_from_flat_params(
             &Type::Tuple(vec![]),
@@ -1089,8 +1255,8 @@ mod tests {
             &mut stmts,
             &mut locals,
             &tir_modules,
-            &type_table,
-            None,
+            &fix.type_table,
+            fix.ctx(),
         );
         assert_eq!(consumed, 0);
         assert!(matches!(expr.kind, TirExprKind::Unit));
@@ -1098,10 +1264,10 @@ mod tests {
 
     #[test]
     fn lift_from_flat_resource() {
+        let fix = LiftCtxFixture::new();
         let mut stmts = Vec::new();
         let mut locals = Vec::new();
         let mut next_local = 1_u32;
-        let type_table = std::cell::RefCell::new(TypeTable::new());
         let tir_modules = IndexMap::default();
         let (expr, consumed) = synthesize_lift_from_flat_params(
             &named_type("Request"),
@@ -1112,8 +1278,8 @@ mod tests {
             &mut stmts,
             &mut locals,
             &tir_modules,
-            &type_table,
-            None,
+            &fix.type_table,
+            fix.ctx(),
         );
         assert_eq!(consumed, 1);
         assert!(matches!(expr.kind, TirExprKind::Local { .. }));

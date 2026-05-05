@@ -38,7 +38,7 @@ use crate::synthesis::common::{
 };
 
 use super::import_adapter::make_binding_function;
-use super::lift::{synthesize_lift, synthesize_lift_with_context};
+use super::lift::synthesize_lift;
 use super::lower::synthesize_lower_wasi_type_to_memory;
 use super::types::{
     LiftContext, binary_add, binary_ne, cm_val_type_to_type_id, cm_zero,
@@ -512,13 +512,9 @@ fn lower_to_flat_inner(
 ///
 /// Returns the lifted TIR expression and the number of flat params consumed.
 ///
-/// `lift_ctx` is consulted for Array / nested-struct lifts where the
-/// WIR `struct_type_map` lookup needs the full CM resolution stack
-/// (WASI + kiln registries, type-table cell, binding package hint).
-/// When it is `None` the helper falls back to `Array<i32>` placeholders
-/// and non-primitive composites resolve via `find_struct_decl` alone —
-/// callers that exercise real structs (the three export-binding
-/// synthesizers) always pass `Some(ctx)`.
+/// `lift_ctx` carries the full CM resolution stack (WASI + kiln registries,
+/// type-table cell, binding package hint) used for Array / nested-struct
+/// lifts and for the `struct_type_map` lookup in WIR.
 pub(super) fn synthesize_lift_from_flat_params(
     ty: &Type,
     flat_param_locals: &[u32],
@@ -529,7 +525,7 @@ pub(super) fn synthesize_lift_from_flat_params(
     locals: &mut Vec<TirLocal>,
     tir_modules: &IndexMap<ModuleSource, TirModule>,
     type_table_cell: &RefCell<TypeTable>,
-    lift_ctx: Option<LiftContext<'_>>,
+    lift_ctx: LiftContext<'_>,
 ) -> (TirExpr, usize) {
     match ty {
         Type::Named(named) => match named.name.as_str() {
@@ -578,14 +574,10 @@ pub(super) fn synthesize_lift_from_flat_params(
                     // `StructLiteral` WIR pass expects.
                     let (field_ast_tys, struct_type_id) = {
                         let tt = type_table_cell.borrow();
-                        let registry = lift_ctx
-                            .as_ref()
-                            .map(|c| c.wasi_registry)
-                            .expect("lift_ctx required when reconstructing struct field AST types");
                         let field_tys: Vec<Type> = struct_decl
                             .fields
                             .iter()
-                            .map(|f| type_id_to_ast_type(f.type_id, &tt, registry))
+                            .map(|f| type_id_to_ast_type(f.type_id, &tt, lift_ctx.wasi_registry))
                             .collect();
                         // Prefer the already-registered TypeId so the WIR
                         // `struct_type_map` lookup hits — the
@@ -692,30 +684,14 @@ pub(super) fn synthesize_lift_from_flat_params(
                     ],
                     TypeTable::UNIT,
                 )));
-                // Use synthesize_lift to lift from linear memory. When a
-                // `LiftContext` is available (real export binding calls),
-                // route through `synthesize_lift_with_context` so the element
-                // type and its registry (WASI or kiln) resolve correctly —
-                // without it the list lift falls back to `Array<i32>` and
-                // non-primitive element types blow up at monomorphization.
-                let lifted = if let Some(ref ctx) = lift_ctx {
-                    synthesize_lift_with_context(
-                        ty,
-                        local_ref(tmp_ptr_local, "__lift_tmp", TypeTable::I32),
-                        next_local,
-                        stmts,
-                        locals,
-                        ctx,
-                    )
-                } else {
-                    synthesize_lift(
-                        ty,
-                        local_ref(tmp_ptr_local, "__lift_tmp", TypeTable::I32),
-                        next_local,
-                        stmts,
-                        locals,
-                    )
-                };
+                let lifted = synthesize_lift(
+                    ty,
+                    local_ref(tmp_ptr_local, "__lift_tmp", TypeTable::I32),
+                    next_local,
+                    stmts,
+                    locals,
+                    &lift_ctx,
+                );
                 // Free temp memory
                 stmts.push(expr_stmt(builtin_call(
                     "realloc",
@@ -931,7 +907,7 @@ pub(super) fn synthesize_result_export_binding(
                 &mut locals,
                 tir_modules,
                 type_table,
-                Some(lift_ctx),
+                lift_ctx,
             );
             lifted_args.push(lifted);
             flat_offset += consumed;
@@ -1478,7 +1454,7 @@ pub(super) fn synthesize_general_export_binding(
                 &mut locals,
                 tir_modules,
                 type_table,
-                Some(lift_ctx),
+                lift_ctx,
             );
             lifted_args.push(lifted);
             flat_offset += consumed;
@@ -1707,7 +1683,7 @@ pub(super) fn synthesize_async_export_binding(
                 &mut locals,
                 tir_modules,
                 type_table,
-                Some(lift_ctx),
+                lift_ctx,
             );
             lifted_args.push(lifted);
             flat_offset += consumed;
