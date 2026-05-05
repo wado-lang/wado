@@ -274,10 +274,14 @@ The specialised path takes a redirect at lowering: `Fn<N, Ret>^Inspect[Alt]` cal
 
 Two whole-program gates keep programs that don't inspect closures from paying for the runtime-dispatch machinery:
 
-1. Schema gate (per `(N, Ret)`): only signatures with a reachable `Fn<N, Ret>^Inspect[Alt]` dispatch stub get the inspectable canonical layout. Other signatures use the slim `(struct env func)` shape with no shared supertype, no inspect/inspect\_alt fields, and no per-literal wrappers.
-2. Per-functor gate: the TIR DCE roots `__Closure_N^Inspect[Alt]` from `ClosureToCanonical` only when the closure's `(N, Ret)` is in the inspectable set determined by a pre-DCE scan of `Fn<N, Ret>^Inspect[Alt]` call sites. A program that builds closures but never calls `:?` / `:#?` on any of them drops all per-literal inspect impls and source-string constants.
+1. Schema gate (per `(N, Ret)`): only signatures with a reachable `Fn<N, Ret>^Inspect` or `^InspectAlt` dispatch stub get the inspectable canonical layout. Other signatures use the slim `(struct env func)` shape with no shared supertype, no inspect/inspect\_alt fields, and no per-literal wrappers.
+2. Per-functor gate (per `(N, Ret)`, per trait method): a pre-DCE scan classifies each `(arity, return_type)` as "inspected", "inspect-alt-ed", or both. The TIR DCE roots `__Closure_N^Inspect` from `ClosureToCanonical` only when the signature is "inspected", and `^InspectAlt` only when it is "inspect-alt-ed". A program that uses only `:?` drops every `__Closure_N^InspectAlt` impl and its per-literal source-string constant; the symmetric case applies to a `:#?`-only program.
 
 The schema gate is a lowering decision rather than a DCE decision — `ref.func` initialisers baked into the canonical struct's `inspect` / `inspect_alt` fields would otherwise keep the wrappers reachable and defeat post-emission DCE.
+
+#### Bare Function References
+
+A bare `&fn_name` lowers to a synthetic zero-capture closure (a `__Closure_N` whose body forwards every parameter to `fn_name`) so that fn-typed slots accept it uniformly with user-written closures. For inspect output, that synthetic body is rendered as `&fn_name` rather than the lowering-internal forwarder text — `:?` still produces the canonical signature string, and `:#?` produces the user-readable expression.
 
 ### Interaction with Existing WEPs
 

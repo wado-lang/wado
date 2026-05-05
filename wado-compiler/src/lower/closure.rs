@@ -293,8 +293,11 @@ impl ClosureLowerer {
             let mut func = func_rc.borrow_mut();
             // Snapshot param `(local_index, type_id)` so the seed pass
             // can run while `func.body` is borrowed mutably.
-            let param_locals: Vec<(u32, TypeId)> =
-                func.params.iter().map(|p| (p.local_index, p.type_id)).collect();
+            let param_locals: Vec<(u32, TypeId)> = func
+                .params
+                .iter()
+                .map(|p| (p.local_index, p.type_id))
+                .collect();
             if let Some(body) = &mut func.body {
                 self.local_to_closure.clear();
                 let mut tt = module.type_table.borrow_mut();
@@ -313,8 +316,11 @@ impl ClosureLowerer {
         }
         for impl_block in &mut module.impls {
             for method in &mut impl_block.methods {
-                let param_locals: Vec<(u32, TypeId)> =
-                    method.params.iter().map(|p| (p.local_index, p.type_id)).collect();
+                let param_locals: Vec<(u32, TypeId)> = method
+                    .params
+                    .iter()
+                    .map(|p| (p.local_index, p.type_id))
+                    .collect();
                 if let Some(body) = &mut method.body {
                     self.local_to_closure.clear();
                     let mut tt = module.type_table.borrow_mut();
@@ -1562,7 +1568,6 @@ fn peel_ref_to_local(expr: &TirExpr) -> Option<u32> {
         _ => None,
     }
 }
-
 
 impl TirMutVisitor for ClosureCallSiteLowerer<'_> {
     fn visit_stmt(&mut self, stmt: &mut TirStmt) {
