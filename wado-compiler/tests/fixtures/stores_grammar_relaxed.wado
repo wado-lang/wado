@@ -1,0 +1,70 @@
+// `stores[...]` accepts empty lists and trailing commas for syntactic
+// consistency with other comma-separated lists. Both are semantic no-ops:
+// `stores[]` declares no stored references (same as omitting the clause)
+// and a trailing comma after a name list is a stylistic choice.
+
+struct Data {
+    value: i32,
+}
+
+struct Container {
+    data: &Data,
+}
+
+// Empty stores list — equivalent to no `stores[...]` clause.
+fn no_store(data: &Data) -> i32 with stores[] {
+    return data.value;
+}
+
+// Trailing comma after a single named entry.
+fn store_one(data: &Data) -> Container with stores[data,] {
+    return Container { data };
+}
+
+// Trailing comma after multiple named entries.
+fn store_two(a: &Data, b: &Data) -> [&Data, &Data] with stores[a, b,] {
+    return [a, b];
+}
+
+// Function-type position: empty `stores[]` and trailing comma in
+// positional indices.
+fn apply_no_store(f: fn(&Data) -> i32 with stores[]) -> i32 {
+    let d = Data { value: 7 };
+    return f(&d);
+}
+
+fn apply_store_trailing(f: fn(&Data) -> Container with stores[0,]) -> i32 {
+    let d = Data { value: 11 };
+    let c = f(&d);
+    return c.data.value;
+}
+
+export fn run() {
+    let d = Data { value: 42 };
+    let v = no_store(&d);
+    assert v == 42;
+
+    let c = store_one(&d);
+    assert c.data.value == 42;
+
+    let pair = store_two(&d, &d);
+    assert pair.0.value == 42;
+    assert pair.1.value == 42;
+
+    let n = apply_no_store(use_value);
+    assert n == 7;
+
+    let m = apply_store_trailing(store_data);
+    assert m == 11;
+}
+
+fn use_value(data: &Data) -> i32 {
+    return data.value;
+}
+
+fn store_data(data: &Data) -> Container with stores[data] {
+    return Container { data };
+}
+
+__DATA__
+{"stdout": ""}

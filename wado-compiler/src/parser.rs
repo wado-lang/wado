@@ -1263,14 +1263,12 @@ impl Parser {
     }
 
     /// Parse `stores[name1, name2]` — the `stores` keyword has already been peeked.
+    /// Empty lists (`stores[]`) and a trailing comma are allowed for syntactic
+    /// consistency with other comma-separated lists; both are no-ops semantically.
     fn parse_stores_list(&mut self) -> ParseResult<Vec<String>> {
         self.expect(&TokenKind::Stores)?;
         self.expect(&TokenKind::LBracket)?;
-        let mut names = vec![self.consume_ident()?];
-        while self.check(&TokenKind::Comma) {
-            self.advance();
-            names.push(self.consume_ident()?);
-        }
+        let names = self.parse_comma_separated(&TokenKind::RBracket, Self::consume_ident)?;
         self.expect(&TokenKind::RBracket)?;
         Ok(names)
     }
@@ -1317,14 +1315,12 @@ impl Parser {
     }
 
     /// Parse `stores[0, 1]` or `stores[name]` in function type position.
+    /// Empty lists and a trailing comma are allowed for syntactic consistency
+    /// with other comma-separated lists; both are no-ops semantically.
     fn parse_stores_list_for_fn_type(&mut self) -> ParseResult<Vec<StoresEntry>> {
         self.expect(&TokenKind::Stores)?;
         self.expect(&TokenKind::LBracket)?;
-        let mut entries = vec![self.parse_stores_entry()?];
-        while self.check(&TokenKind::Comma) {
-            self.advance();
-            entries.push(self.parse_stores_entry()?);
-        }
+        let entries = self.parse_comma_separated(&TokenKind::RBracket, Self::parse_stores_entry)?;
         self.expect(&TokenKind::RBracket)?;
         Ok(entries)
     }
@@ -2367,44 +2363,54 @@ impl Parser {
         Ok(left)
     }
 
-    fn parse_or_expr(&mut self) -> ParseResult<Expr> {
-        let mut left = self.parse_and_expr()?;
+    /// Consume the current token and produce an `Expr::Literal` with the given
+    /// payload. Used for one-token literals (numbers, strings, booleans, etc.).
+    fn consume_literal(&mut self, value: Literal, span: Span) -> Expr {
+        self.advance();
+        Expr::Literal(LiteralExpr {
+            id: self.alloc_ast_id(),
+            value,
+            span,
+        })
+    }
 
-        while self.check(&TokenKind::Or) {
+    /// Parse a left-associative binary expression: `next (op next)*`.
+    /// `classify` returns `Some(op)` if the current token starts an operator at this
+    /// precedence level (and that single-token operator should be consumed), or `None`.
+    fn parse_left_assoc_binary(
+        &mut self,
+        mut next: impl FnMut(&mut Self) -> ParseResult<Expr>,
+        classify: impl Fn(&TokenKind) -> Option<BinaryOp>,
+    ) -> ParseResult<Expr> {
+        let mut left = next(self)?;
+        while let Some(op) = classify(self.peek_kind()) {
             let left_span = left.span();
             self.advance();
-            let right = self.parse_and_expr()?;
-            let merged_span = left_span.merge(&right.span());
+            let right = next(self)?;
+            let span = left_span.merge(&right.span());
             left = Expr::Binary(Box::new(BinaryExpr {
                 id: self.alloc_ast_id(),
                 left,
-                op: BinaryOp::Or,
+                op,
                 right,
-                span: merged_span,
+                span,
             }));
         }
-
         Ok(left)
     }
 
+    fn parse_or_expr(&mut self) -> ParseResult<Expr> {
+        self.parse_left_assoc_binary(Self::parse_and_expr, |k| match k {
+            TokenKind::Or => Some(BinaryOp::Or),
+            _ => None,
+        })
+    }
+
     fn parse_and_expr(&mut self) -> ParseResult<Expr> {
-        let mut left = self.parse_comparison_expr()?;
-
-        while self.check(&TokenKind::And) {
-            let left_span = left.span();
-            self.advance();
-            let right = self.parse_comparison_expr()?;
-            let merged_span = left_span.merge(&right.span());
-            left = Expr::Binary(Box::new(BinaryExpr {
-                id: self.alloc_ast_id(),
-                left,
-                op: BinaryOp::And,
-                right,
-                span: merged_span,
-            }));
-        }
-
-        Ok(left)
+        self.parse_left_assoc_binary(Self::parse_comparison_expr, |k| match k {
+            TokenKind::And => Some(BinaryOp::And),
+            _ => None,
+        })
     }
 
     /// Parse comparison expressions with chaining support.
@@ -2545,113 +2551,40 @@ impl Parser {
     }
 
     fn parse_bitor_expr(&mut self) -> ParseResult<Expr> {
-        let mut left = self.parse_bitxor_expr()?;
-
-        while self.check(&TokenKind::Pipe) {
-            let left_span = left.span();
-            self.advance();
-            let right = self.parse_bitxor_expr()?;
-            let merged_span = left_span.merge(&right.span());
-            left = Expr::Binary(Box::new(BinaryExpr {
-                id: self.alloc_ast_id(),
-                left,
-                op: BinaryOp::BitOr,
-                right,
-                span: merged_span,
-            }));
-        }
-
-        Ok(left)
+        self.parse_left_assoc_binary(Self::parse_bitxor_expr, |k| match k {
+            TokenKind::Pipe => Some(BinaryOp::BitOr),
+            _ => None,
+        })
     }
 
     fn parse_bitxor_expr(&mut self) -> ParseResult<Expr> {
-        let mut left = self.parse_bitand_expr()?;
-
-        while self.check(&TokenKind::Caret) {
-            let left_span = left.span();
-            self.advance();
-            let right = self.parse_bitand_expr()?;
-            let merged_span = left_span.merge(&right.span());
-            left = Expr::Binary(Box::new(BinaryExpr {
-                id: self.alloc_ast_id(),
-                left,
-                op: BinaryOp::BitXor,
-                right,
-                span: merged_span,
-            }));
-        }
-
-        Ok(left)
+        self.parse_left_assoc_binary(Self::parse_bitand_expr, |k| match k {
+            TokenKind::Caret => Some(BinaryOp::BitXor),
+            _ => None,
+        })
     }
 
     fn parse_bitand_expr(&mut self) -> ParseResult<Expr> {
-        let mut left = self.parse_shift_expr()?;
-
-        while self.check(&TokenKind::Ampersand) {
-            let left_span = left.span();
-            self.advance();
-            let right = self.parse_shift_expr()?;
-            let merged_span = left_span.merge(&right.span());
-            left = Expr::Binary(Box::new(BinaryExpr {
-                id: self.alloc_ast_id(),
-                left,
-                op: BinaryOp::BitAnd,
-                right,
-                span: merged_span,
-            }));
-        }
-
-        Ok(left)
+        self.parse_left_assoc_binary(Self::parse_shift_expr, |k| match k {
+            TokenKind::Ampersand => Some(BinaryOp::BitAnd),
+            _ => None,
+        })
     }
 
     fn parse_shift_expr(&mut self) -> ParseResult<Expr> {
-        let mut left = self.parse_additive_expr()?;
-
-        loop {
-            let op = match self.peek_kind() {
-                TokenKind::LtLt => BinaryOp::Shl,
-                TokenKind::GtGt => BinaryOp::Shr,
-                _ => break,
-            };
-            let left_span = left.span();
-            self.advance();
-            let right = self.parse_additive_expr()?;
-            let merged_span = left_span.merge(&right.span());
-            left = Expr::Binary(Box::new(BinaryExpr {
-                id: self.alloc_ast_id(),
-                left,
-                op,
-                right,
-                span: merged_span,
-            }));
-        }
-
-        Ok(left)
+        self.parse_left_assoc_binary(Self::parse_additive_expr, |k| match k {
+            TokenKind::LtLt => Some(BinaryOp::Shl),
+            TokenKind::GtGt => Some(BinaryOp::Shr),
+            _ => None,
+        })
     }
 
     fn parse_additive_expr(&mut self) -> ParseResult<Expr> {
-        let mut left = self.parse_multiplicative_expr()?;
-
-        loop {
-            let op = match self.peek_kind() {
-                TokenKind::Plus => BinaryOp::Add,
-                TokenKind::Minus => BinaryOp::Sub,
-                _ => break,
-            };
-            let left_span = left.span();
-            self.advance();
-            let right = self.parse_multiplicative_expr()?;
-            let merged_span = left_span.merge(&right.span());
-            left = Expr::Binary(Box::new(BinaryExpr {
-                id: self.alloc_ast_id(),
-                left,
-                op,
-                right,
-                span: merged_span,
-            }));
-        }
-
-        Ok(left)
+        self.parse_left_assoc_binary(Self::parse_multiplicative_expr, |k| match k {
+            TokenKind::Plus => Some(BinaryOp::Add),
+            TokenKind::Minus => Some(BinaryOp::Sub),
+            _ => None,
+        })
     }
 
     fn parse_cast_expr(&mut self) -> ParseResult<Expr> {
@@ -2671,29 +2604,12 @@ impl Parser {
     }
 
     fn parse_multiplicative_expr(&mut self) -> ParseResult<Expr> {
-        let mut left = self.parse_cast_expr()?;
-
-        loop {
-            let op = match self.peek_kind() {
-                TokenKind::Star => BinaryOp::Mul,
-                TokenKind::Slash => BinaryOp::Div,
-                TokenKind::Percent => BinaryOp::Mod,
-                _ => break,
-            };
-            let left_span = left.span();
-            self.advance();
-            let right = self.parse_cast_expr()?;
-            let merged_span = left_span.merge(&right.span());
-            left = Expr::Binary(Box::new(BinaryExpr {
-                id: self.alloc_ast_id(),
-                left,
-                op,
-                right,
-                span: merged_span,
-            }));
-        }
-
-        Ok(left)
+        self.parse_left_assoc_binary(Self::parse_cast_expr, |k| match k {
+            TokenKind::Star => Some(BinaryOp::Mul),
+            TokenKind::Slash => Some(BinaryOp::Div),
+            TokenKind::Percent => Some(BinaryOp::Mod),
+            _ => None,
+        })
     }
 
     fn parse_unary_expr(&mut self) -> ParseResult<Expr> {
@@ -2934,6 +2850,121 @@ impl Parser {
         Ok(expr)
     }
 
+    /// Speculatively parse `Type::<Args>::method(...)` after `name::` was already
+    /// consumed and `<` is the next token. On any speculative failure, restore the
+    /// position to `checkpoint` (just before the `::`) and produce a bare `Ident`.
+    fn parse_generic_static_method_call_or_backtrack(
+        &mut self,
+        start_span: Span,
+        name: String,
+        checkpoint: usize,
+    ) -> ParseResult<Expr> {
+        let saved_pending_gt = self.pending_gt;
+        self.advance(); // consume <
+
+        let mut type_args = Vec::new();
+        let mut spec_ok = true;
+
+        match self.parse_type() {
+            Ok(t) => type_args.push(t),
+            Err(_) => spec_ok = false,
+        }
+        while spec_ok && self.check(&TokenKind::Comma) {
+            self.advance();
+            match self.parse_type() {
+                Ok(t) => type_args.push(t),
+                Err(_) => spec_ok = false,
+            }
+        }
+        if spec_ok {
+            spec_ok = self.expect_gt().is_ok();
+        }
+
+        if spec_ok && self.check(&TokenKind::ColonColon) {
+            self.advance(); // consume ::
+            let (method, method_span) = self.consume_ident_with_span()?;
+
+            // Method-level turbofish: method::<U>(...)
+            let method_type_args =
+                if self.check(&TokenKind::ColonColon) && self.peek_nth(1).kind == TokenKind::Lt {
+                    self.advance(); // consume ::
+                    self.parse_call_type_args()?
+                } else {
+                    Vec::new()
+                };
+
+            self.expect(&TokenKind::LParen)?;
+            let (args, has_trailing_comma) = self.parse_arg_list()?;
+            let end_span = self.expect(&TokenKind::RParen)?.span;
+
+            return Ok(Expr::StaticMethodCall(Box::new(StaticMethodCallExpr {
+                id: self.alloc_ast_id(),
+                target_type: Type::Generic(GenericType {
+                    id: self.alloc_ast_id(),
+                    name,
+                    args: type_args,
+                    span: start_span,
+                }),
+                method,
+                method_id: self.alloc_ast_id(),
+                method_span,
+                type_args: method_type_args,
+                args,
+                has_trailing_comma,
+                span: start_span.merge(&end_span),
+            })));
+        }
+
+        self.pos = checkpoint;
+        self.pending_gt = saved_pending_gt;
+        Ok(Expr::Ident(IdentExpr {
+            id: self.alloc_ast_id(),
+            name,
+            span: start_span,
+            segments: Vec::new(),
+        }))
+    }
+
+    /// Parse a `name::seg::seg...` qualified path identifier. The leading `name`
+    /// has already been consumed and `::` has just been consumed by the caller,
+    /// so the parser is positioned at the first segment after that `::`.
+    fn parse_qualified_path(&mut self, start_span: Span, name: String) -> ParseResult<Expr> {
+        let mut segments = vec![PathSegment {
+            id: self.alloc_ast_id(),
+            name: name.clone(),
+            span: start_span,
+        }];
+        let first_seg_span = self.peek().span;
+        let first_seg_name = self.consume_ident()?;
+        segments.push(PathSegment {
+            id: self.alloc_ast_id(),
+            name: first_seg_name.clone(),
+            span: first_seg_span,
+        });
+        let mut qualified_name = format!("{name}::{first_seg_name}");
+        let mut end_span = first_seg_span;
+        while self.check(&TokenKind::ColonColon)
+            && matches!(self.peek_nth(1).kind, TokenKind::Ident(_))
+        {
+            self.advance(); // consume ::
+            let seg_span = self.peek().span;
+            let seg_name = self.consume_ident()?;
+            segments.push(PathSegment {
+                id: self.alloc_ast_id(),
+                name: seg_name.clone(),
+                span: seg_span,
+            });
+            qualified_name = format!("{qualified_name}::{seg_name}");
+            end_span = seg_span;
+        }
+        Ok(Expr::Ident(IdentExpr {
+            id: self.alloc_ast_id(),
+            name: qualified_name,
+            span: start_span.merge(&end_span),
+            segments,
+        }))
+    }
+
     fn parse_primary_expr(&mut self) -> ParseResult<Expr> {
         let start_span = self.peek().span;
 
@@ -2953,113 +2984,11 @@ impl Parser {
                 self.advance(); // consume ::
 
                 if self.check(&TokenKind::Lt) {
-                    // Speculatively try Type::<Args>::method() - static method
-                    // on generic type. If the parse doesn't match, backtrack.
-                    let saved_pending_gt = self.pending_gt;
-                    self.advance(); // consume <
-
-                    let mut type_args = Vec::new();
-                    let mut spec_ok = true;
-
-                    match self.parse_type() {
-                        Ok(t) => type_args.push(t),
-                        Err(_) => spec_ok = false,
-                    }
-                    while spec_ok && self.check(&TokenKind::Comma) {
-                        self.advance();
-                        match self.parse_type() {
-                            Ok(t) => type_args.push(t),
-                            Err(_) => spec_ok = false,
-                        }
-                    }
-                    if spec_ok {
-                        spec_ok = self.expect_gt().is_ok();
-                    }
-
-                    if spec_ok && self.check(&TokenKind::ColonColon) {
-                        self.advance(); // consume ::
-                        let (method, method_span) = self.consume_ident_with_span()?;
-
-                        // Check for method-level turbofish: method::<U>(...)
-                        let method_type_args = if self.check(&TokenKind::ColonColon)
-                            && self.peek_nth(1).kind == TokenKind::Lt
-                        {
-                            self.advance(); // consume ::
-                            self.parse_call_type_args()?
-                        } else {
-                            Vec::new()
-                        };
-
-                        self.expect(&TokenKind::LParen)?;
-                        let (args, has_trailing_comma) = self.parse_arg_list()?;
-                        let end_span = self.expect(&TokenKind::RParen)?.span;
-
-                        return Ok(Expr::StaticMethodCall(Box::new(StaticMethodCallExpr {
-                            id: self.alloc_ast_id(),
-                            target_type: Type::Generic(GenericType {
-                                id: self.alloc_ast_id(),
-                                name,
-                                args: type_args,
-                                span: start_span,
-                            }),
-                            method,
-                            method_id: self.alloc_ast_id(),
-                            method_span,
-                            type_args: method_type_args,
-                            args,
-                            has_trailing_comma,
-                            span: start_span.merge(&end_span),
-                        })));
-                    }
-
-                    // Not a static method call on generic type, backtrack
-                    self.pos = checkpoint;
-                    self.pending_gt = saved_pending_gt;
-                    return Ok(Expr::Ident(IdentExpr {
-                        id: self.alloc_ast_id(),
-                        name,
-                        span: start_span,
-                        segments: Vec::new(),
-                    }));
+                    return self.parse_generic_static_method_call_or_backtrack(
+                        start_span, name, checkpoint,
+                    );
                 }
-                // This is a qualified name like Effect::function or ns::Type::Case
-                // Record the leading segment (already consumed above).
-                let mut segments = vec![PathSegment {
-                    id: self.alloc_ast_id(),
-                    name: name.clone(),
-                    span: start_span,
-                }];
-                // Consume a chain of ::ident segments, capturing each segment's
-                // AstId and span for LSP navigation.
-                let first_seg_span = self.peek().span;
-                let first_seg_name = self.consume_ident()?;
-                segments.push(PathSegment {
-                    id: self.alloc_ast_id(),
-                    name: first_seg_name.clone(),
-                    span: first_seg_span,
-                });
-                let mut qualified_name = format!("{name}::{first_seg_name}");
-                let mut end_span = first_seg_span;
-                while self.check(&TokenKind::ColonColon)
-                    && matches!(self.peek_nth(1).kind, TokenKind::Ident(_))
-                {
-                    self.advance(); // consume ::
-                    let seg_span = self.peek().span;
-                    let seg_name = self.consume_ident()?;
-                    segments.push(PathSegment {
-                        id: self.alloc_ast_id(),
-                        name: seg_name.clone(),
-                        span: seg_span,
-                    });
-                    qualified_name = format!("{qualified_name}::{seg_name}");
-                    end_span = seg_span;
-                }
-                return Ok(Expr::Ident(IdentExpr {
-                    id: self.alloc_ast_id(),
-                    name: qualified_name,
-                    span: start_span.merge(&end_span),
-                    segments,
-                }));
+                return self.parse_qualified_path(start_span, name);
             } else if self.check(&TokenKind::Colon) && self.peek_nth(1).kind == TokenKind::LBrace {
                 // Labeled block expression: `label: { ... }`
                 self.advance(); // consume ':'
@@ -3091,77 +3020,18 @@ impl Parser {
 
         match self.peek_kind().clone() {
             TokenKind::NumberLit(repr) => {
-                self.advance();
-                Ok(Expr::Literal(LiteralExpr {
-                    id: self.alloc_ast_id(),
-                    value: Literal::Number(repr),
-                    span: start_span,
-                }))
+                Ok(self.consume_literal(Literal::Number(repr), start_span))
             }
-            TokenKind::StringLit(raw) => {
-                self.advance();
-                Ok(Expr::Literal(LiteralExpr {
-                    id: self.alloc_ast_id(),
-                    value: Literal::String(raw),
-                    span: start_span,
-                }))
-            }
+            TokenKind::StringLit(raw) => Ok(self.consume_literal(Literal::String(raw), start_span)),
             TokenKind::TemplateStringLit(parts) => {
                 self.advance();
                 self.parse_template_string_parts(parts, start_span)
             }
-            TokenKind::True => {
-                self.advance();
-                Ok(Expr::Literal(LiteralExpr {
-                    id: self.alloc_ast_id(),
-                    value: Literal::Bool(true),
-                    span: start_span,
-                }))
-            }
-            TokenKind::False => {
-                self.advance();
-                Ok(Expr::Literal(LiteralExpr {
-                    id: self.alloc_ast_id(),
-                    value: Literal::Bool(false),
-                    span: start_span,
-                }))
-            }
-            TokenKind::Null => {
-                self.advance();
-                Ok(Expr::Literal(LiteralExpr {
-                    id: self.alloc_ast_id(),
-                    value: Literal::Null,
-                    span: start_span,
-                }))
-            }
-            TokenKind::CharLit(raw) => {
-                self.advance();
-                Ok(Expr::Literal(LiteralExpr {
-                    id: self.alloc_ast_id(),
-                    value: Literal::Char(raw),
-                    span: start_span,
-                }))
-            }
-            TokenKind::LParen => {
-                self.advance();
-                // Unit expression: ()
-                if self.check(&TokenKind::RParen) {
-                    self.advance();
-                    return Ok(Expr::Literal(LiteralExpr {
-                        id: self.alloc_ast_id(),
-                        value: Literal::Unit,
-                        span: start_span,
-                    }));
-                }
-                // Inside parentheses, struct literals are always allowed
-                let saved = self.restrict_struct_literals;
-                self.restrict_struct_literals = false;
-                let expr = self.parse_expr()?;
-                self.restrict_struct_literals = saved;
-                let end_span = self.expect(&TokenKind::RParen)?.span;
-                // Update expression span to include the parentheses
-                Ok(expr.with_span(start_span.merge(&end_span)))
-            }
+            TokenKind::True => Ok(self.consume_literal(Literal::Bool(true), start_span)),
+            TokenKind::False => Ok(self.consume_literal(Literal::Bool(false), start_span)),
+            TokenKind::Null => Ok(self.consume_literal(Literal::Null, start_span)),
+            TokenKind::CharLit(raw) => Ok(self.consume_literal(Literal::Char(raw), start_span)),
+            TokenKind::LParen => self.parse_paren_or_unit_expr(start_span),
             TokenKind::LBracket => {
                 self.advance();
                 // Inside brackets, struct literals are always allowed
@@ -3172,145 +3042,167 @@ impl Parser {
                 result
             }
             TokenKind::Pipe => self.parse_closure(),
-            TokenKind::Or => {
-                // `||` in primary expression position is a zero-parameter closure,
-                // not logical OR (which requires a left operand).
-                self.advance(); // consume `||`
-                let body = if self.check(&TokenKind::LBrace) {
-                    let block = self.parse_block()?;
-                    Expr::Block(Box::new(block))
-                } else {
-                    self.parse_expr()?
-                };
-                let body_span = body.span();
-                Ok(Expr::Closure(Box::new(ClosureExpr {
-                    id: self.alloc_ast_id(),
-                    params: vec![],
-                    body,
-                    source_text: None,
-                    span: start_span.merge(&body_span),
-                })))
-            }
-            TokenKind::LBrace => {
-                // Implicit struct literal: `{ field: value, ... }`
-                // Look ahead to check if this is a struct literal (ident followed by : or ,)
-                // vs a future block expression
-                self.advance(); // consume `{`
-
-                // Check if this looks like a struct literal
-                // Pattern: `{ ident :` or `{ ident ,` or `{ ident }` or `{ "string" :`
-                if let TokenKind::Ident(_) = self.peek_kind() {
-                    // Peek at the token after the identifier
-                    let after_ident = self.peek_nth(1);
-                    if matches!(
-                        after_ident.kind,
-                        TokenKind::Colon | TokenKind::Comma | TokenKind::RBrace
-                    ) {
-                        // This is an implicit struct literal
-                        return self.parse_struct_literal(None, start_span);
-                    }
-                }
-
-                // String literal key: `{ "field": value }`
-                if let TokenKind::StringLit(_) = self.peek_kind()
-                    && matches!(self.peek_nth(1).kind, TokenKind::Colon)
-                {
-                    return self.parse_struct_literal(None, start_span);
-                }
-
-                // Literal-value keywords as keys: `{ true: ... }` → route to struct literal for better error
-                if matches!(
-                    self.peek_kind(),
-                    TokenKind::True | TokenKind::False | TokenKind::Null
-                ) && matches!(self.peek_nth(1).kind, TokenKind::Colon)
-                {
-                    return self.parse_struct_literal(None, start_span);
-                }
-
-                // Empty struct literal: `{}`
-                if self.check(&TokenKind::RBrace) {
-                    return self.parse_struct_literal(None, start_span);
-                }
-
-                // Not a valid implicit struct literal
-                Err(ParseError {
-                    message: "implicit struct literal requires field syntax: { field: value }"
-                        .into(),
-                    span: start_span,
-                })
-            }
+            TokenKind::Or => self.parse_zero_arg_closure_expr(start_span),
+            TokenKind::LBrace => self.parse_implicit_struct_literal_expr(start_span),
             TokenKind::If => self.parse_if_expr(),
             TokenKind::Match => self.parse_match_expr(),
             TokenKind::With => self.parse_with_handler_expr(),
-            TokenKind::Hash => {
-                self.advance(); // consume '#'
-                // Parse compile-time location literals: #file, #line, #function
-                match self.peek_kind() {
-                    TokenKind::Ident(name) => {
-                        let name = name.clone();
-                        let end_span = self.advance().span;
-                        let literal = match name.as_str() {
-                            "file" => Literal::LocationFile,
-                            "line" => Literal::LocationLine,
-                            "function" => Literal::LocationFunction,
-                            "data" => Literal::DataSection,
-                            "include_str" | "include_bytes" => {
-                                let is_str = name == "include_str";
-                                self.expect(&TokenKind::LParen)?;
-                                let path = match self.peek_kind() {
-                                    TokenKind::StringLit(s) => {
-                                        let s = s.clone();
-                                        self.advance();
-                                        s
-                                    }
-                                    _ => {
-                                        return Err(ParseError {
-                                            message: format!(
-                                                "expected string literal path argument for `#{name}`"
-                                            ),
-                                            span: self.peek().span,
-                                        });
-                                    }
-                                };
-                                let close_span = self.expect(&TokenKind::RParen)?.span;
-                                self.include_paths.insert(path.clone());
-                                let lit = if is_str {
-                                    Literal::IncludeStr(path)
-                                } else {
-                                    Literal::IncludeBytes(path)
-                                };
-                                return Ok(Expr::Literal(LiteralExpr {
-                                    id: self.alloc_ast_id(),
-                                    value: lit,
-                                    span: start_span.merge(&close_span),
-                                }));
-                            }
-                            _ => {
-                                return Err(ParseError {
-                                    message: format!(
-                                        "unknown compile-time literal `#{name}`, expected `#file`, `#line`, `#function`, `#data`, `#include_str`, or `#include_bytes`"
-                                    ),
-                                    span: start_span.merge(&end_span),
-                                });
-                            }
-                        };
-                        Ok(Expr::Literal(LiteralExpr {
-                            id: self.alloc_ast_id(),
-                            value: literal,
-                            span: start_span.merge(&end_span),
-                        }))
-                    }
-                    _ => Err(ParseError {
-                        message: "expected identifier after `#` for compile-time literal".into(),
-                        span: start_span,
-                    }),
-                }
-            }
+            TokenKind::Hash => self.parse_compile_time_literal_expr(start_span),
             _ => Err(ParseError {
                 message: format!("expected expression, found {:?}", self.peek_kind()),
                 span: start_span,
             }),
         }
+    }
+
+    /// Parse `(expr)` or the unit literal `()`. The leading `(` has not been consumed.
+    fn parse_paren_or_unit_expr(&mut self, start_span: Span) -> ParseResult<Expr> {
+        self.advance(); // consume `(`
+        if self.check(&TokenKind::RParen) {
+            self.advance();
+            return Ok(Expr::Literal(LiteralExpr {
+                id: self.alloc_ast_id(),
+                value: Literal::Unit,
+                span: start_span,
+            }));
+        }
+        // Struct literals are always allowed inside parentheses.
+        let saved = self.restrict_struct_literals;
+        self.restrict_struct_literals = false;
+        let expr = self.parse_expr()?;
+        self.restrict_struct_literals = saved;
+        let end_span = self.expect(&TokenKind::RParen)?.span;
+        Ok(expr.with_span(start_span.merge(&end_span)))
+    }
+
+    /// Parse `|| body` — a zero-parameter closure. `||` (logical-or token) has
+    /// not been consumed; it is only a closure here because primary position has
+    /// no left operand for the binary operator.
+    fn parse_zero_arg_closure_expr(&mut self, start_span: Span) -> ParseResult<Expr> {
+        self.advance(); // consume `||`
+        let body = if self.check(&TokenKind::LBrace) {
+            let block = self.parse_block()?;
+            Expr::Block(Box::new(block))
+        } else {
+            self.parse_expr()?
+        };
+        let body_span = body.span();
+        Ok(Expr::Closure(Box::new(ClosureExpr {
+            id: self.alloc_ast_id(),
+            params: vec![],
+            body,
+            source_text: None,
+            span: start_span.merge(&body_span),
+        })))
+    }
+
+    /// Parse an implicit (untyped) struct literal `{ field: value, ... }`.
+    /// The leading `{` has not been consumed; this method also rejects braces
+    /// that don't look like a struct literal.
+    fn parse_implicit_struct_literal_expr(&mut self, start_span: Span) -> ParseResult<Expr> {
+        self.advance(); // consume `{`
+
+        // `{ ident :` / `{ ident ,` / `{ ident }`
+        if let TokenKind::Ident(_) = self.peek_kind()
+            && matches!(
+                self.peek_nth(1).kind,
+                TokenKind::Colon | TokenKind::Comma | TokenKind::RBrace
+            )
+        {
+            return self.parse_struct_literal(None, start_span);
+        }
+
+        // `{ "field" :` — string literal field name
+        if let TokenKind::StringLit(_) = self.peek_kind()
+            && matches!(self.peek_nth(1).kind, TokenKind::Colon)
+        {
+            return self.parse_struct_literal(None, start_span);
+        }
+
+        // `{ true: ... }` — keyword used as field name; route through struct
+        // literal parser to produce a clearer error.
+        if matches!(
+            self.peek_kind(),
+            TokenKind::True | TokenKind::False | TokenKind::Null
+        ) && matches!(self.peek_nth(1).kind, TokenKind::Colon)
+        {
+            return self.parse_struct_literal(None, start_span);
+        }
+
+        // Empty struct literal `{}`.
+        if self.check(&TokenKind::RBrace) {
+            return self.parse_struct_literal(None, start_span);
+        }
+
+        Err(ParseError {
+            message: "implicit struct literal requires field syntax: { field: value }".into(),
+            span: start_span,
+        })
+    }
+
+    /// Parse a `#name` compile-time literal: `#file`, `#line`, `#function`,
+    /// `#data`, `#include_str("...")`, `#include_bytes("...")`. The leading `#`
+    /// has not been consumed.
+    fn parse_compile_time_literal_expr(&mut self, start_span: Span) -> ParseResult<Expr> {
+        self.advance(); // consume `#`
+        let TokenKind::Ident(raw_name) = self.peek_kind() else {
+            return Err(ParseError {
+                message: "expected identifier after `#` for compile-time literal".into(),
+                span: start_span,
+            });
+        };
+        let name = raw_name.clone();
+        let name_span = self.advance().span;
+
+        if name == "include_str" || name == "include_bytes" {
+            let is_str = name == "include_str";
+            self.expect(&TokenKind::LParen)?;
+            let path = match self.peek_kind() {
+                TokenKind::StringLit(s) => {
+                    let s = s.clone();
+                    self.advance();
+                    s
+                }
+                _ => {
+                    return Err(ParseError {
+                        message: format!("expected string literal path argument for `#{name}`"),
+                        span: self.peek().span,
+                    });
+                }
+            };
+            let close_span = self.expect(&TokenKind::RParen)?.span;
+            self.include_paths.insert(path.clone());
+            let value = if is_str {
+                Literal::IncludeStr(path)
+            } else {
+                Literal::IncludeBytes(path)
+            };
+            return Ok(Expr::Literal(LiteralExpr {
+                id: self.alloc_ast_id(),
+                value,
+                span: start_span.merge(&close_span),
+            }));
+        }
+
+        let value = match name.as_str() {
+            "file" => Literal::LocationFile,
+            "line" => Literal::LocationLine,
+            "function" => Literal::LocationFunction,
+            "data" => Literal::DataSection,
+            _ => {
+                return Err(ParseError {
+                    message: format!(
+                        "unknown compile-time literal `#{name}`, expected `#file`, `#line`, `#function`, `#data`, `#include_str`, or `#include_bytes`"
+                    ),
+                    span: start_span.merge(&name_span),
+                });
+            }
+        };
+        Ok(Expr::Literal(LiteralExpr {
+            id: self.alloc_ast_id(),
+            value,
+            span: start_span.merge(&name_span),
+        }))
     }
 
     /// Parse if expression: `if condition { expr } else { expr }`
