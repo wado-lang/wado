@@ -1,0 +1,72 @@
+// HFS (Hot Field Scalarize) bug: the pass hoists field accesses of a local
+// variable that is only defined inside a deeply nested arm of the loop body
+// (here, a `match` expression's arm). At runtime the hoisted reads execute
+// before the local is bound, producing `wasm trap: null reference`.
+//
+// Background: discovered while investigating a `null reference` trap inside
+// `core:json/JsonDeserializer::read_json_string` with the optimizer's
+// inline threshold raised to 33+. After threshold-33 inlining, the
+// panic-template `let mut __r: String = ...; ...push_str(...);` ended up
+// inside the `_` match arm of an outer loop. HFS scalarized `__r.used` and
+// `__r.repr`, hoisting `let mut _hfs_used_158: i32 = __r.used;` and
+// `let mut _hfs_repr_159: ... = __r.repr;` to before the loop where `__r`
+// is unbound.
+//
+// TIR after HFS at -O2:
+//
+//     let mut _hfs_a_3: i32 = s.a;        // BUG: `s` not defined here
+//     loop {
+//         if !(i < 3) { break; }
+//         result = match i {
+//             _ => {
+//                 let mut s: S = S { a: 0 };  // `s` defined here only
+//                 _hfs_a_3 = 1; ... = 4;
+//                 s;
+//             },
+//         };
+//         i = (i + 1);
+//     }
+//     s.a = _hfs_a_3;                     // BUG: `s` out of scope here
+//
+// Triggers at all -Ox levels with optimization (O1+); -O0 is fine because
+// HFS does not run there.
+//
+// `#![TODO]` marks this as a known compiler failure. Once HFS gains a
+// scope-aware check (e.g. don't scalarize fields of a local whose Let
+// binding is not visible at the loop's pre-header), remove the attribute
+// and the test framework will warn that the file should be promoted to a
+// normal regression test.
+#![TODO]
+
+struct S {
+    a: i32,
+}
+
+fn build() -> i32 {
+    let mut result: S = S { a: 0 };
+    let mut i = 0;
+    while i < 3 {
+        result = match i {
+            _ => {
+                let mut s: S = S { a: 0 };
+                s.a = 1;
+                s.a = s.a + 1;
+                s.a = s.a + 1;
+                s.a = s.a + 1;
+                s
+            },
+        };
+        i += 1;
+    }
+    return result.a;
+}
+
+export fn run() {
+    let _ = build();
+}
+
+__DATA__
+{
+    "stdout": "",
+    "only_opt": ["O2"]
+}
