@@ -302,9 +302,10 @@ fn safe_join(manifest_root: &Path, rel: &str) -> Option<PathBuf> {
         }
     }
     let joined = manifest_root.join(rel_path);
-    if let (Ok(canon_root), Ok(canon_joined)) =
-        (std::fs::canonicalize(manifest_root), std::fs::canonicalize(&joined))
-        && !canon_joined.starts_with(&canon_root)
+    if let (Ok(canon_root), Ok(canon_joined)) = (
+        std::fs::canonicalize(manifest_root),
+        std::fs::canonicalize(&joined),
+    ) && !canon_joined.starts_with(&canon_root)
     {
         return None;
     }
