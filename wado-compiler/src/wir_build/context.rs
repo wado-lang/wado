@@ -81,7 +81,7 @@ pub struct WirContext<'a> {
     ///         `is_inspectable`)
     /// `is_inspectable` is the per-`(N, Ret)` gate that decides whether
     /// the canonical struct carries the inspect / `inspect_alt` vtable
-    /// slots. See `inspectable_fn_signatures`.
+    /// slots. See `inspectable_fn_dispatch`.
     pub canonical_closure_types: IndexMap<String, (WirTypeId, WirTypeId, bool)>,
     /// Map from closure `(module_source, functor_id)` to the per-functor
     /// canonical wrapper triple. Keyed by module source + functor ID
@@ -89,22 +89,24 @@ pub struct WirContext<'a> {
     pub closure_wrapper_funcs: IndexMap<(ModuleSource, u32), ClosureWrapperFuncs>,
     /// Counter for canonical closure type naming.
     pub canonical_closure_counter: u32,
-    /// Set of `Fn<arity, ret_mangle>` signatures whose `Fn^Inspect` or
-    /// `Fn^InspectAlt` impl survived DCE. Computed once at WIR build
-    /// start by scanning `package.functions` for surviving auto-derived
-    /// dispatch impls. Drives the per-`(N, Ret)` gate that decides
-    /// whether `CanonicalClosure_K` carries `inspect`/`inspect_alt` vtable
-    /// slots — closures whose `(N, Ret)` is unreachable here keep the
-    /// slim `{ env, func }` shape so production builds that never
-    /// inspect closures pay nothing.
-    pub inspectable_fn_signatures: IndexSet<String>,
-    /// Map from `Fn<arity, ret_mangle>` mangled name to the matching
+    /// Set of `(arity, return_type)` signatures whose
+    /// `Fn^Inspect` / `Fn^InspectAlt` dispatch stub survived DCE.
+    /// Computed once at WIR build start by scanning
+    /// `package.functions` for surviving
+    /// `FunctionKind::FnCanonicalDispatch` entries. Drives the per-
+    /// `(N, Ret)` gate that decides whether `CanonicalClosure_K`
+    /// carries `inspect` / `inspect_alt` vtable slots — closures
+    /// whose `(N, Ret)` is unreachable here keep the slim
+    /// `{ env, func }` shape so production builds that never inspect
+    /// closures pay nothing.
+    pub inspectable_fn_dispatch: IndexSet<(usize, TypeId)>,
+    /// Map from `(arity, return_type)` to the matching
     /// `CanonicalClosure_K` struct WIR type id. Populated alongside
-    /// `canonical_closure_types`. The WIR-level
-    /// `Fn<...>^Inspect / InspectAlt` dispatch override uses this to
-    /// pick the correct struct type for `ref.cast` + `struct.get` on
-    /// `self`, since multiple `(N, Ret)` may co-exist in one program.
-    pub fn_struct_name_to_canonical: IndexMap<String, WirTypeId>,
+    /// `canonical_closure_types` so the WIR-level
+    /// `Fn<...>^Inspect / InspectAlt` dispatch body can pick the
+    /// correct struct type for `ref.cast` + `struct.get` on `self`,
+    /// without recovering the type from the function's mangled name.
+    pub fn_dispatch_canonical: IndexMap<(usize, TypeId), WirTypeId>,
 
     /// Collected string literals (from all TIR modules).
     pub string_literals: Vec<String>,
@@ -140,32 +142,21 @@ pub struct PendingFunctionBody {
 /// signatures whose `Fn^Inspect::inspect` or `Fn^InspectAlt::inspect_alt`
 /// impl is reachable.
 ///
-/// Auto-derived dispatch impls for `(N, Ret)` are produced per-module
-/// by `synthesize_traits` and named `<module>/Fn<arity,ret>^Inspect::inspect`
-/// (and the `InspectAlt` variant). After DCE prunes unreachable
-/// functions, the survivors here drive the per-`(N, Ret)` schema gate
-/// so canonical closures whose signature is never inspected stay slim.
-fn compute_inspectable_fn_signatures(package: &FlatPackage) -> IndexSet<String> {
-    let mut set: IndexSet<String> = IndexSet::default();
+/// Auto-derived dispatch stubs for `Fn<arity, return_type>^Inspect`
+/// / `^InspectAlt` are produced per-module by `synthesize_traits`
+/// and tagged `FunctionKind::FnCanonicalDispatch`. After DCE prunes
+/// unreachable functions, the survivors here drive the per-
+/// `(N, Ret)` schema gate so canonical closures whose signature is
+/// never inspected stay slim.
+fn compute_inspectable_fn_dispatch(package: &FlatPackage) -> IndexSet<(usize, TypeId)> {
+    let mut set: IndexSet<(usize, TypeId)> = IndexSet::default();
     for func_rc in &package.functions {
         let Ok(func) = func_rc.try_borrow() else {
             continue;
         };
-        let Some(info) = &func.method_info else {
-            continue;
-        };
-        if info.base_struct_name != "Fn" {
-            continue;
+        if let Some((_, arity, return_type)) = func.fn_canonical_dispatch() {
+            set.insert((arity, return_type));
         }
-        let Some(base_trait) = info.base_trait_name.as_deref() else {
-            continue;
-        };
-        if base_trait != "Inspect" && base_trait != "InspectAlt" {
-            continue;
-        }
-        // `info.struct_name` already includes the type args, e.g.
-        // `Fn<2,i32>` (set by `with_struct_type_args`).
-        set.insert(info.struct_name.clone());
     }
     set
 }
@@ -176,7 +167,7 @@ fn compute_inspectable_fn_signatures(package: &FlatPackage) -> IndexSet<String> 
 /// closure struct.
 ///
 /// `inspect` and `inspect_alt` are `None` when the per-`(N, Ret)`
-/// gate (`WirContext::inspectable_fn_signatures`) reports the
+/// gate (`WirContext::inspectable_fn_dispatch`) reports the
 /// signature as unreachable — in that case `CanonicalClosure_K` uses
 /// the slim `{ env, func }` schema and `translate_closure_to_canonical`
 /// only emits two `struct.new` operands.
@@ -223,7 +214,7 @@ impl<'a> WirContext<'a> {
         // `CanonicalClosure_K`. Programs that don't inspect closures
         // observe an empty set here — every canonical closure stays
         // slim `{ env, func }`.
-        let inspectable_fn_signatures = compute_inspectable_fn_signatures(package);
+        let inspectable_fn_dispatch = compute_inspectable_fn_dispatch(package);
 
         Self {
             package,
@@ -254,8 +245,8 @@ impl<'a> WirContext<'a> {
             canonical_closure_types: IndexMap::default(),
             closure_wrapper_funcs: IndexMap::default(),
             canonical_closure_counter: 0,
-            inspectable_fn_signatures,
-            fn_struct_name_to_canonical: IndexMap::default(),
+            inspectable_fn_dispatch,
+            fn_dispatch_canonical: IndexMap::default(),
             string_literals,
             bytes_literals,
             wasm_module_sources: IndexMap::<ModuleSource, String>::default(),

@@ -168,18 +168,12 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
         // start. Non-inspectable signatures get the slim
         // `{ env, func }` schema and skip inspect wrapper
         // registration entirely.
-        let type_table = &*ctx.package.type_table.borrow();
         let call_func = functor.call_method.borrow();
-        let fn_struct_name = crate::name::mangle_generic_name(
-            "Fn",
-            &[
-                user_param_count.to_string(),
-                type_table.mangle_type_name(call_func.return_type),
-            ],
-        );
+        let return_type = call_func.return_type;
         drop(call_func);
-        let _ = type_table;
-        let is_inspectable = ctx.inspectable_fn_signatures.contains(&fn_struct_name);
+        let is_inspectable = ctx
+            .inspectable_fn_dispatch
+            .contains(&(user_param_count, return_type));
 
         // Get canonical func type, threading the gate so the schema
         // matches what `translate_closure_to_canonical` will emit.
@@ -472,147 +466,100 @@ fn register_inspect_wrapper(
     ctx.register_function(func)
 }
 
-/// Replace the body of every `Fn<N, Ret>^Inspect::inspect` and
-/// `Fn<N, Ret>^InspectAlt::inspect_alt` registered by TIR-level synth
-/// with a vtable indirect call through the canonical closure.
+/// Build the WIR body for a `FunctionKind::FnCanonicalDispatch`
+/// stub: cast `self` to the matching `CanonicalClosure_K`, then
+/// `call_ref (struct.get $K $slot self) (self.env, f)` where `$slot`
+/// is `inspect` or `inspect_alt` depending on `trait_kind`.
 ///
-/// The TIR-level `generate_fn_inspect_fn` synthesises a placeholder
-/// body that writes a single signature string — that's incorrect for
-/// the shared `(N, Ret)` impl because closures with the same arity
-/// and return type may have different parameter types (and the
-/// `:#?` form needs the literal's source body, not a global
-/// signature). This pass swaps in `call_ref (self.inspect)(self.env,
-/// f)` so dispatch reaches the per-functor `__closure_inspect_*_wrapper`
-/// chosen at struct construction time.
-///
-/// Runs after `translate_function_bodies` so the TIR placeholder
-/// translation has already populated `ctx.functions[i].body`; we
-/// overwrite that body in place.
-pub fn override_fn_canonical_dispatch_bodies(ctx: &mut WirContext<'_>) {
+/// Returns `None` when the signature isn't in the inspectable
+/// gate — that means the canonical struct is the slim
+/// `{ env, func }` shape and the dispatch stub is unreachable from
+/// any actually-emitted closure value, so leaving the empty TIR
+/// placeholder body is fine.
+fn build_fn_canonical_dispatch_body(
+    ctx: &mut WirContext<'_>,
+    trait_kind: crate::tir::FnDispatchTrait,
+    arity: usize,
+    return_type: crate::tir::TypeId,
+    self_param_name: String,
+    formatter_param_name: String,
+) -> Option<Vec<WirInstr>> {
+    use crate::tir::FnDispatchTrait;
     use crate::wir::{WirAbstractHeapType, WirType};
 
-    // Indices of WIR functions whose fq matches the per-(N, Ret)
-    // dispatch-impl pattern. We collect first, mutate after, to avoid
-    // borrowing ctx.functions mutably during the scan.
+    let struct_type_id = ctx
+        .fn_dispatch_canonical
+        .get(&(arity, return_type))?
+        .clone();
+    let callback_fn_type_id = ctx.get_or_create_canonical_callback_fn_type();
     let abstract_struct_nullable = WirType::AbstractRef {
         heap_type: WirAbstractHeapType::Struct,
         nullable: true,
     };
-    let callback_fn_type_id = ctx.get_or_create_canonical_callback_fn_type();
+    let field_name = match trait_kind {
+        FnDispatchTrait::Inspect => "inspect",
+        FnDispatchTrait::InspectAlt => "inspect_alt",
+    };
 
-    let targets: Vec<(usize, String, String)> = ctx
-        .functions
-        .iter()
-        .enumerate()
-        .filter_map(|(idx, f)| {
-            let fq = &f.name.fq;
-            // Match `<module>/Fn<N,Ret>^Inspect::inspect` and the
-            // InspectAlt variant. We split on `^` to recover the
-            // mangled struct name (`<module>/Fn<N,Ret>`) and the
-            // method-tail (`Inspect::inspect`).
-            let (struct_part, method_part) = fq.rsplit_once('^')?;
-            // mangled struct must contain the `Fn<` marker so we don't
-            // touch unrelated `^Inspect`-suffixed methods on user
-            // types.
-            let after_slash = struct_part.rsplit_once('/').map_or(struct_part, |(_, n)| n);
-            if !after_slash.starts_with("Fn<") {
-                return None;
-            }
-            if method_part != "Inspect::inspect" && method_part != "InspectAlt::inspect_alt" {
-                return None;
-            }
-            // `after_slash` is the `Fn<arity, ret>` mangle that maps
-            // 1:1 to the matching `CanonicalClosure_K` via
-            // `fn_struct_name_to_canonical`.
-            Some((idx, after_slash.to_string(), method_part.to_string()))
-        })
-        .collect();
-
-    for (idx, fn_struct_name, method) in targets {
-        // Pick the CanonicalClosure_K matching this impl's signature.
-        // Skip if the gate marked the signature non-inspectable
-        // (the impl body would never run because the slim canonical
-        // schema has no inspect slots).
-        let Some(struct_type_id) = ctx
-            .fn_struct_name_to_canonical
-            .get(&fn_struct_name)
-            .cloned()
-        else {
-            continue;
-        };
-
-        let field_name = if method == "Inspect::inspect" {
-            "inspect"
-        } else {
-            "inspect_alt"
-        };
-
-        // Body: call_ref (struct.get $K $field self) (struct.get $K $env self, f)
-        let self_param = "self".to_string();
-        let f_param = "f".to_string();
-        // self in the existing TIR-generated impl is `&Fn<N,Ret>` →
-        // WIR-level `(ref null struct)` (abstract). We refcast to the
-        // canonical closure struct first.
-        let typed_self = "__typed_self".to_string();
-        let body = vec![
-            WirInstr::DeclareLocal {
-                name: typed_self.clone(),
-                ty: WirType::Ref {
-                    type_id: struct_type_id.clone(),
-                    nullable: false,
-                },
+    // Local that holds the refcast `self` so we can read both
+    // `env` and the chosen vtable slot off it without re-casting.
+    let typed_self = "__typed_self".to_string();
+    Some(vec![
+        WirInstr::DeclareLocal {
+            name: typed_self.clone(),
+            ty: WirType::Ref {
+                type_id: struct_type_id.clone(),
+                nullable: false,
             },
-            WirInstr::LocalSet {
-                name: typed_self.clone(),
-                value: Box::new(WirInstr::RefCast {
-                    type_id: struct_type_id.clone(),
-                    nullable: false,
-                    expr: Box::new(WirInstr::LocalGet {
-                        name: self_param,
-                        result_ty: abstract_struct_nullable.clone(),
-                    }),
+        },
+        WirInstr::LocalSet {
+            name: typed_self.clone(),
+            value: Box::new(WirInstr::RefCast {
+                type_id: struct_type_id.clone(),
+                nullable: false,
+                expr: Box::new(WirInstr::LocalGet {
+                    name: self_param_name,
+                    result_ty: abstract_struct_nullable.clone(),
                 }),
-            },
-            WirInstr::CallRef {
-                type_id: callback_fn_type_id.clone(),
-                func_ref: Box::new(WirInstr::StructGet {
-                    type_id: struct_type_id.clone(),
-                    field_name: field_name.to_string(),
-                    expr: Box::new(WirInstr::LocalGet {
-                        name: typed_self.clone(),
-                        result_ty: WirType::Ref {
-                            type_id: struct_type_id.clone(),
-                            nullable: false,
-                        },
-                    }),
+            }),
+        },
+        WirInstr::CallRef {
+            type_id: callback_fn_type_id.clone(),
+            func_ref: Box::new(WirInstr::StructGet {
+                type_id: struct_type_id.clone(),
+                field_name: field_name.to_string(),
+                expr: Box::new(WirInstr::LocalGet {
+                    name: typed_self.clone(),
                     result_ty: WirType::Ref {
-                        type_id: callback_fn_type_id.clone(),
+                        type_id: struct_type_id.clone(),
                         nullable: false,
                     },
                 }),
-                args: vec![
-                    WirInstr::StructGet {
-                        type_id: struct_type_id.clone(),
-                        field_name: "env".to_string(),
-                        expr: Box::new(WirInstr::LocalGet {
-                            name: typed_self,
-                            result_ty: WirType::Ref {
-                                type_id: struct_type_id,
-                                nullable: false,
-                            },
-                        }),
-                        result_ty: abstract_struct_nullable.clone(),
-                    },
-                    WirInstr::LocalGet {
-                        name: f_param,
-                        result_ty: abstract_struct_nullable.clone(),
-                    },
-                ],
-            },
-        ];
-
-        ctx.functions[idx].body = Some(body);
-    }
+                result_ty: WirType::Ref {
+                    type_id: callback_fn_type_id,
+                    nullable: false,
+                },
+            }),
+            args: vec![
+                WirInstr::StructGet {
+                    type_id: struct_type_id.clone(),
+                    field_name: "env".to_string(),
+                    expr: Box::new(WirInstr::LocalGet {
+                        name: typed_self,
+                        result_ty: WirType::Ref {
+                            type_id: struct_type_id,
+                            nullable: false,
+                        },
+                    }),
+                    result_ty: abstract_struct_nullable.clone(),
+                },
+                WirInstr::LocalGet {
+                    name: formatter_param_name,
+                    result_ty: abstract_struct_nullable,
+                },
+            ],
+        },
+    ])
 }
 
 /// Translate all pending function bodies from TIR to WIR instructions.
@@ -622,6 +569,39 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
     for pending_body in &pending {
         let tir_func = pending_body.tir_func.borrow();
         let type_table = pending_body.type_table.borrow();
+
+        // `Fn<arity, ret>^Inspect / InspectAlt` dispatch stubs carry
+        // an empty TIR placeholder body; substitute the real body
+        // (vtable indirect call through `CanonicalClosure_K`) here
+        // instead of translating the placeholder. Skipping the
+        // string-matching post-pass keeps name-format knowledge
+        // confined to `name.rs` and `synthesis::traits`.
+        if let Some((trait_kind, arity, return_type)) = tir_func.fn_canonical_dispatch() {
+            let self_param_name = tir_func
+                .params
+                .first()
+                .map(|p| p.name.clone())
+                .unwrap_or_else(|| "self".to_string());
+            let formatter_param_name = tir_func
+                .params
+                .get(1)
+                .map(|p| p.name.clone())
+                .unwrap_or_else(|| "f".to_string());
+            drop(tir_func);
+            let _ = type_table;
+            let body = build_fn_canonical_dispatch_body(
+                ctx,
+                trait_kind,
+                arity,
+                return_type,
+                self_param_name,
+                formatter_param_name,
+            );
+            if let Some(body) = body {
+                ctx.functions[pending_body.wir_func_index].body = Some(body);
+            }
+            continue;
+        }
 
         if let Some(ref body) = tir_func.body {
             // Build local-name map: params first, then `Let` statement

@@ -3124,6 +3124,17 @@ pub struct TirFunction {
 /// Semantic category of a `TirFunction`. Carries the type operand so the
 /// optimizer can reason about the call without re-deriving it from the
 /// signature.
+/// Identifies which `Fn<N, Ret>` trait method an auto-derived
+/// dispatch stub implements. Recovered from
+/// [`FunctionKind::FnCanonicalDispatch`] so WIR build can choose
+/// the right vtable slot (`inspect` vs `inspect_alt`) without
+/// re-parsing mangled names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FnDispatchTrait {
+    Inspect,
+    InspectAlt,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum FunctionKind {
     /// Ordinary user-defined or synthesized function.
@@ -3133,6 +3144,25 @@ pub enum FunctionKind {
     /// `type_id`. Calls to such functions may be elided when the argument is
     /// provably fresh.
     ValueCopy { type_id: TypeId },
+    /// Auto-derived `Fn<arity, return_type>^Inspect::inspect` (or
+    /// `^InspectAlt::inspect_alt`) dispatch stub.
+    ///
+    /// The TIR body is `unreachable()` — a placeholder that exists
+    /// only so the function is registered and the call is resolvable
+    /// from templates and from user code. WIR build recognises this
+    /// kind and supplies the real body: a `call_ref` through the
+    /// matching `CanonicalClosure_K`'s `inspect` / `inspect_alt`
+    /// vtable slot. Carries `(arity, return_type)` as structured
+    /// fields so neither WIR build nor DCE has to recover them by
+    /// parsing the mangled function name.
+    ///
+    /// See WEP: Inspect (Debug Output) > Closure Inspect via Runtime
+    /// Dispatch.
+    FnCanonicalDispatch {
+        trait_kind: FnDispatchTrait,
+        arity: usize,
+        return_type: TypeId,
+    },
 }
 
 /// Inline hint for a function, extracted from `#[inline(...)]` attributes.
@@ -3176,7 +3206,23 @@ impl TirFunction {
     pub fn value_copy_type(&self) -> Option<TypeId> {
         match self.kind {
             FunctionKind::ValueCopy { type_id } => Some(type_id),
-            FunctionKind::Regular => None,
+            _ => None,
+        }
+    }
+
+    /// Returns the dispatch coordinates if this is an auto-derived
+    /// `Fn<arity, return_type>^Inspect` / `^InspectAlt` stub.
+    /// WIR build uses the result to supply the indirect-call body
+    /// without scanning mangled function names.
+    #[inline]
+    pub fn fn_canonical_dispatch(&self) -> Option<(FnDispatchTrait, usize, TypeId)> {
+        match self.kind {
+            FunctionKind::FnCanonicalDispatch {
+                trait_kind,
+                arity,
+                return_type,
+            } => Some((trait_kind, arity, return_type)),
+            _ => None,
         }
     }
 

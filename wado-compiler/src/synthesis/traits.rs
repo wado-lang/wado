@@ -17,9 +17,9 @@ use crate::hashmap::IndexSet;
 use crate::name::{LocalMethodName, MethodName, ModuleSource};
 use crate::package::Package;
 use crate::tir::{
-    CallArg, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ResolvedType, TirBinaryOp,
-    TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirModule, TirParam, TirStmt,
-    TirStmtKind, TirTypeParam, TirUnaryOp, TypeId, TypeTable,
+    CallArg, FnDispatchTrait, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ResolvedType,
+    TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirModule, TirParam,
+    TirStmt, TirStmtKind, TirTypeParam, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -761,13 +761,10 @@ fn generate_inspect_impls(module: &mut TirModule) {
             } => {
                 generated.push(Rc::new(RefCell::new(generate_fn_inspect_fn(
                     &type_arg_names,
-                    &params,
+                    params.len(),
                     return_type,
-                    type_id,
                     ref_type,
                     fmt_type,
-                    string_type,
-                    &mut tt,
                     span,
                 ))));
             }
@@ -1888,90 +1885,84 @@ fn generate_flags_inspect_fn(
     )
 }
 
-/// Generate `Fn<N,Ret>^Inspect::inspect(&self, &mut Formatter)` for a concrete function type.
+/// Generate `Fn<N, Ret>^Inspect::inspect(&self, &mut Formatter)` as
+/// an auto-derived dispatch stub.
 ///
-/// Body: writes the function type signature, e.g., `|i32, String| -> bool`.
+/// The TIR body is an empty unit block — a placeholder that exists
+/// only so the function entry is registered (and so call sites
+/// referring to it from templates / user code resolve). WIR build
+/// recognises [`FunctionKind::FnCanonicalDispatch`] and supplies the
+/// real body: a `call_ref` through the matching `CanonicalClosure_K`'s
+/// `inspect` vtable slot. See WEP: Inspect (Debug Output) > Closure
+/// Inspect via Runtime Dispatch.
 fn generate_fn_inspect_fn(
     type_arg_names: &[String],
-    param_types: &[TypeId],
+    arity: usize,
     return_type: TypeId,
-    _fn_type: TypeId,
     ref_fn_type: TypeId,
     fmt_type: TypeId,
-    string_type: TypeId,
-    tt: &mut TypeTable,
     span: Span,
 ) -> TirFunction {
-    let method_info = LocalMethodName::new(
-        "Fn".to_string(),
-        Some("Inspect".to_string()),
-        "inspect".to_string(),
+    generate_fn_canonical_dispatch_stub(
+        FnDispatchTrait::Inspect,
+        "Inspect",
+        "inspect",
+        type_arg_names,
+        arity,
+        return_type,
+        ref_fn_type,
+        fmt_type,
+        span,
     )
-    .with_struct_type_args(type_arg_names);
-    let qualified_name = method_info.to_mangled_name();
-
-    // Build the signature string at compile time: "|i32, String| -> bool"
-    let param_names: Vec<String> = param_types.iter().map(|t| tt.type_name(*t)).collect();
-    let ret_name = tt.type_name(return_type);
-    let sig = format!("|{}| -> {}", param_names.join(", "), ret_name);
-
-    let fmt = || local_expr(1, "f", fmt_type, span);
-    let body = TirBlock::new(vec![write_str_stmt(sig, fmt(), string_type, span)], span);
-
-    let mut func = make_synthetic_method(
-        qualified_name,
-        method_info,
-        inspect_params(ref_fn_type, fmt_type, span),
-        TypeTable::UNIT,
-        body,
-        vec![
-            param_local("self", ref_fn_type, false),
-            param_local("f", fmt_type, false),
-        ],
-    );
-    // The TIR body is a placeholder write-signature: WIR build replaces
-    // it with `call_ref (self.inspect)(self.env, f)` so dispatch reaches
-    // the per-functor wrapper installed in the canonical closure
-    // vtable. Block inlining/constant-folding on the TIR placeholder so
-    // the optimizer doesn't bake the signature string into call sites
-    // before the WIR-level override runs.
-    func.inline_hint = InlineHint::Never;
-    func
 }
 
 /// Twin of [`generate_fn_inspect_fn`] for `Fn<N, Ret>^InspectAlt`.
-///
-/// Same shape (placeholder write-signature body, inline-never), but
-/// bound under `InspectAlt::inspect_alt`. WIR build replaces the body
-/// with `call_ref (self.inspect_alt)(self.env, f)` so canonical
-/// closure values produce the per-literal TIR-unparsed source for
-/// `:#?` even after escaping their literal scope.
-#[allow(clippy::too_many_arguments)]
 fn generate_fn_inspect_alt_fn(
     type_arg_names: &[String],
-    param_types: &[TypeId],
+    arity: usize,
     return_type: TypeId,
-    _fn_type: TypeId,
     ref_fn_type: TypeId,
     fmt_type: TypeId,
-    string_type: TypeId,
-    tt: &mut TypeTable,
+    span: Span,
+) -> TirFunction {
+    generate_fn_canonical_dispatch_stub(
+        FnDispatchTrait::InspectAlt,
+        "InspectAlt",
+        "inspect_alt",
+        type_arg_names,
+        arity,
+        return_type,
+        ref_fn_type,
+        fmt_type,
+        span,
+    )
+}
+
+/// Shared body for [`generate_fn_inspect_fn`] /
+/// [`generate_fn_inspect_alt_fn`]. The two only differ in the trait
+/// label and the `FnDispatchTrait` carried in `FunctionKind`.
+#[allow(clippy::too_many_arguments)]
+fn generate_fn_canonical_dispatch_stub(
+    trait_kind: FnDispatchTrait,
+    trait_name: &str,
+    method_name: &str,
+    type_arg_names: &[String],
+    arity: usize,
+    return_type: TypeId,
+    ref_fn_type: TypeId,
+    fmt_type: TypeId,
     span: Span,
 ) -> TirFunction {
     let method_info = LocalMethodName::new(
         "Fn".to_string(),
-        Some("InspectAlt".to_string()),
-        "inspect_alt".to_string(),
+        Some(trait_name.to_string()),
+        method_name.to_string(),
     )
     .with_struct_type_args(type_arg_names);
     let qualified_name = method_info.to_mangled_name();
 
-    let param_names: Vec<String> = param_types.iter().map(|t| tt.type_name(*t)).collect();
-    let ret_name = tt.type_name(return_type);
-    let sig = format!("|{}| -> {}", param_names.join(", "), ret_name);
-
-    let fmt = || local_expr(1, "f", fmt_type, span);
-    let body = TirBlock::new(vec![write_str_stmt(sig, fmt(), string_type, span)], span);
+    // Empty unit body: WIR build supplies the real instructions.
+    let body = TirBlock::new(vec![], span);
 
     let mut func = make_synthetic_method(
         qualified_name,
@@ -1984,6 +1975,15 @@ fn generate_fn_inspect_alt_fn(
             param_local("f", fmt_type, false),
         ],
     );
+    func.kind = FunctionKind::FnCanonicalDispatch {
+        trait_kind,
+        arity,
+        return_type,
+    };
+    // The empty placeholder TIR body is overwritten by WIR build; tell
+    // the inliner not to expand the empty body into call sites before
+    // that happens (otherwise `:?` / `:#?` would silently produce
+    // nothing at higher optimisation levels).
     func.inline_hint = InlineHint::Never;
     func
 }
@@ -2317,24 +2317,19 @@ fn generate_inspect_alt_impls(module: &mut TirModule) {
             ..
         } = &resolved
         {
-            // Function: emit a stand-alone InspectAlt impl with the
-            // same placeholder body shape as Inspect (write
-            // signature). Crucially, do NOT delegate to
-            // `Fn^Inspect::inspect`: WIR build replaces both impl
-            // bodies with vtable indirect calls (`call_ref
-            // (self.inspect)` vs `call_ref (self.inspect_alt)`), and a
-            // delegate would let the optimizer collapse InspectAlt to
-            // Inspect before the WIR override runs, defeating the
-            // per-literal source dispatch.
+            // Function: emit a stand-alone InspectAlt stub. Crucially,
+            // do NOT use the `display_fallback` Inspect-delegate: WIR
+            // build supplies the real body — `call_ref
+            // (self.inspect_alt)` for InspectAlt, `call_ref
+            // (self.inspect)` for Inspect — and a delegate would let
+            // the optimizer collapse InspectAlt to Inspect before WIR
+            // build runs, defeating the per-literal source dispatch.
             generated.push(Rc::new(RefCell::new(generate_fn_inspect_alt_fn(
                 &type_arg_names,
-                params,
+                params.len(),
                 *return_type,
-                type_id,
                 ref_type,
                 fmt_type,
-                string_type,
-                &mut tt,
                 span,
             ))));
         } else {

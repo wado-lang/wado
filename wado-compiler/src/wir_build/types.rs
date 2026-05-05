@@ -1072,10 +1072,11 @@ fn register_canonical_closure_types(ctx: &mut WirContext<'_>) {
     // fn_struct_name)` so we can pick the right `CanonicalClosure_K`
     // schema (slim `{ env, func }` vs fat `{ env, func, inspect,
     // inspect_alt }`) up front based on whether `Fn<arity, ret>^Inspect
-    // / InspectAlt` survived DCE for that signature, and so we can map
-    // the mangled `Fn<...>` name back to the canonical struct type id
-    // for the WIR-level dispatch override pass.
-    let mut fn_sigs: Vec<(Vec<WirType>, Vec<WirType>, bool, String)> = Vec::new();
+    // / InspectAlt` survived DCE for that signature, and so we can
+    // map `(arity, return_type)` back to the canonical struct type
+    // id for the WIR-level dispatch body.
+    let mut fn_sigs: Vec<(Vec<WirType>, Vec<WirType>, bool, usize, crate::tir::TypeId)> =
+        Vec::new();
     let mut seen_keys: crate::hashmap::IndexSet<String> = crate::hashmap::IndexSet::default();
 
     {
@@ -1121,28 +1122,24 @@ fn register_canonical_closure_types(ctx: &mut WirContext<'_>) {
                 };
                 let key = WirContext::canonical_closure_key(&param_wirs, &result_wirs);
                 if seen_keys.insert(key) {
-                    let fn_struct_name = crate::name::mangle_generic_name(
-                        "Fn",
-                        &[
-                            params.len().to_string(),
-                            type_table.mangle_type_name(*return_type),
-                        ],
-                    );
-                    let is_inspectable = ctx.inspectable_fn_signatures.contains(&fn_struct_name);
-                    fn_sigs.push((param_wirs, result_wirs, is_inspectable, fn_struct_name));
+                    let arity = params.len();
+                    let is_inspectable =
+                        ctx.inspectable_fn_dispatch.contains(&(arity, *return_type));
+                    fn_sigs.push((param_wirs, result_wirs, is_inspectable, arity, *return_type));
                 }
             }
         }
     }
 
     // Register canonical closure types for each signature, then
-    // record the (Fn<arity,ret> mangled name → struct type id) mapping
-    // so the dispatch override pass can recover the right struct type.
-    for (param_wirs, result_wirs, is_inspectable, fn_struct_name) in fn_sigs {
+    // record the `(arity, return_type)` → struct type id mapping so
+    // the dispatch body in `translate_function_bodies` can pick the
+    // right struct without having to recover it from a mangled name.
+    for (param_wirs, result_wirs, is_inspectable, arity, return_type) in fn_sigs {
         let (_, struct_type_id) =
             ctx.get_or_create_canonical_closure_type(param_wirs, result_wirs, is_inspectable);
-        ctx.fn_struct_name_to_canonical
-            .insert(fn_struct_name, struct_type_id);
+        ctx.fn_dispatch_canonical
+            .insert((arity, return_type), struct_type_id);
     }
 }
 
