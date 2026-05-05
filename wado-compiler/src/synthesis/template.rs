@@ -13,6 +13,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::hashmap::IndexMap;
 use crate::name::{LocalMethodName, ModuleSource};
 use crate::tir::{
     CallArg, FunctionRef, MonomorphInfo, ResolvedType, TemplateFormatSpec, TirBlock, TirExpr,
@@ -21,13 +22,28 @@ use crate::tir::{
 };
 use crate::token::Span;
 
+/// Mapping from a base trait-method key (`BaseStruct^Trait::method`) to the
+/// `ModuleSource` of the impl that defines it. Built once across all modules
+/// so template expansion can locate user-written impls regardless of which
+/// module they live in (e.g. `impl Display for String` in `core:prelude/format`,
+/// not the module that declares `String`).
+pub type TraitMethodLocations = IndexMap<String, ModuleSource>;
+
 /// Expand all `TemplateString` nodes in a module.
 ///
 /// Runs as part of the pre-mono synthesis phase. Template expansion emits
 /// trait method calls (`Display::fmt`, `Inspect::inspect`) that the monomorphizer
 /// subsequently resolves to concrete implementations.
-pub fn expand_templates(module: &mut TirModule, tt: &Rc<RefCell<TypeTable>>) {
-    let module_src = module.module_source.clone();
+pub fn expand_templates(
+    module: &mut TirModule,
+    tt: &Rc<RefCell<TypeTable>>,
+    trait_method_locations: &TraitMethodLocations,
+) {
+    let ctx = TemplateCtx {
+        tt,
+        module_src: module.module_source.clone(),
+        trait_method_locations,
+    };
     for func_rc in &module.functions {
         let mut func = func_rc.borrow_mut();
         let local_count = func.local_count;
@@ -36,7 +52,7 @@ pub fn expand_templates(module: &mut TirModule, tt: &Rc<RefCell<TypeTable>>) {
                 next_index: local_count,
                 new_locals: Vec::new(),
             };
-            expand_block(body, tt, &mut alloc, &module_src);
+            expand_block(body, &mut alloc, &ctx);
             func.local_count = alloc.next_index;
             func.locals.extend(alloc.new_locals);
         }
@@ -55,12 +71,30 @@ pub fn expand_templates(module: &mut TirModule, tt: &Rc<RefCell<TypeTable>>) {
                     next_index: local_count,
                     new_locals: Vec::new(),
                 };
-                expand_block(body, tt, &mut alloc, &module_src);
+                expand_block(body, &mut alloc, &ctx);
                 method.local_count = alloc.next_index;
                 method.locals.extend(alloc.new_locals);
             }
         }
     }
+}
+
+/// Build the key used in [`TraitMethodLocations`] from a method's parsed
+/// name. Uses base names (no type args) so that monomorphized callers and
+/// the generic impl share a single entry.
+pub fn trait_method_location_key(info: &LocalMethodName) -> Option<String> {
+    let trait_name = info.base_trait_name.as_deref().or(info.trait_name.as_deref())?;
+    Some(format!(
+        "{}^{}::{}",
+        info.base_struct_name, trait_name, info.method_name
+    ))
+}
+
+/// Read-only context shared across all template-expansion helpers.
+struct TemplateCtx<'a> {
+    tt: &'a Rc<RefCell<TypeTable>>,
+    module_src: ModuleSource,
+    trait_method_locations: &'a TraitMethodLocations,
 }
 
 struct FuncLocalAlloc {
@@ -77,44 +111,34 @@ impl FuncLocalAlloc {
     }
 }
 
-fn expand_block(
-    block: &mut TirBlock,
-    tt: &Rc<RefCell<TypeTable>>,
-    alloc: &mut FuncLocalAlloc,
-    module_src: &ModuleSource,
-) {
+fn expand_block(block: &mut TirBlock, alloc: &mut FuncLocalAlloc, ctx: &TemplateCtx) {
     for stmt in &mut block.stmts {
-        expand_stmt(stmt, tt, alloc, module_src);
+        expand_stmt(stmt, alloc, ctx);
     }
 }
 
-fn expand_stmt(
-    stmt: &mut TirStmt,
-    tt: &Rc<RefCell<TypeTable>>,
-    alloc: &mut FuncLocalAlloc,
-    module_src: &ModuleSource,
-) {
+fn expand_stmt(stmt: &mut TirStmt, alloc: &mut FuncLocalAlloc, ctx: &TemplateCtx) {
     match &mut stmt.kind {
-        TirStmtKind::Expr(e) => expand_expr(e, tt, alloc, module_src),
+        TirStmtKind::Expr(e) => expand_expr(e, alloc, ctx),
         TirStmtKind::Let { value, .. } => {
-            expand_expr(value, tt, alloc, module_src);
+            expand_expr(value, alloc, ctx);
         }
         TirStmtKind::Return { value: Some(e) } | TirStmtKind::Break { value: Some(e), .. } => {
-            expand_expr(e, tt, alloc, module_src);
+            expand_expr(e, alloc, ctx);
         }
         TirStmtKind::If {
             condition,
             then_block,
             else_block,
         } => {
-            expand_expr(condition, tt, alloc, module_src);
-            expand_block(then_block, tt, alloc, module_src);
+            expand_expr(condition, alloc, ctx);
+            expand_block(then_block, alloc, ctx);
             if let Some(eb) = else_block {
-                expand_block(eb, tt, alloc, module_src);
+                expand_block(eb, alloc, ctx);
             }
         }
         TirStmtKind::Loop { body } => {
-            expand_block(body, tt, alloc, module_src);
+            expand_block(body, alloc, ctx);
         }
         TirStmtKind::IfLet {
             scrutinee,
@@ -122,44 +146,39 @@ fn expand_stmt(
             else_block,
             ..
         } => {
-            expand_expr(scrutinee, tt, alloc, module_src);
-            expand_block(then_block, tt, alloc, module_src);
+            expand_expr(scrutinee, alloc, ctx);
+            expand_block(then_block, alloc, ctx);
             if let Some(eb) = else_block {
-                expand_block(eb, tt, alloc, module_src);
+                expand_block(eb, alloc, ctx);
             }
         }
         TirStmtKind::LetDestructure { value, .. } | TirStmtKind::TaskReturn { value, .. } => {
-            expand_expr(value, tt, alloc, module_src);
+            expand_expr(value, alloc, ctx);
         }
         TirStmtKind::LabeledBlock { block, .. } => {
-            expand_block(block, tt, alloc, module_src);
+            expand_block(block, alloc, ctx);
         }
         TirStmtKind::VariadicForOf { iterable, body, .. } => {
-            expand_expr(iterable, tt, alloc, module_src);
-            expand_block(body, tt, alloc, module_src);
+            expand_expr(iterable, alloc, ctx);
+            expand_block(body, alloc, ctx);
         }
         _ => {}
     }
 }
 
-fn expand_expr(
-    expr: &mut TirExpr,
-    tt: &Rc<RefCell<TypeTable>>,
-    alloc: &mut FuncLocalAlloc,
-    module_src: &ModuleSource,
-) {
+fn expand_expr(expr: &mut TirExpr, alloc: &mut FuncLocalAlloc, ctx: &TemplateCtx) {
     // First, recurse into sub-expressions
     match &mut expr.kind {
         TirExprKind::TemplateString { parts } => {
             // Expand sub-expressions within template parts first
             for part in parts.iter_mut() {
                 if let TirTemplatePart::Interpolation { expr: inner, .. } = part {
-                    expand_expr(inner, tt, alloc, module_src);
+                    expand_expr(inner, alloc, ctx);
                 }
             }
         }
         TirExprKind::Block(b) | TirExprKind::LabeledBlock { block: b, .. } => {
-            expand_block(b, tt, alloc, module_src);
+            expand_block(b, alloc, ctx);
             return;
         }
         TirExprKind::If {
@@ -167,39 +186,39 @@ fn expand_expr(
             then_branch,
             else_branch,
         } => {
-            expand_expr(condition, tt, alloc, module_src);
-            expand_block(then_branch, tt, alloc, module_src);
+            expand_expr(condition, alloc, ctx);
+            expand_block(then_branch, alloc, ctx);
             if let Some(eb) = else_branch {
-                expand_block(eb, tt, alloc, module_src);
+                expand_block(eb, alloc, ctx);
             }
             return;
         }
         TirExprKind::Match { expr: s, arms } => {
-            expand_expr(s, tt, alloc, module_src);
+            expand_expr(s, alloc, ctx);
             for arm in arms {
                 if let Some(guard) = &mut arm.guard {
-                    expand_expr(guard, tt, alloc, module_src);
+                    expand_expr(guard, alloc, ctx);
                 }
-                expand_expr(&mut arm.body, tt, alloc, module_src);
+                expand_expr(&mut arm.body, alloc, ctx);
             }
             return;
         }
         TirExprKind::Call { args, .. } => {
             for a in args {
-                expand_expr(&mut a.expr, tt, alloc, module_src);
+                expand_expr(&mut a.expr, alloc, ctx);
             }
             return;
         }
         TirExprKind::MethodCall { receiver, args, .. } => {
-            expand_expr(receiver, tt, alloc, module_src);
+            expand_expr(receiver, alloc, ctx);
             for a in args {
-                expand_expr(&mut a.expr, tt, alloc, module_src);
+                expand_expr(&mut a.expr, alloc, ctx);
             }
             return;
         }
         TirExprKind::Binary { left, right, .. } => {
-            expand_expr(left, tt, alloc, module_src);
-            expand_expr(right, tt, alloc, module_src);
+            expand_expr(left, alloc, ctx);
+            expand_expr(right, alloc, ctx);
             return;
         }
         TirExprKind::Unary { expr: inner, .. }
@@ -208,63 +227,63 @@ fn expand_expr(
         | TirExprKind::VariantTag { expr: inner }
         | TirExprKind::VariantTest { expr: inner, .. }
         | TirExprKind::VariantPayload { expr: inner, .. } => {
-            expand_expr(inner, tt, alloc, module_src);
+            expand_expr(inner, alloc, ctx);
             return;
         }
         TirExprKind::Assign { target, value } => {
-            expand_expr(target, tt, alloc, module_src);
-            expand_expr(value, tt, alloc, module_src);
+            expand_expr(target, alloc, ctx);
+            expand_expr(value, alloc, ctx);
             return;
         }
         TirExprKind::Index {
             expr: e,
             index: idx,
         } => {
-            expand_expr(e, tt, alloc, module_src);
-            expand_expr(idx, tt, alloc, module_src);
+            expand_expr(e, alloc, ctx);
+            expand_expr(idx, alloc, ctx);
             return;
         }
         TirExprKind::StructLiteral { fields, .. } => {
             for f in fields {
-                expand_expr(&mut f.value, tt, alloc, module_src);
+                expand_expr(&mut f.value, alloc, ctx);
             }
             return;
         }
         TirExprKind::TupleLiteral { elements } => {
             for e in elements {
-                expand_expr(e, tt, alloc, module_src);
+                expand_expr(e, alloc, ctx);
             }
             return;
         }
         TirExprKind::Closure { body, .. } => {
-            expand_expr(body, tt, alloc, module_src);
+            expand_expr(body, alloc, ctx);
             return;
         }
         TirExprKind::IndirectCall { callee, args } => {
-            expand_expr(callee, tt, alloc, module_src);
+            expand_expr(callee, alloc, ctx);
             for a in args {
-                expand_expr(a, tt, alloc, module_src);
+                expand_expr(a, alloc, ctx);
             }
             return;
         }
         TirExprKind::CmRawCall { args, .. } => {
             for a in args {
-                expand_expr(a, tt, alloc, module_src);
+                expand_expr(a, alloc, ctx);
             }
             return;
         }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {
-                expand_expr(p, tt, alloc, module_src);
+                expand_expr(p, alloc, ctx);
             }
             return;
         }
         TirExprKind::GlobalVarSet { value, .. } => {
-            expand_expr(value, tt, alloc, module_src);
+            expand_expr(value, alloc, ctx);
             return;
         }
         TirExprKind::ClosureToCanonical { functor, .. } => {
-            expand_expr(functor, tt, alloc, module_src);
+            expand_expr(functor, alloc, ctx);
             return;
         }
         TirExprKind::Switch {
@@ -273,22 +292,22 @@ fn expand_expr(
             default,
             ..
         } => {
-            expand_expr(scrutinee, tt, alloc, module_src);
+            expand_expr(scrutinee, alloc, ctx);
             for arm in arms {
-                expand_block(arm, tt, alloc, module_src);
+                expand_block(arm, alloc, ctx);
             }
-            expand_block(default, tt, alloc, module_src);
+            expand_block(default, alloc, ctx);
             return;
         }
         TirExprKind::WithHandler { bindings, body, .. } => {
             for binding in bindings {
-                expand_expr(&mut binding.handler, tt, alloc, module_src);
+                expand_expr(&mut binding.handler, alloc, ctx);
             }
-            expand_block(body, tt, alloc, module_src);
+            expand_block(body, alloc, ctx);
             return;
         }
         TirExprKind::Resume { value } => {
-            expand_expr(value, tt, alloc, module_src);
+            expand_expr(value, alloc, ctx);
             return;
         }
         _ => return,
@@ -306,7 +325,7 @@ fn expand_expr(
         unreachable!();
     };
 
-    let expanded = build_template_block(parts, string_type, span, tt, alloc, module_src);
+    let expanded = build_template_block(parts, string_type, span, alloc, ctx);
     *expr = expanded;
 }
 
@@ -315,10 +334,10 @@ fn build_template_block(
     parts: Vec<TirTemplatePart>,
     string_type: TypeId,
     span: Span,
-    tt: &Rc<RefCell<TypeTable>>,
     alloc: &mut FuncLocalAlloc,
-    module_src: &ModuleSource,
+    ctx: &TemplateCtx,
 ) -> TirExpr {
+    let tt = ctx.tt;
     let label = "__tmpl".to_string();
 
     // Estimate capacity: sum of literal lengths + 16 per interpolation
@@ -561,9 +580,8 @@ fn build_template_block(
                         fmt_mut_ref,
                         it_name,
                         im_name,
-                        tt,
                         span,
-                        module_src,
+                        ctx,
                     );
                     stmts.extend(call_stmts);
                 } else {
@@ -574,9 +592,8 @@ fn build_template_block(
                         fmt_mut_ref,
                         trait_name,
                         method_name,
-                        tt,
                         span,
-                        module_src,
+                        ctx,
                     );
                     stmts.extend(call_stmts);
                 }
@@ -811,18 +828,17 @@ fn trait_fmt_call(
     fmt: TirExpr,
     trait_name: &str,
     method_name: &str,
-    tt: &Rc<RefCell<TypeTable>>,
     span: Span,
-    module_src: &ModuleSource,
+    ctx: &TemplateCtx,
 ) -> Vec<TirStmt> {
     let MethodCallInfo {
         local_name,
         monomorph_info,
         impl_module,
-    } = method_call_info_for_type(type_id, trait_name, method_name, tt, module_src);
+    } = method_call_info_for_type(type_id, trait_name, method_name, ctx);
     let mangled = local_name.to_mangled_name();
 
-    let ref_type = tt.borrow_mut().make_ref(type_id);
+    let ref_type = ctx.tt.borrow_mut().make_ref(type_id);
     let receiver = TirExpr::new(
         TirExprKind::Unary {
             op: TirUnaryOp::Ref,
@@ -867,9 +883,9 @@ fn method_call_info_for_type(
     type_id: TypeId,
     trait_name: &str,
     method_name: &str,
-    tt: &Rc<RefCell<TypeTable>>,
-    module_src: &ModuleSource,
+    ctx: &TemplateCtx,
 ) -> MethodCallInfo {
+    let tt = ctx.tt;
     let resolved = tt.borrow().get(type_id).clone();
     match resolved {
         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
@@ -902,11 +918,15 @@ fn method_call_info_for_type(
                 impl_module: ModuleSource::format(),
             }
         }
-        _ => MethodCallInfo {
-            local_name: method_name_for_type(type_id, trait_name, method_name, tt),
-            monomorph_info: None,
-            impl_module: trait_impl_module(type_id, trait_name, tt, module_src),
-        },
+        _ => {
+            let local_name = method_name_for_type(type_id, trait_name, method_name, tt);
+            let impl_module = trait_impl_module(&local_name, type_id, ctx);
+            MethodCallInfo {
+                local_name,
+                monomorph_info: None,
+                impl_module,
+            }
+        }
     }
 }
 
@@ -969,27 +989,34 @@ fn method_name_for_type(
 }
 
 fn trait_impl_module(
+    local_name: &LocalMethodName,
     type_id: TypeId,
-    _trait_name: &str,
-    tt: &Rc<RefCell<TypeTable>>,
-    module_src: &ModuleSource,
+    ctx: &TemplateCtx,
 ) -> ModuleSource {
-    match tt.borrow().get(type_id).clone() {
+    // Preferred path: consult the project-wide trait method index built in
+    // `synthesize`. This finds the impl regardless of which module the user
+    // wrote it in (e.g. `impl Display for String` lives in
+    // `core:prelude/format`, not `core:prelude/string`).
+    if let Some(key) = trait_method_location_key(local_name)
+        && let Some(loc) = ctx.trait_method_locations.get(&key)
+    {
+        return loc.clone();
+    }
+    // Fallback: function types are anonymous and have no defining module,
+    // so their `Fn<N, Ret>^Inspect` / `^InspectAlt` impls are auto-derived
+    // per-module by `synthesize_traits` (no cross-module dedup, since
+    // `collect_existing_trait_methods` is per-module). After `link()` every
+    // function's `module_source` is rewritten to its hosting module, so the
+    // impl callable from this template lives under the current module's
+    // namespace.
+    match ctx.tt.borrow().get(type_id).clone() {
         ResolvedType::Primitive(_) => ModuleSource::primitive(),
-        ResolvedType::Struct { name, .. } if name == "String" => ModuleSource::format(),
         ResolvedType::Struct { module_source, .. }
         | ResolvedType::Enum { module_source, .. }
         | ResolvedType::Variant { module_source, .. }
         | ResolvedType::Newtype { module_source, .. }
         | ResolvedType::Flags { module_source, .. } => module_source,
-        // Function types are anonymous: their `Fn<N, Ret>^Inspect` /
-        // `Fn<N, Ret>^InspectAlt` impls are auto-derived per-module by
-        // `synthesize_traits` (no cross-module dedup, since
-        // `collect_existing_trait_methods` is per-module). After `link()`
-        // every function's `module_source` is rewritten to its hosting
-        // module, so the impl callable from this template lives under
-        // the current module's namespace.
-        ResolvedType::Function { .. } => module_src.clone(),
+        ResolvedType::Function { .. } => ctx.module_src.clone(),
         _ => ModuleSource::primitive(),
     }
 }
