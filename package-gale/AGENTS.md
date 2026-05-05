@@ -213,4 +213,3 @@ pointer.
 - Tokens from inside expanded sub-rules cannot be used for prediction at the decision point level
 - To use expansion correctly, the prediction must map expanded tokens back to the decision point's lookahead depth (essentially an ATN simulator)
 - `sll_dedup_by_alt` is too aggressive for expanded configs — alternatives sharing sub-rules get merged
-
