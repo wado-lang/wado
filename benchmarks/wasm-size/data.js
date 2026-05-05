@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777963831922,
+  "lastUpdate": 1778015162348,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -19549,6 +19549,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/eeaf83e33d97df14cd2ae8141e88a07ce7b00378"
         },
         "date": 1777963831540,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1775,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8776,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18520,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 503688,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d04a4162f33cf5cb65abd2d3a0f908b16755aff9",
+          "message": "Merge pull request #1003 from wado-lang/claude/integrate-inspect-templates-UYR8R\n\nClosure inspect via Wasm GC subtype dispatch",
+          "timestamp": "2026-05-06T06:00:53+09:00",
+          "tree_id": "dfa4a1476dd662f9a5e5ce0d41df1d88130ded84",
+          "url": "https://github.com/wado-lang/wado/commit/d04a4162f33cf5cb65abd2d3a0f908b16755aff9"
+        },
+        "date": 1778015162203,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
