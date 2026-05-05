@@ -159,6 +159,11 @@ struct TestSpec {
     #[serde(default)]
     only_opt: Vec<String>,
 
+    /// Override the optimizer's inline threshold for this test. Useful for
+    /// pinning the exact threshold that triggered a regression.
+    #[serde(default)]
+    inline_threshold: Option<usize>,
+
     /// Stdin data to pipe into the program.
     /// If set, the program's stdin will receive this UTF-8 string.
     #[serde(default)]
@@ -719,7 +724,7 @@ fn run_normal_test(
         target_world,
         skip_validation: false,
         retain_wir: has_wir,
-        inline_threshold: None,
+        inline_threshold: spec.inline_threshold,
         opt_iterations: None,
         allocator,
         ..Default::default()

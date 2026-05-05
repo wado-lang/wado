@@ -1,0 +1,35 @@
+// Optimizer regression: inlining `core:json/JsonDeserializer::read_json_string`
+// with inline threshold >= 33 produces a wasm `null reference` trap during
+// the slow-path (escape handling) of string parsing.
+//
+// Discovered while sweeping inline thresholds for the json-catalog benchmark.
+// The threshold that controls this is between 32 (works) and 33 (traps), and
+// the bug requires opt level >= O1 (it works at O0). The trap site is inside
+// the inlined slow path of `read_json_string` — likely some downstream pass
+// (value_copy_elide / field_forward / ref_elim / sroa / nullable_ref) elides
+// a null check after inlining grows the function body.
+//
+// Minimal reproducer: deserialize any JSON string that contains a backslash
+// escape (any of `\n`, `\t`, `A`, ...). Strings without escapes parse
+// via the fast path and don't trigger the bug.
+//
+// TODO: Currently `"trapped": true` documents the bug. Once the optimizer
+// pass interaction is fixed, change the spec to `"stdout": ""` (and remove
+// the `unreachable()` so a regression failure surfaces with a clear diff).
+
+use { from_string } from "core:json";
+
+export fn run() {
+    let r = from_string::<String>("\"a\\nb\"");
+    let _ = match r {
+        Ok(_) => 0,
+        Err(_) => unreachable(),
+    };
+}
+
+__DATA__
+{
+    "trapped": true,
+    "inline_threshold": 33,
+    "only_opt": ["O2"]
+}
