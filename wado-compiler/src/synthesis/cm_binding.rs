@@ -766,8 +766,7 @@ mod tests {
                     TirExprKind::Binary { left, right, .. } => {
                         n += visit_expr(left, target) + visit_expr(right, target);
                     }
-                    TirExprKind::Call { args, .. }
-                    | TirExprKind::MethodCall { args, .. } => {
+                    TirExprKind::Call { args, .. } | TirExprKind::MethodCall { args, .. } => {
                         for a in args {
                             n += visit_expr(&a.expr, target);
                         }
@@ -798,8 +797,7 @@ mod tests {
                         }
                         n
                     }
-                    TirStmtKind::Loop { body }
-                    | TirStmtKind::LabeledBlock { block: body, .. } => {
+                    TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
                         visit_block(body.stmts.as_slice(), target)
                     }
                     _ => 0,
