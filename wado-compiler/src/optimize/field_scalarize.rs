@@ -29,8 +29,8 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::ModuleSource;
 use crate::tir::{
-    FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirStmt,
-    TirStmtKind, TirUnaryOp, TypeId, TypeTable,
+    FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirPattern,
+    TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
 
 const MIN_ACCESS_COUNT: usize = 4;
@@ -860,6 +860,14 @@ fn scalarize_loop(
     let mut access_counts: IndexMap<(u32, u32), FieldAccessInfo> = IndexMap::default();
     count_field_accesses_in_block(loop_body, &mut access_counts, type_table);
 
+    // Step 1b: Collect locals introduced inside the loop body. These cannot
+    // be safely scalarized at this loop level — their owning storage (the
+    // GC struct ref) is unbound at the loop's pre-header where the
+    // hoisted `let _hfs_field = local.field;` would run, producing a
+    // null-reference trap. Locals declared in the parent scope (i.e., not
+    // listed here) are fine to scalarize.
+    let inside_loop_locals = collect_locals_introduced_in_block(loop_body);
+
     // Step 2: Select candidates - fields accessed frequently enough,
     // where the field is modified only by direct assignment (not by the whole local being reassigned)
     let mut candidates: Vec<ScalarizeCandidate> = Vec::new();
@@ -883,6 +891,13 @@ fn scalarize_loop(
         // The local must not be aliased (e.g., `other = pos` creates an alias,
         // and field modifications through the alias would bypass the scalar local)
         if info.aliased {
+            continue;
+        }
+        // The local must be bound in the parent scope (visible at the loop's
+        // pre-header). A local introduced inside the loop body is unbound
+        // before its `Let`, and our hoisted `let _hfs = local.field;`
+        // would null-deref at runtime.
+        if inside_loop_locals.contains(&local_idx) {
             continue;
         }
         // The type must be a GC struct (not a primitive)
@@ -1085,6 +1100,88 @@ fn count_field_accesses_in_block(
     for stmt in &block.stmts {
         count_field_accesses_in_stmt(stmt, counts, type_table);
     }
+}
+
+/// Collects every local index introduced (by `Let`, `LetDestructure`, match-
+/// arm patterns, etc.) anywhere inside `block`, walking through nested
+/// arms / blocks but NOT through nested `Loop` bodies (those are processed
+/// independently by their own `scalarize_loop` call). Used to filter out
+/// locals whose owning storage is unbound at the loop's pre-header — those
+/// locals must not be scalarized at this loop level, otherwise the hoisted
+/// `let _hfs_field = local.field;` null-derefs at runtime.
+fn collect_locals_introduced_in_block(block: &TirBlock) -> IndexSet<u32> {
+    struct Collector {
+        out: IndexSet<u32>,
+    }
+
+    impl Collector {
+        fn visit_pattern(&mut self, pattern: &TirPattern) {
+            match pattern {
+                TirPattern::Wildcard
+                | TirPattern::Literal(_)
+                | TirPattern::Enum { .. }
+                | TirPattern::ConstantValue { .. }
+                | TirPattern::Range { .. } => {}
+                TirPattern::Binding { local_index, .. } => {
+                    self.out.insert(*local_index);
+                }
+                TirPattern::Tuple(patterns, _) | TirPattern::Or(patterns) => {
+                    for p in patterns {
+                        self.visit_pattern(p);
+                    }
+                }
+                TirPattern::Variant { bindings, .. } => {
+                    for p in bindings {
+                        self.visit_pattern(p);
+                    }
+                }
+                TirPattern::Struct { fields, .. } => {
+                    for f in fields {
+                        self.visit_pattern(&f.pattern);
+                    }
+                }
+            }
+        }
+    }
+
+    impl crate::tir_visitor::TirRefVisitor for Collector {
+        fn visit_stmt(&mut self, stmt: &TirStmt) {
+            match &stmt.kind {
+                TirStmtKind::Let { local_index, .. } => {
+                    self.out.insert(*local_index);
+                }
+                TirStmtKind::LetDestructure { pattern, .. } => {
+                    self.visit_pattern(pattern);
+                }
+                TirStmtKind::IfLet { pattern, .. } => {
+                    self.visit_pattern(pattern);
+                }
+                TirStmtKind::Loop { .. } => {
+                    // Skip nested loops: their locals are processed by their
+                    // own scalarize_loop pass and are not visible at *this*
+                    // loop's pre-header anyway.
+                    return;
+                }
+                _ => {}
+            }
+            self.walk_stmt(stmt);
+        }
+
+        fn visit_expr(&mut self, expr: &TirExpr) {
+            if let TirExprKind::Match { arms, .. } = &expr.kind {
+                for arm in arms {
+                    self.visit_pattern(&arm.pattern);
+                }
+            }
+            self.walk_expr(expr);
+        }
+    }
+
+    let mut c = Collector {
+        out: IndexSet::default(),
+    };
+    crate::tir_visitor::TirRefVisitor::visit_block(&mut c, block);
+    c.out
 }
 
 fn count_field_accesses_in_stmt(

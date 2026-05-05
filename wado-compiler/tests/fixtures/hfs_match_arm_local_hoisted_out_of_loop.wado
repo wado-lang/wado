@@ -1,7 +1,7 @@
-// HFS (Hot Field Scalarize) bug: the pass hoists field accesses of a local
-// variable that is only defined inside a deeply nested arm of the loop body
-// (here, a `match` expression's arm). At runtime the hoisted reads execute
-// before the local is bound, producing `wasm trap: null reference`.
+// Regression test: HFS (Hot Field Scalarize) used to hoist field accesses of
+// a local variable that is only defined inside a deeply nested arm of the
+// loop body (here, a `match` expression's arm). The hoisted reads ran
+// before the local was bound, producing `wasm trap: null reference`.
 //
 // Background: discovered while investigating a `null reference` trap inside
 // `core:json/JsonDeserializer::read_json_string` with the optimizer's
@@ -31,12 +31,11 @@
 // Triggers at all -Ox levels with optimization (O1+); -O0 is fine because
 // HFS does not run there.
 //
-// `#![TODO]` marks this as a known compiler failure. Once HFS gains a
-// scope-aware check (e.g. don't scalarize fields of a local whose Let
-// binding is not visible at the loop's pre-header), remove the attribute
-// and the test framework will warn that the file should be promoted to a
-// normal regression test.
-#![TODO]
+// Fix: `field_scalarize::scalarize_loop` now collects all locals introduced
+// inside the loop body (including those bound only in nested arms or
+// labeled blocks) and excludes them from scalarization candidates. Locals
+// declared in the parent scope (visible at the loop's pre-header) are
+// still scalarized as before.
 
 struct S {
     a: i32,
@@ -67,6 +66,5 @@ export fn run() {
 
 __DATA__
 {
-    "stdout": "",
-    "only_opt": ["O2"]
+    "stdout": ""
 }
