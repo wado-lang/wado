@@ -47,8 +47,7 @@ pub fn analyze_project(project: &mut FlatPackage) -> IndexSet<FunctionId> {
     // per-functor `__Closure_N^Inspect[Alt]` impls from
     // `ClosureToCanonical`, then compute its reachable set. This
     // identifies which functions can actually run.
-    let (call_graph_v1, _) =
-        build_analysis_graph_with(project, &InspectableSignatures::default());
+    let (call_graph_v1, _) = build_analysis_graph_with(project, &InspectableSignatures::default());
     let reachable_v1 = compute_reachable_from_entries(project, &call_graph_v1);
 
     // Phase 1b: derive the inspectable `(arity, ret)` set from the
