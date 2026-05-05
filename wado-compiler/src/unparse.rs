@@ -3192,7 +3192,7 @@ use crate::lexer::is_valid_ident;
 use crate::tir::{
     TirBinaryOp, TirBlock, TirEnum, TirExpr, TirExprKind, TirFlags, TirFunction, TirGlobal,
     TirLiteralPattern, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct,
-    TirUnaryOp, TypeTable,
+    TirUnaryOp, TypeId, TypeTable,
 };
 
 /// Unparses TIR back to pseudo-Wado source code.
@@ -3202,6 +3202,11 @@ pub struct TirUnparser<'a> {
     type_table: &'a TypeTable,
     output: String,
     indent_level: usize,
+    /// When true, suppress internal debug annotations (e.g.,
+    /// `@capture[0]:n` becomes `n`). Used for closure source-form
+    /// rendering exposed to user-facing inspect output. Default
+    /// `false` keeps the debug-friendly form for TIR dumps.
+    source_form: bool,
 }
 
 impl<'a> TirUnparser<'a> {
@@ -3210,7 +3215,15 @@ impl<'a> TirUnparser<'a> {
             type_table,
             output: String::new(),
             indent_level: 0,
+            source_form: false,
         }
+    }
+
+    /// Enable source-form rendering: suppresses internal annotations
+    /// like `@capture[i]:` so the output reflects user-written names.
+    fn source_form(mut self) -> Self {
+        self.source_form = true;
+        self
     }
 
     /// Quote an identifier if it contains characters that make it invalid Wado syntax.
@@ -3817,8 +3830,15 @@ impl<'a> TirUnparser<'a> {
                 self.unparse_expr(value);
             }
             TirExprKind::Capture { name, index } => {
-                // Display as captured variable with index for debugging
-                self.output.push_str(&format!("@capture[{index}]:{name}"));
+                if self.source_form {
+                    // Source-form: just the original name. The presence of
+                    // a captures[...] header (rendered separately) already
+                    // signals that the closure depends on captured locals.
+                    self.output.push_str(name);
+                } else {
+                    // Debug-form: include capture index for TIR dumps.
+                    self.output.push_str(&format!("@capture[{index}]:{name}"));
+                }
             }
             TirExprKind::Binary { left, op, right } => {
                 self.output.push('(');
@@ -3999,18 +4019,7 @@ impl<'a> TirUnparser<'a> {
                 captures,
                 ..
             } => {
-                self.delimited("|", "|", params, |s, (name, type_id)| {
-                    s.output.push_str(name);
-                    s.output.push_str(": ");
-                    let ty = s.type_table.type_name(*type_id);
-                    s.output.push_str(&ty);
-                });
-                if !captures.is_empty() {
-                    self.output.push_str(" captures");
-                    self.delimited("[", "]", captures, |s, cap| s.output.push_str(&cap.name));
-                }
-                self.output.push(' ');
-                self.unparse_expr(body);
+                self.unparse_closure_form(params, captures, body);
             }
             TirExprKind::IndirectCall { callee, args } => {
                 self.unparse_expr(callee);
@@ -4131,6 +4140,30 @@ impl<'a> TirUnparser<'a> {
             self.output.push_str("    ");
         }
     }
+
+    /// Emit the closure literal form `|name: Type, ...| body` (with an
+    /// optional ` captures[...]` clause) into the unparser's output.
+    /// Shared by the `TirExprKind::Closure` arm and by
+    /// [`unparse_tir_closure_source`].
+    fn unparse_closure_form(
+        &mut self,
+        params: &[(String, TypeId)],
+        captures: &[crate::tir::TirCapture],
+        body: &TirExpr,
+    ) {
+        self.delimited("|", "|", params, |s, (name, type_id)| {
+            s.output.push_str(name);
+            s.output.push_str(": ");
+            let ty = s.type_table.type_name(*type_id);
+            s.output.push_str(&ty);
+        });
+        if !captures.is_empty() {
+            self.output.push_str(" captures");
+            self.delimited("[", "]", captures, |s, cap| s.output.push_str(&cap.name));
+        }
+        self.output.push(' ');
+        self.unparse_expr(body);
+    }
 }
 
 fn emit_tir_literal_pattern(lit: &TirLiteralPattern, output: &mut String) {
@@ -4197,6 +4230,77 @@ fn tir_unary_op_str(op: TirUnaryOp) -> &'static str {
         TirUnaryOp::MutRef => "&mut ",
         TirUnaryOp::Deref => "*",
     }
+}
+
+/// Unparse a TIR closure as `|name: Type, ...| body` (or `|name: Type, ...|
+/// captures[...] body` when the closure captures locals) source text.
+///
+/// Used by `lower::closure` to bake the per-literal source string into
+/// `__Closure_N^InspectAlt::inspect_alt` without requiring every TIR
+/// `Closure` node to carry an unparsed-AST string.
+///
+/// The `captures[name1, name2, ...]` clause has no surface-syntax
+/// counterpart in Wado (closures capture implicitly), but is shown in
+/// the `:#?` debug output by design: it makes captured-environment
+/// dependencies visible at inspect time, which is the whole point of
+/// pretty-printing a closure in the first place. Non-capturing closures
+/// produce output that round-trips through the parser; capturing
+/// closures intentionally do not.
+pub fn unparse_tir_closure_source(
+    params: &[(String, TypeId)],
+    captures: &[crate::tir::TirCapture],
+    body: &TirExpr,
+    type_table: &TypeTable,
+) -> String {
+    // Synthetic closures generated by `FuncRefToClosureRewriter` for a bare
+    // function reference `&foo` are zero-capture wrappers whose body is
+    // exactly `foo(p_0, p_1, ...)`. Render those as `&foo` instead of the
+    // forwarder body so debug output reflects the user-written expression
+    // rather than the lowering-internal `__fn_ref_p<i>` scaffolding.
+    if let Some(rendered) = render_func_ref_closure(params, captures, body) {
+        return rendered;
+    }
+    let mut unparser = TirUnparser::new(type_table).source_form();
+    unparser.unparse_closure_form(params, captures, body);
+    unparser.output
+}
+
+/// If the closure was generated by `FuncRefToClosureRewriter` for a
+/// bare `&fn_name` expression, return its source-form rendering
+/// (`&fn_name`); otherwise return `None`. The rewriter stamps each
+/// synthetic parameter with the well-known `__fn_ref_p<i>` name, so
+/// the parameter-name pattern reliably distinguishes a synthetic
+/// forwarder from a user-written closure that happens to forward all
+/// of its parameters to a single function (`|x: i32| double(x)` is
+/// shape-identical but its parameter is named `x`, not `__fn_ref_p0`).
+fn render_func_ref_closure(
+    params: &[(String, TypeId)],
+    captures: &[crate::tir::TirCapture],
+    body: &TirExpr,
+) -> Option<String> {
+    if !captures.is_empty() {
+        return None;
+    }
+    for (i, (name, _)) in params.iter().enumerate() {
+        if name != &format!("__fn_ref_p{i}") {
+            return None;
+        }
+    }
+    let TirExprKind::Call { func, args, .. } = &body.kind else {
+        return None;
+    };
+    if args.len() != params.len() {
+        return None;
+    }
+    for (i, arg) in args.iter().enumerate() {
+        let TirExprKind::Local { index, .. } = &arg.expr.kind else {
+            return None;
+        };
+        if *index != u32::try_from(i).ok()? {
+            return None;
+        }
+    }
+    Some(format!("&{}", func.name))
 }
 
 /// Public function to unparse TIR module to pseudo-Wado source

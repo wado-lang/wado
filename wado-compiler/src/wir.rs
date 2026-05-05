@@ -682,6 +682,11 @@ pub struct WirStructType {
     /// Name (fq: "core:prelude//Point").
     pub name: WirName,
     /// Fields with names and types.
+    ///
+    /// When `supertype` is `Some`, the supertype's fields must appear as
+    /// the prefix of this list (Wasm GC `sub` requires the subtype to
+    /// list all inherited fields explicitly, in the same order, with
+    /// matching types and mutability).
     pub fields: Vec<WirField>,
     /// Metadata (module source, span, attributes).
     pub meta: WirMeta,
@@ -689,6 +694,12 @@ pub struct WirStructType {
     pub generic_origin: Option<WirGenericOrigin>,
     /// If this type was a newtype in the source (resolved by WIR phase).
     pub newtype_origin: Option<WirNewtypeOrigin>,
+    /// Optional supertype (for `(type $T (sub $S (struct ...)))`).
+    /// Currently used only to share an inspectable closure base across
+    /// all per-signature `CanonicalClosure_K` instances so the
+    /// `Fn<N, Ret>^Inspect` dispatch stub can `ref.cast` to one common
+    /// type rather than one per parameter shape.
+    pub supertype: Option<WirTypeId>,
 }
 
 /// A field in a struct type.

@@ -327,6 +327,7 @@ fn register_struct(
             },
             generic_origin,
             newtype_origin: None,
+            supertype: None,
         }),
     );
 
@@ -440,6 +441,7 @@ fn register_variant(
                 meta: WirMeta::default(),
                 generic_origin: None,
                 newtype_origin: None,
+                supertype: None,
             }),
         );
         ctx.variant_case_info
@@ -547,6 +549,7 @@ fn ensure_box_type(ctx: &mut WirContext<'_>, prim_name: &str, wir_type: crate::w
                 type_args: vec![prim_name.to_string()],
             }),
             newtype_origin: None,
+            supertype: None,
         }),
     );
     ctx.struct_type_map.insert(struct_name, type_id);
@@ -658,6 +661,7 @@ fn register_tuple_types(ctx: &mut WirContext<'_>) {
                         meta: WirMeta::default(),
                         generic_origin: None,
                         newtype_origin: None,
+                        supertype: None,
                     }),
                 );
                 ctx.tuple_type_map
@@ -1002,6 +1006,7 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
                         meta: WirMeta::default(),
                         generic_origin: None,
                         newtype_origin: None,
+                        supertype: None,
                     }),
                 );
                 ctx.variant_case_info
@@ -1067,8 +1072,16 @@ fn register_canonical_closure_types(ctx: &mut WirContext<'_>) {
     use crate::tir::{PrimitiveType, ResolvedType};
     use crate::wir::WirType;
 
-    // Collect all unique function signatures from the shared type table
-    let mut fn_sigs: Vec<(Vec<WirType>, Vec<WirType>)> = Vec::new();
+    // Collect all unique function signatures from the shared type table.
+    // Each entry carries `(param_wirs, result_wirs, is_inspectable,
+    // fn_struct_name)` so we can pick the right `CanonicalClosure_K`
+    // schema (slim `{ env, func }` vs fat `{ env, func, inspect,
+    // inspect_alt }`) up front based on whether `Fn<arity, ret>^Inspect
+    // / InspectAlt` survived DCE for that signature, and so we can
+    // map `(arity, return_type)` back to the canonical struct type
+    // id for the WIR-level dispatch body.
+    let mut fn_sigs: Vec<(Vec<WirType>, Vec<WirType>, bool, usize, crate::tir::TypeId)> =
+        Vec::new();
     let mut seen_keys: crate::hashmap::IndexSet<String> = crate::hashmap::IndexSet::default();
 
     {
@@ -1114,15 +1127,21 @@ fn register_canonical_closure_types(ctx: &mut WirContext<'_>) {
                 };
                 let key = WirContext::canonical_closure_key(&param_wirs, &result_wirs);
                 if seen_keys.insert(key) {
-                    fn_sigs.push((param_wirs, result_wirs));
+                    let arity = params.len();
+                    let is_inspectable =
+                        ctx.inspectable_fn_dispatch.contains(&(arity, *return_type));
+                    fn_sigs.push((param_wirs, result_wirs, is_inspectable, arity, *return_type));
                 }
             }
         }
     }
 
-    // Register canonical closure types for each signature
-    for (param_wirs, result_wirs) in fn_sigs {
-        ctx.get_or_create_canonical_closure_type(param_wirs, result_wirs);
+    // Register canonical closure types for each signature. Inspectable
+    // signatures share the supertype `$canonical_inspectable_base`,
+    // which is what the `Fn<N, Ret>^Inspect` dispatch stub `ref.cast`s
+    // to — so no per-`(N, Ret)` struct map is needed.
+    for (param_wirs, result_wirs, is_inspectable, _arity, _return_type) in fn_sigs {
+        ctx.get_or_create_canonical_closure_type(param_wirs, result_wirs, is_inspectable);
     }
 }
 
@@ -1243,6 +1262,7 @@ fn register_array_wrapper_struct(ctx: &mut WirContext<'_>, elem_name: &str) {
                 type_args: vec![elem_name.to_string()],
             }),
             newtype_origin: None,
+            supertype: None,
         }),
     );
     ctx.struct_type_map.insert(struct_name, type_id);

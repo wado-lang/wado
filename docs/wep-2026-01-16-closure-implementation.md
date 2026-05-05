@@ -801,6 +801,61 @@ This requires a resource table mapping handles to closure structs.
 
 **For Wado MVP: Use Option A** (disallow closures at CM boundary). This can be relaxed later.
 
+#### Canonical Closure as Vtable
+
+A closure value that escapes its declaring scope — passed as a `fn(...)` argument, stored in a struct field, returned, assigned to a global, or rebound to another local — is wrapped in a canonical, signature-keyed struct so any holder of an `Fn<N, Ret>` value can dispatch through a uniform shape. The lower-phase escape analysis decides per local: a closure local that only appears as the callee of `IndirectCall` / receiver of `MethodCall` keeps the specialised `&__Closure_N` form; every other position forces canonicalisation.
+
+The canonical struct comes in two shapes, selected per-`(N, Ret)` by a pre-WIR scan of `Fn<N, Ret>^Inspect[Alt]` call sites:
+
+Slim shape (default — `Fn::call` only):
+
+```wat
+(type $CanonicalClosure_K (struct
+  (field $env  (ref null struct))
+  (field $func (ref $canonical_fn_K))))
+```
+
+Inspectable shape (`Fn^Inspect` / `Fn^InspectAlt` referenced for this signature):
+
+```wat
+(type $canonical_inspectable_base (struct
+  (field $env         (ref null struct))
+  (field $inspect     (ref $canonical_callback_fn))
+  (field $inspect_alt (ref $canonical_callback_fn))))
+
+(type $CanonicalClosure_K (sub $canonical_inspectable_base (struct
+  (field $env         (ref null struct))
+  (field $inspect     (ref $canonical_callback_fn))
+  (field $inspect_alt (ref $canonical_callback_fn))
+  (field $func        (ref $canonical_fn_K)))))
+```
+
+The subtype keeps the shared prefix — `env`, `inspect`, `inspect_alt` — and adds `func` last. `$canonical_callback_fn` has signature `(param $env (ref null struct)) (param $f (ref null struct))` (uniform across all signatures); `$canonical_fn_K` has signature `(param $env (ref null struct)) (param $p_0 ...) ... (result ...)` (per-`K`, typed). The shared base means a single dispatch stub serves every parameter shape with the same `(N, Ret)`: distinct function types like `fn(i32) -> i32` and `fn(String) -> i32` cast to one common type, eliminating any need for per-signature dispatch tables.
+
+Per-literal wrappers (registered in WIR build for every functor `N` whose signature is inspectable):
+
+1. `__closure_wrapper_N` — casts `env` to `(ref $__Closure_N)` and forwards to `__call`.
+2. `__closure_inspect_wrapper_N` — casts `env`, calls `__Closure_N^Inspect::inspect`.
+3. `__closure_inspect_alt_wrapper_N` — casts `env`, calls `__Closure_N^InspectAlt::inspect_alt`.
+
+Trait dispatch from the generic `Fn<N, Ret>^InspectAlt::inspect_alt` impl:
+
+```wat
+;; Fn<N, Ret>^InspectAlt::inspect_alt(self, f)
+(local $b (ref $canonical_inspectable_base))
+(local.set $b (ref.cast (ref $canonical_inspectable_base) (local.get $self)))
+(call_ref $canonical_callback_fn
+  (struct.get $canonical_inspectable_base $env         (local.get $b))
+  (local.get $f)
+  (struct.get $canonical_inspectable_base $inspect_alt (local.get $b)))
+```
+
+The dispatch stub is auto-derived as a `FunctionKind::FnCanonicalDispatch` TIR placeholder with no body — WIR build supplies the instructions above. A bodyless TIR function is naturally skipped by the inliner, monomorphisation, and other body walkers, so the placeholder costs nothing during optimisation.
+
+Programs that never inspect closures emit the slim shape and incur no extra fields, wrappers, or source-string constants. Programs that inspect closures of some `(N, Ret)` pay two refs per canonical value of that signature plus per-literal wrappers and source-string constants for the affected literals only. The `__Closure_N^Inspect[Alt]` impls are TIR-rooted from `ClosureToCanonical` only when the corresponding `(N, Ret)` is inspected.
+
+The specialised path (closure local stays as `&__Closure_N`) does not use the vtable: a redirect at the lowering stage rewrites `Fn<N, Ret>^Inspect[Alt]` calls on known-local receivers to direct calls on `__Closure_N^Inspect[Alt]`, and standard DCE removes those impls when unused.
+
 ## Consequences
 
 ### Positive

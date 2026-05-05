@@ -195,11 +195,11 @@ fn synthesize_inspect_for_type(T, expr, f_ref) -> Vec<TirStmt>:
             synthesize_inspect_for_type(inner, *expr, f_ref)
 
         Closure { params, return_type } →
-            // Default: signature only
-            f.write_str("|param1: Type1, param2: Type2| -> ReturnType")
-            // Alternate (#): TIR unparsed source (compile-time string constant)
-            if f.alternate():
-                f.write_str(tir_unparse(closure_body))
+            // Dispatched via the canonical closure vtable (see "Closure Inspect via
+            // Runtime Dispatch" below). The per-literal __Closure_N^Inspect /
+            // __Closure_N^InspectAlt impls write the signature / source string.
+            self.vtable.inspect    (env, f) // {x:?}
+            self.vtable.inspect_alt(env, f) // {x:#?}
 ```
 
 #### Resolver Changes
@@ -224,16 +224,64 @@ if is_inspect_specifier || (trait_name == "Display" && !has_display_impl) {
 
 The `FunctionRef::Builtin("inspect")` variant acts as the marker. The `synthesize_inspect` pass recognizes this and replaces the entire `StaticCall` with the synthesized TIR.
 
-#### Closure Source Text
+#### Closure Inspect via Runtime Dispatch
 
-For the closure alternate format (`{closure:#?}`), the synthesized code emits the TIR-unparsed representation as a compile-time string constant. During synthesis:
+`Inspect` / `InspectAlt` on a closure value must produce per-literal output (for `:#?`, the closure's own source) regardless of how the value reaches the call site — directly through a local, or indirectly through a function parameter, struct field, or global. Indirect dispatch rules out a pure compile-time substitution: the per-literal information must travel with the value.
 
-1. The closure's TIR body is available (it's a `TirExprKind::Closure`)
-2. Run the TIR unparser on it to produce source text
-3. Embed the result as a `TirExprKind::StringLiteral` in the synthesized code
-4. The default (non-alternate) path generates the signature string from the closure's parameter types and return type, also as a string literal
+Wado closures lower to two complementary representations (see WEP: Closure Implementation):
 
-Both paths produce compile-time constants — no runtime overhead.
+1. Specialised: the local has type `&__Closure_N` (the per-literal functor struct). Used when every reference to the local is in callee position.
+2. Canonical: the value is wrapped in `CanonicalClosure_K` so any holder of an `Fn<N, Ret>` value can invoke or inspect it. The lowering escape analysis demotes a local to canonical as soon as it appears in any non-callee position (struct field, fn argument, return value, global assignment, or rebinding).
+
+The canonical struct carries the runtime vtable for inspectable signatures. To make a single dispatch stub serve every parameter shape with the same `(N, Ret)`, all inspectable canonical structs share a Wasm GC supertype:
+
+```wat
+(type $canonical_inspectable_base (struct
+  (field $env         (ref null struct))
+  (field $inspect     (ref $canonical_callback_fn))
+  (field $inspect_alt (ref $canonical_callback_fn))))
+
+(type $CanonicalClosure_K (sub $canonical_inspectable_base (struct
+  (field $env         (ref null struct))
+  (field $inspect     (ref $canonical_callback_fn))
+  (field $inspect_alt (ref $canonical_callback_fn))
+  (field $func        (ref $canonical_fn_K)))))
+```
+
+`$canonical_callback_fn = (env: structref, f: structref) -> ()` is uniform across signatures. The supertype prefix means `ref.cast self to $canonical_inspectable_base` succeeds for any inspectable closure value, regardless of `K` — so two distinct function types like `fn(i32) -> i32` and `fn(String) -> i32` (same `(arity, return_type)`, different parameter types) reach the same dispatch stub without per-signature tables.
+
+Per-literal artifacts (synthesised at lower time):
+
+1. `__Closure_N` struct (existing) — holds captures.
+2. `__call` method (existing) — closure body.
+3. `__Closure_N^Inspect::inspect(&self, &mut Formatter)` — writes the signature, e.g. `|i32, i32| -> i32`.
+4. `__Closure_N^InspectAlt::inspect_alt(&self, &mut Formatter)` — writes the TIR-unparsed source, e.g. `|x: i32| (x + 1)` (or `|x: i32| captures[n] (x + n)` for capturing closures — the `captures[...]` clause makes captured-environment dependencies visible at inspect time).
+
+Per-literal canonical-path wrappers (registered in WIR build for inspectable signatures only):
+
+1. `__closure_wrapper_N` — casts env, calls `__call`.
+2. `__closure_inspect_wrapper_N` — casts env, calls `__Closure_N^Inspect::inspect`.
+3. `__closure_inspect_alt_wrapper_N` — casts env, calls `__Closure_N^InspectAlt::inspect_alt`.
+
+Dispatch stubs (one pair per inspectable `(N, Ret)`):
+
+- `Fn<N, Ret>^Inspect::inspect(&self, &mut Formatter)`: cast `self` to `$canonical_inspectable_base`, load `inspect`, `call_ref` with `(env, f)`. Same shape for `InspectAlt`.
+- The stub is emitted as `FunctionKind::FnCanonicalDispatch` with a bodyless TIR placeholder; WIR build installs the instructions directly. Bodyless functions bypass the inliner and other TIR-body walkers, so no `inline(never)` workaround is needed.
+
+The specialised path takes a redirect at lowering: `Fn<N, Ret>^Inspect[Alt]` calls on a known-local closure receiver rewrite to direct calls on `__Closure_N^Inspect[Alt]`. The dispatch stub and canonical vtable are bypassed entirely; standard DCE then removes the per-literal impls when no inspect call site survives.
+
+#### Zero Overhead When Unused
+
+Two whole-program gates keep programs that don't inspect closures from paying for the runtime-dispatch machinery:
+
+1. Schema gate (per `(N, Ret)`): only signatures with a reachable `Fn<N, Ret>^Inspect` or `^InspectAlt` dispatch stub get the inspectable canonical layout. Other signatures use the slim `(struct env func)` shape with no shared supertype, no inspect/inspect\_alt fields, and no per-literal wrappers.
+2. Per-functor gate (per `(N, Ret)`, per trait method): a pre-DCE scan classifies each `(arity, return_type)` as "inspected", "inspect-alt-ed", or both. The TIR DCE roots `__Closure_N^Inspect` from `ClosureToCanonical` only when the signature is "inspected", and `^InspectAlt` only when it is "inspect-alt-ed". A program that uses only `:?` drops every `__Closure_N^InspectAlt` impl and its per-literal source-string constant; the symmetric case applies to a `:#?`-only program.
+
+The schema gate is a lowering decision rather than a DCE decision — `ref.func` initialisers baked into the canonical struct's `inspect` / `inspect_alt` fields would otherwise keep the wrappers reachable and defeat post-emission DCE.
+
+#### Bare Function References
+
+A bare `&fn_name` lowers to a synthetic zero-capture closure (a `__Closure_N` whose body forwards every parameter to `fn_name`) so that fn-typed slots accept it uniformly with user-written closures. For inspect output, that synthetic body is rendered as `&fn_name` rather than the lowering-internal forwarder text — `:?` still produces the canonical signature string, and `:#?` produces the user-readable expression.
 
 ### Interaction with Existing WEPs
 
@@ -262,6 +310,8 @@ Both paths produce compile-time constants — no runtime overhead.
    - **Mitigation**: The synthesis is mechanical and type-driven, similar to CM binding synthesis
 3. **String escaping**: Inspect of strings requires escape logic (quotes, backslashes, newlines)
    - **Mitigation**: Implement as a stdlib helper `internal::write_escaped_string(&String, &mut Formatter)`
+4. **Closure ABI carries vtable slots when inspectable**: For each `(N, Ret)` whose `Fn^Inspect` / `Fn^InspectAlt` is referenced anywhere in the program, the canonical closure struct grows from the slim `{ env, func }` to the inspectable `{ env, inspect, inspect_alt, func }` (env-and-vtable prefix shared with the `$canonical_inspectable_base` supertype, typed `func` slot last), costing two extra refs per canonical closure value. Each affected literal also emits two small wrapper functions and one source-string constant.
+   - **Mitigation**: A whole-program usage scan keeps the slim schema for `(N, Ret)` signatures whose `Fn^Inspect` / `Fn^InspectAlt` is unreachable, so production builds that don't print closures pay nothing.
 
 ### Future Extensions
 
@@ -311,8 +361,8 @@ The core `synthesize_inspect` phase and the full pipeline integration are implem
 | Resource (opaque handle)   | Done   | `TypeName#0xHH` using `LowerHex::fmt`                                    |
 | `&T`                       | Done   | `&inspect(inner)`                                                        |
 | `&mut T`                   | Done   | `&mut inspect(inner)`                                                    |
-| Closure (default)          | Done   | Signature only                                                           |
-| Closure (`#` alternate)    | Done   | TIR unparsed source                                                      |
+| Closure (default)          | Done   | Signature only; dispatched via canonical closure vtable                  |
+| Closure (`#` alternate)    | Done   | TIR unparsed source; works for indirect calls (param/field/global)       |
 | Display fallback           | Done   | `{expr}` falls back to inspect when no `Display` impl exists             |
 | Nested structs/arrays      | Done   | Recursive inspect for composite fields                                   |
 | `TreeMap<K, V>`            | Done   | Custom `Inspect`/`InspectAlt`: `{key: value, ...}` format                |

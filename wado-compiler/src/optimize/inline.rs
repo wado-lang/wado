@@ -1896,7 +1896,6 @@ fn remap_expr_inner(
             body,
             captures,
             functor_id,
-            source_text,
             address_taken_locals,
             body_locals,
         } => TirExprKind::Closure {
@@ -1905,7 +1904,6 @@ fn remap_expr_inner(
             body: Box::new(remap_expr(body, param_to_local, local_offset, param_count)),
             captures: captures.clone(),
             functor_id: *functor_id,
-            source_text: source_text.clone(),
             address_taken_locals: address_taken_locals.clone(),
             body_locals: body_locals.clone(),
         },

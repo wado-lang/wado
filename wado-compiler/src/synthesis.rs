@@ -49,7 +49,7 @@ pub fn synthesize(project: Package) -> Result<Package, String> {
     // Expand template strings into Display/Inspect trait calls.
     // This must run after traits synthesis (which generates the impls)
     // but before monomorphization (which resolves the trait calls).
-    for module in project.tir_modules.values() {
+    for module in project.tir_modules.values_mut() {
         let tt = module.type_table.clone();
         template::expand_templates(module, &tt);
     }

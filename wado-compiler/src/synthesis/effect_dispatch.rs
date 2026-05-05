@@ -2233,7 +2233,6 @@ fn build_handler_op_closure(
             body: Box::new(method_call),
             captures,
             functor_id: None,
-            source_text: None,
             address_taken_locals: crate::hashmap::IndexSet::default(),
             // Synthetic dispatch closure; no body-level let-bindings.
             body_locals: Vec::new(),
@@ -2292,7 +2291,6 @@ fn build_trap_closure(
             body: Box::new(trap_call),
             captures: Vec::new(),
             functor_id: None,
-            source_text: None,
             address_taken_locals: crate::hashmap::IndexSet::default(),
             // Synthetic trap stub; no body-level let-bindings.
             body_locals: Vec::new(),

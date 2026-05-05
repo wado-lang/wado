@@ -1758,7 +1758,7 @@ impl FunctionTranslator<'_, '_> {
                 vec![self.ctx.type_id_to_wir_type(self.type_table, return_type)]
             };
         let key = WirContext::canonical_closure_key(&param_wirs, &result_wirs);
-        let (fn_type_id, closure_struct_type_id) = if let Some((ftid, stid)) =
+        let (fn_type_id, closure_struct_type_id) = if let Some((ftid, stid, _)) =
             self.ctx.canonical_closure_types.get(&key)
         {
             (ftid.clone(), stid.clone())
@@ -1877,37 +1877,58 @@ impl FunctionTranslator<'_, '_> {
                 vec![self.ctx.type_id_to_wir_type(self.type_table, return_type)]
             };
 
-        // Get canonical closure type
+        // Get canonical closure type and its inspectable schema flag.
         let key = WirContext::canonical_closure_key(&param_wirs, &result_wirs);
-        let struct_type_id = if let Some((_, stid)) = self.ctx.canonical_closure_types.get(&key) {
-            stid.clone()
+        let (struct_type_id, is_inspectable) = if let Some((_, stid, ins)) =
+            self.ctx.canonical_closure_types.get(&key)
+        {
+            (stid.clone(), *ins)
         } else {
             panic!(
                 "[WIR] translate_closure_to_canonical: canonical closure type not registered for signature {key:?}"
             );
         };
 
-        // Look up the pre-registered wrapper function for this functor.
+        // Look up the pre-registered wrapper triple for this functor.
         // Use closure_module (the module where the closure was defined) for the lookup,
         // not self.module_source (which may differ after cross-module inlining).
         let functor_key = (closure_module.clone(), functor_id);
-        let wrapper_func_id = if let Some(id) = self.ctx.closure_wrapper_funcs.get(&functor_key) {
-            id.clone()
+        let wrappers = if let Some(w) = self.ctx.closure_wrapper_funcs.get(&functor_key) {
+            w.clone()
         } else {
             panic!(
-                "[WIR] translate_closure_to_canonical: closure wrapper function not registered for {functor_key:?}"
+                "[WIR] translate_closure_to_canonical: closure wrappers not registered for {functor_key:?}"
             );
         };
 
-        // Build: CanonicalClosure { env: functor_as_structref, func: ref.func $wrapper }
-        self.struct_new(
-            struct_type_id,
-            vec![
-                functor_instr,
-                WirInstr::RefFunc {
-                    func_id: wrapper_func_id,
-                },
-            ],
-        )
+        // Build `CanonicalClosure_K`. Field order must match the struct
+        // declaration in `WirContext::get_or_create_canonical_closure_type`:
+        //
+        // - Inspectable layout: `{ env, inspect, inspect_alt, func }` —
+        //   the env + vtable prefix is the layout of the shared
+        //   `$canonical_inspectable_base` supertype, and the typed `func`
+        //   slot comes last (per-signature).
+        // - Slim layout: `{ env, func }` — no shared supertype, no
+        //   inspect slots. Production builds that never inspect closures
+        //   stay on this shape.
+        let mut fields = vec![functor_instr];
+        if is_inspectable {
+            let inspect_id = wrappers
+                .inspect
+                .expect("inspectable canonical closure missing inspect wrapper");
+            let inspect_alt_id = wrappers
+                .inspect_alt
+                .expect("inspectable canonical closure missing inspect_alt wrapper");
+            fields.push(WirInstr::RefFunc {
+                func_id: inspect_id,
+            });
+            fields.push(WirInstr::RefFunc {
+                func_id: inspect_alt_id,
+            });
+        }
+        fields.push(WirInstr::RefFunc {
+            func_id: wrappers.call,
+        });
+        self.struct_new(struct_type_id, fields)
     }
 }

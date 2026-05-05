@@ -1,0 +1,44 @@
+// Plain function references (`&fn_name`) lower to synthetic
+// zero-capture closures. They must dispatch through the same
+// canonical-vtable path as user-written closures and produce stable
+// inspect output.
+
+fn double(x: i32) -> i32 {
+    return x * 2;
+}
+
+fn fmt_def(f: fn(i32) -> i32) -> String {
+    return `{f:?}`;
+}
+
+fn fmt_alt(f: fn(i32) -> i32) -> String {
+    return `{f:#?}`;
+}
+
+test "bare fn-ref :? signature" {
+    assert fmt_def(double) == "|i32| -> i32";
+}
+
+test "bare fn-ref :#? renders as &fn_name" {
+    assert fmt_alt(double) == "&double";
+}
+
+// Explicit `&fn_name`. `FuncRefToClosureRewriter` has a separate
+// wrapper-collapse branch that consumes the outer `Unary::Ref`
+// produced by `&` and turns the inner `FuncRef` into the synthetic
+// closure directly; this exercises that path.
+test "explicit &fn-ref :#? renders as &fn_name" {
+    assert fmt_alt(&double) == "&double";
+}
+
+// User-written closure that happens to be shape-identical to the
+// synthetic forwarder (`|x: i32| double(x)`). `render_func_ref_closure`
+// must NOT collapse this to `&double` — the parameter is named `x`,
+// not `__fn_ref_p0`, so the synthetic-name check rejects it.
+test "user-written forwarding closure keeps its source for :#?" {
+    let f = |x: i32| double(x);
+    assert `{f:#?}` == "|x: i32| double(x)";
+}
+
+__DATA__
+{"test": {}}
