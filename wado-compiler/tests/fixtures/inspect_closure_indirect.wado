@@ -1,19 +1,13 @@
 // Closure inspect/inspect_alt must work for indirect dispatch:
-// when the closure value is held behind a function parameter or
-// struct field, `{f:?}` and `{f:#?}` still produce the correct
+// when the closure value is held behind a function parameter, struct
+// field, or global, `{f:?}` and `{f:#?}` still produce the correct
 // signature and per-literal source.
 //
 // The specialised path (closure kept as `&__Closure_N`) dispatches via
 // per-functor `__Closure_N^Inspect / InspectAlt`. Cases that go
 // through the canonical `Fn<N, Ret>` value (function parameters,
-// struct fields) read the source via the `inspect_alt` slot of
-// `CanonicalClosure_K`.
-//
-// The closure-in-a-global case is blocked by an unrelated codegen
-// issue (Wasm globals require const-expression initialisers, but
-// closure construction isn't const, and the deferred-init path
-// currently emits a non-nullable global typed for the placeholder
-// `ref.null`). It will be added once that's fixed.
+// struct fields, globals) read the source via the `inspect_alt` slot
+// of `CanonicalClosure_K`.
 
 fn fmt_def(f: fn(i32) -> i32) -> String {
     return `{f:?}`;
@@ -26,6 +20,8 @@ fn fmt_alt(f: fn(i32) -> i32) -> String {
 struct Holder {
     cb: fn(i32) -> i32,
 }
+
+global mut GLOBAL_CB: fn(i32) -> i32 = |x: i32| x * 10;
 
 test "literal-site :#? still works" {
     let add_one = |x: i32| x + 1;
@@ -63,6 +59,15 @@ test "capturing closure shows captures clause in :#?" {
     let n = 7;
     let f = |x: i32| x + n;
     assert `{f:#?}` == "|x: i32| captures[n] (x + n)";
+}
+
+test "closure stored in global keeps source for :#?" {
+    GLOBAL_CB = |z: i32| z + 100;
+    assert `{GLOBAL_CB:#?}` == "|z: i32| (z + 100)";
+}
+
+test "closure stored in global keeps signature for :?" {
+    assert `{GLOBAL_CB:?}` == "|i32| -> i32";
 }
 
 __DATA__
