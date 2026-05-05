@@ -15,7 +15,7 @@
 
 use serde::{Deserialize, Serialize};
 use wado_compiler::CompilerHost;
-use wado_compiler::annotate::annotate;
+use wado_compiler::annotate::annotate_with_invocations;
 
 use crate::diagnostics::{Position, Range};
 use crate::location::{span_to_range, uri_to_filename};
@@ -62,7 +62,9 @@ pub async fn document_highlight<H: CompilerHost>(
     host: &H,
 ) -> Vec<DocumentHighlight> {
     let filename = uri_to_filename(uri);
-    let Ok(annotated) = annotate(source, host, Some(&filename)).await else {
+    let invocations = crate::kiln::prepare_invocations(&filename, source, host);
+    let Ok(annotated) = annotate_with_invocations(source, host, Some(&filename), invocations).await
+    else {
         return Vec::new();
     };
 

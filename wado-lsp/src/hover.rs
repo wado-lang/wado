@@ -9,7 +9,7 @@
 
 use serde::{Deserialize, Serialize};
 use wado_compiler::CompilerHost;
-use wado_compiler::annotate::{Annotated, annotate};
+use wado_compiler::annotate::{Annotated, annotate_with_invocations};
 use wado_compiler::ast::{self, AstId, Expr, Item, Module, Stmt};
 use wado_compiler::symbol::{Symbol, SymbolKey, SymbolKind};
 use wado_compiler::unparse;
@@ -44,7 +44,10 @@ pub async fn find_hover<H: CompilerHost>(
     host: &H,
 ) -> Option<HoverResult> {
     let filename = uri_to_filename(uri);
-    let annotated = annotate(source, host, Some(&filename)).await.ok()?;
+    let invocations = crate::kiln::prepare_invocations(&filename, source, host);
+    let annotated = annotate_with_invocations(source, host, Some(&filename), invocations)
+        .await
+        .ok()?;
 
     let module = annotated.entry_module_source.clone();
     let line = position.line as usize + 1;
