@@ -21,6 +21,24 @@ fn self_param_offset(callee: &TirFunction) -> u32 {
     u32::from(callee.params.first().is_some_and(|p| p.name == "self"))
 }
 
+/// Build the canonical signature string for a closure, e.g.
+/// `"|i32, String| -> bool"`. Used as the body of
+/// `__Closure_N^Inspect::inspect` so the per-literal Inspect output
+/// matches WEP: Inspect (Debug Output) regardless of how the closure
+/// is later dispatched (specialized or canonical).
+fn format_closure_signature(
+    params: &[(String, TypeId)],
+    return_type: TypeId,
+    type_table: &TypeTable,
+) -> String {
+    let param_names: Vec<String> = params
+        .iter()
+        .map(|(_, ty)| type_table.type_name(*ty))
+        .collect();
+    let ret_name = type_table.type_name(return_type);
+    format!("|{}| -> {}", param_names.join(", "), ret_name)
+}
+
 /// Build the `__capture_<i>` struct-field list for a functor literal from
 /// the closure's captures. Each field reads the captured value from the
 /// outer scope at `cap.outer_index`.
@@ -104,6 +122,11 @@ struct CollectedClosure {
     /// The closure expression's own type — a `fn(...)` type that carries
     /// the canonical return type even when the body is a Block expr.
     func_type_id: TypeId,
+    /// TIR-unparsed source of the closure (set in `desugar.rs`). Consumed
+    /// when synthesising `__Closure_N^InspectAlt::inspect_alt` so the
+    /// per-literal source body becomes a compile-time string constant in
+    /// the impl. `None` for synthesised closures that have no source.
+    source_text: Option<String>,
     span: Span,
 }
 
@@ -606,12 +629,197 @@ impl ClosureLowerer {
             self.functor_infos.push(ClosureFunctor {
                 module_source: self.module_source.clone(),
                 id: collected.id,
-                struct_name,
+                struct_name: struct_name.clone(),
                 struct_type_id,
                 ref_type_id: self_ref_type,
                 call_method: call_method_rc,
                 captures: collected.captures.clone(),
             });
+
+            // Synthesize per-functor Inspect / InspectAlt impls so trait
+            // dispatch on the specialized `&__Closure_N` value writes the
+            // per-literal signature / TIR-unparsed source. The template
+            // expansion's `Function` short-circuit is still present, so
+            // these impls are reachable only from user-written
+            // `closure.inspect(&mut f)` style calls and from the
+            // ClosureCallSiteLowerer redirect added below; standard DCE
+            // removes them when neither is reached.
+            let signature = format_closure_signature(&collected.params, return_type, type_table);
+            let source = collected
+                .source_text
+                .clone()
+                .unwrap_or_else(|| signature.clone());
+            self.generate_functor_format_methods(
+                &struct_name,
+                self_ref_type,
+                &signature,
+                &source,
+                type_table,
+                collected.span,
+            );
+        }
+    }
+
+    /// Synthesize `__Closure_N^Inspect::inspect` and
+    /// `__Closure_N^InspectAlt::inspect_alt` for a single functor.
+    ///
+    /// Both methods take `(&self: &__Closure_N, f: &mut Formatter)` and
+    /// emit a single `f.write_str(<constant>)` body. The signature string
+    /// (`"|i32, i32| -> i32"`) and the source body string
+    /// (`"|x: i32, y: i32| x + y"`) are computed by the caller from
+    /// `CollectedClosure` so this helper stays focused on TIR
+    /// construction.
+    fn generate_functor_format_methods(
+        &mut self,
+        struct_name: &str,
+        self_ref_type: TypeId,
+        signature: &str,
+        source: &str,
+        type_table: &mut TypeTable,
+        span: Span,
+    ) {
+        let formatter_type =
+            type_table.make_struct("Formatter".to_string(), ModuleSource::format());
+        let formatter_mut_ref = type_table.make_mut_ref(formatter_type);
+        let string_type = type_table.make_struct("String".to_string(), ModuleSource::string());
+
+        for (trait_name, method_name, payload) in [
+            ("Inspect", "inspect", signature),
+            ("InspectAlt", "inspect_alt", source),
+        ] {
+            let func = self.build_functor_format_method(
+                struct_name,
+                trait_name,
+                method_name,
+                payload,
+                self_ref_type,
+                formatter_mut_ref,
+                string_type,
+                span,
+            );
+            self.generated_functions.push(Rc::new(RefCell::new(func)));
+        }
+    }
+
+    /// Build a single `__Closure_N^TraitName::method_name(&self, &mut Formatter)`
+    /// whose body is `f.write_str("<payload>")`. Shared by both `Inspect` and
+    /// `InspectAlt` synthesis.
+    #[allow(clippy::too_many_arguments)]
+    fn build_functor_format_method(
+        &self,
+        struct_name: &str,
+        trait_name: &str,
+        method_name: &str,
+        payload: &str,
+        self_ref_type: TypeId,
+        formatter_mut_ref: TypeId,
+        string_type: TypeId,
+        span: Span,
+    ) -> TirFunction {
+        let method_info = LocalMethodName::new(
+            struct_name.to_string(),
+            Some(trait_name.to_string()),
+            method_name.to_string(),
+        );
+        let qualified_name = MethodName::format_local(struct_name, Some(trait_name), method_name);
+
+        let fmt_local = TirExpr::new(
+            TirExprKind::Local {
+                index: 1,
+                name: "f".to_string(),
+            },
+            formatter_mut_ref,
+            span,
+        );
+        let write_str_call = TirExpr::new(
+            TirExprKind::method_call(
+                Box::new(fmt_local),
+                FunctionRef {
+                    module_source: ModuleSource::format(),
+                    name: "Formatter::write_str".to_string(),
+                    monomorph_info: None,
+                    method_info: Some(LocalMethodName::new(
+                        "Formatter".to_string(),
+                        None,
+                        "write_str".to_string(),
+                    )),
+                },
+                vec![],
+                vec![CallArg::new(
+                    TirExpr::new(
+                        TirExprKind::StringLiteral(payload.to_string()),
+                        string_type,
+                        span,
+                    ),
+                    false,
+                )],
+            ),
+            TypeTable::UNIT,
+            span,
+        );
+        let body = TirBlock::new(
+            vec![TirStmt::new(TirStmtKind::Expr(write_str_call), span)],
+            span,
+        );
+
+        TirFunction {
+            module_source: self.module_source.clone(),
+            is_async: false,
+            name: qualified_name,
+            is_pub: false,
+            is_export: false,
+            type_params: Vec::new(),
+            impl_type_params: Vec::new(),
+            monomorph_info: None,
+            method_info: Some(method_info),
+            params: vec![
+                TirParam {
+                    name: "self".to_string(),
+                    type_id: self_ref_type,
+                    local_index: 0,
+                    is_mut: false,
+                    span,
+                    default_expr: None,
+                },
+                TirParam {
+                    name: "f".to_string(),
+                    type_id: formatter_mut_ref,
+                    local_index: 1,
+                    is_mut: false,
+                    span,
+                    default_expr: None,
+                },
+            ],
+            return_type: TypeTable::UNIT,
+            task_return_type: None,
+            effects: Vec::new(),
+            stores: vec![],
+            body: Some(body),
+            span,
+            local_count: 2,
+            locals: vec![
+                TirLocal {
+                    name: "self".to_string(),
+                    type_id: self_ref_type,
+                    is_mut: false,
+                },
+                TirLocal {
+                    name: "f".to_string(),
+                    type_id: formatter_mut_ref,
+                    is_mut: false,
+                },
+            ],
+            address_taken_locals: IndexSet::default(),
+            stores_aliased_locals: IndexSet::default(),
+            is_cm_binding: false,
+            is_dispatch_wrapper: false,
+            is_cm_export: false,
+            is_ambient: false,
+            inline_hint: InlineHint::Auto,
+            comp_features: 0,
+            export_name: None,
+            allocator_tag: None,
+            kind: FunctionKind::Regular,
         }
     }
 
@@ -870,6 +1078,7 @@ impl TirMutVisitor for CollectClosuresVisitor<'_> {
             params,
             body,
             captures,
+            source_text,
             ..
         } = &expr.kind
         {
@@ -880,6 +1089,7 @@ impl TirMutVisitor for CollectClosuresVisitor<'_> {
                 captures: captures.clone(),
                 return_type: body.type_id,
                 func_type_id,
+                source_text: source_text.clone(),
                 span,
             });
         }
@@ -1207,6 +1417,100 @@ impl ClosureCallSiteLowerer<'_> {
             method_info: specialized_method_info,
         };
     }
+
+    /// When a `MethodCall` resolves to `Fn<N, Ret>^Inspect::inspect` or
+    /// `Fn<N, Ret>^InspectAlt::inspect_alt` with a receiver that is a
+    /// specialized closure local, redirect the call to the per-functor
+    /// `__Closure_N^Inspect / InspectAlt` impl synthesised in
+    /// `generate_functor_items`. This is what makes the specialized
+    /// path produce the per-literal signature/source rather than the
+    /// generic canonical-vtable indirection.
+    ///
+    /// The receiver is rewritten from `Unary::Ref(Local(idx, type=Fn))`
+    /// to `Local(idx, type=&__Closure_N)` since the per-functor impl
+    /// expects `&self: &__Closure_N` directly (the local already holds
+    /// a ref after specialization). When no redirect applies (the call
+    /// is on a canonical closure value, or the trait isn't a closure
+    /// inspect trait), this is a no-op and the call keeps its
+    /// `Fn<N, Ret>^...` target for the canonical-vtable path.
+    fn try_redirect_inspect_to_functor(&self, receiver: &mut Box<TirExpr>, func: &mut FunctionRef) {
+        let info = match &func.method_info {
+            Some(info) => info,
+            None => return,
+        };
+        if info.base_struct_name != "Fn" {
+            return;
+        }
+        let Some(base_trait) = info.base_trait_name.as_deref() else {
+            return;
+        };
+        if base_trait != "Inspect" && base_trait != "InspectAlt" {
+            return;
+        }
+
+        let local_idx = match peel_ref_to_local(receiver) {
+            Some(idx) => idx,
+            None => return,
+        };
+        let Some(closure_id) = self.local_to_closure.get(&local_idx).copied() else {
+            return;
+        };
+        if !self.specializable.contains(&closure_id) {
+            return;
+        }
+        let Some(functor) = self.functor_infos.get(closure_id as usize) else {
+            return;
+        };
+
+        let local_name = match &receiver.kind {
+            TirExprKind::Unary {
+                op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+                expr,
+            } => match &expr.kind {
+                TirExprKind::Local { name, .. } => name.clone(),
+                _ => "self".to_string(),
+            },
+            TirExprKind::Local { name, .. } => name.clone(),
+            _ => "self".to_string(),
+        };
+
+        let new_method_info = LocalMethodName::new(
+            functor.struct_name.clone(),
+            Some(base_trait.to_string()),
+            info.method_name.clone(),
+        );
+        let new_name = new_method_info.to_mangled_name();
+
+        let span = receiver.span;
+        **receiver = TirExpr::new(
+            TirExprKind::Local {
+                index: local_idx,
+                name: local_name,
+            },
+            functor.ref_type_id,
+            span,
+        );
+        *func = FunctionRef {
+            module_source: self.module_source.clone(),
+            name: new_name,
+            monomorph_info: None,
+            method_info: Some(new_method_info),
+        };
+    }
+}
+
+/// Walk through `Ref` / `MutRef` wrappers to find an inner `Local` and
+/// return its index. Returns `None` if the receiver isn't a ref-of-local
+/// or a bare local.
+fn peel_ref_to_local(expr: &TirExpr) -> Option<u32> {
+    match &expr.kind {
+        TirExprKind::Local { index, .. } => Some(*index),
+        TirExprKind::Unary {
+            op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+            expr: inner,
+        } => peel_ref_to_local(inner),
+        _ => None,
+    }
 }
 
 impl TirMutVisitor for ClosureCallSiteLowerer<'_> {
@@ -1325,6 +1629,7 @@ impl TirMutVisitor for ClosureCallSiteLowerer<'_> {
                     self.visit_expr(&mut arg.expr);
                 }
                 self.try_redirect_to_specialized_callee(func, args);
+                self.try_redirect_inspect_to_functor(receiver, func);
             }
             _ => self.walk_expr(expr),
         }
