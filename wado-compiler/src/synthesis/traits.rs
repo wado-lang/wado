@@ -1888,13 +1888,13 @@ fn generate_flags_inspect_fn(
 /// Generate `Fn<N, Ret>^Inspect::inspect(&self, &mut Formatter)` as
 /// an auto-derived dispatch stub.
 ///
-/// The TIR body is an empty unit block — a placeholder that exists
-/// only so the function entry is registered (and so call sites
-/// referring to it from templates / user code resolve). WIR build
-/// recognises [`FunctionKind::FnCanonicalDispatch`] and supplies the
-/// real body: a `call_ref` through the matching `CanonicalClosure_K`'s
-/// `inspect` vtable slot. See WEP: Inspect (Debug Output) > Closure
-/// Inspect via Runtime Dispatch.
+/// The TIR body is `None` — the function entry exists only so call
+/// sites referring to it from templates / user code resolve. A bodyless
+/// TIR function naturally bypasses the inliner and other body walkers;
+/// WIR build recognises [`FunctionKind::FnCanonicalDispatch`] and
+/// supplies the real body: a `call_ref` through the matching
+/// `CanonicalClosure_K`'s `inspect` vtable slot. See WEP: Inspect
+/// (Debug Output) > Closure Inspect via Runtime Dispatch.
 fn generate_fn_inspect_fn(
     type_arg_names: &[String],
     arity: usize,
@@ -1961,30 +1961,27 @@ fn generate_fn_canonical_dispatch_stub(
     .with_struct_type_args(type_arg_names);
     let qualified_name = method_info.to_mangled_name();
 
-    // Empty unit body: WIR build supplies the real instructions.
-    let body = TirBlock::new(vec![], span);
-
     let mut func = make_synthetic_method(
         qualified_name,
         method_info,
         inspect_params(ref_fn_type, fmt_type, span),
         TypeTable::UNIT,
-        body,
+        TirBlock::new(vec![], span),
         vec![
             param_local("self", ref_fn_type, false),
             param_local("f", fmt_type, false),
         ],
     );
+    // No TIR body: the real instructions are supplied at WIR build
+    // time via the `FnCanonicalDispatch` arm in `translate_function_bodies`.
+    // Bodyless functions are naturally skipped by the inliner and other
+    // TIR-body walkers, so no `InlineHint::Never` is needed.
+    func.body = None;
     func.kind = FunctionKind::FnCanonicalDispatch {
         trait_kind,
         arity,
         return_type,
     };
-    // The empty placeholder TIR body is overwritten by WIR build; tell
-    // the inliner not to expand the empty body into call sites before
-    // that happens (otherwise `:?` / `:#?` would silently produce
-    // nothing at higher optimisation levels).
-    func.inline_hint = InlineHint::Never;
     func
 }
 

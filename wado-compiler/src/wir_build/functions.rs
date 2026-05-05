@@ -324,7 +324,11 @@ fn register_methods(ctx: &mut WirContext<'_>) {
             continue;
         }
 
-        if tir_func.body.is_none() {
+        // Bodyless methods are normally external/CM-import declarations and
+        // get skipped here. The exception is `FnCanonicalDispatch`: WIR build
+        // supplies its body in `translate_function_bodies`, so the entry must
+        // still be registered so call sites resolve.
+        if tir_func.body.is_none() && tir_func.fn_canonical_dispatch().is_none() {
             continue;
         }
 
