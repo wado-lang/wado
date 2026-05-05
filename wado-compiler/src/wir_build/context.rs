@@ -387,14 +387,17 @@ impl<'a> WirContext<'a> {
     /// The struct schema is the vtable shape required by trait dispatch on
     /// `Fn<N, Ret>` values held behind function parameters, struct fields,
     /// or globals (the indirect-call case). Per WEP: Inspect (Debug
-    /// Output) > Closure Inspect via Runtime Dispatch:
+    /// Output) > Closure Inspect via Runtime Dispatch, the inspectable
+    /// layout puts `env` + the two callback slots first so they form the
+    /// Wasm GC subtype prefix shared with `$canonical_inspectable_base`,
+    /// and the per-signature `func` slot comes last:
     ///
     /// ```text
     /// CanonicalClosure_K {
     ///     env:         (ref null struct),
-    ///     func:        (ref $canonical_fn_K),
     ///     inspect:     (ref $canonical_callback_fn),
     ///     inspect_alt: (ref $canonical_callback_fn),
+    ///     func:        (ref $canonical_fn_K),
     /// }
     /// ```
     ///

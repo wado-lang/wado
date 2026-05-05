@@ -1,13 +1,19 @@
 // Closure inspect/inspect_alt must work for indirect dispatch:
-// when the closure value is held behind a function parameter, struct
-// field, or global, `{f:?}` and `{f:#?}` should still produce the
-// correct signature and per-literal source.
+// when the closure value is held behind a function parameter or
+// struct field, `{f:?}` and `{f:#?}` still produce the correct
+// signature and per-literal source.
 //
 // The specialised path (closure kept as `&__Closure_N`) dispatches via
 // per-functor `__Closure_N^Inspect / InspectAlt`. Cases that go
 // through the canonical `Fn<N, Ret>` value (function parameters,
-// struct fields, globals) read the source via the `inspect_alt` slot
-// of `CanonicalClosure_K`.
+// struct fields) read the source via the `inspect_alt` slot of
+// `CanonicalClosure_K`.
+//
+// The closure-in-a-global case is blocked by an unrelated codegen
+// issue (Wasm globals require const-expression initialisers, but
+// closure construction isn't const, and the deferred-init path
+// currently emits a non-nullable global typed for the placeholder
+// `ref.null`). It will be added once that's fixed.
 
 fn fmt_def(f: fn(i32) -> i32) -> String {
     return `{f:?}`;

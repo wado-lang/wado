@@ -306,7 +306,7 @@ The schema gate is a lowering decision rather than a DCE decision — `ref.func`
    - **Mitigation**: The synthesis is mechanical and type-driven, similar to CM binding synthesis
 3. **String escaping**: Inspect of strings requires escape logic (quotes, backslashes, newlines)
    - **Mitigation**: Implement as a stdlib helper `internal::write_escaped_string(&String, &mut Formatter)`
-4. **Closure ABI carries vtable slots when inspectable**: For each `(N, Ret)` whose `Fn^Inspect` / `Fn^InspectAlt` is referenced anywhere in the program, the canonical closure struct grows from `{ env, func }` to `{ env, func, inspect, inspect_alt }`, costing two extra refs per canonical closure value. Each affected literal also emits two small wrapper functions and one source-string constant.
+4. **Closure ABI carries vtable slots when inspectable**: For each `(N, Ret)` whose `Fn^Inspect` / `Fn^InspectAlt` is referenced anywhere in the program, the canonical closure struct grows from the slim `{ env, func }` to the inspectable `{ env, inspect, inspect_alt, func }` (env-and-vtable prefix shared with the `$canonical_inspectable_base` supertype, typed `func` slot last), costing two extra refs per canonical closure value. Each affected literal also emits two small wrapper functions and one source-string constant.
    - **Mitigation**: A whole-program usage scan keeps the slim schema for `(N, Ret)` signatures whose `Fn^Inspect` / `Fn^InspectAlt` is unreachable, so production builds that don't print closures pay nothing.
 
 ### Future Extensions

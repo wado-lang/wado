@@ -1336,6 +1336,16 @@ impl TirRefVisitor for ClosureSafetyAnalyzer<'_> {
                 }
                 self.in_callee_position = prev;
             }
+            TirExprKind::Unary { expr: inner, .. } => {
+                // `&local` / `&mut local` / `*expr` in callee/receiver
+                // position is still callee/receiver — the unary is just a
+                // reference-projection of the same value. Template-string
+                // expansion routinely wraps the receiver in `Unary::Ref`,
+                // so resetting here would demote every literal-site
+                // `{f:?}` / `{f:#?}` to canonical and defeat the
+                // specialised `__Closure_N` path.
+                self.visit_expr(inner);
+            }
             _ => {
                 // All other positions are escape positions: reset
                 // in_callee_position to false and walk recursively.
