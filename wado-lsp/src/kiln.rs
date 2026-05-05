@@ -133,9 +133,13 @@ fn resolve_invocation(
     manifest_root: &Path,
     invocation: &wado_compiler::kiln::Invocation,
 ) -> Result<(String, Vec<String>), String> {
-    let metadata_path = manifest_root
-        .join(invocation.output_dir.as_str())
-        .join(metadata_filename(invocation.from.as_str()));
+    let Some(output_dir_abs) = safe_join(manifest_root, invocation.output_dir.as_str()) else {
+        return Err(format!(
+            "output_dir {:?} is absolute or contains `..`",
+            invocation.output_dir.as_str(),
+        ));
+    };
+    let metadata_path = output_dir_abs.join(metadata_filename(invocation.from.as_str()));
 
     let metadata: Metadata = match std::fs::read_to_string(&metadata_path) {
         Ok(s) => match serde_json::from_str::<Metadata>(&s) {
@@ -161,6 +165,14 @@ fn resolve_invocation(
     if metadata.options_hash != hash_options_canonical(&invocation.options_canonical) {
         return Err("options changed since last generation".to_string());
     }
+
+    // `generator_source_hash` is recorded by the CLI driver from the
+    // generator package's compiled component closure. The LSP runs in
+    // consume-only mode (no provider, no compile of the generator) and
+    // cannot recompute the current hash, so it cannot detect the
+    // "schema/inputs unchanged but generator source updated" case.
+    // Per WEP 2026-04-12 §"Transitional consume-only mode" this is the
+    // documented gap that `wado check` exists to plug in CI.
 
     if metadata.primary.path != invocation.from.as_str() {
         return Err("primary input path changed since last generation".to_string());
@@ -206,7 +218,12 @@ fn resolve_invocation(
         .find(|o| o.entry)
         .ok_or_else(|| "no entry output recorded in metadata".to_string())?;
 
-    let abs_entry = manifest_root.join(&entry_output.path);
+    let Some(abs_entry) = safe_join(manifest_root, &entry_output.path) else {
+        return Err(format!(
+            "entry output path {:?} is absolute or contains `..`",
+            entry_output.path,
+        ));
+    };
     if !abs_entry.is_file() {
         return Err(format!("{} missing on disk", entry_output.path));
     }
@@ -222,11 +239,43 @@ fn resolve_invocation(
     Ok((path_to_kiln_uri(&canonical), modified))
 }
 
+/// Hash the bytes of `manifest_root/path` and compare against
+/// `expected_hex`. Returns `false` on any I/O failure (file missing,
+/// permission denied), on an absolute / `..`-containing `path`
+/// (refused by [`safe_join`]), and on any hash mismatch — every such
+/// case is a cache miss as far as the caller is concerned.
 fn file_matches(manifest_root: &Path, path: &str, expected_hex: &str) -> bool {
-    let Ok(bytes) = std::fs::read(manifest_root.join(path)) else {
+    let Some(abs) = safe_join(manifest_root, path) else {
+        return false;
+    };
+    let Ok(bytes) = std::fs::read(abs) else {
         return false;
     };
     hex_digest(&content_hash(&bytes)) == expected_hex
+}
+
+/// Join `rel` onto `manifest_root` while refusing absolute paths and
+/// any `..` traversal. Defends against a crafted inline `output_dir`
+/// or a tampered `<primary>.kiln.json` from making the LSP read or
+/// hash arbitrary files outside the workspace.
+///
+/// Returns `None` for any path the caller should treat as a cache miss
+/// (or, in the case of the `metadata_path` build, a hard validation
+/// error). Callers do not need to repeat this check on the resulting
+/// `PathBuf`.
+fn safe_join(manifest_root: &Path, rel: &str) -> Option<PathBuf> {
+    use std::path::Component;
+    let rel_path = Path::new(rel);
+    if rel_path.is_absolute() {
+        return None;
+    }
+    for c in rel_path.components() {
+        match c {
+            Component::Normal(_) | Component::CurDir => {}
+            Component::ParentDir | Component::RootDir | Component::Prefix(_) => return None,
+        }
+    }
+    Some(manifest_root.join(rel_path))
 }
 
 /// Walk up from `entry_path`'s directory looking for the nearest

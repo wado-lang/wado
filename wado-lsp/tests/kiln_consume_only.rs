@@ -291,6 +291,50 @@ fn output_modified_emits_warning_but_redirects() {
     });
 }
 
+#[test]
+fn metadata_with_traversal_paths_is_cache_miss() {
+    futures::executor::block_on(async {
+        // Build a clean workspace, then rewrite the metadata to point
+        // its output at a `..`-prefixed path (a tampered cache file).
+        // The LSP must refuse the join — treating it as a cache miss
+        // — rather than reading or hashing anything outside
+        // `manifest_root`. We also plant a sentinel file outside the
+        // workspace to confirm the traversal really would have hit it.
+        let fixture = build_fixture(FixtureSpec::default());
+        let outside_dir = tempfile::tempdir().unwrap();
+        let outside_path = outside_dir.path().join("victim.wado");
+        std::fs::write(&outside_path, "pub fn pwned() {}\n").unwrap();
+
+        let metadata_path = fixture
+            .root
+            .path()
+            .join("tests/generated")
+            .join(metadata_filename("grammars/calc.g4"));
+        let mut metadata: Metadata =
+            serde_json::from_str(&std::fs::read_to_string(&metadata_path).unwrap()).unwrap();
+        metadata.outputs[0].path = format!(
+            "../../{}",
+            outside_path
+                .strip_prefix(outside_dir.path().parent().unwrap())
+                .unwrap()
+                .display()
+        );
+        std::fs::write(
+            &metadata_path,
+            serde_json::to_string_pretty(&metadata).unwrap(),
+        )
+        .unwrap();
+
+        let (engine, host) = engine_with(&fixture);
+        let diags = engine.diagnostics(&fixture.entry_uri, &host).await;
+
+        assert!(
+            has_warning(&diags, "KILN_STALE_CACHE"),
+            "traversal path must be refused as cache miss, got {diags:#?}",
+        );
+    });
+}
+
 /// Sanity-check: after a consume-only diagnostic pass the workspace
 /// must contain only the files we wrote in `build_fixture`. Catches
 /// accidental regressions where the LSP path picks up a CLI-only write
