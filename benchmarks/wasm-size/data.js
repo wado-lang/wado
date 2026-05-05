@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777934390369,
+  "lastUpdate": 1777940134253,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -19329,6 +19329,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/0c5536db603255a28ae81670510055d4dbb316af"
         },
         "date": 1777934390217,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1775,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8776,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18520,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 503688,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6ba717bcfe559ae407c41ca38dd8584ad506b891",
+          "message": "Merge pull request #998 from wado-lang/claude/refactor-parse-rs-FVfGU\n\nrefactor(parser): collapse binary-op duplication, split parse_primary_expr",
+          "timestamp": "2026-05-05T09:11:05+09:00",
+          "tree_id": "455ac3936cb57016ee64d3e01a8d76ab17d6c668",
+          "url": "https://github.com/wado-lang/wado/commit/6ba717bcfe559ae407c41ca38dd8584ad506b891"
+        },
+        "date": 1777940134145,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
