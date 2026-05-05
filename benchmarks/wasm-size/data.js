@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777941255278,
+  "lastUpdate": 1777945592172,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -19417,6 +19417,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/18671d5e61ba89854c9e692377ef9199cfe69061"
         },
         "date": 1777941255161,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1775,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8776,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18520,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 503688,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "461b316426d72e54a93436b0aae4609715ef84d1",
+          "message": "Merge pull request #1000 from wado-lang/claude/refactor-traits-module-TyJIL\n\nrefactor(synthesis/traits): extract helpers, unify generic and non-generic paths",
+          "timestamp": "2026-05-05T10:41:24+09:00",
+          "tree_id": "ad0274ade327ad1384d144c866de66e7136e502b",
+          "url": "https://github.com/wado-lang/wado/commit/461b316426d72e54a93436b0aae4609715ef84d1"
+        },
+        "date": 1777945591816,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
