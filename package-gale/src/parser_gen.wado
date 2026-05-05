@@ -3027,7 +3027,7 @@ fn gen_repeat(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext, nam
             let opt_name = dedup_name(&field_info.0, name_counts);
             if is_group_store {
                 ctx.group_counter = gc_before;
-                gen_storable_optional(w, inner, ctx, &first, name_counts, &type_str, &opt_name, &field_info.0);
+                gen_storable_optional(w, inner, ctx, name_counts, &type_str, &opt_name, &field_info.0);
             } else {
                 w.begin(`let {opt_name}: Option<{type_str}> = if {ctx.first_check_str(&first)}`);
                 let mut nc: Array<[String, i32]> = [];
@@ -3077,7 +3077,7 @@ fn gen_repeat(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext, nam
         }
 
         if let Optional = rep.kind {
-            gen_optional_with_backtrack(w, inner, ctx, &first, name_counts);
+            gen_optional_with_backtrack(w, inner, ctx, name_counts);
         }
     }
 }
@@ -3285,7 +3285,7 @@ fn gen_repeat_with_follow(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut Gen
         w.line("null");
         w.end_with(";");
     } else {
-        gen_optional_with_backtrack(w, inner, ctx, &first, name_counts);
+        gen_optional_with_backtrack(w, inner, ctx, name_counts);
     }
 }
 
@@ -3559,7 +3559,7 @@ fn emit_scan_guard_with_prefix(w: &mut CodeWriter, inner: &Element, ctx: &mut Ge
     return scan_pos_var;
 }
 
-fn gen_optional_with_backtrack(w: &mut CodeWriter, inner: &Element, ctx: &mut GenContext, first: &Array<String>, name_counts: &mut Array<[String, i32]>) {
+fn gen_optional_with_backtrack(w: &mut CodeWriter, inner: &Element, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
     if has_nested_optionals(inner) {
         if let Group(g) = inner {
             gen_optional_with_lookahead(w, &g.alternatives[0].elements, ctx, name_counts);
@@ -3620,13 +3620,15 @@ fn gen_optional_with_backtrack(w: &mut CodeWriter, inner: &Element, ctx: &mut Ge
     w.end();
 }
 
-/// Generate a storable optional group with proper backtracking.
+/// Generate a storable optional group, picking the best available
+/// disambiguation strategy:
 ///
-/// For groups where leading fixed tokens provide sufficient lookahead
-/// (e.g. `(K_IF K_NOT K_EXISTS)?`), uses multi-token lookahead condition.
-/// For groups starting with rule refs (e.g. `(database_name '.')?`), uses
-/// backtracking to restore position on failure while still capturing fields.
-fn gen_storable_optional(w: &mut CodeWriter, inner: &Element, ctx: &mut GenContext, first: &Array<String>, name_counts: &mut Array<[String, i32]>, type_str: &String, opt_name: &String, field_name: &String) {
+/// - Multi-token lookahead when leading fixed tokens uniquely identify
+///   the optional (e.g. `(K_IF K_NOT K_EXISTS)?`).
+/// - Shape-based lookahead when nested optionals require it.
+/// - Inline scan-guard otherwise (e.g. `(database_name '.')?`); the
+///   inner must be fully scannable, since backtracking has been removed.
+fn gen_storable_optional(w: &mut CodeWriter, inner: &Element, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, type_str: &String, opt_name: &String, field_name: &String) {
     let la_depth = optional_lookahead_depth(inner);
     if la_depth >= 1 {
         // Multi-token lookahead: safe to use ? since tokens are confirmed
@@ -3654,8 +3656,8 @@ fn gen_storable_optional(w: &mut CodeWriter, inner: &Element, ctx: &mut GenConte
         // Nested optionals: use shape-based lookahead dispatch with struct capture
         gen_storable_optional_with_lookahead(w, inner, ctx, name_counts, type_str, opt_name, field_name);
     } else {
-        // Backtracking: save position and restore on mid-sequence failure
-        gen_storable_optional_with_backtrack(w, inner, ctx, first, name_counts, type_str, opt_name, field_name);
+        // Inline scan-guard: scan first, parse on success.
+        gen_storable_optional_with_backtrack(w, inner, ctx, name_counts, type_str, opt_name, field_name);
     }
 }
 
@@ -3785,7 +3787,7 @@ fn gen_absent_optional_field(w: &mut CodeWriter, elem: &Element, name_counts: &m
 ///       }
 ///       result
 ///   } else { null };
-fn gen_storable_optional_with_backtrack(w: &mut CodeWriter, inner: &Element, ctx: &mut GenContext, first: &Array<String>, name_counts: &mut Array<[String, i32]>, type_str: &String, opt_name: &String, field_name: &String) {
+fn gen_storable_optional_with_backtrack(w: &mut CodeWriter, inner: &Element, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, type_str: &String, opt_name: &String, field_name: &String) {
     // Scan-based guard: the inner must be fully scannable. Backtracking has
     // been removed; an unscannable inner is a codegen-time error.
     let mut visiting: Array<String> = [];
