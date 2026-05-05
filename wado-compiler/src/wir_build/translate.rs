@@ -163,11 +163,32 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
         drop(call_func);
         let _ = type_table;
 
-        // Get canonical func type
+        // Decide vtable schema for this functor by looking the
+        // signature up in the inspectable gate computed at WirContext
+        // start. Non-inspectable signatures get the slim
+        // `{ env, func }` schema and skip inspect wrapper
+        // registration entirely.
+        let type_table = &*ctx.package.type_table.borrow();
+        let call_func = functor.call_method.borrow();
+        let fn_struct_name = crate::name::mangle_generic_name(
+            "Fn",
+            &[
+                user_param_count.to_string(),
+                type_table.mangle_type_name(call_func.return_type),
+            ],
+        );
+        drop(call_func);
+        let _ = type_table;
+        let is_inspectable = ctx.inspectable_fn_signatures.contains(&fn_struct_name);
+
+        // Get canonical func type, threading the gate so the schema
+        // matches what `translate_closure_to_canonical` will emit.
         let user_params_clone = user_params.clone();
-        let (call_fn_type_id, _) =
-            ctx.get_or_create_canonical_closure_type(user_params, result_wirs.clone());
-        let callback_fn_type_id = ctx.get_or_create_canonical_callback_fn_type();
+        let (call_fn_type_id, _) = ctx.get_or_create_canonical_closure_type(
+            user_params,
+            result_wirs.clone(),
+            is_inspectable,
+        );
 
         // Get functor struct type ID
         let type_table = &*ctx.package.type_table.borrow();
@@ -193,32 +214,39 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
             call_func_id,
         );
 
-        // Register the inspect / inspect_alt wrappers. These forward
-        // to the per-functor `__Closure_N^Inspect / InspectAlt` impls
-        // synthesised in lower (Phase 2). Lookup may miss if DCE
-        // pruned them — in that case the slot is filled with an
-        // `Unreachable` body, since the canonical struct schema is
-        // fixed and every slot must hold a callable funcref.
-        let inspect_wrapper_id = register_inspect_wrapper(
-            ctx,
-            module_source,
-            functor_name,
-            "Inspect",
-            "inspect",
-            global_id,
-            callback_fn_type_id.clone(),
-            functor_struct_type_id.clone(),
-        );
-        let inspect_alt_wrapper_id = register_inspect_wrapper(
-            ctx,
-            module_source,
-            functor_name,
-            "InspectAlt",
-            "inspect_alt",
-            global_id,
-            callback_fn_type_id,
-            functor_struct_type_id,
-        );
+        // Register the inspect / inspect_alt wrappers only when the
+        // functor's signature is inspectable. These forward to the
+        // per-functor `__Closure_N^Inspect / InspectAlt` impls
+        // synthesised in lower (Phase 2). When DCE pruned the
+        // per-functor impl or the `Formatter` struct isn't registered,
+        // the wrapper body falls back to `Unreachable` — the slot
+        // stays populated so the canonical struct schema is consistent.
+        let (inspect_wrapper_id, inspect_alt_wrapper_id) = if is_inspectable {
+            let callback_fn_type_id = ctx.get_or_create_canonical_callback_fn_type();
+            let inspect = register_inspect_wrapper(
+                ctx,
+                module_source,
+                functor_name,
+                "Inspect",
+                "inspect",
+                global_id,
+                callback_fn_type_id.clone(),
+                functor_struct_type_id.clone(),
+            );
+            let inspect_alt = register_inspect_wrapper(
+                ctx,
+                module_source,
+                functor_name,
+                "InspectAlt",
+                "inspect_alt",
+                global_id,
+                callback_fn_type_id,
+                functor_struct_type_id,
+            );
+            (Some(inspect), Some(inspect_alt))
+        } else {
+            (None, None)
+        };
 
         ctx.closure_wrapper_funcs.insert(
             functor_key,
@@ -493,40 +521,25 @@ pub fn override_fn_canonical_dispatch_bodies(ctx: &mut WirContext<'_>) {
             if method_part != "Inspect::inspect" && method_part != "InspectAlt::inspect_alt" {
                 return None;
             }
-            // Recover the canonical-closure signature key from
-            // `Fn<arity,ret>` so we can pick the right
-            // CanonicalClosure_K type. Currently only used to verify
-            // the lookup succeeds — the field name + abstract callback
-            // fn type is the same across all (N, Ret).
+            // `after_slash` is the `Fn<arity, ret>` mangle that maps
+            // 1:1 to the matching `CanonicalClosure_K` via
+            // `fn_struct_name_to_canonical`.
             Some((idx, after_slash.to_string(), method_part.to_string()))
         })
         .collect();
 
-    // For each canonical closure type, locate the struct type id by
-    // signature key. The Fn<N,Ret>^Inspect impl's self type at
-    // runtime is *some* CanonicalClosure_K. We can't recover the
-    // exact one from the function name alone (the mangle drops the
-    // param types), so we use the abstract structref for self and
-    // refcast inside the body to the FIRST registered
-    // CanonicalClosure_K with that arity+ret. WRONG in general — see
-    // Phase 4 TODO; for now restrict to single-canonical-per-(N,Ret)
-    // programs.
-    let canonical_struct_by_fn_key: crate::hashmap::IndexMap<String, crate::wir::WirTypeId> = ctx
-        .canonical_closure_types
-        .iter()
-        .map(|(key, (_, struct_id))| (key.clone(), struct_id.clone()))
-        .collect();
-
     for (idx, fn_struct_name, method) in targets {
-        // Pick any CanonicalClosure_K with matching arity+ret. We
-        // could parse `Fn<arity,ret>` here; instead we accept the
-        // first registered canonical type for now since the impl body
-        // only uses its `inspect` / `inspect_alt` field name.
-        let Some((_, struct_type_id)) = canonical_struct_by_fn_key.iter().next() else {
+        // Pick the CanonicalClosure_K matching this impl's signature.
+        // Skip if the gate marked the signature non-inspectable
+        // (the impl body would never run because the slim canonical
+        // schema has no inspect slots).
+        let Some(struct_type_id) = ctx
+            .fn_struct_name_to_canonical
+            .get(&fn_struct_name)
+            .cloned()
+        else {
             continue;
         };
-        let struct_type_id = struct_type_id.clone();
-        let _ = fn_struct_name;
 
         let field_name = if method == "Inspect::inspect" {
             "inspect"

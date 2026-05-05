@@ -1758,7 +1758,7 @@ impl FunctionTranslator<'_, '_> {
                 vec![self.ctx.type_id_to_wir_type(self.type_table, return_type)]
             };
         let key = WirContext::canonical_closure_key(&param_wirs, &result_wirs);
-        let (fn_type_id, closure_struct_type_id) = if let Some((ftid, stid)) =
+        let (fn_type_id, closure_struct_type_id) = if let Some((ftid, stid, _)) =
             self.ctx.canonical_closure_types.get(&key)
         {
             (ftid.clone(), stid.clone())
@@ -1877,10 +1877,12 @@ impl FunctionTranslator<'_, '_> {
                 vec![self.ctx.type_id_to_wir_type(self.type_table, return_type)]
             };
 
-        // Get canonical closure type
+        // Get canonical closure type and its inspectable schema flag.
         let key = WirContext::canonical_closure_key(&param_wirs, &result_wirs);
-        let struct_type_id = if let Some((_, stid)) = self.ctx.canonical_closure_types.get(&key) {
-            stid.clone()
+        let (struct_type_id, is_inspectable) = if let Some((_, stid, ins)) =
+            self.ctx.canonical_closure_types.get(&key)
+        {
+            (stid.clone(), *ins)
         } else {
             panic!(
                 "[WIR] translate_closure_to_canonical: canonical closure type not registered for signature {key:?}"
@@ -1899,26 +1901,32 @@ impl FunctionTranslator<'_, '_> {
             );
         };
 
-        // Build the vtable-shaped CanonicalClosure_K:
-        //   { env, func, inspect, inspect_alt }.
-        // The inspect/inspect_alt slots let `Fn<N, Ret>^Inspect /
-        // InspectAlt` dispatch through this value at runtime — see
-        // WEP: Inspect (Debug Output) > Closure Inspect via Runtime
-        // Dispatch.
-        self.struct_new(
-            struct_type_id,
-            vec![
-                functor_instr,
-                WirInstr::RefFunc {
-                    func_id: wrappers.call,
-                },
-                WirInstr::RefFunc {
-                    func_id: wrappers.inspect,
-                },
-                WirInstr::RefFunc {
-                    func_id: wrappers.inspect_alt,
-                },
-            ],
-        )
+        // Build CanonicalClosure_K. Slim `{ env, func }` for non-
+        // inspectable signatures — production builds that never
+        // inspect closures pay nothing here. Fat `{ env, func,
+        // inspect, inspect_alt }` when the per-`(N, Ret)` gate is
+        // set; the extra slots let `Fn<N, Ret>^Inspect / InspectAlt`
+        // dispatch through this value at runtime.
+        let mut fields = vec![
+            functor_instr,
+            WirInstr::RefFunc {
+                func_id: wrappers.call,
+            },
+        ];
+        if is_inspectable {
+            let inspect_id = wrappers
+                .inspect
+                .expect("inspectable canonical closure missing inspect wrapper");
+            let inspect_alt_id = wrappers
+                .inspect_alt
+                .expect("inspectable canonical closure missing inspect_alt wrapper");
+            fields.push(WirInstr::RefFunc {
+                func_id: inspect_id,
+            });
+            fields.push(WirInstr::RefFunc {
+                func_id: inspect_alt_id,
+            });
+        }
+        self.struct_new(struct_type_id, fields)
     }
 }

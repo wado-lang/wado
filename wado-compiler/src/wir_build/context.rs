@@ -77,14 +77,34 @@ pub struct WirContext<'a> {
 
     /// Map from function signature string to canonical closure info.
     /// Key: stringified signature (e.g., "(i32, i32) -> i32")
-    /// Value: (`canonical_fn_type_id`, `canonical_closure_struct_type_id`)
-    pub canonical_closure_types: IndexMap<String, (WirTypeId, WirTypeId)>,
+    /// Value: (`canonical_fn_type_id`, `canonical_closure_struct_type_id`,
+    ///         `is_inspectable`)
+    /// `is_inspectable` is the per-`(N, Ret)` gate that decides whether
+    /// the canonical struct carries the inspect / `inspect_alt` vtable
+    /// slots. See `inspectable_fn_signatures`.
+    pub canonical_closure_types: IndexMap<String, (WirTypeId, WirTypeId, bool)>,
     /// Map from closure `(module_source, functor_id)` to the per-functor
     /// canonical wrapper triple. Keyed by module source + functor ID
     /// because functor IDs are per-module, not globally unique.
     pub closure_wrapper_funcs: IndexMap<(ModuleSource, u32), ClosureWrapperFuncs>,
     /// Counter for canonical closure type naming.
     pub canonical_closure_counter: u32,
+    /// Set of `Fn<arity, ret_mangle>` signatures whose `Fn^Inspect` or
+    /// `Fn^InspectAlt` impl survived DCE. Computed once at WIR build
+    /// start by scanning `package.functions` for surviving auto-derived
+    /// dispatch impls. Drives the per-`(N, Ret)` gate that decides
+    /// whether `CanonicalClosure_K` carries `inspect`/`inspect_alt` vtable
+    /// slots — closures whose `(N, Ret)` is unreachable here keep the
+    /// slim `{ env, func }` shape so production builds that never
+    /// inspect closures pay nothing.
+    pub inspectable_fn_signatures: IndexSet<String>,
+    /// Map from `Fn<arity, ret_mangle>` mangled name to the matching
+    /// `CanonicalClosure_K` struct WIR type id. Populated alongside
+    /// `canonical_closure_types`. The WIR-level
+    /// `Fn<...>^Inspect / InspectAlt` dispatch override uses this to
+    /// pick the correct struct type for `ref.cast` + `struct.get` on
+    /// `self`, since multiple `(N, Ret)` may co-exist in one program.
+    pub fn_struct_name_to_canonical: IndexMap<String, WirTypeId>,
 
     /// Collected string literals (from all TIR modules).
     pub string_literals: Vec<String>,
@@ -116,22 +136,63 @@ pub struct PendingFunctionBody {
     pub type_table: Rc<RefCell<TypeTable>>,
 }
 
+/// Scan `package.functions` and return the set of `Fn<arity, ret>`
+/// signatures whose `Fn^Inspect::inspect` or `Fn^InspectAlt::inspect_alt`
+/// impl is reachable.
+///
+/// Auto-derived dispatch impls for `(N, Ret)` are produced per-module
+/// by `synthesize_traits` and named `<module>/Fn<arity,ret>^Inspect::inspect`
+/// (and the `InspectAlt` variant). After DCE prunes unreachable
+/// functions, the survivors here drive the per-`(N, Ret)` schema gate
+/// so canonical closures whose signature is never inspected stay slim.
+fn compute_inspectable_fn_signatures(package: &FlatPackage) -> IndexSet<String> {
+    let mut set: IndexSet<String> = IndexSet::default();
+    for func_rc in &package.functions {
+        let Ok(func) = func_rc.try_borrow() else {
+            continue;
+        };
+        let Some(info) = &func.method_info else {
+            continue;
+        };
+        if info.base_struct_name != "Fn" {
+            continue;
+        }
+        let Some(base_trait) = info.base_trait_name.as_deref() else {
+            continue;
+        };
+        if base_trait != "Inspect" && base_trait != "InspectAlt" {
+            continue;
+        }
+        // `info.struct_name` already includes the type args, e.g.
+        // `Fn<2,i32>` (set by `with_struct_type_args`).
+        set.insert(info.struct_name.clone());
+    }
+    set
+}
+
 /// Per-functor wrapper functions stored in `CanonicalClosure_K` vtable
 /// slots. Populated by `register_closure_wrappers` and consumed by
-/// `translate_closure_to_canonical` to initialise `struct.new
-/// $CanonicalClosure_K (env, ref.func call, ref.func inspect,
-/// ref.func inspect_alt)`.
+/// `translate_closure_to_canonical` to initialise the canonical
+/// closure struct.
+///
+/// `inspect` and `inspect_alt` are `None` when the per-`(N, Ret)`
+/// gate (`WirContext::inspectable_fn_signatures`) reports the
+/// signature as unreachable — in that case `CanonicalClosure_K` uses
+/// the slim `{ env, func }` schema and `translate_closure_to_canonical`
+/// only emits two `struct.new` operands.
 #[derive(Clone, Debug)]
 pub struct ClosureWrapperFuncs {
     /// `__closure_wrapper_N(env, args...) -> ret` — refcasts env to
     /// `&__Closure_N` and forwards to `__call`.
     pub call: WirFuncId,
     /// `__closure_inspect_wrapper_N(env, formatter)` — refcasts both
-    /// args and forwards to `__Closure_N^Inspect::inspect`.
-    pub inspect: WirFuncId,
+    /// args and forwards to `__Closure_N^Inspect::inspect`. `None`
+    /// when the functor's `(N, Ret)` is not inspectable.
+    pub inspect: Option<WirFuncId>,
     /// `__closure_inspect_alt_wrapper_N(env, formatter)` — refcasts
     /// both args and forwards to `__Closure_N^InspectAlt::inspect_alt`.
-    pub inspect_alt: WirFuncId,
+    /// `None` when the functor's `(N, Ret)` is not inspectable.
+    pub inspect_alt: Option<WirFuncId>,
 }
 
 impl<'a> WirContext<'a> {
@@ -154,6 +215,15 @@ impl<'a> WirContext<'a> {
                 bytes_literals.push(b.clone());
             }
         }
+
+        // Compute the per-`(N, Ret)` inspectable gate. After DCE,
+        // `package.functions` only contains reachable functions, so the
+        // surviving auto-derived `Fn<arity, ret>^Inspect / InspectAlt`
+        // impls tell us exactly which signatures need vtable slots in
+        // `CanonicalClosure_K`. Programs that don't inspect closures
+        // observe an empty set here — every canonical closure stays
+        // slim `{ env, func }`.
+        let inspectable_fn_signatures = compute_inspectable_fn_signatures(package);
 
         Self {
             package,
@@ -184,6 +254,8 @@ impl<'a> WirContext<'a> {
             canonical_closure_types: IndexMap::default(),
             closure_wrapper_funcs: IndexMap::default(),
             canonical_closure_counter: 0,
+            inspectable_fn_signatures,
+            fn_struct_name_to_canonical: IndexMap::default(),
             string_literals,
             bytes_literals,
             wasm_module_sources: IndexMap::<ModuleSource, String>::default(),
@@ -343,10 +415,11 @@ impl<'a> WirContext<'a> {
         &mut self,
         param_wirs: Vec<WirType>,
         result_wirs: Vec<WirType>,
+        is_inspectable: bool,
     ) -> (WirTypeId, WirTypeId) {
         let key = Self::canonical_closure_key(&param_wirs, &result_wirs);
-        if let Some(existing) = self.canonical_closure_types.get(&key) {
-            return existing.clone();
+        if let Some((fn_id, struct_id, _)) = self.canonical_closure_types.get(&key) {
+            return (fn_id.clone(), struct_id.clone());
         }
 
         let id = self.canonical_closure_counter;
@@ -364,57 +437,61 @@ impl<'a> WirContext<'a> {
         let fn_type_fq = format!("functype/$canonical_closure_fn_{id}");
         let fn_type_id = self.register_func_type(fn_type_fq, fn_params, result_wirs);
 
-        // Single canonical callback type `(env, formatter) -> ()` shared
-        // by inspect / inspect_alt across all `(N, Ret)`. Created lazily
-        // and cached so identical func types are shared.
-        let callback_fn_type_id = self.get_or_create_canonical_callback_fn_type();
-
-        // Create canonical closure struct with vtable layout.
-        let struct_fq = format!("canonical//CanonicalClosure_{id}");
+        // Build the closure struct fields. Slim `{ env, func }` is the
+        // default; inspectable signatures append two callback slots
+        // (`inspect`, `inspect_alt`) for runtime trait dispatch.
         use crate::wir::{WirField, WirMeta, WirName, WirStructType};
+        let mut fields = vec![
+            WirField {
+                name: "env".to_string(),
+                ty: abstract_struct_nullable,
+                mutable: false,
+            },
+            WirField {
+                name: "func".to_string(),
+                ty: WirType::Ref {
+                    type_id: fn_type_id.clone(),
+                    nullable: false,
+                },
+                mutable: false,
+            },
+        ];
+        if is_inspectable {
+            let callback_fn_type_id = self.get_or_create_canonical_callback_fn_type();
+            fields.push(WirField {
+                name: "inspect".to_string(),
+                ty: WirType::Ref {
+                    type_id: callback_fn_type_id.clone(),
+                    nullable: false,
+                },
+                mutable: false,
+            });
+            fields.push(WirField {
+                name: "inspect_alt".to_string(),
+                ty: WirType::Ref {
+                    type_id: callback_fn_type_id,
+                    nullable: false,
+                },
+                mutable: false,
+            });
+        }
+
+        let struct_fq = format!("canonical//CanonicalClosure_{id}");
         let struct_type_id = self.register_type(
             struct_fq.clone(),
             WirTypeDef::Struct(WirStructType {
                 name: WirName { fq: struct_fq },
-                fields: vec![
-                    WirField {
-                        name: "env".to_string(),
-                        ty: abstract_struct_nullable,
-                        mutable: false,
-                    },
-                    WirField {
-                        name: "func".to_string(),
-                        ty: WirType::Ref {
-                            type_id: fn_type_id.clone(),
-                            nullable: false,
-                        },
-                        mutable: false,
-                    },
-                    WirField {
-                        name: "inspect".to_string(),
-                        ty: WirType::Ref {
-                            type_id: callback_fn_type_id.clone(),
-                            nullable: false,
-                        },
-                        mutable: false,
-                    },
-                    WirField {
-                        name: "inspect_alt".to_string(),
-                        ty: WirType::Ref {
-                            type_id: callback_fn_type_id,
-                            nullable: false,
-                        },
-                        mutable: false,
-                    },
-                ],
+                fields,
                 meta: WirMeta::default(),
                 generic_origin: None,
                 newtype_origin: None,
             }),
         );
 
-        self.canonical_closure_types
-            .insert(key, (fn_type_id.clone(), struct_type_id.clone()));
+        self.canonical_closure_types.insert(
+            key,
+            (fn_type_id.clone(), struct_type_id.clone(), is_inspectable),
+        );
 
         (fn_type_id, struct_type_id)
     }
