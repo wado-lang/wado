@@ -1829,7 +1829,8 @@ fn generate_inspect_alt_impls(module: &mut TirModule) {
         {
             // Tuple InspectAlt is provided by variadic impl in core:prelude/tuple.wado
             continue;
-        } else if let ResolvedType::Function {
+        }
+        if let ResolvedType::Function {
             params,
             return_type,
             ..

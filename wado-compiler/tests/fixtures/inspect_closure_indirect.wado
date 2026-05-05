@@ -43,16 +43,22 @@ test "closure stored in struct field keeps source for :#?" {
     assert `{h.cb:#?}` == "|y: i32| (y * 2)";
 }
 
-test "captured closure still inspects via captured field" {
+test "let-bound closure stored in struct field then read back keeps source for :#?" {
     let inner = |a: i32| a * 3;
     let h = Holder { cb: inner };
     assert `{h.cb:#?}` == "|a: i32| (a * 3)";
 }
 
-test "captured closure passed across fn boundary keeps source" {
+test "let-bound closure stored in struct field passed across fn boundary keeps source" {
     let inner = |a: i32| a * 3;
     let h = Holder { cb: inner };
     assert fmt_alt(h.cb) == "|a: i32| (a * 3)";
+}
+
+test "specialised closure formatted via Display falls through to Inspect output" {
+    let f = |x: i32| x + 1;
+    assert `{f}` == "|i32| -> i32";
+    assert `{f:#}` == "|x: i32| (x + 1)";
 }
 
 test "capturing closure shows captures clause in :#?" {

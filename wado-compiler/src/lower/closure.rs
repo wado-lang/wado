@@ -1479,15 +1479,28 @@ impl ClosureCallSiteLowerer<'_> {
         };
     }
 
-    /// When a `MethodCall` resolves to `Fn<N, Ret>^Inspect::inspect` or
-    /// `Fn<N, Ret>^InspectAlt::inspect_alt` with a receiver that is a
-    /// specialised closure local — either let-bound by the closure
+    /// When a `MethodCall` resolves to `Fn<N, Ret>^Inspect`,
+    /// `^InspectAlt`, `^Display`, or `^DisplayAlt` with a receiver that
+    /// is a specialised closure local — either let-bound by the closure
     /// safety analyser, or a fn-param specialised parameter
     /// (`generate_fn_param_specializations` rewrites the param type to
     /// `&__Closure_N`) — redirect the call to the per-functor
-    /// `__Closure_N^Inspect / InspectAlt` impl. The redirect bypasses
-    /// the canonical-vtable indirection so the specialised path
-    /// produces the per-literal signature / source.
+    /// `__Closure_N^Inspect / InspectAlt` impl. `Display` / `DisplayAlt`
+    /// auto-derived fallbacks delegate to `Inspect` / `InspectAlt`
+    /// respectively, so all four trait-method shapes terminate at the
+    /// per-functor impl on the specialised path. Skipping the redirect
+    /// for `Display`/`DisplayAlt` would let the value reach the
+    /// canonical-vtable dispatch stub through the fallback's
+    /// `self.Inspect::inspect(f)` body, where `ref.cast self to
+    /// $canonical_inspectable_base` traps because the receiver is a
+    /// specialised `&__Closure_N`, not a canonical struct.
+    ///
+    /// Cross-module note: when the closure was defined in module A and
+    /// the redirect fires inside a body that was inlined / specialised
+    /// into module B, the per-functor impl still lives in module A
+    /// (where the closure literal was lowered). The rewritten
+    /// `FunctionRef` uses the functor's `module_source`, not the
+    /// surrounding body's module.
     ///
     /// Detection: `local_to_closure` is seeded by the safety analyser
     /// for let-bound closures and by `seed_local_to_closure_from_params`
@@ -1506,9 +1519,15 @@ impl ClosureCallSiteLowerer<'_> {
         let Some(base_trait) = info.base_trait_name.as_deref() else {
             return;
         };
-        if base_trait != "Inspect" && base_trait != "InspectAlt" {
-            return;
-        }
+        // Map each formatting trait to the per-functor impl that
+        // produces the right output. `Display`/`DisplayAlt` fall back
+        // to `Inspect`/`InspectAlt` so the redirect targets are the
+        // same per-functor method either way.
+        let (target_trait, target_method) = match base_trait {
+            "Inspect" | "Display" => ("Inspect", "inspect"),
+            "InspectAlt" | "DisplayAlt" => ("InspectAlt", "inspect_alt"),
+            _ => return,
+        };
 
         let local_idx = match peel_ref_to_local(receiver) {
             Some(idx) => idx,
@@ -1535,8 +1554,8 @@ impl ClosureCallSiteLowerer<'_> {
 
         let new_method_info = LocalMethodName::new(
             functor.struct_name.clone(),
-            Some(base_trait.to_string()),
-            info.method_name.clone(),
+            Some(target_trait.to_string()),
+            target_method.to_string(),
         );
         let new_name = new_method_info.to_mangled_name();
 
@@ -1550,7 +1569,15 @@ impl ClosureCallSiteLowerer<'_> {
             span,
         );
         *func = FunctionRef {
-            module_source: self.module_source.clone(),
+            // Use the functor's *defining* module, not the surrounding
+            // body's module: the per-functor `__Closure_N^Inspect[Alt]`
+            // impl was synthesised alongside the closure literal in
+            // `lower::closure::ClosureLowerer::lower_module`, so it
+            // lives in `functor.module_source`. After cross-module
+            // inlining (`generate_fn_param_specializations` clones a
+            // helper into another module) the body may be visited from
+            // a different module, but the impl itself doesn't move.
+            module_source: functor.module_source.clone(),
             name: new_name,
             monomorph_info: None,
             method_info: Some(new_method_info),
