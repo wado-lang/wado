@@ -43,8 +43,27 @@ struct FunctionAnalysis {
 /// list. Returns the set of reachable functions for use by
 /// `remove_unreachable_functions`.
 pub fn analyze_project(project: &mut FlatPackage) -> IndexSet<FunctionId> {
-    // Phase 1: Pure analysis — build graph, compute reachable set
-    let (call_graph, effect_usage) = build_analysis_graph(project);
+    // Phase 1a: build a provisional call graph that does NOT root the
+    // per-functor `__Closure_N^Inspect[Alt]` impls from
+    // `ClosureToCanonical`, then compute its reachable set. This
+    // identifies which functions can actually run.
+    let (call_graph_v1, _) =
+        build_analysis_graph_with(project, &InspectableSignatures::default());
+    let reachable_v1 = compute_reachable_from_entries(project, &call_graph_v1);
+
+    // Phase 1b: derive the inspectable `(arity, ret)` set from the
+    // reachable functions only. A dead `:?`/`:#?` call site in
+    // unreachable code must NOT keep per-functor inspect impls alive
+    // for a reachable canonicalised closure of the matching signature.
+    let inspectable = collect_inspectable_signatures_from_reachable(project, &reachable_v1);
+
+    // Phase 1c: rebuild the call graph with inspect roots gated by the
+    // reachable-derived signatures, then compute the final reachable
+    // set. The per-functor impls themselves don't issue any
+    // `Fn^Inspect[Alt]` calls (they just write per-literal strings),
+    // so the inspectable set is stable under this expansion — no
+    // fixpoint iteration is needed.
+    let (call_graph, effect_usage) = build_analysis_graph_with(project, &inspectable);
     let reachable = compute_reachable_from_entries(project, &call_graph);
 
     // Phase 2: Resolve imports and WASI features using reachable set
@@ -470,19 +489,14 @@ pub fn remove_unreachable_closure_functors(project: &mut FlatPackage) {
 }
 
 /// Build call graph and effect usage from all TIR functions
-fn build_analysis_graph(project: &FlatPackage) -> (CallGraph, EffectUsageMap) {
+fn build_analysis_graph_with(
+    project: &FlatPackage,
+    inspectable_signatures: &InspectableSignatures,
+) -> (CallGraph, EffectUsageMap) {
     let mut call_graph: CallGraph = IndexMap::default();
     let mut effect_usage: EffectUsageMap = IndexMap::default();
 
     let type_table = &*project.type_table.borrow();
-
-    // Pre-scan TIR for `Fn<arity, ret>^Inspect/InspectAlt::inspect[_alt]`
-    // method-call sites. Only those `(arity, ret)` signatures need their
-    // per-functor `__Closure_N^Inspect/InspectAlt` impls kept alive when a
-    // closure is canonicalised — without this gate, every
-    // `ClosureToCanonical` would unconditionally root those impls, wasting
-    // code size in programs that build closures but never inspect them.
-    let inspectable_signatures = collect_inspectable_signatures(project);
 
     // Analyze functions (including methods stored as functions)
     for func_rc in &project.functions {
@@ -524,7 +538,7 @@ fn build_analysis_graph(project: &FlatPackage) -> (CallGraph, EffectUsageMap) {
                 ))
             }
         };
-        let analysis = analyze_function(&func, module_source, type_table, &inspectable_signatures);
+        let analysis = analyze_function(&func, module_source, type_table, inspectable_signatures);
         call_graph.insert(func_id.clone(), analysis.callees);
         if !analysis.effect_calls.is_empty() {
             effect_usage.insert(func_id.clone(), analysis.effect_calls);
@@ -551,16 +565,63 @@ struct InspectableSignatures {
     inspect_alt: IndexSet<(usize, TypeId)>,
 }
 
-fn collect_inspectable_signatures(project: &FlatPackage) -> InspectableSignatures {
+/// Compute the inspectable `(arity, return_type)` set from the bodies
+/// of *reachable* functions only. Restricting the scan to live code
+/// keeps a dead `:?`/`:#?` call from forcing per-functor inspect impls
+/// to stay alive for an unrelated reachable closure of the same
+/// signature.
+fn collect_inspectable_signatures_from_reachable(
+    project: &FlatPackage,
+    reachable: &IndexSet<FunctionId>,
+) -> InspectableSignatures {
     let mut sigs = InspectableSignatures::default();
     let type_table = &*project.type_table.borrow();
     for func_rc in &project.functions {
         let func = func_rc.borrow();
+        let func_id = function_id_for(&func);
+        if !reachable.contains(&func_id) {
+            continue;
+        }
         if let Some(body) = &func.body {
             scan_inspect_signatures_block(body, type_table, &mut sigs);
         }
     }
     sigs
+}
+
+/// Compute the `FunctionId` used by the call graph for a TIR function.
+/// Mirrors the keying logic in `build_analysis_graph_with`; centralising
+/// it here so other passes (notably the inspectable-signatures scan)
+/// can compare against the call graph's reachable set.
+fn function_id_for(func: &TirFunction) -> FunctionId {
+    let module_source = &func.module_source;
+    if let Some(ref info) = func.method_info {
+        if let Some(monomorph_info) = &func.monomorph_info {
+            FunctionId::Free(FreeFunctionName::with_monomorph_info(
+                module_source.clone(),
+                func.name.clone(),
+                monomorph_info.generic_name.clone(),
+            ))
+        } else {
+            FunctionId::Method(MethodName::new(
+                module_source.clone(),
+                info.struct_name.clone(),
+                info.trait_name.clone(),
+                info.method_name.clone(),
+            ))
+        }
+    } else if let Some(monomorph_info) = &func.monomorph_info {
+        FunctionId::Free(FreeFunctionName::with_monomorph_info(
+            module_source.clone(),
+            func.name.clone(),
+            monomorph_info.generic_name.clone(),
+        ))
+    } else {
+        FunctionId::Free(FreeFunctionName::from_module_source(
+            module_source,
+            &func.name,
+        ))
+    }
 }
 
 fn scan_inspect_signatures_block(

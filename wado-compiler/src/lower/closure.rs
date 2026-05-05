@@ -674,13 +674,16 @@ impl ClosureLowerer {
             });
 
             // Synthesize per-functor Inspect / InspectAlt impls so trait
-            // dispatch on the specialized `&__Closure_N` value writes the
-            // per-literal signature / TIR-unparsed source. The template
-            // expansion's `Function` short-circuit is still present, so
-            // these impls are reachable only from user-written
-            // `closure.inspect(&mut f)` style calls and from the
-            // ClosureCallSiteLowerer redirect added below; standard DCE
-            // removes them when neither is reached.
+            // dispatch on the specialised `&__Closure_N` value writes the
+            // per-literal signature / TIR-unparsed source. Template
+            // expansion routes `{f:?}` / `{f:#?}` for fn-typed receivers
+            // through the same `Fn<N, Ret>^Inspect[Alt]::inspect[_alt]`
+            // call shape that user-written `f.inspect(&mut formatter)`
+            // produces, so these impls are reachable through three
+            // routes: explicit user calls, the `ClosureCallSiteLowerer`
+            // redirect added below (specialised path), and the
+            // canonical-vtable inspect slots (indirect path). Standard
+            // DCE removes them when none of these reach.
             let signature = format_closure_signature(&collected.params, return_type, type_table);
             // Recover the per-literal source body (`|x: i32| x + 1`)
             // by unparsing the captured TIR closure form. The TIR is

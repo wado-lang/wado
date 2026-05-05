@@ -26,7 +26,7 @@ use crate::token::Span;
 /// Runs as part of the pre-mono synthesis phase. Template expansion emits
 /// trait method calls (`Display::fmt`, `Inspect::inspect`) that the monomorphizer
 /// subsequently resolves to concrete implementations.
-pub fn expand_templates(module: &TirModule, tt: &Rc<RefCell<TypeTable>>) {
+pub fn expand_templates(module: &mut TirModule, tt: &Rc<RefCell<TypeTable>>) {
     let module_src = module.module_source.clone();
     for func_rc in &module.functions {
         let mut func = func_rc.borrow_mut();
@@ -39,6 +39,26 @@ pub fn expand_templates(module: &TirModule, tt: &Rc<RefCell<TypeTable>>) {
             expand_block(body, tt, &mut alloc, &module_src);
             func.local_count = alloc.next_index;
             func.locals.extend(alloc.new_locals);
+        }
+    }
+    // Walk impl-block methods too. They aren't reachable via
+    // `module.functions` (which holds only free functions and
+    // synthesised wrappers), so a template string inside e.g.
+    // `impl Point { fn show(&self) -> String { return `..` } }` would
+    // otherwise survive as a raw `TirExprKind::TemplateString` node and
+    // hit later phases that don't know how to handle it.
+    for impl_block in &mut module.impls {
+        for method in &mut impl_block.methods {
+            let local_count = method.local_count;
+            if let Some(ref mut body) = method.body {
+                let mut alloc = FuncLocalAlloc {
+                    next_index: local_count,
+                    new_locals: Vec::new(),
+                };
+                expand_block(body, tt, &mut alloc, &module_src);
+                method.local_count = alloc.next_index;
+                method.locals.extend(alloc.new_locals);
+            }
         }
     }
 }
