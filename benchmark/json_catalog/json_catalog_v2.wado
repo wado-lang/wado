@@ -1,0 +1,1059 @@
+// JSON benchmark v2 (Stage 1 PoC): hand-rolled CitmCatalog parser.
+//
+// This bypasses core:serde and core:json entirely. The goal is to measure
+// the upper bound of removing trait dispatch / Result propagation /
+// sub-access struct allocation alone, before deciding whether to invest
+// in tape (Stage 2) or SIMD (Stage 3).
+//
+// Output types are identical to json_catalog.wado for fair comparison.
+
+use { Stdout } from "core:cli";
+use { TreeMap } from "core:collections";
+use { MonotonicClock } from "wasi:clocks";
+use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
+use { Benchmark } from "core:benchmark";
+
+struct Event {
+    description: Option<String>,
+    id: i64,
+    logo: Option<String>,
+    name: String,
+    sub_topic_ids: Array<i64>,
+    subject_code: Option<String>,
+    subtitle: Option<String>,
+    topic_ids: Array<i64>,
+}
+
+struct Price {
+    amount: i64,
+    audience_sub_category_id: i64,
+    seat_category_id: i64,
+}
+
+struct Area {
+    area_id: i64,
+    block_ids: Array<i64>,
+}
+
+struct SeatCategory {
+    areas: Array<Area>,
+    seat_category_id: i64,
+}
+
+struct Performance {
+    event_id: i64,
+    id: i64,
+    logo: Option<String>,
+    name: Option<String>,
+    prices: Array<Price>,
+    seat_categories: Array<SeatCategory>,
+    seat_map_image: Option<String>,
+    start: i64,
+    venue_code: String,
+}
+
+struct CitmCatalog {
+    area_names: TreeMap<String, String>,
+    audience_sub_category_names: TreeMap<String, String>,
+    block_names: TreeMap<String, String>,
+    events: TreeMap<String, Event>,
+    performances: Array<Performance>,
+    seat_category_names: TreeMap<String, String>,
+    sub_topic_names: TreeMap<String, String>,
+    subject_names: TreeMap<String, String>,
+    topic_names: TreeMap<String, String>,
+    topic_sub_topics: TreeMap<String, Array<i64>>,
+    venue_names: TreeMap<String, String>,
+}
+
+struct P {
+    input: String,
+    pos: i32,
+    len: i32,
+}
+
+impl P {
+    fn skip_ws(&mut self) {
+        let len = self.len;
+        while self.pos < len {
+            let b = self.input.get_byte(self.pos) as i32;
+            if b > 32 {
+                return;
+            }
+            if b == 32 || b == 10 || b == 13 || b == 9 {
+                self.pos += 1;
+            } else {
+                return;
+            }
+        }
+    }
+
+    fn peek(&self) -> i32 {
+        if self.pos >= self.len {
+            return -1;
+        }
+        return self.input.get_byte(self.pos) as i32;
+    }
+
+    fn expect_byte(&mut self, c: i32) {
+        self.skip_ws();
+        if self.pos >= self.len {
+            panic(`unexpected EOF, expected '{c as u8 as char}'`);
+        }
+        let b = self.input.get_byte(self.pos) as i32;
+        if b != c {
+            panic(`expected '{c as u8 as char}' at {self.pos}, got '{b as u8 as char}'`);
+        }
+        self.pos += 1;
+    }
+
+    fn try_consume_null(&mut self) -> bool {
+        self.skip_ws();
+        if self.pos + 4 <= self.len {
+            let p = self.pos;
+            if self.input.get_byte(p) as i32 == 'n' as i32
+                && self.input.get_byte(p + 1) as i32 == 'u' as i32
+                && self.input.get_byte(p + 2) as i32 == 'l' as i32
+                && self.input.get_byte(p + 3) as i32 == 'l' as i32 {
+                self.pos = p + 4;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    fn parse_i64(&mut self) -> i64 {
+        self.skip_ws();
+        let len = self.len;
+        let mut neg = false;
+        if self.pos < len && self.input.get_byte(self.pos) as i32 == '-' as i32 {
+            neg = true;
+            self.pos += 1;
+        }
+        let mut result: i64 = 0;
+        while self.pos < len {
+            let b = self.input.get_byte(self.pos) as i32;
+            if '0' as i32 <= b <= '9' as i32 {
+                result = result * 10 + (b - '0' as i32) as i64;
+                self.pos += 1;
+            } else {
+                break;
+            }
+        }
+        if neg {
+            return -result;
+        }
+        return result;
+    }
+
+    fn read_string(&mut self) -> String {
+        self.expect_byte('"' as i32);
+        let start = self.pos;
+        let len = self.len;
+        while self.pos < len {
+            let b = self.input.get_byte(self.pos) as i32;
+            if b == '"' as i32 {
+                let end = self.pos;
+                self.pos += 1;
+                return self.input.substr_bytes(start, end);
+            }
+            if b == '\\' as i32 {
+                return self.read_string_escaped(start);
+            }
+            self.pos += 1;
+        }
+        panic("EOF in string");
+    }
+
+    fn read_string_escaped(&mut self, prefix_start: i32) -> String {
+        let mut result = self.input.substr_bytes(prefix_start, self.pos);
+        let len = self.len;
+        loop {
+            let b = self.input.get_byte(self.pos) as i32;
+            if b == '"' as i32 {
+                self.pos += 1;
+                return result;
+            }
+            // b == '\\'
+            self.pos += 1;
+            if self.pos >= len {
+                panic("EOF after \\");
+            }
+            let esc = self.input.get_byte(self.pos) as u8 as char;
+            self.pos += 1;
+            match esc {
+                '"' => result.push('"'),
+                '\\' => result.push('\\'),
+                '/' => result.push('/'),
+                'n' => result.push('\n'),
+                'r' => result.push('\r'),
+                't' => result.push('\t'),
+                'b' => result.push(8 as u8 as char),
+                'f' => result.push(12 as u8 as char),
+                'u' => {
+                    if self.pos + 4 > len {
+                        panic("EOF in \\u");
+                    }
+                    let mut code: u32 = 0;
+                    for let mut i = 0; i < 4; i += 1 {
+                        let ch = self.input.get_byte(self.pos + i) as u8 as char;
+                        code = code * 16 + ch.hex_digit_value() as u32;
+                    }
+                    self.pos += 4;
+                    if let Some(c) = char::from_u32(code) {
+                        result.push(c);
+                    } else {
+                        panic("bad unicode codepoint");
+                    }
+                },
+                _ => panic(`invalid escape \\{esc}`),
+            }
+            // gather next unescaped chunk
+            let cs = self.pos;
+            while self.pos < len {
+                let b2 = self.input.get_byte(self.pos) as i32;
+                if b2 == '"' as i32 || b2 == '\\' as i32 {
+                    break;
+                }
+                self.pos += 1;
+            }
+            if self.pos > cs {
+                let chunk = self.input.substr_bytes(cs, self.pos);
+                result.push_str(chunk);
+            }
+        }
+        unreachable();
+    }
+
+    fn skip_string(&mut self) {
+        // pos at '"'
+        self.pos += 1;
+        let len = self.len;
+        while self.pos < len {
+            let b = self.input.get_byte(self.pos) as i32;
+            if b == '"' as i32 {
+                self.pos += 1;
+                return;
+            }
+            if b == '\\' as i32 {
+                self.pos += 2;
+                continue;
+            }
+            self.pos += 1;
+        }
+        panic("EOF in string");
+    }
+
+    fn skip_object(&mut self) {
+        self.pos += 1; // consume '{'
+        self.skip_ws();
+        if self.peek() == '}' as i32 {
+            self.pos += 1;
+            return;
+        }
+        loop {
+            self.skip_ws();
+            self.skip_string();
+            self.skip_ws();
+            self.expect_byte(':' as i32);
+            self.skip_value();
+            self.skip_ws();
+            let c = self.peek();
+            if c == '}' as i32 {
+                self.pos += 1;
+                return;
+            }
+            if c != ',' as i32 {
+                panic("skip_object: expected ',' or '}'");
+            }
+            self.pos += 1;
+        }
+        unreachable();
+    }
+
+    fn skip_array(&mut self) {
+        self.pos += 1;
+        self.skip_ws();
+        if self.peek() == ']' as i32 {
+            self.pos += 1;
+            return;
+        }
+        loop {
+            self.skip_value();
+            self.skip_ws();
+            let c = self.peek();
+            if c == ']' as i32 {
+                self.pos += 1;
+                return;
+            }
+            if c != ',' as i32 {
+                panic("skip_array: expected ',' or ']'");
+            }
+            self.pos += 1;
+        }
+        unreachable();
+    }
+
+    fn skip_number(&mut self) {
+        let len = self.len;
+        if self.pos < len && self.input.get_byte(self.pos) as i32 == '-' as i32 {
+            self.pos += 1;
+        }
+        while self.pos < len {
+            let b = self.input.get_byte(self.pos) as i32;
+            if ('0' as i32 <= b <= '9' as i32) || b == '.' as i32 || b == 'e' as i32 || b == 'E' as i32 || b == '+' as i32 || b == '-' as i32 {
+                self.pos += 1;
+            } else {
+                return;
+            }
+        }
+    }
+
+    fn skip_value(&mut self) {
+        self.skip_ws();
+        let b = self.peek();
+        if b == '"' as i32 {
+            self.skip_string();
+            return;
+        }
+        if b == '{' as i32 {
+            self.skip_object();
+            return;
+        }
+        if b == '[' as i32 {
+            self.skip_array();
+            return;
+        }
+        if b == 't' as i32 {
+            self.pos += 4;
+            return;
+        }
+        if b == 'f' as i32 {
+            self.pos += 5;
+            return;
+        }
+        if b == 'n' as i32 {
+            self.pos += 4;
+            return;
+        }
+        self.skip_number();
+    }
+
+    /// Reads `"key":` (with whitespace) and returns [key_start, key_end).
+    /// Panics if the key contains an escape (PoC limitation; CITM keys are clean ASCII).
+    fn key_range(&mut self) -> [i32, i32] {
+        self.skip_ws();
+        if self.peek() != '"' as i32 {
+            panic(`expected key at {self.pos}`);
+        }
+        self.pos += 1;
+        let start = self.pos;
+        let len = self.len;
+        while self.pos < len {
+            let b = self.input.get_byte(self.pos) as i32;
+            if b == '"' as i32 {
+                let end = self.pos;
+                self.pos += 1;
+                self.skip_ws();
+                self.expect_byte(':' as i32);
+                return [start, end];
+            }
+            if b == '\\' as i32 {
+                panic("escape in field key not supported in PoC");
+            }
+            self.pos += 1;
+        }
+        panic("EOF in key");
+    }
+
+    fn parse_optional_string(&mut self) -> Option<String> {
+        if self.try_consume_null() {
+            return null;
+        }
+        return Option::Some(self.read_string());
+    }
+
+    fn parse_array_i64(&mut self) -> Array<i64> {
+        self.expect_byte('[' as i32);
+        self.skip_ws();
+        if self.peek() == ']' as i32 {
+            self.pos += 1;
+            return [];
+        }
+        let mut arr: Array<i64> = [];
+        loop {
+            arr.push(self.parse_i64());
+            self.skip_ws();
+            let c = self.peek();
+            if c == ']' as i32 {
+                self.pos += 1;
+                return arr;
+            }
+            if c != ',' as i32 {
+                panic("array<i64>: expected ',' or ']'");
+            }
+            self.pos += 1;
+        }
+        unreachable();
+    }
+
+    fn parse_event(&mut self) -> Event {
+        self.expect_byte('{' as i32);
+        let mut description: Option<String> = null;
+        let mut id: i64 = 0;
+        let mut logo: Option<String> = null;
+        let mut name: String = "";
+        let mut sub_topic_ids: Array<i64> = [];
+        let mut subject_code: Option<String> = null;
+        let mut subtitle: Option<String> = null;
+        let mut topic_ids: Array<i64> = [];
+
+        self.skip_ws();
+        if self.peek() == '}' as i32 {
+            self.pos += 1;
+            return Event { description, id, logo, name, sub_topic_ids, subject_code, subtitle, topic_ids };
+        }
+        loop {
+            let [ks, ke] = self.key_range();
+            let klen = ke - ks;
+            let g0 = self.input.get_byte(ks) as i32;
+            let mut handled = false;
+            if klen == 2 {
+                // "id"
+                if g0 == 'i' as i32 && self.input.get_byte(ks + 1) as i32 == 'd' as i32 {
+                    id = self.parse_i64();
+                    handled = true;
+                }
+            } else if klen == 4 {
+                // "logo" / "name"
+                if g0 == 'n' as i32 {
+                    name = self.read_string();
+                    handled = true;
+                } else if g0 == 'l' as i32 {
+                    logo = self.parse_optional_string();
+                    handled = true;
+                }
+            } else if klen == 8 {
+                // "subtitle" / "topicIds"
+                if g0 == 's' as i32 {
+                    subtitle = self.parse_optional_string();
+                    handled = true;
+                } else if g0 == 't' as i32 {
+                    topic_ids = self.parse_array_i64();
+                    handled = true;
+                }
+            } else if klen == 11 {
+                // "description" / "subTopicIds" / "subjectCode"
+                if g0 == 'd' as i32 {
+                    description = self.parse_optional_string();
+                    handled = true;
+                } else if g0 == 's' as i32 {
+                    let g3 = self.input.get_byte(ks + 3) as i32;
+                    if g3 == 'T' as i32 {
+                        sub_topic_ids = self.parse_array_i64();
+                        handled = true;
+                    } else if g3 == 'e' as i32 {
+                        subject_code = self.parse_optional_string();
+                        handled = true;
+                    }
+                }
+            }
+            if !handled {
+                self.skip_value();
+            }
+
+            self.skip_ws();
+            let c = self.peek();
+            if c == '}' as i32 {
+                self.pos += 1;
+                return Event { description, id, logo, name, sub_topic_ids, subject_code, subtitle, topic_ids };
+            }
+            if c != ',' as i32 {
+                panic("event: expected ',' or '}'");
+            }
+            self.pos += 1;
+        }
+        unreachable();
+    }
+
+    fn parse_price(&mut self) -> Price {
+        self.expect_byte('{' as i32);
+        let mut amount: i64 = 0;
+        let mut audience_sub_category_id: i64 = 0;
+        let mut seat_category_id: i64 = 0;
+        self.skip_ws();
+        if self.peek() == '}' as i32 {
+            self.pos += 1;
+            return Price { amount, audience_sub_category_id, seat_category_id };
+        }
+        loop {
+            let [ks, ke] = self.key_range();
+            let klen = ke - ks;
+            let g0 = self.input.get_byte(ks) as i32;
+            let mut handled = false;
+            if klen == 6 {
+                // "amount"
+                if g0 == 'a' as i32 {
+                    amount = self.parse_i64();
+                    handled = true;
+                }
+            } else if klen == 14 {
+                // "seatCategoryId"
+                if g0 == 's' as i32 {
+                    seat_category_id = self.parse_i64();
+                    handled = true;
+                }
+            } else if klen == 21 {
+                // "audienceSubCategoryId"
+                if g0 == 'a' as i32 {
+                    audience_sub_category_id = self.parse_i64();
+                    handled = true;
+                }
+            }
+            if !handled {
+                self.skip_value();
+            }
+
+            self.skip_ws();
+            let c = self.peek();
+            if c == '}' as i32 {
+                self.pos += 1;
+                return Price { amount, audience_sub_category_id, seat_category_id };
+            }
+            if c != ',' as i32 {
+                panic("price: expected ',' or '}'");
+            }
+            self.pos += 1;
+        }
+        unreachable();
+    }
+
+    fn parse_array_price(&mut self) -> Array<Price> {
+        self.expect_byte('[' as i32);
+        self.skip_ws();
+        if self.peek() == ']' as i32 {
+            self.pos += 1;
+            return [];
+        }
+        let mut arr: Array<Price> = [];
+        loop {
+            arr.push(self.parse_price());
+            self.skip_ws();
+            let c = self.peek();
+            if c == ']' as i32 {
+                self.pos += 1;
+                return arr;
+            }
+            if c != ',' as i32 {
+                panic("array<Price>: expected ',' or ']'");
+            }
+            self.pos += 1;
+        }
+        unreachable();
+    }
+
+    fn parse_area(&mut self) -> Area {
+        self.expect_byte('{' as i32);
+        let mut area_id: i64 = 0;
+        let mut block_ids: Array<i64> = [];
+        self.skip_ws();
+        if self.peek() == '}' as i32 {
+            self.pos += 1;
+            return Area { area_id, block_ids };
+        }
+        loop {
+            let [ks, ke] = self.key_range();
+            let klen = ke - ks;
+            let g0 = self.input.get_byte(ks) as i32;
+            let mut handled = false;
+            if klen == 6 {
+                // "areaId"
+                if g0 == 'a' as i32 {
+                    area_id = self.parse_i64();
+                    handled = true;
+                }
+            } else if klen == 8 {
+                // "blockIds"
+                if g0 == 'b' as i32 {
+                    block_ids = self.parse_array_i64();
+                    handled = true;
+                }
+            }
+            if !handled {
+                self.skip_value();
+            }
+
+            self.skip_ws();
+            let c = self.peek();
+            if c == '}' as i32 {
+                self.pos += 1;
+                return Area { area_id, block_ids };
+            }
+            if c != ',' as i32 {
+                panic("area: expected ',' or '}'");
+            }
+            self.pos += 1;
+        }
+        unreachable();
+    }
+
+    fn parse_array_area(&mut self) -> Array<Area> {
+        self.expect_byte('[' as i32);
+        self.skip_ws();
+        if self.peek() == ']' as i32 {
+            self.pos += 1;
+            return [];
+        }
+        let mut arr: Array<Area> = [];
+        loop {
+            arr.push(self.parse_area());
+            self.skip_ws();
+            let c = self.peek();
+            if c == ']' as i32 {
+                self.pos += 1;
+                return arr;
+            }
+            if c != ',' as i32 {
+                panic("array<Area>: expected ',' or ']'");
+            }
+            self.pos += 1;
+        }
+        unreachable();
+    }
+
+    fn parse_seat_category(&mut self) -> SeatCategory {
+        self.expect_byte('{' as i32);
+        let mut areas: Array<Area> = [];
+        let mut seat_category_id: i64 = 0;
+        self.skip_ws();
+        if self.peek() == '}' as i32 {
+            self.pos += 1;
+            return SeatCategory { areas, seat_category_id };
+        }
+        loop {
+            let [ks, ke] = self.key_range();
+            let klen = ke - ks;
+            let g0 = self.input.get_byte(ks) as i32;
+            let mut handled = false;
+            if klen == 5 {
+                // "areas"
+                if g0 == 'a' as i32 {
+                    areas = self.parse_array_area();
+                    handled = true;
+                }
+            } else if klen == 14 {
+                // "seatCategoryId"
+                if g0 == 's' as i32 {
+                    seat_category_id = self.parse_i64();
+                    handled = true;
+                }
+            }
+            if !handled {
+                self.skip_value();
+            }
+
+            self.skip_ws();
+            let c = self.peek();
+            if c == '}' as i32 {
+                self.pos += 1;
+                return SeatCategory { areas, seat_category_id };
+            }
+            if c != ',' as i32 {
+                panic("seat_category: expected ',' or '}'");
+            }
+            self.pos += 1;
+        }
+        unreachable();
+    }
+
+    fn parse_array_seat_category(&mut self) -> Array<SeatCategory> {
+        self.expect_byte('[' as i32);
+        self.skip_ws();
+        if self.peek() == ']' as i32 {
+            self.pos += 1;
+            return [];
+        }
+        let mut arr: Array<SeatCategory> = [];
+        loop {
+            arr.push(self.parse_seat_category());
+            self.skip_ws();
+            let c = self.peek();
+            if c == ']' as i32 {
+                self.pos += 1;
+                return arr;
+            }
+            if c != ',' as i32 {
+                panic("array<SeatCategory>: expected ',' or ']'");
+            }
+            self.pos += 1;
+        }
+        unreachable();
+    }
+
+    fn parse_performance(&mut self) -> Performance {
+        self.expect_byte('{' as i32);
+        let mut event_id: i64 = 0;
+        let mut id: i64 = 0;
+        let mut logo: Option<String> = null;
+        let mut name: Option<String> = null;
+        let mut prices: Array<Price> = [];
+        let mut seat_categories: Array<SeatCategory> = [];
+        let mut seat_map_image: Option<String> = null;
+        let mut start: i64 = 0;
+        let mut venue_code: String = "";
+
+        self.skip_ws();
+        if self.peek() == '}' as i32 {
+            self.pos += 1;
+            return Performance { event_id, id, logo, name, prices, seat_categories, seat_map_image, start, venue_code };
+        }
+        loop {
+            let [ks, ke] = self.key_range();
+            let klen = ke - ks;
+            let g0 = self.input.get_byte(ks) as i32;
+            let mut handled = false;
+            if klen == 2 {
+                if g0 == 'i' as i32 && self.input.get_byte(ks + 1) as i32 == 'd' as i32 {
+                    id = self.parse_i64();
+                    handled = true;
+                }
+            } else if klen == 4 {
+                // "logo" / "name"
+                if g0 == 'l' as i32 {
+                    logo = self.parse_optional_string();
+                    handled = true;
+                } else if g0 == 'n' as i32 {
+                    name = self.parse_optional_string();
+                    handled = true;
+                }
+            } else if klen == 5 {
+                // "start"
+                if g0 == 's' as i32 {
+                    start = self.parse_i64();
+                    handled = true;
+                }
+            } else if klen == 6 {
+                // "prices"
+                if g0 == 'p' as i32 {
+                    prices = self.parse_array_price();
+                    handled = true;
+                }
+            } else if klen == 7 {
+                // "eventId"
+                if g0 == 'e' as i32 {
+                    event_id = self.parse_i64();
+                    handled = true;
+                }
+            } else if klen == 9 {
+                // "venueCode"
+                if g0 == 'v' as i32 {
+                    venue_code = self.read_string();
+                    handled = true;
+                }
+            } else if klen == 12 {
+                // "seatMapImage"
+                if g0 == 's' as i32 {
+                    seat_map_image = self.parse_optional_string();
+                    handled = true;
+                }
+            } else if klen == 14 {
+                // "seatCategories"
+                if g0 == 's' as i32 {
+                    seat_categories = self.parse_array_seat_category();
+                    handled = true;
+                }
+            }
+            if !handled {
+                self.skip_value();
+            }
+
+            self.skip_ws();
+            let c = self.peek();
+            if c == '}' as i32 {
+                self.pos += 1;
+                return Performance { event_id, id, logo, name, prices, seat_categories, seat_map_image, start, venue_code };
+            }
+            if c != ',' as i32 {
+                panic("performance: expected ',' or '}'");
+            }
+            self.pos += 1;
+        }
+        unreachable();
+    }
+
+    fn parse_array_performance(&mut self) -> Array<Performance> {
+        self.expect_byte('[' as i32);
+        self.skip_ws();
+        if self.peek() == ']' as i32 {
+            self.pos += 1;
+            return [];
+        }
+        let mut arr: Array<Performance> = [];
+        loop {
+            arr.push(self.parse_performance());
+            self.skip_ws();
+            let c = self.peek();
+            if c == ']' as i32 {
+                self.pos += 1;
+                return arr;
+            }
+            if c != ',' as i32 {
+                panic("array<Performance>: expected ',' or ']'");
+            }
+            self.pos += 1;
+        }
+        unreachable();
+    }
+
+    fn parse_string_map(&mut self) -> TreeMap<String, String> {
+        self.expect_byte('{' as i32);
+        self.skip_ws();
+        let mut m: TreeMap<String, String> = {};
+        if self.peek() == '}' as i32 {
+            self.pos += 1;
+            return m;
+        }
+        loop {
+            let key = self.read_string();
+            self.skip_ws();
+            self.expect_byte(':' as i32);
+            self.skip_ws();
+            let val = self.read_string();
+            m[key] = val;
+            self.skip_ws();
+            let c = self.peek();
+            if c == '}' as i32 {
+                self.pos += 1;
+                return m;
+            }
+            if c != ',' as i32 {
+                panic("string_map: expected ',' or '}'");
+            }
+            self.pos += 1;
+        }
+        unreachable();
+    }
+
+    fn parse_event_map(&mut self) -> TreeMap<String, Event> {
+        self.expect_byte('{' as i32);
+        self.skip_ws();
+        let mut m: TreeMap<String, Event> = {};
+        if self.peek() == '}' as i32 {
+            self.pos += 1;
+            return m;
+        }
+        loop {
+            let key = self.read_string();
+            self.skip_ws();
+            self.expect_byte(':' as i32);
+            let val = self.parse_event();
+            m[key] = val;
+            self.skip_ws();
+            let c = self.peek();
+            if c == '}' as i32 {
+                self.pos += 1;
+                return m;
+            }
+            if c != ',' as i32 {
+                panic("event_map: expected ',' or '}'");
+            }
+            self.pos += 1;
+        }
+        unreachable();
+    }
+
+    fn parse_topic_subtopics(&mut self) -> TreeMap<String, Array<i64>> {
+        self.expect_byte('{' as i32);
+        self.skip_ws();
+        let mut m: TreeMap<String, Array<i64>> = {};
+        if self.peek() == '}' as i32 {
+            self.pos += 1;
+            return m;
+        }
+        loop {
+            let key = self.read_string();
+            self.skip_ws();
+            self.expect_byte(':' as i32);
+            let val = self.parse_array_i64();
+            m[key] = val;
+            self.skip_ws();
+            let c = self.peek();
+            if c == '}' as i32 {
+                self.pos += 1;
+                return m;
+            }
+            if c != ',' as i32 {
+                panic("topic_sub_topics: expected ',' or '}'");
+            }
+            self.pos += 1;
+        }
+        unreachable();
+    }
+
+    fn parse_citm_catalog(&mut self) -> CitmCatalog {
+        self.expect_byte('{' as i32);
+        let mut area_names: TreeMap<String, String> = {};
+        let mut audience_sub_category_names: TreeMap<String, String> = {};
+        let mut block_names: TreeMap<String, String> = {};
+        let mut events: TreeMap<String, Event> = {};
+        let mut performances: Array<Performance> = [];
+        let mut seat_category_names: TreeMap<String, String> = {};
+        let mut sub_topic_names: TreeMap<String, String> = {};
+        let mut subject_names: TreeMap<String, String> = {};
+        let mut topic_names: TreeMap<String, String> = {};
+        let mut topic_sub_topics: TreeMap<String, Array<i64>> = {};
+        let mut venue_names: TreeMap<String, String> = {};
+
+        self.skip_ws();
+        if self.peek() == '}' as i32 {
+            self.pos += 1;
+            return CitmCatalog {
+                area_names, audience_sub_category_names, block_names, events,
+                performances, seat_category_names, sub_topic_names,
+                subject_names, topic_names, topic_sub_topics, venue_names,
+            };
+        }
+        loop {
+            let [ks, ke] = self.key_range();
+            let klen = ke - ks;
+            let g0 = self.input.get_byte(ks) as i32;
+            let mut handled = false;
+            if klen == 6 {
+                // "events"
+                if g0 == 'e' as i32 {
+                    events = self.parse_event_map();
+                    handled = true;
+                }
+            } else if klen == 9 {
+                // "areaNames"
+                if g0 == 'a' as i32 {
+                    area_names = self.parse_string_map();
+                    handled = true;
+                }
+            } else if klen == 10 {
+                // "blockNames" / "topicNames" / "venueNames"
+                if g0 == 'b' as i32 {
+                    block_names = self.parse_string_map();
+                    handled = true;
+                } else if g0 == 't' as i32 {
+                    topic_names = self.parse_string_map();
+                    handled = true;
+                } else if g0 == 'v' as i32 {
+                    venue_names = self.parse_string_map();
+                    handled = true;
+                }
+            } else if klen == 12 {
+                // "performances" / "subjectNames"
+                if g0 == 'p' as i32 {
+                    performances = self.parse_array_performance();
+                    handled = true;
+                } else if g0 == 's' as i32 {
+                    subject_names = self.parse_string_map();
+                    handled = true;
+                }
+            } else if klen == 13 {
+                // "subTopicNames"
+                if g0 == 's' as i32 {
+                    sub_topic_names = self.parse_string_map();
+                    handled = true;
+                }
+            } else if klen == 14 {
+                // "topicSubTopics"
+                if g0 == 't' as i32 {
+                    topic_sub_topics = self.parse_topic_subtopics();
+                    handled = true;
+                }
+            } else if klen == 17 {
+                // "seatCategoryNames"
+                if g0 == 's' as i32 {
+                    seat_category_names = self.parse_string_map();
+                    handled = true;
+                }
+            } else if klen == 24 {
+                // "audienceSubCategoryNames"
+                if g0 == 'a' as i32 {
+                    audience_sub_category_names = self.parse_string_map();
+                    handled = true;
+                }
+            }
+            if !handled {
+                self.skip_value();
+            }
+
+            self.skip_ws();
+            let c = self.peek();
+            if c == '}' as i32 {
+                self.pos += 1;
+                return CitmCatalog {
+                    area_names, audience_sub_category_names, block_names, events,
+                    performances, seat_category_names, sub_topic_names,
+                    subject_names, topic_names, topic_sub_topics, venue_names,
+                };
+            }
+            if c != ',' as i32 {
+                panic("citm_catalog: expected ',' or '}'");
+            }
+            self.pos += 1;
+        }
+        unreachable();
+    }
+}
+
+fn read_file(path: String) -> String with Preopens {
+    let dirs = Preopens::get_directories();
+    let root = dirs[0].0;
+    let open_result = root.open_at(PathFlags::none(), path, OpenFlags::none(), DescriptorFlags::Read).wait();
+    if let Err(_) = open_result {
+        panic(`failed to open {path}`);
+    }
+    let file = match open_result {
+        Ok(f) => f,
+        Err(_) => unreachable(),
+    };
+    let [stream, _done] = file.read_via_stream(0 as Filesize);
+    let mut buf = String::with_capacity(2 * 1024 * 1024);
+    loop {
+        let chunk = stream.read(4096);
+        if chunk.len() == 0 {
+            break;
+        }
+        let start = buf.internal_reserve_uninit(chunk.len());
+        for let mut i = 0; i < chunk.len(); i += 1 {
+            buf.set_byte(start + i, chunk[i]);
+        }
+    }
+    stream.drop();
+    return buf;
+}
+
+struct CatalogCounts {
+    events: i32,
+    performances: i32,
+}
+
+fn parse_counts_v2(json_data: String) -> CatalogCounts {
+    let mut p = P { input: json_data, pos: 0, len: json_data.len() };
+    p.skip_ws();
+    let catalog = p.parse_citm_catalog();
+    return CatalogCounts {
+        events: catalog.events.len(),
+        performances: catalog.performances.len(),
+    };
+}
+
+test "smoke" {
+    let counts = parse_counts_v2("{\"areaNames\":{},\"audienceSubCategoryNames\":{},\"blockNames\":{},\"events\":{},\"performances\":[],\"seatCategoryNames\":{},\"subTopicNames\":{},\"subjectNames\":{},\"topicNames\":{},\"topicSubTopics\":{},\"venueNames\":{}}");
+    assert counts.events == 0;
+    assert counts.performances == 0;
+}
+
+export fn run() with Stdout, MonotonicClock, Preopens {
+    let json_data = read_file("json_catalog/citm_catalog.json");
+    let mut b = Benchmark::new("json-catalog-v2");
+    b.input_size = Option::Some(json_data.len());
+
+    let counts = b.run("", || parse_counts_v2(json_data));
+    assert counts.events == 184;
+    assert counts.performances == 243;
+    b.println(`parsed {counts.events} events, {counts.performances} performances`);
+}
