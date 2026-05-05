@@ -1,0 +1,50 @@
+// Compiler regression: WIR pipeline produces invalid Wasm for a `match`
+// arm that constructs a struct local and then reads a field of it, when
+// embedded in a `while` loop body.
+//
+// Discovered while investigating a `null reference` trap inside
+// `core:json/JsonDeserializer::read_json_string`. With the optimizer's
+// inline threshold raised to 33+ on the json-catalog benchmark, deserializing
+// any JSON string with a backslash escape (e.g. `"a\nb"`) trapped at runtime;
+// the TIR dump showed the `field_scalarize` (HFS) pass hoisting `__r.used`
+// and `__r.repr` out of the slow-path loop, where `__r` is a local
+// constructed only inside a deeply nested `match _ => {...}` arm (the
+// inlined `panic!("invalid escape '\\{esc}'")` template).
+//
+// Minimizing further (no `core:json`, no `--optimize-inline-threshold`)
+// produced the standalone repro below: a tiny `while`+`match` where one
+// arm constructs `S` and reads `s.a`. At all default opt levels the WIR
+// pipeline emits an invalid module (`type mismatch: expected i32 but
+// nothing on stack`).
+//
+// The matching arm without the loop only ICE's at -O0 (the optimizer
+// "happens to clean it up" at -O1+), so the loop is essential to
+// surface the bug post-optimization.
+//
+// `#![TODO]` marks this as a known compiler failure; once fixed, remove
+// the attribute and the test framework will warn that the file should
+// be promoted to a normal regression test.
+#![TODO]
+
+struct S {
+    a: i32,
+}
+
+export fn run() {
+    let mut i = 0;
+    while i < 2 {
+        match i {
+            0 => {
+                let s = S { a: 1 };
+                let _ = s.a;
+            },
+            _ => {},
+        }
+        i += 1;
+    }
+}
+
+__DATA__
+{
+    "stdout": ""
+}
