@@ -4614,14 +4614,19 @@ fn general_group_all_scannable(sorted_group: &Array<i32>, alts: &Array<Alternati
 
 /// Returns true iff every alt's remaining suffix `[skip..]` is fully
 /// scannable. Used as the precondition for the prediction-tree
-/// `Ambiguous` branch to fall through to scan dispatch.
-fn backtrack_node_all_scannable(sorted: &Array<i32>, alts: &Array<Alternative>, ctx: &mut GenContext, skip: i32) -> bool {
+/// `Ambiguous` branch to fall through to scan dispatch. An empty suffix
+/// (`skip == alt.elements.len()`, i.e. an at-end alt produced by
+/// `build_sll_node`'s `at_end_alts` path) is treated as scannable: its
+/// scan trivially succeeds at the current position, and `sort_group_by_
+/// element_count` sorts it last so it acts as the unconditional
+/// fallback in `gen_group_scan_dispatch`.
+fn ambiguous_node_all_scannable(sorted: &Array<i32>, alts: &Array<Alternative>, ctx: &mut GenContext, skip: i32) -> bool {
     if sorted.len() < 2 {
         return false;
     }
     for let mut k = 0; k < sorted.len(); k += 1 {
         let alt = &alts[sorted[k]];
-        if skip >= alt.elements.len() {
+        if skip > alt.elements.len() {
             return false;
         }
         for let mut i = skip; i < alt.elements.len(); i += 1 {
@@ -4743,7 +4748,7 @@ fn gen_group_prediction_code_skip(w: &mut CodeWriter, node: &PredictionNode, alt
 
         // Every alt's remaining elements must be fully scannable. Backtracking
         // has been removed; an unscannable suffix is a codegen-time error.
-        if !backtrack_node_all_scannable(&sorted, alts, ctx, skip) {
+        if !ambiguous_node_all_scannable(&sorted, alts, ctx, skip) {
             panic("prediction Ambiguous node has unscannable alt; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')");
         }
         gen_group_scan_dispatch(w, &sorted, alts, ctx, name_counts, skip);

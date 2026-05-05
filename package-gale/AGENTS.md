@@ -188,7 +188,24 @@ pointer.
 
 ## Generated Parser Rules
 
-- **No backtracking in new code.** Use static k-token lookahead prediction to disambiguate alternatives. If prediction cannot resolve within depth 5, file an issue rather than adding backtracking. Existing backtracking sites are being migrated to prediction; do not add new ones. The migration is complete for all committed grammars — `bt_try` count is 0 across `sqlite`, `sqlite_highlight`, `rust`, `type_script`, and `antlrv4`. Stage C dispatch sites use scan-side first-success-wins on `sort_group_by_element_count` order, with `gen_scan_multi_alt` partitioning atom alts by their depth-0 first token so longest-first sort behaves like longest-match within each partition.
+- **No backtracking in new code.** Use static k-token lookahead prediction
+  to disambiguate alternatives. If prediction cannot resolve within depth 5,
+  file an issue rather than adding backtracking. The codegen has no
+  speculative-parse fallback any more — an alt whose suffix is unscannable
+  at a tournament site is a codegen-time `panic!`, not a `bt_try` block.
+
+### Migration status (2026-04)
+
+The bt → scan-dispatch migration is complete. `bt_try` and `opt_bt` count
+is 0 across every committed grammar (`sqlite`, `sqlite_highlight`, `rust`,
+`type_script`, `antlrv4`, plus the smaller fixture grammars). Stage C
+dispatch sites use scan-side first-success-wins on
+`sort_group_by_element_count` (longest-first) order, and
+`gen_scan_multi_alt` partitions atom alts by their depth-0 first token
+before applying first-success-wins inside each partition — that
+combination is correctness-equivalent to the longest-match tournament for
+the cases that actually arise (e.g. `expr`'s `column_ref` IDENT vs
+`function_call` IDENT '(' … ')').
 
 ## Failed Approaches (Do Not Repeat)
 
