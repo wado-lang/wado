@@ -610,7 +610,13 @@ fn analyze_function(
     let mut analysis = FunctionAnalysis::default();
 
     if let Some(body) = &func.body {
-        analyze_block(body, current_module, type_table, inspectable_signatures, &mut analysis);
+        analyze_block(
+            body,
+            current_module,
+            type_table,
+            inspectable_signatures,
+            &mut analysis,
+        );
     }
     analysis
 }
@@ -625,14 +631,32 @@ fn analyze_block(
     for stmt in &block.stmts {
         match &stmt.kind {
             TirStmtKind::Let { value, .. } => {
-                analyze_expr(value, current_module, type_table, inspectable_signatures, analysis);
+                analyze_expr(
+                    value,
+                    current_module,
+                    type_table,
+                    inspectable_signatures,
+                    analysis,
+                );
             }
             TirStmtKind::Expr(expr) => {
-                analyze_expr(expr, current_module, type_table, inspectable_signatures, analysis);
+                analyze_expr(
+                    expr,
+                    current_module,
+                    type_table,
+                    inspectable_signatures,
+                    analysis,
+                );
             }
             TirStmtKind::Return { value } => {
                 if let Some(expr) = value {
-                    analyze_expr(expr, current_module, type_table, inspectable_signatures, analysis);
+                    analyze_expr(
+                        expr,
+                        current_module,
+                        type_table,
+                        inspectable_signatures,
+                        analysis,
+                    );
                 }
             }
             TirStmtKind::If {
@@ -640,17 +664,47 @@ fn analyze_block(
                 then_block,
                 else_block,
             } => {
-                analyze_expr(condition, current_module, type_table, inspectable_signatures, analysis);
-                analyze_block(then_block, current_module, type_table, inspectable_signatures, analysis);
+                analyze_expr(
+                    condition,
+                    current_module,
+                    type_table,
+                    inspectable_signatures,
+                    analysis,
+                );
+                analyze_block(
+                    then_block,
+                    current_module,
+                    type_table,
+                    inspectable_signatures,
+                    analysis,
+                );
                 if let Some(else_blk) = else_block {
-                    analyze_block(else_blk, current_module, type_table, inspectable_signatures, analysis);
+                    analyze_block(
+                        else_blk,
+                        current_module,
+                        type_table,
+                        inspectable_signatures,
+                        analysis,
+                    );
                 }
             }
             TirStmtKind::Loop { body } => {
-                analyze_block(body, current_module, type_table, inspectable_signatures, analysis);
+                analyze_block(
+                    body,
+                    current_module,
+                    type_table,
+                    inspectable_signatures,
+                    analysis,
+                );
             }
             TirStmtKind::LabeledBlock { block, .. } => {
-                analyze_block(block, current_module, type_table, inspectable_signatures, analysis);
+                analyze_block(
+                    block,
+                    current_module,
+                    type_table,
+                    inspectable_signatures,
+                    analysis,
+                );
             }
             TirStmtKind::IfLet {
                 scrutinee,
@@ -658,20 +712,50 @@ fn analyze_block(
                 else_block,
                 ..
             } => {
-                analyze_expr(scrutinee, current_module, type_table, inspectable_signatures, analysis);
-                analyze_block(then_block, current_module, type_table, inspectable_signatures, analysis);
+                analyze_expr(
+                    scrutinee,
+                    current_module,
+                    type_table,
+                    inspectable_signatures,
+                    analysis,
+                );
+                analyze_block(
+                    then_block,
+                    current_module,
+                    type_table,
+                    inspectable_signatures,
+                    analysis,
+                );
                 if let Some(else_blk) = else_block {
-                    analyze_block(else_blk, current_module, type_table, inspectable_signatures, analysis);
+                    analyze_block(
+                        else_blk,
+                        current_module,
+                        type_table,
+                        inspectable_signatures,
+                        analysis,
+                    );
                 }
             }
             TirStmtKind::Break { value, .. } => {
                 if let Some(v) = value {
-                    analyze_expr(v, current_module, type_table, inspectable_signatures, analysis);
+                    analyze_expr(
+                        v,
+                        current_module,
+                        type_table,
+                        inspectable_signatures,
+                        analysis,
+                    );
                 }
             }
             TirStmtKind::Continue => {}
             TirStmtKind::LetDestructure { value, .. } => {
-                analyze_expr(value, current_module, type_table, inspectable_signatures, analysis);
+                analyze_expr(
+                    value,
+                    current_module,
+                    type_table,
+                    inspectable_signatures,
+                    analysis,
+                );
             }
             TirStmtKind::TaskReturn { .. } => {
                 unreachable!("TaskReturn should be eliminated by synthesis before this phase")
@@ -771,7 +855,13 @@ fn analyze_expr(
             }
 
             for arg in args {
-                analyze_expr(&arg.expr, current_module, type_table, inspectable_signatures, analysis);
+                analyze_expr(
+                    &arg.expr,
+                    current_module,
+                    type_table,
+                    inspectable_signatures,
+                    analysis,
+                );
             }
         }
         TirExprKind::MethodCall {
@@ -1073,24 +1163,72 @@ fn analyze_expr(
                 }
             }
 
-            analyze_expr(receiver, current_module, type_table, inspectable_signatures, analysis);
+            analyze_expr(
+                receiver,
+                current_module,
+                type_table,
+                inspectable_signatures,
+                analysis,
+            );
             for arg in args {
-                analyze_expr(&arg.expr, current_module, type_table, inspectable_signatures, analysis);
+                analyze_expr(
+                    &arg.expr,
+                    current_module,
+                    type_table,
+                    inspectable_signatures,
+                    analysis,
+                );
             }
         }
         TirExprKind::Binary { left, right, .. } => {
-            analyze_expr(left, current_module, type_table, inspectable_signatures, analysis);
-            analyze_expr(right, current_module, type_table, inspectable_signatures, analysis);
+            analyze_expr(
+                left,
+                current_module,
+                type_table,
+                inspectable_signatures,
+                analysis,
+            );
+            analyze_expr(
+                right,
+                current_module,
+                type_table,
+                inspectable_signatures,
+                analysis,
+            );
         }
         TirExprKind::Unary { expr, .. } => {
-            analyze_expr(expr, current_module, type_table, inspectable_signatures, analysis);
+            analyze_expr(
+                expr,
+                current_module,
+                type_table,
+                inspectable_signatures,
+                analysis,
+            );
         }
         TirExprKind::Assign { target, value } => {
-            analyze_expr(target, current_module, type_table, inspectable_signatures, analysis);
-            analyze_expr(value, current_module, type_table, inspectable_signatures, analysis);
+            analyze_expr(
+                target,
+                current_module,
+                type_table,
+                inspectable_signatures,
+                analysis,
+            );
+            analyze_expr(
+                value,
+                current_module,
+                type_table,
+                inspectable_signatures,
+                analysis,
+            );
         }
         TirExprKind::Cast { expr, .. } => {
-            analyze_expr(expr, current_module, type_table, inspectable_signatures, analysis);
+            analyze_expr(
+                expr,
+                current_module,
+                type_table,
+                inspectable_signatures,
+                analysis,
+            );
         }
         TirExprKind::CmRawCall { local_name, args } => {
             // CmRawCall references a lowered WASI import function.
@@ -1106,7 +1244,13 @@ fn analyze_expr(
                 analysis.effect_calls.insert((interface_name, op_name));
             }
             for arg in args {
-                analyze_expr(arg, current_module, type_table, inspectable_signatures, analysis);
+                analyze_expr(
+                    arg,
+                    current_module,
+                    type_table,
+                    inspectable_signatures,
+                    analysis,
+                );
             }
         }
         TirExprKind::FieldAccess { expr, .. }
@@ -1115,52 +1259,142 @@ fn analyze_expr(
         | TirExprKind::TypePackExpansion {
             call_expr: expr, ..
         } => {
-            analyze_expr(expr, current_module, type_table, inspectable_signatures, analysis);
+            analyze_expr(
+                expr,
+                current_module,
+                type_table,
+                inspectable_signatures,
+                analysis,
+            );
         }
         TirExprKind::Index { expr, index } => {
-            analyze_expr(expr, current_module, type_table, inspectable_signatures, analysis);
-            analyze_expr(index, current_module, type_table, inspectable_signatures, analysis);
+            analyze_expr(
+                expr,
+                current_module,
+                type_table,
+                inspectable_signatures,
+                analysis,
+            );
+            analyze_expr(
+                index,
+                current_module,
+                type_table,
+                inspectable_signatures,
+                analysis,
+            );
         }
         TirExprKind::Block(block) => {
-            analyze_block(block, current_module, type_table, inspectable_signatures, analysis);
+            analyze_block(
+                block,
+                current_module,
+                type_table,
+                inspectable_signatures,
+                analysis,
+            );
         }
         TirExprKind::If {
             condition,
             then_branch,
             else_branch,
         } => {
-            analyze_expr(condition, current_module, type_table, inspectable_signatures, analysis);
-            analyze_block(then_branch, current_module, type_table, inspectable_signatures, analysis);
+            analyze_expr(
+                condition,
+                current_module,
+                type_table,
+                inspectable_signatures,
+                analysis,
+            );
+            analyze_block(
+                then_branch,
+                current_module,
+                type_table,
+                inspectable_signatures,
+                analysis,
+            );
             if let Some(else_blk) = else_branch {
-                analyze_block(else_blk, current_module, type_table, inspectable_signatures, analysis);
+                analyze_block(
+                    else_blk,
+                    current_module,
+                    type_table,
+                    inspectable_signatures,
+                    analysis,
+                );
             }
         }
         TirExprKind::Match { expr, arms } => {
-            analyze_expr(expr, current_module, type_table, inspectable_signatures, analysis);
+            analyze_expr(
+                expr,
+                current_module,
+                type_table,
+                inspectable_signatures,
+                analysis,
+            );
             for arm in arms {
                 if let Some(guard) = &arm.guard {
-                    analyze_expr(guard, current_module, type_table, inspectable_signatures, analysis);
+                    analyze_expr(
+                        guard,
+                        current_module,
+                        type_table,
+                        inspectable_signatures,
+                        analysis,
+                    );
                 }
-                analyze_expr(&arm.body, current_module, type_table, inspectable_signatures, analysis);
+                analyze_expr(
+                    &arm.body,
+                    current_module,
+                    type_table,
+                    inspectable_signatures,
+                    analysis,
+                );
             }
         }
         TirExprKind::StructLiteral { fields, .. } => {
             for field in fields {
-                analyze_expr(&field.value, current_module, type_table, inspectable_signatures, analysis);
+                analyze_expr(
+                    &field.value,
+                    current_module,
+                    type_table,
+                    inspectable_signatures,
+                    analysis,
+                );
             }
         }
         TirExprKind::TupleLiteral { elements } => {
             for elem in elements {
-                analyze_expr(elem, current_module, type_table, inspectable_signatures, analysis);
+                analyze_expr(
+                    elem,
+                    current_module,
+                    type_table,
+                    inspectable_signatures,
+                    analysis,
+                );
             }
         }
         TirExprKind::Closure { body, .. } => {
-            analyze_expr(body, current_module, type_table, inspectable_signatures, analysis);
+            analyze_expr(
+                body,
+                current_module,
+                type_table,
+                inspectable_signatures,
+                analysis,
+            );
         }
         TirExprKind::IndirectCall { callee, args } => {
-            analyze_expr(callee, current_module, type_table, inspectable_signatures, analysis);
+            analyze_expr(
+                callee,
+                current_module,
+                type_table,
+                inspectable_signatures,
+                analysis,
+            );
             for arg in args {
-                analyze_expr(arg, current_module, type_table, inspectable_signatures, analysis);
+                analyze_expr(
+                    arg,
+                    current_module,
+                    type_table,
+                    inspectable_signatures,
+                    analysis,
+                );
             }
         }
         TirExprKind::ClosureToCanonical {
@@ -1169,7 +1403,13 @@ fn analyze_expr(
             target_fn_type,
             closure_module,
         } => {
-            analyze_expr(functor, current_module, type_table, inspectable_signatures, analysis);
+            analyze_expr(
+                functor,
+                current_module,
+                type_table,
+                inspectable_signatures,
+                analysis,
+            );
             // The `__call` method is always reached via `ref.func` baked
             // into the canonical closure struct's `func` slot.
             let struct_name = format!("__Closure_{functor_id}");
@@ -1196,9 +1436,10 @@ fn analyze_expr(
             } = type_table.get(*target_fn_type)
                 && inspectable_signatures.contains(&(params.len(), *return_type))
             {
-                for (trait_name, method_name) in
-                    [(Some("Inspect"), "inspect"), (Some("InspectAlt"), "inspect_alt")]
-                {
+                for (trait_name, method_name) in [
+                    (Some("Inspect"), "inspect"),
+                    (Some("InspectAlt"), "inspect_alt"),
+                ] {
                     analysis.callees.insert(FunctionId::Method(MethodName::new(
                         closure_module.clone(),
                         struct_name.clone(),
@@ -1210,20 +1451,50 @@ fn analyze_expr(
         }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(payload_expr) = payload {
-                analyze_expr(payload_expr, current_module, type_table, inspectable_signatures, analysis);
+                analyze_expr(
+                    payload_expr,
+                    current_module,
+                    type_table,
+                    inspectable_signatures,
+                    analysis,
+                );
             }
         }
         TirExprKind::LabeledBlock { block, .. } => {
-            analyze_block(block, current_module, type_table, inspectable_signatures, analysis);
+            analyze_block(
+                block,
+                current_module,
+                type_table,
+                inspectable_signatures,
+                analysis,
+            );
         }
         TirExprKind::GlobalVarSet { value, .. } => {
-            analyze_expr(value, current_module, type_table, inspectable_signatures, analysis);
+            analyze_expr(
+                value,
+                current_module,
+                type_table,
+                inspectable_signatures,
+                analysis,
+            );
         }
         TirExprKind::VariantTag { expr } | TirExprKind::VariantTest { expr, .. } => {
-            analyze_expr(expr, current_module, type_table, inspectable_signatures, analysis);
+            analyze_expr(
+                expr,
+                current_module,
+                type_table,
+                inspectable_signatures,
+                analysis,
+            );
         }
         TirExprKind::VariantPayload { expr, .. } => {
-            analyze_expr(expr, current_module, type_table, inspectable_signatures, analysis);
+            analyze_expr(
+                expr,
+                current_module,
+                type_table,
+                inspectable_signatures,
+                analysis,
+            );
         }
         TirExprKind::Switch {
             scrutinee,
@@ -1231,11 +1502,29 @@ fn analyze_expr(
             default,
             ..
         } => {
-            analyze_expr(scrutinee, current_module, type_table, inspectable_signatures, analysis);
+            analyze_expr(
+                scrutinee,
+                current_module,
+                type_table,
+                inspectable_signatures,
+                analysis,
+            );
             for arm in arms {
-                analyze_block(arm, current_module, type_table, inspectable_signatures, analysis);
+                analyze_block(
+                    arm,
+                    current_module,
+                    type_table,
+                    inspectable_signatures,
+                    analysis,
+                );
             }
-            analyze_block(default, current_module, type_table, inspectable_signatures, analysis);
+            analyze_block(
+                default,
+                current_module,
+                type_table,
+                inspectable_signatures,
+                analysis,
+            );
         }
         // Leaf nodes - no calls
         TirExprKind::IntLiteral { .. }

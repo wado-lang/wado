@@ -803,45 +803,58 @@ This requires a resource table mapping handles to closure structs.
 
 #### Canonical Closure as Vtable
 
-When a closure value escapes its literal scope (passed as a `fn(...)` argument, stored in a struct field, returned from a function, etc.) the per-literal `__Closure_N` ref is wrapped in a canonical, signature-keyed struct so that any holder of a `Fn<N, Ret>` value can dispatch through a uniform shape. This struct is the runtime carrier for any trait method dispatched on a `Fn<N, Ret>` value.
+A closure value that escapes its declaring scope — passed as a `fn(...)` argument, stored in a struct field, returned, assigned to a global, or rebound to another local — is wrapped in a canonical, signature-keyed struct so any holder of an `Fn<N, Ret>` value can dispatch through a uniform shape. The lower-phase escape analysis decides per local: a closure local that only appears as the callee of `IndirectCall` / receiver of `MethodCall` keeps the specialised `&__Closure_N` form; every other position forces canonicalisation.
+
+The canonical struct comes in two shapes, selected per-`(N, Ret)` by a pre-WIR scan of `Fn<N, Ret>^Inspect[Alt]` call sites:
 
 Slim shape (default — `Fn::call` only):
 
 ```wat
 (type $CanonicalClosure_K (struct
   (field $env  (ref null struct))
-  (field $func (ref $canonical_fn_K))
-))
+  (field $func (ref $canonical_fn_K))))
 ```
 
-`$canonical_fn_K` has signature `(param $env (ref null struct)) (param $p_0 ...) ... (result ...)`. Each per-literal functor registers a small `__closure_wrapper_N` that casts `env` back to `(ref $__Closure_N)` and forwards to `__call`.
-
-Inspectable shape (extended — `Fn^Inspect` / `Fn^InspectAlt` reachable for this signature):
+Inspectable shape (`Fn^Inspect` / `Fn^InspectAlt` referenced for this signature):
 
 ```wat
-(type $CanonicalClosure_K (struct
+(type $canonical_inspectable_base (struct
   (field $env         (ref null struct))
-  (field $func        (ref $canonical_fn_K))
-  (field $inspect     (ref $canonical_inspect_fn))
-  (field $inspect_alt (ref $canonical_inspect_alt_fn))
-))
+  (field $inspect     (ref $canonical_callback_fn))
+  (field $inspect_alt (ref $canonical_callback_fn))))
+
+(type $CanonicalClosure_K (sub $canonical_inspectable_base (struct
+  (field $env         (ref null struct))
+  (field $inspect     (ref $canonical_callback_fn))
+  (field $inspect_alt (ref $canonical_callback_fn))
+  (field $func        (ref $canonical_fn_K)))))
 ```
 
-`$canonical_inspect_fn` has signature `(param $env (ref null struct)) (param $f (ref $Formatter))`. Each per-literal functor registers two extra wrappers (`__closure_inspect_wrapper_N`, `__closure_inspect_alt_wrapper_N`) that cast `env` and forward to the literal's `__Closure_N^Inspect::inspect` / `__Closure_N^InspectAlt::inspect_alt` impls. Those impls write the per-literal signature string and TIR-unparsed source body, respectively.
+The subtype keeps the shared prefix — `env`, `inspect`, `inspect_alt` — and adds `func` last. `$canonical_callback_fn` has signature `(param $env (ref null struct)) (param $f (ref null struct))` (uniform across all signatures); `$canonical_fn_K` has signature `(param $env (ref null struct)) (param $p_0 ...) ... (result ...)` (per-`K`, typed). The shared base means a single dispatch stub serves every parameter shape with the same `(N, Ret)`: distinct function types like `fn(i32) -> i32` and `fn(String) -> i32` cast to one common type, eliminating any need for per-signature dispatch tables.
 
-Trait dispatch via the canonical struct:
+Per-literal wrappers (registered in WIR build for every functor `N` whose signature is inspectable):
+
+1. `__closure_wrapper_N` — casts `env` to `(ref $__Closure_N)` and forwards to `__call`.
+2. `__closure_inspect_wrapper_N` — casts `env`, calls `__Closure_N^Inspect::inspect`.
+3. `__closure_inspect_alt_wrapper_N` — casts `env`, calls `__Closure_N^InspectAlt::inspect_alt`.
+
+Trait dispatch from the generic `Fn<N, Ret>^InspectAlt::inspect_alt` impl:
 
 ```wat
 ;; Fn<N, Ret>^InspectAlt::inspect_alt(self, f)
-(call_ref $canonical_inspect_alt_fn
-  (struct.get $CanonicalClosure_K $env         (local.get $self))
+(local $b (ref $canonical_inspectable_base))
+(local.set $b (ref.cast (ref $canonical_inspectable_base) (local.get $self)))
+(call_ref $canonical_callback_fn
+  (struct.get $canonical_inspectable_base $env         (local.get $b))
   (local.get $f)
-  (struct.get $CanonicalClosure_K $inspect_alt (local.get $self)))
+  (struct.get $canonical_inspectable_base $inspect_alt (local.get $b)))
 ```
 
-Schema selection is a whole-program lowering decision, not a DCE result: a pre-WIR usage scan tags each `(N, Ret)` whose `Fn^Inspect` / `Fn^InspectAlt` is reachable, and `get_or_create_canonical_closure_type` reads the tag to choose between the two shapes. Programs that never inspect closures emit the slim shape and pay no extra fields, wrappers, or source strings. Programs that do inspect closures pay two refs per canonical value plus per-literal wrappers and source-string constants for the affected `(N, Ret)` only.
+The dispatch stub is auto-derived as a `FunctionKind::FnCanonicalDispatch` TIR placeholder with no body — WIR build supplies the instructions above. A bodyless TIR function is naturally skipped by the inliner, monomorphisation, and other body walkers, so the placeholder costs nothing during optimisation.
 
-The specialized path (closure local stays as `&__Closure_N`) does not use the vtable: trait dispatch resolves directly to the per-literal `__Closure_N^Inspect` / `__Closure_N^InspectAlt` impls, and standard DCE removes them when unused.
+Programs that never inspect closures emit the slim shape and incur no extra fields, wrappers, or source-string constants. Programs that inspect closures of some `(N, Ret)` pay two refs per canonical value of that signature plus per-literal wrappers and source-string constants for the affected literals only. The `__Closure_N^Inspect[Alt]` impls are TIR-rooted from `ClosureToCanonical` only when the corresponding `(N, Ret)` is inspected.
+
+The specialised path (closure local stays as `&__Closure_N`) does not use the vtable: a redirect at the lowering stage rewrites `Fn<N, Ret>^Inspect[Alt]` calls on known-local receivers to direct calls on `__Closure_N^Inspect[Alt]`, and standard DCE removes those impls when unused.
 
 ## Consequences
 

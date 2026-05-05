@@ -387,13 +387,15 @@ impl<'a> WirEmitter<'a> {
         // Resolve the optional supertype to its already-emitted Wasm type
         // index. Pre-pass `pre_assign_type_indices` ensures every WirTypeId
         // is mapped before any struct uses it as a supertype.
-        let supertype_idx = s
-            .supertype
-            .as_ref()
-            .map(|st_id| *self.type_index_map.get(&st_id.index()).unwrap_or_else(|| panic!(
-                "supertype WIR type id {} ({}) not pre-assigned in type_index_map",
-                st_id.index(), st_id.fq()
-            )));
+        let supertype_idx = s.supertype.as_ref().map(|st_id| {
+            *self.type_index_map.get(&st_id.index()).unwrap_or_else(|| {
+                panic!(
+                    "supertype WIR type id {} ({}) not pre-assigned in type_index_map",
+                    st_id.index(),
+                    st_id.fq()
+                )
+            })
+        });
 
         // Use is_final: false so (ref (exact $T)) from struct.new is a subtype of (ref null $T)
         subtypes.push(SubType {

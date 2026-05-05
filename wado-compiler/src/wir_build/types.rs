@@ -441,7 +441,7 @@ fn register_variant(
                 meta: WirMeta::default(),
                 generic_origin: None,
                 newtype_origin: None,
-            supertype: None,
+                supertype: None,
             }),
         );
         ctx.variant_case_info
@@ -661,7 +661,7 @@ fn register_tuple_types(ctx: &mut WirContext<'_>) {
                         meta: WirMeta::default(),
                         generic_origin: None,
                         newtype_origin: None,
-            supertype: None,
+                        supertype: None,
                     }),
                 );
                 ctx.tuple_type_map
@@ -1006,7 +1006,7 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
                         meta: WirMeta::default(),
                         generic_origin: None,
                         newtype_origin: None,
-            supertype: None,
+                        supertype: None,
                     }),
                 );
                 ctx.variant_case_info
