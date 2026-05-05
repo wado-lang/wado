@@ -67,6 +67,20 @@ test "capturing closure shows captures clause in :#?" {
     assert `{f:#?}` == "|x: i32| captures[n] (x + n)";
 }
 
+test "capturing closure passed through fn parameter keeps captures clause for :#?" {
+    let n = 7;
+    let f = |x: i32| x + n;
+    assert fmt_alt(f) == "|x: i32| captures[n] (x + n)";
+}
+
+test "capturing closure stored in struct field keeps captures clause for :#?" {
+    let multiplier = 3;
+    let h = Holder {
+        cb: |y: i32| y * multiplier,
+    };
+    assert `{h.cb:#?}` == "|y: i32| captures[multiplier] (y * multiplier)";
+}
+
 test "closure stored in global keeps source for :#?" {
     GLOBAL_CB = |z: i32| z + 100;
     assert `{GLOBAL_CB:#?}` == "|z: i32| (z + 100)";

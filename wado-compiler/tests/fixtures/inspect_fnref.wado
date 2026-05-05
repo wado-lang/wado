@@ -15,12 +15,29 @@ fn fmt_alt(f: fn(i32) -> i32) -> String {
     return `{f:#?}`;
 }
 
-test "fn-ref :? signature" {
+test "bare fn-ref :? signature" {
     assert fmt_def(double) == "|i32| -> i32";
 }
 
-test "fn-ref :#? renders as &fn_name" {
+test "bare fn-ref :#? renders as &fn_name" {
     assert fmt_alt(double) == "&double";
+}
+
+// Explicit `&fn_name`. `FuncRefToClosureRewriter` has a separate
+// wrapper-collapse branch that consumes the outer `Unary::Ref`
+// produced by `&` and turns the inner `FuncRef` into the synthetic
+// closure directly; this exercises that path.
+test "explicit &fn-ref :#? renders as &fn_name" {
+    assert fmt_alt(&double) == "&double";
+}
+
+// User-written closure that happens to be shape-identical to the
+// synthetic forwarder (`|x: i32| double(x)`). `render_func_ref_closure`
+// must NOT collapse this to `&double` — the parameter is named `x`,
+// not `__fn_ref_p0`, so the synthetic-name check rejects it.
+test "user-written forwarding closure keeps its source for :#?" {
+    let f = |x: i32| double(x);
+    assert `{f:#?}` == "|x: i32| double(x)";
 }
 
 __DATA__

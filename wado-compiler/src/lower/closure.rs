@@ -378,7 +378,13 @@ impl ClosureLowerer {
     /// zero-capture `Closure` nodes. This enables named functions to be passed as function-type
     /// arguments (e.g., `apply(double, 21)` or `apply(&double, 21)`).
     fn convert_func_refs_to_closures(&self, module: &mut TirModule) {
-        // Build a map from function name to (param_types, return_type)
+        // Build a map from function name to (param_types, return_type).
+        //
+        // `lower::lower` operates on a flattened `FlatPackage` — all functions
+        // from every module (entry, prelude, stdlib, transitively-loaded user
+        // modules) are placed into a single `module.functions` before this
+        // runs, so a bare-name lookup here covers imported function refs like
+        // `&println` from `core:cli` without an additional cross-module pass.
         let mut func_sigs: IndexMap<String, FuncSig> = IndexMap::default();
         for func_rc in &module.functions {
             let func = func_rc.borrow();
