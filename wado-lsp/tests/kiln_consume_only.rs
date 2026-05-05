@@ -267,8 +267,7 @@ fn output_modified_emits_warning_but_redirects() {
         // edit is honored) and a `KilnGeneratedModified` warning must
         // surface so `wado check` won't be silently bypassed.
         let fixture = build_fixture(FixtureSpec {
-            generated_on_disk:
-                "#![generated(by = \"fake:gen@0.1\", sources = [\"grammars/calc.g4\"])]\n\
+            generated_on_disk: "#![generated(by = \"fake:gen@0.1\", sources = [\"grammars/calc.g4\"])]\n\
                  pub fn parse() -> i32 { return 99; }\n",
             ..FixtureSpec::default()
         });

@@ -193,7 +193,10 @@ fn resolve_invocation(
     for read in &metadata.reads {
         let normalized = InvocationPath::normalize(&read.path);
         if !file_matches(manifest_root, normalized.as_str(), &read.hash) {
-            return Err(format!("{} (read-file dependency) changed on disk", read.path));
+            return Err(format!(
+                "{} (read-file dependency) changed on disk",
+                read.path
+            ));
         }
     }
 
@@ -277,12 +280,7 @@ fn emit_stale<H: CompilerHost>(host: &H, invocation_id: &str, reason: &str, span
     });
 }
 
-fn emit_modified<H: CompilerHost>(
-    host: &H,
-    invocation_id: &str,
-    path: &str,
-    span: DiagnosticSpan,
-) {
+fn emit_modified<H: CompilerHost>(host: &H, invocation_id: &str, path: &str, span: DiagnosticSpan) {
     host.emit_diagnostic(Diagnostic {
         severity: Severity::Warning,
         code: Code::KilnGeneratedModified,
