@@ -35,13 +35,11 @@ test "closure passed as fn param keeps signature for :?" {
     assert fmt_def(add_one) == "|i32| -> i32";
 }
 
-#[TODO]
 test "closure passed as fn param keeps source for :#?" {
     let add_one = |x: i32| x + 1;
     assert fmt_alt(add_one) == "|x: i32| x + 1";
 }
 
-#[TODO]
 test "closure stored in struct field keeps source for :#?" {
     let h = Holder { cb: |y: i32| y * 2 };
     assert `{h.cb:#?}` == "|y: i32| y * 2";

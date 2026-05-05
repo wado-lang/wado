@@ -1098,13 +1098,19 @@ fn analyze_expr(
             // current_module, because after cross-module inlining the
             // ClosureToCanonical may appear in a different module than
             // where __Closure_N::__call is defined.
-            let method_name = MethodName::new(
-                closure_module.clone(),
-                format!("__Closure_{functor_id}"),
-                None,
-                "__call".to_string(),
-            );
-            analysis.callees.insert(FunctionId::Method(method_name));
+            let struct_name = format!("__Closure_{functor_id}");
+            for (trait_name, method_name) in [
+                (None, "__call"),
+                (Some("Inspect"), "inspect"),
+                (Some("InspectAlt"), "inspect_alt"),
+            ] {
+                analysis.callees.insert(FunctionId::Method(MethodName::new(
+                    closure_module.clone(),
+                    struct_name.clone(),
+                    trait_name.map(str::to_string),
+                    method_name.to_string(),
+                )));
+            }
         }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(payload_expr) = payload {

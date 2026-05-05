@@ -79,9 +79,10 @@ pub struct WirContext<'a> {
     /// Key: stringified signature (e.g., "(i32, i32) -> i32")
     /// Value: (`canonical_fn_type_id`, `canonical_closure_struct_type_id`)
     pub canonical_closure_types: IndexMap<String, (WirTypeId, WirTypeId)>,
-    /// Map from closure `(module_source, functor_id)` to canonical wrapper function `WirFuncId`.
-    /// Keyed by module source + functor ID because functor IDs are per-module, not globally unique.
-    pub closure_wrapper_funcs: IndexMap<(ModuleSource, u32), WirFuncId>,
+    /// Map from closure `(module_source, functor_id)` to the per-functor
+    /// canonical wrapper triple. Keyed by module source + functor ID
+    /// because functor IDs are per-module, not globally unique.
+    pub closure_wrapper_funcs: IndexMap<(ModuleSource, u32), ClosureWrapperFuncs>,
     /// Counter for canonical closure type naming.
     pub canonical_closure_counter: u32,
 
@@ -113,6 +114,24 @@ pub struct PendingFunctionBody {
     pub tir_func: Rc<RefCell<TirFunction>>,
     /// The type table for this function's module
     pub type_table: Rc<RefCell<TypeTable>>,
+}
+
+/// Per-functor wrapper functions stored in `CanonicalClosure_K` vtable
+/// slots. Populated by `register_closure_wrappers` and consumed by
+/// `translate_closure_to_canonical` to initialise `struct.new
+/// $CanonicalClosure_K (env, ref.func call, ref.func inspect,
+/// ref.func inspect_alt)`.
+#[derive(Clone, Debug)]
+pub struct ClosureWrapperFuncs {
+    /// `__closure_wrapper_N(env, args...) -> ret` — refcasts env to
+    /// `&__Closure_N` and forwards to `__call`.
+    pub call: WirFuncId,
+    /// `__closure_inspect_wrapper_N(env, formatter)` — refcasts both
+    /// args and forwards to `__Closure_N^Inspect::inspect`.
+    pub inspect: WirFuncId,
+    /// `__closure_inspect_alt_wrapper_N(env, formatter)` — refcasts
+    /// both args and forwards to `__Closure_N^InspectAlt::inspect_alt`.
+    pub inspect_alt: WirFuncId,
 }
 
 impl<'a> WirContext<'a> {
@@ -296,6 +315,30 @@ impl<'a> WirContext<'a> {
 
     /// Get or create a canonical closure type pair (func type + closure struct) for a
     /// function signature. Returns `(fn_type_id, closure_struct_type_id)`.
+    ///
+    /// The struct schema is the vtable shape required by trait dispatch on
+    /// `Fn<N, Ret>` values held behind function parameters, struct fields,
+    /// or globals (the indirect-call case). Per WEP: Inspect (Debug
+    /// Output) > Closure Inspect via Runtime Dispatch:
+    ///
+    /// ```text
+    /// CanonicalClosure_K {
+    ///     env:         (ref null struct),
+    ///     func:        (ref $canonical_fn_K),
+    ///     inspect:     (ref $canonical_callback_fn),
+    ///     inspect_alt: (ref $canonical_callback_fn),
+    /// }
+    /// ```
+    ///
+    /// `$canonical_callback_fn = (env, formatter) -> ()` is shared across
+    /// all signatures: the `env`/`formatter` slots use abstract `(ref null
+    /// struct)` so a single function type covers every closure literal.
+    /// Each per-literal wrapper refcasts both args back to its concrete
+    /// `&__Closure_N` and `&Formatter` before forwarding.
+    ///
+    /// Phase 4 will gate the inspect slots behind a per-`(N, Ret)` usage
+    /// scan so signatures whose `Fn^Inspect` / `Fn^InspectAlt` is
+    /// unreachable revert to the slim `{ env, func }` shape.
     pub fn get_or_create_canonical_closure_type(
         &mut self,
         param_wirs: Vec<WirType>,
@@ -311,16 +354,22 @@ impl<'a> WirContext<'a> {
 
         // Create canonical function type: (ref null struct, params...) -> results
         // The env param must be nullable to accept any struct ref subtype.
-        let mut fn_params = vec![WirType::AbstractRef {
+        let abstract_struct_nullable = WirType::AbstractRef {
             heap_type: crate::wir::WirAbstractHeapType::Struct,
             nullable: true,
-        }];
+        };
+        let mut fn_params = vec![abstract_struct_nullable.clone()];
         fn_params.extend(param_wirs.iter().cloned());
 
         let fn_type_fq = format!("functype/$canonical_closure_fn_{id}");
         let fn_type_id = self.register_func_type(fn_type_fq, fn_params, result_wirs);
 
-        // Create canonical closure struct: { env: (ref null struct), func: (ref $fn_type) }
+        // Single canonical callback type `(env, formatter) -> ()` shared
+        // by inspect / inspect_alt across all `(N, Ret)`. Created lazily
+        // and cached so identical func types are shared.
+        let callback_fn_type_id = self.get_or_create_canonical_callback_fn_type();
+
+        // Create canonical closure struct with vtable layout.
         let struct_fq = format!("canonical//CanonicalClosure_{id}");
         use crate::wir::{WirField, WirMeta, WirName, WirStructType};
         let struct_type_id = self.register_type(
@@ -330,16 +379,29 @@ impl<'a> WirContext<'a> {
                 fields: vec![
                     WirField {
                         name: "env".to_string(),
-                        ty: WirType::AbstractRef {
-                            heap_type: crate::wir::WirAbstractHeapType::Struct,
-                            nullable: true,
-                        },
+                        ty: abstract_struct_nullable,
                         mutable: false,
                     },
                     WirField {
                         name: "func".to_string(),
                         ty: WirType::Ref {
                             type_id: fn_type_id.clone(),
+                            nullable: false,
+                        },
+                        mutable: false,
+                    },
+                    WirField {
+                        name: "inspect".to_string(),
+                        ty: WirType::Ref {
+                            type_id: callback_fn_type_id.clone(),
+                            nullable: false,
+                        },
+                        mutable: false,
+                    },
+                    WirField {
+                        name: "inspect_alt".to_string(),
+                        ty: WirType::Ref {
+                            type_id: callback_fn_type_id,
                             nullable: false,
                         },
                         mutable: false,
@@ -355,6 +417,29 @@ impl<'a> WirContext<'a> {
             .insert(key, (fn_type_id.clone(), struct_type_id.clone()));
 
         (fn_type_id, struct_type_id)
+    }
+
+    /// Func type for the inspect / `inspect_alt` vtable slots:
+    /// `(env: ref null struct, formatter: ref null struct) -> ()`.
+    ///
+    /// Both args use abstract `(ref null struct)` so a single fn type
+    /// is compatible with every per-functor wrapper. The wrappers
+    /// refcast `env` to the concrete `&__Closure_N` and `formatter` to
+    /// `&Formatter` internally before forwarding.
+    pub fn get_or_create_canonical_callback_fn_type(&mut self) -> WirTypeId {
+        let fq = "functype/$canonical_callback_fn".to_string();
+        if let Some(id) = self.type_map.get(&fq) {
+            return id.clone();
+        }
+        let abstract_struct_nullable = WirType::AbstractRef {
+            heap_type: crate::wir::WirAbstractHeapType::Struct,
+            nullable: true,
+        };
+        self.register_func_type(
+            fq,
+            vec![abstract_struct_nullable.clone(), abstract_struct_nullable],
+            vec![],
+        )
     }
 
     /// Register a CM canonical import lazily and return its `WirFuncId`.

@@ -1887,25 +1887,36 @@ impl FunctionTranslator<'_, '_> {
             );
         };
 
-        // Look up the pre-registered wrapper function for this functor.
+        // Look up the pre-registered wrapper triple for this functor.
         // Use closure_module (the module where the closure was defined) for the lookup,
         // not self.module_source (which may differ after cross-module inlining).
         let functor_key = (closure_module.clone(), functor_id);
-        let wrapper_func_id = if let Some(id) = self.ctx.closure_wrapper_funcs.get(&functor_key) {
-            id.clone()
+        let wrappers = if let Some(w) = self.ctx.closure_wrapper_funcs.get(&functor_key) {
+            w.clone()
         } else {
             panic!(
-                "[WIR] translate_closure_to_canonical: closure wrapper function not registered for {functor_key:?}"
+                "[WIR] translate_closure_to_canonical: closure wrappers not registered for {functor_key:?}"
             );
         };
 
-        // Build: CanonicalClosure { env: functor_as_structref, func: ref.func $wrapper }
+        // Build the vtable-shaped CanonicalClosure_K:
+        //   { env, func, inspect, inspect_alt }.
+        // The inspect/inspect_alt slots let `Fn<N, Ret>^Inspect /
+        // InspectAlt` dispatch through this value at runtime — see
+        // WEP: Inspect (Debug Output) > Closure Inspect via Runtime
+        // Dispatch.
         self.struct_new(
             struct_type_id,
             vec![
                 functor_instr,
                 WirInstr::RefFunc {
-                    func_id: wrapper_func_id,
+                    func_id: wrappers.call,
+                },
+                WirInstr::RefFunc {
+                    func_id: wrappers.inspect,
+                },
+                WirInstr::RefFunc {
+                    func_id: wrappers.inspect_alt,
                 },
             ],
         )

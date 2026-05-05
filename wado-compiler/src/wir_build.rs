@@ -39,6 +39,15 @@ pub fn build_wir_package(package: &FlatPackage) -> WirPackage {
     // Step 3: Translate function bodies
     translate::translate_function_bodies(&mut ctx);
 
+    // Step 3.5: Override `Fn<N, Ret>^Inspect / InspectAlt` impl bodies
+    // with vtable indirect dispatch through `CanonicalClosure_K`. The
+    // TIR-level synth (`generate_fn_inspect_fn`) registers the
+    // function entry and a placeholder write-signature body; this pass
+    // replaces the body so any holder of a `Fn<N, Ret>` value (param,
+    // struct field, global) prints the per-literal signature/source
+    // via the closure's vtable.
+    translate::override_fn_canonical_dispatch_bodies(&mut ctx);
+
     // Step 4: Build the final WirPackage
     ctx.into_wir_package()
 }

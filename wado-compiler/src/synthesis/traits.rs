@@ -1918,7 +1918,7 @@ fn generate_fn_inspect_fn(
     let fmt = || local_expr(1, "f", fmt_type, span);
     let body = TirBlock::new(vec![write_str_stmt(sig, fmt(), string_type, span)], span);
 
-    make_synthetic_method(
+    let mut func = make_synthetic_method(
         qualified_name,
         method_info,
         inspect_params(ref_fn_type, fmt_type, span),
@@ -1928,7 +1928,64 @@ fn generate_fn_inspect_fn(
             param_local("self", ref_fn_type, false),
             param_local("f", fmt_type, false),
         ],
+    );
+    // The TIR body is a placeholder write-signature: WIR build replaces
+    // it with `call_ref (self.inspect)(self.env, f)` so dispatch reaches
+    // the per-functor wrapper installed in the canonical closure
+    // vtable. Block inlining/constant-folding on the TIR placeholder so
+    // the optimizer doesn't bake the signature string into call sites
+    // before the WIR-level override runs.
+    func.inline_hint = InlineHint::Never;
+    func
+}
+
+/// Twin of [`generate_fn_inspect_fn`] for `Fn<N, Ret>^InspectAlt`.
+///
+/// Same shape (placeholder write-signature body, inline-never), but
+/// bound under `InspectAlt::inspect_alt`. WIR build replaces the body
+/// with `call_ref (self.inspect_alt)(self.env, f)` so canonical
+/// closure values produce the per-literal TIR-unparsed source for
+/// `:#?` even after escaping their literal scope.
+#[allow(clippy::too_many_arguments)]
+fn generate_fn_inspect_alt_fn(
+    type_arg_names: &[String],
+    param_types: &[TypeId],
+    return_type: TypeId,
+    _fn_type: TypeId,
+    ref_fn_type: TypeId,
+    fmt_type: TypeId,
+    string_type: TypeId,
+    tt: &mut TypeTable,
+    span: Span,
+) -> TirFunction {
+    let method_info = LocalMethodName::new(
+        "Fn".to_string(),
+        Some("InspectAlt".to_string()),
+        "inspect_alt".to_string(),
     )
+    .with_struct_type_args(type_arg_names);
+    let qualified_name = method_info.to_mangled_name();
+
+    let param_names: Vec<String> = param_types.iter().map(|t| tt.type_name(*t)).collect();
+    let ret_name = tt.type_name(return_type);
+    let sig = format!("|{}| -> {}", param_names.join(", "), ret_name);
+
+    let fmt = || local_expr(1, "f", fmt_type, span);
+    let body = TirBlock::new(vec![write_str_stmt(sig, fmt(), string_type, span)], span);
+
+    let mut func = make_synthetic_method(
+        qualified_name,
+        method_info,
+        inspect_params(ref_fn_type, fmt_type, span),
+        TypeTable::UNIT,
+        body,
+        vec![
+            param_local("self", ref_fn_type, false),
+            param_local("f", fmt_type, false),
+        ],
+    );
+    func.inline_hint = InlineHint::Never;
+    func
 }
 
 /// Generate Inspect for opaque/resource types (Future, Stream, etc.).
@@ -2254,8 +2311,35 @@ fn generate_inspect_alt_impls(module: &mut TirModule) {
         if matches!(resolved, ResolvedType::GenericInstance { ref name, ref module_source, .. } if TypeTable::is_tuple_type(name, module_source))
         {
             // Tuple InspectAlt is provided by variadic impl in core:prelude/tuple.wado
+        } else if let ResolvedType::Function {
+            params,
+            return_type,
+            ..
+        } = &resolved
+        {
+            // Function: emit a stand-alone InspectAlt impl with the
+            // same placeholder body shape as Inspect (write
+            // signature). Crucially, do NOT delegate to
+            // `Fn^Inspect::inspect`: WIR build replaces both impl
+            // bodies with vtable indirect calls (`call_ref
+            // (self.inspect)` vs `call_ref (self.inspect_alt)`), and a
+            // delegate would let the optimizer collapse InspectAlt to
+            // Inspect before the WIR override runs, defeating the
+            // per-literal source dispatch.
+            generated.push(Rc::new(RefCell::new(generate_fn_inspect_alt_fn(
+                &type_arg_names,
+                params,
+                *return_type,
+                type_id,
+                ref_type,
+                fmt_type,
+                string_type,
+                &mut tt,
+                span,
+            ))));
         } else {
-            // Function types, opaque types: delegate to Inspect
+            // Opaque resource types (Future, Stream, etc.): delegate
+            // to Inspect (no per-literal data to dispatch through).
             let di = LocalMethodName::new(
                 base_name.clone(),
                 Some("InspectAlt".to_string()),
