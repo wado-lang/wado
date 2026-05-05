@@ -21,10 +21,10 @@
 
 use std::path::Path;
 
-use sha2::{Digest, Sha256};
 use wado_compiler::kiln::metadata::{
     FileHash, METADATA_VERSION, Metadata, OutputEntry, metadata_filename,
 };
+use wado_compiler::kiln::{content_hash, hex_digest};
 use wado_lsp::{Engine, FilesystemCompilerHost, Severity};
 
 const SCHEMA_BODY: &str = "// dummy calc grammar — body content is irrelevant\n";
@@ -44,27 +44,12 @@ fn entry_source() -> &'static str {
 }
 
 fn hex_sha256(bytes: &[u8]) -> String {
-    let digest = Sha256::digest(bytes);
-    let mut s = String::with_capacity(64);
-    for b in &digest {
-        s.push_str(&format!("{b:02x}"));
-    }
-    s
+    hex_digest(&content_hash(bytes))
 }
 
-/// Layout of the prepared fixture, exposed so tests can canonicalize
-/// paths once and assert against URIs the LSP produces.
 struct Fixture {
-    /// Tempdir root (the workspace's `manifest_root`).
     root: tempfile::TempDir,
-    /// Absolute path to the entry document the editor "opens".
-    entry_path: std::path::PathBuf,
-    /// `file://` URI passed to `Engine::open_document`.
     entry_uri: String,
-    /// Absolute path to the generated module the redirect should land on.
-    /// Useful for sanity checks; `Engine::diagnostics` does not return it.
-    #[allow(dead_code)]
-    generated_path: std::path::PathBuf,
 }
 
 /// Build a fresh consume-only workspace under `tempdir()`.
@@ -90,8 +75,7 @@ fn build_fixture(schema_on_disk: &str) -> Fixture {
 
     let gen_dir = root.join("tests/generated");
     std::fs::create_dir_all(&gen_dir).unwrap();
-    let generated_path = gen_dir.join("calc.wado");
-    std::fs::write(&generated_path, GENERATED_BODY).unwrap();
+    std::fs::write(gen_dir.join("calc.wado"), GENERATED_BODY).unwrap();
 
     // The metadata pins `SCHEMA_BODY`'s hash, even when the on-disk
     // copy carries different bytes — that's how we simulate drift.
@@ -130,12 +114,9 @@ fn build_fixture(schema_on_disk: &str) -> Fixture {
     let entry_path = root.join("main.wado");
     std::fs::write(&entry_path, entry_source()).unwrap();
 
-    let entry_uri = format!("file://{}", entry_path.display());
     Fixture {
         root: tmp,
-        entry_path,
-        entry_uri,
-        generated_path,
+        entry_uri: format!("file://{}", entry_path.display()),
     }
 }
 
@@ -179,9 +160,6 @@ fn cache_hit_does_not_warn_and_redirects() {
             "expected clean compile when the cache is fresh, got {:#?}",
             errors(&diags),
         );
-
-        // The fixture must outlive every reference into its tempdir.
-        let _ = fixture.entry_path;
     });
 }
 

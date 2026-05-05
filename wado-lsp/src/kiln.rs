@@ -27,11 +27,11 @@
 
 use std::path::{Path, PathBuf};
 
-use sha2::{Digest, Sha256};
 use wado_compiler::ast::{Item, Module};
 use wado_compiler::kiln::metadata::{METADATA_VERSION, Metadata, metadata_filename};
 use wado_compiler::kiln::{
-    InvocationIndex, InvocationPath, collect_inline_invocations, hash_options_canonical,
+    InvocationIndex, InvocationPath, collect_inline_invocations, content_hash, hash_options_canonical,
+    hex_digest,
 };
 use wado_compiler::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
 
@@ -78,18 +78,15 @@ pub fn prepare_invocations<H: CompilerHost>(
         .expect("entry module was just inserted");
     let mut index = InvocationIndex::new();
     for invocation in &invocations {
-        let invocation_id = invocation.decl_site.synthetic_id.clone();
         match resolve_invocation(&manifest_root, invocation) {
-            Resolution::Hit { entry_uri } => {
-                index.insert(
-                    &invocation.decl_site.module,
-                    invocation.from.as_str(),
-                    &entry_uri,
-                );
-            }
-            Resolution::Miss { reason } => {
+            Ok(entry_uri) => index.insert(
+                &invocation.decl_site.module,
+                invocation.from.as_str(),
+                &entry_uri,
+            ),
+            Err(reason) => {
                 let span = use_decl_span_for(entry_module, &invocation.from, entry_filename);
-                emit_stale(host, &invocation_id, &reason, span);
+                emit_stale(host, &invocation.decl_site.synthetic_id, &reason, span);
             }
         }
     }
@@ -117,16 +114,12 @@ fn use_decl_span_for(module: &Module, from: &InvocationPath, filename: &str) -> 
     }
 }
 
-#[derive(Debug)]
-enum Resolution {
-    Hit { entry_uri: String },
-    Miss { reason: String },
-}
-
+/// On hit, returns the `kiln:/abs/path` URI of the generated entry
+/// module. On miss, returns a human-readable reason for the diagnostic.
 fn resolve_invocation(
     manifest_root: &Path,
     invocation: &wado_compiler::kiln::Invocation,
-) -> Resolution {
+) -> Result<String, String> {
     let metadata_path = manifest_root
         .join(invocation.output_dir.as_str())
         .join(metadata_filename(invocation.from.as_str()));
@@ -135,124 +128,75 @@ fn resolve_invocation(
         Ok(s) => match serde_json::from_str::<Metadata>(&s) {
             Ok(m) if m.version == METADATA_VERSION => m,
             Ok(_) => {
-                return Resolution::Miss {
-                    reason: format!(
-                        "metadata at {} has an unsupported version",
-                        metadata_path.display(),
-                    ),
-                };
+                return Err(format!(
+                    "metadata at {} has an unsupported version",
+                    metadata_path.display(),
+                ));
             }
             Err(e) => {
-                return Resolution::Miss {
-                    reason: format!("failed to parse {}: {e}", metadata_path.display()),
-                };
+                return Err(format!("failed to parse {}: {e}", metadata_path.display()));
             }
         },
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            return Resolution::Miss {
-                reason: format!("no cache at {}", metadata_path.display()),
-            };
+            return Err(format!("no cache at {}", metadata_path.display()));
         }
         Err(e) => {
-            return Resolution::Miss {
-                reason: format!("cannot read {}: {e}", metadata_path.display()),
-            };
+            return Err(format!("cannot read {}: {e}", metadata_path.display()));
         }
     };
 
-    let options_hash = hash_options_canonical(&invocation.options_canonical);
-    if metadata.options_hash != options_hash {
-        return Resolution::Miss {
-            reason: "options changed since last generation".to_string(),
-        };
+    if metadata.options_hash != hash_options_canonical(&invocation.options_canonical) {
+        return Err("options changed since last generation".to_string());
     }
 
     if metadata.primary.path != invocation.from.as_str() {
-        return Resolution::Miss {
-            reason: "primary input path changed since last generation".to_string(),
-        };
+        return Err("primary input path changed since last generation".to_string());
     }
     if !file_matches(
         manifest_root,
         &metadata.primary.path,
         &metadata.primary.hash,
     ) {
-        return Resolution::Miss {
-            reason: format!("{} changed on disk", metadata.primary.path),
-        };
+        return Err(format!("{} changed on disk", metadata.primary.path));
     }
 
     if metadata.inputs.len() != invocation.inputs.len() {
-        return Resolution::Miss {
-            reason: "inputs list changed since last generation".to_string(),
-        };
+        return Err("inputs list changed since last generation".to_string());
     }
     for (declared, recorded) in invocation.inputs.iter().zip(&metadata.inputs) {
         if declared.as_str() != recorded.path {
-            return Resolution::Miss {
-                reason: "inputs list changed since last generation".to_string(),
-            };
+            return Err("inputs list changed since last generation".to_string());
         }
         if !file_matches(manifest_root, &recorded.path, &recorded.hash) {
-            return Resolution::Miss {
-                reason: format!("{} changed on disk", recorded.path),
-            };
+            return Err(format!("{} changed on disk", recorded.path));
         }
     }
 
-    let entry_output = metadata.outputs.iter().find(|o| o.entry);
-    let Some(entry_output) = entry_output else {
-        return Resolution::Miss {
-            reason: "no entry output recorded in metadata".to_string(),
-        };
-    };
+    let entry_output = metadata
+        .outputs
+        .iter()
+        .find(|o| o.entry)
+        .ok_or_else(|| "no entry output recorded in metadata".to_string())?;
 
     let abs_entry = manifest_root.join(&entry_output.path);
     if !abs_entry.is_file() {
-        return Resolution::Miss {
-            reason: format!("{} missing on disk", entry_output.path),
-        };
+        return Err(format!("{} missing on disk", entry_output.path));
     }
 
     let canonical = std::fs::canonicalize(&abs_entry).unwrap_or(abs_entry);
-    Resolution::Hit {
-        entry_uri: path_to_kiln_uri(&canonical),
-    }
+    Ok(path_to_kiln_uri(&canonical))
 }
 
 fn file_matches(manifest_root: &Path, path: &str, expected_hex: &str) -> bool {
-    let abs = manifest_root.join(path);
-    let Ok(bytes) = std::fs::read(&abs) else {
+    let Ok(bytes) = std::fs::read(manifest_root.join(path)) else {
         return false;
     };
-    hex_digest(&Sha256::digest(&bytes)) == expected_hex
-}
-
-fn hex_digest(digest: &[u8]) -> String {
-    let mut s = String::with_capacity(digest.len() * 2);
-    for b in digest {
-        let hi = b >> 4;
-        let lo = b & 0x0f;
-        s.push(hex_nibble(hi));
-        s.push(hex_nibble(lo));
-    }
-    s
-}
-
-fn hex_nibble(n: u8) -> char {
-    match n {
-        0..=9 => (b'0' + n) as char,
-        _ => (b'a' + (n - 10)) as char,
-    }
+    hex_digest(&content_hash(&bytes)) == expected_hex
 }
 
 /// Walk up from `entry_path`'s directory looking for the nearest
-/// `wado.toml`. Returns the directory that contains it (the kiln
-/// pipeline's `manifest_root`).
-///
-/// This duplicates the logic of `wado_cli::compile::load_nearest_manifest`
-/// but skips the actual TOML parse — the LSP only needs the directory
-/// for path resolution, not the manifest contents.
+/// `wado.toml`. Returns the directory that contains it — the kiln
+/// pipeline's `manifest_root`.
 fn find_manifest_root(entry_path: &Path) -> Option<PathBuf> {
     let mut dir = entry_path
         .parent()
