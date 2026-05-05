@@ -113,12 +113,13 @@ fn resolve_local_names(raw: &IndexMap<u32, String>, params: &[TirParam]) -> Inde
 /// 3. `__closure_inspect_alt_wrapper_N(env, formatter)` — refcasts
 ///    both args and forwards to `__Closure_N^InspectAlt::inspect_alt`.
 ///
-/// The per-functor `__Closure_N^Inspect / InspectAlt` impls are
-/// synthesised in lower (Phase 2). DCE keeps them alive when the
-/// functor escapes via `ClosureToCanonical`; if both are missing we
-/// still register the call wrapper but use `Unreachable` as the body
-/// for the inspect slots (the slots stay populated so the struct
-/// schema is consistent, but unreachable trap on call).
+/// The per-functor `__Closure_N^Inspect` / `InspectAlt` impls are
+/// synthesised in lower (Phase 2). For non-inspectable signatures the
+/// canonical struct uses the slim `{ env, func }` schema and only the
+/// call wrapper is registered; the `inspect` / `inspect_alt` wrappers
+/// don't exist and the corresponding fields aren't on the struct, so
+/// nothing has to be filled in. For inspectable signatures all three
+/// wrappers are registered and reach the per-functor impls.
 pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
     use crate::wir::WirType;
 

@@ -1,0 +1,27 @@
+// Plain function references (`&fn_name`) lower to synthetic
+// zero-capture closures. They must dispatch through the same
+// canonical-vtable path as user-written closures and produce stable
+// inspect output.
+
+fn double(x: i32) -> i32 {
+    return x * 2;
+}
+
+fn fmt_def(f: fn(i32) -> i32) -> String {
+    return `{f:?}`;
+}
+
+fn fmt_alt(f: fn(i32) -> i32) -> String {
+    return `{f:#?}`;
+}
+
+test "fn-ref :? signature" {
+    assert fmt_def(double) == "|i32| -> i32";
+}
+
+test "fn-ref :#? renders as &fn_name" {
+    assert fmt_alt(double) == "&double";
+}
+
+__DATA__
+{"test": {}}

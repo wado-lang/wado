@@ -538,40 +538,50 @@ fn build_analysis_graph(project: &FlatPackage) -> (CallGraph, EffectUsageMap) {
 /// signature that is the receiver type of a `Fn<arity, ret>^Inspect` or
 /// `Fn<arity, ret>^InspectAlt` method call. Used by the DCE call-graph
 /// builder to gate the per-functor `inspect` / `inspect_alt` root
-/// marking emitted from `ClosureToCanonical`: without a real
-/// `Fn^Inspect[Alt]` caller, those per-functor impls cannot be invoked
-/// indirectly, so keeping them alive is purely waste.
-fn collect_inspectable_signatures(project: &FlatPackage) -> IndexSet<(usize, TypeId)> {
-    let mut set: IndexSet<(usize, TypeId)> = IndexSet::default();
+/// marking emitted from `ClosureToCanonical` independently: without a
+/// real `Fn^Inspect[Alt]` caller, those per-functor impls cannot be
+/// invoked indirectly, so keeping them alive is purely waste.
+///
+/// The two trait methods are tracked separately so a program that only
+/// formats closures with `:?` doesn't keep every `__Closure_N^InspectAlt`
+/// impl (and its per-literal source-string constant) alive.
+#[derive(Default)]
+struct InspectableSignatures {
+    inspect: IndexSet<(usize, TypeId)>,
+    inspect_alt: IndexSet<(usize, TypeId)>,
+}
+
+fn collect_inspectable_signatures(project: &FlatPackage) -> InspectableSignatures {
+    let mut sigs = InspectableSignatures::default();
     let type_table = &*project.type_table.borrow();
     for func_rc in &project.functions {
         let func = func_rc.borrow();
         if let Some(body) = &func.body {
-            scan_inspect_signatures_block(body, type_table, &mut set);
+            scan_inspect_signatures_block(body, type_table, &mut sigs);
         }
     }
-    set
+    sigs
 }
 
 fn scan_inspect_signatures_block(
     block: &TirBlock,
     type_table: &TypeTable,
-    set: &mut IndexSet<(usize, TypeId)>,
+    sigs: &mut InspectableSignatures,
 ) {
     for stmt in &block.stmts {
-        scan_inspect_signatures_stmt(stmt, type_table, set);
+        scan_inspect_signatures_stmt(stmt, type_table, sigs);
     }
 }
 
 fn scan_inspect_signatures_stmt(
     stmt: &TirStmt,
     type_table: &TypeTable,
-    set: &mut IndexSet<(usize, TypeId)>,
+    sigs: &mut InspectableSignatures,
 ) {
     use crate::tir_visitor::TirRefVisitor;
     struct Scanner<'a> {
         type_table: &'a TypeTable,
-        set: &'a mut IndexSet<(usize, TypeId)>,
+        sigs: &'a mut InspectableSignatures,
     }
     impl TirRefVisitor for Scanner<'_> {
         fn visit_expr(&mut self, expr: &TirExpr) {
@@ -579,7 +589,6 @@ fn scan_inspect_signatures_stmt(
                 && let Some(info) = &func.method_info
                 && info.base_struct_name == "Fn"
                 && let Some(trait_name) = info.base_trait_name.as_deref()
-                && (trait_name == "Inspect" || trait_name == "InspectAlt")
             {
                 // Receiver type is `&Fn(...)` — peel the reference and read
                 // the function's arity + return type out of the type table.
@@ -590,13 +599,22 @@ fn scan_inspect_signatures_stmt(
                     ..
                 } = self.type_table.get(recv_type)
                 {
-                    self.set.insert((params.len(), *return_type));
+                    let key = (params.len(), *return_type);
+                    match trait_name {
+                        "Inspect" => {
+                            self.sigs.inspect.insert(key);
+                        }
+                        "InspectAlt" => {
+                            self.sigs.inspect_alt.insert(key);
+                        }
+                        _ => {}
+                    }
                 }
             }
             self.walk_expr(expr);
         }
     }
-    let mut s = Scanner { type_table, set };
+    let mut s = Scanner { type_table, sigs };
     s.visit_stmt(stmt);
 }
 
@@ -605,7 +623,7 @@ fn analyze_function(
     func: &TirFunction,
     current_module: &ModuleSource,
     type_table: &TypeTable,
-    inspectable_signatures: &IndexSet<(usize, TypeId)>,
+    inspectable_signatures: &InspectableSignatures,
 ) -> FunctionAnalysis {
     let mut analysis = FunctionAnalysis::default();
 
@@ -625,7 +643,7 @@ fn analyze_block(
     block: &TirBlock,
     current_module: &ModuleSource,
     type_table: &TypeTable,
-    inspectable_signatures: &IndexSet<(usize, TypeId)>,
+    inspectable_signatures: &InspectableSignatures,
     analysis: &mut FunctionAnalysis,
 ) {
     for stmt in &block.stmts {
@@ -771,7 +789,7 @@ fn analyze_expr(
     expr: &TirExpr,
     current_module: &ModuleSource,
     type_table: &TypeTable,
-    inspectable_signatures: &IndexSet<(usize, TypeId)>,
+    inspectable_signatures: &InspectableSignatures,
     analysis: &mut FunctionAnalysis,
 ) {
     match &expr.kind {
@@ -1420,31 +1438,34 @@ fn analyze_expr(
                 "__call".to_string(),
             )));
 
-            // The per-functor `__Closure_N^Inspect / ^InspectAlt` impls
-            // (and their source-string literals) only need to stay alive
-            // when the canonical struct will carry the `inspect /
-            // inspect_alt` vtable slots — i.e. when some `Fn<arity,
-            // ret>^Inspect[Alt]` call site exists for this signature. If
-            // no inspection ever happens for this `(arity, ret)`, the
-            // canonical struct is slim `{ env, func }` and rooting the
-            // per-functor inspect impls would just retain unreachable
-            // code and dead source-string literals.
+            // The per-functor `__Closure_N^Inspect` and `^InspectAlt`
+            // impls (and their per-literal source-string constants) only
+            // need to stay alive when their corresponding `Fn<arity,
+            // ret>^Inspect[Alt]` dispatch stub is reachable — gated
+            // independently per trait method. A program that only ever
+            // uses `:?` keeps `__Closure_N^Inspect` but drops
+            // `__Closure_N^InspectAlt` and its source-string literal.
             if let ResolvedType::Function {
                 params,
                 return_type,
                 ..
             } = type_table.get(*target_fn_type)
-                && inspectable_signatures.contains(&(params.len(), *return_type))
             {
-                for (trait_name, method_name) in [
-                    (Some("Inspect"), "inspect"),
-                    (Some("InspectAlt"), "inspect_alt"),
-                ] {
+                let key = (params.len(), *return_type);
+                if inspectable_signatures.inspect.contains(&key) {
                     analysis.callees.insert(FunctionId::Method(MethodName::new(
                         closure_module.clone(),
                         struct_name.clone(),
-                        trait_name.map(str::to_string),
-                        method_name.to_string(),
+                        Some("Inspect".to_string()),
+                        "inspect".to_string(),
+                    )));
+                }
+                if inspectable_signatures.inspect_alt.contains(&key) {
+                    analysis.callees.insert(FunctionId::Method(MethodName::new(
+                        closure_module.clone(),
+                        struct_name,
+                        Some("InspectAlt".to_string()),
+                        "inspect_alt".to_string(),
                     )));
                 }
             }

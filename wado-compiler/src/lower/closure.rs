@@ -291,9 +291,14 @@ impl ClosureLowerer {
             .collect();
         for func_rc in &lowered_funcs {
             let mut func = func_rc.borrow_mut();
+            // Snapshot param `(local_index, type_id)` so the seed pass
+            // can run while `func.body` is borrowed mutably.
+            let param_locals: Vec<(u32, TypeId)> =
+                func.params.iter().map(|p| (p.local_index, p.type_id)).collect();
             if let Some(body) = &mut func.body {
                 self.local_to_closure.clear();
                 let mut tt = module.type_table.borrow_mut();
+                self.seed_local_to_closure_from_params(&param_locals, &tt);
                 ClosureCallSiteLowerer {
                     local_to_closure: &mut self.local_to_closure,
                     specializable: &self.specializable,
@@ -308,9 +313,12 @@ impl ClosureLowerer {
         }
         for impl_block in &mut module.impls {
             for method in &mut impl_block.methods {
+                let param_locals: Vec<(u32, TypeId)> =
+                    method.params.iter().map(|p| (p.local_index, p.type_id)).collect();
                 if let Some(body) = &mut method.body {
                     self.local_to_closure.clear();
                     let mut tt = module.type_table.borrow_mut();
+                    self.seed_local_to_closure_from_params(&param_locals, &tt);
                     ClosureCallSiteLowerer {
                         local_to_closure: &mut self.local_to_closure,
                         specializable: &self.specializable,
@@ -424,6 +432,32 @@ impl ClosureLowerer {
     }
 
     /// Update `locals` in a function after closure transformation
+    /// Seed `local_to_closure` for any function parameter whose declared
+    /// type is `&__Closure_N` (the result of fn-param specialisation in
+    /// `generate_fn_param_specializations`). Without this, the
+    /// inspect-redirect in `try_redirect_inspect_to_functor` would miss
+    /// specialised parameters — they aren't `let`-bound, so the safety
+    /// analyser doesn't put them in the map — and `f.Fn^Inspect::inspect`
+    /// inside a specialised function body would fall through to the
+    /// canonical-vtable dispatch on a `&__Closure_N` value, where the
+    /// `ref.cast` to `$canonical_inspectable_base` traps.
+    fn seed_local_to_closure_from_params(
+        &mut self,
+        param_locals: &[(u32, TypeId)],
+        type_table: &TypeTable,
+    ) {
+        for (local_index, type_id) in param_locals {
+            let bare = type_table.peel_refs(*type_id);
+            for (idx, functor) in self.functor_infos.iter().enumerate() {
+                if functor.struct_type_id == bare {
+                    let closure_id = u32::try_from(idx).expect("functor id fits in u32");
+                    self.local_to_closure.insert(*local_index, closure_id);
+                    break;
+                }
+            }
+        }
+    }
+
     fn update_local_types(&self, func: &mut TirFunction) {
         // For each local that stored a closure and was transformed to a struct,
         // update its type from function type to struct type
@@ -1438,19 +1472,20 @@ impl ClosureCallSiteLowerer<'_> {
 
     /// When a `MethodCall` resolves to `Fn<N, Ret>^Inspect::inspect` or
     /// `Fn<N, Ret>^InspectAlt::inspect_alt` with a receiver that is a
-    /// specialized closure local, redirect the call to the per-functor
-    /// `__Closure_N^Inspect / InspectAlt` impl synthesised in
-    /// `generate_functor_items`. This is what makes the specialized
-    /// path produce the per-literal signature/source rather than the
-    /// generic canonical-vtable indirection.
+    /// specialised closure local — either let-bound by the closure
+    /// safety analyser, or a fn-param specialised parameter
+    /// (`generate_fn_param_specializations` rewrites the param type to
+    /// `&__Closure_N`) — redirect the call to the per-functor
+    /// `__Closure_N^Inspect / InspectAlt` impl. The redirect bypasses
+    /// the canonical-vtable indirection so the specialised path
+    /// produces the per-literal signature / source.
     ///
-    /// The receiver is rewritten from `Unary::Ref(Local(idx, type=Fn))`
-    /// to `Local(idx, type=&__Closure_N)` since the per-functor impl
-    /// expects `&self: &__Closure_N` directly (the local already holds
-    /// a ref after specialization). When no redirect applies (the call
-    /// is on a canonical closure value, or the trait isn't a closure
-    /// inspect trait), this is a no-op and the call keeps its
-    /// `Fn<N, Ret>^...` target for the canonical-vtable path.
+    /// Detection: `local_to_closure` is seeded by the safety analyser
+    /// for let-bound closures and by `seed_local_to_closure_from_params`
+    /// at body-walk start for fn-param specialised parameters. A
+    /// receiver that doesn't peel down to a local (or peels to one not
+    /// in the map, i.e. a canonicalised value) falls through to the
+    /// generic dispatch stub.
     fn try_redirect_inspect_to_functor(&self, receiver: &mut Box<TirExpr>, func: &mut FunctionRef) {
         let info = match &func.method_info {
             Some(info) => info,
@@ -1473,9 +1508,6 @@ impl ClosureCallSiteLowerer<'_> {
         let Some(closure_id) = self.local_to_closure.get(&local_idx).copied() else {
             return;
         };
-        if !self.specializable.contains(&closure_id) {
-            return;
-        }
         let Some(functor) = self.functor_infos.get(closure_id as usize) else {
             return;
         };
@@ -1530,6 +1562,7 @@ fn peel_ref_to_local(expr: &TirExpr) -> Option<u32> {
         _ => None,
     }
 }
+
 
 impl TirMutVisitor for ClosureCallSiteLowerer<'_> {
     fn visit_stmt(&mut self, stmt: &mut TirStmt) {
