@@ -78,15 +78,22 @@ pub fn prepare_invocations<H: CompilerHost>(
         .expect("entry module was just inserted");
     let mut index = InvocationIndex::new();
     for invocation in &invocations {
+        let invocation_id = &invocation.decl_site.synthetic_id;
         match resolve_invocation(&manifest_root, invocation) {
-            Ok(entry_uri) => index.insert(
-                &invocation.decl_site.module,
-                invocation.from.as_str(),
-                &entry_uri,
-            ),
+            Ok((entry_uri, modified)) => {
+                index.insert(
+                    &invocation.decl_site.module,
+                    invocation.from.as_str(),
+                    &entry_uri,
+                );
+                for path in &modified {
+                    let span = use_decl_span_for(entry_module, &invocation.from, entry_filename);
+                    emit_modified(host, invocation_id, path, span);
+                }
+            }
             Err(reason) => {
                 let span = use_decl_span_for(entry_module, &invocation.from, entry_filename);
-                emit_stale(host, &invocation.decl_site.synthetic_id, &reason, span);
+                emit_stale(host, invocation_id, &reason, span);
             }
         }
     }
@@ -114,12 +121,18 @@ fn use_decl_span_for(module: &Module, from: &InvocationPath, filename: &str) -> 
     }
 }
 
-/// On hit, returns the `kiln:/abs/path` URI of the generated entry
-/// module. On miss, returns a human-readable reason for the diagnostic.
+/// Validate the cached metadata against on-disk state.
+///
+/// On hit returns the `kiln:/abs/path` URI of the generated entry
+/// module plus the project-root-relative paths of any output files
+/// whose bytes drifted from `metadata.outputs[].hash` (hit-but-modified
+/// — the user hand-edited the generated `.wado`; honor the edit but
+/// surface it via [`Code::KilnGeneratedModified`] at the call site).
+/// On miss returns a human-readable reason for [`Code::KilnStaleCache`].
 fn resolve_invocation(
     manifest_root: &Path,
     invocation: &wado_compiler::kiln::Invocation,
-) -> Result<String, String> {
+) -> Result<(String, Vec<String>), String> {
     let metadata_path = manifest_root
         .join(invocation.output_dir.as_str())
         .join(metadata_filename(invocation.from.as_str()));
@@ -172,6 +185,18 @@ fn resolve_invocation(
         }
     }
 
+    // `reads` are the transitive `host::read-file` pickups from the
+    // last generator run (e.g. a `.proto` import or a `.g4` lexer
+    // grammar). They're not in `invocation.inputs` so the user can't
+    // see them at the call site, but a change to one still invalidates
+    // the cache. CLI parity: see `wado_cli::kiln_driver::cache_matches`.
+    for read in &metadata.reads {
+        let normalized = InvocationPath::normalize(&read.path);
+        if !file_matches(manifest_root, normalized.as_str(), &read.hash) {
+            return Err(format!("{} (read-file dependency) changed on disk", read.path));
+        }
+    }
+
     let entry_output = metadata
         .outputs
         .iter()
@@ -183,8 +208,15 @@ fn resolve_invocation(
         return Err(format!("{} missing on disk", entry_output.path));
     }
 
+    let mut modified = Vec::new();
+    for output in &metadata.outputs {
+        if !file_matches(manifest_root, &output.path, &output.hash) {
+            modified.push(output.path.clone());
+        }
+    }
+
     let canonical = std::fs::canonicalize(&abs_entry).unwrap_or(abs_entry);
-    Ok(path_to_kiln_uri(&canonical))
+    Ok((path_to_kiln_uri(&canonical), modified))
 }
 
 fn file_matches(manifest_root: &Path, path: &str, expected_hex: &str) -> bool {
@@ -240,6 +272,24 @@ fn emit_stale<H: CompilerHost>(host: &H, invocation_id: &str, reason: &str, span
         message: format!(
             "kiln[{invocation_id}]: stale cache ({reason}); \
              re-run `wado compile` natively to refresh.",
+        ),
+        span: Some(span),
+    });
+}
+
+fn emit_modified<H: CompilerHost>(
+    host: &H,
+    invocation_id: &str,
+    path: &str,
+    span: DiagnosticSpan,
+) {
+    host.emit_diagnostic(Diagnostic {
+        severity: Severity::Warning,
+        code: Code::KilnGeneratedModified,
+        message: format!(
+            "kiln[{invocation_id}]: {path} has been modified after generation; \
+             the on-disk content is honored, but `wado check` will fail. \
+             Run `wado compile` (or delete the file) to regenerate.",
         ),
         span: Some(span),
     });
