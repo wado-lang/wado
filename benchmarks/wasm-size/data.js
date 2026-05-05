@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777963757311,
+  "lastUpdate": 1777963831922,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -19505,6 +19505,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/fbfdd55e4eb513747a1e57435ffb80a303e8d29e"
         },
         "date": 1777963756974,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1775,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8776,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18520,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 503688,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "eeaf83e33d97df14cd2ae8141e88a07ce7b00378",
+          "message": "Merge pull request #1001 from wado-lang/claude/review-kiln-web-6WIlK\n\nfeat(wado-lsp): wire consume-only Kiln redirects through Engine (WEP M7)",
+          "timestamp": "2026-05-05T15:44:41+09:00",
+          "tree_id": "36729bdfc3a5f801b8015eef7270a27476a673bb",
+          "url": "https://github.com/wado-lang/wado/commit/eeaf83e33d97df14cd2ae8141e88a07ce7b00378"
+        },
+        "date": 1777963831540,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
