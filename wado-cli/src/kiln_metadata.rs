@@ -13,80 +13,32 @@
 //! `build/kiln/<synthetic_id>`), the file lives in that gitignored tree
 //! and behaves like before. Deleting the file is not an error: the next
 //! compile rebuilds from scratch.
+//!
+//! The schema types (`Metadata`, `FileHash`, `OutputEntry`,
+//! `METADATA_VERSION`) live in `wado_compiler::kiln::metadata` so they
+//! can be shared with `wado-lsp`'s consume-only redirect builder; this
+//! module wraps them with `std::fs` reads and writes.
 
 use std::path::{Path, PathBuf};
 
-use serde::{Deserialize, Serialize};
-
-/// Schema version of the `<primary>.kiln.json` file. Bumped only on
-/// incompatible changes; older files are silently ignored (treated as a
-/// cache miss) when the version differs.
-///
-/// v2 (current): added `generator_source_hash` so a change to the
-/// generator's `.wado` source closure invalidates the cache. v1 metadata
-/// has no record of the generator's identity beyond the `generator`
-/// string and silently survived edits to transitive generator imports —
-/// see `cache_matches` for the comparison.
-pub const METADATA_VERSION: u32 = 2;
-
-/// Suffix appended to the primary input's basename to form the metadata
-/// filename. Lives in `<manifest_root>/<output_dir>/`.
-const METADATA_SUFFIX: &str = ".kiln.json";
-
-/// Per-invocation cache state recorded between Kiln runs.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct Metadata {
-    pub version: u32,
-    pub invocation: String,
-    pub generator: String,
-    /// Hex-encoded SHA-256 of the generator's source closure (entry
-    /// `.wado` plus every transitively imported `.wado`). When the
-    /// stored value differs from the provider's current hash the
-    /// cache must miss — see `cache_matches`. An empty string is
-    /// recorded for providers that cannot compute one (currently the
-    /// spec-form path), which means cache validation falls back to
-    /// the file-hash checks alone.
-    #[serde(default)]
-    pub generator_source_hash: String,
-    pub primary: FileHash,
-    #[serde(default)]
-    pub inputs: Vec<FileHash>,
-    #[serde(default)]
-    pub reads: Vec<FileHash>,
-    pub options_hash: String,
-    pub outputs: Vec<OutputEntry>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct FileHash {
-    pub path: String,
-    pub hash: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct OutputEntry {
-    pub path: String,
-    pub hash: String,
-    pub entry: bool,
-}
+pub use wado_compiler::kiln::metadata::{
+    FileHash, METADATA_VERSION, Metadata, OutputEntry, metadata_filename,
+};
 
 /// Path to the metadata file for an invocation.
 ///
 /// `output_dir` is the relative `Invocation::output_dir` (e.g.
 /// `tests/generated/sqlite` or `build/kiln/<synthetic_id>`). `primary`
 /// is `Invocation::from` — the metadata's basename uses
-/// `Path::file_name(primary)` so two invocations sharing one
+/// [`metadata_filename`] so two invocations sharing one
 /// `output_dir` collide only if they share both primary basename and
 /// options, which would already make them the same invocation under
 /// [`crate::kiln_driver::invocation_id`].
 #[must_use]
 pub fn metadata_path(manifest_root: &Path, output_dir: &str, primary: &str) -> PathBuf {
-    let basename = Path::new(primary)
-        .file_name()
-        .map_or_else(|| primary.to_string(), |s| s.to_string_lossy().into_owned());
     manifest_root
         .join(output_dir)
-        .join(format!("{basename}{METADATA_SUFFIX}"))
+        .join(metadata_filename(primary))
 }
 
 /// Read the metadata file for an invocation, if present.
