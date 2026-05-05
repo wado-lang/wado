@@ -14,12 +14,16 @@ wado-compiler = { path = "../wado-compiler" }
 indexmap = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+sha2 = { workspace = true }
 # `futures::executor::block_on` drives both the async server loop (in
 # `src/bin/wado-lsp.rs`) and the async unit tests, so tokio is not pulled
 # into the dep graph at all. Keeping wado-lsp tokio-free matters for CI
 # cache reuse with other workspace members that need a different tokio
 # feature set, and keeps the `wasm32-wasip2` artifact small.
 futures = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
 
 [lints]
 workspace = true

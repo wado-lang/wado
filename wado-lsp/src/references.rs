@@ -10,7 +10,7 @@
 
 use serde::{Deserialize, Serialize};
 use wado_compiler::CompilerHost;
-use wado_compiler::annotate::{Annotated, annotate};
+use wado_compiler::annotate::{Annotated, annotate_with_invocations};
 use wado_compiler::symbol::SymbolKey;
 
 use crate::diagnostics::{Position, Range};
@@ -35,7 +35,9 @@ pub async fn find_references<H: CompilerHost>(
     host: &H,
 ) -> Vec<ReferenceLocation> {
     let filename = uri_to_filename(uri);
-    let Ok(annotated) = annotate(source, host, Some(&filename)).await else {
+    let invocations = crate::kiln::prepare_invocations(&filename, source, host);
+    let Ok(annotated) = annotate_with_invocations(source, host, Some(&filename), invocations).await
+    else {
         return Vec::new();
     };
 

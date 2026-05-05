@@ -3,6 +3,7 @@ mod diagnostics;
 mod document_highlight;
 pub mod host;
 mod hover;
+pub mod kiln;
 mod location;
 mod references;
 pub mod semantic_tokens;
@@ -148,7 +149,14 @@ impl Engine {
 
         let filename = uri_to_filename(uri);
         let collecting_host = DiagnosticCollector::new(host);
-        let _ = wado_compiler::annotate(source, &collecting_host, Some(&filename)).await;
+        let invocations = kiln::prepare_invocations(&filename, source, &collecting_host);
+        let _ = wado_compiler::annotate_with_invocations(
+            source,
+            &collecting_host,
+            Some(&filename),
+            invocations,
+        )
+        .await;
 
         collecting_host
             .take_diagnostics()
