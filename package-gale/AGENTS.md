@@ -196,7 +196,7 @@ pointer.
 
 **Goal:** Expand multi-token RuleRefs during SLL prediction to reduce backtracking.
 
-**What was tried:** Added `return_stack` to `SllConfig` to track continuation points when entering a referenced rule. `sll_expand_rule_ref` pushed return frames and advanced inside sub-rules. `try_expand_opaque` called expansion when `build_sll_node` would otherwise produce `Backtrack`.
+**What was tried:** Added `return_stack` to `SllConfig` to track continuation points when entering a referenced rule. `sll_expand_rule_ref` pushed return frames and advanced inside sub-rules. `try_expand_opaque` called expansion when `build_sll_node` would otherwise produce `Ambiguous` (then named `Backtrack`).
 
 **Why it failed (3 distinct bugs):**
 

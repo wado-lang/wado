@@ -71,7 +71,7 @@ variant PredictionNode {
     Leaf(i32),
     Dispatch(PredictionDispatch),
     Consume(ConsumeNode),
-    Backtrack(Array<i32>),
+    Ambiguous(Array<i32>),
 }
 
 struct ConsumeNode {
@@ -116,18 +116,18 @@ fn build_prediction(alt_indices: &Array<i32>, first_sets: &Array<Array<String>>,
     return strip_dead_consume(tree);
 }
 
-/// Strip Consume nodes whose child contains any Backtrack — fall back to
-/// Backtrack from the original position rather than consuming then failing.
-/// This handles both direct Consume → Backtrack and indirect cases like
-/// Consume → Dispatch → (Branch → Backtrack).
+/// Strip Consume nodes whose child contains any Ambiguous — fall back to
+/// Ambiguous from the original position rather than consuming then failing.
+/// This handles both direct Consume → Ambiguous and indirect cases like
+/// Consume → Dispatch → (Branch → Ambiguous).
 fn strip_dead_consume(node: PredictionNode) -> PredictionNode {
     return match node {
         Consume(c) => {
             let child = strip_dead_consume(c.child);
-            if prediction_contains_backtrack(&child) {
+            if prediction_contains_ambiguous(&child) {
                 let mut indices: Array<i32> = [];
                 prediction_collect_all_indices(&child, &mut indices);
-                PredictionNode::Backtrack(indices);
+                PredictionNode::Ambiguous(indices);
             } else {
                 PredictionNode::Consume(ConsumeNode { element: c.element, child });
             }
@@ -146,13 +146,13 @@ fn strip_dead_consume(node: PredictionNode) -> PredictionNode {
     };
 }
 
-fn prediction_contains_backtrack(node: &PredictionNode) -> bool {
+fn prediction_contains_ambiguous(node: &PredictionNode) -> bool {
     return match *node {
-        Backtrack(_) => true,
-        Consume(c) => prediction_contains_backtrack(&c.child),
+        Ambiguous(_) => true,
+        Consume(c) => prediction_contains_ambiguous(&c.child),
         Dispatch(d) => {
             for let b of &d.branches {
-                if prediction_contains_backtrack(&b.child) {
+                if prediction_contains_ambiguous(&b.child) {
                     return true;
                 }
             }
@@ -164,7 +164,7 @@ fn prediction_contains_backtrack(node: &PredictionNode) -> bool {
 
 fn prediction_collect_all_indices(node: &PredictionNode, out: &mut Array<i32>) {
     match *node {
-        Backtrack(indices) => {
+        Ambiguous(indices) => {
             for let i of &indices {
                 if !out.iter().any(|x: i32| x == *i) {
                     out.push(*i);
@@ -563,10 +563,10 @@ fn sll_dedup_by_alt(configs: &Array<SllConfig>) -> Array<SllConfig> {
 fn build_sll_node(configs: &Array<SllConfig>, depth: i32, max_depth: i32, ctx: &mut GenContext) -> PredictionNode {
     let closed = sll_closure(configs);
 
-    // Guard: if too many configs, fall back to backtracking to avoid explosion.
+    // Guard: if too many configs, fall back to Ambiguous (codegen scan-dispatches) to avoid explosion.
     if closed.len() > 200 {
         let alts = sll_unique_alts(&closed);
-        return PredictionNode::Backtrack(alts);
+        return PredictionNode::Ambiguous(alts);
     }
 
     // Check unique alternatives.
@@ -575,7 +575,7 @@ fn build_sll_node(configs: &Array<SllConfig>, depth: i32, max_depth: i32, ctx: &
         return PredictionNode::Leaf(alts[0]);
     }
     if alts.len() == 0 || depth >= max_depth {
-        return PredictionNode::Backtrack(alts);
+        return PredictionNode::Ambiguous(alts);
     }
 
     // Check for common prefix: if all configs are at a terminal element
@@ -661,7 +661,7 @@ fn build_sll_node(configs: &Array<SllConfig>, depth: i32, max_depth: i32, ctx: &
             if let Some(node) = expanded {
                 node;
             } else {
-                PredictionNode::Backtrack(next_alts);
+                PredictionNode::Ambiguous(next_alts);
             }
         } else {
             // Still ambiguous: recurse with deeper lookahead.
@@ -688,9 +688,9 @@ fn build_sll_node(configs: &Array<SllConfig>, depth: i32, max_depth: i32, ctx: &
     //    branch can fail at parse time (e.g. typespec `ID '[' ']'` matches
     //    the lookahead `[` but the body `[ ]` won't match `[ <e> ]`),
     //    leaving the at-end alt as the only correct choice. Fall back to
-    //    Backtrack so the codegen's longest-match scan dispatch picks the
+    //    Ambiguous so the codegen's longest-match scan dispatch picks the
     //    alt whose body actually parses (cf. ANTLR4's adaptive prediction).
-    //  * Multiple at-end alts → true ambiguity → Backtrack.
+    //  * Multiple at-end alts → true ambiguity → Ambiguous.
     let mut at_end_alts: Array<i32> = [];
     for let c of &closed {
         if config_is_at_end(c) && !array_contains_i32(&at_end_alts, c.alt_index) {
@@ -699,14 +699,14 @@ fn build_sll_node(configs: &Array<SllConfig>, depth: i32, max_depth: i32, ctx: &
     }
 
     if at_end_alts.len() >= 1 && branches.len() >= 1 {
-        return PredictionNode::Backtrack(alts);
+        return PredictionNode::Ambiguous(alts);
     }
 
     if branches.len() == 0 {
         if at_end_alts.len() == 1 {
             return PredictionNode::Leaf(at_end_alts[0]);
         }
-        return PredictionNode::Backtrack(alts);
+        return PredictionNode::Ambiguous(alts);
     }
     return PredictionNode::Dispatch(PredictionDispatch { depth, branches });
 }
@@ -818,7 +818,7 @@ fn try_expand_opaque(original_configs: &Array<SllConfig>, token: &String, non_op
             has_improvement = true;
             PredictionNode::Leaf(token_alts[0]);
         } else {
-            PredictionNode::Backtrack(token_alts.sorted());
+            PredictionNode::Ambiguous(token_alts.sorted());
         };
         let idx = find_merge_branch(&branches, &child);
         if idx >= 0 {
@@ -830,11 +830,11 @@ fn try_expand_opaque(original_configs: &Array<SllConfig>, token: &String, non_op
     if !has_improvement || branches.is_empty() {
         return null;
     }
-    // Only use if ALL branches are Leaf — any Backtrack branch means expansion
+    // Only use if ALL branches are Leaf — any Ambiguous branch means expansion
     // didn't fully resolve, and the code generator's Dispatch has no fallback
     // for unmatched tokens, which would silently drop valid inputs.
     for let b of branches {
-        if let Backtrack(_) = b.child {
+        if let Ambiguous(_) = b.child {
             return null;
         }
     }
@@ -978,7 +978,7 @@ fn first_of_elements(elements: &Array<Element>, ctx: &mut GenContext, visiting: 
 fn prediction_node_eq(a: &PredictionNode, b: &PredictionNode) -> bool {
     return match [*a, *b] {
         [Leaf(ai), Leaf(bi)] => ai == bi,
-        [Backtrack(aa), Backtrack(ba)] => {
+        [Ambiguous(aa), Ambiguous(ba)] => {
             if aa.len() != ba.len() {
                 return false;
             }
@@ -1039,36 +1039,6 @@ fn array_contains_i32(arr: &Array<i32>, val: i32) -> bool {
         }
     }
     return false;
-}
-
-fn count_backtrack_nodes(node: &PredictionNode) -> i32 {
-    return match *node {
-        Backtrack(_) => 1,
-        Dispatch(d) => {
-            let mut count = 0;
-            for let b of &d.branches {
-                count += count_backtrack_nodes(&b.child);
-            }
-            count;
-        },
-        Consume(c) => count_backtrack_nodes(&c.child),
-        Leaf(_) => 0,
-    };
-}
-
-fn count_leaf_nodes(node: &PredictionNode) -> i32 {
-    return match *node {
-        Leaf(_) => 1,
-        Dispatch(d) => {
-            let mut count = 0;
-            for let b of &d.branches {
-                count += count_leaf_nodes(&b.child);
-            }
-            count;
-        },
-        Consume(c) => count_leaf_nodes(&c.child),
-        Backtrack(_) => 0,
-    };
 }
 
 pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, ctx: &mut GenContext) {
@@ -1236,7 +1206,7 @@ fn gen_parser_struct(w: &mut CodeWriter) {
 }
 
 // --- Alternative Scan Helpers ---
-// For each alternative in a Backtrack group that has a scannable prefix,
+// For each alternative in an Ambiguous group that has a scannable prefix,
 // generate a scan_<rule>_bt_<N> function. This function scans only the
 // scannable prefix of the alternative, which is enough to distinguish it
 // from other alternatives without full speculative parsing.
@@ -1255,8 +1225,9 @@ fn scannable_prefix_len(elements: &Array<Element>, ctx: &mut GenContext) -> i32 
     return count;
 }
 
-/// Generate a scan function for a backtracking alternative if it has at least
-/// one scannable leading element. The scan covers the scannable prefix only.
+/// Generate a scan function for a tournament alternative (`parse_X_bt_N` —
+/// the `_bt_` infix is historical) if it has at least one scannable leading
+/// element. The scan covers the scannable prefix only.
 fn gen_bt_scan_if_possible(w: &mut CodeWriter, alt: &Alternative, fn_name: &String, alt_idx: i32, ctx: &mut GenContext) {
     let prefix_len = scannable_prefix_len(&alt.elements, ctx);
     if prefix_len == 0 {
@@ -1299,7 +1270,7 @@ fn alt_scan_is_full(elements: &Array<Element>, ctx: &mut GenContext) -> bool {
 // --- Scan Function Generation ---
 // Scan functions recognize parser rules by walking token kinds without building
 // CST nodes or constructing error messages. They return the token position after
-// successful recognition, or -1 on failure. Used to disambiguate Backtrack
+// successful recognition, or -1 on failure. Used to disambiguate Ambiguous
 // alternatives without expensive speculative parsing.
 
 fn gen_scan_functions(w: &mut CodeWriter, grammar: &Grammar, ctx: &mut GenContext) {
@@ -2213,7 +2184,8 @@ fn gen_scan_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, fa
 }
 
 /// Emit scan code for an element that assigns to `pos` (may set -1 on failure).
-/// Used inside optional/repetition blocks where failure means backtrack, not abort.
+/// Used inside optional/repetition blocks where failure means "skip this
+/// iteration / branch", not abort.
 fn gen_scan_element_assign(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext) {
     if let Label(lab) = elem {
         gen_scan_element_assign(w, &lab.element, ctx);
@@ -2475,9 +2447,9 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext) {
         first_sets.push(ctx.first_of_alt(&rule.alternatives[idx], &mut visiting));
     }
     let mut groups = compute_overlap_groups(&first_sets);
-    let needs_bt = has_multi_alt_groups(&groups);
+    let has_overlaps = has_multi_alt_groups(&groups);
 
-    if needs_bt {
+    if has_overlaps {
         for let mut g = 0; g < groups.len(); g += 1 {
             if groups[g].len() > 1 {
                 sort_group_by_specificity(&mut groups[g], &first_sets);
@@ -2499,7 +2471,7 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext) {
         }
     }
 
-    if needs_bt {
+    if has_overlaps {
         for let group of groups {
             if group.len() > 1 {
                 for let gi of group {
@@ -2552,7 +2524,7 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext) {
         f.set_return_type(`Result<{type_name}, ParseError>`);
         f.emit_begin(w);
         w.line("let start = p.peek().span.start;");
-        if needs_bt {
+        if has_overlaps {
             gen_multi_alt_body_bt(w, rule, &type_name, ctx, &groups, &first_sets, &non_lr_indices);
         } else {
             gen_multi_alt_body(w, rule, &type_name, ctx, &non_lr_indices);
@@ -2585,7 +2557,7 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext) {
         f.set_return_type(`Result<{type_name}, ParseError>`);
         f.emit_begin(w);
         w.line("let start = p.peek().span.start;");
-        if needs_bt {
+        if has_overlaps {
             gen_multi_alt_body_bt(w, rule, &type_name, ctx, &groups, &first_sets, &non_lr_indices);
         } else {
             gen_multi_alt_body(w, rule, &type_name, ctx, &non_lr_indices);
@@ -3077,7 +3049,7 @@ fn gen_repeat(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext, nam
         }
 
         if let Optional = rep.kind {
-            gen_optional_with_backtrack(w, inner, ctx, name_counts);
+            gen_optional_with_scan_guard(w, inner, ctx, name_counts);
         }
     }
 }
@@ -3285,7 +3257,7 @@ fn gen_repeat_with_follow(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut Gen
         w.line("null");
         w.end_with(";");
     } else {
-        gen_optional_with_backtrack(w, inner, ctx, name_counts);
+        gen_optional_with_scan_guard(w, inner, ctx, name_counts);
     }
 }
 
@@ -3559,7 +3531,7 @@ fn emit_scan_guard_with_prefix(w: &mut CodeWriter, inner: &Element, ctx: &mut Ge
     return scan_pos_var;
 }
 
-fn gen_optional_with_backtrack(w: &mut CodeWriter, inner: &Element, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+fn gen_optional_with_scan_guard(w: &mut CodeWriter, inner: &Element, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
     if has_nested_optionals(inner) {
         if let Group(g) = inner {
             gen_optional_with_lookahead(w, &g.alternatives[0].elements, ctx, name_counts);
@@ -3601,7 +3573,7 @@ fn gen_optional_with_backtrack(w: &mut CodeWriter, inner: &Element, ctx: &mut Ge
     // codegen-time error.
     let mut visiting: Array<String> = [];
     if !ctx.is_element_scannable(inner, &mut visiting) {
-        panic("gen_optional_with_backtrack: inner element is not scannable; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')");
+        panic("gen_optional_with_scan_guard: inner element is not scannable; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')");
     }
     let scan_pos_var = emit_opt_scan_guard(w, inner, ctx, name_counts);
     w.begin(`if {scan_pos_var} >= 0`);
@@ -3657,7 +3629,7 @@ fn gen_storable_optional(w: &mut CodeWriter, inner: &Element, ctx: &mut GenConte
         gen_storable_optional_with_lookahead(w, inner, ctx, name_counts, type_str, opt_name, field_name);
     } else {
         // Inline scan-guard: scan first, parse on success.
-        gen_storable_optional_with_backtrack(w, inner, ctx, name_counts, type_str, opt_name, field_name);
+        gen_storable_optional_with_scan_guard(w, inner, ctx, name_counts, type_str, opt_name, field_name);
     }
 }
 
@@ -3770,29 +3742,20 @@ fn gen_absent_optional_field(w: &mut CodeWriter, elem: &Element, name_counts: &m
     }
 }
 
-/// Generate a storable optional with backtracking for struct capture.
+/// Generate a storable optional with a scan-guard for struct capture.
 ///
 /// Produces code like:
-///   let opt: Option<Type> = if first_check {
-///       let saved = p.pos;
-///       let mut result: Option<Type> = null;
-///       bt: {
-///           let r1 = parse_foo(p);
-///           if let Err(_) = r1 { p.pos = saved; break bt; }
-///           let foo = r1.unwrap();
-///           let r2 = p.expect(TK_DOT);
-///           if let Err(_) = r2 { p.pos = saved; break bt; }
-///           let dot = r2.unwrap();
-///           result = Option::<Type>::Some(Type { foo, dot });
-///       }
-///       result
+///   let opt: Option<Type> = if scan_pos >= 0 {
+///       let foo = parse_foo(p);
+///       let dot = p.expect(TK_DOT);
+///       Option::<Type>::Some(Type { foo, dot })
 ///   } else { null };
-fn gen_storable_optional_with_backtrack(w: &mut CodeWriter, inner: &Element, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, type_str: &String, opt_name: &String, field_name: &String) {
+fn gen_storable_optional_with_scan_guard(w: &mut CodeWriter, inner: &Element, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, type_str: &String, opt_name: &String, field_name: &String) {
     // Scan-based guard: the inner must be fully scannable. Backtracking has
     // been removed; an unscannable inner is a codegen-time error.
     let mut visiting: Array<String> = [];
     if !ctx.is_element_scannable(inner, &mut visiting) {
-        panic("gen_storable_optional_with_backtrack: inner element is not scannable; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')");
+        panic("gen_storable_optional_with_scan_guard: inner element is not scannable; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')");
     }
     let scan_pos_var = emit_opt_scan_guard(w, inner, ctx, name_counts);
     w.begin(`let {opt_name}: Option<{type_str}> = if {scan_pos_var} >= 0`);
@@ -4170,7 +4133,7 @@ fn gen_consume_group(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &mut Ge
             let mut sorted_group = group.sorted();
             sort_group_by_element_count(&mut sorted_group, alts);
             let mut nc: Array<[String, i32]> = [];
-            gen_backtracking_body(w, &sorted_group, alts, ctx, &mut nc);
+            gen_prediction_body(w, &sorted_group, alts, ctx, &mut nc);
         }
     }
     w.end();
@@ -4211,7 +4174,7 @@ fn gen_consume_group_store(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &
         }
         w.end_with(";");
     } else {
-        // Complex case: overlapping FIRST sets, use Option + backtracking
+        // Complex case: overlapping FIRST sets, use Option + scan dispatch
         let opt_var = dedup_name(&`{var_name}_opt`, name_counts);
         w.line(`let mut {opt_var}: Option<{type_name}> = null;`);
 
@@ -4530,7 +4493,7 @@ fn gen_general_group_store(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &
         w.end_with(";");
         ctx.group_counter = gc_max;
     } else {
-        // Overlapping FIRST sets — use Option + backtracking
+        // Overlapping FIRST sets — use Option + scan dispatch
         let opt_var = dedup_name(&`{var_name}_opt`, name_counts);
         w.line(`let mut {opt_var}: Option<{type_name}> = null;`);
 
@@ -4651,7 +4614,7 @@ fn general_group_all_scannable(sorted_group: &Array<i32>, alts: &Array<Alternati
 
 /// Returns true iff every alt's remaining suffix `[skip..]` is fully
 /// scannable. Used as the precondition for the prediction-tree
-/// `Backtrack` branch to fall through to scan dispatch.
+/// `Ambiguous` branch to fall through to scan dispatch.
 fn backtrack_node_all_scannable(sorted: &Array<i32>, alts: &Array<Alternative>, ctx: &mut GenContext, skip: i32) -> bool {
     if sorted.len() < 2 {
         return false;
@@ -4732,7 +4695,7 @@ fn gen_general_group_scan_dispatch(w: &mut CodeWriter, alts: &Array<Alternative>
     w.end();
 }
 
-fn gen_backtracking_body(w: &mut CodeWriter, group: &Array<i32>, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+fn gen_prediction_body(w: &mut CodeWriter, group: &Array<i32>, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
     // Build prediction tree for the group alternatives.
     let mut pred_indices: Array<i32> = [];
     let mut pred_firsts: Array<Array<String>> = [];
@@ -4774,14 +4737,14 @@ fn gen_group_prediction_code_skip(w: &mut CodeWriter, node: &PredictionNode, alt
         gen_group_prediction_code_skip(w, &c.child, alts, ctx, name_counts, skip + 1);
         return;
     }
-    if let Backtrack(indices) = node {
+    if let Ambiguous(indices) = node {
         let mut sorted = indices.sorted();
         sort_group_by_element_count(&mut sorted, alts);
 
         // Every alt's remaining elements must be fully scannable. Backtracking
         // has been removed; an unscannable suffix is a codegen-time error.
         if !backtrack_node_all_scannable(&sorted, alts, ctx, skip) {
-            panic("prediction Backtrack node has unscannable alt; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')");
+            panic("prediction Ambiguous node has unscannable alt; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')");
         }
         gen_group_scan_dispatch(w, &sorted, alts, ctx, name_counts, skip);
         return;
@@ -4807,7 +4770,7 @@ fn gen_group_prediction_code_skip(w: &mut CodeWriter, node: &PredictionNode, alt
 /// whose scan advances furthest is parsed; ties go to the first in sorted
 /// order. If all scans fail, the last alt is parsed to surface a real error.
 /// First-success-wins scan dispatch for `gen_group_prediction_code`'s
-/// `Backtrack` node. The `sorted` parameter has already been ordered by
+/// `Ambiguous` node. The `sorted` parameter has already been ordered by
 /// `sort_group_by_element_count` (longest-first), so scanning candidates
 /// in that order and committing on first success matches what the
 /// longest-match tournament would have picked while skipping the remaining
@@ -5442,7 +5405,7 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
         // If it doesn't (e.g. a RuleRef at position skip was expanded via Dispatch
         // and the Consume is actually for a later element), the skip count would be
         // wrong and the Leaf would generate incorrect code. In that case, don't
-        // increment skip — the Leaf will fall back to the backtracking helper.
+        // increment skip — the Leaf will fall back to the scan-tournament helper.
         let elem_matches = elements_match(&c.element, &alts[0].elements[skip]);
         if elem_matches {
             gen_element(w, &c.element, ctx, name_counts);
@@ -5454,15 +5417,15 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
         }
         return;
     }
-    if let Backtrack(indices) = node {
+    if let Ambiguous(indices) = node {
         // Sort by element count for proper ordering (single RuleRef first, etc.)
         let mut sorted_indices = indices.sorted();
         sort_group_by_element_count(&mut sorted_indices, alts);
         if skip == 0 {
             // Check if any alternatives have scan functions available.
-            // If ALL non-last alternatives have scans, we can eliminate
-            // backtracking entirely: scan each, parse the winner.
-            // If some have scans and some don't, use a hybrid approach.
+            // If ALL non-last alternatives have scans, we run a longest-match
+            // scan tournament: scan each, parse the winner. If some have
+            // scans and some don't, use a hybrid approach.
             let mut all_have_scans = true;
             for let mut i = 0; i < sorted_indices.len() - 1; i += 1 {
                 let idx = sorted_indices[i];
@@ -5546,7 +5509,7 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
                                 w.end();
                                 w.end();
                             } else {
-                                // No scan: full backtracking.
+                                // No scan: save-and-rewind speculative parse.
                                 w.line(`let r_{idx} = {*fn_name}_bt_{idx}(p);`);
                                 w.begin(`if let Err(_) = r_{idx}`);
                                 w.line("p.pos = saved;");
@@ -5558,7 +5521,7 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
                     }
                 }
             } else {
-                // Fallback: original backtracking pattern.
+                // Fallback: save-and-rewind speculative parse pattern.
                 w.line("let saved = p.pos;");
                 for let mut i = 0; i < sorted_indices.len(); i += 1 {
                     let idx = sorted_indices[i];
@@ -5577,8 +5540,8 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
             }
         } else {
             // Prefix already consumed — should not happen.
-            // Consume nodes that lead to Backtrack are stripped at build time.
-            panic("unreachable: Consume leading to Backtrack should have been stripped");
+            // Consume nodes that lead to Ambiguous are stripped at build time.
+            panic("unreachable: Consume leading to Ambiguous should have been stripped");
         }
         return;
     }
@@ -5678,8 +5641,6 @@ fn gen_multi_alt_body_bt(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
                 pred_elements.push(rule.alternatives[real_idx].elements);
             }
             let tree = build_prediction(&pred_indices, &pred_firsts, &pred_elements, 0, 5, ctx);
-            let bt_count = count_backtrack_nodes(&tree);
-
             gen_prediction_code(w, &tree, &fn_name, &rule.alternatives, type_name, ctx);
         }
 
