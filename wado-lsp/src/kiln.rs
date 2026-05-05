@@ -30,8 +30,8 @@ use std::path::{Path, PathBuf};
 use wado_compiler::ast::{Item, Module};
 use wado_compiler::kiln::metadata::{METADATA_VERSION, Metadata, metadata_filename};
 use wado_compiler::kiln::{
-    InvocationIndex, InvocationPath, collect_inline_invocations, content_hash, hash_options_canonical,
-    hex_digest,
+    InvocationIndex, InvocationPath, collect_inline_invocations, content_hash,
+    hash_options_canonical, hex_digest,
 };
 use wado_compiler::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
 
