@@ -1809,12 +1809,12 @@ fn gen_scan_multi_alt(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &mut G
         }
     }
 
-    // Sort each partition (and the unguarded alts) longest-first using the
-    // same sort that parse-side `bt_try` uses (`sort_group_by_element_count`).
-    // First-success-wins in `emit_scan_partition_body` relies on this order:
-    // the most specific (highest-priority, then most-elements) candidate is
-    // scanned first, so committing on first success is correctness-equivalent
-    // to a longest-match tournament when alts may share prefixes (e.g.
+    // Sort each partition (and the unguarded alts) longest-first via
+    // `sort_group_by_element_count`. First-success-wins in
+    // `emit_scan_partition_body` relies on this order: the most specific
+    // (highest-priority, then most-elements) candidate is scanned first,
+    // so committing on first success is correctness-equivalent to a
+    // longest-match tournament when alts may share prefixes (e.g.
     // `expr`'s `column_ref` IDENT vs `function_call` IDENT '(' ... ')' ).
     for let mut g = 0; g < groups_alts.len(); g += 1 {
         sort_group_by_element_count(&mut groups_alts[g], alts);
@@ -3596,108 +3596,28 @@ fn gen_optional_with_backtrack(w: &mut CodeWriter, inner: &Element, ctx: &mut Ge
         return;
     }
 
-    // Scan-based guard: when the inner is fully scannable (no LR rule refs),
-    // predict with an inline scan and commit-parse unconditionally.
+    // Scan-based guard: the inner must be fully scannable (no unresolved
+    // RuleRefs). Backtracking has been removed; an unscannable inner is a
+    // codegen-time error.
     let mut visiting: Array<String> = [];
-    if ctx.is_element_scannable(inner, &mut visiting) {
-        let scan_pos_var = emit_opt_scan_guard(w, inner, ctx, name_counts);
-        w.begin(`if {scan_pos_var} >= 0`);
-        let mut nc: Array<[String, i32]> = [];
-        if let Group(g) = inner {
-            if g.alternatives.len() == 1 {
-                for let elem of g.alternatives[0].elements {
-                    gen_element(w, &elem, ctx, &mut nc);
-                }
-            } else {
-                gen_element(w, inner, ctx, &mut nc);
+    if !ctx.is_element_scannable(inner, &mut visiting) {
+        panic("gen_optional_with_backtrack: inner element is not scannable; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')");
+    }
+    let scan_pos_var = emit_opt_scan_guard(w, inner, ctx, name_counts);
+    w.begin(`if {scan_pos_var} >= 0`);
+    let mut nc: Array<[String, i32]> = [];
+    if let Group(g) = inner {
+        if g.alternatives.len() == 1 {
+            for let elem of g.alternatives[0].elements {
+                gen_element(w, &elem, ctx, &mut nc);
             }
         } else {
             gen_element(w, inner, ctx, &mut nc);
         }
-        w.end();
-        return;
-    }
-
-    w.begin(`if {ctx.first_check_str(first)}`);
-
-    let saved = dedup_name(&"opt_saved", name_counts);
-    let label = dedup_name(&"opt_bt", name_counts);
-    w.line(`let {saved} = p.pos;`);
-    w.begin(`{label}:`);
-
-    let mut bt_nc: Array<[String, i32]> = [];
-    if let Group(g) = inner {
-        if g.alternatives.len() == 1 {
-            for let elem of g.alternatives[0].elements {
-                gen_element_failable(w, &elem, ctx, &saved, &label, &mut bt_nc);
-            }
-        } else {
-            gen_element(w, inner, ctx, &mut bt_nc);
-        }
     } else {
-        gen_element_failable(w, inner, ctx, &saved, &label, &mut bt_nc);
+        gen_element(w, inner, ctx, &mut nc);
     }
-
-    w.end();  // label
-    w.end();  // if
-}
-
-fn gen_element_failable(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, saved_var: &String, label: &String, name_counts: &mut Array<[String, i32]>) {
-    if let TokenRef(t) = elem {
-        let const_name = `TK_{t.name}`;
-        let r_var = dedup_name(&"opt_r", name_counts);
-        w.line(`let {r_var} = p.expect({const_name});`);
-        w.line(`if let Err(_) = {r_var} \{ p.pos = {saved_var}; break {label}; \}`);
-        return;
-    }
-    if let Literal(l) = elem {
-        let const_name = literal_const_name(&l.text);
-        let display = `'{l.text}'`;
-        let r_var = dedup_name(&"opt_r", name_counts);
-        w.line(`let {r_var} = p.expect({const_name});`);
-        w.line(`if let Err(_) = {r_var} \{ p.pos = {saved_var}; break {label}; \}`);
-        return;
-    }
-    if let RuleRef(r) = elem {
-        let fn_name = `parse_{r.snake_name}`;
-        let r_var = dedup_name(&"opt_r", name_counts);
-        w.line(`let {r_var} = {fn_name}(p);`);
-        w.line(`if let Err(_) = {r_var} \{ p.pos = {saved_var}; break {label}; \}`);
-        return;
-    }
-    if let Wildcard(_) = elem {
-        let r_var = dedup_name(&"opt_r", name_counts);
-        w.line(`let {r_var} = p.match_any();`);
-        w.line(`if let Err(_) = {r_var} \{ p.pos = {saved_var}; break {label}; \}`);
-        return;
-    }
-    if let Not(ne) = elem {
-        let r_var = dedup_name(&"opt_r", name_counts);
-        let call = not_match_call(&ne.element);
-        w.line(`let {r_var} = {call};`);
-        w.line(`if let Err(_) = {r_var} \{ p.pos = {saved_var}; break {label}; \}`);
-        return;
-    }
-    if let Repeat(rep) = elem {
-        gen_repeat(w, rep, ctx, name_counts, &([] as Array<String>));
-        return;
-    }
-    if let Group(g) = elem {
-        if g.alternatives.len() == 1 {
-            for let inner_elem of g.alternatives[0].elements {
-                gen_element_failable(w, &inner_elem, ctx, saved_var, label, name_counts);
-            }
-        } else if is_general_group(&g.alternatives) {
-            gen_general_group_store_optional(w, &g.alternatives, ctx, name_counts);
-        } else {
-            gen_consume_group(w, &g.alternatives, ctx, name_counts);
-        }
-        return;
-    }
-    if let Label(lab) = elem {
-        gen_element_failable(w, &lab.element, ctx, saved_var, label, name_counts);
-        return;
-    }
+    w.end();
 }
 
 /// Generate a storable optional group with proper backtracking.
@@ -3866,66 +3786,23 @@ fn gen_absent_optional_field(w: &mut CodeWriter, elem: &Element, name_counts: &m
 ///       result
 ///   } else { null };
 fn gen_storable_optional_with_backtrack(w: &mut CodeWriter, inner: &Element, ctx: &mut GenContext, first: &Array<String>, name_counts: &mut Array<[String, i32]>, type_str: &String, opt_name: &String, field_name: &String) {
-    // Scan-based guard: when the inner is fully scannable, predict with an
-    // inline scan and commit-parse without any backtracking machinery.
+    // Scan-based guard: the inner must be fully scannable. Backtracking has
+    // been removed; an unscannable inner is a codegen-time error.
     let mut visiting: Array<String> = [];
-    if ctx.is_element_scannable(inner, &mut visiting) {
-        let scan_pos_var = emit_opt_scan_guard(w, inner, ctx, name_counts);
-        w.begin(`let {opt_name}: Option<{type_str}> = if {scan_pos_var} >= 0`);
-
-        if let Group(g) = inner {
-            if is_single_alt_group(&g.alternatives) {
-                let alt = &g.alternatives[0];
-                let mut elem_nc: Array<[String, i32]> = [];
-                let gc_start = ctx.group_counter;
-                for let elem of &alt.elements {
-                    gen_element(w, elem, ctx, &mut elem_nc);
-                }
-                let struct_type_name = single_alt_group_type_name(alt);
-                let struct_field_name = single_alt_group_field_name(alt);
-                w.line(`let {struct_field_name} = {struct_type_name} \{`);
-                w.indent();
-                ctx.group_counter = gc_start;
-                let mut assign_nc: Array<[String, i32]> = [];
-                for let elem of &alt.elements {
-                    gen_field_assignment(w, elem, &mut assign_nc, ctx);
-                }
-                w.dedent();
-                w.line("};");
-                w.line(`Option::<{type_str}>::Some({field_name})`);
-            } else {
-                let mut nc: Array<[String, i32]> = [];
-                gen_group_store_any(w, inner, ctx, &mut nc, &([] as Array<String>));
-                w.line(`Option::<{type_str}>::Some({field_name})`);
-            }
-        }
-
-        w.else_begin("else");
-        w.line("null");
-        w.end_with(";");
-        return;
+    if !ctx.is_element_scannable(inner, &mut visiting) {
+        panic("gen_storable_optional_with_backtrack: inner element is not scannable; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')");
     }
-
-    w.begin(`let {opt_name}: Option<{type_str}> = if {ctx.first_check_str(first)}`);
-
-    let saved = dedup_name(&"opt_saved", name_counts);
-    let label = dedup_name(&"opt_bt", name_counts);
-    let result_var = dedup_name(&"opt_result", name_counts);
-
-    w.line(`let {saved} = p.pos;`);
-    w.line(`let mut {result_var}: Option<{type_str}> = null;`);
-    w.begin(`{label}:`);
+    let scan_pos_var = emit_opt_scan_guard(w, inner, ctx, name_counts);
+    w.begin(`let {opt_name}: Option<{type_str}> = if {scan_pos_var} >= 0`);
 
     if let Group(g) = inner {
         if is_single_alt_group(&g.alternatives) {
             let alt = &g.alternatives[0];
-            // Use fresh name counters so element names match field assignments
             let mut elem_nc: Array<[String, i32]> = [];
             let gc_start = ctx.group_counter;
             for let elem of &alt.elements {
-                gen_element_failable_named(w, elem, ctx, &saved, &label, &mut elem_nc);
+                gen_element(w, elem, ctx, &mut elem_nc);
             }
-            // Construct the struct
             let struct_type_name = single_alt_group_type_name(alt);
             let struct_field_name = single_alt_group_field_name(alt);
             w.line(`let {struct_field_name} = {struct_type_name} \{`);
@@ -3937,96 +3814,17 @@ fn gen_storable_optional_with_backtrack(w: &mut CodeWriter, inner: &Element, ctx
             }
             w.dedent();
             w.line("};");
-            w.line(`{result_var} = Option::<{type_str}>::Some({field_name});`);
+            w.line(`Option::<{type_str}>::Some({field_name})`);
         } else {
-            // For other storable patterns (simple_cst_group, token_only_group),
-            // they should be safe without backtracking. Generate normally.
             let mut nc: Array<[String, i32]> = [];
             gen_group_store_any(w, inner, ctx, &mut nc, &([] as Array<String>));
-            w.line(`{result_var} = Option::<{type_str}>::Some({field_name});`);
+            w.line(`Option::<{type_str}>::Some({field_name})`);
         }
     }
 
-    w.end();  // label
-    w.line(result_var);
     w.else_begin("else");
     w.line("null");
     w.end_with(";");
-}
-
-/// Generate a failable element that uses proper variable names for struct
-/// construction, instead of the anonymous `opt_r` variables.
-///
-/// For TokenRef/Literal: generates `let r = p.expect(TK); if Err, break; let name = r.unwrap();`
-/// For RuleRef: generates `let r = parse_foo(p); if Err, break; let foo = r.unwrap();`
-fn gen_element_failable_named(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, saved_var: &String, label: &String, name_counts: &mut Array<[String, i32]>) {
-    if let TokenRef(tr) = elem {
-        let const_name = `TK_{tr.name}`;
-        let field_name = dedup_name(&tr.field_name, name_counts);
-        let r_var = dedup_name(&"_bt_r", name_counts);
-        w.line(`let {r_var} = p.expect({const_name});`);
-        w.line(`if let Err(_) = {r_var} \{ p.pos = {saved_var}; break {label}; \}`);
-        w.line(`let {field_name} = {r_var}.unwrap();`);
-        return;
-    }
-    if let Literal(lit) = elem {
-        let const_name = literal_const_name(&lit.text);
-        let display = `'{lit.text}'`;
-        let field_name = dedup_name(&literal_field_name(&lit.text), name_counts);
-        let r_var = dedup_name(&"_bt_r", name_counts);
-        w.line(`let {r_var} = p.expect({const_name});`);
-        w.line(`if let Err(_) = {r_var} \{ p.pos = {saved_var}; break {label}; \}`);
-        w.line(`let {field_name} = {r_var}.unwrap();`);
-        return;
-    }
-    if let RuleRef(rr) = elem {
-        let fn_name = `parse_{rr.snake_name}`;
-        let field_name = dedup_name(&rr.field_name, name_counts);
-        let r_var = dedup_name(&"_bt_r", name_counts);
-        w.line(`let {r_var} = {fn_name}(p);`);
-        w.line(`if let Err(_) = {r_var} \{ p.pos = {saved_var}; break {label}; \}`);
-        w.line(`let {field_name} = {r_var}.unwrap();`);
-        return;
-    }
-    if let Wildcard(_) = elem {
-        let field_name = dedup_name(&"wildcard", name_counts);
-        let r_var = dedup_name(&"_bt_r", name_counts);
-        w.line(`let {r_var} = p.match_any();`);
-        w.line(`if let Err(_) = {r_var} \{ p.pos = {saved_var}; break {label}; \}`);
-        w.line(`let {field_name} = {r_var}.unwrap();`);
-        return;
-    }
-    if let Not(ne) = elem {
-        let field_name = dedup_name(&not_element_field_name(&ne.element), name_counts);
-        let r_var = dedup_name(&"_bt_r", name_counts);
-        let call = not_match_call(&ne.element);
-        w.line(`let {r_var} = {call};`);
-        w.line(`if let Err(_) = {r_var} \{ p.pos = {saved_var}; break {label}; \}`);
-        w.line(`let {field_name} = {r_var}.unwrap();`);
-        return;
-    }
-    if let Repeat(rep) = elem {
-        gen_repeat(w, rep, ctx, name_counts, &([] as Array<String>));
-        return;
-    }
-    if let Group(g) = elem {
-        if is_simple_cst_group(&g.alternatives) {
-            gen_consume_group_store_optional(w, &g.alternatives, ctx, name_counts);
-        } else if is_token_only_group(&g.alternatives) {
-            gen_consume_token_group(w, &g.alternatives, ctx, name_counts);
-        } else if is_single_alt_group(&g.alternatives) {
-            gen_consume_single_alt_group(w, &g.alternatives[0], ctx, name_counts, &([] as Array<String>));
-        } else if is_general_group(&g.alternatives) {
-            gen_general_group_store_optional(w, &g.alternatives, ctx, name_counts);
-        } else {
-            gen_consume_group(w, &g.alternatives, ctx, name_counts);
-        }
-        return;
-    }
-    if let Label(lab) = elem {
-        gen_element_failable_named(w, &lab.element, ctx, saved_var, label, name_counts);
-        return;
-    }
 }
 
 /// Emit the Parser call expression for `~ X` (set complement). Returns a
@@ -4446,11 +4244,10 @@ fn gen_consume_group_store(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &
                 let mut sorted_group = group.sorted();
                 sort_group_by_element_count(&mut sorted_group, alts);
 
-                if rule_ref_group_all_scannable(&sorted_group, alts, ctx) {
-                    gen_rule_ref_group_scan_dispatch(w, &sorted_group, alts, &opt_var, type_name, ctx, name_counts);
-                } else {
-                    gen_rule_ref_group_backtrack(w, &sorted_group, alts, &opt_var, type_name, ctx, name_counts);
+                if !rule_ref_group_all_scannable(&sorted_group, alts, ctx) {
+                    panic("rule-ref group has unscannable alt; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')");
                 }
+                gen_rule_ref_group_scan_dispatch(w, &sorted_group, alts, &opt_var, type_name, ctx, name_counts);
             }
         }
         w.end();  // if/else if chain
@@ -4536,44 +4333,6 @@ fn gen_rule_ref_group_scan_dispatch(w: &mut CodeWriter, sorted_group: &Array<i32
     w.end();
 }
 
-/// Speculative-parse fallback for RuleRef-only groups when scan is unavailable.
-fn gen_rule_ref_group_backtrack(w: &mut CodeWriter, sorted_group: &Array<i32>, alts: &Array<Alternative>, opt_var: &String, type_name: &String, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
-    let saved = dedup_name(&"saved_pos", name_counts);
-    let done = dedup_name(&"bt_done", name_counts);
-    w.line(`let {saved} = p.pos;`);
-    w.line(`let mut {done} = false;`);
-
-    for let mut k = 0; k < sorted_group.len(); k += 1 {
-        let alt_idx = sorted_group[k];
-        let is_last = k == sorted_group.len() - 1;
-        if let RuleRef(r) = &alts[alt_idx].elements[0] {
-            let fn_name = `parse_{r.snake_name}`;
-            let case_name = group_case_name(&alts[alt_idx]);
-
-            if is_last {
-                w.begin(`if !{done}`);
-                let local_var = r.snake_name;
-                w.line(`let {local_var} = {fn_name}(p)?;`);
-                w.line(`{*opt_var} = Option::<{type_name}>::Some({type_name}::{case_name}({local_var}));`);
-                w.end();
-            } else {
-                let bt_label = dedup_name(&"bt_try", name_counts);
-                w.begin(`if !{done}`);
-                w.begin(`{bt_label}:`);
-                let r_var = dedup_name(&"opt_r", name_counts);
-                w.line(`let {r_var} = {fn_name}(p);`);
-                w.line(`if let Err(_) = {r_var} \{ p.pos = {saved}; break {bt_label}; \}`);
-                w.line(
-                    `{*opt_var} = Option::<{type_name}>::Some({type_name}::{case_name}({r_var}.unwrap()));`,
-                );
-                w.line(`{done} = true;`);
-                w.end();  // label
-                w.end();  // if !done
-            }
-        }
-    }
-}
-
 fn gen_consume_group_store_optional(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
     let var_name = dedup_name(&group_field_base_name(alts), name_counts);
     let type_name = group_variant_type_name(alts);
@@ -4622,11 +4381,10 @@ fn gen_consume_group_store_optional(w: &mut CodeWriter, alts: &Array<Alternative
             let mut sorted_group = group.sorted();
             sort_group_by_element_count(&mut sorted_group, alts);
 
-            if rule_ref_group_all_scannable(&sorted_group, alts, ctx) {
-                gen_rule_ref_group_scan_dispatch(w, &sorted_group, alts, &inner_var, type_name, ctx, name_counts);
-            } else {
-                gen_rule_ref_group_backtrack(w, &sorted_group, alts, &inner_var, type_name, ctx, name_counts);
+            if !rule_ref_group_all_scannable(&sorted_group, alts, ctx) {
+                panic("rule-ref group has unscannable alt; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')");
             }
+            gen_rule_ref_group_scan_dispatch(w, &sorted_group, alts, &inner_var, type_name, ctx, name_counts);
         }
     }
     w.end();  // if/else if chain
@@ -4720,7 +4478,7 @@ fn gen_general_group_store_optional(w: &mut CodeWriter, alts: &Array<Alternative
         } else {
             let mut sorted_group = group.sorted();
             sort_group_by_element_count(&mut sorted_group, alts);
-            gen_general_group_backtrack(w, alts, &sorted_group, &type_name, &inner_var, ctx, name_counts, group_index);
+            gen_general_group_dispatch(w, alts, &sorted_group, &type_name, &inner_var, ctx, name_counts, group_index);
         }
         if ctx.group_counter > gc_max {
             gc_max = ctx.group_counter;
@@ -4800,7 +4558,7 @@ fn gen_general_group_store(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &
             } else {
                 let mut sorted_group = group.sorted();
                 sort_group_by_element_count(&mut sorted_group, alts);
-                gen_general_group_backtrack(w, alts, &sorted_group, &type_name, &opt_var, ctx, name_counts, group_index);
+                gen_general_group_dispatch(w, alts, &sorted_group, &type_name, &opt_var, ctx, name_counts, group_index);
             }
             if ctx.group_counter > gc_max {
                 gc_max = ctx.group_counter;
@@ -4856,88 +4614,59 @@ fn gen_general_alt_construct(w: &mut CodeWriter, alts: &Array<Alternative>, alt_
     w.line("})");
 }
 
-/// Backtracking for overlapping alts in a general group — try each, store on success.
-fn gen_general_group_backtrack(w: &mut CodeWriter, alts: &Array<Alternative>, sorted_group: &Array<i32>, type_name: &String, inner_var: &String, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, group_index: i32) {
-    // Stage C/2: longest-match scan dispatch when every alt is fully
-    // scannable. Replaces speculative parse + bt_try with non-allocating
-    // scan, then parses only the winner.
-    let mut all_scannable = sorted_group.len() >= 2;
-    if all_scannable {
-        for let mut k = 0; k < sorted_group.len(); k += 1 {
-            let alt = &alts[sorted_group[k]];
-            if alt.elements.len() == 0 {
-                all_scannable = false;
-                break;
-            }
-            for let elem of &alt.elements {
-                let mut visiting: Array<String> = [];
-                if !ctx.is_element_scannable(elem, &mut visiting) {
-                    all_scannable = false;
-                    break;
-                }
-            }
-            if !all_scannable {
-                break;
-            }
-        }
+/// First-success-wins scan dispatch wrapper for overlapping general-group
+/// alts. Asserts that every alt is fully scannable, then delegates to
+/// `gen_general_group_scan_dispatch`. Backtracking has been removed; an
+/// unscannable alt is a codegen-time error.
+fn gen_general_group_dispatch(w: &mut CodeWriter, alts: &Array<Alternative>, sorted_group: &Array<i32>, type_name: &String, inner_var: &String, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, group_index: i32) {
+    if !general_group_all_scannable(sorted_group, alts, ctx) {
+        panic("general group has unscannable alt; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')");
     }
+    gen_general_group_scan_dispatch(w, alts, sorted_group, type_name, inner_var, ctx, name_counts, group_index);
+}
 
-    if all_scannable {
-        gen_general_group_scan_dispatch(w, alts, sorted_group, type_name, inner_var, ctx, name_counts, group_index);
-        return;
+/// Returns true iff every alt in `sorted_group` has at least one element
+/// and all its elements are scannable. Used as the precondition for
+/// `gen_general_group_dispatch` (non-RuleRef-only overlapping groups).
+fn general_group_all_scannable(sorted_group: &Array<i32>, alts: &Array<Alternative>, ctx: &mut GenContext) -> bool {
+    if sorted_group.len() < 2 {
+        return false;
     }
-
-    let saved = dedup_name(&"saved_pos", name_counts);
-    let done = dedup_name(&"bt_done", name_counts);
-    w.line(`let {saved} = p.pos;`);
-    w.line(`let mut {done} = false;`);
-
-    let gc_entry = ctx.group_counter;
     for let mut k = 0; k < sorted_group.len(); k += 1 {
-        let alt_idx = sorted_group[k];
-        let is_last = k == sorted_group.len() - 1;
-        let alt = &alts[alt_idx];
-        let struct_name = general_group_alt_struct_name(&ctx.current_rule_name, group_index, alt_idx);
-
-        ctx.group_counter = gc_entry;
-        if is_last {
-            w.begin(`if !{done}`);
-            let mut nc: Array<[String, i32]> = [];
-            let gc_last = ctx.group_counter;
-            gen_elements_with_non_greedy(w, &alt.elements, ctx, &mut nc, &([] as Array<String>));
-            w.line(`{inner_var} = Option::<{type_name}>::Some({type_name}::Alt{alt_idx}({struct_name} \{`);
-            w.indent();
-            ctx.group_counter = gc_last;
-            let mut assign_nc: Array<[String, i32]> = [];
-            for let elem of &alt.elements {
-                gen_field_assignment(w, elem, &mut assign_nc, ctx);
+        let alt = &alts[sorted_group[k]];
+        if alt.elements.len() == 0 {
+            return false;
+        }
+        for let elem of &alt.elements {
+            let mut visiting: Array<String> = [];
+            if !ctx.is_element_scannable(elem, &mut visiting) {
+                return false;
             }
-            w.dedent();
-            w.line("}));");
-            w.end();
-        } else {
-            let bt_label = dedup_name(&"bt_try", name_counts);
-            w.begin(`if !{done}`);
-            w.begin(`{bt_label}:`);
-            let mut nc: Array<[String, i32]> = [];
-            let gc_bt = ctx.group_counter;
-            for let elem of &alt.elements {
-                gen_element_failable_named(w, elem, ctx, &saved, &bt_label, &mut nc);
-            }
-            w.line(`{inner_var} = Option::<{type_name}>::Some({type_name}::Alt{alt_idx}({struct_name} \{`);
-            w.indent();
-            ctx.group_counter = gc_bt;
-            let mut assign_nc: Array<[String, i32]> = [];
-            for let elem of &alt.elements {
-                gen_field_assignment(w, elem, &mut assign_nc, ctx);
-            }
-            w.dedent();
-            w.line("}));");
-            w.line(`{done} = true;`);
-            w.end();  // label
-            w.end();  // if !done
         }
     }
+    return true;
+}
+
+/// Returns true iff every alt's remaining suffix `[skip..]` is fully
+/// scannable. Used as the precondition for the prediction-tree
+/// `Backtrack` branch to fall through to scan dispatch.
+fn backtrack_node_all_scannable(sorted: &Array<i32>, alts: &Array<Alternative>, ctx: &mut GenContext, skip: i32) -> bool {
+    if sorted.len() < 2 {
+        return false;
+    }
+    for let mut k = 0; k < sorted.len(); k += 1 {
+        let alt = &alts[sorted[k]];
+        if skip >= alt.elements.len() {
+            return false;
+        }
+        for let mut i = skip; i < alt.elements.len(); i += 1 {
+            let mut visiting: Array<String> = [];
+            if !ctx.is_element_scannable(&alt.elements[i], &mut visiting) {
+                return false;
+            }
+        }
+    }
+    return true;
 }
 
 /// First-success-wins scan dispatch for general groups (overlapping alts).
@@ -5047,64 +4776,12 @@ fn gen_group_prediction_code_skip(w: &mut CodeWriter, node: &PredictionNode, alt
         let mut sorted = indices.sorted();
         sort_group_by_element_count(&mut sorted, alts);
 
-        // Stage C/2: if every alt's remaining elements are fully scannable,
-        // use longest-match first-win scan dispatch instead of speculative
-        // parse with bt_try labels. This eliminates per-alt ParseError
-        // construction and token-array rewind.
-        let mut all_scannable = sorted.len() >= 2;
-        if all_scannable {
-            for let mut k = 0; k < sorted.len(); k += 1 {
-                let alt = &alts[sorted[k]];
-                if skip >= alt.elements.len() {
-                    all_scannable = false;
-                    break;
-                }
-                for let mut i = skip; i < alt.elements.len(); i += 1 {
-                    let mut visiting: Array<String> = [];
-                    if !ctx.is_element_scannable(&alt.elements[i], &mut visiting) {
-                        all_scannable = false;
-                        break;
-                    }
-                }
-                if !all_scannable {
-                    break;
-                }
-            }
+        // Every alt's remaining elements must be fully scannable. Backtracking
+        // has been removed; an unscannable suffix is a codegen-time error.
+        if !backtrack_node_all_scannable(&sorted, alts, ctx, skip) {
+            panic("prediction Backtrack node has unscannable alt; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')");
         }
-
-        if all_scannable {
-            gen_group_scan_dispatch(w, &sorted, alts, ctx, name_counts, skip);
-            return;
-        }
-
-        let saved_var = dedup_name(&"saved_pos", name_counts);
-        let done_var = dedup_name(&"bt_done", name_counts);
-        w.line(`let {saved_var} = p.pos;`);
-        w.line(`let mut {done_var} = false;`);
-        for let mut k = 0; k < sorted.len(); k += 1 {
-            let alt_idx = sorted[k];
-            let is_last = k == sorted.len() - 1;
-            let alt = &alts[alt_idx];
-            if is_last {
-                w.begin(`if !{done_var}`);
-                let mut nc: Array<[String, i32]> = [];
-                for let mut i = skip; i < alt.elements.len(); i += 1 {
-                    gen_element(w, &alt.elements[i], ctx, &mut nc);
-                }
-                w.end();
-            } else {
-                let bt_label = dedup_name(&"bt_try", name_counts);
-                w.begin(`if !{done_var}`);
-                w.begin(`{bt_label}:`);
-                let mut nc: Array<[String, i32]> = [];
-                for let mut i = skip; i < alt.elements.len(); i += 1 {
-                    gen_element_failable(w, &alt.elements[i], ctx, &saved_var, &bt_label, &mut nc);
-                }
-                w.line(`{done_var} = true;`);
-                w.end();  // label
-                w.end();
-            }
-        }
+        gen_group_scan_dispatch(w, &sorted, alts, ctx, name_counts, skip);
         return;
     }
     if let Dispatch(d) = node {
