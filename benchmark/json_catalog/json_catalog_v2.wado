@@ -68,39 +68,48 @@ struct CitmCatalog {
 
 struct P {
     input: String,
+    repr: builtin::array<u8>,
     pos: i32,
     len: i32,
 }
 
 impl P {
+    #[inline(always)]
     fn skip_ws(&mut self) {
+        let raw = self.repr;
         let len = self.len;
-        while self.pos < len {
-            let b = self.input.get_byte(self.pos) as i32;
+        let mut pos = self.pos;
+        while pos < len {
+            let b = builtin::array_get_u8(raw, pos) as i32;
             if b > 32 {
+                self.pos = pos;
                 return;
             }
             if b == 32 || b == 10 || b == 13 || b == 9 {
-                self.pos += 1;
+                pos += 1;
             } else {
+                self.pos = pos;
                 return;
             }
         }
+        self.pos = pos;
     }
 
+    #[inline(always)]
     fn peek(&self) -> i32 {
         if self.pos >= self.len {
             return -1;
         }
-        return self.input.get_byte(self.pos) as i32;
+        return builtin::array_get_u8(self.repr, self.pos) as i32;
     }
 
+    #[inline(always)]
     fn expect_byte(&mut self, c: i32) {
         self.skip_ws();
         if self.pos >= self.len {
             panic(`unexpected EOF, expected '{c as u8 as char}'`);
         }
-        let b = self.input.get_byte(self.pos) as i32;
+        let b = builtin::array_get_u8(self.repr, self.pos) as i32;
         if b != c {
             panic(`expected '{c as u8 as char}' at {self.pos}, got '{b as u8 as char}'`);
         }
@@ -124,22 +133,25 @@ impl P {
 
     fn parse_i64(&mut self) -> i64 {
         self.skip_ws();
+        let raw = self.repr;
         let len = self.len;
+        let mut pos = self.pos;
         let mut neg = false;
-        if self.pos < len && self.input.get_byte(self.pos) as i32 == '-' as i32 {
+        if pos < len && builtin::array_get_u8(raw, pos) as i32 == '-' as i32 {
             neg = true;
-            self.pos += 1;
+            pos += 1;
         }
         let mut result: i64 = 0;
-        while self.pos < len {
-            let b = self.input.get_byte(self.pos) as i32;
+        while pos < len {
+            let b = builtin::array_get_u8(raw, pos) as i32;
             if '0' as i32 <= b <= '9' as i32 {
                 result = result * 10 + (b - '0' as i32) as i64;
-                self.pos += 1;
+                pos += 1;
             } else {
                 break;
             }
         }
+        self.pos = pos;
         if neg {
             return -result;
         }
@@ -148,19 +160,22 @@ impl P {
 
     fn read_string(&mut self) -> String {
         self.expect_byte('"' as i32);
-        let start = self.pos;
+        let raw = self.repr;
         let len = self.len;
-        while self.pos < len {
-            let b = self.input.get_byte(self.pos) as i32;
+        let mut pos = self.pos;
+        let start = pos;
+        while pos < len {
+            let b = builtin::array_get_u8(raw, pos) as i32;
             if b == '"' as i32 {
-                let end = self.pos;
-                self.pos += 1;
+                let end = pos;
+                self.pos = pos + 1;
                 return self.input.substr_bytes(start, end);
             }
             if b == '\\' as i32 {
+                self.pos = pos;
                 return self.read_string_escaped(start);
             }
-            self.pos += 1;
+            pos += 1;
         }
         panic("EOF in string");
     }
@@ -341,19 +356,22 @@ impl P {
 
     /// Reads `"key":` (with whitespace) and returns [key_start, key_end).
     /// Panics if the key contains an escape (PoC limitation; CITM keys are clean ASCII).
+    #[inline]
     fn key_range(&mut self) -> [i32, i32] {
         self.skip_ws();
-        if self.peek() != '"' as i32 {
-            panic(`expected key at {self.pos}`);
-        }
-        self.pos += 1;
-        let start = self.pos;
+        let raw = self.repr;
         let len = self.len;
-        while self.pos < len {
-            let b = self.input.get_byte(self.pos) as i32;
+        let mut pos = self.pos;
+        if pos >= len || builtin::array_get_u8(raw, pos) as i32 != '"' as i32 {
+            panic(`expected key at {pos}`);
+        }
+        pos += 1;
+        let start = pos;
+        while pos < len {
+            let b = builtin::array_get_u8(raw, pos) as i32;
             if b == '"' as i32 {
-                let end = self.pos;
-                self.pos += 1;
+                let end = pos;
+                self.pos = pos + 1;
                 self.skip_ws();
                 self.expect_byte(':' as i32);
                 return [start, end];
@@ -361,7 +379,7 @@ impl P {
             if b == '\\' as i32 {
                 panic("escape in field key not supported in PoC");
             }
-            self.pos += 1;
+            pos += 1;
         }
         panic("EOF in key");
     }
@@ -376,23 +394,56 @@ impl P {
     fn parse_array_i64(&mut self) -> Array<i64> {
         self.expect_byte('[' as i32);
         self.skip_ws();
-        if self.peek() == ']' as i32 {
-            self.pos += 1;
+        let raw = self.repr;
+        let len = self.len;
+        let mut pos = self.pos;
+        if pos < len && builtin::array_get_u8(raw, pos) as i32 == ']' as i32 {
+            self.pos = pos + 1;
             return [];
         }
-        let mut arr: Array<i64> = [];
+        let mut arr: Array<i64> = Array::with_capacity(4);
         loop {
-            arr.push(self.parse_i64());
-            self.skip_ws();
-            let c = self.peek();
+            // skip ws
+            while pos < len {
+                let b = builtin::array_get_u8(raw, pos) as i32;
+                if b > 32 { break; }
+                if b == 32 || b == 10 || b == 13 || b == 9 { pos += 1; } else { break; }
+            }
+            // parse i64 inline
+            let mut neg = false;
+            if pos < len && builtin::array_get_u8(raw, pos) as i32 == '-' as i32 {
+                neg = true;
+                pos += 1;
+            }
+            let mut result: i64 = 0;
+            while pos < len {
+                let b = builtin::array_get_u8(raw, pos) as i32;
+                if '0' as i32 <= b <= '9' as i32 {
+                    result = result * 10 + (b - '0' as i32) as i64;
+                    pos += 1;
+                } else {
+                    break;
+                }
+            }
+            arr.push(if neg { -result } else { result });
+            // skip ws
+            while pos < len {
+                let b = builtin::array_get_u8(raw, pos) as i32;
+                if b > 32 { break; }
+                if b == 32 || b == 10 || b == 13 || b == 9 { pos += 1; } else { break; }
+            }
+            if pos >= len {
+                panic("array<i64>: EOF");
+            }
+            let c = builtin::array_get_u8(raw, pos) as i32;
             if c == ']' as i32 {
-                self.pos += 1;
+                self.pos = pos + 1;
                 return arr;
             }
             if c != ',' as i32 {
                 panic("array<i64>: expected ',' or ']'");
             }
-            self.pos += 1;
+            pos += 1;
         }
         unreachable();
     }
@@ -535,7 +586,7 @@ impl P {
             self.pos += 1;
             return [];
         }
-        let mut arr: Array<Price> = [];
+        let mut arr: Array<Price> = Array::with_capacity(8);
         loop {
             arr.push(self.parse_price());
             self.skip_ws();
@@ -553,46 +604,99 @@ impl P {
     }
 
     fn parse_area(&mut self) -> Area {
-        self.expect_byte('{' as i32);
+        let raw = self.repr;
+        let len = self.len;
+        let mut pos = self.pos;
+        // skip ws + '{'
+        while pos < len {
+            let b = builtin::array_get_u8(raw, pos) as i32;
+            if b > 32 { break; }
+            if b == 32 || b == 10 || b == 13 || b == 9 { pos += 1; } else { break; }
+        }
+        if pos >= len || builtin::array_get_u8(raw, pos) as i32 != '{' as i32 {
+            panic("area: expected '{'");
+        }
+        pos += 1;
+
         let mut area_id: i64 = 0;
         let mut block_ids: Array<i64> = [];
-        self.skip_ws();
-        if self.peek() == '}' as i32 {
-            self.pos += 1;
+
+        // skip ws (peek for '}')
+        while pos < len {
+            let b = builtin::array_get_u8(raw, pos) as i32;
+            if b > 32 { break; }
+            if b == 32 || b == 10 || b == 13 || b == 9 { pos += 1; } else { break; }
+        }
+        if pos < len && builtin::array_get_u8(raw, pos) as i32 == '}' as i32 {
+            self.pos = pos + 1;
             return Area { area_id, block_ids };
         }
         loop {
-            let [ks, ke] = self.key_range();
-            let klen = ke - ks;
-            let g0 = self.input.get_byte(ks) as i32;
-            let mut handled = false;
-            if klen == 6 {
-                // "areaId"
-                if g0 == 'a' as i32 {
-                    area_id = self.parse_i64();
-                    handled = true;
-                }
-            } else if klen == 8 {
-                // "blockIds"
-                if g0 == 'b' as i32 {
-                    block_ids = self.parse_array_i64();
-                    handled = true;
-                }
+            // skip ws before key
+            while pos < len {
+                let b = builtin::array_get_u8(raw, pos) as i32;
+                if b > 32 { break; }
+                if b == 32 || b == 10 || b == 13 || b == 9 { pos += 1; } else { break; }
             }
-            if !handled {
+            if pos >= len || builtin::array_get_u8(raw, pos) as i32 != '"' as i32 {
+                panic("area: expected key");
+            }
+            pos += 1;
+            let key_start = pos;
+            while pos < len {
+                let b = builtin::array_get_u8(raw, pos) as i32;
+                if b == '"' as i32 { break; }
+                pos += 1;
+            }
+            let key_end = pos;
+            let klen = key_end - key_start;
+            pos += 1; // consume closing '"'
+
+            // skip ws + ':'
+            while pos < len {
+                let b = builtin::array_get_u8(raw, pos) as i32;
+                if b > 32 { break; }
+                if b == 32 || b == 10 || b == 13 || b == 9 { pos += 1; } else { break; }
+            }
+            if pos >= len || builtin::array_get_u8(raw, pos) as i32 != ':' as i32 {
+                panic("area: expected ':'");
+            }
+            pos += 1;
+
+            // dispatch by length+first-byte
+            let g0 = builtin::array_get_u8(raw, key_start) as i32;
+            if klen == 6 && g0 == 'a' as i32 {
+                self.pos = pos;
+                area_id = self.parse_i64();
+                pos = self.pos;
+            } else if klen == 8 && g0 == 'b' as i32 {
+                self.pos = pos;
+                block_ids = self.parse_array_i64();
+                pos = self.pos;
+            } else {
+                self.pos = pos;
                 self.skip_value();
+                pos = self.pos;
             }
 
-            self.skip_ws();
-            let c = self.peek();
+            // skip ws + check ',' or '}'
+            while pos < len {
+                let b = builtin::array_get_u8(raw, pos) as i32;
+                if b > 32 { break; }
+                if b == 32 || b == 10 || b == 13 || b == 9 { pos += 1; } else { break; }
+            }
+            if pos >= len {
+                panic("area: EOF");
+            }
+            let c = builtin::array_get_u8(raw, pos) as i32;
             if c == '}' as i32 {
-                self.pos += 1;
+                self.pos = pos + 1;
                 return Area { area_id, block_ids };
             }
             if c != ',' as i32 {
                 panic("area: expected ',' or '}'");
             }
-            self.pos += 1;
+            pos += 1;
         }
         unreachable();
     }
@@ -604,7 +708,7 @@ impl P {
             self.pos += 1;
             return [];
         }
-        let mut arr: Array<Area> = [];
+        let mut arr: Array<Area> = Array::with_capacity(4);
         loop {
             arr.push(self.parse_area());
             self.skip_ws();
@@ -673,7 +777,7 @@ impl P {
             self.pos += 1;
             return [];
         }
-        let mut arr: Array<SeatCategory> = [];
+        let mut arr: Array<SeatCategory> = Array::with_capacity(8);
         loop {
             arr.push(self.parse_seat_category());
             self.skip_ws();
@@ -788,7 +892,7 @@ impl P {
             self.pos += 1;
             return [];
         }
-        let mut arr: Array<Performance> = [];
+        let mut arr: Array<Performance> = Array::with_capacity(256);
         loop {
             arr.push(self.parse_performance());
             self.skip_ws();
@@ -1032,7 +1136,12 @@ struct CatalogCounts {
 }
 
 fn parse_counts_v2(json_data: String) -> CatalogCounts {
-    let mut p = P { input: json_data, pos: 0, len: json_data.len() };
+    let mut p = P {
+        input: json_data,
+        repr: json_data.internal_raw_bytes(),
+        pos: 0,
+        len: json_data.len(),
+    };
     p.skip_ws();
     let catalog = p.parse_citm_catalog();
     return CatalogCounts {
@@ -1051,6 +1160,7 @@ export fn run() with Stdout, MonotonicClock, Preopens {
     let json_data = read_file("json_catalog/citm_catalog.json");
     let mut b = Benchmark::new("json-catalog-v2");
     b.input_size = Option::Some(json_data.len());
+    b.iterations = 5;
 
     let counts = b.run("", || parse_counts_v2(json_data));
     assert counts.events == 184;
