@@ -467,30 +467,34 @@ fn register_inspect_wrapper(
 }
 
 /// Build the WIR body for a `FunctionKind::FnCanonicalDispatch`
-/// stub: cast `self` to the matching `CanonicalClosure_K`, then
-/// `call_ref (struct.get $K $slot self) (self.env, f)` where `$slot`
-/// is `inspect` or `inspect_alt` depending on `trait_kind`.
+/// stub: cast `self` to the shared `$canonical_inspectable_base`
+/// supertype, then `call_ref (struct.get base $slot self) (self.env,
+/// f)` where `$slot` is `inspect` or `inspect_alt` depending on
+/// `trait_kind`.
 ///
-/// Returns `None` when the signature isn't in the inspectable
-/// gate — that means the canonical struct is the slim
-/// `{ env, func }` shape and the dispatch stub is unreachable from
-/// any actually-emitted closure value, so leaving the empty TIR
-/// placeholder body is fine.
+/// Casting to the shared base — instead of one specific
+/// `CanonicalClosure_K` per `(arity, return_type)` — lets the same
+/// dispatch stub serve every parameter shape with that signature
+/// pair; without it the cast would trap whenever a runtime value
+/// belonged to a different per-signature canonical struct.
+///
+/// Returns `None` when no inspectable canonical struct has been
+/// registered: in that case the dispatch stub is unreachable from any
+/// emitted closure value (every canonical struct is slim `{ env, func
+/// }`), so leaving the bodyless TIR placeholder in place is fine.
+#[allow(clippy::needless_pass_by_value)] // signature mirrors the param-name plumbing in translate_function_bodies
 fn build_fn_canonical_dispatch_body(
     ctx: &mut WirContext<'_>,
     trait_kind: crate::tir::FnDispatchTrait,
-    arity: usize,
-    return_type: crate::tir::TypeId,
     self_param_name: String,
     formatter_param_name: String,
 ) -> Option<Vec<WirInstr>> {
     use crate::tir::FnDispatchTrait;
     use crate::wir::{WirAbstractHeapType, WirType};
 
-    let struct_type_id = ctx
-        .fn_dispatch_canonical
-        .get(&(arity, return_type))?
-        .clone();
+    // No inspectable canonical struct was ever registered → the stub is
+    // dead code. Leave the bodyless declaration in place.
+    let base_type_id = ctx.canonical_inspectable_base_type_id.clone()?;
     let callback_fn_type_id = ctx.get_or_create_canonical_callback_fn_type();
     let abstract_struct_nullable = WirType::AbstractRef {
         heap_type: WirAbstractHeapType::Struct,
@@ -508,14 +512,14 @@ fn build_fn_canonical_dispatch_body(
         WirInstr::DeclareLocal {
             name: typed_self.clone(),
             ty: WirType::Ref {
-                type_id: struct_type_id.clone(),
+                type_id: base_type_id.clone(),
                 nullable: false,
             },
         },
         WirInstr::LocalSet {
             name: typed_self.clone(),
             value: Box::new(WirInstr::RefCast {
-                type_id: struct_type_id.clone(),
+                type_id: base_type_id.clone(),
                 nullable: false,
                 expr: Box::new(WirInstr::LocalGet {
                     name: self_param_name,
@@ -526,12 +530,12 @@ fn build_fn_canonical_dispatch_body(
         WirInstr::CallRef {
             type_id: callback_fn_type_id.clone(),
             func_ref: Box::new(WirInstr::StructGet {
-                type_id: struct_type_id.clone(),
+                type_id: base_type_id.clone(),
                 field_name: field_name.to_string(),
                 expr: Box::new(WirInstr::LocalGet {
                     name: typed_self.clone(),
                     result_ty: WirType::Ref {
-                        type_id: struct_type_id.clone(),
+                        type_id: base_type_id.clone(),
                         nullable: false,
                     },
                 }),
@@ -542,12 +546,12 @@ fn build_fn_canonical_dispatch_body(
             }),
             args: vec![
                 WirInstr::StructGet {
-                    type_id: struct_type_id.clone(),
+                    type_id: base_type_id.clone(),
                     field_name: "env".to_string(),
                     expr: Box::new(WirInstr::LocalGet {
                         name: typed_self,
                         result_ty: WirType::Ref {
-                            type_id: struct_type_id,
+                            type_id: base_type_id,
                             nullable: false,
                         },
                     }),
@@ -576,7 +580,7 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
         // instead of translating the placeholder. Skipping the
         // string-matching post-pass keeps name-format knowledge
         // confined to `name.rs` and `synthesis::traits`.
-        if let Some((trait_kind, arity, return_type)) = tir_func.fn_canonical_dispatch() {
+        if let Some((trait_kind, _arity, _return_type)) = tir_func.fn_canonical_dispatch() {
             let self_param_name = tir_func
                 .params
                 .first()
@@ -592,8 +596,6 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
             let body = build_fn_canonical_dispatch_body(
                 ctx,
                 trait_kind,
-                arity,
-                return_type,
                 self_param_name,
                 formatter_param_name,
             );

@@ -100,13 +100,18 @@ pub struct WirContext<'a> {
     /// `{ env, func }` shape so production builds that never inspect
     /// closures pay nothing.
     pub inspectable_fn_dispatch: IndexSet<(usize, TypeId)>,
-    /// Map from `(arity, return_type)` to the matching
-    /// `CanonicalClosure_K` struct WIR type id. Populated alongside
-    /// `canonical_closure_types` so the WIR-level
-    /// `Fn<...>^Inspect / InspectAlt` dispatch body can pick the
-    /// correct struct type for `ref.cast` + `struct.get` on `self`,
-    /// without recovering the type from the function's mangled name.
-    pub fn_dispatch_canonical: IndexMap<(usize, TypeId), WirTypeId>,
+    /// Shared inspectable supertype `$canonical_inspectable_base`
+    /// (`{ env, inspect, inspect_alt }`). Lazily created on the first
+    /// inspectable `CanonicalClosure_K` registration; the
+    /// `Fn<N, Ret>^Inspect` dispatch stub `ref.cast`s `self` to this
+    /// type so any inspectable closure value reaches the same `inspect`
+    /// / `inspect_alt` slot positions regardless of its parameter
+    /// types. Without this shared supertype the dispatch stub would
+    /// have to pick one specific `CanonicalClosure_K` per `(arity,
+    /// return_type)` pair and trap whenever a runtime value belongs to
+    /// a different per-signature canonical struct sharing the same
+    /// `(arity, return_type)`.
+    pub canonical_inspectable_base_type_id: Option<WirTypeId>,
 
     /// Collected string literals (from all TIR modules).
     pub string_literals: Vec<String>,
@@ -246,7 +251,7 @@ impl<'a> WirContext<'a> {
             closure_wrapper_funcs: IndexMap::default(),
             canonical_closure_counter: 0,
             inspectable_fn_dispatch,
-            fn_dispatch_canonical: IndexMap::default(),
+            canonical_inspectable_base_type_id: None,
             string_literals,
             bytes_literals,
             wasm_module_sources: IndexMap::<ModuleSource, String>::default(),
@@ -399,9 +404,19 @@ impl<'a> WirContext<'a> {
     /// Each per-literal wrapper refcasts both args back to its concrete
     /// `&__Closure_N` and `&Formatter` before forwarding.
     ///
-    /// Phase 4 will gate the inspect slots behind a per-`(N, Ret)` usage
-    /// scan so signatures whose `Fn^Inspect` / `Fn^InspectAlt` is
-    /// unreachable revert to the slim `{ env, func }` shape.
+    /// Inspectable canonical structs share the supertype
+    /// `$canonical_inspectable_base` (built lazily via
+    /// [`Self::get_or_create_canonical_inspectable_base`]); per-signature
+    /// canonical structs add a typed `func` field at the end. The
+    /// `Fn<N, Ret>^Inspect` dispatch stub casts to that base, so any
+    /// inspectable closure value reaches the shared `inspect` /
+    /// `inspect_alt` slots regardless of its parameter types — the only
+    /// requirement is that the field layout `{ env, inspect, inspect_alt,
+    /// func }` is identical across subtypes (Wasm GC `sub` constraint).
+    ///
+    /// Non-inspectable signatures keep the slim `{ env, func }` layout
+    /// without any supertype: the dispatch stub is never synthesised for
+    /// them, so the base type is irrelevant.
     pub fn get_or_create_canonical_closure_type(
         &mut self,
         param_wirs: Vec<WirType>,
@@ -428,26 +443,18 @@ impl<'a> WirContext<'a> {
         let fn_type_fq = format!("functype/$canonical_closure_fn_{id}");
         let fn_type_id = self.register_func_type(fn_type_fq, fn_params, result_wirs);
 
-        // Build the closure struct fields. Slim `{ env, func }` is the
-        // default; inspectable signatures append two callback slots
-        // (`inspect`, `inspect_alt`) for runtime trait dispatch.
+        // Build the closure struct fields. Inspectable layout puts the
+        // env + vtable slots first so they form a Wasm GC subtype prefix
+        // shared with `$canonical_inspectable_base`; the per-signature
+        // `func` field comes last. Non-inspectable layout is the slim
+        // `{ env, func }` (no shared supertype).
         use crate::wir::{WirField, WirMeta, WirName, WirStructType};
-        let mut fields = vec![
-            WirField {
-                name: "env".to_string(),
-                ty: abstract_struct_nullable,
-                mutable: false,
-            },
-            WirField {
-                name: "func".to_string(),
-                ty: WirType::Ref {
-                    type_id: fn_type_id.clone(),
-                    nullable: false,
-                },
-                mutable: false,
-            },
-        ];
-        if is_inspectable {
+        let mut fields = vec![WirField {
+            name: "env".to_string(),
+            ty: abstract_struct_nullable,
+            mutable: false,
+        }];
+        let supertype = if is_inspectable {
             let callback_fn_type_id = self.get_or_create_canonical_callback_fn_type();
             fields.push(WirField {
                 name: "inspect".to_string(),
@@ -465,7 +472,18 @@ impl<'a> WirContext<'a> {
                 },
                 mutable: false,
             });
-        }
+            Some(self.get_or_create_canonical_inspectable_base())
+        } else {
+            None
+        };
+        fields.push(WirField {
+            name: "func".to_string(),
+            ty: WirType::Ref {
+                type_id: fn_type_id.clone(),
+                nullable: false,
+            },
+            mutable: false,
+        });
 
         let struct_fq = format!("canonical//CanonicalClosure_{id}");
         let struct_type_id = self.register_type(
@@ -476,6 +494,7 @@ impl<'a> WirContext<'a> {
                 meta: WirMeta::default(),
                 generic_origin: None,
                 newtype_origin: None,
+                supertype,
             }),
         );
 
@@ -485,6 +504,63 @@ impl<'a> WirContext<'a> {
         );
 
         (fn_type_id, struct_type_id)
+    }
+
+    /// Lazily create (or fetch) the shared inspectable closure supertype
+    /// `$canonical_inspectable_base = (struct env inspect inspect_alt)`.
+    ///
+    /// All inspectable per-signature `CanonicalClosure_K` declare this
+    /// type as their supertype, so any inspectable closure value can be
+    /// `ref.cast` to it. The `Fn<N, Ret>^Inspect` dispatch stub uses
+    /// exactly this cast — independent of the `(N, Ret)` pair — and
+    /// reads `inspect` / `inspect_alt` from the base layout.
+    pub fn get_or_create_canonical_inspectable_base(&mut self) -> WirTypeId {
+        if let Some(id) = &self.canonical_inspectable_base_type_id {
+            return id.clone();
+        }
+        let callback_fn_type_id = self.get_or_create_canonical_callback_fn_type();
+        let abstract_struct_nullable = WirType::AbstractRef {
+            heap_type: crate::wir::WirAbstractHeapType::Struct,
+            nullable: true,
+        };
+        use crate::wir::{WirField, WirMeta, WirName, WirStructType};
+        let fields = vec![
+            WirField {
+                name: "env".to_string(),
+                ty: abstract_struct_nullable,
+                mutable: false,
+            },
+            WirField {
+                name: "inspect".to_string(),
+                ty: WirType::Ref {
+                    type_id: callback_fn_type_id.clone(),
+                    nullable: false,
+                },
+                mutable: false,
+            },
+            WirField {
+                name: "inspect_alt".to_string(),
+                ty: WirType::Ref {
+                    type_id: callback_fn_type_id,
+                    nullable: false,
+                },
+                mutable: false,
+            },
+        ];
+        let fq = "canonical//CanonicalInspectableBase".to_string();
+        let id = self.register_type(
+            fq.clone(),
+            WirTypeDef::Struct(WirStructType {
+                name: WirName { fq },
+                fields,
+                meta: WirMeta::default(),
+                generic_origin: None,
+                newtype_origin: None,
+                supertype: None,
+            }),
+        );
+        self.canonical_inspectable_base_type_id = Some(id.clone());
+        id
     }
 
     /// Func type for the inspect / `inspect_alt` vtable slots:
@@ -941,6 +1017,7 @@ impl<'a> WirContext<'a> {
             meta: crate::wir::WirMeta::default(),
             generic_origin: None,
             newtype_origin: None,
+            supertype: None,
         });
         let type_id = self.register_type(display, struct_def);
         // Register in tuple_type_map using the TIR element TypeIds

@@ -3,15 +3,11 @@
 // field, or global, `{f:?}` and `{f:#?}` should still produce the
 // correct signature and per-literal source.
 //
-// Phase 2 (this commit) makes the SPECIALIZED path (closure stays as
-// `&__Closure_N`) dispatch through per-functor `__Closure_N^Inspect /
-// InspectAlt` impls. Indirect cases that go through the canonical
-// `Fn<N, Ret>` value still fall back to the per-`(N, Ret)` Inspect
-// impl, which writes the signature only — so `{f:#?}` for a closure
-// passed across a function/struct boundary returns the signature
-// rather than the source. Phase 3 extends `CanonicalClosure_K` with
-// `inspect`/`inspect_alt` vtable slots to fix this; the failing
-// sub-tests below are the acceptance criteria for that work.
+// The specialised path (closure kept as `&__Closure_N`) dispatches via
+// per-functor `__Closure_N^Inspect / InspectAlt`. Cases that go
+// through the canonical `Fn<N, Ret>` value (function parameters,
+// struct fields, globals) read the source via the `inspect_alt` slot
+// of `CanonicalClosure_K`.
 
 fn fmt_def(f: fn(i32) -> i32) -> String {
     return `{f:?}`;
@@ -43,6 +39,24 @@ test "closure passed as fn param keeps source for :#?" {
 test "closure stored in struct field keeps source for :#?" {
     let h = Holder { cb: |y: i32| y * 2 };
     assert `{h.cb:#?}` == "|y: i32| (y * 2)";
+}
+
+test "captured closure still inspects via captured field" {
+    let inner = |a: i32| a * 3;
+    let h = Holder { cb: inner };
+    assert `{h.cb:#?}` == "|a: i32| (a * 3)";
+}
+
+test "captured closure passed across fn boundary keeps source" {
+    let inner = |a: i32| a * 3;
+    let h = Holder { cb: inner };
+    assert fmt_alt(h.cb) == "|a: i32| (a * 3)";
+}
+
+test "capturing closure shows captures clause in :#?" {
+    let n = 7;
+    let f = |x: i32| x + n;
+    assert `{f:#?}` == "|x: i32| captures[n] (x + n)";
 }
 
 __DATA__

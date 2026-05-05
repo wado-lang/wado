@@ -3202,6 +3202,11 @@ pub struct TirUnparser<'a> {
     type_table: &'a TypeTable,
     output: String,
     indent_level: usize,
+    /// When true, suppress internal debug annotations (e.g.,
+    /// `@capture[0]:n` becomes `n`). Used for closure source-form
+    /// rendering exposed to user-facing inspect output. Default
+    /// `false` keeps the debug-friendly form for TIR dumps.
+    source_form: bool,
 }
 
 impl<'a> TirUnparser<'a> {
@@ -3210,7 +3215,15 @@ impl<'a> TirUnparser<'a> {
             type_table,
             output: String::new(),
             indent_level: 0,
+            source_form: false,
         }
+    }
+
+    /// Enable source-form rendering: suppresses internal annotations
+    /// like `@capture[i]:` so the output reflects user-written names.
+    fn source_form(mut self) -> Self {
+        self.source_form = true;
+        self
     }
 
     /// Quote an identifier if it contains characters that make it invalid Wado syntax.
@@ -3817,8 +3830,15 @@ impl<'a> TirUnparser<'a> {
                 self.unparse_expr(value);
             }
             TirExprKind::Capture { name, index } => {
-                // Display as captured variable with index for debugging
-                self.output.push_str(&format!("@capture[{index}]:{name}"));
+                if self.source_form {
+                    // Source-form: just the original name. The presence of
+                    // a captures[...] header (rendered separately) already
+                    // signals that the closure depends on captured locals.
+                    self.output.push_str(name);
+                } else {
+                    // Debug-form: include capture index for TIR dumps.
+                    self.output.push_str(&format!("@capture[{index}]:{name}"));
+                }
             }
             TirExprKind::Binary { left, op, right } => {
                 self.output.push('(');
@@ -4212,18 +4232,27 @@ fn tir_unary_op_str(op: TirUnaryOp) -> &'static str {
     }
 }
 
-/// Unparse a TIR closure as `|name: Type, ...| body` source text.
+/// Unparse a TIR closure as `|name: Type, ...| body` (or `|name: Type, ...|
+/// captures[...] body` when the closure captures locals) source text.
 ///
-/// Used by `lower::closure` to bake the per-literal source string
-/// into `__Closure_N^InspectAlt::inspect_alt` without requiring
-/// every TIR `Closure` node to carry an unparsed-AST string.
+/// Used by `lower::closure` to bake the per-literal source string into
+/// `__Closure_N^InspectAlt::inspect_alt` without requiring every TIR
+/// `Closure` node to carry an unparsed-AST string.
+///
+/// The `captures[name1, name2, ...]` clause has no surface-syntax
+/// counterpart in Wado (closures capture implicitly), but is shown in
+/// the `:#?` debug output by design: it makes captured-environment
+/// dependencies visible at inspect time, which is the whole point of
+/// pretty-printing a closure in the first place. Non-capturing closures
+/// produce output that round-trips through the parser; capturing
+/// closures intentionally do not.
 pub fn unparse_tir_closure_source(
     params: &[(String, TypeId)],
     captures: &[crate::tir::TirCapture],
     body: &TirExpr,
     type_table: &TypeTable,
 ) -> String {
-    let mut unparser = TirUnparser::new(type_table);
+    let mut unparser = TirUnparser::new(type_table).source_form();
     unparser.unparse_closure_form(params, captures, body);
     unparser.output
 }

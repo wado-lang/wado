@@ -249,7 +249,7 @@ impl ClosureLowerer {
                 ClosureSafetyAnalyzer {
                     local_to_closure: &mut self.local_to_closure,
                     specializable: &mut self.specializable,
-                    in_arg_position: false,
+                    in_callee_position: false,
                 }
                 .visit_block(body);
             }
@@ -261,7 +261,7 @@ impl ClosureLowerer {
                     ClosureSafetyAnalyzer {
                         local_to_closure: &mut self.local_to_closure,
                         specializable: &mut self.specializable,
-                        in_arg_position: false,
+                        in_callee_position: false,
                     }
                     .visit_block(body);
                 }
@@ -1227,38 +1227,59 @@ impl TirRefVisitor for LocalCollector<'_> {
     }
 }
 
-/// Phase 2 visitor: decide which closures are safe to specialise. A closure
-/// is unsafe if it (or a local that holds it) appears directly in argument
-/// position — those are routed through `ClosureToCanonical` instead.
+/// Phase 2 visitor: decide which closures are safe to specialise.
 ///
-/// `in_arg_position` is tracked manually since the visitor traits don't
-/// propagate context. The flag is set true only on the direct child of an
-/// argument slot in `Call` / `MethodCall` / `IndirectCall` / `CmRawCall`,
-/// and reset to false everywhere else (statement boundaries, sub-expr
-/// wrappers, closure bodies).
+/// A closure is **safe to specialise** when its value never escapes its
+/// declaring local: every use is either a direct call (`local(args)` /
+/// `local.method(args)`) or a redirect-eligible trait dispatch on it.
+/// Otherwise the value must travel as a `CanonicalClosure_K` so it can be
+/// stored in struct fields, passed as a function argument, returned, or
+/// assigned to globals — all positions where a specialised
+/// `__Closure_N` would be incompatible with the receiver's canonical fn
+/// type.
+///
+/// The escape decision is made by tracking `in_callee_position`: only the
+/// callee of `IndirectCall` / receiver of `MethodCall` / func of `Call` is
+/// a non-escape position. Every other slot (struct literal field, return
+/// value, global assignment, let-rebinding, …) is an escape, and finding a
+/// closure-bearing `Local` or a `Closure` literal there marks it
+/// non-specialisable.
+///
+/// `Let { value: Closure }` is special-cased: the literal is what binds
+/// the local, not an escape. Its body is walked under a fresh
+/// `local_to_closure` (closure bodies have their own local-index namespace).
 struct ClosureSafetyAnalyzer<'a> {
     local_to_closure: &'a mut IndexMap<u32, u32>,
     specializable: &'a mut IndexSet<u32>,
-    in_arg_position: bool,
+    /// True only when the current expression is the callee of a call
+    /// (or receiver of a method call). Default false.
+    in_callee_position: bool,
 }
 
 impl TirRefVisitor for ClosureSafetyAnalyzer<'_> {
     fn visit_stmt(&mut self, stmt: &TirStmt) {
+        // Let-binding a closure literal: mark the local as carrying that
+        // closure, mark the closure specialisable, then walk the body
+        // (which owns a fresh local-index namespace).
         if let TirStmtKind::Let {
             local_index, value, ..
         } = &stmt.kind
             && let TirExprKind::Closure {
+                body,
                 functor_id: Some(closure_id),
                 ..
             } = &value.kind
         {
             self.local_to_closure.insert(*local_index, *closure_id);
-            // Initially mark as safe; will be removed if passed as argument.
             self.specializable.insert(*closure_id);
+            let saved_l2c = std::mem::take(self.local_to_closure);
+            let prev = std::mem::replace(&mut self.in_callee_position, false);
+            self.visit_expr(body);
+            self.in_callee_position = prev;
+            *self.local_to_closure = saved_l2c;
+            return;
         }
-        let prev = std::mem::replace(&mut self.in_arg_position, false);
         self.walk_stmt(stmt);
-        self.in_arg_position = prev;
     }
 
     fn visit_expr(&mut self, expr: &TirExpr) {
@@ -1268,16 +1289,16 @@ impl TirRefVisitor for ClosureSafetyAnalyzer<'_> {
                 functor_id: Some(closure_id),
                 ..
             } => {
-                if self.in_arg_position {
+                // A closure literal that isn't the immediate value of a
+                // `let` (handled in visit_stmt) escapes unless it's the
+                // direct callee of a call.
+                if !self.in_callee_position {
                     self.specializable.swap_remove(closure_id);
                 }
-                // The closure body uses a fresh local-index namespace, so
-                // outer-scope `local_to_closure` entries must not leak in.
-                // Save / restore across the descent.
                 let saved_l2c = std::mem::take(self.local_to_closure);
-                let prev_arg = std::mem::replace(&mut self.in_arg_position, false);
+                let prev = std::mem::replace(&mut self.in_callee_position, false);
                 self.visit_expr(body);
-                self.in_arg_position = prev_arg;
+                self.in_callee_position = prev;
                 *self.local_to_closure = saved_l2c;
             }
             TirExprKind::Closure {
@@ -1289,54 +1310,38 @@ impl TirRefVisitor for ClosureSafetyAnalyzer<'_> {
                 )
             }
             TirExprKind::Local { index, .. } => {
-                if self.in_arg_position
+                if !self.in_callee_position
                     && let Some(closure_id) = self.local_to_closure.get(index)
                 {
                     self.specializable.swap_remove(closure_id);
                 }
             }
-            TirExprKind::Call { args, .. } => {
-                let prev = std::mem::replace(&mut self.in_arg_position, true);
-                for arg in args {
-                    self.visit_expr(&arg.expr);
-                }
-                self.in_arg_position = prev;
-            }
-            TirExprKind::CmRawCall { args, .. } => {
-                let prev = std::mem::replace(&mut self.in_arg_position, true);
+            TirExprKind::IndirectCall { callee, args } => {
+                let prev = self.in_callee_position;
+                self.in_callee_position = true;
+                self.visit_expr(callee);
+                self.in_callee_position = false;
                 for arg in args {
                     self.visit_expr(arg);
                 }
-                self.in_arg_position = prev;
+                self.in_callee_position = prev;
             }
             TirExprKind::MethodCall { receiver, args, .. } => {
-                let prev = std::mem::replace(&mut self.in_arg_position, false);
+                let prev = self.in_callee_position;
+                self.in_callee_position = true;
                 self.visit_expr(receiver);
-                self.in_arg_position = true;
+                self.in_callee_position = false;
                 for arg in args {
                     self.visit_expr(&arg.expr);
                 }
-                self.in_arg_position = prev;
-            }
-            TirExprKind::IndirectCall { callee, args } => {
-                let prev = std::mem::replace(&mut self.in_arg_position, false);
-                self.visit_expr(callee);
-                self.in_arg_position = true;
-                for arg in args {
-                    self.visit_expr(arg);
-                }
-                self.in_arg_position = prev;
-            }
-            TirExprKind::ClosureToCanonical { functor, .. } => {
-                // Pass-through: original preserved in_arg_position here.
-                self.visit_expr(functor);
+                self.in_callee_position = prev;
             }
             _ => {
-                // Every other recursion site in the original passes
-                // `in_arg_position=false`, so reset before the default walk.
-                let prev = std::mem::replace(&mut self.in_arg_position, false);
+                // All other positions are escape positions: reset
+                // in_callee_position to false and walk recursively.
+                let prev = std::mem::replace(&mut self.in_callee_position, false);
                 self.walk_expr(expr);
-                self.in_arg_position = prev;
+                self.in_callee_position = prev;
             }
         }
     }

@@ -1901,18 +1901,17 @@ impl FunctionTranslator<'_, '_> {
             );
         };
 
-        // Build CanonicalClosure_K. Slim `{ env, func }` for non-
-        // inspectable signatures — production builds that never
-        // inspect closures pay nothing here. Fat `{ env, func,
-        // inspect, inspect_alt }` when the per-`(N, Ret)` gate is
-        // set; the extra slots let `Fn<N, Ret>^Inspect / InspectAlt`
-        // dispatch through this value at runtime.
-        let mut fields = vec![
-            functor_instr,
-            WirInstr::RefFunc {
-                func_id: wrappers.call,
-            },
-        ];
+        // Build `CanonicalClosure_K`. Field order must match the struct
+        // declaration in `WirContext::get_or_create_canonical_closure_type`:
+        //
+        // - Inspectable layout: `{ env, inspect, inspect_alt, func }` —
+        //   the env + vtable prefix is the layout of the shared
+        //   `$canonical_inspectable_base` supertype, and the typed `func`
+        //   slot comes last (per-signature).
+        // - Slim layout: `{ env, func }` — no shared supertype, no
+        //   inspect slots. Production builds that never inspect closures
+        //   stay on this shape.
+        let mut fields = vec![functor_instr];
         if is_inspectable {
             let inspect_id = wrappers
                 .inspect
@@ -1927,6 +1926,9 @@ impl FunctionTranslator<'_, '_> {
                 func_id: inspect_alt_id,
             });
         }
+        fields.push(WirInstr::RefFunc {
+            func_id: wrappers.call,
+        });
         self.struct_new(struct_type_id, fields)
     }
 }

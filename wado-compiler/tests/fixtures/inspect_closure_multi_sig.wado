@@ -1,0 +1,24 @@
+// Multiple closure signatures sharing the same (arity, return_type)
+// but different parameter types. The dispatch stub `Fn<1,i32>^Inspect`
+// must work for both.
+
+fn fmt_i(f: fn(i32) -> i32) -> String {
+    return `{f:?}`;
+}
+
+fn fmt_s(f: fn(String) -> i32) -> String {
+    return `{f:?}`;
+}
+
+test "i32 -> i32 inspect" {
+    let g = |x: i32| x + 1;
+    assert fmt_i(g) == "|i32| -> i32";
+}
+
+test "String -> i32 inspect" {
+    let g = |s: String| s.len();
+    assert fmt_s(g) == "|String| -> i32";
+}
+
+__DATA__
+{"test": {}}

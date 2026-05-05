@@ -327,6 +327,7 @@ fn register_struct(
             },
             generic_origin,
             newtype_origin: None,
+            supertype: None,
         }),
     );
 
@@ -440,6 +441,7 @@ fn register_variant(
                 meta: WirMeta::default(),
                 generic_origin: None,
                 newtype_origin: None,
+            supertype: None,
             }),
         );
         ctx.variant_case_info
@@ -547,6 +549,7 @@ fn ensure_box_type(ctx: &mut WirContext<'_>, prim_name: &str, wir_type: crate::w
                 type_args: vec![prim_name.to_string()],
             }),
             newtype_origin: None,
+            supertype: None,
         }),
     );
     ctx.struct_type_map.insert(struct_name, type_id);
@@ -658,6 +661,7 @@ fn register_tuple_types(ctx: &mut WirContext<'_>) {
                         meta: WirMeta::default(),
                         generic_origin: None,
                         newtype_origin: None,
+            supertype: None,
                     }),
                 );
                 ctx.tuple_type_map
@@ -1002,6 +1006,7 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
                         meta: WirMeta::default(),
                         generic_origin: None,
                         newtype_origin: None,
+            supertype: None,
                     }),
                 );
                 ctx.variant_case_info
@@ -1131,15 +1136,12 @@ fn register_canonical_closure_types(ctx: &mut WirContext<'_>) {
         }
     }
 
-    // Register canonical closure types for each signature, then
-    // record the `(arity, return_type)` → struct type id mapping so
-    // the dispatch body in `translate_function_bodies` can pick the
-    // right struct without having to recover it from a mangled name.
-    for (param_wirs, result_wirs, is_inspectable, arity, return_type) in fn_sigs {
-        let (_, struct_type_id) =
-            ctx.get_or_create_canonical_closure_type(param_wirs, result_wirs, is_inspectable);
-        ctx.fn_dispatch_canonical
-            .insert((arity, return_type), struct_type_id);
+    // Register canonical closure types for each signature. Inspectable
+    // signatures share the supertype `$canonical_inspectable_base`,
+    // which is what the `Fn<N, Ret>^Inspect` dispatch stub `ref.cast`s
+    // to — so no per-`(N, Ret)` struct map is needed.
+    for (param_wirs, result_wirs, is_inspectable, _arity, _return_type) in fn_sigs {
+        ctx.get_or_create_canonical_closure_type(param_wirs, result_wirs, is_inspectable);
     }
 }
 
@@ -1260,6 +1262,7 @@ fn register_array_wrapper_struct(ctx: &mut WirContext<'_>, elem_name: &str) {
                 type_args: vec![elem_name.to_string()],
             }),
             newtype_origin: None,
+            supertype: None,
         }),
     );
     ctx.struct_type_map.insert(struct_name, type_id);
