@@ -190,9 +190,13 @@ pointer.
 
 - **No backtracking in new code.** Use static k-token lookahead prediction
   to disambiguate alternatives. If prediction cannot resolve within depth 5,
-  file an issue rather than adding backtracking. The codegen has no
-  speculative-parse fallback any more — an alt whose suffix is unscannable
-  at a tournament site is a codegen-time `panic!`, not a `bt_try` block.
+  file an issue rather than adding backtracking. The Stage C codegen no
+  longer emits `bt_try` or `opt_bt` blocks — an alt whose suffix is
+  unscannable at a tournament site is a codegen-time `panic!`. (The
+  rule-level LR-atom path in `gen_prediction_code_inner` retains a
+  save-and-rewind pattern as a structural fallback when scan helpers are
+  unavailable; no committed grammar exercises it, but the code is kept
+  for malformed-grammar diagnostics.)
 
 ### Migration status (2026-04)
 

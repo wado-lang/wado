@@ -4770,14 +4770,10 @@ fn gen_group_prediction_code_skip(w: &mut CodeWriter, node: &PredictionNode, alt
     }
 }
 
-/// Emit longest-match first-win scan dispatch for group-level alternatives.
-/// Each alt's remaining elements (from `skip`) are scanned inline. The alt
-/// whose scan advances furthest is parsed; ties go to the first in sorted
-/// order. If all scans fail, the last alt is parsed to surface a real error.
 /// First-success-wins scan dispatch for `gen_group_prediction_code`'s
 /// `Ambiguous` node. The `sorted` parameter has already been ordered by
 /// `sort_group_by_element_count` (longest-first), so scanning candidates
-/// in that order and committing on first success matches what the
+/// in that order and committing on first success matches what a
 /// longest-match tournament would have picked while skipping the remaining
 /// scans. Critical for performance when any alt's scan recurses through
 /// an LR rule (`AGENTS.md` "Failed Approaches: Removing the LR Gate
@@ -4787,7 +4783,8 @@ fn gen_group_prediction_code_skip(w: &mut CodeWriter, node: &PredictionNode, alt
 /// matching alt index is recorded in `gd_winner` and the winner is parsed
 /// once via the trailing `if/else if/else` chain. The last alt is the
 /// unconditional fallback so a real parse error surfaces when no scan
-/// matched.
+/// matched (or so an at-end empty-suffix alt acts as the epsilon
+/// fallback — its scan trivially succeeds with zero tokens consumed).
 fn gen_group_scan_dispatch(w: &mut CodeWriter, sorted: &Array<i32>, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, skip: i32) {
     let winner_var = dedup_name(&"gd_winner", name_counts);
     let dispatch_label = dedup_name(&"gd_dispatch", name_counts);
