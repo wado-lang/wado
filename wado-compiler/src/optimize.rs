@@ -159,7 +159,7 @@ pub fn optimize(
             // Final DCE: clean up code made dead by optimizations
             run_dce(&mut project, profiler);
         }
-        OptLevel::O2 | OptLevel::Os => {
+        OptLevel::O2 => {
             let config = OptConfig {
                 iterations: opt_iterations.unwrap_or(10),
                 // Threshold 20: covers `index_assign` (11 expressions) and
@@ -171,9 +171,21 @@ pub fn optimize(
             run_dce(&mut project, profiler);
             run_optimization_passes(&mut project, &config, profiler);
             run_dce(&mut project, profiler);
-            if opt_level == OptLevel::Os {
-                project.strip_names = true;
-            }
+        }
+        OptLevel::Os => {
+            let config = OptConfig {
+                iterations: opt_iterations.unwrap_or(10),
+                // -Os keeps the inliner conservative (threshold 12) — the
+                // heuristics that pay off for runtime perf at -O2 grow
+                // the binary noticeably (e.g., sqlite_highlight grows
+                // ~30% when `String::push`/`Display::fmt`/etc. are
+                // inlined). Match the pre-tuning -O2 threshold here.
+                inline_threshold: inline_threshold.unwrap_or(12),
+            };
+            run_dce(&mut project, profiler);
+            run_optimization_passes(&mut project, &config, profiler);
+            run_dce(&mut project, profiler);
+            project.strip_names = true;
         }
         OptLevel::O3 => {
             let config = OptConfig {
