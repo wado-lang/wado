@@ -162,8 +162,11 @@ pub fn optimize(
         OptLevel::O2 | OptLevel::Os => {
             let config = OptConfig {
                 iterations: opt_iterations.unwrap_or(10),
-                // Threshold 12: allows index_assign (11 expressions) to be inlined
-                inline_threshold: inline_threshold.unwrap_or(12),
+                // Threshold 20: covers `index_assign` (11 expressions) and
+                // medium-sized helpers like `String::push` and CITM-style
+                // `read_json_string` field accesses without bloating
+                // function bodies enough to hurt branch prediction.
+                inline_threshold: inline_threshold.unwrap_or(20),
             };
             run_dce(&mut project, profiler);
             run_optimization_passes(&mut project, &config, profiler);
@@ -175,7 +178,7 @@ pub fn optimize(
         OptLevel::O3 => {
             let config = OptConfig {
                 iterations: opt_iterations.unwrap_or(100),
-                inline_threshold: inline_threshold.unwrap_or(30),
+                inline_threshold: inline_threshold.unwrap_or(40),
             };
             run_dce(&mut project, profiler);
             run_optimization_passes(&mut project, &config, profiler);
