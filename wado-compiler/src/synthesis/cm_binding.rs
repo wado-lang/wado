@@ -749,13 +749,75 @@ mod tests {
     /// i32-handle fallback. Regression for issue #997 (#1, #2).
     #[test]
     fn lift_list_named_variant_uses_registry_stride() {
+        use crate::tir::TirStmt;
+
+        // Visit every TIR sub-expression and count `IntLiteral { value: target }`
+        // occurrences. Walks through the structural recursion sites that
+        // `synthesize_lift_list` emits (Let init, If condition, Loop body,
+        // realloc args). Built as a semantic check so it doesn't depend on
+        // any `Debug` output formatting.
+        fn count_int_literals(stmts: &[TirStmt], target: u64) -> usize {
+            fn visit_expr(e: &TirExpr, target: u64) -> usize {
+                let mut n = match &e.kind {
+                    TirExprKind::IntLiteral { value, .. } if *value == target => 1,
+                    _ => 0,
+                };
+                match &e.kind {
+                    TirExprKind::Binary { left, right, .. } => {
+                        n += visit_expr(left, target) + visit_expr(right, target);
+                    }
+                    TirExprKind::Call { args, .. }
+                    | TirExprKind::MethodCall { args, .. } => {
+                        for a in args {
+                            n += visit_expr(&a.expr, target);
+                        }
+                    }
+                    TirExprKind::Unary { expr: inner, .. }
+                    | TirExprKind::Cast { expr: inner, .. } => n += visit_expr(inner, target),
+                    TirExprKind::Assign { target: t, value } => {
+                        n += visit_expr(t, target) + visit_expr(value, target);
+                    }
+                    _ => {}
+                }
+                n
+            }
+            fn visit_stmt(s: &TirStmt, target: u64) -> usize {
+                match &s.kind {
+                    TirStmtKind::Let { value, .. } | TirStmtKind::Expr(value) => {
+                        visit_expr(value, target)
+                    }
+                    TirStmtKind::If {
+                        condition,
+                        then_block,
+                        else_block,
+                    } => {
+                        let mut n = visit_expr(condition, target)
+                            + visit_block(then_block.stmts.as_slice(), target);
+                        if let Some(b) = else_block {
+                            n += visit_block(b.stmts.as_slice(), target);
+                        }
+                        n
+                    }
+                    TirStmtKind::Loop { body }
+                    | TirStmtKind::LabeledBlock { block: body, .. } => {
+                        visit_block(body.stmts.as_slice(), target)
+                    }
+                    _ => 0,
+                }
+            }
+            fn visit_block(stmts: &[TirStmt], target: u64) -> usize {
+                stmts.iter().map(|s| visit_stmt(s, target)).sum()
+            }
+            visit_block(stmts, target)
+        }
+
         let (registry, _) = WasiRegistry::build_from_stdlib();
         let elem_ty = named_type("IpAddress");
-        let expected_size = crate::component_model::cm_size_with_registry_scoped(
+        let expected_size = u64::from(crate::component_model::cm_size_with_registry_scoped(
             &elem_ty,
             registry,
             Some("sockets"),
-        );
+        ));
         // Sanity: registry-derived size differs from the 4-byte fallback.
         assert!(expected_size > 4, "registry size should exceed handle size");
 
@@ -785,14 +847,11 @@ mod tests {
             &ctx,
         );
         // Stride appears at element-addr offset (`i * elem_size`) and in
-        // the realloc free (`count * elem_size`). The registry-aware path
-        // should emit `IntLiteral { value: <expected_size> }` at both sites.
-        let dump = format!("{stmts:?}");
-        let needle = format!("value: {expected_size}");
+        // the realloc free (`count * elem_size`).
+        let occurrences = count_int_literals(&stmts, expected_size);
         assert!(
-            dump.matches(&needle).count() >= 2,
-            "expected `{needle}` at ≥ 2 sites, got: {}",
-            dump.matches(&needle).count()
+            occurrences >= 2,
+            "expected ≥2 `IntLiteral {{ value: {expected_size} }}` occurrences, got {occurrences}"
         );
     }
 
