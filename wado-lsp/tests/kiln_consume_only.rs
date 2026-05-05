@@ -75,6 +75,10 @@ struct FixtureSpec<'a> {
     /// pins `GENERATED_BODY`'s hash; passing anything else simulates a
     /// hand-edit (hit-but-modified).
     generated_on_disk: &'a str,
+    /// Override the `generator` identity written into metadata.
+    /// Defaults to `"fake:gen@0.1"` so it matches what
+    /// `generator_identity` derives for the inline `module:`.
+    metadata_generator: Option<&'a str>,
 }
 
 impl Default for FixtureSpec<'_> {
@@ -83,6 +87,7 @@ impl Default for FixtureSpec<'_> {
             schema_on_disk: SCHEMA_BODY,
             read_on_disk: None,
             generated_on_disk: GENERATED_BODY,
+            metadata_generator: None,
         }
     }
 }
@@ -117,7 +122,10 @@ fn build_fixture(spec: FixtureSpec<'_>) -> Fixture {
     let metadata = Metadata {
         version: METADATA_VERSION,
         invocation: "kiln-test".to_string(),
-        generator: "fake:gen@0.1".to_string(),
+        generator: spec
+            .metadata_generator
+            .unwrap_or("fake:gen@0.1")
+            .to_string(),
         generator_source_hash: String::new(),
         primary: FileHash {
             path: "grammars/calc.g4".to_string(),
@@ -331,6 +339,78 @@ fn metadata_with_traversal_paths_is_cache_miss() {
         assert!(
             has_warning(&diags, "KILN_STALE_CACHE"),
             "traversal path must be refused as cache miss, got {diags:#?}",
+        );
+    });
+}
+
+#[test]
+fn generator_identity_mismatch_is_cache_miss() {
+    futures::executor::block_on(async {
+        // Same schema, same options, but the inline `module:` now
+        // resolves to a different `generator_identity` than what the
+        // metadata pinned (e.g. user bumped the generator version or
+        // switched packages). The LSP must refuse the redirect — a
+        // hit here would silently consume output produced by a
+        // different generator.
+        let fixture = build_fixture(FixtureSpec {
+            metadata_generator: Some("fake:gen@9.9"),
+            ..FixtureSpec::default()
+        });
+        let (engine, host) = engine_with(&fixture);
+
+        let diags = engine.diagnostics(&fixture.entry_uri, &host).await;
+
+        assert!(
+            has_warning(&diags, "KILN_STALE_CACHE"),
+            "generator-identity mismatch must be refused as cache miss, got {diags:#?}",
+        );
+    });
+}
+
+#[test]
+fn missing_output_is_cache_miss() {
+    futures::executor::block_on(async {
+        // Cache says the output exists, but the file is gone.
+        // CLI parity: `wado_cli::kiln_driver::cache_matches` treats
+        // an unreadable output as a miss; the LSP must do the same
+        // rather than redirect into thin air.
+        let fixture = build_fixture(FixtureSpec::default());
+        std::fs::remove_file(fixture.root.path().join("tests/generated/calc.wado")).unwrap();
+
+        let (engine, host) = engine_with(&fixture);
+        let diags = engine.diagnostics(&fixture.entry_uri, &host).await;
+
+        assert!(
+            has_warning(&diags, "KILN_STALE_CACHE"),
+            "missing output must be refused as cache miss, got {diags:#?}",
+        );
+    });
+}
+
+#[cfg(unix)]
+#[test]
+fn symlink_escape_is_cache_miss() {
+    futures::executor::block_on(async {
+        // Replace the generated output with a symlink that points at
+        // a sentinel file outside the workspace. `safe_join`
+        // canonicalizes both the joined path and `manifest_root`,
+        // so the resolved target must lie under the workspace —
+        // anything else is refused as a cache miss.
+        let fixture = build_fixture(FixtureSpec::default());
+        let outside_dir = tempfile::tempdir().unwrap();
+        let outside_file = outside_dir.path().join("victim.wado");
+        std::fs::write(&outside_file, "pub fn pwned() -> i32 { return 0; }\n").unwrap();
+
+        let inside = fixture.root.path().join("tests/generated/calc.wado");
+        std::fs::remove_file(&inside).unwrap();
+        std::os::unix::fs::symlink(&outside_file, &inside).unwrap();
+
+        let (engine, host) = engine_with(&fixture);
+        let diags = engine.diagnostics(&fixture.entry_uri, &host).await;
+
+        assert!(
+            has_warning(&diags, "KILN_STALE_CACHE"),
+            "symlink escape must be refused as cache miss, got {diags:#?}",
         );
     });
 }

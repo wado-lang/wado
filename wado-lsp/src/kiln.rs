@@ -30,7 +30,7 @@ use std::path::{Path, PathBuf};
 use wado_compiler::ast::{Item, Module};
 use wado_compiler::kiln::metadata::{METADATA_VERSION, Metadata, metadata_filename};
 use wado_compiler::kiln::{
-    InvocationIndex, InvocationPath, collect_inline_invocations, content_hash,
+    InvocationIndex, InvocationPath, collect_inline_invocations, content_hash, generator_identity,
     hash_options_canonical, hex_digest,
 };
 use wado_compiler::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
@@ -166,6 +166,14 @@ fn resolve_invocation(
         return Err("options changed since last generation".to_string());
     }
 
+    let current_identity = generator_identity(&invocation.module);
+    if metadata.generator != current_identity {
+        return Err(format!(
+            "generator changed since last generation ({} → {})",
+            metadata.generator, current_identity,
+        ));
+    }
+
     // `generator_source_hash` is recorded by the CLI driver from the
     // generator package's compiled component closure. The LSP runs in
     // consume-only mode (no provider, no compile of the generator) and
@@ -212,29 +220,37 @@ fn resolve_invocation(
         }
     }
 
-    let entry_output = metadata
-        .outputs
-        .iter()
-        .find(|o| o.entry)
-        .ok_or_else(|| "no entry output recorded in metadata".to_string())?;
-
-    let Some(abs_entry) = safe_join(manifest_root, &entry_output.path) else {
-        return Err(format!(
-            "entry output path {:?} is absolute or contains `..`",
-            entry_output.path,
-        ));
-    };
-    if !abs_entry.is_file() {
-        return Err(format!("{} missing on disk", entry_output.path));
+    if !metadata.outputs.iter().any(|o| o.entry) {
+        return Err("no entry output recorded in metadata".to_string());
     }
 
     let mut modified = Vec::new();
+    let mut entry_abs: Option<PathBuf> = None;
     for output in &metadata.outputs {
-        if !file_matches(manifest_root, &output.path, &output.hash) {
+        let Some(abs) = safe_join(manifest_root, &output.path) else {
+            return Err(format!(
+                "output path {:?} is absolute, contains `..`, or escapes the workspace",
+                output.path,
+            ));
+        };
+        let bytes = match std::fs::read(&abs) {
+            Ok(b) => b,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                return Err(format!("{} missing on disk", output.path));
+            }
+            Err(e) => {
+                return Err(format!("cannot read {}: {e}", output.path));
+            }
+        };
+        if hex_digest(&content_hash(&bytes)) != output.hash {
             modified.push(output.path.clone());
+        }
+        if output.entry {
+            entry_abs = Some(abs);
         }
     }
 
+    let abs_entry = entry_abs.expect("entry output presence verified above");
     let canonical = std::fs::canonicalize(&abs_entry).unwrap_or(abs_entry);
     Ok((path_to_kiln_uri(&canonical), modified))
 }
@@ -254,15 +270,25 @@ fn file_matches(manifest_root: &Path, path: &str, expected_hex: &str) -> bool {
     hex_digest(&content_hash(&bytes)) == expected_hex
 }
 
-/// Join `rel` onto `manifest_root` while refusing absolute paths and
-/// any `..` traversal. Defends against a crafted inline `output_dir`
-/// or a tampered `<primary>.kiln.json` from making the LSP read or
-/// hash arbitrary files outside the workspace.
+/// Join `rel` onto `manifest_root` while refusing absolute paths,
+/// `..` traversal, and symlink escapes out of the workspace. Defends
+/// against a crafted inline `output_dir` or a tampered
+/// `<primary>.kiln.json` making the LSP read or hash arbitrary files
+/// outside the workspace.
 ///
 /// Returns `None` for any path the caller should treat as a cache miss
 /// (or, in the case of the `metadata_path` build, a hard validation
 /// error). Callers do not need to repeat this check on the resulting
 /// `PathBuf`.
+///
+/// Symlink check: when both `manifest_root` and the joined path
+/// canonicalize successfully, the joined canonical path must remain
+/// under the canonical root. When the joined path does not exist yet
+/// (canonicalize fails) we keep the lexical join — the textual
+/// `..`/absolute checks above already rule out the obvious escapes,
+/// and a subsequent read on a non-existent file is harmless cache
+/// miss. There is no TOCTOU defense beyond this; callers operate
+/// read-only.
 fn safe_join(manifest_root: &Path, rel: &str) -> Option<PathBuf> {
     use std::path::Component;
     let rel_path = Path::new(rel);
@@ -275,7 +301,14 @@ fn safe_join(manifest_root: &Path, rel: &str) -> Option<PathBuf> {
             Component::ParentDir | Component::RootDir | Component::Prefix(_) => return None,
         }
     }
-    Some(manifest_root.join(rel_path))
+    let joined = manifest_root.join(rel_path);
+    if let (Ok(canon_root), Ok(canon_joined)) =
+        (std::fs::canonicalize(manifest_root), std::fs::canonicalize(&joined))
+        && !canon_joined.starts_with(&canon_root)
+    {
+        return None;
+    }
+    Some(joined)
 }
 
 /// Walk up from `entry_path`'s directory looking for the nearest
