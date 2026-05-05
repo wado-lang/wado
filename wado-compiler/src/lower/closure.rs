@@ -109,7 +109,9 @@ fn build_specialized_method_info(info: &LocalMethodName, functor_suffix: &str) -
 
 /// Snapshot taken in Phase 1 for the functor-generation pass. `body` is a
 /// deep clone so the original AST can be mutated in place by later passes
-/// without disturbing the synthesised `__call` body.
+/// without disturbing the synthesised `__call` body. The body is also
+/// re-unparsed by `generate_functor_items` to bake the per-literal source
+/// string into `__Closure_N^InspectAlt::inspect_alt`.
 #[derive(Debug, Clone)]
 struct CollectedClosure {
     id: u32,
@@ -122,11 +124,6 @@ struct CollectedClosure {
     /// The closure expression's own type — a `fn(...)` type that carries
     /// the canonical return type even when the body is a Block expr.
     func_type_id: TypeId,
-    /// TIR-unparsed source of the closure (set in `desugar.rs`). Consumed
-    /// when synthesising `__Closure_N^InspectAlt::inspect_alt` so the
-    /// per-literal source body becomes a compile-time string constant in
-    /// the impl. `None` for synthesised closures that have no source.
-    source_text: Option<String>,
     span: Span,
 }
 
@@ -645,10 +642,19 @@ impl ClosureLowerer {
             // ClosureCallSiteLowerer redirect added below; standard DCE
             // removes them when neither is reached.
             let signature = format_closure_signature(&collected.params, return_type, type_table);
-            let source = collected
-                .source_text
-                .clone()
-                .unwrap_or_else(|| signature.clone());
+            // Recover the per-literal source body (`|x: i32| x + 1`)
+            // by unparsing the captured TIR closure form. The TIR is
+            // post-resolve so type annotations are concrete; output
+            // may differ from the original source byte-for-byte but
+            // remains the canonical inspect-debug representation per
+            // WEP: Inspect (Debug Output) > Closure Inspect via
+            // Runtime Dispatch.
+            let source = crate::unparse::unparse_tir_closure_source(
+                &collected.params,
+                &collected.captures,
+                &collected.body,
+                type_table,
+            );
             self.generate_functor_format_methods(
                 &struct_name,
                 self_ref_type,
@@ -1078,7 +1084,6 @@ impl TirMutVisitor for CollectClosuresVisitor<'_> {
             params,
             body,
             captures,
-            source_text,
             ..
         } = &expr.kind
         {
@@ -1089,7 +1094,6 @@ impl TirMutVisitor for CollectClosuresVisitor<'_> {
                 captures: captures.clone(),
                 return_type: body.type_id,
                 func_type_id,
-                source_text: source_text.clone(),
                 span,
             });
         }
@@ -1192,7 +1196,6 @@ impl TirMutVisitor for FuncRefToClosureRewriter<'_> {
                 body: Box::new(body),
                 captures: Vec::new(),
                 functor_id: None,
-                source_text: None,
                 address_taken_locals: IndexSet::default(),
                 body_locals: Vec::new(),
             };

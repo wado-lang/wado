@@ -27,7 +27,7 @@ struct Holder {
 
 test "literal-site :#? still works" {
     let add_one = |x: i32| x + 1;
-    assert `{add_one:#?}` == "|x: i32| x + 1";
+    assert `{add_one:#?}` == "|x: i32| (x + 1)";
 }
 
 test "closure passed as fn param keeps signature for :?" {
@@ -37,12 +37,12 @@ test "closure passed as fn param keeps signature for :?" {
 
 test "closure passed as fn param keeps source for :#?" {
     let add_one = |x: i32| x + 1;
-    assert fmt_alt(add_one) == "|x: i32| x + 1";
+    assert fmt_alt(add_one) == "|x: i32| (x + 1)";
 }
 
 test "closure stored in struct field keeps source for :#?" {
     let h = Holder { cb: |y: i32| y * 2 };
-    assert `{h.cb:#?}` == "|y: i32| y * 2";
+    assert `{h.cb:#?}` == "|y: i32| (y * 2)";
 }
 
 __DATA__

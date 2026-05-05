@@ -210,7 +210,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 body: Box::new(body),
                 captures,
                 functor_id: None,
-                source_text: closure.source_text.clone(),
                 address_taken_locals: closure_ctx.address_taken_locals,
                 body_locals,
             },
@@ -331,7 +330,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 body: Box::new(body),
                 captures,
                 functor_id: None, // Assigned during lowering
-                source_text: closure.source_text.clone(),
                 address_taken_locals: closure_ctx.address_taken_locals,
                 body_locals,
             },

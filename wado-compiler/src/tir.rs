@@ -2500,8 +2500,6 @@ pub enum TirExprKind {
         /// Optional functor ID assigned during lowering.
         /// Used by monomorphize phase to look up the corresponding `ClosureFunctor`.
         functor_id: Option<u32>,
-        /// Pre-desugar source text for inspect output.
-        source_text: Option<String>,
         /// Closure-scope address-taken locals, captured from the
         /// closure's resolution `FunctionContext`. The boxing pass uses
         /// this when descending into the closure body — the body's

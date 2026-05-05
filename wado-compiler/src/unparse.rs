@@ -3192,7 +3192,7 @@ use crate::lexer::is_valid_ident;
 use crate::tir::{
     TirBinaryOp, TirBlock, TirEnum, TirExpr, TirExprKind, TirFlags, TirFunction, TirGlobal,
     TirLiteralPattern, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct,
-    TirUnaryOp, TypeTable,
+    TirUnaryOp, TypeId, TypeTable,
 };
 
 /// Unparses TIR back to pseudo-Wado source code.
@@ -3999,18 +3999,7 @@ impl<'a> TirUnparser<'a> {
                 captures,
                 ..
             } => {
-                self.delimited("|", "|", params, |s, (name, type_id)| {
-                    s.output.push_str(name);
-                    s.output.push_str(": ");
-                    let ty = s.type_table.type_name(*type_id);
-                    s.output.push_str(&ty);
-                });
-                if !captures.is_empty() {
-                    self.output.push_str(" captures");
-                    self.delimited("[", "]", captures, |s, cap| s.output.push_str(&cap.name));
-                }
-                self.output.push(' ');
-                self.unparse_expr(body);
+                self.unparse_closure_form(params, captures, body);
             }
             TirExprKind::IndirectCall { callee, args } => {
                 self.unparse_expr(callee);
@@ -4131,6 +4120,30 @@ impl<'a> TirUnparser<'a> {
             self.output.push_str("    ");
         }
     }
+
+    /// Emit the closure literal form `|name: Type, ...| body` (with an
+    /// optional ` captures[...]` clause) into the unparser's output.
+    /// Shared by the `TirExprKind::Closure` arm and by
+    /// [`unparse_tir_closure_source`].
+    fn unparse_closure_form(
+        &mut self,
+        params: &[(String, TypeId)],
+        captures: &[crate::tir::TirCapture],
+        body: &TirExpr,
+    ) {
+        self.delimited("|", "|", params, |s, (name, type_id)| {
+            s.output.push_str(name);
+            s.output.push_str(": ");
+            let ty = s.type_table.type_name(*type_id);
+            s.output.push_str(&ty);
+        });
+        if !captures.is_empty() {
+            self.output.push_str(" captures");
+            self.delimited("[", "]", captures, |s, cap| s.output.push_str(&cap.name));
+        }
+        self.output.push(' ');
+        self.unparse_expr(body);
+    }
 }
 
 fn emit_tir_literal_pattern(lit: &TirLiteralPattern, output: &mut String) {
@@ -4197,6 +4210,22 @@ fn tir_unary_op_str(op: TirUnaryOp) -> &'static str {
         TirUnaryOp::MutRef => "&mut ",
         TirUnaryOp::Deref => "*",
     }
+}
+
+/// Unparse a TIR closure as `|name: Type, ...| body` source text.
+///
+/// Used by `lower::closure` to bake the per-literal source string
+/// into `__Closure_N^InspectAlt::inspect_alt` without requiring
+/// every TIR `Closure` node to carry an unparsed-AST string.
+pub fn unparse_tir_closure_source(
+    params: &[(String, TypeId)],
+    captures: &[crate::tir::TirCapture],
+    body: &TirExpr,
+    type_table: &TypeTable,
+) -> String {
+    let mut unparser = TirUnparser::new(type_table);
+    unparser.unparse_closure_form(params, captures, body);
+    unparser.output
 }
 
 /// Public function to unparse TIR module to pseudo-Wado source
