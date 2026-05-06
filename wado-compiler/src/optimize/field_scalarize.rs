@@ -823,23 +823,9 @@ fn scalarize_block(
         match &mut stmt.kind {
             TirStmtKind::Loop { body } => {
                 // Recurse into inner blocks/loops first.
-                changed |= scalarize_block(
-                    body,
-                    local_count,
-                    locals,
-                    type_table,
-                    cache,
-                    analysis,
-                );
+                changed |= scalarize_block(body, local_count, locals, type_table, cache, analysis);
                 // Try to scalarize hot fields at this loop level.
-                let result = scalarize_loop(
-                    body,
-                    local_count,
-                    locals,
-                    type_table,
-                    cache,
-                    analysis,
-                );
+                let result = scalarize_loop(body, local_count, locals, type_table, cache, analysis);
                 if result.pre_stmts.is_empty() {
                     new_stmts.push(stmt);
                 } else {
@@ -854,35 +840,16 @@ fn scalarize_block(
                 else_block,
                 ..
             } => {
-                changed |= scalarize_block(
-                    then_block,
-                    local_count,
-                    locals,
-                    type_table,
-                    cache,
-                    analysis,
-                );
+                changed |=
+                    scalarize_block(then_block, local_count, locals, type_table, cache, analysis);
                 if let Some(eb) = else_block {
-                    changed |= scalarize_block(
-                        eb,
-                        local_count,
-                        locals,
-                        type_table,
-                        cache,
-                        analysis,
-                    );
+                    changed |=
+                        scalarize_block(eb, local_count, locals, type_table, cache, analysis);
                 }
                 new_stmts.push(stmt);
             }
             TirStmtKind::LabeledBlock { block: inner, .. } => {
-                changed |= scalarize_block(
-                    inner,
-                    local_count,
-                    locals,
-                    type_table,
-                    cache,
-                    analysis,
-                );
+                changed |= scalarize_block(inner, local_count, locals, type_table, cache, analysis);
                 new_stmts.push(stmt);
             }
             TirStmtKind::IfLet {
@@ -890,23 +857,11 @@ fn scalarize_block(
                 else_block,
                 ..
             } => {
-                changed |= scalarize_block(
-                    then_block,
-                    local_count,
-                    locals,
-                    type_table,
-                    cache,
-                    analysis,
-                );
+                changed |=
+                    scalarize_block(then_block, local_count, locals, type_table, cache, analysis);
                 if let Some(eb) = else_block {
-                    changed |= scalarize_block(
-                        eb,
-                        local_count,
-                        locals,
-                        type_table,
-                        cache,
-                        analysis,
-                    );
+                    changed |=
+                        scalarize_block(eb, local_count, locals, type_table, cache, analysis);
                 }
                 new_stmts.push(stmt);
             }
