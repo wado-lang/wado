@@ -839,7 +839,7 @@ fn parse_s(p: &mut Parser) -> Result<SNode, ParseError> {
     let start = p.peek().span.start;
     let e = parse_e(p)?;
     return Result::<SNode, ParseError>::Ok(SNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         e,
     });
 }
@@ -850,7 +850,7 @@ fn parse_e_atom(p: &mut Parser) -> Result<ENode, ParseError> {
     if kind == TK_INT {
         let int = p.expect(TK_INT)?;
         return Result::<ENode, ParseError>::Ok(ENode::Alt1(EAlt1 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             int,
         }));
     }
@@ -860,7 +860,7 @@ fn parse_e_atom(p: &mut Parser) -> Result<ENode, ParseError> {
         let x = e;
         let rparen = p.expect(TK_LIT_RPAREN)?;
         return Result::<ENode, ParseError>::Ok(ENode::Alt2(EAlt2 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             lparen,
             x,
             rparen,
@@ -879,7 +879,7 @@ fn parse_e_lr_0(p: &mut Parser, left: ENode, start: i32) -> Result<ENode, ParseE
     let e = parse_e(p, 2)?;
     let b = e;
     return Result::<ENode, ParseError>::Ok(ENode::Alt0(EAlt0 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         a: left,
         op,
         b,

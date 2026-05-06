@@ -1016,7 +1016,7 @@ fn parse_program(p: &mut Parser) -> Result<ProgramNode, ParseError> {
     }
     let eof = p.expect(TK_EOF)?;
     return Result::<ProgramNode, ParseError>::Ok(ProgramNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         stmt_list,
         eof,
     });
@@ -1028,21 +1028,21 @@ fn parse_stmt(p: &mut Parser) -> Result<StmtNode, ParseError> {
     if kind == TK_ID {
         let assign_stmt = parse_assign_stmt(p)?;
         return Result::<StmtNode, ParseError>::Ok(StmtNode::Alt0(StmtAlt0 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             assign_stmt,
         }));
     }
     if kind == TK_PAIR {
         let pair_stmt = parse_pair_stmt(p)?;
         return Result::<StmtNode, ParseError>::Ok(StmtNode::Alt1(StmtAlt1 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             pair_stmt,
         }));
     }
     if kind == TK_LIST {
         let mix_stmt = parse_mix_stmt(p)?;
         return Result::<StmtNode, ParseError>::Ok(StmtNode::Alt2(StmtAlt2 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             mix_stmt,
         }));
     }
@@ -1062,7 +1062,7 @@ fn parse_assign_stmt(p: &mut Parser) -> Result<AssignStmtNode, ParseError> {
     let value = string;
     let semi = p.expect(TK_SEMI)?;
     return Result::<AssignStmtNode, ParseError>::Ok(AssignStmtNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         key,
         eq,
         value,
@@ -1079,7 +1079,7 @@ fn parse_pair_stmt(p: &mut Parser) -> Result<PairStmtNode, ParseError> {
     let id = p.expect(TK_ID)?;
     let semi = p.expect(TK_SEMI)?;
     return Result::<PairStmtNode, ParseError>::Ok(PairStmtNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         pair,
         k,
         colon,
@@ -1092,7 +1092,7 @@ fn parse_key_rule(p: &mut Parser) -> Result<KeyRuleNode, ParseError> {
     let start = p.peek().span.start;
     let id = p.expect(TK_ID)?;
     return Result::<KeyRuleNode, ParseError>::Ok(KeyRuleNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         id,
     });
 }
@@ -1128,7 +1128,7 @@ fn parse_mix_stmt(p: &mut Parser) -> Result<MixStmtNode, ParseError> {
     }
     let semi = p.expect(TK_SEMI)?;
     return Result::<MixStmtNode, ParseError>::Ok(MixStmtNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         list,
         head,
         comma_rest_list,

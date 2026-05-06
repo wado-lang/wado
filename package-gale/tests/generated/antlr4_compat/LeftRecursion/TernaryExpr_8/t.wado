@@ -887,7 +887,7 @@ fn parse_s(p: &mut Parser) -> Result<SNode, ParseError> {
     let e = parse_e(p)?;
     let eof = p.expect(TK_EOF)?;
     return Result::<SNode, ParseError>::Ok(SNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         e,
         eof,
     });
@@ -899,7 +899,7 @@ fn parse_e_atom(p: &mut Parser) -> Result<ENode, ParseError> {
     if kind == TK_ID {
         let id = p.expect(TK_ID)?;
         return Result::<ENode, ParseError>::Ok(ENode::Alt4(EAlt4 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             id,
         }));
     }
@@ -914,7 +914,7 @@ fn parse_e_lr_0(p: &mut Parser, left: ENode, start: i32) -> Result<ENode, ParseE
     let star = p.expect(TK_LIT_STAR)?;
     let e_2 = parse_e(p, 5)?;
     return Result::<ENode, ParseError>::Ok(ENode::Alt0(EAlt0 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         e: left,
         star,
         e_2,
@@ -925,7 +925,7 @@ fn parse_e_lr_1(p: &mut Parser, left: ENode, start: i32) -> Result<ENode, ParseE
     let plus = p.expect(TK_LIT_PLUS)?;
     let e_2 = parse_e(p, 4)?;
     return Result::<ENode, ParseError>::Ok(ENode::Alt1(EAlt1 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         e: left,
         plus,
         e_2,
@@ -938,7 +938,7 @@ fn parse_e_lr_2(p: &mut Parser, left: ENode, start: i32) -> Result<ENode, ParseE
     let colon = p.expect(TK_LIT_COLON)?;
     let e_3 = parse_e(p, 2)?;
     return Result::<ENode, ParseError>::Ok(ENode::Alt2(EAlt2 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         e: left,
         question,
         e_2,
@@ -951,7 +951,7 @@ fn parse_e_lr_3(p: &mut Parser, left: ENode, start: i32) -> Result<ENode, ParseE
     let eq = p.expect(TK_LIT_EQ)?;
     let e_2 = parse_e(p, 1)?;
     return Result::<ENode, ParseError>::Ok(ENode::Alt3(EAlt3 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         e: left,
         eq,
         e_2,

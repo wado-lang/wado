@@ -833,7 +833,7 @@ fn parse_line(p: &mut Parser) -> Result<LineNode, ParseError> {
     }
     let eof = p.expect(TK_EOF)?;
     return Result::<LineNode, ParseError>::Ok(LineNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         keyword_or_ident_or_exact_list,
         eof,
     });

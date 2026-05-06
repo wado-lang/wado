@@ -59,7 +59,7 @@ Implementation references:
 - `package-gale/src/parser_gen.wado` — `gen_scan_follow_variant`,
   `gen_parse_follow_variant`, the `current_follow_mask` /
   `ruleref_call_follow` threading, and
-  `sort_group_by_element_count_desc` for LL-correct group dispatch.
+  `sort_group_by_mandatory_count_desc` for LL-correct group dispatch.
 
 ### What does not work yet (v1 limitations)
 

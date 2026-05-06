@@ -724,7 +724,7 @@ fn parse_r(p: &mut Parser) -> Result<RNode, ParseError> {
     let a = parse_a(p)?;
     let b = parse_b(p)?;
     return Result::<RNode, ParseError>::Ok(RNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         a,
         b,
     });
@@ -734,7 +734,7 @@ fn parse_a(p: &mut Parser) -> Result<ANode, ParseError> {
     let start = p.peek().span.start;
     let a = p.expect(TK_A)?;
     return Result::<ANode, ParseError>::Ok(ANode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         a,
     });
 }
@@ -743,7 +743,7 @@ fn parse_b(p: &mut Parser) -> Result<BNode, ParseError> {
     let start = p.peek().span.start;
     let b = p.expect(TK_B)?;
     return Result::<BNode, ParseError>::Ok(BNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         b,
     });
 }

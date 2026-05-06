@@ -786,7 +786,7 @@ fn parse_expr_atom(p: &mut Parser) -> Result<ExprNode, ParseError> {
     if kind == TK_INT {
         let int = p.expect(TK_INT)?;
         return Result::<ExprNode, ParseError>::Ok(ExprNode::Int(ExprInt {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             int,
         }));
     }
@@ -801,7 +801,7 @@ fn parse_expr_lr_0(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNod
     let caret = p.expect(TK_LIT_CARET)?;
     let expr_2 = parse_expr(p, 2)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Pow(ExprPow {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         expr: left,
         caret,
         expr_2,
@@ -812,7 +812,7 @@ fn parse_expr_lr_1(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNod
     let plus = p.expect(TK_LIT_PLUS)?;
     let expr_2 = parse_expr(p, 2)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Add(ExprAdd {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         expr: left,
         plus,
         expr_2,

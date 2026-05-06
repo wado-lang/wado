@@ -2799,14 +2799,14 @@ fn gen_alt_body(w: &mut CodeWriter, type_name: &String, variant_case: Option<Str
         let sname = struct_name.unwrap();
         w.line(`return Result::<{type_name}, ParseError>::Ok({type_name}::{case}({sname} \{`);
         w.indent();
-        w.line("span: Span::new(start, p.last_end()),");
+        w.line("span: Span::new(start, i32::max(start, p.last_end())),");
         gen_field_assignments(w, &alt.elements, ctx);
         w.dedent();
         w.line("}));");
     } else {
         w.line(`return Result::<{type_name}, ParseError>::Ok({type_name} \{`);
         w.indent();
-        w.line("span: Span::new(start, p.last_end()),");
+        w.line("span: Span::new(start, i32::max(start, p.last_end())),");
         gen_field_assignments(w, &alt.elements, ctx);
         w.dedent();
         w.line("});");
@@ -2858,14 +2858,14 @@ fn gen_alt_body_skip(w: &mut CodeWriter, type_name: &String, variant_case: Optio
         let sname = struct_name.unwrap();
         w.line(`return Result::<{type_name}, ParseError>::Ok({type_name}::{case}({sname} \{`);
         w.indent();
-        w.line("span: Span::new(start, p.last_end()),");
+        w.line("span: Span::new(start, i32::max(start, p.last_end())),");
         gen_field_assignments(w, &alt.elements, ctx);
         w.dedent();
         w.line("}));");
     } else {
         w.line(`return Result::<{type_name}, ParseError>::Ok({type_name} \{`);
         w.indent();
-        w.line("span: Span::new(start, p.last_end()),");
+        w.line("span: Span::new(start, i32::max(start, p.last_end())),");
         gen_field_assignments(w, &alt.elements, ctx);
         w.dedent();
         w.line("});");
@@ -5411,7 +5411,7 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
         let first_field = first_binding;
         w.line(`return Result::<{type_name}, ParseError>::Ok({type_name}::{case_names[lr_idx]}({sname} \{`);
         w.indent();
-        w.line("span: Span::new(start, p.last_end()),");
+        w.line("span: Span::new(start, i32::max(start, p.last_end())),");
         if first_is_list_label {
             // Cast so `[left]` matches the `Array<T>` field type rather
             // than the inferred 1-tuple `[T]`.

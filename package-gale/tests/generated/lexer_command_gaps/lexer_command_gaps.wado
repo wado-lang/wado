@@ -935,7 +935,7 @@ fn parse_text(p: &mut Parser) -> Result<TextNode, ParseError> {
     }
     let eof = p.expect(TK_EOF)?;
     return Result::<TextNode, ParseError>::Ok(TextNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         word_or_number_or_pragma_list,
         eof,
     });

@@ -732,7 +732,7 @@ fn parse_stmt(p: &mut Parser) -> Result<StmtNode, ParseError> {
     let ident = p.expect(TK_IDENT)?;
     let eof = p.expect(TK_EOF)?;
     return Result::<StmtNode, ParseError>::Ok(StmtNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         if_,
         ident,
         eof,

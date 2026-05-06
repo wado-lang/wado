@@ -911,7 +911,7 @@ fn parse_file(p: &mut Parser) -> Result<FileNode, ParseError> {
     }
     let eof = p.expect(TK_EOF)?;
     return Result::<FileNode, ParseError>::Ok(FileNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         wildcard_list,
         constant_item_list,
         eof,
@@ -926,7 +926,7 @@ fn parse_constant(p: &mut Parser) -> Result<ConstantNode, ParseError> {
     let lit_int = p.expect(TK_LIT_INT)?;
     let id = p.expect(TK_ID)?;
     return Result::<ConstantNode, ParseError>::Ok(ConstantNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         lit_public,
         lit_static,
         lit_final,

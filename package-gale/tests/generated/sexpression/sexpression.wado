@@ -1220,7 +1220,7 @@ fn parse_sexpr(p: &mut Parser) -> Result<SexprNode, ParseError> {
     }
     let eof = p.expect(TK_EOF)?;
     return Result::<SexprNode, ParseError>::Ok(SexprNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         item_list,
         eof,
     });
@@ -1234,7 +1234,7 @@ fn parse_item_bt_2(p: &mut Parser) -> Result<ItemNode, ParseError> {
     let item_2 = parse_item(p)?;
     let rparen = p.expect(TK_RPAREN)?;
     return Result::<ItemNode, ParseError>::Ok(ItemNode::Alt2(ItemAlt2 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         lparen,
         item,
         dot,
@@ -1262,7 +1262,7 @@ fn parse_item_bt_1(p: &mut Parser) -> Result<ItemNode, ParseError> {
     let start = p.peek().span.start;
     let list_ = parse_list_(p)?;
     return Result::<ItemNode, ParseError>::Ok(ItemNode::Alt1(ItemAlt1 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         list_,
     }));
 }
@@ -1280,7 +1280,7 @@ fn parse_item(p: &mut Parser) -> Result<ItemNode, ParseError> {
     if _gale_kind_set_1(kind) {
         let atom = parse_atom(p)?;
         return Result::<ItemNode, ParseError>::Ok(ItemNode::Alt0(ItemAlt0 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             atom,
         }));
     }
@@ -1336,7 +1336,7 @@ fn parse_list_(p: &mut Parser) -> Result<ListNode, ParseError> {
     }
     let rparen = p.expect(TK_RPAREN)?;
     return Result::<ListNode, ParseError>::Ok(ListNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         lparen,
         item_list,
         rparen,
@@ -1349,28 +1349,28 @@ fn parse_atom(p: &mut Parser) -> Result<AtomNode, ParseError> {
     if kind == TK_STRING {
         let string = p.expect(TK_STRING)?;
         return Result::<AtomNode, ParseError>::Ok(AtomNode::Alt0(AtomAlt0 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             string,
         }));
     }
     if kind == TK_SYMBOL {
         let symbol = p.expect(TK_SYMBOL)?;
         return Result::<AtomNode, ParseError>::Ok(AtomNode::Alt1(AtomAlt1 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             symbol,
         }));
     }
     if kind == TK_NUMBER {
         let number = p.expect(TK_NUMBER)?;
         return Result::<AtomNode, ParseError>::Ok(AtomNode::Alt2(AtomAlt2 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             number,
         }));
     }
     if kind == TK_DOT {
         let dot = p.expect(TK_DOT)?;
         return Result::<AtomNode, ParseError>::Ok(AtomNode::Alt3(AtomAlt3 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             dot,
         }));
     }

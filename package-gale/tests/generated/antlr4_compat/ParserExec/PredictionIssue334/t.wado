@@ -816,7 +816,7 @@ fn parse_file_(p: &mut Parser) -> Result<FileNode, ParseError> {
     };
     let eof = p.expect(TK_EOF)?;
     return Result::<FileNode, ParseError>::Ok(FileNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         item,
         semicolon_item_list,
         semicolon,
@@ -834,7 +834,7 @@ fn parse_item(p: &mut Parser) -> Result<ItemNode, ParseError> {
         null
     };
     return Result::<ItemNode, ParseError>::Ok(ItemNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         a,
         b,
     });

@@ -807,7 +807,7 @@ fn parse_r(p: &mut Parser) -> Result<RNode, ParseError> {
     let group_0 = group_0_inner;
     let eof = p.expect(TK_EOF)?;
     return Result::<RNode, ParseError>::Ok(RNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         group_0,
         eof,
     });
@@ -817,7 +817,7 @@ fn parse_wrapper(p: &mut Parser) -> Result<WrapperNode, ParseError> {
     let start = p.peek().span.start;
     let a = parse_a(p)?;
     return Result::<WrapperNode, ParseError>::Ok(WrapperNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         a,
     });
 }
@@ -832,7 +832,7 @@ fn parse_a(p: &mut Parser) -> Result<ANode, ParseError> {
         null
     };
     return Result::<ANode, ParseError>::Ok(ANode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         x,
         y,
     });
@@ -842,7 +842,7 @@ fn parse_b(p: &mut Parser) -> Result<BNode, ParseError> {
     let start = p.peek().span.start;
     let y = p.expect(TK_Y)?;
     return Result::<BNode, ParseError>::Ok(BNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         y,
     });
 }
@@ -858,7 +858,7 @@ fn parse_wrapper__follow_0(p: &mut Parser) -> Result<WrapperNode, ParseError> {
     let start = p.peek().span.start;
     let a = parse_a(p)?;
     return Result::<WrapperNode, ParseError>::Ok(WrapperNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         a,
     });
 }

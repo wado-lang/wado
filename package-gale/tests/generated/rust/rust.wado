@@ -16545,7 +16545,7 @@ fn parse_crate(p: &mut Parser) -> Result<CrateNode, ParseError> {
     }
     let eof = p.expect(TK_EOF)?;
     return Result::<CrateNode, ParseError>::Ok(CrateNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         inner_attribute_list,
         item_list,
         eof,
@@ -16558,7 +16558,7 @@ fn parse_macro_invocation(p: &mut Parser) -> Result<MacroInvocationNode, ParseEr
     let not = p.expect(TK_NOT)?;
     let delim_token_tree = parse_delim_token_tree(p)?;
     return Result::<MacroInvocationNode, ParseError>::Ok(MacroInvocationNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         simple_path,
         not,
         delim_token_tree,
@@ -16587,7 +16587,7 @@ fn parse_delim_token_tree(p: &mut Parser) -> Result<DelimTokenTreeNode, ParseErr
         }
         let rparen = p.expect(TK_RPAREN)?;
         return Result::<DelimTokenTreeNode, ParseError>::Ok(DelimTokenTreeNode::Alt0(DelimTokenTreeAlt0 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             lparen,
             token_tree_list,
             rparen,
@@ -16612,7 +16612,7 @@ fn parse_delim_token_tree(p: &mut Parser) -> Result<DelimTokenTreeNode, ParseErr
         }
         let rsquarebracket = p.expect(TK_RSQUAREBRACKET)?;
         return Result::<DelimTokenTreeNode, ParseError>::Ok(DelimTokenTreeNode::Alt1(DelimTokenTreeAlt1 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             lsquarebracket,
             token_tree_list,
             rsquarebracket,
@@ -16637,7 +16637,7 @@ fn parse_delim_token_tree(p: &mut Parser) -> Result<DelimTokenTreeNode, ParseErr
         }
         let rcurlybrace = p.expect(TK_RCURLYBRACE)?;
         return Result::<DelimTokenTreeNode, ParseError>::Ok(DelimTokenTreeNode::Alt2(DelimTokenTreeAlt2 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             lcurlybrace,
             token_tree_list,
             rcurlybrace,
@@ -16674,14 +16674,14 @@ fn parse_token_tree(p: &mut Parser) -> Result<TokenTreeNode, ParseError> {
             token_tree_token_list.push(token_tree_token);
         }
         return Result::<TokenTreeNode, ParseError>::Ok(TokenTreeNode::Alt0(TokenTreeAlt0 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             token_tree_token_list,
         }));
     }
     if _gale_kind_set_3(kind) {
         let delim_token_tree = parse_delim_token_tree(p)?;
         return Result::<TokenTreeNode, ParseError>::Ok(TokenTreeNode::Alt1(TokenTreeAlt1 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             delim_token_tree,
         }));
     }
@@ -16696,7 +16696,7 @@ fn parse_token_tree_token_bt_1(p: &mut Parser) -> Result<TokenTreeTokenNode, Par
     let start = p.peek().span.start;
     let macro_literal_token = parse_macro_literal_token(p)?;
     return Result::<TokenTreeTokenNode, ParseError>::Ok(TokenTreeTokenNode::Alt1(TokenTreeTokenAlt1 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         macro_literal_token,
     }));
 }
@@ -16712,7 +16712,7 @@ fn parse_token_tree_token_bt_0(p: &mut Parser) -> Result<TokenTreeTokenNode, Par
     let start = p.peek().span.start;
     let macro_identifier_like_token = parse_macro_identifier_like_token(p)?;
     return Result::<TokenTreeTokenNode, ParseError>::Ok(TokenTreeTokenNode::Alt0(TokenTreeTokenAlt0 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         macro_identifier_like_token,
     }));
 }
@@ -16759,21 +16759,21 @@ fn parse_token_tree_token(p: &mut Parser) -> Result<TokenTreeTokenNode, ParseErr
     if _gale_kind_set_7(kind) {
         let macro_punctuation_token = parse_macro_punctuation_token(p)?;
         return Result::<TokenTreeTokenNode, ParseError>::Ok(TokenTreeTokenNode::Alt2(TokenTreeTokenAlt2 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             macro_punctuation_token,
         }));
     }
     if _gale_kind_set_8(kind) {
         let macro_rep_op = parse_macro_rep_op(p)?;
         return Result::<TokenTreeTokenNode, ParseError>::Ok(TokenTreeTokenNode::Alt3(TokenTreeTokenAlt3 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             macro_rep_op,
         }));
     }
     if kind == TK_DOLLAR {
         let dollar = p.expect(TK_DOLLAR)?;
         return Result::<TokenTreeTokenNode, ParseError>::Ok(TokenTreeTokenNode::Alt4(TokenTreeTokenAlt4 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             dollar,
         }));
     }
@@ -16807,7 +16807,7 @@ fn parse_macro_invocation_semi_bt_0(p: &mut Parser) -> Result<MacroInvocationSem
     let rparen = p.expect(TK_RPAREN)?;
     let semi = p.expect(TK_SEMI)?;
     return Result::<MacroInvocationSemiNode, ParseError>::Ok(MacroInvocationSemiNode::Alt0(MacroInvocationSemiAlt0 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         simple_path,
         not,
         lparen,
@@ -16861,7 +16861,7 @@ fn parse_macro_invocation_semi_bt_1(p: &mut Parser) -> Result<MacroInvocationSem
     let rsquarebracket = p.expect(TK_RSQUAREBRACKET)?;
     let semi = p.expect(TK_SEMI)?;
     return Result::<MacroInvocationSemiNode, ParseError>::Ok(MacroInvocationSemiNode::Alt1(MacroInvocationSemiAlt1 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         simple_path,
         not,
         lsquarebracket,
@@ -16914,7 +16914,7 @@ fn parse_macro_invocation_semi_bt_2(p: &mut Parser) -> Result<MacroInvocationSem
     }
     let rcurlybrace = p.expect(TK_RCURLYBRACE)?;
     return Result::<MacroInvocationSemiNode, ParseError>::Ok(MacroInvocationSemiNode::Alt2(MacroInvocationSemiAlt2 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         simple_path,
         not,
         lcurlybrace,
@@ -16992,7 +16992,7 @@ fn parse_macro_rules_definition(p: &mut Parser) -> Result<MacroRulesDefinitionNo
     let identifier = parse_identifier(p)?;
     let macro_rules_def = parse_macro_rules_def(p)?;
     return Result::<MacroRulesDefinitionNode, ParseError>::Ok(MacroRulesDefinitionNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         kw_macrorules,
         not,
         identifier,
@@ -17009,7 +17009,7 @@ fn parse_macro_rules_def(p: &mut Parser) -> Result<MacroRulesDefNode, ParseError
         let rparen = p.expect(TK_RPAREN)?;
         let semi = p.expect(TK_SEMI)?;
         return Result::<MacroRulesDefNode, ParseError>::Ok(MacroRulesDefNode::Alt0(MacroRulesDefAlt0 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             lparen,
             macro_rules,
             rparen,
@@ -17022,7 +17022,7 @@ fn parse_macro_rules_def(p: &mut Parser) -> Result<MacroRulesDefNode, ParseError
         let rsquarebracket = p.expect(TK_RSQUAREBRACKET)?;
         let semi = p.expect(TK_SEMI)?;
         return Result::<MacroRulesDefNode, ParseError>::Ok(MacroRulesDefNode::Alt1(MacroRulesDefAlt1 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             lsquarebracket,
             macro_rules,
             rsquarebracket,
@@ -17034,7 +17034,7 @@ fn parse_macro_rules_def(p: &mut Parser) -> Result<MacroRulesDefNode, ParseError
         let macro_rules = parse_macro_rules(p)?;
         let rcurlybrace = p.expect(TK_RCURLYBRACE)?;
         return Result::<MacroRulesDefNode, ParseError>::Ok(MacroRulesDefNode::Alt2(MacroRulesDefAlt2 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             lcurlybrace,
             macro_rules,
             rcurlybrace,
@@ -17079,7 +17079,7 @@ fn parse_macro_rules(p: &mut Parser) -> Result<MacroRulesNode, ParseError> {
         null
     };
     return Result::<MacroRulesNode, ParseError>::Ok(MacroRulesNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         macro_rule,
         semi_macro_rule_list,
         semi,
@@ -17092,7 +17092,7 @@ fn parse_macro_rule(p: &mut Parser) -> Result<MacroRuleNode, ParseError> {
     let fatarrow = p.expect(TK_FATARROW)?;
     let macro_transcriber = parse_macro_transcriber(p)?;
     return Result::<MacroRuleNode, ParseError>::Ok(MacroRuleNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         macro_matcher,
         fatarrow,
         macro_transcriber,
@@ -17121,7 +17121,7 @@ fn parse_macro_matcher(p: &mut Parser) -> Result<MacroMatcherNode, ParseError> {
         }
         let rparen = p.expect(TK_RPAREN)?;
         return Result::<MacroMatcherNode, ParseError>::Ok(MacroMatcherNode::Alt0(MacroMatcherAlt0 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             lparen,
             macro_match_list,
             rparen,
@@ -17146,7 +17146,7 @@ fn parse_macro_matcher(p: &mut Parser) -> Result<MacroMatcherNode, ParseError> {
         }
         let rsquarebracket = p.expect(TK_RSQUAREBRACKET)?;
         return Result::<MacroMatcherNode, ParseError>::Ok(MacroMatcherNode::Alt1(MacroMatcherAlt1 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             lsquarebracket,
             macro_match_list,
             rsquarebracket,
@@ -17171,7 +17171,7 @@ fn parse_macro_matcher(p: &mut Parser) -> Result<MacroMatcherNode, ParseError> {
         }
         let rcurlybrace = p.expect(TK_RCURLYBRACE)?;
         return Result::<MacroMatcherNode, ParseError>::Ok(MacroMatcherNode::Alt2(MacroMatcherAlt2 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             lcurlybrace,
             macro_match_list,
             rcurlybrace,
@@ -17216,7 +17216,7 @@ fn parse_macro_match_bt_3(p: &mut Parser) -> Result<MacroMatchNode, ParseError> 
     };
     let macro_rep_op = parse_macro_rep_op(p)?;
     return Result::<MacroMatchNode, ParseError>::Ok(MacroMatchNode::Alt3(MacroMatchAlt3 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         dollar,
         lparen,
         macro_match_list,
@@ -17272,7 +17272,7 @@ fn parse_macro_match_bt_2(p: &mut Parser) -> Result<MacroMatchNode, ParseError> 
     let colon = p.expect(TK_COLON)?;
     let macro_frag_spec = parse_macro_frag_spec(p)?;
     return Result::<MacroMatchNode, ParseError>::Ok(MacroMatchNode::Alt2(MacroMatchAlt2 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         dollar,
         group_0,
         colon,
@@ -17334,14 +17334,14 @@ fn parse_macro_match(p: &mut Parser) -> Result<MacroMatchNode, ParseError> {
             macro_match_token_list.push(macro_match_token);
         }
         return Result::<MacroMatchNode, ParseError>::Ok(MacroMatchNode::Alt0(MacroMatchAlt0 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             macro_match_token_list,
         }));
     }
     if _gale_kind_set_3(kind) {
         let macro_matcher = parse_macro_matcher(p)?;
         return Result::<MacroMatchNode, ParseError>::Ok(MacroMatchNode::Alt1(MacroMatchAlt1 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             macro_matcher,
         }));
     }
@@ -17363,7 +17363,7 @@ fn parse_macro_match_token_bt_1(p: &mut Parser) -> Result<MacroMatchTokenNode, P
     let start = p.peek().span.start;
     let macro_literal_token = parse_macro_literal_token(p)?;
     return Result::<MacroMatchTokenNode, ParseError>::Ok(MacroMatchTokenNode::Alt1(MacroMatchTokenAlt1 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         macro_literal_token,
     }));
 }
@@ -17379,7 +17379,7 @@ fn parse_macro_match_token_bt_0(p: &mut Parser) -> Result<MacroMatchTokenNode, P
     let start = p.peek().span.start;
     let macro_identifier_like_token = parse_macro_identifier_like_token(p)?;
     return Result::<MacroMatchTokenNode, ParseError>::Ok(MacroMatchTokenNode::Alt0(MacroMatchTokenAlt0 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         macro_identifier_like_token,
     }));
 }
@@ -17426,14 +17426,14 @@ fn parse_macro_match_token(p: &mut Parser) -> Result<MacroMatchTokenNode, ParseE
     if _gale_kind_set_7(kind) {
         let macro_punctuation_token = parse_macro_punctuation_token(p)?;
         return Result::<MacroMatchTokenNode, ParseError>::Ok(MacroMatchTokenNode::Alt2(MacroMatchTokenAlt2 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             macro_punctuation_token,
         }));
     }
     if _gale_kind_set_8(kind) {
         let macro_rep_op = parse_macro_rep_op(p)?;
         return Result::<MacroMatchTokenNode, ParseError>::Ok(MacroMatchTokenNode::Alt3(MacroMatchTokenAlt3 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             macro_rep_op,
         }));
     }
@@ -17448,7 +17448,7 @@ fn parse_macro_frag_spec(p: &mut Parser) -> Result<MacroFragSpecNode, ParseError
     let start = p.peek().span.start;
     let identifier = parse_identifier(p)?;
     return Result::<MacroFragSpecNode, ParseError>::Ok(MacroFragSpecNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         identifier,
     });
 }
@@ -17457,7 +17457,7 @@ fn parse_macro_rep_sep_bt_1(p: &mut Parser) -> Result<MacroRepSepNode, ParseErro
     let start = p.peek().span.start;
     let macro_literal_token = parse_macro_literal_token(p)?;
     return Result::<MacroRepSepNode, ParseError>::Ok(MacroRepSepNode::Alt1(MacroRepSepAlt1 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         macro_literal_token,
     }));
 }
@@ -17473,7 +17473,7 @@ fn parse_macro_rep_sep_bt_0(p: &mut Parser) -> Result<MacroRepSepNode, ParseErro
     let start = p.peek().span.start;
     let macro_identifier_like_token = parse_macro_identifier_like_token(p)?;
     return Result::<MacroRepSepNode, ParseError>::Ok(MacroRepSepNode::Alt0(MacroRepSepAlt0 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         macro_identifier_like_token,
     }));
 }
@@ -17520,14 +17520,14 @@ fn parse_macro_rep_sep(p: &mut Parser) -> Result<MacroRepSepNode, ParseError> {
     if _gale_kind_set_7(kind) {
         let macro_punctuation_token = parse_macro_punctuation_token(p)?;
         return Result::<MacroRepSepNode, ParseError>::Ok(MacroRepSepNode::Alt2(MacroRepSepAlt2 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             macro_punctuation_token,
         }));
     }
     if kind == TK_DOLLAR {
         let dollar = p.expect(TK_DOLLAR)?;
         return Result::<MacroRepSepNode, ParseError>::Ok(MacroRepSepNode::Alt3(MacroRepSepAlt3 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             dollar,
         }));
     }
@@ -17544,21 +17544,21 @@ fn parse_macro_rep_op(p: &mut Parser) -> Result<MacroRepOpNode, ParseError> {
     if kind == TK_STAR {
         let star = p.expect(TK_STAR)?;
         return Result::<MacroRepOpNode, ParseError>::Ok(MacroRepOpNode::Alt0(MacroRepOpAlt0 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             star,
         }));
     }
     if kind == TK_PLUS {
         let plus = p.expect(TK_PLUS)?;
         return Result::<MacroRepOpNode, ParseError>::Ok(MacroRepOpNode::Alt1(MacroRepOpAlt1 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             plus,
         }));
     }
     if kind == TK_QUESTION {
         let question = p.expect(TK_QUESTION)?;
         return Result::<MacroRepOpNode, ParseError>::Ok(MacroRepOpNode::Alt2(MacroRepOpAlt2 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             question,
         }));
     }
@@ -17573,7 +17573,7 @@ fn parse_macro_transcriber(p: &mut Parser) -> Result<MacroTranscriberNode, Parse
     let start = p.peek().span.start;
     let delim_token_tree = parse_delim_token_tree(p)?;
     return Result::<MacroTranscriberNode, ParseError>::Ok(MacroTranscriberNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         delim_token_tree,
     });
 }
@@ -17606,7 +17606,7 @@ fn parse_item(p: &mut Parser) -> Result<ItemNode, ParseError> {
     }
     let vis_item_or_macro_item = vis_item_or_macro_item_inner;
     return Result::<ItemNode, ParseError>::Ok(ItemNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         outer_attribute_list,
         vis_item_or_macro_item,
     });
@@ -17717,7 +17717,7 @@ fn parse_vis_item(p: &mut Parser) -> Result<VisItemNode, ParseError> {
     }
     let module_or_extern_crate_or_use_declaration_or_function__or_type_alias_or_struct__or_enumeration_or_union__or_constant_item_or_static_item_or_trait__or_implementation_or_extern_block = module_or_extern_crate_or_use_declaration_or_function__or_type_alias_or_struct__or_enumeration_or_union__or_constant_item_or_static_item_or_trait__or_implementation_or_extern_block_inner;
     return Result::<VisItemNode, ParseError>::Ok(VisItemNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         visibility,
         module_or_extern_crate_or_use_declaration_or_function__or_type_alias_or_struct__or_enumeration_or_union__or_constant_item_or_static_item_or_trait__or_implementation_or_extern_block,
     });
@@ -17727,7 +17727,7 @@ fn parse_macro_item_bt_1(p: &mut Parser) -> Result<MacroItemNode, ParseError> {
     let start = p.peek().span.start;
     let macro_rules_definition = parse_macro_rules_definition(p)?;
     return Result::<MacroItemNode, ParseError>::Ok(MacroItemNode::Alt1(MacroItemAlt1 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         macro_rules_definition,
     }));
 }
@@ -17743,7 +17743,7 @@ fn parse_macro_item_bt_0(p: &mut Parser) -> Result<MacroItemNode, ParseError> {
     let start = p.peek().span.start;
     let macro_invocation_semi = parse_macro_invocation_semi(p)?;
     return Result::<MacroItemNode, ParseError>::Ok(MacroItemNode::Alt0(MacroItemAlt0 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         macro_invocation_semi,
     }));
 }
@@ -17851,7 +17851,7 @@ fn parse_module(p: &mut Parser) -> Result<ModuleNode, ParseError> {
     }
     let group_0 = group_0_inner;
     return Result::<ModuleNode, ParseError>::Ok(ModuleNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         kw_unsafe,
         kw_mod,
         identifier,
@@ -17872,7 +17872,7 @@ fn parse_extern_crate(p: &mut Parser) -> Result<ExternCrateNode, ParseError> {
     };
     let semi = p.expect(TK_SEMI)?;
     return Result::<ExternCrateNode, ParseError>::Ok(ExternCrateNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         kw_extern,
         kw_crate,
         crate_ref,
@@ -17887,14 +17887,14 @@ fn parse_crate_ref(p: &mut Parser) -> Result<CrateRefNode, ParseError> {
     if _gale_kind_set_17(kind) {
         let identifier = parse_identifier(p)?;
         return Result::<CrateRefNode, ParseError>::Ok(CrateRefNode::Alt0(CrateRefAlt0 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             identifier,
         }));
     }
     if kind == TK_KW_SELFVALUE {
         let kw_selfvalue = p.expect(TK_KW_SELFVALUE)?;
         return Result::<CrateRefNode, ParseError>::Ok(CrateRefNode::Alt1(CrateRefAlt1 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_selfvalue,
         }));
     }
@@ -17923,7 +17923,7 @@ fn parse_as_clause(p: &mut Parser) -> Result<AsClauseNode, ParseError> {
     }
     let group_0 = group_0_inner;
     return Result::<AsClauseNode, ParseError>::Ok(AsClauseNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         kw_as,
         group_0,
     });
@@ -17935,7 +17935,7 @@ fn parse_use_declaration(p: &mut Parser) -> Result<UseDeclarationNode, ParseErro
     let use_tree = parse_use_tree(p)?;
     let semi = p.expect(TK_SEMI)?;
     return Result::<UseDeclarationNode, ParseError>::Ok(UseDeclarationNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         kw_use,
         use_tree,
         semi,
@@ -17970,7 +17970,7 @@ fn parse_use_tree_bt_1(p: &mut Parser) -> Result<UseTreeNode, ParseError> {
         null
     };
     return Result::<UseTreeNode, ParseError>::Ok(UseTreeNode::Alt1(UseTreeAlt1 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         simple_path,
         kw_as_item,
     }));
@@ -18153,7 +18153,7 @@ fn parse_use_tree_bt_0(p: &mut Parser) -> Result<UseTreeNode, ParseError> {
     }
     let group_0 = group_0_inner;
     return Result::<UseTreeNode, ParseError>::Ok(UseTreeNode::Alt0(UseTreeAlt0 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         simple_path_pathsep,
         group_0,
     }));
@@ -18336,7 +18336,7 @@ fn parse_function_(p: &mut Parser) -> Result<FunctionNode, ParseError> {
     }
     let group_0 = group_0_inner;
     return Result::<FunctionNode, ParseError>::Ok(FunctionNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         function_qualifiers,
         kw_fn,
         identifier,
@@ -18387,7 +18387,7 @@ fn parse_function_qualifiers(p: &mut Parser) -> Result<FunctionQualifiersNode, P
         null
     };
     return Result::<FunctionQualifiersNode, ParseError>::Ok(FunctionQualifiersNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         kw_const,
         kw_async,
         kw_unsafe,
@@ -18401,14 +18401,14 @@ fn parse_abi(p: &mut Parser) -> Result<AbiNode, ParseError> {
     if kind == TK_STRING_LITERAL {
         let string_literal = p.expect(TK_STRING_LITERAL)?;
         return Result::<AbiNode, ParseError>::Ok(AbiNode::Alt0(AbiAlt0 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             string_literal,
         }));
     }
     if kind == TK_RAW_STRING_LITERAL {
         let raw_string_literal = p.expect(TK_RAW_STRING_LITERAL)?;
         return Result::<AbiNode, ParseError>::Ok(AbiNode::Alt1(AbiAlt1 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             raw_string_literal,
         }));
     }
@@ -18472,7 +18472,7 @@ fn parse_function_parameters_bt_1(p: &mut Parser) -> Result<FunctionParametersNo
         null
     };
     return Result::<FunctionParametersNode, ParseError>::Ok(FunctionParametersNode::Alt1(FunctionParametersAlt1 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         self_param_comma,
         function_param,
         comma_function_param_list,
@@ -18531,7 +18531,7 @@ fn parse_function_parameters_bt_0(p: &mut Parser) -> Result<FunctionParametersNo
         null
     };
     return Result::<FunctionParametersNode, ParseError>::Ok(FunctionParametersNode::Alt0(FunctionParametersAlt0 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         self_param,
         comma,
     }));
@@ -18627,7 +18627,7 @@ fn parse_self_param(p: &mut Parser) -> Result<SelfParamNode, ParseError> {
     }
     let shorthand_self_or_typed_self = shorthand_self_or_typed_self_inner;
     return Result::<SelfParamNode, ParseError>::Ok(SelfParamNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         outer_attribute_list,
         shorthand_self_or_typed_self,
     });
@@ -18659,7 +18659,7 @@ fn parse_shorthand_self(p: &mut Parser) -> Result<ShorthandSelfNode, ParseError>
     };
     let kw_selfvalue = p.expect(TK_KW_SELFVALUE)?;
     return Result::<ShorthandSelfNode, ParseError>::Ok(ShorthandSelfNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         and_lifetime,
         kw_mut,
         kw_selfvalue,
@@ -18678,7 +18678,7 @@ fn parse_typed_self(p: &mut Parser) -> Result<TypedSelfNode, ParseError> {
     let colon = p.expect(TK_COLON)?;
     let type_ = parse_type_(p)?;
     return Result::<TypedSelfNode, ParseError>::Ok(TypedSelfNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         kw_mut,
         kw_selfvalue,
         colon,
@@ -18736,7 +18736,7 @@ fn parse_function_param(p: &mut Parser) -> Result<FunctionParamNode, ParseError>
     }
     let group_0 = group_0_inner;
     return Result::<FunctionParamNode, ParseError>::Ok(FunctionParamNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         outer_attribute_list,
         group_0,
     });
@@ -18761,7 +18761,7 @@ fn parse_function_param_pattern(p: &mut Parser) -> Result<FunctionParamPatternNo
     }
     let group_0 = group_0_inner;
     return Result::<FunctionParamPatternNode, ParseError>::Ok(FunctionParamPatternNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         pattern,
         colon,
         group_0,
@@ -18773,7 +18773,7 @@ fn parse_function_return_type(p: &mut Parser) -> Result<FunctionReturnTypeNode, 
     let rarrow = p.expect(TK_RARROW)?;
     let type_ = parse_type_(p)?;
     return Result::<FunctionReturnTypeNode, ParseError>::Ok(FunctionReturnTypeNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         rarrow,
         type_,
     });
@@ -18808,7 +18808,7 @@ fn parse_type_alias(p: &mut Parser) -> Result<TypeAliasNode, ParseError> {
     };
     let semi = p.expect(TK_SEMI)?;
     return Result::<TypeAliasNode, ParseError>::Ok(TypeAliasNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         kw_type,
         identifier,
         generic_params,
@@ -18822,7 +18822,7 @@ fn parse_struct__bt_0(p: &mut Parser) -> Result<StructNode, ParseError> {
     let start = p.peek().span.start;
     let struct_struct = parse_struct_struct(p)?;
     return Result::<StructNode, ParseError>::Ok(StructNode::Alt0(StructAlt0 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         struct_struct,
     }));
 }
@@ -18838,7 +18838,7 @@ fn parse_struct__bt_1(p: &mut Parser) -> Result<StructNode, ParseError> {
     let start = p.peek().span.start;
     let tuple_struct = parse_tuple_struct(p)?;
     return Result::<StructNode, ParseError>::Ok(StructNode::Alt1(StructAlt1 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         tuple_struct,
     }));
 }
@@ -18925,7 +18925,7 @@ fn parse_struct_struct(p: &mut Parser) -> Result<StructStructNode, ParseError> {
     }
     let group_0 = group_0_inner;
     return Result::<StructStructNode, ParseError>::Ok(StructStructNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         kw_struct,
         identifier,
         generic_params,
@@ -18960,7 +18960,7 @@ fn parse_tuple_struct(p: &mut Parser) -> Result<TupleStructNode, ParseError> {
     };
     let semi = p.expect(TK_SEMI)?;
     return Result::<TupleStructNode, ParseError>::Ok(TupleStructNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         kw_struct,
         identifier,
         generic_params,
@@ -19004,7 +19004,7 @@ fn parse_struct_fields(p: &mut Parser) -> Result<StructFieldsNode, ParseError> {
         null
     };
     return Result::<StructFieldsNode, ParseError>::Ok(StructFieldsNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         struct_field,
         comma_struct_field_list,
         comma,
@@ -19038,7 +19038,7 @@ fn parse_struct_field(p: &mut Parser) -> Result<StructFieldNode, ParseError> {
     let colon = p.expect(TK_COLON)?;
     let type_ = parse_type_(p)?;
     return Result::<StructFieldNode, ParseError>::Ok(StructFieldNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         outer_attribute_list,
         visibility,
         identifier,
@@ -19079,7 +19079,7 @@ fn parse_tuple_fields(p: &mut Parser) -> Result<TupleFieldsNode, ParseError> {
         null
     };
     return Result::<TupleFieldsNode, ParseError>::Ok(TupleFieldsNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         tuple_field,
         comma_tuple_field_list,
         comma,
@@ -19111,7 +19111,7 @@ fn parse_tuple_field(p: &mut Parser) -> Result<TupleFieldNode, ParseError> {
     };
     let type_ = parse_type_(p)?;
     return Result::<TupleFieldNode, ParseError>::Ok(TupleFieldNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         outer_attribute_list,
         visibility,
         type_,
@@ -19143,7 +19143,7 @@ fn parse_enumeration(p: &mut Parser) -> Result<EnumerationNode, ParseError> {
     };
     let rcurlybrace = p.expect(TK_RCURLYBRACE)?;
     return Result::<EnumerationNode, ParseError>::Ok(EnumerationNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         kw_enum,
         identifier,
         generic_params,
@@ -19186,7 +19186,7 @@ fn parse_enum_items(p: &mut Parser) -> Result<EnumItemsNode, ParseError> {
         null
     };
     return Result::<EnumItemsNode, ParseError>::Ok(EnumItemsNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         enum_item,
         comma_enum_item_list,
         comma,
@@ -19261,7 +19261,7 @@ fn parse_enum_item(p: &mut Parser) -> Result<EnumItemNode, ParseError> {
         null
     };
     return Result::<EnumItemNode, ParseError>::Ok(EnumItemNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         outer_attribute_list,
         visibility,
         identifier,
@@ -19280,7 +19280,7 @@ fn parse_enum_item_tuple(p: &mut Parser) -> Result<EnumItemTupleNode, ParseError
     };
     let rparen = p.expect(TK_RPAREN)?;
     return Result::<EnumItemTupleNode, ParseError>::Ok(EnumItemTupleNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         lparen,
         tuple_fields,
         rparen,
@@ -19298,7 +19298,7 @@ fn parse_enum_item_struct(p: &mut Parser) -> Result<EnumItemStructNode, ParseErr
     };
     let rcurlybrace = p.expect(TK_RCURLYBRACE)?;
     return Result::<EnumItemStructNode, ParseError>::Ok(EnumItemStructNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         lcurlybrace,
         struct_fields,
         rcurlybrace,
@@ -19310,7 +19310,7 @@ fn parse_enum_item_discriminant(p: &mut Parser) -> Result<EnumItemDiscriminantNo
     let eq = p.expect(TK_EQ)?;
     let expression = parse_expression(p)?;
     return Result::<EnumItemDiscriminantNode, ParseError>::Ok(EnumItemDiscriminantNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         eq,
         expression,
     });
@@ -19336,7 +19336,7 @@ fn parse_union_(p: &mut Parser) -> Result<UnionNode, ParseError> {
     let struct_fields = parse_struct_fields(p)?;
     let rcurlybrace = p.expect(TK_RCURLYBRACE)?;
     return Result::<UnionNode, ParseError>::Ok(UnionNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         kw_union,
         identifier,
         generic_params,
@@ -19379,7 +19379,7 @@ fn parse_constant_item(p: &mut Parser) -> Result<ConstantItemNode, ParseError> {
     };
     let semi = p.expect(TK_SEMI)?;
     return Result::<ConstantItemNode, ParseError>::Ok(ConstantItemNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         kw_const,
         group_0,
         colon,
@@ -19414,7 +19414,7 @@ fn parse_static_item(p: &mut Parser) -> Result<StaticItemNode, ParseError> {
     };
     let semi = p.expect(TK_SEMI)?;
     return Result::<StaticItemNode, ParseError>::Ok(StaticItemNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         kw_static,
         kw_mut,
         identifier,
@@ -19496,7 +19496,7 @@ fn parse_trait_(p: &mut Parser) -> Result<TraitNode, ParseError> {
     }
     let rcurlybrace = p.expect(TK_RCURLYBRACE)?;
     return Result::<TraitNode, ParseError>::Ok(TraitNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         kw_unsafe,
         kw_trait,
         identifier,
@@ -19514,7 +19514,7 @@ fn parse_implementation_bt_0(p: &mut Parser) -> Result<ImplementationNode, Parse
     let start = p.peek().span.start;
     let inherent_impl = parse_inherent_impl(p)?;
     return Result::<ImplementationNode, ParseError>::Ok(ImplementationNode::Alt0(ImplementationAlt0 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         inherent_impl,
     }));
 }
@@ -19530,7 +19530,7 @@ fn parse_implementation_bt_1(p: &mut Parser) -> Result<ImplementationNode, Parse
     let start = p.peek().span.start;
     let trait_impl = parse_trait_impl(p)?;
     return Result::<ImplementationNode, ParseError>::Ok(ImplementationNode::Alt1(ImplementationAlt1 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         trait_impl,
     }));
 }
@@ -19623,7 +19623,7 @@ fn parse_inherent_impl(p: &mut Parser) -> Result<InherentImplNode, ParseError> {
     }
     let rcurlybrace = p.expect(TK_RCURLYBRACE)?;
     return Result::<InherentImplNode, ParseError>::Ok(InherentImplNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         kw_impl,
         generic_params,
         type_,
@@ -19698,7 +19698,7 @@ fn parse_trait_impl(p: &mut Parser) -> Result<TraitImplNode, ParseError> {
     }
     let rcurlybrace = p.expect(TK_RCURLYBRACE)?;
     return Result::<TraitImplNode, ParseError>::Ok(TraitImplNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         kw_unsafe,
         kw_impl,
         generic_params,
@@ -19762,7 +19762,7 @@ fn parse_extern_block(p: &mut Parser) -> Result<ExternBlockNode, ParseError> {
     }
     let rcurlybrace = p.expect(TK_RCURLYBRACE)?;
     return Result::<ExternBlockNode, ParseError>::Ok(ExternBlockNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         kw_unsafe,
         kw_extern,
         abi,
@@ -19821,7 +19821,7 @@ fn parse_external_item(p: &mut Parser) -> Result<ExternalItemNode, ParseError> {
     }
     let group_0 = group_0_inner;
     return Result::<ExternalItemNode, ParseError>::Ok(ExternalItemNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         outer_attribute_list,
         group_0,
     });
@@ -19927,7 +19927,7 @@ fn parse_generic_params(p: &mut Parser) -> Result<GenericParamsNode, ParseError>
     };
     let gt = p.expect(TK_GT)?;
     return Result::<GenericParamsNode, ParseError>::Ok(GenericParamsNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         lt,
         item_generic_param_comma,
         gt,
@@ -19978,7 +19978,7 @@ fn parse_generic_param(p: &mut Parser) -> Result<GenericParamNode, ParseError> {
     }
     let lifetime_param_or_type_param_or_const_param = lifetime_param_or_type_param_or_const_param_inner;
     return Result::<GenericParamNode, ParseError>::Ok(GenericParamNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         outer_attribute_list,
         lifetime_param_or_type_param_or_const_param,
     });
@@ -20005,7 +20005,7 @@ fn parse_lifetime_param(p: &mut Parser) -> Result<LifetimeParamNode, ParseError>
         null
     };
     return Result::<LifetimeParamNode, ParseError>::Ok(LifetimeParamNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         outer_attribute,
         lifetime_or_label,
         colon_lifetime_bounds,
@@ -20049,7 +20049,7 @@ fn parse_type_param(p: &mut Parser) -> Result<TypeParamNode, ParseError> {
         null
     };
     return Result::<TypeParamNode, ParseError>::Ok(TypeParamNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         outer_attribute,
         identifier,
         colon_type_param_bounds,
@@ -20064,7 +20064,7 @@ fn parse_const_param(p: &mut Parser) -> Result<ConstParamNode, ParseError> {
     let colon = p.expect(TK_COLON)?;
     let type_ = parse_type_(p)?;
     return Result::<ConstParamNode, ParseError>::Ok(ConstParamNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         kw_const,
         identifier,
         colon,
@@ -20104,7 +20104,7 @@ fn parse_where_clause(p: &mut Parser) -> Result<WhereClauseNode, ParseError> {
         null
     };
     return Result::<WhereClauseNode, ParseError>::Ok(WhereClauseNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         kw_where,
         where_clause_item_comma_list,
         where_clause_item,
@@ -20115,7 +20115,7 @@ fn parse_where_clause_item_bt_0(p: &mut Parser) -> Result<WhereClauseItemNode, P
     let start = p.peek().span.start;
     let lifetime_where_clause_item = parse_lifetime_where_clause_item(p)?;
     return Result::<WhereClauseItemNode, ParseError>::Ok(WhereClauseItemNode::Alt0(WhereClauseItemAlt0 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         lifetime_where_clause_item,
     }));
 }
@@ -20131,7 +20131,7 @@ fn parse_where_clause_item_bt_1(p: &mut Parser) -> Result<WhereClauseItemNode, P
     let start = p.peek().span.start;
     let type_bound_where_clause_item = parse_type_bound_where_clause_item(p)?;
     return Result::<WhereClauseItemNode, ParseError>::Ok(WhereClauseItemNode::Alt1(WhereClauseItemAlt1 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         type_bound_where_clause_item,
     }));
 }
@@ -20186,7 +20186,7 @@ fn parse_lifetime_where_clause_item(p: &mut Parser) -> Result<LifetimeWhereClaus
     let colon = p.expect(TK_COLON)?;
     let lifetime_bounds = parse_lifetime_bounds(p)?;
     return Result::<LifetimeWhereClauseItemNode, ParseError>::Ok(LifetimeWhereClauseItemNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         lifetime,
         colon,
         lifetime_bounds,
@@ -20205,7 +20205,7 @@ fn parse_type_bound_where_clause_item(p: &mut Parser) -> Result<TypeBoundWhereCl
         null
     };
     return Result::<TypeBoundWhereClauseItemNode, ParseError>::Ok(TypeBoundWhereClauseItemNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         for_lifetimes,
         type_,
         colon,
@@ -20218,7 +20218,7 @@ fn parse_for_lifetimes(p: &mut Parser) -> Result<ForLifetimesNode, ParseError> {
     let kw_for = p.expect(TK_KW_FOR)?;
     let generic_params = parse_generic_params(p)?;
     return Result::<ForLifetimesNode, ParseError>::Ok(ForLifetimesNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         kw_for,
         generic_params,
     });
@@ -20288,7 +20288,7 @@ fn parse_associated_item(p: &mut Parser) -> Result<AssociatedItemNode, ParseErro
     }
     let group_0 = group_0_inner;
     return Result::<AssociatedItemNode, ParseError>::Ok(AssociatedItemNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         outer_attribute_list,
         group_0,
     });
@@ -20302,7 +20302,7 @@ fn parse_inner_attribute(p: &mut Parser) -> Result<InnerAttributeNode, ParseErro
     let attr = parse_attr(p)?;
     let rsquarebracket = p.expect(TK_RSQUAREBRACKET)?;
     return Result::<InnerAttributeNode, ParseError>::Ok(InnerAttributeNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         pound,
         not,
         lsquarebracket,
@@ -20318,7 +20318,7 @@ fn parse_outer_attribute(p: &mut Parser) -> Result<OuterAttributeNode, ParseErro
     let attr = parse_attr(p)?;
     let rsquarebracket = p.expect(TK_RSQUAREBRACKET)?;
     return Result::<OuterAttributeNode, ParseError>::Ok(OuterAttributeNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         pound,
         lsquarebracket,
         attr,
@@ -20336,7 +20336,7 @@ fn parse_attr(p: &mut Parser) -> Result<AttrNode, ParseError> {
         null
     };
     return Result::<AttrNode, ParseError>::Ok(AttrNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         simple_path,
         attr_input,
     });
@@ -20348,7 +20348,7 @@ fn parse_attr_input(p: &mut Parser) -> Result<AttrInputNode, ParseError> {
     if _gale_kind_set_3(kind) {
         let delim_token_tree = parse_delim_token_tree(p)?;
         return Result::<AttrInputNode, ParseError>::Ok(AttrInputNode::Alt0(AttrInputAlt0 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             delim_token_tree,
         }));
     }
@@ -20356,7 +20356,7 @@ fn parse_attr_input(p: &mut Parser) -> Result<AttrInputNode, ParseError> {
         let eq = p.expect(TK_EQ)?;
         let literal_expression = parse_literal_expression(p)?;
         return Result::<AttrInputNode, ParseError>::Ok(AttrInputNode::Alt1(AttrInputAlt1 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             eq,
             literal_expression,
         }));
@@ -20372,7 +20372,7 @@ fn parse_statement_bt_2(p: &mut Parser) -> Result<StatementNode, ParseError> {
     let start = p.peek().span.start;
     let let_statement = parse_let_statement(p)?;
     return Result::<StatementNode, ParseError>::Ok(StatementNode::Alt2(StatementAlt2 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         let_statement,
     }));
 }
@@ -20388,7 +20388,7 @@ fn parse_statement_bt_4(p: &mut Parser) -> Result<StatementNode, ParseError> {
     let start = p.peek().span.start;
     let macro_invocation_semi = parse_macro_invocation_semi(p)?;
     return Result::<StatementNode, ParseError>::Ok(StatementNode::Alt4(StatementAlt4 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         macro_invocation_semi,
     }));
 }
@@ -20404,7 +20404,7 @@ fn parse_statement_bt_1(p: &mut Parser) -> Result<StatementNode, ParseError> {
     let start = p.peek().span.start;
     let item = parse_item(p)?;
     return Result::<StatementNode, ParseError>::Ok(StatementNode::Alt1(StatementAlt1 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         item,
     }));
 }
@@ -20420,7 +20420,7 @@ fn parse_statement_bt_3(p: &mut Parser) -> Result<StatementNode, ParseError> {
     let start = p.peek().span.start;
     let expression_statement = parse_expression_statement(p)?;
     return Result::<StatementNode, ParseError>::Ok(StatementNode::Alt3(StatementAlt3 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         expression_statement,
     }));
 }
@@ -20438,7 +20438,7 @@ fn parse_statement(p: &mut Parser) -> Result<StatementNode, ParseError> {
     if kind == TK_SEMI {
         let semi = p.expect(TK_SEMI)?;
         return Result::<StatementNode, ParseError>::Ok(StatementNode::Alt0(StatementAlt0 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             semi,
         }));
     }
@@ -20583,7 +20583,7 @@ fn parse_let_statement(p: &mut Parser) -> Result<LetStatementNode, ParseError> {
     };
     let semi = p.expect(TK_SEMI)?;
     return Result::<LetStatementNode, ParseError>::Ok(LetStatementNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         outer_attribute_list,
         kw_let,
         pattern_no_top_alt,
@@ -20603,7 +20603,7 @@ fn parse_expression_statement_bt_1(p: &mut Parser) -> Result<ExpressionStatement
         null
     };
     return Result::<ExpressionStatementNode, ParseError>::Ok(ExpressionStatementNode::Alt1(ExpressionStatementAlt1 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         expression_with_block,
         semi,
     }));
@@ -20626,7 +20626,7 @@ fn parse_expression_statement_bt_0(p: &mut Parser) -> Result<ExpressionStatement
     let expression = parse_expression(p)?;
     let semi = p.expect(TK_SEMI)?;
     return Result::<ExpressionStatementNode, ParseError>::Ok(ExpressionStatementNode::Alt0(ExpressionStatementAlt0 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         expression,
         semi,
     }));
@@ -20682,7 +20682,7 @@ fn parse_expression_bt_38(p: &mut Parser) -> Result<ExpressionNode, ParseError> 
     let start = p.peek().span.start;
     let expression_with_block = parse_expression_with_block(p)?;
     return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::ExpressionWithBlock_(ExpressionExpressionWithBlock_ {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         expression_with_block,
     }));
 }
@@ -20717,7 +20717,7 @@ fn parse_expression_bt_0(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
     }
     let expression = parse_expression(p, 22)?;
     return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::AttributedExpression(ExpressionAttributedExpression {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         outer_attribute_list,
         expression,
     }));
@@ -20742,7 +20742,7 @@ fn parse_expression_bt_39(p: &mut Parser) -> Result<ExpressionNode, ParseError> 
     let start = p.peek().span.start;
     let macro_invocation = parse_macro_invocation(p)?;
     return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::MacroInvocationAsExpression(ExpressionMacroInvocationAsExpression {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         macro_invocation,
     }));
 }
@@ -20758,7 +20758,7 @@ fn parse_expression_bt_36(p: &mut Parser) -> Result<ExpressionNode, ParseError> 
     let start = p.peek().span.start;
     let enumeration_variant_expression = parse_enumeration_variant_expression(p)?;
     return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::EnumerationVariantExpression_(ExpressionEnumerationVariantExpression_ {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         enumeration_variant_expression,
     }));
 }
@@ -20774,7 +20774,7 @@ fn parse_expression_bt_35(p: &mut Parser) -> Result<ExpressionNode, ParseError> 
     let start = p.peek().span.start;
     let struct_expression = parse_struct_expression(p)?;
     return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::StructExpression_(ExpressionStructExpression_ {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         struct_expression,
     }));
 }
@@ -20790,7 +20790,7 @@ fn parse_expression_bt_2(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
     let start = p.peek().span.start;
     let path_expression = parse_path_expression(p)?;
     return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::PathExpression_(ExpressionPathExpression_ {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         path_expression,
     }));
 }
@@ -20823,7 +20823,7 @@ fn parse_expression_bt_32(p: &mut Parser) -> Result<ExpressionNode, ParseError> 
     let expression = parse_expression(p)?;
     let rparen = p.expect(TK_RPAREN)?;
     return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::GroupedExpression(ExpressionGroupedExpression {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         lparen,
         inner_attribute_list,
         expression,
@@ -20874,7 +20874,7 @@ fn parse_expression_bt_34(p: &mut Parser) -> Result<ExpressionNode, ParseError> 
     };
     let rparen = p.expect(TK_RPAREN)?;
     return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::TupleExpression(ExpressionTupleExpression {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         lparen,
         inner_attribute_list,
         tuple_elements,
@@ -20935,7 +20935,7 @@ fn parse_expression_atom(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
     if _gale_kind_set_48(kind) {
         let literal_expression = parse_literal_expression(p)?;
         return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::LiteralExpression_(ExpressionLiteralExpression_ {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             literal_expression,
         }));
     }
@@ -21022,7 +21022,7 @@ fn parse_expression_atom(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
         };
         let expression = parse_expression(p, 15)?;
         return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::BorrowExpression(ExpressionBorrowExpression {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             and_or_andand,
             kw_mut,
             expression,
@@ -21032,7 +21032,7 @@ fn parse_expression_atom(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
         let star = p.expect(TK_STAR)?;
         let expression = parse_expression(p, 15)?;
         return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::DereferenceExpression(ExpressionDereferenceExpression {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             star,
             expression,
         }));
@@ -21041,7 +21041,7 @@ fn parse_expression_atom(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
         let minus_or_not = p.advance();
         let expression = parse_expression(p, 15)?;
         return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::NegationExpression(ExpressionNegationExpression {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             minus_or_not,
             expression,
         }));
@@ -21055,7 +21055,7 @@ fn parse_expression_atom(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
             null
         };
         return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::RangeExpression1(ExpressionRangeExpression1 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             dotdot,
             expression,
         }));
@@ -21064,7 +21064,7 @@ fn parse_expression_atom(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
         let dotdoteq = p.expect(TK_DOTDOTEQ)?;
         let expression = parse_expression(p, 4)?;
         return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::RangeExpression2(ExpressionRangeExpression2 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             dotdoteq,
             expression,
         }));
@@ -21084,7 +21084,7 @@ fn parse_expression_atom(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
             null
         };
         return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::ContinueExpression(ExpressionContinueExpression {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_continue,
             lifetime_or_label,
             expression,
@@ -21105,7 +21105,7 @@ fn parse_expression_atom(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
             null
         };
         return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::BreakExpression(ExpressionBreakExpression {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_break,
             lifetime_or_label,
             expression,
@@ -21120,7 +21120,7 @@ fn parse_expression_atom(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
             null
         };
         return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::ReturnExpression(ExpressionReturnExpression {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_return,
             expression,
         }));
@@ -21173,7 +21173,7 @@ fn parse_expression_atom(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
         };
         let rsquarebracket = p.expect(TK_RSQUAREBRACKET)?;
         return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::ArrayExpression(ExpressionArrayExpression {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             lsquarebracket,
             inner_attribute_list,
             array_elements,
@@ -21183,7 +21183,7 @@ fn parse_expression_atom(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
     if _gale_kind_set_52(kind) {
         let closure_expression = parse_closure_expression(p)?;
         return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::ClosureExpression_(ExpressionClosureExpression_ {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             closure_expression,
         }));
     }
@@ -21206,7 +21206,7 @@ fn parse_expression_lr_3(p: &mut Parser, left: ExpressionNode, start: i32) -> Re
     };
     let rparen = p.expect(TK_RPAREN)?;
     return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::MethodCallExpression(ExpressionMethodCallExpression {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         expression: left,
         dot,
         path_expr_segment,
@@ -21220,7 +21220,7 @@ fn parse_expression_lr_4(p: &mut Parser, left: ExpressionNode, start: i32) -> Re
     let dot = p.expect(TK_DOT)?;
     let identifier = parse_identifier(p)?;
     return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::FieldExpression(ExpressionFieldExpression {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         expression: left,
         dot,
         identifier,
@@ -21231,7 +21231,7 @@ fn parse_expression_lr_5(p: &mut Parser, left: ExpressionNode, start: i32) -> Re
     let dot = p.expect(TK_DOT)?;
     let tuple_index = parse_tuple_index(p)?;
     return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::TupleIndexingExpression(ExpressionTupleIndexingExpression {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         expression: left,
         dot,
         tuple_index,
@@ -21242,7 +21242,7 @@ fn parse_expression_lr_6(p: &mut Parser, left: ExpressionNode, start: i32) -> Re
     let dot = p.expect(TK_DOT)?;
     let kw_await = p.expect(TK_KW_AWAIT)?;
     return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::AwaitExpression(ExpressionAwaitExpression {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         expression: left,
         dot,
         kw_await,
@@ -21259,7 +21259,7 @@ fn parse_expression_lr_7(p: &mut Parser, left: ExpressionNode, start: i32) -> Re
     };
     let rparen = p.expect(TK_RPAREN)?;
     return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::CallExpression(ExpressionCallExpression {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         expression: left,
         lparen,
         call_params,
@@ -21272,7 +21272,7 @@ fn parse_expression_lr_8(p: &mut Parser, left: ExpressionNode, start: i32) -> Re
     let expression_2 = parse_expression(p, 17)?;
     let rsquarebracket = p.expect(TK_RSQUAREBRACKET)?;
     return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::IndexExpression(ExpressionIndexExpression {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         expression: left,
         lsquarebracket,
         expression_2,
@@ -21283,7 +21283,7 @@ fn parse_expression_lr_8(p: &mut Parser, left: ExpressionNode, start: i32) -> Re
 fn parse_expression_lr_9(p: &mut Parser, left: ExpressionNode, start: i32) -> Result<ExpressionNode, ParseError> {
     let question = p.expect(TK_QUESTION)?;
     return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::ErrorPropagationExpression(ExpressionErrorPropagationExpression {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         expression: left,
         question,
     }));
@@ -21293,7 +21293,7 @@ fn parse_expression_lr_13(p: &mut Parser, left: ExpressionNode, start: i32) -> R
     let kw_as = p.expect(TK_KW_AS)?;
     let type_no_bounds = parse_type_no_bounds(p)?;
     return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::TypeCastExpression(ExpressionTypeCastExpression {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         expression: left,
         kw_as,
         type_no_bounds,
@@ -21304,7 +21304,7 @@ fn parse_expression_lr_14(p: &mut Parser, left: ExpressionNode, start: i32) -> R
     let star_or_slash_or_percent = p.advance();
     let expression_2 = parse_expression(p, 14)?;
     return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::ArithmeticOrLogicalExpression0(ExpressionArithmeticOrLogicalExpression0 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         expression: left,
         star_or_slash_or_percent,
         expression_2,
@@ -21315,7 +21315,7 @@ fn parse_expression_lr_15(p: &mut Parser, left: ExpressionNode, start: i32) -> R
     let plus_or_minus = p.advance();
     let expression_2 = parse_expression(p, 13)?;
     return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::ArithmeticOrLogicalExpression1(ExpressionArithmeticOrLogicalExpression1 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         expression: left,
         plus_or_minus,
         expression_2,
@@ -21335,7 +21335,7 @@ fn parse_expression_lr_16(p: &mut Parser, left: ExpressionNode, start: i32) -> R
     let shl_or_shr = shl_or_shr_inner;
     let expression_2 = parse_expression(p, 12)?;
     return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::ArithmeticOrLogicalExpression2(ExpressionArithmeticOrLogicalExpression2 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         expression: left,
         shl_or_shr,
         expression_2,
@@ -21346,7 +21346,7 @@ fn parse_expression_lr_17(p: &mut Parser, left: ExpressionNode, start: i32) -> R
     let and = p.expect(TK_AND)?;
     let expression_2 = parse_expression(p, 11)?;
     return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::ArithmeticOrLogicalExpression3(ExpressionArithmeticOrLogicalExpression3 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         expression: left,
         and,
         expression_2,
@@ -21357,7 +21357,7 @@ fn parse_expression_lr_18(p: &mut Parser, left: ExpressionNode, start: i32) -> R
     let caret = p.expect(TK_CARET)?;
     let expression_2 = parse_expression(p, 10)?;
     return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::ArithmeticOrLogicalExpression4(ExpressionArithmeticOrLogicalExpression4 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         expression: left,
         caret,
         expression_2,
@@ -21368,7 +21368,7 @@ fn parse_expression_lr_19(p: &mut Parser, left: ExpressionNode, start: i32) -> R
     let or = p.expect(TK_OR)?;
     let expression_2 = parse_expression(p, 9)?;
     return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::ArithmeticOrLogicalExpression5(ExpressionArithmeticOrLogicalExpression5 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         expression: left,
         or,
         expression_2,
@@ -21379,7 +21379,7 @@ fn parse_expression_lr_20(p: &mut Parser, left: ExpressionNode, start: i32) -> R
     let comparison_operator = parse_comparison_operator(p)?;
     let expression_2 = parse_expression(p, 8)?;
     return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::ComparisonExpression(ExpressionComparisonExpression {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         expression: left,
         comparison_operator,
         expression_2,
@@ -21390,7 +21390,7 @@ fn parse_expression_lr_21(p: &mut Parser, left: ExpressionNode, start: i32) -> R
     let andand = p.expect(TK_ANDAND)?;
     let expression_2 = parse_expression(p, 7)?;
     return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::LazyBooleanExpression0(ExpressionLazyBooleanExpression0 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         expression: left,
         andand,
         expression_2,
@@ -21401,7 +21401,7 @@ fn parse_expression_lr_22(p: &mut Parser, left: ExpressionNode, start: i32) -> R
     let oror = p.expect(TK_OROR)?;
     let expression_2 = parse_expression(p, 6)?;
     return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::LazyBooleanExpression1(ExpressionLazyBooleanExpression1 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         expression: left,
         oror,
         expression_2,
@@ -21417,7 +21417,7 @@ fn parse_expression_lr_23(p: &mut Parser, left: ExpressionNode, start: i32) -> R
         null
     };
     return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::RangeExpression0(ExpressionRangeExpression0 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         expression: left,
         dotdot,
         expression_2,
@@ -21428,7 +21428,7 @@ fn parse_expression_lr_26(p: &mut Parser, left: ExpressionNode, start: i32) -> R
     let dotdoteq = p.expect(TK_DOTDOTEQ)?;
     let expression_2 = parse_expression(p, 4)?;
     return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::RangeExpression3(ExpressionRangeExpression3 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         expression: left,
         dotdoteq,
         expression_2,
@@ -21439,7 +21439,7 @@ fn parse_expression_lr_27(p: &mut Parser, left: ExpressionNode, start: i32) -> R
     let eq = p.expect(TK_EQ)?;
     let expression_2 = parse_expression(p, 3)?;
     return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::AssignmentExpression(ExpressionAssignmentExpression {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         expression: left,
         eq,
         expression_2,
@@ -21450,7 +21450,7 @@ fn parse_expression_lr_28(p: &mut Parser, left: ExpressionNode, start: i32) -> R
     let compound_assign_operator = parse_compound_assign_operator(p)?;
     let expression_2 = parse_expression(p, 2)?;
     return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::CompoundAssignmentExpression(ExpressionCompoundAssignmentExpression {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         expression: left,
         compound_assign_operator,
         expression_2,
@@ -21728,42 +21728,42 @@ fn parse_comparison_operator(p: &mut Parser) -> Result<ComparisonOperatorNode, P
     if kind == TK_EQEQ {
         let eqeq = p.expect(TK_EQEQ)?;
         return Result::<ComparisonOperatorNode, ParseError>::Ok(ComparisonOperatorNode::Alt0(ComparisonOperatorAlt0 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             eqeq,
         }));
     }
     if kind == TK_NE {
         let ne = p.expect(TK_NE)?;
         return Result::<ComparisonOperatorNode, ParseError>::Ok(ComparisonOperatorNode::Alt1(ComparisonOperatorAlt1 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             ne,
         }));
     }
     if kind == TK_GT {
         let gt = p.expect(TK_GT)?;
         return Result::<ComparisonOperatorNode, ParseError>::Ok(ComparisonOperatorNode::Alt2(ComparisonOperatorAlt2 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             gt,
         }));
     }
     if kind == TK_LT {
         let lt = p.expect(TK_LT)?;
         return Result::<ComparisonOperatorNode, ParseError>::Ok(ComparisonOperatorNode::Alt3(ComparisonOperatorAlt3 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             lt,
         }));
     }
     if kind == TK_GE {
         let ge = p.expect(TK_GE)?;
         return Result::<ComparisonOperatorNode, ParseError>::Ok(ComparisonOperatorNode::Alt4(ComparisonOperatorAlt4 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             ge,
         }));
     }
     if kind == TK_LE {
         let le = p.expect(TK_LE)?;
         return Result::<ComparisonOperatorNode, ParseError>::Ok(ComparisonOperatorNode::Alt5(ComparisonOperatorAlt5 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             le,
         }));
     }
@@ -21780,70 +21780,70 @@ fn parse_compound_assign_operator(p: &mut Parser) -> Result<CompoundAssignOperat
     if kind == TK_PLUSEQ {
         let pluseq = p.expect(TK_PLUSEQ)?;
         return Result::<CompoundAssignOperatorNode, ParseError>::Ok(CompoundAssignOperatorNode::Alt0(CompoundAssignOperatorAlt0 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             pluseq,
         }));
     }
     if kind == TK_MINUSEQ {
         let minuseq = p.expect(TK_MINUSEQ)?;
         return Result::<CompoundAssignOperatorNode, ParseError>::Ok(CompoundAssignOperatorNode::Alt1(CompoundAssignOperatorAlt1 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             minuseq,
         }));
     }
     if kind == TK_STAREQ {
         let stareq = p.expect(TK_STAREQ)?;
         return Result::<CompoundAssignOperatorNode, ParseError>::Ok(CompoundAssignOperatorNode::Alt2(CompoundAssignOperatorAlt2 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             stareq,
         }));
     }
     if kind == TK_SLASHEQ {
         let slasheq = p.expect(TK_SLASHEQ)?;
         return Result::<CompoundAssignOperatorNode, ParseError>::Ok(CompoundAssignOperatorNode::Alt3(CompoundAssignOperatorAlt3 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             slasheq,
         }));
     }
     if kind == TK_PERCENTEQ {
         let percenteq = p.expect(TK_PERCENTEQ)?;
         return Result::<CompoundAssignOperatorNode, ParseError>::Ok(CompoundAssignOperatorNode::Alt4(CompoundAssignOperatorAlt4 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             percenteq,
         }));
     }
     if kind == TK_ANDEQ {
         let andeq = p.expect(TK_ANDEQ)?;
         return Result::<CompoundAssignOperatorNode, ParseError>::Ok(CompoundAssignOperatorNode::Alt5(CompoundAssignOperatorAlt5 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             andeq,
         }));
     }
     if kind == TK_OREQ {
         let oreq = p.expect(TK_OREQ)?;
         return Result::<CompoundAssignOperatorNode, ParseError>::Ok(CompoundAssignOperatorNode::Alt6(CompoundAssignOperatorAlt6 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             oreq,
         }));
     }
     if kind == TK_CARETEQ {
         let careteq = p.expect(TK_CARETEQ)?;
         return Result::<CompoundAssignOperatorNode, ParseError>::Ok(CompoundAssignOperatorNode::Alt7(CompoundAssignOperatorAlt7 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             careteq,
         }));
     }
     if kind == TK_SHLEQ {
         let shleq = p.expect(TK_SHLEQ)?;
         return Result::<CompoundAssignOperatorNode, ParseError>::Ok(CompoundAssignOperatorNode::Alt8(CompoundAssignOperatorAlt8 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             shleq,
         }));
     }
     if kind == TK_SHREQ {
         let shreq = p.expect(TK_SHREQ)?;
         return Result::<CompoundAssignOperatorNode, ParseError>::Ok(CompoundAssignOperatorNode::Alt9(CompoundAssignOperatorAlt9 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             shreq,
         }));
     }
@@ -21858,7 +21858,7 @@ fn parse_expression_with_block_bt_5(p: &mut Parser) -> Result<ExpressionWithBloc
     let start = p.peek().span.start;
     let if_expression = parse_if_expression(p)?;
     return Result::<ExpressionWithBlockNode, ParseError>::Ok(ExpressionWithBlockNode::Alt5(ExpressionWithBlockAlt5 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         if_expression,
     }));
 }
@@ -21874,7 +21874,7 @@ fn parse_expression_with_block_bt_6(p: &mut Parser) -> Result<ExpressionWithBloc
     let start = p.peek().span.start;
     let if_let_expression = parse_if_let_expression(p)?;
     return Result::<ExpressionWithBlockNode, ParseError>::Ok(ExpressionWithBlockNode::Alt6(ExpressionWithBlockAlt6 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         if_let_expression,
     }));
 }
@@ -21911,7 +21911,7 @@ fn parse_expression_with_block(p: &mut Parser) -> Result<ExpressionWithBlockNode
         }
         let expression_with_block = parse_expression_with_block(p)?;
         return Result::<ExpressionWithBlockNode, ParseError>::Ok(ExpressionWithBlockNode::Alt0(ExpressionWithBlockAlt0 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             outer_attribute_list,
             expression_with_block,
         }));
@@ -21919,28 +21919,28 @@ fn parse_expression_with_block(p: &mut Parser) -> Result<ExpressionWithBlockNode
     if kind == TK_LCURLYBRACE {
         let block_expression = parse_block_expression(p)?;
         return Result::<ExpressionWithBlockNode, ParseError>::Ok(ExpressionWithBlockNode::Alt1(ExpressionWithBlockAlt1 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             block_expression,
         }));
     }
     if kind == TK_KW_ASYNC {
         let async_block_expression = parse_async_block_expression(p)?;
         return Result::<ExpressionWithBlockNode, ParseError>::Ok(ExpressionWithBlockNode::Alt2(ExpressionWithBlockAlt2 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             async_block_expression,
         }));
     }
     if kind == TK_KW_UNSAFE {
         let unsafe_block_expression = parse_unsafe_block_expression(p)?;
         return Result::<ExpressionWithBlockNode, ParseError>::Ok(ExpressionWithBlockNode::Alt3(ExpressionWithBlockAlt3 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             unsafe_block_expression,
         }));
     }
     if _gale_kind_set_60(kind) {
         let loop_expression = parse_loop_expression(p)?;
         return Result::<ExpressionWithBlockNode, ParseError>::Ok(ExpressionWithBlockNode::Alt4(ExpressionWithBlockAlt4 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             loop_expression,
         }));
     }
@@ -21956,7 +21956,7 @@ fn parse_expression_with_block(p: &mut Parser) -> Result<ExpressionWithBlockNode
     if kind == TK_KW_MATCH {
         let match_expression = parse_match_expression(p)?;
         return Result::<ExpressionWithBlockNode, ParseError>::Ok(ExpressionWithBlockNode::Alt7(ExpressionWithBlockAlt7 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             match_expression,
         }));
     }
@@ -21973,70 +21973,70 @@ fn parse_literal_expression(p: &mut Parser) -> Result<LiteralExpressionNode, Par
     if kind == TK_CHAR_LITERAL {
         let char_literal = p.expect(TK_CHAR_LITERAL)?;
         return Result::<LiteralExpressionNode, ParseError>::Ok(LiteralExpressionNode::Alt0(LiteralExpressionAlt0 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             char_literal,
         }));
     }
     if kind == TK_STRING_LITERAL {
         let string_literal = p.expect(TK_STRING_LITERAL)?;
         return Result::<LiteralExpressionNode, ParseError>::Ok(LiteralExpressionNode::Alt1(LiteralExpressionAlt1 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             string_literal,
         }));
     }
     if kind == TK_RAW_STRING_LITERAL {
         let raw_string_literal = p.expect(TK_RAW_STRING_LITERAL)?;
         return Result::<LiteralExpressionNode, ParseError>::Ok(LiteralExpressionNode::Alt2(LiteralExpressionAlt2 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             raw_string_literal,
         }));
     }
     if kind == TK_BYTE_LITERAL {
         let byte_literal = p.expect(TK_BYTE_LITERAL)?;
         return Result::<LiteralExpressionNode, ParseError>::Ok(LiteralExpressionNode::Alt3(LiteralExpressionAlt3 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             byte_literal,
         }));
     }
     if kind == TK_BYTE_STRING_LITERAL {
         let byte_string_literal = p.expect(TK_BYTE_STRING_LITERAL)?;
         return Result::<LiteralExpressionNode, ParseError>::Ok(LiteralExpressionNode::Alt4(LiteralExpressionAlt4 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             byte_string_literal,
         }));
     }
     if kind == TK_RAW_BYTE_STRING_LITERAL {
         let raw_byte_string_literal = p.expect(TK_RAW_BYTE_STRING_LITERAL)?;
         return Result::<LiteralExpressionNode, ParseError>::Ok(LiteralExpressionNode::Alt5(LiteralExpressionAlt5 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             raw_byte_string_literal,
         }));
     }
     if kind == TK_INTEGER_LITERAL {
         let integer_literal = p.expect(TK_INTEGER_LITERAL)?;
         return Result::<LiteralExpressionNode, ParseError>::Ok(LiteralExpressionNode::Alt6(LiteralExpressionAlt6 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             integer_literal,
         }));
     }
     if kind == TK_FLOAT_LITERAL {
         let float_literal = p.expect(TK_FLOAT_LITERAL)?;
         return Result::<LiteralExpressionNode, ParseError>::Ok(LiteralExpressionNode::Alt7(LiteralExpressionAlt7 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             float_literal,
         }));
     }
     if kind == TK_KW_TRUE {
         let kw_true = p.expect(TK_KW_TRUE)?;
         return Result::<LiteralExpressionNode, ParseError>::Ok(LiteralExpressionNode::Alt8(LiteralExpressionAlt8 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_true,
         }));
     }
     if kind == TK_KW_FALSE {
         let kw_false = p.expect(TK_KW_FALSE)?;
         return Result::<LiteralExpressionNode, ParseError>::Ok(LiteralExpressionNode::Alt9(LiteralExpressionAlt9 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_false,
         }));
     }
@@ -22053,14 +22053,14 @@ fn parse_path_expression(p: &mut Parser) -> Result<PathExpressionNode, ParseErro
     if _gale_kind_set_61(kind) {
         let path_in_expression = parse_path_in_expression(p)?;
         return Result::<PathExpressionNode, ParseError>::Ok(PathExpressionNode::Alt0(PathExpressionAlt0 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             path_in_expression,
         }));
     }
     if kind == TK_LT {
         let qualified_path_in_expression = parse_qualified_path_in_expression(p)?;
         return Result::<PathExpressionNode, ParseError>::Ok(PathExpressionNode::Alt1(PathExpressionAlt1 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             qualified_path_in_expression,
         }));
     }
@@ -22097,7 +22097,7 @@ fn parse_block_expression(p: &mut Parser) -> Result<BlockExpressionNode, ParseEr
     };
     let rcurlybrace = p.expect(TK_RCURLYBRACE)?;
     return Result::<BlockExpressionNode, ParseError>::Ok(BlockExpressionNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         lcurlybrace,
         inner_attribute_list,
         statements,
@@ -22109,7 +22109,7 @@ fn parse_statements_bt_1(p: &mut Parser) -> Result<StatementsNode, ParseError> {
     let start = p.peek().span.start;
     let expression = parse_expression(p)?;
     return Result::<StatementsNode, ParseError>::Ok(StatementsNode::Alt1(StatementsAlt1 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         expression,
     }));
 }
@@ -22149,7 +22149,7 @@ fn parse_statements_bt_0(p: &mut Parser) -> Result<StatementsNode, ParseError> {
         null
     };
     return Result::<StatementsNode, ParseError>::Ok(StatementsNode::Alt0(StatementsAlt0 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         statement_list,
         expression,
     }));
@@ -22221,7 +22221,7 @@ fn parse_async_block_expression(p: &mut Parser) -> Result<AsyncBlockExpressionNo
     };
     let block_expression = parse_block_expression(p)?;
     return Result::<AsyncBlockExpressionNode, ParseError>::Ok(AsyncBlockExpressionNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         kw_async,
         kw_move,
         block_expression,
@@ -22233,7 +22233,7 @@ fn parse_unsafe_block_expression(p: &mut Parser) -> Result<UnsafeBlockExpression
     let kw_unsafe = p.expect(TK_KW_UNSAFE)?;
     let block_expression = parse_block_expression(p)?;
     return Result::<UnsafeBlockExpressionNode, ParseError>::Ok(UnsafeBlockExpressionNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         kw_unsafe,
         block_expression,
     });
@@ -22271,7 +22271,7 @@ fn parse_array_elements_bt_0(p: &mut Parser) -> Result<ArrayElementsNode, ParseE
         null
     };
     return Result::<ArrayElementsNode, ParseError>::Ok(ArrayElementsNode::Alt0(ArrayElementsAlt0 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         expression,
         comma_expression_list,
         comma,
@@ -22311,7 +22311,7 @@ fn parse_array_elements_bt_1(p: &mut Parser) -> Result<ArrayElementsNode, ParseE
     let semi = p.expect(TK_SEMI)?;
     let expression_2 = parse_expression(p)?;
     return Result::<ArrayElementsNode, ParseError>::Ok(ArrayElementsNode::Alt1(ArrayElementsAlt1 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         expression,
         semi,
         expression_2,
@@ -22399,7 +22399,7 @@ fn parse_tuple_elements(p: &mut Parser) -> Result<TupleElementsNode, ParseError>
         null
     };
     return Result::<TupleElementsNode, ParseError>::Ok(TupleElementsNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         expression_comma_list,
         expression,
     });
@@ -22409,7 +22409,7 @@ fn parse_tuple_index(p: &mut Parser) -> Result<TupleIndexNode, ParseError> {
     let start = p.peek().span.start;
     let integer_literal = p.expect(TK_INTEGER_LITERAL)?;
     return Result::<TupleIndexNode, ParseError>::Ok(TupleIndexNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         integer_literal,
     });
 }
@@ -22418,7 +22418,7 @@ fn parse_struct_expression_bt_0(p: &mut Parser) -> Result<StructExpressionNode, 
     let start = p.peek().span.start;
     let struct_expr_struct = parse_struct_expr_struct(p)?;
     return Result::<StructExpressionNode, ParseError>::Ok(StructExpressionNode::Alt0(StructExpressionAlt0 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         struct_expr_struct,
     }));
 }
@@ -22434,7 +22434,7 @@ fn parse_struct_expression_bt_1(p: &mut Parser) -> Result<StructExpressionNode, 
     let start = p.peek().span.start;
     let struct_expr_tuple = parse_struct_expr_tuple(p)?;
     return Result::<StructExpressionNode, ParseError>::Ok(StructExpressionNode::Alt1(StructExpressionAlt1 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         struct_expr_tuple,
     }));
 }
@@ -22450,7 +22450,7 @@ fn parse_struct_expression_bt_2(p: &mut Parser) -> Result<StructExpressionNode, 
     let start = p.peek().span.start;
     let struct_expr_unit = parse_struct_expr_unit(p)?;
     return Result::<StructExpressionNode, ParseError>::Ok(StructExpressionNode::Alt2(StructExpressionAlt2 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         struct_expr_unit,
     }));
 }
@@ -22560,7 +22560,7 @@ fn parse_struct_expr_struct(p: &mut Parser) -> Result<StructExprStructNode, Pars
     };
     let rcurlybrace = p.expect(TK_RCURLYBRACE)?;
     return Result::<StructExprStructNode, ParseError>::Ok(StructExprStructNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         path_in_expression,
         lcurlybrace,
         inner_attribute_list,
@@ -22631,7 +22631,7 @@ fn parse_struct_expr_fields(p: &mut Parser) -> Result<StructExprFieldsNode, Pars
     }
     let group_0 = group_0_inner;
     return Result::<StructExprFieldsNode, ParseError>::Ok(StructExprFieldsNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         struct_expr_field,
         comma_struct_expr_field_list,
         group_0,
@@ -22717,7 +22717,7 @@ fn parse_struct_expr_field(p: &mut Parser) -> Result<StructExprFieldNode, ParseE
     }
     let group_0 = group_0_inner;
     return Result::<StructExprFieldNode, ParseError>::Ok(StructExprFieldNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         outer_attribute_list,
         group_0,
     });
@@ -22728,7 +22728,7 @@ fn parse_struct_base(p: &mut Parser) -> Result<StructBaseNode, ParseError> {
     let dotdot = p.expect(TK_DOTDOT)?;
     let expression = parse_expression(p)?;
     return Result::<StructBaseNode, ParseError>::Ok(StructBaseNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         dotdot,
         expression,
     });
@@ -22850,7 +22850,7 @@ fn parse_struct_expr_tuple(p: &mut Parser) -> Result<StructExprTupleNode, ParseE
     };
     let rparen = p.expect(TK_RPAREN)?;
     return Result::<StructExprTupleNode, ParseError>::Ok(StructExprTupleNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         path_in_expression,
         lparen,
         inner_attribute_list,
@@ -22863,7 +22863,7 @@ fn parse_struct_expr_unit(p: &mut Parser) -> Result<StructExprUnitNode, ParseErr
     let start = p.peek().span.start;
     let path_in_expression = parse_path_in_expression(p)?;
     return Result::<StructExprUnitNode, ParseError>::Ok(StructExprUnitNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         path_in_expression,
     });
 }
@@ -22872,7 +22872,7 @@ fn parse_enumeration_variant_expression_bt_0(p: &mut Parser) -> Result<Enumerati
     let start = p.peek().span.start;
     let enum_expr_struct = parse_enum_expr_struct(p)?;
     return Result::<EnumerationVariantExpressionNode, ParseError>::Ok(EnumerationVariantExpressionNode::Alt0(EnumerationVariantExpressionAlt0 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         enum_expr_struct,
     }));
 }
@@ -22888,7 +22888,7 @@ fn parse_enumeration_variant_expression_bt_1(p: &mut Parser) -> Result<Enumerati
     let start = p.peek().span.start;
     let enum_expr_tuple = parse_enum_expr_tuple(p)?;
     return Result::<EnumerationVariantExpressionNode, ParseError>::Ok(EnumerationVariantExpressionNode::Alt1(EnumerationVariantExpressionAlt1 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         enum_expr_tuple,
     }));
 }
@@ -22904,7 +22904,7 @@ fn parse_enumeration_variant_expression_bt_2(p: &mut Parser) -> Result<Enumerati
     let start = p.peek().span.start;
     let enum_expr_fieldless = parse_enum_expr_fieldless(p)?;
     return Result::<EnumerationVariantExpressionNode, ParseError>::Ok(EnumerationVariantExpressionNode::Alt2(EnumerationVariantExpressionAlt2 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         enum_expr_fieldless,
     }));
 }
@@ -22971,7 +22971,7 @@ fn parse_enum_expr_struct(p: &mut Parser) -> Result<EnumExprStructNode, ParseErr
     };
     let rcurlybrace = p.expect(TK_RCURLYBRACE)?;
     return Result::<EnumExprStructNode, ParseError>::Ok(EnumExprStructNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         path_in_expression,
         lcurlybrace,
         enum_expr_fields,
@@ -23011,7 +23011,7 @@ fn parse_enum_expr_fields(p: &mut Parser) -> Result<EnumExprFieldsNode, ParseErr
         null
     };
     return Result::<EnumExprFieldsNode, ParseError>::Ok(EnumExprFieldsNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         enum_expr_field,
         comma_enum_expr_field_list,
         comma,
@@ -23022,7 +23022,7 @@ fn parse_enum_expr_field_bt_0(p: &mut Parser) -> Result<EnumExprFieldNode, Parse
     let start = p.peek().span.start;
     let identifier = parse_identifier(p)?;
     return Result::<EnumExprFieldNode, ParseError>::Ok(EnumExprFieldNode::Alt0(EnumExprFieldAlt0 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         identifier,
     }));
 }
@@ -23049,7 +23049,7 @@ fn parse_enum_expr_field_bt_1(p: &mut Parser) -> Result<EnumExprFieldNode, Parse
     let colon = p.expect(TK_COLON)?;
     let expression = parse_expression(p)?;
     return Result::<EnumExprFieldNode, ParseError>::Ok(EnumExprFieldNode::Alt1(EnumExprFieldAlt1 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         identifier_or_tuple_index,
         colon,
         expression,
@@ -23222,7 +23222,7 @@ fn parse_enum_expr_tuple(p: &mut Parser) -> Result<EnumExprTupleNode, ParseError
     };
     let rparen = p.expect(TK_RPAREN)?;
     return Result::<EnumExprTupleNode, ParseError>::Ok(EnumExprTupleNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         path_in_expression,
         lparen,
         expression_item_comma,
@@ -23234,7 +23234,7 @@ fn parse_enum_expr_fieldless(p: &mut Parser) -> Result<EnumExprFieldlessNode, Pa
     let start = p.peek().span.start;
     let path_in_expression = parse_path_in_expression(p)?;
     return Result::<EnumExprFieldlessNode, ParseError>::Ok(EnumExprFieldlessNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         path_in_expression,
     });
 }
@@ -23271,7 +23271,7 @@ fn parse_call_params(p: &mut Parser) -> Result<CallParamsNode, ParseError> {
         null
     };
     return Result::<CallParamsNode, ParseError>::Ok(CallParamsNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         expression,
         comma_expression_list,
         comma,
@@ -23328,7 +23328,7 @@ fn parse_closure_expression(p: &mut Parser) -> Result<ClosureExpressionNode, Par
     }
     let group_1 = group_1_inner;
     return Result::<ClosureExpressionNode, ParseError>::Ok(ClosureExpressionNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         kw_move,
         group_0,
         group_1,
@@ -23367,7 +23367,7 @@ fn parse_closure_parameters(p: &mut Parser) -> Result<ClosureParametersNode, Par
         null
     };
     return Result::<ClosureParametersNode, ParseError>::Ok(ClosureParametersNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         closure_param,
         comma_closure_param_list,
         comma,
@@ -23404,7 +23404,7 @@ fn parse_closure_param(p: &mut Parser) -> Result<ClosureParamNode, ParseError> {
         null
     };
     return Result::<ClosureParamNode, ParseError>::Ok(ClosureParamNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         outer_attribute_list,
         pattern,
         colon_type_,
@@ -23449,7 +23449,7 @@ fn parse_loop_expression(p: &mut Parser) -> Result<LoopExpressionNode, ParseErro
     }
     let infinite_loop_expression_or_predicate_loop_expression_or_predicate_pattern_loop_expression_or_iterator_loop_expression = infinite_loop_expression_or_predicate_loop_expression_or_predicate_pattern_loop_expression_or_iterator_loop_expression_inner;
     return Result::<LoopExpressionNode, ParseError>::Ok(LoopExpressionNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         loop_label,
         infinite_loop_expression_or_predicate_loop_expression_or_predicate_pattern_loop_expression_or_iterator_loop_expression,
     });
@@ -23460,7 +23460,7 @@ fn parse_infinite_loop_expression(p: &mut Parser) -> Result<InfiniteLoopExpressi
     let kw_loop = p.expect(TK_KW_LOOP)?;
     let block_expression = parse_block_expression(p)?;
     return Result::<InfiniteLoopExpressionNode, ParseError>::Ok(InfiniteLoopExpressionNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         kw_loop,
         block_expression,
     });
@@ -23472,7 +23472,7 @@ fn parse_predicate_loop_expression(p: &mut Parser) -> Result<PredicateLoopExpres
     let expression = parse_expression(p)?;
     let block_expression = parse_block_expression(p)?;
     return Result::<PredicateLoopExpressionNode, ParseError>::Ok(PredicateLoopExpressionNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         kw_while,
         expression,
         block_expression,
@@ -23488,7 +23488,7 @@ fn parse_predicate_pattern_loop_expression(p: &mut Parser) -> Result<PredicatePa
     let expression = parse_expression(p)?;
     let block_expression = parse_block_expression(p)?;
     return Result::<PredicatePatternLoopExpressionNode, ParseError>::Ok(PredicatePatternLoopExpressionNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         kw_while,
         kw_let,
         pattern,
@@ -23506,7 +23506,7 @@ fn parse_iterator_loop_expression(p: &mut Parser) -> Result<IteratorLoopExpressi
     let expression = parse_expression(p)?;
     let block_expression = parse_block_expression(p)?;
     return Result::<IteratorLoopExpressionNode, ParseError>::Ok(IteratorLoopExpressionNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         kw_for,
         pattern,
         kw_in,
@@ -23520,7 +23520,7 @@ fn parse_loop_label(p: &mut Parser) -> Result<LoopLabelNode, ParseError> {
     let lifetime_or_label = p.expect(TK_LIFETIME_OR_LABEL)?;
     let colon = p.expect(TK_COLON)?;
     return Result::<LoopLabelNode, ParseError>::Ok(LoopLabelNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         lifetime_or_label,
         colon,
     });
@@ -23568,7 +23568,7 @@ fn parse_if_expression(p: &mut Parser) -> Result<IfExpressionNode, ParseError> {
         null
     };
     return Result::<IfExpressionNode, ParseError>::Ok(IfExpressionNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         kw_if,
         expression,
         block_expression,
@@ -23621,7 +23621,7 @@ fn parse_if_let_expression(p: &mut Parser) -> Result<IfLetExpressionNode, ParseE
         null
     };
     return Result::<IfLetExpressionNode, ParseError>::Ok(IfLetExpressionNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         kw_if,
         kw_let,
         pattern,
@@ -23660,7 +23660,7 @@ fn parse_match_expression(p: &mut Parser) -> Result<MatchExpressionNode, ParseEr
     };
     let rcurlybrace = p.expect(TK_RCURLYBRACE)?;
     return Result::<MatchExpressionNode, ParseError>::Ok(MatchExpressionNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         kw_match,
         expression,
         lcurlybrace,
@@ -23708,7 +23708,7 @@ fn parse_match_arms(p: &mut Parser) -> Result<MatchArmsNode, ParseError> {
         null
     };
     return Result::<MatchArmsNode, ParseError>::Ok(MatchArmsNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         match_arm_fatarrow_match_arm_expression_list,
         match_arm,
         fatarrow,
@@ -23727,7 +23727,7 @@ fn parse_match_arm_expression_bt_1(p: &mut Parser) -> Result<MatchArmExpressionN
         null
     };
     return Result::<MatchArmExpressionNode, ParseError>::Ok(MatchArmExpressionNode::Alt1(MatchArmExpressionAlt1 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         expression_with_block,
         comma,
     }));
@@ -23750,7 +23750,7 @@ fn parse_match_arm_expression_bt_0(p: &mut Parser) -> Result<MatchArmExpressionN
     let expression = parse_expression(p)?;
     let comma = p.expect(TK_COMMA)?;
     return Result::<MatchArmExpressionNode, ParseError>::Ok(MatchArmExpressionNode::Alt0(MatchArmExpressionAlt0 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         expression,
         comma,
     }));
@@ -23827,7 +23827,7 @@ fn parse_match_arm(p: &mut Parser) -> Result<MatchArmNode, ParseError> {
         null
     };
     return Result::<MatchArmNode, ParseError>::Ok(MatchArmNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         outer_attribute_list,
         pattern,
         match_arm_guard,
@@ -23839,7 +23839,7 @@ fn parse_match_arm_guard(p: &mut Parser) -> Result<MatchArmGuardNode, ParseError
     let kw_if = p.expect(TK_KW_IF)?;
     let expression = parse_expression(p)?;
     return Result::<MatchArmGuardNode, ParseError>::Ok(MatchArmGuardNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         kw_if,
         expression,
     });
@@ -23877,7 +23877,7 @@ fn parse_pattern(p: &mut Parser) -> Result<PatternNode, ParseError> {
         or_pattern_no_top_alt_list.push(or_pattern_no_top_alt);
     }
     return Result::<PatternNode, ParseError>::Ok(PatternNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         or,
         pattern_no_top_alt,
         or_pattern_no_top_alt_list,
@@ -23888,7 +23888,7 @@ fn parse_pattern_no_top_alt_bt_1(p: &mut Parser) -> Result<PatternNoTopAltNode, 
     let start = p.peek().span.start;
     let range_pattern = parse_range_pattern(p)?;
     return Result::<PatternNoTopAltNode, ParseError>::Ok(PatternNoTopAltNode::Alt1(PatternNoTopAltAlt1 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         range_pattern,
     }));
 }
@@ -23904,7 +23904,7 @@ fn parse_pattern_no_top_alt_bt_0(p: &mut Parser) -> Result<PatternNoTopAltNode, 
     let start = p.peek().span.start;
     let pattern_without_range = parse_pattern_without_range(p)?;
     return Result::<PatternNoTopAltNode, ParseError>::Ok(PatternNoTopAltNode::Alt0(PatternNoTopAltAlt0 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         pattern_without_range,
     }));
 }
@@ -23957,7 +23957,7 @@ fn parse_pattern_without_range_bt_1(p: &mut Parser) -> Result<PatternWithoutRang
     let start = p.peek().span.start;
     let identifier_pattern = parse_identifier_pattern(p)?;
     return Result::<PatternWithoutRangeNode, ParseError>::Ok(PatternWithoutRangeNode::Alt1(PatternWithoutRangeAlt1 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         identifier_pattern,
     }));
 }
@@ -23973,7 +23973,7 @@ fn parse_pattern_without_range_bt_11(p: &mut Parser) -> Result<PatternWithoutRan
     let start = p.peek().span.start;
     let macro_invocation = parse_macro_invocation(p)?;
     return Result::<PatternWithoutRangeNode, ParseError>::Ok(PatternWithoutRangeNode::Alt11(PatternWithoutRangeAlt11 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         macro_invocation,
     }));
 }
@@ -23989,7 +23989,7 @@ fn parse_pattern_without_range_bt_6(p: &mut Parser) -> Result<PatternWithoutRang
     let start = p.peek().span.start;
     let tuple_struct_pattern = parse_tuple_struct_pattern(p)?;
     return Result::<PatternWithoutRangeNode, ParseError>::Ok(PatternWithoutRangeNode::Alt6(PatternWithoutRangeAlt6 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         tuple_struct_pattern,
     }));
 }
@@ -24005,7 +24005,7 @@ fn parse_pattern_without_range_bt_5(p: &mut Parser) -> Result<PatternWithoutRang
     let start = p.peek().span.start;
     let struct_pattern = parse_struct_pattern(p)?;
     return Result::<PatternWithoutRangeNode, ParseError>::Ok(PatternWithoutRangeNode::Alt5(PatternWithoutRangeAlt5 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         struct_pattern,
     }));
 }
@@ -24021,7 +24021,7 @@ fn parse_pattern_without_range_bt_10(p: &mut Parser) -> Result<PatternWithoutRan
     let start = p.peek().span.start;
     let path_pattern = parse_path_pattern(p)?;
     return Result::<PatternWithoutRangeNode, ParseError>::Ok(PatternWithoutRangeNode::Alt10(PatternWithoutRangeAlt10 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         path_pattern,
     }));
 }
@@ -24037,7 +24037,7 @@ fn parse_pattern_without_range_bt_7(p: &mut Parser) -> Result<PatternWithoutRang
     let start = p.peek().span.start;
     let tuple_pattern = parse_tuple_pattern(p)?;
     return Result::<PatternWithoutRangeNode, ParseError>::Ok(PatternWithoutRangeNode::Alt7(PatternWithoutRangeAlt7 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         tuple_pattern,
     }));
 }
@@ -24053,7 +24053,7 @@ fn parse_pattern_without_range_bt_8(p: &mut Parser) -> Result<PatternWithoutRang
     let start = p.peek().span.start;
     let grouped_pattern = parse_grouped_pattern(p)?;
     return Result::<PatternWithoutRangeNode, ParseError>::Ok(PatternWithoutRangeNode::Alt8(PatternWithoutRangeAlt8 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         grouped_pattern,
     }));
 }
@@ -24071,7 +24071,7 @@ fn parse_pattern_without_range(p: &mut Parser) -> Result<PatternWithoutRangeNode
     if _gale_kind_set_74(kind) {
         let literal_pattern = parse_literal_pattern(p)?;
         return Result::<PatternWithoutRangeNode, ParseError>::Ok(PatternWithoutRangeNode::Alt0(PatternWithoutRangeAlt0 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             literal_pattern,
         }));
     }
@@ -24199,21 +24199,21 @@ fn parse_pattern_without_range(p: &mut Parser) -> Result<PatternWithoutRangeNode
     if kind == TK_UNDERSCORE {
         let wildcard_pattern = parse_wildcard_pattern(p)?;
         return Result::<PatternWithoutRangeNode, ParseError>::Ok(PatternWithoutRangeNode::Alt2(PatternWithoutRangeAlt2 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             wildcard_pattern,
         }));
     }
     if kind == TK_DOTDOT {
         let rest_pattern = parse_rest_pattern(p)?;
         return Result::<PatternWithoutRangeNode, ParseError>::Ok(PatternWithoutRangeNode::Alt3(PatternWithoutRangeAlt3 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             rest_pattern,
         }));
     }
     if _gale_kind_set_49(kind) {
         let reference_pattern = parse_reference_pattern(p)?;
         return Result::<PatternWithoutRangeNode, ParseError>::Ok(PatternWithoutRangeNode::Alt4(PatternWithoutRangeAlt4 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             reference_pattern,
         }));
     }
@@ -24245,7 +24245,7 @@ fn parse_pattern_without_range(p: &mut Parser) -> Result<PatternWithoutRangeNode
     if kind == TK_LSQUAREBRACKET {
         let slice_pattern = parse_slice_pattern(p)?;
         return Result::<PatternWithoutRangeNode, ParseError>::Ok(PatternWithoutRangeNode::Alt9(PatternWithoutRangeAlt9 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             slice_pattern,
         }));
     }
@@ -24266,7 +24266,7 @@ fn parse_literal_pattern_bt_8(p: &mut Parser) -> Result<LiteralPatternNode, Pars
     };
     let integer_literal = p.expect(TK_INTEGER_LITERAL)?;
     return Result::<LiteralPatternNode, ParseError>::Ok(LiteralPatternNode::Alt8(LiteralPatternAlt8 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         minus,
         integer_literal,
     }));
@@ -24294,7 +24294,7 @@ fn parse_literal_pattern_bt_9(p: &mut Parser) -> Result<LiteralPatternNode, Pars
     };
     let float_literal = p.expect(TK_FLOAT_LITERAL)?;
     return Result::<LiteralPatternNode, ParseError>::Ok(LiteralPatternNode::Alt9(LiteralPatternAlt9 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         minus,
         float_literal,
     }));
@@ -24318,56 +24318,56 @@ fn parse_literal_pattern(p: &mut Parser) -> Result<LiteralPatternNode, ParseErro
     if kind == TK_KW_TRUE {
         let kw_true = p.expect(TK_KW_TRUE)?;
         return Result::<LiteralPatternNode, ParseError>::Ok(LiteralPatternNode::Alt0(LiteralPatternAlt0 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_true,
         }));
     }
     if kind == TK_KW_FALSE {
         let kw_false = p.expect(TK_KW_FALSE)?;
         return Result::<LiteralPatternNode, ParseError>::Ok(LiteralPatternNode::Alt1(LiteralPatternAlt1 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_false,
         }));
     }
     if kind == TK_CHAR_LITERAL {
         let char_literal = p.expect(TK_CHAR_LITERAL)?;
         return Result::<LiteralPatternNode, ParseError>::Ok(LiteralPatternNode::Alt2(LiteralPatternAlt2 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             char_literal,
         }));
     }
     if kind == TK_BYTE_LITERAL {
         let byte_literal = p.expect(TK_BYTE_LITERAL)?;
         return Result::<LiteralPatternNode, ParseError>::Ok(LiteralPatternNode::Alt3(LiteralPatternAlt3 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             byte_literal,
         }));
     }
     if kind == TK_STRING_LITERAL {
         let string_literal = p.expect(TK_STRING_LITERAL)?;
         return Result::<LiteralPatternNode, ParseError>::Ok(LiteralPatternNode::Alt4(LiteralPatternAlt4 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             string_literal,
         }));
     }
     if kind == TK_RAW_STRING_LITERAL {
         let raw_string_literal = p.expect(TK_RAW_STRING_LITERAL)?;
         return Result::<LiteralPatternNode, ParseError>::Ok(LiteralPatternNode::Alt5(LiteralPatternAlt5 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             raw_string_literal,
         }));
     }
     if kind == TK_BYTE_STRING_LITERAL {
         let byte_string_literal = p.expect(TK_BYTE_STRING_LITERAL)?;
         return Result::<LiteralPatternNode, ParseError>::Ok(LiteralPatternNode::Alt6(LiteralPatternAlt6 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             byte_string_literal,
         }));
     }
     if kind == TK_RAW_BYTE_STRING_LITERAL {
         let raw_byte_string_literal = p.expect(TK_RAW_BYTE_STRING_LITERAL)?;
         return Result::<LiteralPatternNode, ParseError>::Ok(LiteralPatternNode::Alt7(LiteralPatternAlt7 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             raw_byte_string_literal,
         }));
     }
@@ -24418,7 +24418,7 @@ fn parse_identifier_pattern(p: &mut Parser) -> Result<IdentifierPatternNode, Par
         null
     };
     return Result::<IdentifierPatternNode, ParseError>::Ok(IdentifierPatternNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         kw_ref,
         kw_mut,
         identifier,
@@ -24430,7 +24430,7 @@ fn parse_wildcard_pattern(p: &mut Parser) -> Result<WildcardPatternNode, ParseEr
     let start = p.peek().span.start;
     let underscore = p.expect(TK_UNDERSCORE)?;
     return Result::<WildcardPatternNode, ParseError>::Ok(WildcardPatternNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         underscore,
     });
 }
@@ -24439,7 +24439,7 @@ fn parse_rest_pattern(p: &mut Parser) -> Result<RestPatternNode, ParseError> {
     let start = p.peek().span.start;
     let dotdot = p.expect(TK_DOTDOT)?;
     return Result::<RestPatternNode, ParseError>::Ok(RestPatternNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         dotdot,
     });
 }
@@ -24450,7 +24450,7 @@ fn parse_range_pattern_bt_0(p: &mut Parser) -> Result<RangePatternNode, ParseErr
     let dotdoteq = p.expect(TK_DOTDOTEQ)?;
     let range_pattern_bound_2 = parse_range_pattern_bound(p)?;
     return Result::<RangePatternNode, ParseError>::Ok(RangePatternNode::InclusiveRangePattern(RangePatternInclusiveRangePattern {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         range_pattern_bound,
         dotdoteq,
         range_pattern_bound_2,
@@ -24474,7 +24474,7 @@ fn parse_range_pattern_bt_2(p: &mut Parser) -> Result<RangePatternNode, ParseErr
     let dotdotdot = p.expect(TK_DOTDOTDOT)?;
     let range_pattern_bound_2 = parse_range_pattern_bound(p)?;
     return Result::<RangePatternNode, ParseError>::Ok(RangePatternNode::ObsoleteRangePattern(RangePatternObsoleteRangePattern {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         range_pattern_bound,
         dotdotdot,
         range_pattern_bound_2,
@@ -24497,7 +24497,7 @@ fn parse_range_pattern_bt_1(p: &mut Parser) -> Result<RangePatternNode, ParseErr
     let range_pattern_bound = parse_range_pattern_bound(p)?;
     let dotdot = p.expect(TK_DOTDOT)?;
     return Result::<RangePatternNode, ParseError>::Ok(RangePatternNode::HalfOpenRangePattern(RangePatternHalfOpenRangePattern {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         range_pattern_bound,
         dotdot,
     }));
@@ -24565,7 +24565,7 @@ fn parse_range_pattern_bound_bt_2(p: &mut Parser) -> Result<RangePatternBoundNod
     };
     let integer_literal = p.expect(TK_INTEGER_LITERAL)?;
     return Result::<RangePatternBoundNode, ParseError>::Ok(RangePatternBoundNode::Alt2(RangePatternBoundAlt2 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         minus,
         integer_literal,
     }));
@@ -24593,7 +24593,7 @@ fn parse_range_pattern_bound_bt_3(p: &mut Parser) -> Result<RangePatternBoundNod
     };
     let float_literal = p.expect(TK_FLOAT_LITERAL)?;
     return Result::<RangePatternBoundNode, ParseError>::Ok(RangePatternBoundNode::Alt3(RangePatternBoundAlt3 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         minus,
         float_literal,
     }));
@@ -24617,14 +24617,14 @@ fn parse_range_pattern_bound(p: &mut Parser) -> Result<RangePatternBoundNode, Pa
     if kind == TK_CHAR_LITERAL {
         let char_literal = p.expect(TK_CHAR_LITERAL)?;
         return Result::<RangePatternBoundNode, ParseError>::Ok(RangePatternBoundNode::Alt0(RangePatternBoundAlt0 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             char_literal,
         }));
     }
     if kind == TK_BYTE_LITERAL {
         let byte_literal = p.expect(TK_BYTE_LITERAL)?;
         return Result::<RangePatternBoundNode, ParseError>::Ok(RangePatternBoundNode::Alt1(RangePatternBoundAlt1 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             byte_literal,
         }));
     }
@@ -24644,7 +24644,7 @@ fn parse_range_pattern_bound(p: &mut Parser) -> Result<RangePatternBoundNode, Pa
     if _gale_kind_set_77(kind) {
         let path_pattern = parse_path_pattern(p)?;
         return Result::<RangePatternBoundNode, ParseError>::Ok(RangePatternBoundNode::Alt4(RangePatternBoundAlt4 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             path_pattern,
         }));
     }
@@ -24666,7 +24666,7 @@ fn parse_reference_pattern(p: &mut Parser) -> Result<ReferencePatternNode, Parse
     };
     let pattern_without_range = parse_pattern_without_range(p)?;
     return Result::<ReferencePatternNode, ParseError>::Ok(ReferencePatternNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         and_or_andand,
         kw_mut,
         pattern_without_range,
@@ -24685,7 +24685,7 @@ fn parse_struct_pattern(p: &mut Parser) -> Result<StructPatternNode, ParseError>
     };
     let rcurlybrace = p.expect(TK_RCURLYBRACE)?;
     return Result::<StructPatternNode, ParseError>::Ok(StructPatternNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         path_in_expression,
         lcurlybrace,
         struct_pattern_elements,
@@ -24697,7 +24697,7 @@ fn parse_struct_pattern_elements_bt_1(p: &mut Parser) -> Result<StructPatternEle
     let start = p.peek().span.start;
     let struct_pattern_et_cetera = parse_struct_pattern_et_cetera(p)?;
     return Result::<StructPatternElementsNode, ParseError>::Ok(StructPatternElementsNode::Alt1(StructPatternElementsAlt1 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         struct_pattern_et_cetera,
     }));
 }
@@ -24729,7 +24729,7 @@ fn parse_struct_pattern_elements_bt_0(p: &mut Parser) -> Result<StructPatternEle
         null
     };
     return Result::<StructPatternElementsNode, ParseError>::Ok(StructPatternElementsNode::Alt0(StructPatternElementsAlt0 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         struct_pattern_fields,
         comma_struct_pattern_et_cetera,
     }));
@@ -24820,7 +24820,7 @@ fn parse_struct_pattern_fields(p: &mut Parser) -> Result<StructPatternFieldsNode
         comma_struct_pattern_field_list.push(comma_struct_pattern_field);
     }
     return Result::<StructPatternFieldsNode, ParseError>::Ok(StructPatternFieldsNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         struct_pattern_field,
         comma_struct_pattern_field_list,
     });
@@ -24902,7 +24902,7 @@ fn parse_struct_pattern_field(p: &mut Parser) -> Result<StructPatternFieldNode, 
     }
     let group_0 = group_0_inner;
     return Result::<StructPatternFieldNode, ParseError>::Ok(StructPatternFieldNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         outer_attribute_list,
         group_0,
     });
@@ -24927,7 +24927,7 @@ fn parse_struct_pattern_et_cetera(p: &mut Parser) -> Result<StructPatternEtCeter
     }
     let dotdot = p.expect(TK_DOTDOT)?;
     return Result::<StructPatternEtCeteraNode, ParseError>::Ok(StructPatternEtCeteraNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         outer_attribute_list,
         dotdot,
     });
@@ -24945,7 +24945,7 @@ fn parse_tuple_struct_pattern(p: &mut Parser) -> Result<TupleStructPatternNode, 
     };
     let rparen = p.expect(TK_RPAREN)?;
     return Result::<TupleStructPatternNode, ParseError>::Ok(TupleStructPatternNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         path_in_expression,
         lparen,
         tuple_struct_items,
@@ -24985,7 +24985,7 @@ fn parse_tuple_struct_items(p: &mut Parser) -> Result<TupleStructItemsNode, Pars
         null
     };
     return Result::<TupleStructItemsNode, ParseError>::Ok(TupleStructItemsNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         pattern,
         comma_pattern_list,
         comma,
@@ -25003,7 +25003,7 @@ fn parse_tuple_pattern(p: &mut Parser) -> Result<TuplePatternNode, ParseError> {
     };
     let rparen = p.expect(TK_RPAREN)?;
     return Result::<TuplePatternNode, ParseError>::Ok(TuplePatternNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         lparen,
         tuple_pattern_items,
         rparen,
@@ -25014,7 +25014,7 @@ fn parse_tuple_pattern_items_bt_1(p: &mut Parser) -> Result<TuplePatternItemsNod
     let start = p.peek().span.start;
     let rest_pattern = parse_rest_pattern(p)?;
     return Result::<TuplePatternItemsNode, ParseError>::Ok(TuplePatternItemsNode::Alt1(TuplePatternItemsAlt1 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         rest_pattern,
     }));
 }
@@ -25062,7 +25062,7 @@ fn parse_tuple_pattern_items_bt_2(p: &mut Parser) -> Result<TuplePatternItemsNod
         null
     };
     return Result::<TuplePatternItemsNode, ParseError>::Ok(TuplePatternItemsNode::Alt2(TuplePatternItemsAlt2 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         pattern,
         comma_pattern_list,
         comma,
@@ -25111,7 +25111,7 @@ fn parse_tuple_pattern_items_bt_0(p: &mut Parser) -> Result<TuplePatternItemsNod
     let pattern = parse_pattern(p)?;
     let comma = p.expect(TK_COMMA)?;
     return Result::<TuplePatternItemsNode, ParseError>::Ok(TuplePatternItemsNode::Alt0(TuplePatternItemsAlt0 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         pattern,
         comma,
     }));
@@ -25197,7 +25197,7 @@ fn parse_grouped_pattern(p: &mut Parser) -> Result<GroupedPatternNode, ParseErro
     let pattern = parse_pattern(p)?;
     let rparen = p.expect(TK_RPAREN)?;
     return Result::<GroupedPatternNode, ParseError>::Ok(GroupedPatternNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         lparen,
         pattern,
         rparen,
@@ -25215,7 +25215,7 @@ fn parse_slice_pattern(p: &mut Parser) -> Result<SlicePatternNode, ParseError> {
     };
     let rsquarebracket = p.expect(TK_RSQUAREBRACKET)?;
     return Result::<SlicePatternNode, ParseError>::Ok(SlicePatternNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         lsquarebracket,
         slice_pattern_items,
         rsquarebracket,
@@ -25254,7 +25254,7 @@ fn parse_slice_pattern_items(p: &mut Parser) -> Result<SlicePatternItemsNode, Pa
         null
     };
     return Result::<SlicePatternItemsNode, ParseError>::Ok(SlicePatternItemsNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         pattern,
         comma_pattern_list,
         comma,
@@ -25267,14 +25267,14 @@ fn parse_path_pattern(p: &mut Parser) -> Result<PathPatternNode, ParseError> {
     if _gale_kind_set_61(kind) {
         let path_in_expression = parse_path_in_expression(p)?;
         return Result::<PathPatternNode, ParseError>::Ok(PathPatternNode::Alt0(PathPatternAlt0 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             path_in_expression,
         }));
     }
     if kind == TK_LT {
         let qualified_path_in_expression = parse_qualified_path_in_expression(p)?;
         return Result::<PathPatternNode, ParseError>::Ok(PathPatternNode::Alt1(PathPatternAlt1 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             qualified_path_in_expression,
         }));
     }
@@ -25289,7 +25289,7 @@ fn parse_type__bt_1(p: &mut Parser) -> Result<TypeNode, ParseError> {
     let start = p.peek().span.start;
     let impl_trait_type = parse_impl_trait_type(p)?;
     return Result::<TypeNode, ParseError>::Ok(TypeNode::Alt1(TypeAlt1 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         impl_trait_type,
     }));
 }
@@ -25305,7 +25305,7 @@ fn parse_type__bt_2(p: &mut Parser) -> Result<TypeNode, ParseError> {
     let start = p.peek().span.start;
     let trait_object_type = parse_trait_object_type(p)?;
     return Result::<TypeNode, ParseError>::Ok(TypeNode::Alt2(TypeAlt2 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         trait_object_type,
     }));
 }
@@ -25321,7 +25321,7 @@ fn parse_type__bt_0(p: &mut Parser) -> Result<TypeNode, ParseError> {
     let start = p.peek().span.start;
     let type_no_bounds = parse_type_no_bounds(p)?;
     return Result::<TypeNode, ParseError>::Ok(TypeNode::Alt0(TypeAlt0 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         type_no_bounds,
     }));
 }
@@ -25398,7 +25398,7 @@ fn parse_type_no_bounds_bt_0(p: &mut Parser) -> Result<TypeNoBoundsNode, ParseEr
     let start = p.peek().span.start;
     let parenthesized_type = parse_parenthesized_type(p)?;
     return Result::<TypeNoBoundsNode, ParseError>::Ok(TypeNoBoundsNode::Alt0(TypeNoBoundsAlt0 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         parenthesized_type,
     }));
 }
@@ -25414,7 +25414,7 @@ fn parse_type_no_bounds_bt_4(p: &mut Parser) -> Result<TypeNoBoundsNode, ParseEr
     let start = p.peek().span.start;
     let tuple_type = parse_tuple_type(p)?;
     return Result::<TypeNoBoundsNode, ParseError>::Ok(TypeNoBoundsNode::Alt4(TypeNoBoundsAlt4 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         tuple_type,
     }));
 }
@@ -25430,7 +25430,7 @@ fn parse_type_no_bounds_bt_12(p: &mut Parser) -> Result<TypeNoBoundsNode, ParseE
     let start = p.peek().span.start;
     let bare_function_type = parse_bare_function_type(p)?;
     return Result::<TypeNoBoundsNode, ParseError>::Ok(TypeNoBoundsNode::Alt12(TypeNoBoundsAlt12 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         bare_function_type,
     }));
 }
@@ -25446,7 +25446,7 @@ fn parse_type_no_bounds_bt_13(p: &mut Parser) -> Result<TypeNoBoundsNode, ParseE
     let start = p.peek().span.start;
     let macro_invocation = parse_macro_invocation(p)?;
     return Result::<TypeNoBoundsNode, ParseError>::Ok(TypeNoBoundsNode::Alt13(TypeNoBoundsAlt13 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         macro_invocation,
     }));
 }
@@ -25462,7 +25462,7 @@ fn parse_type_no_bounds_bt_3(p: &mut Parser) -> Result<TypeNoBoundsNode, ParseEr
     let start = p.peek().span.start;
     let type_path = parse_type_path(p)?;
     return Result::<TypeNoBoundsNode, ParseError>::Ok(TypeNoBoundsNode::Alt3(TypeNoBoundsAlt3 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         type_path,
     }));
 }
@@ -25478,7 +25478,7 @@ fn parse_type_no_bounds_bt_2(p: &mut Parser) -> Result<TypeNoBoundsNode, ParseEr
     let start = p.peek().span.start;
     let trait_object_type_one_bound = parse_trait_object_type_one_bound(p)?;
     return Result::<TypeNoBoundsNode, ParseError>::Ok(TypeNoBoundsNode::Alt2(TypeNoBoundsAlt2 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         trait_object_type_one_bound,
     }));
 }
@@ -25494,7 +25494,7 @@ fn parse_type_no_bounds_bt_8(p: &mut Parser) -> Result<TypeNoBoundsNode, ParseEr
     let start = p.peek().span.start;
     let array_type = parse_array_type(p)?;
     return Result::<TypeNoBoundsNode, ParseError>::Ok(TypeNoBoundsNode::Alt8(TypeNoBoundsAlt8 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         array_type,
     }));
 }
@@ -25510,7 +25510,7 @@ fn parse_type_no_bounds_bt_9(p: &mut Parser) -> Result<TypeNoBoundsNode, ParseEr
     let start = p.peek().span.start;
     let slice_type = parse_slice_type(p)?;
     return Result::<TypeNoBoundsNode, ParseError>::Ok(TypeNoBoundsNode::Alt9(TypeNoBoundsAlt9 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         slice_type,
     }));
 }
@@ -25639,28 +25639,28 @@ fn parse_type_no_bounds(p: &mut Parser) -> Result<TypeNoBoundsNode, ParseError> 
     if kind == TK_KW_IMPL {
         let impl_trait_type_one_bound = parse_impl_trait_type_one_bound(p)?;
         return Result::<TypeNoBoundsNode, ParseError>::Ok(TypeNoBoundsNode::Alt1(TypeNoBoundsAlt1 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             impl_trait_type_one_bound,
         }));
     }
     if kind == TK_NOT {
         let never_type = parse_never_type(p)?;
         return Result::<TypeNoBoundsNode, ParseError>::Ok(TypeNoBoundsNode::Alt5(TypeNoBoundsAlt5 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             never_type,
         }));
     }
     if kind == TK_STAR {
         let raw_pointer_type = parse_raw_pointer_type(p)?;
         return Result::<TypeNoBoundsNode, ParseError>::Ok(TypeNoBoundsNode::Alt6(TypeNoBoundsAlt6 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             raw_pointer_type,
         }));
     }
     if kind == TK_AND {
         let reference_type = parse_reference_type(p)?;
         return Result::<TypeNoBoundsNode, ParseError>::Ok(TypeNoBoundsNode::Alt7(TypeNoBoundsAlt7 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             reference_type,
         }));
     }
@@ -25692,14 +25692,14 @@ fn parse_type_no_bounds(p: &mut Parser) -> Result<TypeNoBoundsNode, ParseError> 
     if kind == TK_UNDERSCORE {
         let inferred_type = parse_inferred_type(p)?;
         return Result::<TypeNoBoundsNode, ParseError>::Ok(TypeNoBoundsNode::Alt10(TypeNoBoundsAlt10 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             inferred_type,
         }));
     }
     if kind == TK_LT {
         let qualified_path_in_type = parse_qualified_path_in_type(p)?;
         return Result::<TypeNoBoundsNode, ParseError>::Ok(TypeNoBoundsNode::Alt11(TypeNoBoundsAlt11 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             qualified_path_in_type,
         }));
     }
@@ -25716,7 +25716,7 @@ fn parse_parenthesized_type(p: &mut Parser) -> Result<ParenthesizedTypeNode, Par
     let type_ = parse_type_(p)?;
     let rparen = p.expect(TK_RPAREN)?;
     return Result::<ParenthesizedTypeNode, ParseError>::Ok(ParenthesizedTypeNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         lparen,
         type_,
         rparen,
@@ -25727,7 +25727,7 @@ fn parse_never_type(p: &mut Parser) -> Result<NeverTypeNode, ParseError> {
     let start = p.peek().span.start;
     let not = p.expect(TK_NOT)?;
     return Result::<NeverTypeNode, ParseError>::Ok(NeverTypeNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         not,
     });
 }
@@ -25811,7 +25811,7 @@ fn parse_tuple_type(p: &mut Parser) -> Result<TupleTypeNode, ParseError> {
     };
     let rparen = p.expect(TK_RPAREN)?;
     return Result::<TupleTypeNode, ParseError>::Ok(TupleTypeNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         lparen,
         item_type_,
         rparen,
@@ -25826,7 +25826,7 @@ fn parse_array_type(p: &mut Parser) -> Result<ArrayTypeNode, ParseError> {
     let expression = parse_expression(p)?;
     let rsquarebracket = p.expect(TK_RSQUAREBRACKET)?;
     return Result::<ArrayTypeNode, ParseError>::Ok(ArrayTypeNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         lsquarebracket,
         type_,
         semi,
@@ -25841,7 +25841,7 @@ fn parse_slice_type(p: &mut Parser) -> Result<SliceTypeNode, ParseError> {
     let type_ = parse_type_(p)?;
     let rsquarebracket = p.expect(TK_RSQUAREBRACKET)?;
     return Result::<SliceTypeNode, ParseError>::Ok(SliceTypeNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         lsquarebracket,
         type_,
         rsquarebracket,
@@ -25865,7 +25865,7 @@ fn parse_reference_type(p: &mut Parser) -> Result<ReferenceTypeNode, ParseError>
     };
     let type_no_bounds = parse_type_no_bounds(p)?;
     return Result::<ReferenceTypeNode, ParseError>::Ok(ReferenceTypeNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         and,
         lifetime,
         kw_mut,
@@ -25879,7 +25879,7 @@ fn parse_raw_pointer_type(p: &mut Parser) -> Result<RawPointerTypeNode, ParseErr
     let kw_mut_or_kw_const = p.advance();
     let type_no_bounds = parse_type_no_bounds(p)?;
     return Result::<RawPointerTypeNode, ParseError>::Ok(RawPointerTypeNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         star,
         kw_mut_or_kw_const,
         type_no_bounds,
@@ -25911,7 +25911,7 @@ fn parse_bare_function_type(p: &mut Parser) -> Result<BareFunctionTypeNode, Pars
         null
     };
     return Result::<BareFunctionTypeNode, ParseError>::Ok(BareFunctionTypeNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         for_lifetimes,
         function_type_qualifiers,
         kw_fn,
@@ -25947,7 +25947,7 @@ fn parse_function_type_qualifiers(p: &mut Parser) -> Result<FunctionTypeQualifie
         null
     };
     return Result::<FunctionTypeQualifiersNode, ParseError>::Ok(FunctionTypeQualifiersNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         kw_unsafe,
         kw_extern_abi,
     });
@@ -25958,7 +25958,7 @@ fn parse_bare_function_return_type(p: &mut Parser) -> Result<BareFunctionReturnT
     let rarrow = p.expect(TK_RARROW)?;
     let type_no_bounds = parse_type_no_bounds(p)?;
     return Result::<BareFunctionReturnTypeNode, ParseError>::Ok(BareFunctionReturnTypeNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         rarrow,
         type_no_bounds,
     });
@@ -25968,7 +25968,7 @@ fn parse_function_parameters_maybe_named_variadic_bt_0(p: &mut Parser) -> Result
     let start = p.peek().span.start;
     let maybe_named_function_parameters = parse_maybe_named_function_parameters(p)?;
     return Result::<FunctionParametersMaybeNamedVariadicNode, ParseError>::Ok(FunctionParametersMaybeNamedVariadicNode::Alt0(FunctionParametersMaybeNamedVariadicAlt0 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         maybe_named_function_parameters,
     }));
 }
@@ -25984,7 +25984,7 @@ fn parse_function_parameters_maybe_named_variadic_bt_1(p: &mut Parser) -> Result
     let start = p.peek().span.start;
     let maybe_named_function_parameters_variadic = parse_maybe_named_function_parameters_variadic(p)?;
     return Result::<FunctionParametersMaybeNamedVariadicNode, ParseError>::Ok(FunctionParametersMaybeNamedVariadicNode::Alt1(FunctionParametersMaybeNamedVariadicAlt1 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         maybe_named_function_parameters_variadic,
     }));
 }
@@ -26063,7 +26063,7 @@ fn parse_maybe_named_function_parameters(p: &mut Parser) -> Result<MaybeNamedFun
         null
     };
     return Result::<MaybeNamedFunctionParametersNode, ParseError>::Ok(MaybeNamedFunctionParametersNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         maybe_named_param,
         comma_maybe_named_param_list,
         comma,
@@ -26140,7 +26140,7 @@ fn parse_maybe_named_param(p: &mut Parser) -> Result<MaybeNamedParamNode, ParseE
     };
     let type_ = parse_type_(p)?;
     return Result::<MaybeNamedParamNode, ParseError>::Ok(MaybeNamedParamNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         outer_attribute_list,
         item_colon,
         type_,
@@ -26190,7 +26190,7 @@ fn parse_maybe_named_function_parameters_variadic(p: &mut Parser) -> Result<Mayb
     }
     let dotdotdot = p.expect(TK_DOTDOTDOT)?;
     return Result::<MaybeNamedFunctionParametersVariadicNode, ParseError>::Ok(MaybeNamedFunctionParametersVariadicNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         maybe_named_param_comma_list,
         maybe_named_param,
         comma,
@@ -26209,7 +26209,7 @@ fn parse_trait_object_type(p: &mut Parser) -> Result<TraitObjectTypeNode, ParseE
     };
     let type_param_bounds = parse_type_param_bounds(p)?;
     return Result::<TraitObjectTypeNode, ParseError>::Ok(TraitObjectTypeNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         kw_dyn,
         type_param_bounds,
     });
@@ -26225,7 +26225,7 @@ fn parse_trait_object_type_one_bound(p: &mut Parser) -> Result<TraitObjectTypeOn
     };
     let trait_bound = parse_trait_bound(p)?;
     return Result::<TraitObjectTypeOneBoundNode, ParseError>::Ok(TraitObjectTypeOneBoundNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         kw_dyn,
         trait_bound,
     });
@@ -26236,7 +26236,7 @@ fn parse_impl_trait_type(p: &mut Parser) -> Result<ImplTraitTypeNode, ParseError
     let kw_impl = p.expect(TK_KW_IMPL)?;
     let type_param_bounds = parse_type_param_bounds(p)?;
     return Result::<ImplTraitTypeNode, ParseError>::Ok(ImplTraitTypeNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         kw_impl,
         type_param_bounds,
     });
@@ -26247,7 +26247,7 @@ fn parse_impl_trait_type_one_bound(p: &mut Parser) -> Result<ImplTraitTypeOneBou
     let kw_impl = p.expect(TK_KW_IMPL)?;
     let trait_bound = parse_trait_bound(p)?;
     return Result::<ImplTraitTypeOneBoundNode, ParseError>::Ok(ImplTraitTypeOneBoundNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         kw_impl,
         trait_bound,
     });
@@ -26257,7 +26257,7 @@ fn parse_inferred_type(p: &mut Parser) -> Result<InferredTypeNode, ParseError> {
     let start = p.peek().span.start;
     let underscore = p.expect(TK_UNDERSCORE)?;
     return Result::<InferredTypeNode, ParseError>::Ok(InferredTypeNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         underscore,
     });
 }
@@ -26294,7 +26294,7 @@ fn parse_type_param_bounds(p: &mut Parser) -> Result<TypeParamBoundsNode, ParseE
         null
     };
     return Result::<TypeParamBoundsNode, ParseError>::Ok(TypeParamBoundsNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         type_param_bound,
         plus_type_param_bound_list,
         plus,
@@ -26307,14 +26307,14 @@ fn parse_type_param_bound(p: &mut Parser) -> Result<TypeParamBoundNode, ParseErr
     if _gale_kind_set_26(kind) {
         let lifetime = parse_lifetime(p)?;
         return Result::<TypeParamBoundNode, ParseError>::Ok(TypeParamBoundNode::Alt0(TypeParamBoundAlt0 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             lifetime,
         }));
     }
     if _gale_kind_set_88(kind) {
         let trait_bound = parse_trait_bound(p)?;
         return Result::<TypeParamBoundNode, ParseError>::Ok(TypeParamBoundNode::Alt1(TypeParamBoundAlt1 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             trait_bound,
         }));
     }
@@ -26343,7 +26343,7 @@ fn parse_trait_bound(p: &mut Parser) -> Result<TraitBoundNode, ParseError> {
         };
         let type_path = parse_type_path(p)?;
         return Result::<TraitBoundNode, ParseError>::Ok(TraitBoundNode::Alt0(TraitBoundAlt0 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             question,
             for_lifetimes,
             type_path,
@@ -26366,7 +26366,7 @@ fn parse_trait_bound(p: &mut Parser) -> Result<TraitBoundNode, ParseError> {
         let type_path = parse_type_path(p)?;
         let rparen = p.expect(TK_RPAREN)?;
         return Result::<TraitBoundNode, ParseError>::Ok(TraitBoundNode::Alt1(TraitBoundAlt1 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             lparen,
             question,
             for_lifetimes,
@@ -26412,7 +26412,7 @@ fn parse_lifetime_bounds(p: &mut Parser) -> Result<LifetimeBoundsNode, ParseErro
         null
     };
     return Result::<LifetimeBoundsNode, ParseError>::Ok(LifetimeBoundsNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         lifetime_plus_list,
         lifetime,
     });
@@ -26424,21 +26424,21 @@ fn parse_lifetime(p: &mut Parser) -> Result<LifetimeNode, ParseError> {
     if kind == TK_LIFETIME_OR_LABEL {
         let lifetime_or_label = p.expect(TK_LIFETIME_OR_LABEL)?;
         return Result::<LifetimeNode, ParseError>::Ok(LifetimeNode::Alt0(LifetimeAlt0 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             lifetime_or_label,
         }));
     }
     if kind == TK_KW_STATICLIFETIME {
         let kw_staticlifetime = p.expect(TK_KW_STATICLIFETIME)?;
         return Result::<LifetimeNode, ParseError>::Ok(LifetimeNode::Alt1(LifetimeAlt1 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_staticlifetime,
         }));
     }
     if kind == TK_KW_UNDERLINELIFETIME {
         let kw_underlinelifetime = p.expect(TK_KW_UNDERLINELIFETIME)?;
         return Result::<LifetimeNode, ParseError>::Ok(LifetimeNode::Alt2(LifetimeAlt2 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_underlinelifetime,
         }));
     }
@@ -26481,7 +26481,7 @@ fn parse_simple_path(p: &mut Parser) -> Result<SimplePathNode, ParseError> {
         pathsep_simple_path_segment_list.push(pathsep_simple_path_segment);
     }
     return Result::<SimplePathNode, ParseError>::Ok(SimplePathNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         pathsep,
         simple_path_segment,
         pathsep_simple_path_segment_list,
@@ -26494,35 +26494,35 @@ fn parse_simple_path_segment(p: &mut Parser) -> Result<SimplePathSegmentNode, Pa
     if _gale_kind_set_17(kind) {
         let identifier = parse_identifier(p)?;
         return Result::<SimplePathSegmentNode, ParseError>::Ok(SimplePathSegmentNode::Alt0(SimplePathSegmentAlt0 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             identifier,
         }));
     }
     if kind == TK_KW_SUPER {
         let kw_super = p.expect(TK_KW_SUPER)?;
         return Result::<SimplePathSegmentNode, ParseError>::Ok(SimplePathSegmentNode::Alt1(SimplePathSegmentAlt1 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_super,
         }));
     }
     if kind == TK_KW_SELFVALUE {
         let kw_selfvalue = p.expect(TK_KW_SELFVALUE)?;
         return Result::<SimplePathSegmentNode, ParseError>::Ok(SimplePathSegmentNode::Alt2(SimplePathSegmentAlt2 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_selfvalue,
         }));
     }
     if kind == TK_KW_CRATE {
         let kw_crate = p.expect(TK_KW_CRATE)?;
         return Result::<SimplePathSegmentNode, ParseError>::Ok(SimplePathSegmentNode::Alt3(SimplePathSegmentAlt3 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_crate,
         }));
     }
     if kind == TK_KW_DOLLARCRATE {
         let kw_dollarcrate = p.expect(TK_KW_DOLLARCRATE)?;
         return Result::<SimplePathSegmentNode, ParseError>::Ok(SimplePathSegmentNode::Alt4(SimplePathSegmentAlt4 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_dollarcrate,
         }));
     }
@@ -26565,7 +26565,7 @@ fn parse_path_in_expression(p: &mut Parser) -> Result<PathInExpressionNode, Pars
         pathsep_path_expr_segment_list.push(pathsep_path_expr_segment);
     }
     return Result::<PathInExpressionNode, ParseError>::Ok(PathInExpressionNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         pathsep,
         path_expr_segment,
         pathsep_path_expr_segment_list,
@@ -26587,7 +26587,7 @@ fn parse_path_expr_segment(p: &mut Parser) -> Result<PathExprSegmentNode, ParseE
         null
     };
     return Result::<PathExprSegmentNode, ParseError>::Ok(PathExprSegmentNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         path_ident_segment,
         pathsep_generic_args,
     });
@@ -26599,42 +26599,42 @@ fn parse_path_ident_segment(p: &mut Parser) -> Result<PathIdentSegmentNode, Pars
     if _gale_kind_set_17(kind) {
         let identifier = parse_identifier(p)?;
         return Result::<PathIdentSegmentNode, ParseError>::Ok(PathIdentSegmentNode::Alt0(PathIdentSegmentAlt0 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             identifier,
         }));
     }
     if kind == TK_KW_SUPER {
         let kw_super = p.expect(TK_KW_SUPER)?;
         return Result::<PathIdentSegmentNode, ParseError>::Ok(PathIdentSegmentNode::Alt1(PathIdentSegmentAlt1 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_super,
         }));
     }
     if kind == TK_KW_SELFVALUE {
         let kw_selfvalue = p.expect(TK_KW_SELFVALUE)?;
         return Result::<PathIdentSegmentNode, ParseError>::Ok(PathIdentSegmentNode::Alt2(PathIdentSegmentAlt2 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_selfvalue,
         }));
     }
     if kind == TK_KW_SELFTYPE {
         let kw_selftype = p.expect(TK_KW_SELFTYPE)?;
         return Result::<PathIdentSegmentNode, ParseError>::Ok(PathIdentSegmentNode::Alt3(PathIdentSegmentAlt3 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_selftype,
         }));
     }
     if kind == TK_KW_CRATE {
         let kw_crate = p.expect(TK_KW_CRATE)?;
         return Result::<PathIdentSegmentNode, ParseError>::Ok(PathIdentSegmentNode::Alt4(PathIdentSegmentAlt4 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_crate,
         }));
     }
     if kind == TK_KW_DOLLARCRATE {
         let kw_dollarcrate = p.expect(TK_KW_DOLLARCRATE)?;
         return Result::<PathIdentSegmentNode, ParseError>::Ok(PathIdentSegmentNode::Alt5(PathIdentSegmentAlt5 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_dollarcrate,
         }));
     }
@@ -26679,7 +26679,7 @@ fn parse_generic_args_bt_1(p: &mut Parser) -> Result<GenericArgsNode, ParseError
     };
     let gt = p.expect(TK_GT)?;
     return Result::<GenericArgsNode, ParseError>::Ok(GenericArgsNode::Alt1(GenericArgsAlt1 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         lt,
         generic_args_lifetimes,
         comma_generic_args_types,
@@ -26756,7 +26756,7 @@ fn parse_generic_args_bt_2(p: &mut Parser) -> Result<GenericArgsNode, ParseError
     };
     let gt = p.expect(TK_GT)?;
     return Result::<GenericArgsNode, ParseError>::Ok(GenericArgsNode::Alt2(GenericArgsAlt2 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         lt,
         generic_args_types,
         comma_generic_args_bindings,
@@ -26829,7 +26829,7 @@ fn parse_generic_args_bt_3(p: &mut Parser) -> Result<GenericArgsNode, ParseError
     };
     let gt = p.expect(TK_GT)?;
     return Result::<GenericArgsNode, ParseError>::Ok(GenericArgsNode::Alt3(GenericArgsAlt3 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         lt,
         generic_arg_comma_list,
         generic_arg,
@@ -26874,7 +26874,7 @@ fn parse_generic_args_bt_0(p: &mut Parser) -> Result<GenericArgsNode, ParseError
     let lt = p.expect(TK_LT)?;
     let gt = p.expect(TK_GT)?;
     return Result::<GenericArgsNode, ParseError>::Ok(GenericArgsNode::Alt0(GenericArgsAlt0 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         lt,
         gt,
     }));
@@ -26942,7 +26942,7 @@ fn parse_generic_arg_bt_0(p: &mut Parser) -> Result<GenericArgNode, ParseError> 
     let start = p.peek().span.start;
     let lifetime = parse_lifetime(p)?;
     return Result::<GenericArgNode, ParseError>::Ok(GenericArgNode::Alt0(GenericArgAlt0 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         lifetime,
     }));
 }
@@ -26958,7 +26958,7 @@ fn parse_generic_arg_bt_3(p: &mut Parser) -> Result<GenericArgNode, ParseError> 
     let start = p.peek().span.start;
     let generic_args_binding = parse_generic_args_binding(p)?;
     return Result::<GenericArgNode, ParseError>::Ok(GenericArgNode::Alt3(GenericArgAlt3 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         generic_args_binding,
     }));
 }
@@ -26974,7 +26974,7 @@ fn parse_generic_arg_bt_2(p: &mut Parser) -> Result<GenericArgNode, ParseError> 
     let start = p.peek().span.start;
     let generic_args_const = parse_generic_args_const(p)?;
     return Result::<GenericArgNode, ParseError>::Ok(GenericArgNode::Alt2(GenericArgAlt2 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         generic_args_const,
     }));
 }
@@ -26990,7 +26990,7 @@ fn parse_generic_arg_bt_1(p: &mut Parser) -> Result<GenericArgNode, ParseError> 
     let start = p.peek().span.start;
     let type_ = parse_type_(p)?;
     return Result::<GenericArgNode, ParseError>::Ok(GenericArgNode::Alt1(GenericArgAlt1 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         type_,
     }));
 }
@@ -27099,7 +27099,7 @@ fn parse_generic_args_const(p: &mut Parser) -> Result<GenericArgsConstNode, Pars
     if kind == TK_LCURLYBRACE {
         let block_expression = parse_block_expression(p)?;
         return Result::<GenericArgsConstNode, ParseError>::Ok(GenericArgsConstNode::Alt0(GenericArgsConstAlt0 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             block_expression,
         }));
     }
@@ -27112,7 +27112,7 @@ fn parse_generic_args_const(p: &mut Parser) -> Result<GenericArgsConstNode, Pars
         };
         let literal_expression = parse_literal_expression(p)?;
         return Result::<GenericArgsConstNode, ParseError>::Ok(GenericArgsConstNode::Alt1(GenericArgsConstAlt1 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             minus,
             literal_expression,
         }));
@@ -27120,7 +27120,7 @@ fn parse_generic_args_const(p: &mut Parser) -> Result<GenericArgsConstNode, Pars
     if _gale_kind_set_94(kind) {
         let simple_path_segment = parse_simple_path_segment(p)?;
         return Result::<GenericArgsConstNode, ParseError>::Ok(GenericArgsConstNode::Alt2(GenericArgsConstAlt2 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             simple_path_segment,
         }));
     }
@@ -27157,7 +27157,7 @@ fn parse_generic_args_lifetimes(p: &mut Parser) -> Result<GenericArgsLifetimesNo
         comma_lifetime_list.push(comma_lifetime);
     }
     return Result::<GenericArgsLifetimesNode, ParseError>::Ok(GenericArgsLifetimesNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         lifetime,
         comma_lifetime_list,
     });
@@ -27189,7 +27189,7 @@ fn parse_generic_args_types(p: &mut Parser) -> Result<GenericArgsTypesNode, Pars
         comma_type__list.push(comma_type_);
     }
     return Result::<GenericArgsTypesNode, ParseError>::Ok(GenericArgsTypesNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         type_,
         comma_type__list,
     });
@@ -27221,7 +27221,7 @@ fn parse_generic_args_bindings(p: &mut Parser) -> Result<GenericArgsBindingsNode
         comma_generic_args_binding_list.push(comma_generic_args_binding);
     }
     return Result::<GenericArgsBindingsNode, ParseError>::Ok(GenericArgsBindingsNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         generic_args_binding,
         comma_generic_args_binding_list,
     });
@@ -27233,7 +27233,7 @@ fn parse_generic_args_binding(p: &mut Parser) -> Result<GenericArgsBindingNode, 
     let eq = p.expect(TK_EQ)?;
     let type_ = parse_type_(p)?;
     return Result::<GenericArgsBindingNode, ParseError>::Ok(GenericArgsBindingNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         identifier,
         eq,
         type_,
@@ -27270,7 +27270,7 @@ fn parse_qualified_path_in_expression(p: &mut Parser) -> Result<QualifiedPathInE
         pathsep_path_expr_segment_list.push(pathsep_path_expr_segment);
     }
     return Result::<QualifiedPathInExpressionNode, ParseError>::Ok(QualifiedPathInExpressionNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         qualified_path_type,
         pathsep_path_expr_segment_list,
     });
@@ -27293,7 +27293,7 @@ fn parse_qualified_path_type(p: &mut Parser) -> Result<QualifiedPathTypeNode, Pa
     };
     let gt = p.expect(TK_GT)?;
     return Result::<QualifiedPathTypeNode, ParseError>::Ok(QualifiedPathTypeNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         lt,
         type_,
         kw_as_type_path,
@@ -27331,7 +27331,7 @@ fn parse_qualified_path_in_type(p: &mut Parser) -> Result<QualifiedPathInTypeNod
         pathsep_type_path_segment_list.push(pathsep_type_path_segment);
     }
     return Result::<QualifiedPathInTypeNode, ParseError>::Ok(QualifiedPathInTypeNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         qualified_path_type,
         pathsep_type_path_segment_list,
     });
@@ -27369,7 +27369,7 @@ fn parse_type_path(p: &mut Parser) -> Result<TypePathNode, ParseError> {
         pathsep_type_path_segment_list.push(pathsep_type_path_segment);
     }
     return Result::<TypePathNode, ParseError>::Ok(TypePathNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         pathsep,
         type_path_segment,
         pathsep_type_path_segment_list,
@@ -27420,7 +27420,7 @@ fn parse_type_path_segment(p: &mut Parser) -> Result<TypePathSegmentNode, ParseE
         null
     };
     return Result::<TypePathSegmentNode, ParseError>::Ok(TypePathSegmentNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         path_ident_segment,
         pathsep,
         generic_args_or_type_path_fn,
@@ -27449,7 +27449,7 @@ fn parse_type_path_fn(p: &mut Parser) -> Result<TypePathFnNode, ParseError> {
         null
     };
     return Result::<TypePathFnNode, ParseError>::Ok(TypePathFnNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         lparen,
         type_path_inputs,
         rparen,
@@ -27489,7 +27489,7 @@ fn parse_type_path_inputs(p: &mut Parser) -> Result<TypePathInputsNode, ParseErr
         null
     };
     return Result::<TypePathInputsNode, ParseError>::Ok(TypePathInputsNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         type_,
         comma_type__list,
         comma,
@@ -27538,7 +27538,7 @@ fn parse_visibility(p: &mut Parser) -> Result<VisibilityNode, ParseError> {
         null
     };
     return Result::<VisibilityNode, ParseError>::Ok(VisibilityNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         kw_pub,
         lparen_item_rparen,
     });
@@ -27550,21 +27550,21 @@ fn parse_identifier(p: &mut Parser) -> Result<IdentifierNode, ParseError> {
     if kind == TK_NON_KEYWORD_IDENTIFIER {
         let non_keyword_identifier = p.expect(TK_NON_KEYWORD_IDENTIFIER)?;
         return Result::<IdentifierNode, ParseError>::Ok(IdentifierNode::Alt0(IdentifierAlt0 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             non_keyword_identifier,
         }));
     }
     if kind == TK_RAW_IDENTIFIER {
         let raw_identifier = p.expect(TK_RAW_IDENTIFIER)?;
         return Result::<IdentifierNode, ParseError>::Ok(IdentifierNode::Alt1(IdentifierAlt1 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             raw_identifier,
         }));
     }
     if kind == TK_KW_MACRORULES {
         let kw_macrorules = p.expect(TK_KW_MACRORULES)?;
         return Result::<IdentifierNode, ParseError>::Ok(IdentifierNode::Alt2(IdentifierAlt2 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_macrorules,
         }));
     }
@@ -27581,371 +27581,371 @@ fn parse_keyword(p: &mut Parser) -> Result<KeywordNode, ParseError> {
     if kind == TK_KW_AS {
         let kw_as = p.expect(TK_KW_AS)?;
         return Result::<KeywordNode, ParseError>::Ok(KeywordNode::Alt0(KeywordAlt0 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_as,
         }));
     }
     if kind == TK_KW_BREAK {
         let kw_break = p.expect(TK_KW_BREAK)?;
         return Result::<KeywordNode, ParseError>::Ok(KeywordNode::Alt1(KeywordAlt1 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_break,
         }));
     }
     if kind == TK_KW_CONST {
         let kw_const = p.expect(TK_KW_CONST)?;
         return Result::<KeywordNode, ParseError>::Ok(KeywordNode::Alt2(KeywordAlt2 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_const,
         }));
     }
     if kind == TK_KW_CONTINUE {
         let kw_continue = p.expect(TK_KW_CONTINUE)?;
         return Result::<KeywordNode, ParseError>::Ok(KeywordNode::Alt3(KeywordAlt3 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_continue,
         }));
     }
     if kind == TK_KW_CRATE {
         let kw_crate = p.expect(TK_KW_CRATE)?;
         return Result::<KeywordNode, ParseError>::Ok(KeywordNode::Alt4(KeywordAlt4 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_crate,
         }));
     }
     if kind == TK_KW_ELSE {
         let kw_else = p.expect(TK_KW_ELSE)?;
         return Result::<KeywordNode, ParseError>::Ok(KeywordNode::Alt5(KeywordAlt5 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_else,
         }));
     }
     if kind == TK_KW_ENUM {
         let kw_enum = p.expect(TK_KW_ENUM)?;
         return Result::<KeywordNode, ParseError>::Ok(KeywordNode::Alt6(KeywordAlt6 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_enum,
         }));
     }
     if kind == TK_KW_EXTERN {
         let kw_extern = p.expect(TK_KW_EXTERN)?;
         return Result::<KeywordNode, ParseError>::Ok(KeywordNode::Alt7(KeywordAlt7 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_extern,
         }));
     }
     if kind == TK_KW_FALSE {
         let kw_false = p.expect(TK_KW_FALSE)?;
         return Result::<KeywordNode, ParseError>::Ok(KeywordNode::Alt8(KeywordAlt8 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_false,
         }));
     }
     if kind == TK_KW_FN {
         let kw_fn = p.expect(TK_KW_FN)?;
         return Result::<KeywordNode, ParseError>::Ok(KeywordNode::Alt9(KeywordAlt9 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_fn,
         }));
     }
     if kind == TK_KW_FOR {
         let kw_for = p.expect(TK_KW_FOR)?;
         return Result::<KeywordNode, ParseError>::Ok(KeywordNode::Alt10(KeywordAlt10 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_for,
         }));
     }
     if kind == TK_KW_IF {
         let kw_if = p.expect(TK_KW_IF)?;
         return Result::<KeywordNode, ParseError>::Ok(KeywordNode::Alt11(KeywordAlt11 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_if,
         }));
     }
     if kind == TK_KW_IMPL {
         let kw_impl = p.expect(TK_KW_IMPL)?;
         return Result::<KeywordNode, ParseError>::Ok(KeywordNode::Alt12(KeywordAlt12 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_impl,
         }));
     }
     if kind == TK_KW_IN {
         let kw_in = p.expect(TK_KW_IN)?;
         return Result::<KeywordNode, ParseError>::Ok(KeywordNode::Alt13(KeywordAlt13 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_in,
         }));
     }
     if kind == TK_KW_LET {
         let kw_let = p.expect(TK_KW_LET)?;
         return Result::<KeywordNode, ParseError>::Ok(KeywordNode::Alt14(KeywordAlt14 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_let,
         }));
     }
     if kind == TK_KW_LOOP {
         let kw_loop = p.expect(TK_KW_LOOP)?;
         return Result::<KeywordNode, ParseError>::Ok(KeywordNode::Alt15(KeywordAlt15 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_loop,
         }));
     }
     if kind == TK_KW_MATCH {
         let kw_match = p.expect(TK_KW_MATCH)?;
         return Result::<KeywordNode, ParseError>::Ok(KeywordNode::Alt16(KeywordAlt16 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_match,
         }));
     }
     if kind == TK_KW_MOD {
         let kw_mod = p.expect(TK_KW_MOD)?;
         return Result::<KeywordNode, ParseError>::Ok(KeywordNode::Alt17(KeywordAlt17 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_mod,
         }));
     }
     if kind == TK_KW_MOVE {
         let kw_move = p.expect(TK_KW_MOVE)?;
         return Result::<KeywordNode, ParseError>::Ok(KeywordNode::Alt18(KeywordAlt18 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_move,
         }));
     }
     if kind == TK_KW_MUT {
         let kw_mut = p.expect(TK_KW_MUT)?;
         return Result::<KeywordNode, ParseError>::Ok(KeywordNode::Alt19(KeywordAlt19 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_mut,
         }));
     }
     if kind == TK_KW_PUB {
         let kw_pub = p.expect(TK_KW_PUB)?;
         return Result::<KeywordNode, ParseError>::Ok(KeywordNode::Alt20(KeywordAlt20 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_pub,
         }));
     }
     if kind == TK_KW_REF {
         let kw_ref = p.expect(TK_KW_REF)?;
         return Result::<KeywordNode, ParseError>::Ok(KeywordNode::Alt21(KeywordAlt21 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_ref,
         }));
     }
     if kind == TK_KW_RETURN {
         let kw_return = p.expect(TK_KW_RETURN)?;
         return Result::<KeywordNode, ParseError>::Ok(KeywordNode::Alt22(KeywordAlt22 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_return,
         }));
     }
     if kind == TK_KW_SELFVALUE {
         let kw_selfvalue = p.expect(TK_KW_SELFVALUE)?;
         return Result::<KeywordNode, ParseError>::Ok(KeywordNode::Alt23(KeywordAlt23 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_selfvalue,
         }));
     }
     if kind == TK_KW_SELFTYPE {
         let kw_selftype = p.expect(TK_KW_SELFTYPE)?;
         return Result::<KeywordNode, ParseError>::Ok(KeywordNode::Alt24(KeywordAlt24 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_selftype,
         }));
     }
     if kind == TK_KW_STATIC {
         let kw_static = p.expect(TK_KW_STATIC)?;
         return Result::<KeywordNode, ParseError>::Ok(KeywordNode::Alt25(KeywordAlt25 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_static,
         }));
     }
     if kind == TK_KW_STRUCT {
         let kw_struct = p.expect(TK_KW_STRUCT)?;
         return Result::<KeywordNode, ParseError>::Ok(KeywordNode::Alt26(KeywordAlt26 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_struct,
         }));
     }
     if kind == TK_KW_SUPER {
         let kw_super = p.expect(TK_KW_SUPER)?;
         return Result::<KeywordNode, ParseError>::Ok(KeywordNode::Alt27(KeywordAlt27 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_super,
         }));
     }
     if kind == TK_KW_TRAIT {
         let kw_trait = p.expect(TK_KW_TRAIT)?;
         return Result::<KeywordNode, ParseError>::Ok(KeywordNode::Alt28(KeywordAlt28 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_trait,
         }));
     }
     if kind == TK_KW_TRUE {
         let kw_true = p.expect(TK_KW_TRUE)?;
         return Result::<KeywordNode, ParseError>::Ok(KeywordNode::Alt29(KeywordAlt29 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_true,
         }));
     }
     if kind == TK_KW_TYPE {
         let kw_type = p.expect(TK_KW_TYPE)?;
         return Result::<KeywordNode, ParseError>::Ok(KeywordNode::Alt30(KeywordAlt30 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_type,
         }));
     }
     if kind == TK_KW_UNSAFE {
         let kw_unsafe = p.expect(TK_KW_UNSAFE)?;
         return Result::<KeywordNode, ParseError>::Ok(KeywordNode::Alt31(KeywordAlt31 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_unsafe,
         }));
     }
     if kind == TK_KW_USE {
         let kw_use = p.expect(TK_KW_USE)?;
         return Result::<KeywordNode, ParseError>::Ok(KeywordNode::Alt32(KeywordAlt32 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_use,
         }));
     }
     if kind == TK_KW_WHERE {
         let kw_where = p.expect(TK_KW_WHERE)?;
         return Result::<KeywordNode, ParseError>::Ok(KeywordNode::Alt33(KeywordAlt33 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_where,
         }));
     }
     if kind == TK_KW_WHILE {
         let kw_while = p.expect(TK_KW_WHILE)?;
         return Result::<KeywordNode, ParseError>::Ok(KeywordNode::Alt34(KeywordAlt34 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_while,
         }));
     }
     if kind == TK_KW_ASYNC {
         let kw_async = p.expect(TK_KW_ASYNC)?;
         return Result::<KeywordNode, ParseError>::Ok(KeywordNode::Alt35(KeywordAlt35 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_async,
         }));
     }
     if kind == TK_KW_AWAIT {
         let kw_await = p.expect(TK_KW_AWAIT)?;
         return Result::<KeywordNode, ParseError>::Ok(KeywordNode::Alt36(KeywordAlt36 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_await,
         }));
     }
     if kind == TK_KW_DYN {
         let kw_dyn = p.expect(TK_KW_DYN)?;
         return Result::<KeywordNode, ParseError>::Ok(KeywordNode::Alt37(KeywordAlt37 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_dyn,
         }));
     }
     if kind == TK_KW_ABSTRACT {
         let kw_abstract = p.expect(TK_KW_ABSTRACT)?;
         return Result::<KeywordNode, ParseError>::Ok(KeywordNode::Alt38(KeywordAlt38 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_abstract,
         }));
     }
     if kind == TK_KW_BECOME {
         let kw_become = p.expect(TK_KW_BECOME)?;
         return Result::<KeywordNode, ParseError>::Ok(KeywordNode::Alt39(KeywordAlt39 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_become,
         }));
     }
     if kind == TK_KW_BOX {
         let kw_box = p.expect(TK_KW_BOX)?;
         return Result::<KeywordNode, ParseError>::Ok(KeywordNode::Alt40(KeywordAlt40 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_box,
         }));
     }
     if kind == TK_KW_DO {
         let kw_do = p.expect(TK_KW_DO)?;
         return Result::<KeywordNode, ParseError>::Ok(KeywordNode::Alt41(KeywordAlt41 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_do,
         }));
     }
     if kind == TK_KW_FINAL {
         let kw_final = p.expect(TK_KW_FINAL)?;
         return Result::<KeywordNode, ParseError>::Ok(KeywordNode::Alt42(KeywordAlt42 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_final,
         }));
     }
     if kind == TK_KW_MACRO {
         let kw_macro = p.expect(TK_KW_MACRO)?;
         return Result::<KeywordNode, ParseError>::Ok(KeywordNode::Alt43(KeywordAlt43 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_macro,
         }));
     }
     if kind == TK_KW_OVERRIDE {
         let kw_override = p.expect(TK_KW_OVERRIDE)?;
         return Result::<KeywordNode, ParseError>::Ok(KeywordNode::Alt44(KeywordAlt44 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_override,
         }));
     }
     if kind == TK_KW_PRIV {
         let kw_priv = p.expect(TK_KW_PRIV)?;
         return Result::<KeywordNode, ParseError>::Ok(KeywordNode::Alt45(KeywordAlt45 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_priv,
         }));
     }
     if kind == TK_KW_TYPEOF {
         let kw_typeof = p.expect(TK_KW_TYPEOF)?;
         return Result::<KeywordNode, ParseError>::Ok(KeywordNode::Alt46(KeywordAlt46 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_typeof,
         }));
     }
     if kind == TK_KW_UNSIZED {
         let kw_unsized = p.expect(TK_KW_UNSIZED)?;
         return Result::<KeywordNode, ParseError>::Ok(KeywordNode::Alt47(KeywordAlt47 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_unsized,
         }));
     }
     if kind == TK_KW_VIRTUAL {
         let kw_virtual = p.expect(TK_KW_VIRTUAL)?;
         return Result::<KeywordNode, ParseError>::Ok(KeywordNode::Alt48(KeywordAlt48 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_virtual,
         }));
     }
     if kind == TK_KW_YIELD {
         let kw_yield = p.expect(TK_KW_YIELD)?;
         return Result::<KeywordNode, ParseError>::Ok(KeywordNode::Alt49(KeywordAlt49 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_yield,
         }));
     }
     if kind == TK_KW_TRY {
         let kw_try = p.expect(TK_KW_TRY)?;
         return Result::<KeywordNode, ParseError>::Ok(KeywordNode::Alt50(KeywordAlt50 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_try,
         }));
     }
     if kind == TK_KW_UNION {
         let kw_union = p.expect(TK_KW_UNION)?;
         return Result::<KeywordNode, ParseError>::Ok(KeywordNode::Alt51(KeywordAlt51 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_union,
         }));
     }
     if kind == TK_KW_STATICLIFETIME {
         let kw_staticlifetime = p.expect(TK_KW_STATICLIFETIME)?;
         return Result::<KeywordNode, ParseError>::Ok(KeywordNode::Alt52(KeywordAlt52 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_staticlifetime,
         }));
     }
@@ -27960,7 +27960,7 @@ fn parse_macro_identifier_like_token_bt_1(p: &mut Parser) -> Result<MacroIdentif
     let start = p.peek().span.start;
     let identifier = parse_identifier(p)?;
     return Result::<MacroIdentifierLikeTokenNode, ParseError>::Ok(MacroIdentifierLikeTokenNode::Alt1(MacroIdentifierLikeTokenAlt1 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         identifier,
     }));
 }
@@ -27976,7 +27976,7 @@ fn parse_macro_identifier_like_token_bt_2(p: &mut Parser) -> Result<MacroIdentif
     let start = p.peek().span.start;
     let kw_macrorules = p.expect(TK_KW_MACRORULES)?;
     return Result::<MacroIdentifierLikeTokenNode, ParseError>::Ok(MacroIdentifierLikeTokenNode::Alt2(MacroIdentifierLikeTokenAlt2 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         kw_macrorules,
     }));
 }
@@ -27994,7 +27994,7 @@ fn parse_macro_identifier_like_token(p: &mut Parser) -> Result<MacroIdentifierLi
     if _gale_kind_set_97(kind) {
         let keyword = parse_keyword(p)?;
         return Result::<MacroIdentifierLikeTokenNode, ParseError>::Ok(MacroIdentifierLikeTokenNode::Alt0(MacroIdentifierLikeTokenAlt0 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             keyword,
         }));
     }
@@ -28028,21 +28028,21 @@ fn parse_macro_identifier_like_token(p: &mut Parser) -> Result<MacroIdentifierLi
     if kind == TK_KW_UNDERLINELIFETIME {
         let kw_underlinelifetime = p.expect(TK_KW_UNDERLINELIFETIME)?;
         return Result::<MacroIdentifierLikeTokenNode, ParseError>::Ok(MacroIdentifierLikeTokenNode::Alt3(MacroIdentifierLikeTokenAlt3 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_underlinelifetime,
         }));
     }
     if kind == TK_KW_DOLLARCRATE {
         let kw_dollarcrate = p.expect(TK_KW_DOLLARCRATE)?;
         return Result::<MacroIdentifierLikeTokenNode, ParseError>::Ok(MacroIdentifierLikeTokenNode::Alt4(MacroIdentifierLikeTokenAlt4 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             kw_dollarcrate,
         }));
     }
     if kind == TK_LIFETIME_OR_LABEL {
         let lifetime_or_label = p.expect(TK_LIFETIME_OR_LABEL)?;
         return Result::<MacroIdentifierLikeTokenNode, ParseError>::Ok(MacroIdentifierLikeTokenNode::Alt5(MacroIdentifierLikeTokenAlt5 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             lifetime_or_label,
         }));
     }
@@ -28057,7 +28057,7 @@ fn parse_macro_literal_token(p: &mut Parser) -> Result<MacroLiteralTokenNode, Pa
     let start = p.peek().span.start;
     let literal_expression = parse_literal_expression(p)?;
     return Result::<MacroLiteralTokenNode, ParseError>::Ok(MacroLiteralTokenNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         literal_expression,
     });
 }
@@ -28068,273 +28068,273 @@ fn parse_macro_punctuation_token(p: &mut Parser) -> Result<MacroPunctuationToken
     if kind == TK_MINUS {
         let minus = p.expect(TK_MINUS)?;
         return Result::<MacroPunctuationTokenNode, ParseError>::Ok(MacroPunctuationTokenNode::Alt0(MacroPunctuationTokenAlt0 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             minus,
         }));
     }
     if kind == TK_SLASH {
         let slash = p.expect(TK_SLASH)?;
         return Result::<MacroPunctuationTokenNode, ParseError>::Ok(MacroPunctuationTokenNode::Alt1(MacroPunctuationTokenAlt1 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             slash,
         }));
     }
     if kind == TK_PERCENT {
         let percent = p.expect(TK_PERCENT)?;
         return Result::<MacroPunctuationTokenNode, ParseError>::Ok(MacroPunctuationTokenNode::Alt2(MacroPunctuationTokenAlt2 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             percent,
         }));
     }
     if kind == TK_CARET {
         let caret = p.expect(TK_CARET)?;
         return Result::<MacroPunctuationTokenNode, ParseError>::Ok(MacroPunctuationTokenNode::Alt3(MacroPunctuationTokenAlt3 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             caret,
         }));
     }
     if kind == TK_NOT {
         let not = p.expect(TK_NOT)?;
         return Result::<MacroPunctuationTokenNode, ParseError>::Ok(MacroPunctuationTokenNode::Alt4(MacroPunctuationTokenAlt4 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             not,
         }));
     }
     if kind == TK_AND {
         let and = p.expect(TK_AND)?;
         return Result::<MacroPunctuationTokenNode, ParseError>::Ok(MacroPunctuationTokenNode::Alt5(MacroPunctuationTokenAlt5 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             and,
         }));
     }
     if kind == TK_OR {
         let or = p.expect(TK_OR)?;
         return Result::<MacroPunctuationTokenNode, ParseError>::Ok(MacroPunctuationTokenNode::Alt6(MacroPunctuationTokenAlt6 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             or,
         }));
     }
     if kind == TK_ANDAND {
         let andand = p.expect(TK_ANDAND)?;
         return Result::<MacroPunctuationTokenNode, ParseError>::Ok(MacroPunctuationTokenNode::Alt7(MacroPunctuationTokenAlt7 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             andand,
         }));
     }
     if kind == TK_OROR {
         let oror = p.expect(TK_OROR)?;
         return Result::<MacroPunctuationTokenNode, ParseError>::Ok(MacroPunctuationTokenNode::Alt8(MacroPunctuationTokenAlt8 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             oror,
         }));
     }
     if kind == TK_PLUSEQ {
         let pluseq = p.expect(TK_PLUSEQ)?;
         return Result::<MacroPunctuationTokenNode, ParseError>::Ok(MacroPunctuationTokenNode::Alt9(MacroPunctuationTokenAlt9 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             pluseq,
         }));
     }
     if kind == TK_MINUSEQ {
         let minuseq = p.expect(TK_MINUSEQ)?;
         return Result::<MacroPunctuationTokenNode, ParseError>::Ok(MacroPunctuationTokenNode::Alt10(MacroPunctuationTokenAlt10 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             minuseq,
         }));
     }
     if kind == TK_STAREQ {
         let stareq = p.expect(TK_STAREQ)?;
         return Result::<MacroPunctuationTokenNode, ParseError>::Ok(MacroPunctuationTokenNode::Alt11(MacroPunctuationTokenAlt11 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             stareq,
         }));
     }
     if kind == TK_SLASHEQ {
         let slasheq = p.expect(TK_SLASHEQ)?;
         return Result::<MacroPunctuationTokenNode, ParseError>::Ok(MacroPunctuationTokenNode::Alt12(MacroPunctuationTokenAlt12 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             slasheq,
         }));
     }
     if kind == TK_PERCENTEQ {
         let percenteq = p.expect(TK_PERCENTEQ)?;
         return Result::<MacroPunctuationTokenNode, ParseError>::Ok(MacroPunctuationTokenNode::Alt13(MacroPunctuationTokenAlt13 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             percenteq,
         }));
     }
     if kind == TK_CARETEQ {
         let careteq = p.expect(TK_CARETEQ)?;
         return Result::<MacroPunctuationTokenNode, ParseError>::Ok(MacroPunctuationTokenNode::Alt14(MacroPunctuationTokenAlt14 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             careteq,
         }));
     }
     if kind == TK_ANDEQ {
         let andeq = p.expect(TK_ANDEQ)?;
         return Result::<MacroPunctuationTokenNode, ParseError>::Ok(MacroPunctuationTokenNode::Alt15(MacroPunctuationTokenAlt15 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             andeq,
         }));
     }
     if kind == TK_OREQ {
         let oreq = p.expect(TK_OREQ)?;
         return Result::<MacroPunctuationTokenNode, ParseError>::Ok(MacroPunctuationTokenNode::Alt16(MacroPunctuationTokenAlt16 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             oreq,
         }));
     }
     if kind == TK_SHLEQ {
         let shleq = p.expect(TK_SHLEQ)?;
         return Result::<MacroPunctuationTokenNode, ParseError>::Ok(MacroPunctuationTokenNode::Alt17(MacroPunctuationTokenAlt17 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             shleq,
         }));
     }
     if kind == TK_SHREQ {
         let shreq = p.expect(TK_SHREQ)?;
         return Result::<MacroPunctuationTokenNode, ParseError>::Ok(MacroPunctuationTokenNode::Alt18(MacroPunctuationTokenAlt18 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             shreq,
         }));
     }
     if kind == TK_EQ {
         let eq = p.expect(TK_EQ)?;
         return Result::<MacroPunctuationTokenNode, ParseError>::Ok(MacroPunctuationTokenNode::Alt19(MacroPunctuationTokenAlt19 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             eq,
         }));
     }
     if kind == TK_EQEQ {
         let eqeq = p.expect(TK_EQEQ)?;
         return Result::<MacroPunctuationTokenNode, ParseError>::Ok(MacroPunctuationTokenNode::Alt20(MacroPunctuationTokenAlt20 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             eqeq,
         }));
     }
     if kind == TK_NE {
         let ne = p.expect(TK_NE)?;
         return Result::<MacroPunctuationTokenNode, ParseError>::Ok(MacroPunctuationTokenNode::Alt21(MacroPunctuationTokenAlt21 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             ne,
         }));
     }
     if kind == TK_GT {
         let gt = p.expect(TK_GT)?;
         return Result::<MacroPunctuationTokenNode, ParseError>::Ok(MacroPunctuationTokenNode::Alt22(MacroPunctuationTokenAlt22 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             gt,
         }));
     }
     if kind == TK_LT {
         let lt = p.expect(TK_LT)?;
         return Result::<MacroPunctuationTokenNode, ParseError>::Ok(MacroPunctuationTokenNode::Alt23(MacroPunctuationTokenAlt23 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             lt,
         }));
     }
     if kind == TK_GE {
         let ge = p.expect(TK_GE)?;
         return Result::<MacroPunctuationTokenNode, ParseError>::Ok(MacroPunctuationTokenNode::Alt24(MacroPunctuationTokenAlt24 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             ge,
         }));
     }
     if kind == TK_LE {
         let le = p.expect(TK_LE)?;
         return Result::<MacroPunctuationTokenNode, ParseError>::Ok(MacroPunctuationTokenNode::Alt25(MacroPunctuationTokenAlt25 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             le,
         }));
     }
     if kind == TK_AT {
         let at = p.expect(TK_AT)?;
         return Result::<MacroPunctuationTokenNode, ParseError>::Ok(MacroPunctuationTokenNode::Alt26(MacroPunctuationTokenAlt26 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             at,
         }));
     }
     if kind == TK_UNDERSCORE {
         let underscore = p.expect(TK_UNDERSCORE)?;
         return Result::<MacroPunctuationTokenNode, ParseError>::Ok(MacroPunctuationTokenNode::Alt27(MacroPunctuationTokenAlt27 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             underscore,
         }));
     }
     if kind == TK_DOT {
         let dot = p.expect(TK_DOT)?;
         return Result::<MacroPunctuationTokenNode, ParseError>::Ok(MacroPunctuationTokenNode::Alt28(MacroPunctuationTokenAlt28 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             dot,
         }));
     }
     if kind == TK_DOTDOT {
         let dotdot = p.expect(TK_DOTDOT)?;
         return Result::<MacroPunctuationTokenNode, ParseError>::Ok(MacroPunctuationTokenNode::Alt29(MacroPunctuationTokenAlt29 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             dotdot,
         }));
     }
     if kind == TK_DOTDOTDOT {
         let dotdotdot = p.expect(TK_DOTDOTDOT)?;
         return Result::<MacroPunctuationTokenNode, ParseError>::Ok(MacroPunctuationTokenNode::Alt30(MacroPunctuationTokenAlt30 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             dotdotdot,
         }));
     }
     if kind == TK_DOTDOTEQ {
         let dotdoteq = p.expect(TK_DOTDOTEQ)?;
         return Result::<MacroPunctuationTokenNode, ParseError>::Ok(MacroPunctuationTokenNode::Alt31(MacroPunctuationTokenAlt31 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             dotdoteq,
         }));
     }
     if kind == TK_COMMA {
         let comma = p.expect(TK_COMMA)?;
         return Result::<MacroPunctuationTokenNode, ParseError>::Ok(MacroPunctuationTokenNode::Alt32(MacroPunctuationTokenAlt32 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             comma,
         }));
     }
     if kind == TK_SEMI {
         let semi = p.expect(TK_SEMI)?;
         return Result::<MacroPunctuationTokenNode, ParseError>::Ok(MacroPunctuationTokenNode::Alt33(MacroPunctuationTokenAlt33 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             semi,
         }));
     }
     if kind == TK_COLON {
         let colon = p.expect(TK_COLON)?;
         return Result::<MacroPunctuationTokenNode, ParseError>::Ok(MacroPunctuationTokenNode::Alt34(MacroPunctuationTokenAlt34 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             colon,
         }));
     }
     if kind == TK_PATHSEP {
         let pathsep = p.expect(TK_PATHSEP)?;
         return Result::<MacroPunctuationTokenNode, ParseError>::Ok(MacroPunctuationTokenNode::Alt35(MacroPunctuationTokenAlt35 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             pathsep,
         }));
     }
     if kind == TK_RARROW {
         let rarrow = p.expect(TK_RARROW)?;
         return Result::<MacroPunctuationTokenNode, ParseError>::Ok(MacroPunctuationTokenNode::Alt36(MacroPunctuationTokenAlt36 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             rarrow,
         }));
     }
     if kind == TK_FATARROW {
         let fatarrow = p.expect(TK_FATARROW)?;
         return Result::<MacroPunctuationTokenNode, ParseError>::Ok(MacroPunctuationTokenNode::Alt37(MacroPunctuationTokenAlt37 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             fatarrow,
         }));
     }
     if kind == TK_POUND {
         let pound = p.expect(TK_POUND)?;
         return Result::<MacroPunctuationTokenNode, ParseError>::Ok(MacroPunctuationTokenNode::Alt38(MacroPunctuationTokenAlt38 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             pound,
         }));
     }
@@ -28350,7 +28350,7 @@ fn parse_shl(p: &mut Parser) -> Result<ShlNode, ParseError> {
     let lt = p.expect(TK_LT)?;
     let lt_2 = p.expect(TK_LT)?;
     return Result::<ShlNode, ParseError>::Ok(ShlNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         lt,
         lt_2,
     });
@@ -28361,7 +28361,7 @@ fn parse_shr(p: &mut Parser) -> Result<ShrNode, ParseError> {
     let gt = p.expect(TK_GT)?;
     let gt_2 = p.expect(TK_GT)?;
     return Result::<ShrNode, ParseError>::Ok(ShrNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         gt,
         gt_2,
     });

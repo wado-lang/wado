@@ -951,7 +951,7 @@ fn parse_s(p: &mut Parser) -> Result<SNode, ParseError> {
     let declarator = parse_declarator(p)?;
     let eof = p.expect(TK_EOF)?;
     return Result::<SNode, ParseError>::Ok(SNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         declarator,
         eof,
     });
@@ -964,7 +964,7 @@ fn parse_declarator_atom(p: &mut Parser) -> Result<DeclaratorNode, ParseError> {
         let star = p.expect(TK_LIT_STAR)?;
         let declarator = parse_declarator(p, 1)?;
         return Result::<DeclaratorNode, ParseError>::Ok(DeclaratorNode::Alt3(DeclaratorAlt3 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             star,
             declarator,
         }));
@@ -974,7 +974,7 @@ fn parse_declarator_atom(p: &mut Parser) -> Result<DeclaratorNode, ParseError> {
         let declarator = parse_declarator(p)?;
         let rparen = p.expect(TK_LIT_RPAREN)?;
         return Result::<DeclaratorNode, ParseError>::Ok(DeclaratorNode::Alt4(DeclaratorAlt4 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             lparen,
             declarator,
             rparen,
@@ -983,7 +983,7 @@ fn parse_declarator_atom(p: &mut Parser) -> Result<DeclaratorNode, ParseError> {
     if kind == TK_ID {
         let id = p.expect(TK_ID)?;
         return Result::<DeclaratorNode, ParseError>::Ok(DeclaratorNode::Alt5(DeclaratorAlt5 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             id,
         }));
     }
@@ -999,7 +999,7 @@ fn parse_declarator_lr_0(p: &mut Parser, left: DeclaratorNode, start: i32) -> Re
     let e = parse_e(p)?;
     let rbracket = p.expect(TK_LIT_RBRACKET)?;
     return Result::<DeclaratorNode, ParseError>::Ok(DeclaratorNode::Alt0(DeclaratorAlt0 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         declarator: left,
         lbracket,
         e,
@@ -1011,7 +1011,7 @@ fn parse_declarator_lr_1(p: &mut Parser, left: DeclaratorNode, start: i32) -> Re
     let lbracket = p.expect(TK_LIT_LBRACKET)?;
     let rbracket = p.expect(TK_LIT_RBRACKET)?;
     return Result::<DeclaratorNode, ParseError>::Ok(DeclaratorNode::Alt1(DeclaratorAlt1 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         declarator: left,
         lbracket,
         rbracket,
@@ -1022,7 +1022,7 @@ fn parse_declarator_lr_2(p: &mut Parser, left: DeclaratorNode, start: i32) -> Re
     let lparen = p.expect(TK_LIT_LPAREN)?;
     let rparen = p.expect(TK_LIT_RPAREN)?;
     return Result::<DeclaratorNode, ParseError>::Ok(DeclaratorNode::Alt2(DeclaratorAlt2 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         declarator: left,
         lparen,
         rparen,
@@ -1076,7 +1076,7 @@ fn parse_e(p: &mut Parser) -> Result<ENode, ParseError> {
     let start = p.peek().span.start;
     let int = p.expect(TK_INT)?;
     return Result::<ENode, ParseError>::Ok(ENode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         int,
     });
 }
