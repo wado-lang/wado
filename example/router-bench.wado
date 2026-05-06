@@ -19,6 +19,7 @@
 use { println, Stdout } from "core:cli";
 use { MonotonicClock } from "wasi:clocks";
 use { Benchmark } from "core:benchmark";
+use { TreeMap } from "core:collections";
 use {
     AccessRequest, Method, RoutePattern,
     build_routes, build_access_pattern,
@@ -77,9 +78,29 @@ fn run_linear_one(router: &LinearRouter, method: Method, path: &String, repeats:
     return acc;
 }
 
-/// Sanity check: all three engines must return identical results for
-/// every entry in the access pattern. Run before timing so a regression
-/// in one engine doesn't masquerade as a speedup.
+/// Returns true when both maps contain the same key/value pairs. Order
+/// independent because TreeMap.get is O(log n) lookup.
+fn maps_equal(a: &TreeMap<String, String>, b: &TreeMap<String, String>) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    for let [k, v] of a.entries() {
+        match b.get(k) {
+            Some(bv) => {
+                if bv != v {
+                    return false;
+                }
+            },
+            None => { return false; },
+        }
+    }
+    return true;
+}
+
+/// Sanity check: all three engines must return identical handler ids
+/// *and* identical params for every entry in the access pattern. Run
+/// before timing so a regression in one engine doesn't masquerade as a
+/// speedup.
 fn verify_engines_agree(
     linear: &LinearRouter,
     radix: &RadixRouter,
@@ -94,6 +115,11 @@ fn verify_engines_agree(
         let expected = req.expected_handler_id;
         if l.handler_id != expected || r.handler_id != expected || d.handler_id != expected {
             println(`MISMATCH on {req.path}: expected={expected} linear={l.handler_id} radix={r.handler_id} dfa={d.handler_id}`);
+            all_ok = false;
+            continue;
+        }
+        if !maps_equal(&l.params, &r.params) || !maps_equal(&l.params, &d.params) {
+            println(`PARAMS MISMATCH on {req.path}: linear={l.params:?} radix={r.params:?} dfa={d.params:?}`);
             all_ok = false;
         }
     }

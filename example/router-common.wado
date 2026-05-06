@@ -146,12 +146,20 @@ pub fn build_routes() -> Array<RoutePattern> {
         "/api/v1/categories/:slug/products/:pid",
     ];
 
+    // NOTE: param names are kept consistent with the first-registered route
+    // through the same position (e.g. `/api/v1/users/:id` registered above
+    // forces every later route through that position to also use `:id`).
+    // Radix and DFA share the param node across overlapping routes, so a
+    // mismatched name there would silently surface as the first-registered
+    // name and disagree with the linear engine that stores each route
+    // independently. The cross-engine `verify_engines_agree` check would
+    // catch such a mismatch — see the bench driver.
     let param3: Array<String> = [
-        "/api/v1/users/:uid/posts/:pid/comments/:cid",
-        "/api/v1/users/:uid/posts/:pid/reactions/:rid",
-        "/api/v1/products/:pid/variants/:vid/reviews/:rid",
-        "/api/v1/orders/:oid/items/:iid/refunds/:rid",
-        "/api/v1/categories/:cat/products/:pid/reviews/:rid",
+        "/api/v1/users/:id/posts/:pid/comments/:cid",
+        "/api/v1/users/:id/posts/:pid/reactions/:rid",
+        "/api/v1/products/:id/variants/:vid/reviews/:rid",
+        "/api/v1/orders/:id/items/:item_id/refunds/:rid",
+        "/api/v1/categories/:slug/products/:pid/reviews/:rid",
     ];
 
     let wildcards: Array<String> = [
@@ -218,18 +226,17 @@ pub variant Segment {
     Wildcard(String),  // name without the leading "*", must be the last segment
 }
 
-/// Parse a route pattern path (must start with '/') into a list of
-/// segments. `/foo/:bar/*baz` -> [Literal("foo"), Param("bar"), Wildcard("baz")].
-/// The leading slash is consumed; an empty path or a single "/" yields an
-/// empty array.
+/// Parse a route pattern path into a list of segments.
+/// `/foo/:bar/*baz` -> [Literal("foo"), Param("bar"), Wildcard("baz")].
+/// `/` (the empty pattern, which terminates at the root) yields `[]`.
+/// Panics when the pattern is empty or does not start with `/`.
 pub fn parse_pattern(path: &String) -> Array<Segment> {
     let mut out: Array<Segment> = [];
     let bytes = path.len();
-    if bytes == 0 {
-        return out;
+    if bytes == 0 || path.get_byte(0) != '/' as u8 {
+        panic("route pattern must start with '/'");
     }
-    // Expect leading '/'.
-    let mut i = if path.get_byte(0) == '/' as u8 { 1 } else { 0 };
+    let mut i = 1;
     while i < bytes {
         let mut j = i;
         while j < bytes && path.get_byte(j) != '/' as u8 {
@@ -286,4 +293,19 @@ test "parse_pattern: literals, params, wildcard" {
     assert segs[3] matches { Param("id") };
     assert segs[4] matches { Literal("posts") };
     assert segs[5] matches { Wildcard("rest") };
+}
+
+test "parse_pattern: root pattern yields empty" {
+    let segs = parse_pattern(&"/");
+    assert segs.len() == 0;
+}
+
+#[expect_trap]
+test "parse_pattern: missing leading slash panics" {
+    parse_pattern(&"foo");
+}
+
+#[expect_trap]
+test "parse_pattern: empty pattern panics" {
+    parse_pattern(&"");
 }

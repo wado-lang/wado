@@ -139,15 +139,21 @@ impl DfaRouter {
             pos = end + 1;
         }
         // Path consumed. `pos == plen + 1` means the last segment ended at
-        // the end of the path (no trailing slash). `pos == plen` means a
-        // trailing slash was consumed.
+        // the end of the path (no trailing slash). `pos == plen` means
+        // either a trailing slash was consumed after a segment, or the
+        // path was exactly "/" and the loop never ran.
         if pos == plen + 1 {
             if self.states[state].handler_id >= 0 && self.states[state].method == method {
                 return MatchResult { handler_id: self.states[state].handler_id, params };
             }
         } else if pos == plen {
-            // Trailing '/' was consumed; only a wildcard route matches with
-            // empty captured remainder.
+            // `state == 0` here means the loop never ran, i.e. the path was
+            // exactly "/" (or empty) — match the root handler if registered.
+            if state == 0 && self.states[state].handler_id >= 0 && self.states[state].method == method {
+                return MatchResult { handler_id: self.states[state].handler_id, params };
+            }
+            // Trailing '/' after a segment: only a wildcard route at this
+            // state matches, with empty captured remainder.
             if self.states[state].wildcard_handler >= 0
                 && self.states[state].wildcard_method == method
             {
@@ -289,4 +295,24 @@ test "dfa: bsearch keeps array sorted across many inserts" {
     assert r.match_path(Method::Get, &"/banana").handler_id == 4;
     assert r.match_path(Method::Get, &"/cherry").handler_id == 5;
     assert r.match_path(Method::Get, &"/coconut").handler_id == -1;
+}
+
+test "dfa: method mismatch is a miss" {
+    let routes = [
+        RoutePattern { method: Method::Post, path: "/login", handler_id: 1 },
+    ] as Array<RoutePattern>;
+    let r = DfaRouter::build(&routes);
+    assert r.match_path(Method::Get, &"/login").handler_id == -1;
+    assert r.match_path(Method::Post, &"/login").handler_id == 1;
+}
+
+test "dfa: root pattern matches /" {
+    let routes = [
+        RoutePattern { method: Method::Get, path: "/", handler_id: 7 },
+        RoutePattern { method: Method::Get, path: "/foo", handler_id: 8 },
+    ] as Array<RoutePattern>;
+    let r = DfaRouter::build(&routes);
+    assert r.match_path(Method::Get, &"/").handler_id == 7;
+    assert r.match_path(Method::Get, &"/foo").handler_id == 8;
+    assert r.match_path(Method::Get, &"/bar").handler_id == -1;
 }

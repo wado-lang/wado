@@ -62,6 +62,15 @@ impl RadixRouter {
     pub fn match_path(&self, method: Method, path: &String) -> MatchResult {
         let mut params = TreeMap::<String, String>::new();
         let plen = path.len();
+        // Empty pattern ("/") registers a handler at the root with no edge,
+        // so walk's edge-driven traversal cannot reach it. Match path "/"
+        // against root.handler_id directly before falling back to walk —
+        // walk still handles a wildcard registered at root (`/*x`).
+        if plen == 1 && path.get_byte(0) == '/' as u8
+            && self.nodes[0].handler_id >= 0
+            && self.nodes[0].method == method {
+            return MatchResult { handler_id: self.nodes[0].handler_id, params };
+        }
         let hit = self.walk(0, path, 0, plen, method, &mut params);
         if hit < 0 {
             return no_match();
@@ -295,4 +304,24 @@ test "radix: deep param chain" {
     assert m.params["uid"] == "12";
     assert m.params["pid"] == "34";
     assert m.params["cid"] == "56";
+}
+
+test "radix: method mismatch is a miss" {
+    let routes = [
+        RoutePattern { method: Method::Post, path: "/login", handler_id: 1 },
+    ] as Array<RoutePattern>;
+    let r = RadixRouter::build(&routes);
+    assert r.match_path(Method::Get, &"/login").handler_id == -1;
+    assert r.match_path(Method::Post, &"/login").handler_id == 1;
+}
+
+test "radix: root pattern matches /" {
+    let routes = [
+        RoutePattern { method: Method::Get, path: "/", handler_id: 7 },
+        RoutePattern { method: Method::Get, path: "/foo", handler_id: 8 },
+    ] as Array<RoutePattern>;
+    let r = RadixRouter::build(&routes);
+    assert r.match_path(Method::Get, &"/").handler_id == 7;
+    assert r.match_path(Method::Get, &"/foo").handler_id == 8;
+    assert r.match_path(Method::Get, &"/bar").handler_id == -1;
 }

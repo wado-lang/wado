@@ -120,8 +120,9 @@ fn try_match(segments: &Array<Segment>, path: &String, params: &mut TreeMap<Stri
             return false;
         }
     }
-    // No segments at all means we must have consumed nothing.
-    return pos == 0 && plen <= 1;
+    // No segments at all (empty pattern "/") means the path must also have
+    // been fully consumed. After leading-'/' skip, pos == plen on path "/".
+    return pos >= plen;
 }
 
 test "linear: static hits" {
@@ -168,4 +169,15 @@ test "linear: method mismatch is a miss" {
     ] as Array<RoutePattern>;
     let r = LinearRouter::build(&routes);
     assert r.match_path(Method::Get, &"/login").handler_id == -1;
+}
+
+test "linear: root pattern matches /" {
+    let routes = [
+        RoutePattern { method: Method::Get, path: "/", handler_id: 7 },
+        RoutePattern { method: Method::Get, path: "/foo", handler_id: 8 },
+    ] as Array<RoutePattern>;
+    let r = LinearRouter::build(&routes);
+    assert r.match_path(Method::Get, &"/").handler_id == 7;
+    assert r.match_path(Method::Get, &"/foo").handler_id == 8;
+    assert r.match_path(Method::Get, &"/bar").handler_id == -1;
 }
