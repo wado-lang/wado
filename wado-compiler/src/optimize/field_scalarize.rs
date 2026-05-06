@@ -774,6 +774,17 @@ fn scalarize_function(
     // direct call-argument position) so loop-level scalarization can
     // refuse those candidates.
     let aliased_in_function = collect_function_aliased_locals(body, type_table);
+    // Inline-block-mutated locals are also computed once per function:
+    // the set is whole-function-wide (any inline-block write anywhere in
+    // the function poisons the scalar→field invariant for that local at
+    // every loop level), so per-loop recomputation would be a quadratic
+    // walk over the function body for nothing.
+    let inline_block_written_in_function =
+        collect_locals_accessed_inside_inline_blocks(body, type_table);
+    let analysis = HfsAnalysis {
+        aliased_in_function: &aliased_in_function,
+        inline_block_written: &inline_block_written_in_function,
+    };
     let mut local_count = func.local_count;
     let mut locals = func.locals.clone();
     let changed = scalarize_block(
@@ -782,11 +793,19 @@ fn scalarize_function(
         &mut locals,
         type_table,
         cache,
-        &aliased_in_function,
+        &analysis,
     );
     func.local_count = local_count;
     func.locals = locals;
     changed
+}
+
+/// Read-only function-wide pre-analysis shared by every `scalarize_loop`
+/// invocation in the same function. Computed once in `scalarize_function`
+/// to keep the per-loop work linear in the loop body's size.
+struct HfsAnalysis<'a> {
+    aliased_in_function: &'a IndexSet<u32>,
+    inline_block_written: &'a IndexSet<u32>,
 }
 
 fn scalarize_block(
@@ -795,7 +814,7 @@ fn scalarize_block(
     locals: &mut Vec<TirLocal>,
     type_table: &TypeTable,
     cache: &FieldUsageCache,
-    aliased_in_function: &IndexSet<u32>,
+    analysis: &HfsAnalysis<'_>,
 ) -> bool {
     let mut changed = false;
     let mut new_stmts = Vec::new();
@@ -810,7 +829,7 @@ fn scalarize_block(
                     locals,
                     type_table,
                     cache,
-                    aliased_in_function,
+                    analysis,
                 );
                 // Try to scalarize hot fields at this loop level.
                 let result = scalarize_loop(
@@ -819,7 +838,7 @@ fn scalarize_block(
                     locals,
                     type_table,
                     cache,
-                    aliased_in_function,
+                    analysis,
                 );
                 if result.pre_stmts.is_empty() {
                     new_stmts.push(stmt);
@@ -841,7 +860,7 @@ fn scalarize_block(
                     locals,
                     type_table,
                     cache,
-                    aliased_in_function,
+                    analysis,
                 );
                 if let Some(eb) = else_block {
                     changed |= scalarize_block(
@@ -850,7 +869,7 @@ fn scalarize_block(
                         locals,
                         type_table,
                         cache,
-                        aliased_in_function,
+                        analysis,
                     );
                 }
                 new_stmts.push(stmt);
@@ -862,7 +881,7 @@ fn scalarize_block(
                     locals,
                     type_table,
                     cache,
-                    aliased_in_function,
+                    analysis,
                 );
                 new_stmts.push(stmt);
             }
@@ -877,7 +896,7 @@ fn scalarize_block(
                     locals,
                     type_table,
                     cache,
-                    aliased_in_function,
+                    analysis,
                 );
                 if let Some(eb) = else_block {
                     changed |= scalarize_block(
@@ -886,7 +905,7 @@ fn scalarize_block(
                         locals,
                         type_table,
                         cache,
-                        aliased_in_function,
+                        analysis,
                     );
                 }
                 new_stmts.push(stmt);
@@ -923,7 +942,7 @@ fn scalarize_loop(
     locals: &mut Vec<TirLocal>,
     type_table: &TypeTable,
     cache: &FieldUsageCache,
-    aliased_in_function: &IndexSet<u32>,
+    analysis: &HfsAnalysis<'_>,
 ) -> ScalarizeResult {
     // Step 1: Count field accesses (reads + writes) in the loop body
     let mut access_counts: IndexMap<(u32, u32), FieldAccessInfo> = IndexMap::default();
@@ -936,19 +955,6 @@ fn scalarize_loop(
     // null-reference trap. Locals declared in the parent scope (i.e., not
     // listed here) are fine to scalarize.
     let inside_loop_locals = collect_locals_introduced_in_block(loop_body);
-
-    // Step 1c: Collect locals whose fields are accessed inside an inlined
-    // method body (`__inline_*` labeled block) within the loop. The
-    // sync-around-call logic in `replace_in_*` inserts a write-back/re-read
-    // pair around any expression that contains an unscalarised method call
-    // or function call. The inlined block, however, has *already* been
-    // HFS-rewritten to read/write the scalar directly — so when an outer
-    // `match` mixes an inlined-call arm (writes via scalar) with a
-    // method-call arm (writes via field) the post-match re-read clobbers
-    // the scalar with the stale field value, dropping the inlined arm's
-    // updates. Skip such candidates: HFS would emit incorrect code.
-    let inline_block_accessed_locals =
-        collect_locals_accessed_inside_inline_blocks(loop_body, type_table);
 
     // Step 2: Select candidates - fields accessed frequently enough,
     // where the field is modified only by direct assignment (not by the whole local being reassigned)
@@ -981,7 +987,7 @@ fn scalarize_loop(
         // alias bypass the HFS scalar — and since the capture can be
         // hoisted *out* of the loop by `tmpl_hoist`, the loop-local
         // alias scan in `count_field_accesses_in_expr` does not see it.
-        if aliased_in_function.contains(&local_idx) {
+        if analysis.aliased_in_function.contains(&local_idx) {
             continue;
         }
         // The local must not be touched inside any `__inline_*` labeled
@@ -989,7 +995,7 @@ fn scalarize_loop(
         // directly, and the surrounding sync-around-call logic that
         // wraps a sibling method-call arm would clobber the scalar with
         // the stale field value.
-        if inline_block_accessed_locals.contains(&local_idx) {
+        if analysis.inline_block_written.contains(&local_idx) {
             continue;
         }
         // The local must be bound in the parent scope (visible at the loop's
