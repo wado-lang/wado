@@ -1368,8 +1368,7 @@ fn collect_locals_accessed_inside_inline_blocks(
                         self.visit_block(eb);
                     }
                 }
-                TirStmtKind::Loop { body }
-                | TirStmtKind::LabeledBlock { block: body, .. } => {
+                TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
                     self.visit_block(body);
                 }
                 TirStmtKind::IfLet {

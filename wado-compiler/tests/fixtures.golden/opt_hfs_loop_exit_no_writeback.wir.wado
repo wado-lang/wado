@@ -113,19 +113,17 @@ fn "wado-compiler/tests/fixtures/opt_hfs_loop_exit_no_writeback.wado/process"(st
     let _licm_data_4: ref "core:prelude//Array<i32>";
     let _licm_used_5: i32;
     let _licm_repr_6: ref builtin::array<i32>;
-    let _hfs_counter_7: i32;
     _licm_limit_3 = state.limit;
     _licm_data_4 = state.data;
     _licm_used_5 = _licm_data_4.used;
     _licm_repr_6 = _licm_data_4.repr;
-    _hfs_counter_7 = state.counter;
     b0: block {
         l1: loop {
-            if _hfs_counter_7 >= _licm_limit_3 {
+            if state.counter >= _licm_limit_3 {
                 break b0;
             }
             state.total = state.total + __inline_Array_i32__IndexValue_i32___index_value_0: block -> i32 {
-                index = _hfs_counter_7;
+                index = state.counter;
                 if index >= _licm_used_5 {
                     "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
@@ -133,11 +131,10 @@ fn "wado-compiler/tests/fixtures/opt_hfs_loop_exit_no_writeback.wado/process"(st
                 break __inline_Array_i32__IndexValue_i32___index_value_0: builtin::array_get<i32>(_licm_repr_6, index);
                 unreachable;
             };
-            _hfs_counter_7 = _hfs_counter_7 + 1;
+            state.counter = state.counter + 1;
             continue l1;
         };
     };
-    state.counter = _hfs_counter_7;
 }
 
 fn "wado-compiler/tests/fixtures/opt_hfs_loop_exit_no_writeback.wado/run"() {
