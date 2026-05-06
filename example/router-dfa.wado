@@ -1,17 +1,16 @@
 //! Segment-level tagged DFA HTTP router.
 //!
 //! Routes are split at '/' boundaries, and each segment becomes a single
-//! transition. States are stored in a flat arena `Array<DfaState>`; literal
-//! transitions live in a per-state `TreeMap<String, i32>`, parametric and
-//! wildcard transitions are stored on the parent state. Matching is a
-//! deterministic loop with no backtracking: at each state, literal first,
-//! then param, then wildcard. The "tag" attached to a param/wildcard
-//! transition records the param name so the captured segment can be
-//! associated by name in the result `params`.
+//! transition. States are stored in a flat arena `Array<DfaState>`.
+//! Each state's literal transitions live in a sorted `Array<DfaLiteralEdge>`
+//! looked up by binary search; parametric and wildcard transitions are
+//! stored on the parent state. Matching is a deterministic loop with no
+//! backtracking: at each state, literal first, then param, then wildcard.
 //!
-//! The avoided byte-by-byte work makes per-state work cheaper than radix
-//! at the cost of constructing one substring per segment for the literal
-//! lookup.
+//! Lookup compares the stored edge label byte-for-byte against the path's
+//! `[start..end]` range without allocating a new `String` per segment.
+//! That avoids the `substr_bytes` per-segment allocation that a
+//! `TreeMap<String, i32>`-based design would force.
 
 use { TreeMap } from "core:collections";
 use {
@@ -19,20 +18,25 @@ use {
     no_match, parse_pattern,
 } from "./router-common.wado";
 
+struct DfaLiteralEdge {
+    label: String,
+    target: i32,
+}
+
 struct DfaState {
-    literals: TreeMap<String, i32>,  // segment string -> next state id
-    param_target: i32,                // -1 if no param child
+    literals: Array<DfaLiteralEdge>,  // sorted by label byte-wise
+    param_target: i32,                 // -1 if no param child
     param_name: String,
-    wildcard_handler: i32,            // -1 if no wildcard route at this state
+    wildcard_handler: i32,             // -1 if no wildcard route at this state
     wildcard_method: Method,
     wildcard_name: String,
-    handler_id: i32,                  // -1 if not terminal
+    handler_id: i32,                   // -1 if not terminal
     method: Method,
 }
 
 fn new_state() -> DfaState {
     return DfaState {
-        literals: TreeMap::<String, i32>::new(),
+        literals: [],
         param_target: -1,
         param_name: "",
         wildcard_handler: -1,
@@ -81,15 +85,17 @@ impl DfaRouter {
                 },
                 Literal(lit) => {
                     let key = *lit;
-                    let existing = self.states[cur].literals.get(key);
-                    match existing {
-                        Some(next) => { cur = next; },
-                        None => {
-                            let new_id = self.states.len();
-                            self.states.push(new_state());
-                            self.states[cur].literals[key] = new_id;
-                            cur = new_id;
-                        },
+                    let [pos, found] = bsearch_label(&self.states[cur].literals, &key);
+                    if found {
+                        cur = self.states[cur].literals[pos].target;
+                    } else {
+                        let new_id = self.states.len();
+                        self.states.push(new_state());
+                        self.states[cur].literals.insert(pos, DfaLiteralEdge {
+                            label: key,
+                            target: new_id,
+                        });
+                        cur = new_id;
                     }
                 },
             }
@@ -113,24 +119,22 @@ impl DfaRouter {
                 // Empty segment ("//" in path).
                 return no_match();
             }
-            // Try literal first; on miss fall back to param, then wildcard.
-            let seg = path.substr_bytes(pos, end);
-            match self.states[state].literals.get(seg) {
-                Some(next) => { state = next; },
-                None => {
-                    if self.states[state].param_target >= 0 {
-                        let pname = self.states[state].param_name;
-                        params[pname] = seg;
-                        state = self.states[state].param_target;
-                    } else if self.states[state].wildcard_handler >= 0
-                        && self.states[state].wildcard_method == method
-                    {
-                        params[self.states[state].wildcard_name] = path.substr_bytes(pos, plen);
-                        return MatchResult { handler_id: self.states[state].wildcard_handler, params };
-                    } else {
-                        return no_match();
-                    }
-                },
+            // Try literal first via byte-range binary search (no allocation).
+            // On miss fall back to param, then wildcard.
+            let target = bsearch_target_by_bytes(&self.states[state].literals, path, pos, end);
+            if target >= 0 {
+                state = target;
+            } else if self.states[state].param_target >= 0 {
+                let pname = self.states[state].param_name;
+                params[pname] = path.substr_bytes(pos, end);
+                state = self.states[state].param_target;
+            } else if self.states[state].wildcard_handler >= 0
+                && self.states[state].wildcard_method == method
+            {
+                params[self.states[state].wildcard_name] = path.substr_bytes(pos, plen);
+                return MatchResult { handler_id: self.states[state].wildcard_handler, params };
+            } else {
+                return no_match();
             }
             pos = end + 1;
         }
@@ -153,6 +157,66 @@ impl DfaRouter {
         }
         return no_match();
     }
+}
+
+/// Binary search for `key` in a sorted edges array. Returns
+/// `[index, found]`: when `found` is true `index` is the matched
+/// position; otherwise `index` is the insertion point.
+fn bsearch_label(edges: &Array<DfaLiteralEdge>, key: &String) -> [i32, bool] {
+    let mut lo = 0;
+    let mut hi = edges.len();
+    while lo < hi {
+        let mid = (lo + hi) / 2;
+        match edges[mid].label.cmp(key) {
+            Less => { lo = mid + 1; },
+            Greater => { hi = mid; },
+            Equal => { return [mid, true]; },
+        }
+    }
+    return [lo, false];
+}
+
+/// Binary search variant that compares edge labels against `path[start..end]`
+/// directly, with no intermediate `String` allocation. Returns the matched
+/// edge's target state id, or -1 on miss.
+fn bsearch_target_by_bytes(edges: &Array<DfaLiteralEdge>, path: &String, start: i32, end: i32) -> i32 {
+    let mut lo = 0;
+    let mut hi = edges.len();
+    while lo < hi {
+        let mid = (lo + hi) / 2;
+        match cmp_string_to_byte_range(&edges[mid].label, path, start, end) {
+            Less => { lo = mid + 1; },
+            Greater => { hi = mid; },
+            Equal => { return edges[mid].target; },
+        }
+    }
+    return -1;
+}
+
+/// Lexicographic byte comparison between `label` (whole string) and
+/// `path[start..end]`. Equivalent to `label.cmp(&path.substr_bytes(start, end))`
+/// but without the intermediate allocation.
+fn cmp_string_to_byte_range(label: &String, path: &String, start: i32, end: i32) -> Ordering {
+    let llen = label.len();
+    let blen = end - start;
+    let cmp_len = if llen < blen { llen } else { blen };
+    for let mut i = 0; i < cmp_len; i += 1 {
+        let a = label.get_byte(i);
+        let b = path.get_byte(start + i);
+        if a < b {
+            return Ordering::Less;
+        }
+        if a > b {
+            return Ordering::Greater;
+        }
+    }
+    if llen < blen {
+        return Ordering::Less;
+    }
+    if llen > blen {
+        return Ordering::Greater;
+    }
+    return Ordering::Equal;
 }
 
 test "dfa: static routes" {
@@ -208,4 +272,21 @@ test "dfa: deep param chain" {
     assert m.params["uid"] == "12";
     assert m.params["pid"] == "34";
     assert m.params["cid"] == "56";
+}
+
+test "dfa: bsearch keeps array sorted across many inserts" {
+    let routes = [
+        RoutePattern { method: Method::Get, path: "/zoo", handler_id: 1 },
+        RoutePattern { method: Method::Get, path: "/apple", handler_id: 2 },
+        RoutePattern { method: Method::Get, path: "/mango", handler_id: 3 },
+        RoutePattern { method: Method::Get, path: "/banana", handler_id: 4 },
+        RoutePattern { method: Method::Get, path: "/cherry", handler_id: 5 },
+    ] as Array<RoutePattern>;
+    let r = DfaRouter::build(&routes);
+    assert r.match_path(Method::Get, &"/zoo").handler_id == 1;
+    assert r.match_path(Method::Get, &"/apple").handler_id == 2;
+    assert r.match_path(Method::Get, &"/mango").handler_id == 3;
+    assert r.match_path(Method::Get, &"/banana").handler_id == 4;
+    assert r.match_path(Method::Get, &"/cherry").handler_id == 5;
+    assert r.match_path(Method::Get, &"/coconut").handler_id == -1;
 }
