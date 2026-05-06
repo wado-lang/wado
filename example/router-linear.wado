@@ -56,7 +56,7 @@ impl LinearRouter {
 fn try_match(segments: &Array<Segment>, path: &String, params: &mut TreeMap<String, String>) -> bool {
     let plen = path.len();
     // Skip leading '/'.
-    let mut pos = if plen > 0 && path.get_byte(0) == 47 { 1 } else { 0 };
+    let mut pos = if plen > 0 && path.get_byte(0) == '/' as u8 { 1 } else { 0 };
     let nseg = segments.len();
     for let mut idx = 0; idx < nseg; idx += 1 {
         let seg = &segments[idx];
@@ -78,7 +78,7 @@ fn try_match(segments: &Array<Segment>, path: &String, params: &mut TreeMap<Stri
                     return false;
                 }
                 let mut end = pos;
-                while end < plen && path.get_byte(end) != 47 {
+                while end < plen && path.get_byte(end) != '/' as u8 {
                     end += 1;
                 }
                 if end == pos {
@@ -100,7 +100,7 @@ fn try_match(segments: &Array<Segment>, path: &String, params: &mut TreeMap<Stri
                     return false;
                 }
                 let mut end = pos;
-                while end < plen && path.get_byte(end) != 47 {
+                while end < plen && path.get_byte(end) != '/' as u8 {
                     end += 1;
                 }
                 if end == pos {

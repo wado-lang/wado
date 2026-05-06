@@ -229,19 +229,18 @@ pub fn parse_pattern(path: &String) -> Array<Segment> {
         return out;
     }
     // Expect leading '/'.
-    let mut i = if path.get_byte(0) == 47 { 1 } else { 0 };
+    let mut i = if path.get_byte(0) == '/' as u8 { 1 } else { 0 };
     while i < bytes {
         let mut j = i;
-        while j < bytes && path.get_byte(j) != 47 {
+        while j < bytes && path.get_byte(j) != '/' as u8 {
             j += 1;
         }
         let seg = path.substr_bytes(i, j);
         if seg.len() > 0 {
-            // First byte tags the segment kind: ':' (58) -> Param,
-            // '*' (42) -> Wildcard, anything else -> Literal.
-            let item = match seg.get_byte(0) {
-                58 => Segment::Param(seg.substr_bytes(1, seg.len())),
-                42 => Segment::Wildcard(seg.substr_bytes(1, seg.len())),
+            // First byte tags the segment kind.
+            let item = match seg.get_byte(0) as char {
+                ':' => Segment::Param(seg.substr_bytes(1, seg.len())),
+                '*' => Segment::Wildcard(seg.substr_bytes(1, seg.len())),
                 _ => Segment::Literal(seg),
             };
             out.push(item);

@@ -102,11 +102,11 @@ impl DfaRouter {
         let mut params = TreeMap::<String, String>::new();
         let plen = path.len();
         // Skip leading '/' if any.
-        let mut pos = if plen > 0 && path.get_byte(0) == 47 { 1 } else { 0 };
+        let mut pos = if plen > 0 && path.get_byte(0) == '/' as u8 { 1 } else { 0 };
         let mut state: i32 = 0;
         while pos < plen {
             let mut end = pos;
-            while end < plen && path.get_byte(end) != 47 {
+            while end < plen && path.get_byte(end) != '/' as u8 {
                 end += 1;
             }
             if end == pos {
