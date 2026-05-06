@@ -66,7 +66,12 @@ pub(crate) type TraitImplModuleIndex = IndexMap<(String, String), ModuleSource>;
 /// Contains pre-built indices for fast lookup of trait implementations,
 /// trait declarations, and blanket impls. Built once before resolution
 /// begins and shared (via `Arc`) across all module resolvers.
-#[derive(Debug, Clone)]
+/// `TraitEnv` is *intentionally* not `Clone`. After `build()` returns, the
+/// only legitimate way to mutate the env is `extend_with_synthesised`,
+/// which moves out of an `Arc` whose strong count must be 1. Forbidding
+/// clones at the type level surfaces accidental `Arc` sharing as a
+/// compile error rather than a silent deep-clone of every index.
+#[derive(Debug)]
 pub struct TraitEnv {
     /// Type name → impl blocks that implement traits for that type.
     pub(super) impl_index: TraitImplIndex,
@@ -399,16 +404,18 @@ impl TraitEnv {
     /// per pipeline run (the synthesis phase) — calling again replaces the
     /// existing layer.
     ///
-    /// Falls back to cloning the full `TraitEnv` when the `Arc` is shared
-    /// (LSP path keeps `state.trait_env` alive past `Package` construction
-    /// in some configurations). The clone is expensive but rare; the fast
-    /// path is the unique-owner case the `compile_with_options` pipeline
-    /// hits.
+    /// `prev` must be the unique owner of the inner `TraitEnv`
+    /// (`Arc::strong_count == 1`). Since `TraitEnv: !Clone`, this is the
+    /// only viable extension shape: we move out of the `Arc`, swap one
+    /// field, and re-wrap. Callers are responsible for not handing this
+    /// function a shared `Arc`.
     pub fn extend_with_synthesised(
         prev: Arc<Self>,
         synth_impls: SynthesisedImpls,
     ) -> Arc<Self> {
-        let mut env = Arc::try_unwrap(prev).unwrap_or_else(|shared| (*shared).clone());
+        let Ok(mut env) = Arc::try_unwrap(prev) else {
+            panic!("extend_with_synthesised: TraitEnv Arc must be uniquely owned")
+        };
         env.synthesised = Some(synth_impls);
         Arc::new(env)
     }
