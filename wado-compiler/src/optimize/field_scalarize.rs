@@ -1201,13 +1201,19 @@ fn count_field_accesses_in_block(
     }
 }
 
-/// Walk the loop body once and collect every local index that is the
-/// receiver of a `FieldAccess` inside any `LabeledBlock` whose label
-/// starts with the inliner's `__inline_` prefix. Such accesses survive
-/// inlining of an `&mut self` method body and are HFS-rewritten directly
-/// to the scalar; the outer sync-around-call logic that wraps a sibling
-/// non-inlined method call would clobber the scalar with a stale field
-/// value, so HFS must not scalarize the local at this loop level.
+/// Walk the loop body once and collect every local index whose field
+/// is *written* (assigned) or whose `&mut local` is captured inside any
+/// `LabeledBlock` whose label starts with the inliner's `__inline_`
+/// prefix. Such writes survive inlining of an `&mut self` method body
+/// and are HFS-rewritten directly to the scalar; the outer
+/// sync-around-call logic that wraps a sibling non-inlined method call
+/// would clobber the scalar with a stale field value, so HFS must not
+/// scalarize the local at this loop level.
+///
+/// Reads inside an inline block are safe: HFS rewrites them to read
+/// the scalar, and no clobber happens (the scalar's value is preserved
+/// across the surrounding sync). Only the *write* path poisons the
+/// scalar→field invariant.
 fn collect_locals_accessed_inside_inline_blocks(
     body: &TirBlock,
     type_table: &TypeTable,
@@ -1218,11 +1224,30 @@ fn collect_locals_accessed_inside_inline_blocks(
         depth: usize,
     }
     impl Walker<'_> {
-        fn record(&mut self, expr: &TirExpr) {
+        /// Record a field-write of a GC-heap local: `local.f = …` inside
+        /// an inline block.
+        fn record_assign_target(&mut self, target: &TirExpr) {
             if self.depth == 0 {
                 return;
             }
-            if let TirExprKind::FieldAccess { expr: inner, .. } = &expr.kind
+            if let TirExprKind::FieldAccess { expr: inner, .. } = &target.kind
+                && let TirExprKind::Local { index, .. } = &inner.kind
+                && is_gc_heap_type(inner.type_id, self.type_table)
+            {
+                self.out.insert(*index);
+            }
+        }
+        /// Record an `&mut local` taken inside an inline block: the
+        /// callee may mutate fields through the captured reference, so
+        /// the same scalar-poisoning concern applies.
+        fn record_mut_ref(&mut self, expr: &TirExpr) {
+            if self.depth == 0 {
+                return;
+            }
+            if let TirExprKind::Unary {
+                op: TirUnaryOp::MutRef,
+                expr: inner,
+            } = &expr.kind
                 && let TirExprKind::Local { index, .. } = &inner.kind
                 && is_gc_heap_type(inner.type_id, self.type_table)
             {
@@ -1230,7 +1255,6 @@ fn collect_locals_accessed_inside_inline_blocks(
             }
         }
         fn visit_expr(&mut self, expr: &TirExpr) {
-            self.record(expr);
             match &expr.kind {
                 TirExprKind::LabeledBlock { label, block, .. } => {
                     let inline = label.starts_with("__inline_");
@@ -1280,6 +1304,7 @@ fn collect_locals_accessed_inside_inline_blocks(
                     self.visit_expr(right);
                 }
                 TirExprKind::Assign { target, value } => {
+                    self.record_assign_target(target);
                     self.visit_expr(target);
                     self.visit_expr(value);
                 }
@@ -1289,17 +1314,21 @@ fn collect_locals_accessed_inside_inline_blocks(
                 }
                 TirExprKind::Call { args, .. } => {
                     for arg in args {
+                        self.record_mut_ref(&arg.expr);
                         self.visit_expr(&arg.expr);
                     }
                 }
                 TirExprKind::MethodCall { receiver, args, .. } => {
+                    self.record_mut_ref(receiver);
                     self.visit_expr(receiver);
                     for arg in args {
+                        self.record_mut_ref(&arg.expr);
                         self.visit_expr(&arg.expr);
                     }
                 }
                 TirExprKind::CmRawCall { args, .. } | TirExprKind::IndirectCall { args, .. } => {
                     for arg in args {
+                        self.record_mut_ref(arg);
                         self.visit_expr(arg);
                     }
                 }
