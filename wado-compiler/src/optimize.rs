@@ -370,9 +370,22 @@ fn run_optimization_passes(
     profiler: &dyn SpanEmitter,
 ) {
     let threshold = config.inline_threshold;
+    let trace_loop = crate::trace::filter().enabled("opt_loop");
     for i in 0..config.iterations {
         profiler.span_start(&format!("tir/iteration {}", i + 1));
         let mut changed = false;
+        let mut iter_changed: Vec<&'static str> = Vec::new();
+        macro_rules! step {
+            ($name:expr, $body:expr) => {{
+                let c = run_pass($name, project, profiler, $body);
+                if c {
+                    changed = true;
+                    if trace_loop {
+                        iter_changed.push($name);
+                    }
+                }
+            }};
+        }
         // Container SROA must run *before* inline in each iteration: inline
         // expands trait methods like `IndexValue::index_value` into raw
         // `builtin::array_get` + field-access pairs, after which the
@@ -380,9 +393,7 @@ fn run_optimization_passes(
         // also means we see the `SequenceLiteralBuilder` desugaring for `[]`
         // while its inner `Constructor` call is still a plain `Call` node,
         // which `recognize_init` can match structurally.
-        changed |= run_pass("tir/container_sroa", project, profiler, |p| {
-            scalarize_containers(p)
-        });
+        step!("tir/container_sroa", |p| scalarize_containers(p));
         // Run value-copy elision *before* inlining: the inliner expands
         // every reachable `$value_copy$T<id>` body into a labeled
         // block, after which the `Call($value_copy$T, [arg])` shape the
@@ -409,44 +420,32 @@ fn run_optimization_passes(
         // gone and the literal-recognising rewrite can no longer match,
         // leaving short-string formatting paths (e.g. `fpfmt.wado`'s
         // `buf.push_str("0.")`) paying full per-call allocation cost.
-        changed |= run_pass("tir/string_push", project, profiler, |p| {
-            simplify_short_push_str(p)
-        });
-        changed |= run_pass("tir/inline", project, profiler, |p| {
-            inline_functions(p, threshold)
-        });
-        changed |= run_pass("tir/labeled_block_fusion", project, profiler, |p| {
-            fuse_labeled_blocks(p)
-        });
-        changed |= run_pass("tir/ref_elim", project, profiler, |p| {
-            eliminate_unnecessary_refs(p)
-        });
-        changed |= run_pass("tir/sroa", project, profiler, |p| {
-            scalar_replace_aggregates(p)
-        });
-        changed |= run_pass("tir/copy_prop", project, profiler, propagate_copies);
-        changed |= run_pass("tir/cse", project, profiler, eliminate_common_subexprs);
-        changed |= run_pass("tir/store_load_forward", project, profiler, |p| {
-            forward_stores_to_loads(p)
-        });
-        changed |= run_pass("tir/field_forward", project, profiler, |p| {
-            forward_struct_field_constants(p)
-        });
-        changed |= run_pass("tir/const_fold", project, profiler, fold_constants);
-        changed |= run_pass("tir/const_global_promotion", project, profiler, |p| {
-            promote_constant_globals(p)
-        });
-        changed |= run_pass("tir/branch_prune", project, profiler, |p| {
-            prune_constant_branches(p)
-        });
-        changed |= run_pass("tir/licm", project, profiler, apply_licm);
-        changed |= run_pass("tir/condition_implication", project, profiler, |p| {
+        step!("tir/string_push", |p| simplify_short_push_str(p));
+        step!("tir/inline", |p| inline_functions(p, threshold));
+        step!("tir/labeled_block_fusion", |p| fuse_labeled_blocks(p));
+        step!("tir/ref_elim", |p| eliminate_unnecessary_refs(p));
+        step!("tir/sroa", |p| scalar_replace_aggregates(p));
+        step!("tir/copy_prop", propagate_copies);
+        step!("tir/cse", eliminate_common_subexprs);
+        step!("tir/store_load_forward", |p| forward_stores_to_loads(p));
+        step!("tir/field_forward", |p| forward_struct_field_constants(p));
+        step!("tir/const_fold", fold_constants);
+        step!("tir/const_global_promotion", |p| promote_constant_globals(p));
+        step!("tir/branch_prune", |p| prune_constant_branches(p));
+        step!("tir/licm", apply_licm);
+        step!("tir/condition_implication", |p| {
             eliminate_implied_conditions(p)
         });
-        changed |= run_pass("tir/tmpl_hoist", project, profiler, |p| {
-            hoist_template_buffers(p)
-        });
+        step!("tir/tmpl_hoist", |p| hoist_template_buffers(p));
         profiler.span_end(&format!("tir/iteration {}", i + 1));
+        if trace_loop {
+            crate::compiler_trace!(
+                "opt_loop",
+                "iter {:>3}: changed_by = [{}]",
+                i + 1,
+                iter_changed.join(", ")
+            );
+        }
         if !changed {
             profiler.debug(&format!(
                 "TIR optimizer converged after {} iteration(s)",
