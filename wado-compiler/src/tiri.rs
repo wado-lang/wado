@@ -271,9 +271,8 @@ impl Value {
                 })
             }
             TirExprKind::FloatLiteral { value, .. } => {
-                let prim = prim_of(expr.type_id, type_table).filter(|p| {
-                    matches!(p, PrimitiveType::F32 | PrimitiveType::F64)
-                })?;
+                let prim = prim_of(expr.type_id, type_table)
+                    .filter(|p| matches!(p, PrimitiveType::F32 | PrimitiveType::F64))?;
                 Some(Self::Float {
                     value: *value,
                     prim,

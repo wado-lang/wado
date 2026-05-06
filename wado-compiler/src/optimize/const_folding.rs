@@ -77,8 +77,7 @@ pub fn fold_constants(project: &mut FlatPackage) -> bool {
             // interpreter consults these every time the visitor calls
             // `bind_field` / `invalidate_field` /
             // `invalidate_aliased_fields`.
-            let alias_info =
-                build_alias_info(body, &address_taken, &stores_aliased, &type_table);
+            let alias_info = build_alias_info(body, &address_taken, &stores_aliased, &type_table);
             visitor.interpreter.set_alias_info(alias_info);
             changed |= visitor.visit_block(body);
         }
@@ -394,8 +393,7 @@ impl ConstFoldVisitor<'_> {
                 TirExprKind::Local { index, .. } => {
                     let local_index = *index;
                     let field_name = field_name.clone();
-                    self.interpreter
-                        .invalidate_field(local_index, &field_name);
+                    self.interpreter.invalidate_field(local_index, &field_name);
                     if let Some(v) = Value::from_literal_expr(value, self.type_table) {
                         self.interpreter.bind_field(local_index, &field_name, v);
                     }

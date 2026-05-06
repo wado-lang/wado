@@ -25,6 +25,7 @@
 //! explicit. The optimizer only *removes* redundant copies via
 //! `value_copy_elide`, which runs as a regular pass in the fixed-point loop.
 
+mod alias;
 mod condition_implication;
 mod const_branch_prune;
 mod const_folding;
@@ -33,7 +34,6 @@ mod container_sroa;
 mod copy_prop;
 mod cse;
 pub mod dce;
-mod alias;
 mod field_scalarize;
 mod inline;
 mod labeled_block_fusion;
