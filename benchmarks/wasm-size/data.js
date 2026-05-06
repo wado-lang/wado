@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778054774478,
+  "lastUpdate": 1778067947131,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -19769,6 +19769,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c2ad33d89bc5c60621dc02682172f49738f98ef6"
         },
         "date": 1778054774105,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1770,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9140,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18520,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 508287,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ab5f1e64ac32b59f4f6776305f733c10a65c3d19",
+          "message": "Merge pull request #1010 from wado-lang/claude/fix-tir-optimizer-convergence-7gSOS\n\ntiri: absorb field_forward into const_fold (fixes #1009)",
+          "timestamp": "2026-05-06T20:40:54+09:00",
+          "tree_id": "97deb88e8a776da5bdc734030b325c6a6fb31a7d",
+          "url": "https://github.com/wado-lang/wado/commit/ab5f1e64ac32b59f4f6776305f733c10a65c3d19"
+        },
+        "date": 1778067946774,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
