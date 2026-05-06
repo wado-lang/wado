@@ -107,4 +107,3 @@ It may include TODOs on WIP.
 - [Resource Inheritance and Downcast (`resource extends`)](./wep-2026-04-28-resource-inheritance.md)
 - [Test Discovery](./wep-2026-05-02-test-discovery.md)
 - [WIT Interoperability](./wep-2026-05-02-wit-interoperability.md)
-- [Static-Analysis LL(*) Repair via `__follow_<id>` Variants](./wep-2026-05-06-ll-prediction.md)

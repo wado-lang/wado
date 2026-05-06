@@ -145,27 +145,27 @@ test "parse JSON.g4" {
 
 ### Test Grammars (`tests/grammars/`)
 
-| File                  | Language     | Notes                                                        |
-| --------------------- | ------------ | ------------------------------------------------------------ |
-| `JSON.g4`             | JSON         | Combined grammar. Clean (no actions).                        |
-| `sexpression.g4`      | S-expression | Combined grammar. Clean.                                     |
-| `calculator.g4`       | Calculator   | Combined grammar. Clean.                                     |
-| `SQLite.g4`           | SQLite       | Combined grammar. Large, clean.                              |
-| `css3Lexer.g4`        | CSS3         | Split lexer. Clean.                                          |
-| `css3Parser.g4`       | CSS3         | Split parser. Clean.                                         |
-| `HTMLLexer.g4`        | HTML         | Split lexer. Clean.                                          |
-| `HTMLParser.g4`       | HTML         | Split parser. Clean.                                         |
-| `ANTLRv4Lexer.g4`     | ANTLR4       | Split lexer. Has action blocks and `superClass`.             |
-| `ANTLRv4Parser.g4`    | ANTLR4       | Split parser. Clean.                                         |
-| `RustLexer.g4`        | Rust         | Split lexer. Has semantic predicates and `superClass`.       |
-| `RustParser.g4`       | Rust         | Split parser. Has semantic predicates and `superClass`.      |
-| `TypeScriptLexer.g4`  | TypeScript   | Split lexer. Has semantic predicates and `superClass`.       |
-| `TypeScriptParser.g4` | TypeScript   | Split parser. Has many semantic predicates and `superClass`. |
-| `ll_basic.g4`         | LL fixture   | Combined. Tail-greedy `Y?` with required follow `b : Y` — passes (v1 LL). |
-| `ll_nullable_suffix.g4` | LL fixture | Combined. Like `ll_basic` but next sibling is nullable — `#[TODO]`. |
-| `ll_multi_alt.g4`     | LL fixture   | Combined. Tail-greedy callee is multi-alt — `#[TODO]`. |
-| `ll_lr_atom.g4`       | LL fixture   | Combined. Tail-greedy callee is left-recursive — `#[TODO]`. |
-| `ll_ctx_follow.g4`    | LL fixture   | Combined. Follow propagation through a passthrough rule — `#[TODO]`. |
+| File                    | Language     | Notes                                                                     |
+| ----------------------- | ------------ | ------------------------------------------------------------------------- |
+| `JSON.g4`               | JSON         | Combined grammar. Clean (no actions).                                     |
+| `sexpression.g4`        | S-expression | Combined grammar. Clean.                                                  |
+| `calculator.g4`         | Calculator   | Combined grammar. Clean.                                                  |
+| `SQLite.g4`             | SQLite       | Combined grammar. Large, clean.                                           |
+| `css3Lexer.g4`          | CSS3         | Split lexer. Clean.                                                       |
+| `css3Parser.g4`         | CSS3         | Split parser. Clean.                                                      |
+| `HTMLLexer.g4`          | HTML         | Split lexer. Clean.                                                       |
+| `HTMLParser.g4`         | HTML         | Split parser. Clean.                                                      |
+| `ANTLRv4Lexer.g4`       | ANTLR4       | Split lexer. Has action blocks and `superClass`.                          |
+| `ANTLRv4Parser.g4`      | ANTLR4       | Split parser. Clean.                                                      |
+| `RustLexer.g4`          | Rust         | Split lexer. Has semantic predicates and `superClass`.                    |
+| `RustParser.g4`         | Rust         | Split parser. Has semantic predicates and `superClass`.                   |
+| `TypeScriptLexer.g4`    | TypeScript   | Split lexer. Has semantic predicates and `superClass`.                    |
+| `TypeScriptParser.g4`   | TypeScript   | Split parser. Has many semantic predicates and `superClass`.              |
+| `ll_basic.g4`           | LL fixture   | Combined. Tail-greedy `Y?` with required follow `b : Y` — passes (v1 LL). |
+| `ll_nullable_suffix.g4` | LL fixture   | Combined. Like `ll_basic` but next sibling is nullable — `#[TODO]`.       |
+| `ll_multi_alt.g4`       | LL fixture   | Combined. Tail-greedy callee is multi-alt — `#[TODO]`.                    |
+| `ll_lr_atom.g4`         | LL fixture   | Combined. Tail-greedy callee is left-recursive — `#[TODO]`.               |
+| `ll_ctx_follow.g4`      | LL fixture   | Combined. Follow propagation through a passthrough rule — `#[TODO]`.      |
 
 Clean grammars (JSON, sexpression, calculator, SQLite, CSS3, HTML) contain no target-language-dependent elements and should be fully parseable and code-generatable.
 
@@ -242,7 +242,7 @@ the cases that actually arise (e.g. `expr`'s `column_ref` IDENT vs
 
 ### LL(\*) variant emit — three over-broad attempts (2026-05)
 
-**Goal:** Static-analysis-based one-level LL(\*) repair via per-(rule, follow-mask) `__follow_<id>` variants. See `docs/wep-2026-05-06-ll-prediction.md` for the design and `tests/grammars/ll_*.g4` for the regression suite.
+**Goal:** Static-analysis-based one-level LL(\*) repair via per-(rule, follow-mask) `__follow_<id>` variants. See [`antlr4-compatibility.md`'s "Phase 4 (landed)" section](./antlr4-compatibility.md#phase-4-landed--static-analysis-llrepair-via-__follow_id-variants) for the design and `tests/grammars/ll_*.g4` for the regression suite.
 
 **Three attempts that broke real grammars and had to be narrowed back:**
 

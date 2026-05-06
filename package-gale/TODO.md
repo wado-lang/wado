@@ -67,13 +67,13 @@ Each gap has a regression grammar under `tests/grammars/ll_*.g4` plus
 a `#[TODO]` driver test. Closing a gap means making the test pass
 without breaking the others.
 
-| Gap | Fixture | Why v1 punts |
-| --- | --- | --- |
-| Nullable next sibling | `ll_nullable_suffix.g4` | `gen_alt_elements` skips variant registration when `is_suffix_nullable`. Closing requires CTX_FOLLOW propagation through the outer rule's follow. |
-| Multi-alt callee | `ll_multi_alt.g4` | `intern_follow_variant` rejects multi-alt rules. `gen_parse_follow_variant` only emits single-alt `gen_alt_body`; needs the multi-alt body / bt-helper duplication. |
-| Left-recursive callee | `ll_lr_atom.g4` | `intern_follow_variant` rejects LR rules. Needs `scan_R__follow_<id>_atom` + per-LR-alt suffix helpers + a precedence-climbing variant dispatcher. |
-| Caller-of-caller follow | `ll_ctx_follow.g4` | `ruleref_call_follow` is computed from the immediate alt's siblings only. Needs a per-rule FOLLOW fixed point that propagates through nullable / passthrough rules. |
-| Multi-token tail-greedy inner | (no fixture yet) | `tail_greedy_first_of_element` only counts Repeats whose inner is a single token (TokenRef / Literal / Wildcard / Not / single-token RuleRef). Needed for `(A B)?` style tail-greedy patterns where the inner sequence is multi-token. |
+| Gap                           | Fixture                 | Why v1 punts                                                                                                                                                                                                                           |
+| ----------------------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Nullable next sibling         | `ll_nullable_suffix.g4` | `gen_alt_elements` skips variant registration when `is_suffix_nullable`. Closing requires CTX_FOLLOW propagation through the outer rule's follow.                                                                                      |
+| Multi-alt callee              | `ll_multi_alt.g4`       | `intern_follow_variant` rejects multi-alt rules. `gen_parse_follow_variant` only emits single-alt `gen_alt_body`; needs the multi-alt body / bt-helper duplication.                                                                    |
+| Left-recursive callee         | `ll_lr_atom.g4`         | `intern_follow_variant` rejects LR rules. Needs `scan_R__follow_<id>_atom` + per-LR-alt suffix helpers + a precedence-climbing variant dispatcher.                                                                                     |
+| Caller-of-caller follow       | `ll_ctx_follow.g4`      | `ruleref_call_follow` is computed from the immediate alt's siblings only. Needs a per-rule FOLLOW fixed point that propagates through nullable / passthrough rules.                                                                    |
+| Multi-token tail-greedy inner | (no fixture yet)        | `tail_greedy_first_of_element` only counts Repeats whose inner is a single token (TokenRef / Literal / Wildcard / Not / single-token RuleRef). Needed for `(A B)?` style tail-greedy patterns where the inner sequence is multi-token. |
 
 ### Beyond v1: ANTLR4 oracle integration
 

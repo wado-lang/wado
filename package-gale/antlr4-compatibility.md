@@ -295,7 +295,7 @@ invocation), runs the generated parser on `[input]`, and compares
 
 Current numbers (run `wado test package-gale/tests/antlr4-compat`):
 
-- **74 Stage B tests emitted** — 70 pass, 4 `#[TODO]` (known
+- **74 Stage B tests emitted** — 71 pass, 3 `#[TODO]` (known
   divergences tracked in `[stage_b_todo]` of `status.toml`).
 - **0 `[stage_b_skip]`** — the historical four
   (`LeftRecursion/ReturnValueAndActionsList[12]_[13]`) were unblocked
@@ -326,22 +326,15 @@ Three independent pieces make up the wiring:
    `output_dir`, avoiding cross-grammar name collisions in
    generated code.
 
-The 4 `#[TODO]` entries are the natural Stage B backlog. They split
-into two buckets:
-
-- **Full-context LL(\*) prediction (next focus)** —
-  `ParserExec/PredictionMode_LL`, where `(a b | a) EOF` with a
-  greedy `a : X Y?` makes Gale's first-token dispatch pick `a` only
-  while ANTLR4's LL prediction picks `a b` based on the follow set.
-  Sketch and design notes in [`TODO.md`](./TODO.md). This is the
-  planned next compatibility track because the harder cases in the
-  Stage C bucket below depend on predicates as a prediction
-  tiebreaker, so prediction has to be sound first.
-- **Action / predicate execution (Stage C territory)** —
-  `LeftRecursion/SemPredFailOption` (the failing predicate guard is
-  silently dropped because action bodies are skipped),
-  `SemPredEvalParser/PredFromAltTestedInLoopBack_{1,2}` (semantic
-  predicate enforcement).
+The 3 remaining `#[TODO]` entries are the natural Stage B backlog
+and all sit in **Stage C territory** (action / predicate
+execution): `LeftRecursion/SemPredFailOption` (the failing
+predicate guard is silently dropped because action bodies are
+skipped) and `SemPredEvalParser/PredFromAltTestedInLoopBack_{1,2}`
+(semantic predicate enforcement). The fourth was
+`ParserExec/PredictionMode_LL`; it closed when Phase 4
+([below](#phase-4-landed--static-analysis-llrepair-via-__follow_id-variants))
+landed.
 
 ### Recently closed gaps
 
@@ -393,6 +386,149 @@ historical Stage B bucket and exposed real compiler / codegen bugs):
   the label name through `gen_lr_suffix_helpers` so the LR helper's
   struct-literal field name and field-assignment dedup counter
   match the bt-side parser. Unblocked 9 LR descriptors.
+
+### Phase 4 (landed) — Static-analysis LL repair via `__follow_<id>` variants
+
+Closes `ParserExec/PredictionMode_LL` and the broader class of
+SLL-vs-LL divergences where the LL-correct alt depends on the
+caller's required follow set.
+
+#### The problem
+
+ANTLR4 uses adaptive LL(\*) prediction
+(`vendor/antlr4/runtime/Java/src/org/antlr/v4/runtime/atn/
+ParserATNSimulator.java`): when SLL is ambiguous it switches to
+full-context analysis, considering the call stack and what each
+caller expects to follow. Gale's prediction is SLL-only.
+
+The canonical reproducer (also `tests/grammars/ll_basic.g4`):
+
+```antlr
+r : (a b | a) EOF ;
+a : X Y? ;
+b : Y ;
+```
+
+For input `X Y`, ANTLR4's LL prediction yields `(r (a X) (b Y))` —
+alt 0 wins because `b` claims the trailing `Y`. SLL/greedy yields
+`(r (a X Y))` because `a`'s `Y?` consumes `Y` without knowing the
+caller (`b`) needs it.
+
+#### The design choice
+
+A full ATN simulator is a significant engineering investment. We
+took the static path: when a `RuleRef R` call site has a follow
+set that overlaps `R`'s tail-greedy set, generate a
+`scan_R__follow_<id>` / `parse_R__follow_<id>` whose body
+suppresses the overlapping tail-greedy consumption. Compute the
+analysis at codegen time, never at runtime.
+
+This is one design point on a spectrum from "no LL repair" (Gale
+stays SLL, real grammars diverge) to "runtime ATN simulator"
+(full ANTLR4 fidelity, large engineering cost). Static variant
+emit closes the shapes ANTLR4 itself resolves via static FOLLOW
+analysis and leaves the rest for the simulator if/when we land it.
+
+#### Mechanism
+
+`GenContext` exposes two analyses:
+
+- `tail_greedy_first_of_rule(R)` — token kinds that `R`'s body
+  may **greedily** consume at tail position. Walks each alt from
+  the tail, accumulating `first_of_element(inner)` for tail-position
+  `Repeat` elements; stops at the first non-deeply-nullable
+  element. Transitively follows tail RuleRefs.
+- `intern_follow_variant(R, caller_follow, is_scan)` — registers a
+  variant for `(R, mask)` where `mask = tail_greedy(R) ∩
+  caller_follow`. Same `(R, mask)` pair always returns the same
+  `id`, so call sites with different but outside-the-intersection
+  follows share a single variant.
+
+Two `GenContext` fields thread the mask and per-call-site follow:
+`current_follow_mask` (subtracted from tail-position `Repeat`
+first sets in `gen_*_repeat`) and `ruleref_call_follow` (read by
+`RuleRef` branches in `gen_scan_element` / `gen_element` to look
+up a variant).
+
+A fixed-point loop at the end of `gen_parser` emits all registered
+variants — variant bodies' own RuleRef calls may register
+additional variants in cascade.
+
+Group-level scan dispatches use a separate sort
+(`sort_group_by_mandatory_count_desc`) keyed on
+`mandatory_element_count` (count of non-deeply-nullable top-level
+elements; deep nullability is essential — a `RuleRef` to a
+fully-nullable rule must not inflate the count). This makes
+`(a b | a)` (mandatory lengths 2 and 1) sort the longer alt
+first, while `(table_or_subquery (',' tor)* | join_clause)` (both
+mandatory length 1) ties and falls through to priority. Rule-level
+dispatch keeps its priority-primary sort because the catch-all
+semantics are intentional there.
+
+#### Soundness conditions
+
+The repair must not consume tokens the caller depends on, but it
+must also not refuse to consume tokens that legitimately belong
+to the callee. Three conditions decide whether the repair is sound
+at a given site, and they are necessary — not arbitrary v1 cutoffs:
+
+1. **Single-token tail-greedy inner.** A `Repeat` whose inner
+   consumes more than one token per iteration cannot be safely
+   suppressed by a follow mask. The mask suppresses the iteration's
+   first-token check, but the inner's deeper tokens may
+   legitimately re-enter on overlapping tokens (HTMLParser's
+   `htmlContent` rule re-enters on TAG_OPEN; the closing `</div>`'s
+   TAG_OPEN is the same token). Static analysis can't distinguish
+   the two. `tail_greedy_first_of_element` enforces this: only
+   `Repeat`s whose inner is `element_is_single_token` contribute.
+
+2. **Strictly required next sibling.** When the caller's immediate
+   next sibling is nullable, its first set might or might not be
+   claimed at runtime, and the runtime decision depends on what
+   comes after the nullable element. Suppressing the callee's
+   tail-greedy unconditionally is unsound (CSS3's `selector :
+   simpleSelectorSequence ws (combinator …)*` — `ws`'s follow
+   includes Space from `combinator`'s first set, but `ws` should
+   still consume Space when no combinator follows). Alt-element
+   walkers only set `ruleref_call_follow` when
+   `tail_is_nullable_deep(elements, i + 1)` is false.
+
+3. **Variant emit can faithfully reproduce the callee body.** A
+   `__follow_<id>` variant must emit a function with the same
+   shape as the regular `scan_R` / `parse_R`, parameterised by
+   the mask. Anything `gen_parse_fn` and `gen_scan_function` know
+   how to emit, the variant emit must mirror.
+   `intern_follow_variant` rejects rules the emit pass cannot
+   reproduce, and `gen_*_follow_variant` `panic!` on contract
+   violation so a future relaxation cannot leak dangling
+   references into generated source.
+
+(1) and (2) are inherent limits of static FOLLOW analysis —
+closing them requires either a multi-token lookahead extension or
+a runtime decision. (3) is a registry/emit invariant: the
+registry must not promise variants the emit pass cannot deliver.
+
+#### Current coverage and gaps
+
+The catalogue of LL fixtures and their pass/`#[TODO]` state lives
+in [`TODO.md`](./TODO.md)'s LL section, exercised by
+`tests/grammars/ll_*.g4`. The architecture above admits the
+catalogued extensions (deeper follow propagation, multi-alt
+variant emit, LR variant emit) as incremental work behind the same
+`intern_follow_variant` / variant-emit contract. None of them
+require revising the design; they require lifting one of the
+soundness conditions by either extending the static analysis (e.g.
+compute `FOLLOW(R)` as a call-graph fixed point) or extending the
+variant emit to reproduce more body shapes (e.g. multi-alt body,
+LR atom + suffix helpers).
+
+There exist grammars where static FOLLOW cannot decide the
+LL-correct alt — typically those where the decision depends on
+arbitrary lookahead through ambiguous prefixes. Those grammars
+require runtime ATN simulation. The decision to start with static
+repair is a cost-vs-coverage trade-off; we will revisit it if the
+catalogued static extensions don't reach the grammars we care
+about.
 
 ### Future work
 
