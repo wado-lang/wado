@@ -233,7 +233,7 @@ impl TirOptVisitor for ConstFoldVisitor<'_> {
         // indexee of an `Index`) are read positions; walk those, but
         // leave the outer `target` shape opaque. After the walk,
         // observe what was assigned so the field env stays in sync.
-        if matches!(expr.kind, TirExprKind::Assign { .. }) {
+        if matches!(&expr.kind, TirExprKind::Assign { .. }) {
             return self.visit_assign(expr);
         }
 
@@ -392,10 +392,9 @@ impl ConstFoldVisitor<'_> {
             } => match &inner.kind {
                 TirExprKind::Local { index, .. } => {
                     let local_index = *index;
-                    let field_name = field_name.clone();
-                    self.interpreter.invalidate_field(local_index, &field_name);
+                    self.interpreter.invalidate_field(local_index, field_name);
                     if let Some(v) = Value::from_literal_expr(value, self.type_table) {
-                        self.interpreter.bind_field(local_index, &field_name, v);
+                        self.interpreter.bind_field(local_index, field_name, v);
                     }
                 }
                 _ => {

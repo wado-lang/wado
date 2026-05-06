@@ -653,8 +653,12 @@ impl<'a> Interpreter<'a> {
         if let Some(m) = self.field_env.get_mut(&local_index) {
             m.swap_remove(field_name);
         }
-        if let Some(group) = self.alias_info.alias_groups.get(&local_index).cloned() {
-            for other in &group {
+        // Disjoint-field borrow: `&self.alias_info.alias_groups` and
+        // `&mut self.field_env` access different fields of `Self`,
+        // so the borrow checker accepts holding the immutable group
+        // borrow across the mutable map probe.
+        if let Some(group) = self.alias_info.alias_groups.get(&local_index) {
+            for other in group {
                 if *other == local_index {
                     continue;
                 }
