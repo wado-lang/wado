@@ -110,6 +110,25 @@ pub struct SynthesisedImpls {
     pub trait_impl_modules: TraitImplModuleIndex,
 }
 
+impl SynthesisedImpls {
+    /// Record that `impl <trait_name> for <type_name>` has been synthesized
+    /// in `module`. First insert wins (matches AST-layer first-write
+    /// semantics).
+    pub fn record_impl(&mut self, type_name: String, trait_name: String, module: ModuleSource) {
+        self.trait_impl_modules
+            .entry((type_name, trait_name))
+            .or_insert(module);
+    }
+
+    /// `true` if `impl <trait_name> for <type_name>` has already been
+    /// recorded in this synthesis layer.
+    #[must_use]
+    pub fn has_impl(&self, type_name: &str, trait_name: &str) -> bool {
+        self.trait_impl_modules
+            .contains_key(&(type_name.to_string(), trait_name.to_string()))
+    }
+}
+
 impl TraitEnv {
     /// Build trait indices from all loaded modules.
     ///
