@@ -555,42 +555,7 @@ fn build_analysis_graph(project: &FlatPackage) -> (CallGraph, EffectUsageMap) {
     for func_rc in &project.functions {
         let func = func_rc.borrow();
         let module_source = &func.module_source;
-        // Use the TirFunction's is_method() to determine if this is a method
-        let func_id = if let Some(ref info) = func.method_info {
-            // This is a method - use MethodName or FreeFunctionName with monomorph info
-            if let Some(monomorph_info) = &func.monomorph_info {
-                // Monomorphized method - use FreeFunctionName with metadata.
-                // Use the actual module_source where the function lives.
-                FunctionId::Free(FreeFunctionName::with_monomorph_info(
-                    module_source.clone(),
-                    func.name.clone(),
-                    monomorph_info.generic_name.clone(),
-                ))
-            } else {
-                // Non-monomorphized method - use method_info
-                FunctionId::Method(MethodName::new(
-                    module_source.clone(),
-                    info.struct_name.clone(),
-                    info.trait_name.clone(),
-                    info.method_name.clone(),
-                ))
-            }
-        } else {
-            // Regular function - use FreeFunctionName
-            if let Some(monomorph_info) = &func.monomorph_info {
-                // Monomorphized function - use actual module_source
-                FunctionId::Free(FreeFunctionName::with_monomorph_info(
-                    module_source.clone(),
-                    func.name.clone(),
-                    monomorph_info.generic_name.clone(),
-                ))
-            } else {
-                FunctionId::Free(FreeFunctionName::from_module_source(
-                    module_source,
-                    &func.name,
-                ))
-            }
-        };
+        let func_id = function_id_for(&func);
         let analysis = analyze_function(&func, module_source, type_table);
         call_graph.insert(func_id.clone(), analysis.callees);
         if !analysis.effect_calls.is_empty() {

@@ -48,11 +48,16 @@ struct RefInfo {
 ///    Replace `r.field` with `v.field` and drop the binding.
 ///
 /// 2. `let r: &mut T = s` (or `&T`) where `s` is itself a reference-typed
-///    local — the inlined shadow pattern, e.g. the `let self = self;` that
-///    appears at the entry of an inlined `&mut self` method body. Resolve
-///    transitively: if `s` aliases `&v`, treat `r` as if it aliased `&v`
-///    too. If `s` is not (yet) tracked, still register `r` as an alias of
-///    `s` so a later replacement can substitute `s` for `r`.
+///    local **already tracked in `refs`** — the inlined shadow pattern,
+///    e.g. the `let self = self;` that appears at the entry of an inlined
+///    `&mut self` method body. Copy `s`'s `RefInfo` into `r` so `r.field`
+///    resolves to the same root.
+///
+///    If `s` is not tracked yet we leave `r` un-tracked. The pass walks
+///    statements in source order, so by the time we encounter
+///    `let r = s` any earlier `let s = &v` is already in `refs`; an
+///    `s` that becomes tracked later cannot retroactively make `r`
+///    eligible because `r`'s uses have already been classified.
 ///
 /// For every expression that uses a tracked local, classifies the use as
 /// field-access-only or not. Any non-field-access use marks the binding as

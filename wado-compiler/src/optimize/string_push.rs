@@ -141,6 +141,14 @@ fn try_split_stmt(expr: &TirExpr, ctx: &Ctx) -> Option<Vec<TirStmt>> {
 /// Receivers we are willing to clone N times. The set is intentionally
 /// narrow: anything that may allocate, trap, or be observably stateful is
 /// excluded so duplicating it cannot change semantics.
+///
+/// `String::push_str`'s `&mut self` parameter constrains what a TIR
+/// `MethodCall` receiver can syntactically be: it must be a place, so
+/// in practice we only ever see `Local`, an `&mut`-wrapped `Local`, or
+/// a `FieldAccess` chain rooted at a `Local`. The broader leaves
+/// (`Capture`, `GlobalVarGet`) are accepted defensively because they
+/// are pure reads with no observable side effects of their own — were
+/// they to appear here, cloning them would still be sound.
 fn is_duplicable_receiver(e: &TirExpr) -> bool {
     match &e.kind {
         TirExprKind::Local { .. }
