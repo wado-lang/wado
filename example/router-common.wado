@@ -1,0 +1,311 @@
+//! Shared types, route set, and access pattern for the HTTP router
+//! benchmark. The same 100 route definitions are fed to each engine
+//! (Linear / Radix tree / segment-level tagged DFA) so the comparison
+//! is apples-to-apples.
+
+use { TreeMap } from "core:collections";
+
+pub enum Method { Get, Post, Put, Delete }
+
+pub struct RoutePattern {
+    pub method: Method,
+    pub path: String,
+    pub handler_id: i32,
+}
+
+pub struct MatchResult {
+    pub handler_id: i32,
+    pub params: TreeMap<String, String>,
+}
+
+pub fn no_match() -> MatchResult {
+    return MatchResult {
+        handler_id: -1,
+        params: TreeMap::<String, String>::new(),
+    };
+}
+
+pub struct AccessRequest {
+    pub method: Method,
+    pub path: String,
+    pub expected_handler_id: i32,
+}
+
+/// Returns 100 route patterns, distributed as:
+///   - 70 static (20 shallow / 30 medium / 20 deep)
+///   - 25 parametric (10 with 1 param / 10 with 2 / 5 with 3)
+///   - 5 wildcard
+/// Most routes share the `/api/v1/...` prefix so prefix-compressing
+/// engines (radix tree) can exercise their strength.
+pub fn build_routes() -> Array<RoutePattern> {
+    let mut routes: Array<RoutePattern> = [];
+    let mut id = 0;
+
+    let static_shallow: Array<String> = [
+        "/health",
+        "/version",
+        "/metrics",
+        "/ping",
+        "/robots.txt",
+        "/favicon.ico",
+        "/api/v1/health",
+        "/api/v1/version",
+        "/api/v1/status",
+        "/api/v1/metrics",
+        "/api/v2/health",
+        "/api/v2/version",
+        "/admin/login",
+        "/admin/logout",
+        "/admin/dashboard",
+        "/auth/login",
+        "/auth/logout",
+        "/auth/refresh",
+        "/docs",
+        "/openapi.json",
+    ];
+
+    let static_medium: Array<String> = [
+        "/api/v1/users/list",
+        "/api/v1/users/create",
+        "/api/v1/users/search",
+        "/api/v1/users/me",
+        "/api/v1/posts/list",
+        "/api/v1/posts/create",
+        "/api/v1/posts/search",
+        "/api/v1/posts/popular",
+        "/api/v1/products/list",
+        "/api/v1/products/create",
+        "/api/v1/products/search",
+        "/api/v1/products/featured",
+        "/api/v1/orders/list",
+        "/api/v1/orders/create",
+        "/api/v1/orders/recent",
+        "/api/v1/comments/list",
+        "/api/v1/comments/create",
+        "/api/v1/comments/recent",
+        "/api/v1/admin/users/list",
+        "/api/v1/admin/users/create",
+        "/api/v1/admin/posts/list",
+        "/api/v1/admin/posts/moderate",
+        "/api/v1/admin/products/list",
+        "/api/v1/admin/orders/list",
+        "/api/v1/admin/config/get",
+        "/api/v1/admin/config/set",
+        "/api/v1/admin/stats/users",
+        "/api/v1/admin/stats/orders",
+        "/api/v1/admin/stats/revenue",
+        "/api/v1/admin/stats/traffic",
+    ];
+
+    let static_deep: Array<String> = [
+        "/api/v1/admin/users/sessions/active",
+        "/api/v1/admin/users/sessions/expired",
+        "/api/v1/admin/users/permissions/list",
+        "/api/v1/admin/users/permissions/create",
+        "/api/v1/admin/posts/comments/flagged",
+        "/api/v1/admin/posts/comments/deleted",
+        "/api/v1/admin/products/inventory/low",
+        "/api/v1/admin/products/inventory/zero",
+        "/api/v1/admin/products/categories/list",
+        "/api/v1/admin/products/categories/create",
+        "/api/v1/admin/orders/payments/pending",
+        "/api/v1/admin/orders/payments/failed",
+        "/api/v1/admin/orders/shipments/pending",
+        "/api/v1/admin/orders/shipments/late",
+        "/api/v1/admin/system/logs/recent",
+        "/api/v1/admin/system/logs/errors",
+        "/api/v1/admin/system/jobs/running",
+        "/api/v1/admin/system/jobs/failed",
+        "/api/v1/admin/system/cache/stats",
+        "/api/v1/admin/system/cache/clear",
+    ];
+
+    let param1: Array<String> = [
+        "/api/v1/users/:id",
+        "/api/v1/posts/:id",
+        "/api/v1/products/:id",
+        "/api/v1/orders/:id",
+        "/api/v1/comments/:id",
+        "/api/v1/categories/:slug",
+        "/api/v1/tags/:tag",
+        "/api/v1/profile/:username",
+        "/api/v1/auth/sessions/:token",
+        "/api/v1/files/:filename",
+    ];
+
+    let param2: Array<String> = [
+        "/api/v1/users/:id/posts/:pid",
+        "/api/v1/users/:id/comments/:cid",
+        "/api/v1/users/:id/orders/:oid",
+        "/api/v1/users/:id/profile/:section",
+        "/api/v1/posts/:id/comments/:cid",
+        "/api/v1/posts/:id/reactions/:rid",
+        "/api/v1/products/:id/reviews/:rid",
+        "/api/v1/products/:id/variants/:vid",
+        "/api/v1/orders/:id/items/:item_id",
+        "/api/v1/categories/:slug/products/:pid",
+    ];
+
+    // NOTE: param names are kept consistent with the first-registered route
+    // through the same position (e.g. `/api/v1/users/:id` registered above
+    // forces every later route through that position to also use `:id`).
+    // Radix and DFA share the param node across overlapping routes, so a
+    // mismatched name there would silently surface as the first-registered
+    // name and disagree with the linear engine that stores each route
+    // independently. The cross-engine `verify_engines_agree` check would
+    // catch such a mismatch — see the bench driver.
+    let param3: Array<String> = [
+        "/api/v1/users/:id/posts/:pid/comments/:cid",
+        "/api/v1/users/:id/posts/:pid/reactions/:rid",
+        "/api/v1/products/:id/variants/:vid/reviews/:rid",
+        "/api/v1/orders/:id/items/:item_id/refunds/:rid",
+        "/api/v1/categories/:slug/products/:pid/reviews/:rid",
+    ];
+
+    let wildcards: Array<String> = [
+        "/static/*path",
+        "/files/:bucket/*key",
+        "/assets/*path",
+        "/downloads/:user/*path",
+        "/uploads/*path",
+    ];
+
+    for let p of static_shallow {
+        routes.push(RoutePattern { method: Method::Get, path: p, handler_id: id });
+        id += 1;
+    }
+    for let p of static_medium {
+        routes.push(RoutePattern { method: Method::Get, path: p, handler_id: id });
+        id += 1;
+    }
+    for let p of static_deep {
+        routes.push(RoutePattern { method: Method::Get, path: p, handler_id: id });
+        id += 1;
+    }
+    for let p of param1 {
+        routes.push(RoutePattern { method: Method::Get, path: p, handler_id: id });
+        id += 1;
+    }
+    for let p of param2 {
+        routes.push(RoutePattern { method: Method::Get, path: p, handler_id: id });
+        id += 1;
+    }
+    for let p of param3 {
+        routes.push(RoutePattern { method: Method::Get, path: p, handler_id: id });
+        id += 1;
+    }
+    for let p of wildcards {
+        routes.push(RoutePattern { method: Method::Get, path: p, handler_id: id });
+        id += 1;
+    }
+    return routes;
+}
+
+/// 9 hits + 1 miss, exercising every shape from the route set.
+/// `expected_handler_id` is `-1` for the miss and otherwise refers to
+/// the index assigned by `build_routes()`.
+pub fn build_access_pattern() -> Array<AccessRequest> {
+    return [
+        AccessRequest { method: Method::Get, path: "/api/v1/health",                                        expected_handler_id: 6 },
+        AccessRequest { method: Method::Get, path: "/api/v1/users/list",                                    expected_handler_id: 20 },
+        AccessRequest { method: Method::Get, path: "/api/v1/admin/users/sessions/active",                   expected_handler_id: 50 },
+        AccessRequest { method: Method::Get, path: "/api/v1/users/12345",                                   expected_handler_id: 70 },
+        AccessRequest { method: Method::Get, path: "/api/v1/users/12345/posts/678",                         expected_handler_id: 80 },
+        AccessRequest { method: Method::Get, path: "/api/v1/users/12345/posts/678/comments/9",              expected_handler_id: 90 },
+        AccessRequest { method: Method::Get, path: "/static/css/main.css",                                  expected_handler_id: 95 },
+        AccessRequest { method: Method::Get, path: "/api/v1/products/list",                                 expected_handler_id: 28 },
+        AccessRequest { method: Method::Get, path: "/api/v1/users/12345/profile/email",                     expected_handler_id: 83 },
+        AccessRequest { method: Method::Get, path: "/api/v1/does/not/exist",                                expected_handler_id: -1 },
+    ] as Array<AccessRequest>;
+}
+
+/// Parsed segment of a route pattern, shared between engines.
+pub variant Segment {
+    Literal(String),
+    Param(String),     // name without the leading ":"
+    Wildcard(String),  // name without the leading "*", must be the last segment
+}
+
+/// Parse a route pattern path into a list of segments.
+/// `/foo/:bar/*baz` -> [Literal("foo"), Param("bar"), Wildcard("baz")].
+/// `/` (the empty pattern, which terminates at the root) yields `[]`.
+/// Panics when the pattern is empty or does not start with `/`.
+pub fn parse_pattern(path: &String) -> Array<Segment> {
+    let mut out: Array<Segment> = [];
+    let bytes = path.len();
+    if bytes == 0 || path.get_byte(0) != '/' as u8 {
+        panic("route pattern must start with '/'");
+    }
+    let mut i = 1;
+    while i < bytes {
+        let mut j = i;
+        while j < bytes && path.get_byte(j) != '/' as u8 {
+            j += 1;
+        }
+        let seg = path.substr_bytes(i, j);
+        if seg.len() > 0 {
+            // First byte tags the segment kind.
+            let item = match seg.get_byte(0) as char {
+                ':' => Segment::Param(seg.substr_bytes(1, seg.len())),
+                '*' => Segment::Wildcard(seg.substr_bytes(1, seg.len())),
+                _ => Segment::Literal(seg),
+            };
+            out.push(item);
+        }
+        i = j + 1;
+    }
+    return out;
+}
+
+test "build_routes: 100 patterns total" {
+    let routes = build_routes();
+    assert routes.len() == 100;
+    // Spot checks for indices used by the access pattern.
+    assert routes[6].path == "/api/v1/health";
+    assert routes[20].path == "/api/v1/users/list";
+    assert routes[28].path == "/api/v1/products/list";
+    assert routes[50].path == "/api/v1/admin/users/sessions/active";
+    assert routes[70].path == "/api/v1/users/:id";
+    assert routes[80].path == "/api/v1/users/:id/posts/:pid";
+    assert routes[83].path == "/api/v1/users/:id/profile/:section";
+    assert routes[90].path == "/api/v1/users/:id/posts/:pid/comments/:cid";
+    assert routes[95].path == "/static/*path";
+}
+
+test "build_access_pattern: 10 entries, 1 miss" {
+    let pat = build_access_pattern();
+    assert pat.len() == 10;
+    let mut misses = 0;
+    for let r of pat {
+        if r.expected_handler_id < 0 {
+            misses += 1;
+        }
+    }
+    assert misses == 1;
+}
+
+test "parse_pattern: literals, params, wildcard" {
+    let segs = parse_pattern(&"/api/v1/users/:id/posts/*rest");
+    assert segs.len() == 6;
+    assert segs[0] matches { Literal("api") };
+    assert segs[1] matches { Literal("v1") };
+    assert segs[2] matches { Literal("users") };
+    assert segs[3] matches { Param("id") };
+    assert segs[4] matches { Literal("posts") };
+    assert segs[5] matches { Wildcard("rest") };
+}
+
+test "parse_pattern: root pattern yields empty" {
+    let segs = parse_pattern(&"/");
+    assert segs.len() == 0;
+}
+
+#[expect_trap]
+test "parse_pattern: missing leading slash panics" {
+    parse_pattern(&"foo");
+}
+
+#[expect_trap]
+test "parse_pattern: empty pattern panics" {
+    parse_pattern(&"");
+}

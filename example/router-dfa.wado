@@ -1,0 +1,318 @@
+//! Segment-level tagged DFA HTTP router.
+//!
+//! Routes are split at '/' boundaries, and each segment becomes a single
+//! transition. States are stored in a flat arena `Array<DfaState>`.
+//! Each state's literal transitions live in a sorted `Array<DfaLiteralEdge>`
+//! looked up by binary search; parametric and wildcard transitions are
+//! stored on the parent state. Matching is a deterministic loop with no
+//! backtracking: at each state, literal first, then param, then wildcard.
+//!
+//! Lookup compares the stored edge label byte-for-byte against the path's
+//! `[start..end]` range without allocating a new `String` per segment.
+//! That avoids the `substr_bytes` per-segment allocation that a
+//! `TreeMap<String, i32>`-based design would force.
+
+use { TreeMap } from "core:collections";
+use {
+    Method, MatchResult, RoutePattern, Segment,
+    no_match, parse_pattern,
+} from "./router-common.wado";
+
+struct DfaLiteralEdge {
+    label: String,
+    target: i32,
+}
+
+struct DfaState {
+    literals: Array<DfaLiteralEdge>,  // sorted by label byte-wise
+    param_target: i32,                 // -1 if no param child
+    param_name: String,
+    wildcard_handler: i32,             // -1 if no wildcard route at this state
+    wildcard_method: Method,
+    wildcard_name: String,
+    handler_id: i32,                   // -1 if not terminal
+    method: Method,
+}
+
+fn new_state() -> DfaState {
+    return DfaState {
+        literals: [],
+        param_target: -1,
+        param_name: "",
+        wildcard_handler: -1,
+        wildcard_method: Method::Get,
+        wildcard_name: "",
+        handler_id: -1,
+        method: Method::Get,
+    };
+}
+
+pub struct DfaRouter {
+    states: Array<DfaState>,   // state 0 is the start state
+}
+
+impl DfaRouter {
+    pub fn build(patterns: &Array<RoutePattern>) -> DfaRouter {
+        let mut r = DfaRouter { states: [] };
+        r.states.push(new_state());
+        for let p of patterns {
+            r.insert_pattern(p.method, &p.path, p.handler_id);
+        }
+        return r;
+    }
+
+    fn insert_pattern(&mut self, method: Method, path: &String, handler_id: i32) {
+        let segs = parse_pattern(path);
+        let mut cur: i32 = 0;
+        let nseg = segs.len();
+        for let mut i = 0; i < nseg; i += 1 {
+            let seg = &segs[i];
+            match seg {
+                Wildcard(name) => {
+                    self.states[cur].wildcard_handler = handler_id;
+                    self.states[cur].wildcard_method = method;
+                    self.states[cur].wildcard_name = *name;
+                    return;
+                },
+                Param(name) => {
+                    if self.states[cur].param_target < 0 {
+                        let new_id = self.states.len();
+                        self.states.push(new_state());
+                        self.states[cur].param_target = new_id;
+                        self.states[cur].param_name = *name;
+                    }
+                    cur = self.states[cur].param_target;
+                },
+                Literal(lit) => {
+                    let key = *lit;
+                    let [pos, found] = bsearch_label(&self.states[cur].literals, &key);
+                    if found {
+                        cur = self.states[cur].literals[pos].target;
+                    } else {
+                        let new_id = self.states.len();
+                        self.states.push(new_state());
+                        self.states[cur].literals.insert(pos, DfaLiteralEdge {
+                            label: key,
+                            target: new_id,
+                        });
+                        cur = new_id;
+                    }
+                },
+            }
+        }
+        self.states[cur].handler_id = handler_id;
+        self.states[cur].method = method;
+    }
+
+    pub fn match_path(&self, method: Method, path: &String) -> MatchResult {
+        let mut params = TreeMap::<String, String>::new();
+        let plen = path.len();
+        // Skip leading '/' if any.
+        let mut pos = if plen > 0 && path.get_byte(0) == '/' as u8 { 1 } else { 0 };
+        let mut state: i32 = 0;
+        while pos < plen {
+            let mut end = pos;
+            while end < plen && path.get_byte(end) != '/' as u8 {
+                end += 1;
+            }
+            if end == pos {
+                // Empty segment ("//" in path).
+                return no_match();
+            }
+            // Try literal first via byte-range binary search (no allocation).
+            // On miss fall back to param, then wildcard.
+            let target = bsearch_target_by_bytes(&self.states[state].literals, path, pos, end);
+            if target >= 0 {
+                state = target;
+            } else if self.states[state].param_target >= 0 {
+                let pname = self.states[state].param_name;
+                params[pname] = path.substr_bytes(pos, end);
+                state = self.states[state].param_target;
+            } else if self.states[state].wildcard_handler >= 0
+                && self.states[state].wildcard_method == method
+            {
+                params[self.states[state].wildcard_name] = path.substr_bytes(pos, plen);
+                return MatchResult { handler_id: self.states[state].wildcard_handler, params };
+            } else {
+                return no_match();
+            }
+            pos = end + 1;
+        }
+        // Path consumed. `pos == plen + 1` means the last segment ended at
+        // the end of the path (no trailing slash). `pos == plen` means
+        // either a trailing slash was consumed after a segment, or the
+        // path was exactly "/" and the loop never ran.
+        if pos == plen + 1 {
+            if self.states[state].handler_id >= 0 && self.states[state].method == method {
+                return MatchResult { handler_id: self.states[state].handler_id, params };
+            }
+        } else if pos == plen {
+            // `state == 0` here means the loop never ran, i.e. the path was
+            // exactly "/" (or empty) — match the root handler if registered.
+            if state == 0 && self.states[state].handler_id >= 0 && self.states[state].method == method {
+                return MatchResult { handler_id: self.states[state].handler_id, params };
+            }
+            // Trailing '/' after a segment: only a wildcard route at this
+            // state matches, with empty captured remainder.
+            if self.states[state].wildcard_handler >= 0
+                && self.states[state].wildcard_method == method
+            {
+                params[self.states[state].wildcard_name] = "";
+                return MatchResult { handler_id: self.states[state].wildcard_handler, params };
+            }
+        }
+        return no_match();
+    }
+}
+
+/// Binary search for `key` in a sorted edges array. Returns
+/// `[index, found]`: when `found` is true `index` is the matched
+/// position; otherwise `index` is the insertion point.
+fn bsearch_label(edges: &Array<DfaLiteralEdge>, key: &String) -> [i32, bool] {
+    let mut lo = 0;
+    let mut hi = edges.len();
+    while lo < hi {
+        let mid = (lo + hi) / 2;
+        match edges[mid].label.cmp(key) {
+            Less => { lo = mid + 1; },
+            Greater => { hi = mid; },
+            Equal => { return [mid, true]; },
+        }
+    }
+    return [lo, false];
+}
+
+/// Binary search variant that compares edge labels against `path[start..end]`
+/// directly, with no intermediate `String` allocation. Returns the matched
+/// edge's target state id, or -1 on miss.
+fn bsearch_target_by_bytes(edges: &Array<DfaLiteralEdge>, path: &String, start: i32, end: i32) -> i32 {
+    let mut lo = 0;
+    let mut hi = edges.len();
+    while lo < hi {
+        let mid = (lo + hi) / 2;
+        match cmp_string_to_byte_range(&edges[mid].label, path, start, end) {
+            Less => { lo = mid + 1; },
+            Greater => { hi = mid; },
+            Equal => { return edges[mid].target; },
+        }
+    }
+    return -1;
+}
+
+/// Lexicographic byte comparison between `label` (whole string) and
+/// `path[start..end]`. Equivalent to `label.cmp(&path.substr_bytes(start, end))`
+/// but without the intermediate allocation.
+fn cmp_string_to_byte_range(label: &String, path: &String, start: i32, end: i32) -> Ordering {
+    let llen = label.len();
+    let blen = end - start;
+    let cmp_len = if llen < blen { llen } else { blen };
+    for let mut i = 0; i < cmp_len; i += 1 {
+        let a = label.get_byte(i);
+        let b = path.get_byte(start + i);
+        if a < b {
+            return Ordering::Less;
+        }
+        if a > b {
+            return Ordering::Greater;
+        }
+    }
+    if llen < blen {
+        return Ordering::Less;
+    }
+    if llen > blen {
+        return Ordering::Greater;
+    }
+    return Ordering::Equal;
+}
+
+test "dfa: static routes" {
+    let routes = [
+        RoutePattern { method: Method::Get, path: "/health", handler_id: 1 },
+        RoutePattern { method: Method::Get, path: "/api/v1/users/list", handler_id: 2 },
+        RoutePattern { method: Method::Get, path: "/api/v1/users/me", handler_id: 3 },
+    ] as Array<RoutePattern>;
+    let r = DfaRouter::build(&routes);
+    assert r.match_path(Method::Get, &"/health").handler_id == 1;
+    assert r.match_path(Method::Get, &"/api/v1/users/list").handler_id == 2;
+    assert r.match_path(Method::Get, &"/api/v1/users/me").handler_id == 3;
+    assert r.match_path(Method::Get, &"/missing").handler_id == -1;
+    assert r.match_path(Method::Get, &"/api/v1/users").handler_id == -1;
+}
+
+test "dfa: param + literal sibling (literal wins)" {
+    let routes = [
+        RoutePattern { method: Method::Get, path: "/users/list", handler_id: 1 },
+        RoutePattern { method: Method::Get, path: "/users/:id", handler_id: 2 },
+        RoutePattern { method: Method::Get, path: "/users/:id/profile", handler_id: 3 },
+    ] as Array<RoutePattern>;
+    let r = DfaRouter::build(&routes);
+
+    assert r.match_path(Method::Get, &"/users/list").handler_id == 1;
+
+    let m = r.match_path(Method::Get, &"/users/42");
+    assert m.handler_id == 2;
+    assert m.params["id"] == "42";
+
+    let m2 = r.match_path(Method::Get, &"/users/42/profile");
+    assert m2.handler_id == 3;
+    assert m2.params["id"] == "42";
+}
+
+test "dfa: wildcard catch-all" {
+    let routes = [
+        RoutePattern { method: Method::Get, path: "/static/*path", handler_id: 9 },
+    ] as Array<RoutePattern>;
+    let r = DfaRouter::build(&routes);
+    let m = r.match_path(Method::Get, &"/static/css/main.css");
+    assert m.handler_id == 9;
+    assert m.params["path"] == "css/main.css";
+}
+
+test "dfa: deep param chain" {
+    let routes = [
+        RoutePattern { method: Method::Get, path: "/api/v1/users/:uid/posts/:pid/comments/:cid", handler_id: 90 },
+    ] as Array<RoutePattern>;
+    let r = DfaRouter::build(&routes);
+    let m = r.match_path(Method::Get, &"/api/v1/users/12/posts/34/comments/56");
+    assert m.handler_id == 90;
+    assert m.params["uid"] == "12";
+    assert m.params["pid"] == "34";
+    assert m.params["cid"] == "56";
+}
+
+test "dfa: bsearch keeps array sorted across many inserts" {
+    let routes = [
+        RoutePattern { method: Method::Get, path: "/zoo", handler_id: 1 },
+        RoutePattern { method: Method::Get, path: "/apple", handler_id: 2 },
+        RoutePattern { method: Method::Get, path: "/mango", handler_id: 3 },
+        RoutePattern { method: Method::Get, path: "/banana", handler_id: 4 },
+        RoutePattern { method: Method::Get, path: "/cherry", handler_id: 5 },
+    ] as Array<RoutePattern>;
+    let r = DfaRouter::build(&routes);
+    assert r.match_path(Method::Get, &"/zoo").handler_id == 1;
+    assert r.match_path(Method::Get, &"/apple").handler_id == 2;
+    assert r.match_path(Method::Get, &"/mango").handler_id == 3;
+    assert r.match_path(Method::Get, &"/banana").handler_id == 4;
+    assert r.match_path(Method::Get, &"/cherry").handler_id == 5;
+    assert r.match_path(Method::Get, &"/coconut").handler_id == -1;
+}
+
+test "dfa: method mismatch is a miss" {
+    let routes = [
+        RoutePattern { method: Method::Post, path: "/login", handler_id: 1 },
+    ] as Array<RoutePattern>;
+    let r = DfaRouter::build(&routes);
+    assert r.match_path(Method::Get, &"/login").handler_id == -1;
+    assert r.match_path(Method::Post, &"/login").handler_id == 1;
+}
+
+test "dfa: root pattern matches /" {
+    let routes = [
+        RoutePattern { method: Method::Get, path: "/", handler_id: 7 },
+        RoutePattern { method: Method::Get, path: "/foo", handler_id: 8 },
+    ] as Array<RoutePattern>;
+    let r = DfaRouter::build(&routes);
+    assert r.match_path(Method::Get, &"/").handler_id == 7;
+    assert r.match_path(Method::Get, &"/foo").handler_id == 8;
+    assert r.match_path(Method::Get, &"/bar").handler_id == -1;
+}
