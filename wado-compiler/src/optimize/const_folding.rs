@@ -131,18 +131,43 @@ impl TirOptVisitor for ConstFoldVisitor<'_> {
     }
 
     fn visit_expr(&mut self, expr: &mut TirExpr) -> bool {
+        // `Assign { target, value }` is special-cased: the OUTER `target`
+        // expression is an lvalue (write position) and tiri's leaf
+        // rewrites — particularly the new `FieldAccess(Local, field)`
+        // arm — would happily fold a known field-value into the LHS,
+        // turning `obj.f = newval` into `5 = newval`. Only `target`'s
+        // sub-expressions (the receiver of a `FieldAccess`, the
+        // indexee of an `Index`) are read positions; walk those, but
+        // leave the outer `target` shape opaque.
+        if matches!(expr.kind, TirExprKind::Assign { .. }) {
+            let TirExprKind::Assign { target, value } = &mut expr.kind else {
+                unreachable!();
+            };
+            let mut changed = self.visit_expr(value);
+            match &mut target.kind {
+                TirExprKind::FieldAccess { expr: inner, .. }
+                | TirExprKind::Index { expr: inner, .. } => {
+                    changed |= self.visit_expr(inner);
+                }
+                _ => {}
+            }
+            // Observe assignments to invalidate the LHS local in env. Done
+            // *after* walking so the RHS sees the prior binding.
+            if let TirExprKind::Local { index, .. } = &target.kind {
+                self.interpreter.invalidate_local(*index);
+            }
+            // `reduce_local` on an `Assign` node has no rewrite that
+            // applies (nothing in tiri matches `Assign`), so the call
+            // is a guarded no-op — but keep it for symmetry / future
+            // expansion.
+            changed |= self.interpreter.reduce_local(expr);
+            return changed;
+        }
         // Bottom-up: walk every child kind first (`opt_walk_expr` covers
         // If / Block / Match / Call / … in addition to the Binary /
         // Unary / Cast trees that the interpreter recurses into).
         // Then ask the interpreter to apply local rewrites at this node.
         let mut changed = opt_walk_expr(self, expr);
-        // Observe assignments to invalidate the LHS local in env. Done
-        // *after* walking so the RHS sees the prior binding.
-        if let TirExprKind::Assign { target, .. } = &expr.kind
-            && let TirExprKind::Local { index, .. } = &target.kind
-        {
-            self.interpreter.invalidate_local(*index);
-        }
         changed |= self.interpreter.reduce_local(expr);
         changed
     }
