@@ -265,6 +265,7 @@ fn "wado-compiler/tests/fixtures/opt_codewriter_miscompile.wado/emit_alts"(w, n)
     let _licm_indent_level_96: i32;
     let _licm_indent_level_97: i32;
     let _licm_buf_98: ref "core:prelude/string.wado//String";
+    let _hfs_indent_level_99: i32;
     id = __inline_Writer__next_id_0: block -> i32 {
         w.id_counter = w.id_counter + 1;
         break __inline_Writer__next_id_0: w.id_counter;
@@ -338,9 +339,11 @@ fn "wado-compiler/tests/fixtures/opt_codewriter_miscompile.wado/emit_alts"(w, n)
     w.fresh_line = 1;
     __for_1: block {
         i_3 = 0;
+        _hfs_indent_level_99 = w.indent_level;
         block {
             l16: loop {
                 if i_3 >= n {
+                    w.indent_level = _hfs_indent_level_99;
                     break __for_1;
                 }
                 if i_3 > 0 {
@@ -360,7 +363,7 @@ fn "wado-compiler/tests/fixtures/opt_codewriter_miscompile.wado/emit_alts"(w, n)
                     };
                     __inline_Writer__write_indent_18____for_0: block {
                         i_47 = 0;
-                        _licm_indent_level_89 = w.indent_level;
+                        _licm_indent_level_89 = _hfs_indent_level_99;
                         _licm_buf_90 = w.buf;
                         block {
                             l20: loop {
@@ -381,7 +384,7 @@ fn "wado-compiler/tests/fixtures/opt_codewriter_miscompile.wado/emit_alts"(w, n)
                     "core:prelude/string.wado/String::push"(w.buf, 123);
                     "core:prelude/string.wado/String::push"(w.buf, 10);
                     w.fresh_line = 1;
-                    w.indent_level = w.indent_level + 1;
+                    _hfs_indent_level_99 = _hfs_indent_level_99 + 1;
                 }
                 opener_49 = __tmpl: block -> ref "core:prelude/string.wado//String" {
                     __local_11 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(23), used: 0 };
@@ -399,7 +402,7 @@ fn "wado-compiler/tests/fixtures/opt_codewriter_miscompile.wado/emit_alts"(w, n)
                 };
                 __inline_Writer__write_indent_24____for_0: block {
                     i_57 = 0;
-                    _licm_indent_level_91 = w.indent_level;
+                    _licm_indent_level_91 = _hfs_indent_level_99;
                     _licm_buf_92 = w.buf;
                     block {
                         l23: loop {
@@ -420,7 +423,7 @@ fn "wado-compiler/tests/fixtures/opt_codewriter_miscompile.wado/emit_alts"(w, n)
                 "core:prelude/string.wado/String::push"(w.buf, 123);
                 "core:prelude/string.wado/String::push"(w.buf, 10);
                 w.fresh_line = 1;
-                w.indent_level = w.indent_level + 1;
+                _hfs_indent_level_99 = _hfs_indent_level_99 + 1;
                 buf_58 = w.buf;
                 __inline_emit_decorations_25____for_0: block {
                     i_61 = 0;
@@ -448,6 +451,7 @@ fn "wado-compiler/tests/fixtures/opt_codewriter_miscompile.wado/emit_alts"(w, n)
                         };
                     };
                 };
+                w.indent_level = _hfs_indent_level_99;
                 "wado-compiler/tests/fixtures/opt_codewriter_miscompile.wado/emit_body"(w, __tmpl: block -> ref "core:prelude/string.wado//String" {
                     __local_13 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
                     __local_14 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_13 };
@@ -455,10 +459,11 @@ fn "wado-compiler/tests/fixtures/opt_codewriter_miscompile.wado/emit_alts"(w, n)
                     break __tmpl: __local_13;
                     unreachable;
                 });
-                w.indent_level = w.indent_level - 1;
+                _hfs_indent_level_99 = w.indent_level;
+                _hfs_indent_level_99 = _hfs_indent_level_99 - 1;
                 __inline_Writer__write_indent_31____for_0: block {
                     i_71 = 0;
-                    _licm_indent_level_93 = w.indent_level;
+                    _licm_indent_level_93 = _hfs_indent_level_99;
                     _licm_buf_94 = w.buf;
                     block {
                         l32: loop {
@@ -481,6 +486,7 @@ fn "wado-compiler/tests/fixtures/opt_codewriter_miscompile.wado/emit_alts"(w, n)
                 continue l16;
             };
         };
+        w.indent_level = _hfs_indent_level_99;
     };
     __for_2: block {
         i_4 = 1;

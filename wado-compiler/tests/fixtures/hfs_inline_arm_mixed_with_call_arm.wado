@@ -26,11 +26,14 @@
 // method call (sync handles it). When the same match mixes (a) and
 // (b), the post-match re-read clobbers (a)'s writes.
 //
-// Fix: in `scalarize_loop`, refuse any candidate local whose fields
-// are accessed inside a `__inline_*` labeled block within the loop
-// body — those bodies have *already* been HFS-rewritten to use the
-// scalar directly, so any sync wrapping a sibling method-call would
-// corrupt the scalar.
+// Fix (#1008): `replace_in_block` dispatches per-arm for `Expr(Match)`
+// at stmt position — each arm body computes its own sync locally and
+// wraps with write-back / re-read only when needed. The scalar arm
+// (inlined `b.v += 1`) gets no sync, the call arm gets sync local to
+// itself, and the surrounding stmt no longer propagates a clobbering
+// re-read. The same shape without inlining is also covered by
+// `hfs_match_scalar_arm_mixed_with_call_arm.wado` — the bug is
+// structural, not specific to inlined labeled blocks.
 //
 // This fixture exercises the exact mixed-arm shape and covers the
 // bug at every -Ox level (it manifests as wrong stdout, not a trap).

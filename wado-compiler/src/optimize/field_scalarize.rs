@@ -774,16 +774,8 @@ fn scalarize_function(
     // direct call-argument position) so loop-level scalarization can
     // refuse those candidates.
     let aliased_in_function = collect_function_aliased_locals(body, type_table);
-    // Inline-block-mutated locals are also computed once per function:
-    // the set is whole-function-wide (any inline-block write anywhere in
-    // the function poisons the scalar→field invariant for that local at
-    // every loop level), so per-loop recomputation would be a quadratic
-    // walk over the function body for nothing.
-    let inline_block_written_in_function =
-        collect_locals_accessed_inside_inline_blocks(body, type_table);
     let analysis = HfsAnalysis {
         aliased_in_function: &aliased_in_function,
-        inline_block_written: &inline_block_written_in_function,
     };
     let mut local_count = func.local_count;
     let mut locals = func.locals.clone();
@@ -805,7 +797,6 @@ fn scalarize_function(
 /// to keep the per-loop work linear in the loop body's size.
 struct HfsAnalysis<'a> {
     aliased_in_function: &'a IndexSet<u32>,
-    inline_block_written: &'a IndexSet<u32>,
 }
 
 fn scalarize_block(
@@ -943,14 +934,6 @@ fn scalarize_loop(
         // hoisted *out* of the loop by `tmpl_hoist`, the loop-local
         // alias scan in `count_field_accesses_in_expr` does not see it.
         if analysis.aliased_in_function.contains(&local_idx) {
-            continue;
-        }
-        // The local must not be touched inside any `__inline_*` labeled
-        // block in the loop body — those blocks read/write the scalar
-        // directly, and the surrounding sync-around-call logic that
-        // wraps a sibling method-call arm would clobber the scalar with
-        // the stale field value.
-        if analysis.inline_block_written.contains(&local_idx) {
             continue;
         }
         // The local must be bound in the parent scope (visible at the loop's
@@ -1160,234 +1143,6 @@ fn count_field_accesses_in_block(
     for stmt in &block.stmts {
         count_field_accesses_in_stmt(stmt, counts, type_table);
     }
-}
-
-/// Walk the loop body once and collect every local index whose field
-/// is *written* (assigned) or whose `&mut local` is captured inside any
-/// `LabeledBlock` whose label starts with the inliner's `__inline_`
-/// prefix. Such writes survive inlining of an `&mut self` method body
-/// and are HFS-rewritten directly to the scalar; the outer
-/// sync-around-call logic that wraps a sibling non-inlined method call
-/// would clobber the scalar with a stale field value, so HFS must not
-/// scalarize the local at this loop level.
-///
-/// Reads inside an inline block are safe: HFS rewrites them to read
-/// the scalar, and no clobber happens (the scalar's value is preserved
-/// across the surrounding sync). Only the *write* path poisons the
-/// scalar→field invariant.
-fn collect_locals_accessed_inside_inline_blocks(
-    body: &TirBlock,
-    type_table: &TypeTable,
-) -> IndexSet<u32> {
-    struct Walker<'a> {
-        type_table: &'a TypeTable,
-        out: IndexSet<u32>,
-        depth: usize,
-    }
-    impl Walker<'_> {
-        /// Record a field-write of a GC-heap local: `local.f = …` inside
-        /// an inline block.
-        fn record_assign_target(&mut self, target: &TirExpr) {
-            if self.depth == 0 {
-                return;
-            }
-            if let TirExprKind::FieldAccess { expr: inner, .. } = &target.kind
-                && let TirExprKind::Local { index, .. } = &inner.kind
-                && is_gc_heap_type(inner.type_id, self.type_table)
-            {
-                self.out.insert(*index);
-            }
-        }
-        /// Record an `&mut local` taken inside an inline block: the
-        /// callee may mutate fields through the captured reference, so
-        /// the same scalar-poisoning concern applies.
-        fn record_mut_ref(&mut self, expr: &TirExpr) {
-            if self.depth == 0 {
-                return;
-            }
-            if let TirExprKind::Unary {
-                op: TirUnaryOp::MutRef,
-                expr: inner,
-            } = &expr.kind
-                && let TirExprKind::Local { index, .. } = &inner.kind
-                && is_gc_heap_type(inner.type_id, self.type_table)
-            {
-                self.out.insert(*index);
-            }
-        }
-        fn visit_expr(&mut self, expr: &TirExpr) {
-            match &expr.kind {
-                TirExprKind::LabeledBlock { label, block, .. } => {
-                    let inline = label.starts_with("__inline_");
-                    if inline {
-                        self.depth += 1;
-                    }
-                    self.visit_block(block);
-                    if inline {
-                        self.depth -= 1;
-                    }
-                }
-                TirExprKind::Block(block) => self.visit_block(block),
-                TirExprKind::If {
-                    condition,
-                    then_branch,
-                    else_branch,
-                } => {
-                    self.visit_expr(condition);
-                    self.visit_block(then_branch);
-                    if let Some(eb) = else_branch {
-                        self.visit_block(eb);
-                    }
-                }
-                TirExprKind::Match { expr, arms } => {
-                    self.visit_expr(expr);
-                    for arm in arms {
-                        if let Some(g) = &arm.guard {
-                            self.visit_expr(g);
-                        }
-                        self.visit_expr(&arm.body);
-                    }
-                }
-                TirExprKind::Switch {
-                    scrutinee,
-                    arms,
-                    default,
-                    ..
-                } => {
-                    self.visit_expr(scrutinee);
-                    for arm in arms {
-                        self.visit_block(arm);
-                    }
-                    self.visit_block(default);
-                }
-                TirExprKind::Binary { left, right, .. } => {
-                    self.visit_expr(left);
-                    self.visit_expr(right);
-                }
-                TirExprKind::Assign { target, value } => {
-                    self.record_assign_target(target);
-                    self.visit_expr(target);
-                    self.visit_expr(value);
-                }
-                TirExprKind::Index { expr, index } => {
-                    self.visit_expr(expr);
-                    self.visit_expr(index);
-                }
-                TirExprKind::Call { args, .. } => {
-                    for arg in args {
-                        self.record_mut_ref(&arg.expr);
-                        self.visit_expr(&arg.expr);
-                    }
-                }
-                TirExprKind::MethodCall { receiver, args, .. } => {
-                    self.record_mut_ref(receiver);
-                    self.visit_expr(receiver);
-                    for arg in args {
-                        self.record_mut_ref(&arg.expr);
-                        self.visit_expr(&arg.expr);
-                    }
-                }
-                TirExprKind::CmRawCall { args, .. } | TirExprKind::IndirectCall { args, .. } => {
-                    for arg in args {
-                        self.record_mut_ref(arg);
-                        self.visit_expr(arg);
-                    }
-                }
-                TirExprKind::StructLiteral { fields, .. } => {
-                    for f in fields {
-                        self.visit_expr(&f.value);
-                    }
-                }
-                TirExprKind::TupleLiteral { elements } => {
-                    for e in elements {
-                        self.visit_expr(e);
-                    }
-                }
-                TirExprKind::VariantConstruct { payload, .. } => {
-                    if let Some(p) = payload {
-                        self.visit_expr(p);
-                    }
-                }
-                TirExprKind::Unary { expr: inner, .. }
-                | TirExprKind::Cast { expr: inner, .. }
-                | TirExprKind::FieldAccess { expr: inner, .. }
-                | TirExprKind::TupleSpread { expr: inner }
-                | TirExprKind::TupleZip { expr: inner }
-                | TirExprKind::TypePackExpansion {
-                    call_expr: inner, ..
-                }
-                | TirExprKind::VariantTag { expr: inner }
-                | TirExprKind::VariantTest { expr: inner, .. }
-                | TirExprKind::VariantPayload { expr: inner, .. }
-                | TirExprKind::GlobalVarSet { value: inner, .. }
-                | TirExprKind::ClosureToCanonical { functor: inner, .. } => {
-                    self.visit_expr(inner);
-                }
-                TirExprKind::Closure { body, .. } => {
-                    self.visit_expr(body);
-                }
-                _ => {}
-            }
-        }
-        fn visit_block(&mut self, block: &TirBlock) {
-            for stmt in &block.stmts {
-                self.visit_stmt(stmt);
-            }
-        }
-        fn visit_stmt(&mut self, stmt: &TirStmt) {
-            match &stmt.kind {
-                TirStmtKind::Let { value, .. } | TirStmtKind::LetDestructure { value, .. } => {
-                    self.visit_expr(value);
-                }
-                TirStmtKind::Expr(expr) | TirStmtKind::TaskReturn { value: expr } => {
-                    self.visit_expr(expr);
-                }
-                TirStmtKind::Return { value } | TirStmtKind::Break { value, .. } => {
-                    if let Some(v) = value {
-                        self.visit_expr(v);
-                    }
-                }
-                TirStmtKind::If {
-                    condition,
-                    then_block,
-                    else_block,
-                } => {
-                    self.visit_expr(condition);
-                    self.visit_block(then_block);
-                    if let Some(eb) = else_block {
-                        self.visit_block(eb);
-                    }
-                }
-                TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-                    self.visit_block(body);
-                }
-                TirStmtKind::IfLet {
-                    scrutinee,
-                    then_block,
-                    else_block,
-                    ..
-                } => {
-                    self.visit_expr(scrutinee);
-                    self.visit_block(then_block);
-                    if let Some(eb) = else_block {
-                        self.visit_block(eb);
-                    }
-                }
-                TirStmtKind::Continue => {}
-                TirStmtKind::VariadicForOf { iterable, body, .. } => {
-                    self.visit_expr(iterable);
-                    self.visit_block(body);
-                }
-            }
-        }
-    }
-    let mut w = Walker {
-        type_table,
-        out: IndexSet::default(),
-        depth: 0,
-    };
-    w.visit_block(body);
-    w.out
 }
 
 /// Walk the function body once and collect every GC-heap-typed local
@@ -2253,6 +2008,71 @@ fn replace_in_block(
                 new_stmts.push(stmt);
                 continue;
             }
+            TirStmtKind::Expr(expr)
+                if matches!(expr.kind, TirExprKind::Match { .. })
+                    && match_arms_have_no_guards(expr)
+                    && match_arm_bodies_are_unit(expr) =>
+            {
+                // Per-arm sync dispatch (#1008): each arm body is its own sync
+                // scope so a call in one arm doesn't trigger sync that clobbers
+                // a sibling scalar-update arm. Only safe when arm bodies are
+                // unit-typed (they get wrapped with a Block whose last stmt is
+                // the re-read assign, also unit-typed) and no arm has a guard
+                // (guards executing partway through arm selection complicate
+                // sync placement); other shapes fall through to whole-stmt sync.
+                if let TirExprKind::Match {
+                    expr: scrutinee,
+                    arms,
+                } = &mut expr.kind
+                {
+                    let mut scrut_sync = SyncFields {
+                        write_back: IndexSet::default(),
+                        re_read: IndexSet::default(),
+                    };
+                    compute_sync_fields_in_expr(
+                        scrutinee,
+                        candidates,
+                        type_table,
+                        cache,
+                        &mut scrut_sync,
+                    );
+                    for c in candidates {
+                        if scrut_sync
+                            .write_back
+                            .contains(&(c.local_index, c.field_index))
+                        {
+                            new_stmts.push(make_write_back_stmt(c, span));
+                        }
+                    }
+                    replace_in_expr(scrutinee, candidates, &ctx);
+
+                    for arm in arms.iter_mut() {
+                        let mut arm_sync = SyncFields {
+                            write_back: IndexSet::default(),
+                            re_read: IndexSet::default(),
+                        };
+                        compute_sync_fields_in_expr(
+                            &arm.body,
+                            candidates,
+                            type_table,
+                            cache,
+                            &mut arm_sync,
+                        );
+                        replace_in_expr(&mut arm.body, candidates, &ctx);
+                        if !arm_sync.write_back.is_empty() || !arm_sync.re_read.is_empty() {
+                            wrap_unit_expr_with_sync(&mut arm.body, &arm_sync, candidates);
+                        }
+                    }
+
+                    new_stmts.push(stmt);
+                    for c in candidates {
+                        if scrut_sync.re_read.contains(&(c.local_index, c.field_index)) {
+                            new_stmts.push(make_re_read_stmt(c, span));
+                        }
+                    }
+                    continue;
+                }
+            }
             _ => {}
         }
 
@@ -2847,6 +2667,65 @@ fn make_write_back_stmts(
         .iter()
         .map(|c| make_write_back_stmt(c, span))
         .collect()
+}
+
+/// Returns true if the expression is a `Match` whose every arm body has unit
+/// type. Used by `replace_in_block` to gate the per-arm sync dispatch: a unit
+/// arm body can be wrapped as `Block { write_back; body; re_read }` without a
+/// value-capture temp, since the trailing re-read assign is also unit-typed.
+fn match_arm_bodies_are_unit(expr: &TirExpr) -> bool {
+    if let TirExprKind::Match { arms, .. } = &expr.kind {
+        arms.iter().all(|a| a.body.type_id == TypeTable::UNIT)
+    } else {
+        false
+    }
+}
+
+/// Returns true if no arm of the match has a guard. The per-arm sync dispatch
+/// places sync around each arm body; guards execute as part of arm selection
+/// and complicate where sync should land, so guarded matches fall back to the
+/// whole-stmt sync path.
+fn match_arms_have_no_guards(expr: &TirExpr) -> bool {
+    if let TirExprKind::Match { arms, .. } = &expr.kind {
+        arms.iter().all(|a| a.guard.is_none())
+    } else {
+        false
+    }
+}
+
+/// Replace a unit-typed expression in place with `Block { write_back; expr;
+/// re_read }`. The Block's last stmt is the re-read assign (unit), so the
+/// Block evaluates to unit too — preserving the original expression's type.
+/// Used by the per-arm sync dispatch (#1008) so that a call in one match arm
+/// gets sync local to that arm instead of leaking sync around the whole
+/// containing stmt.
+fn wrap_unit_expr_with_sync(
+    expr: &mut TirExpr,
+    sync: &SyncFields,
+    candidates: &[ScalarizeCandidate],
+) {
+    let span = expr.span;
+    let type_id = expr.type_id;
+    debug_assert_eq!(type_id, TypeTable::UNIT);
+    let placeholder = TirExpr::new(TirExprKind::Unit, type_id, span);
+    let original = std::mem::replace(expr, placeholder);
+    let mut stmts = Vec::new();
+    for c in candidates {
+        if sync.write_back.contains(&(c.local_index, c.field_index)) {
+            stmts.push(make_write_back_stmt(c, span));
+        }
+    }
+    stmts.push(TirStmt::new(TirStmtKind::Expr(original), span));
+    for c in candidates {
+        if sync.re_read.contains(&(c.local_index, c.field_index)) {
+            stmts.push(make_re_read_stmt(c, span));
+        }
+    }
+    *expr = TirExpr::new(
+        TirExprKind::Block(TirBlock::new(stmts, span)),
+        type_id,
+        span,
+    );
 }
 
 fn replace_in_expr(expr: &mut TirExpr, candidates: &[ScalarizeCandidate], ctx: &ReplaceCtx) {
