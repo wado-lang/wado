@@ -638,6 +638,7 @@ fn "wado-compiler/tests/fixtures/opt_hfs_immut_ref_method_reread.wado/Lexer::rea
     let _licm_used_11: i32;
     let _licm_repr_12: ref builtin::array<char>;
     let _licm_used_15: i32;
+    let _hfs_pos_16: i32;
     self.pos = self.pos + 1;
     text = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     "core:prelude/string.wado/String::push"(text, 91);
@@ -645,13 +646,15 @@ fn "wado-compiler/tests/fixtures/opt_hfs_immut_ref_method_reread.wado/Lexer::rea
     _licm_used_11 = _licm_chars_10.used;
     _licm_repr_12 = _licm_chars_10.repr;
     _licm_used_15 = _licm_chars_10.used;
+    _hfs_pos_16 = self.pos;
     block {
         l41: loop {
-            if self.pos >= _licm_used_15 {
+            if _hfs_pos_16 >= _licm_used_15 {
+                self.pos = _hfs_pos_16;
                 return text;
             }
             c = __inline_Array_char__IndexValue_i32___index_value_2: block -> char {
-                index_6 = self.pos;
+                index_6 = _hfs_pos_16;
                 if index_6 >= _licm_used_11 {
                     "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
@@ -659,12 +662,12 @@ fn "wado-compiler/tests/fixtures/opt_hfs_immut_ref_method_reread.wado/Lexer::rea
                 break __inline_Array_char__IndexValue_i32___index_value_2: builtin::array_get<char>(_licm_repr_12, index_6);
                 unreachable;
             };
-            self.pos = self.pos + 1;
+            _hfs_pos_16 = _hfs_pos_16 + 1;
             if c == 92 {
                 "core:prelude/string.wado/String::push"(text, c);
-                if self.pos < _licm_used_15 {
+                if _hfs_pos_16 < _licm_used_15 {
                     "core:prelude/string.wado/String::push"(text, __inline_Array_char__IndexValue_i32___index_value_4: block -> char {
-                        index_9 = self.pos;
+                        index_9 = _hfs_pos_16;
                         if index_9 >= _licm_used_11 {
                             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                             unreachable;
@@ -672,18 +675,20 @@ fn "wado-compiler/tests/fixtures/opt_hfs_immut_ref_method_reread.wado/Lexer::rea
                         break __inline_Array_char__IndexValue_i32___index_value_4: builtin::array_get<char>(_licm_repr_12, index_9);
                         unreachable;
                     });
-                    self.pos = self.pos + 1;
+                    _hfs_pos_16 = _hfs_pos_16 + 1;
                 }
                 continue l41;
             }
             if c == 93 {
                 "core:prelude/string.wado/String::push"(text, c);
+                self.pos = _hfs_pos_16;
                 return text;
             }
             "core:prelude/string.wado/String::push"(text, c);
             continue l41;
         };
     };
+    self.pos = _hfs_pos_16;
 }
 
 fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, prefix, digit_count) {
