@@ -1,0 +1,204 @@
+//! Segment-level tagged DFA HTTP router.
+//!
+//! Routes are split at '/' boundaries, and each segment becomes a single
+//! transition. States are stored in a flat arena `Array<DfaState>`; literal
+//! transitions live in a per-state `TreeMap<String, i32>`, parametric and
+//! wildcard transitions are stored on the parent state. Matching is a
+//! deterministic loop with no backtracking: at each state, literal first,
+//! then param, then wildcard. The "tag" attached to a param/wildcard
+//! transition records the param name so the captured segment can be
+//! associated by name in the result `params`.
+//!
+//! The avoided byte-by-byte work makes per-state work cheaper than radix
+//! at the cost of constructing one substring per segment for the literal
+//! lookup.
+
+use { TreeMap } from "core:collections";
+use {
+    Method, MatchResult, RoutePattern, Segment,
+    no_match, parse_pattern,
+} from "./router-common.wado";
+
+struct DfaState {
+    literals: TreeMap<String, i32>,  // segment string -> next state id
+    param_target: i32,                // -1 if no param child
+    param_name: String,
+    wildcard_handler: i32,            // -1 if no wildcard route at this state
+    wildcard_method: Method,
+    wildcard_name: String,
+    handler_id: i32,                  // -1 if not terminal
+    method: Method,
+}
+
+fn new_state() -> DfaState {
+    return DfaState {
+        literals: TreeMap::<String, i32>::new(),
+        param_target: -1,
+        param_name: "",
+        wildcard_handler: -1,
+        wildcard_method: Method::Get,
+        wildcard_name: "",
+        handler_id: -1,
+        method: Method::Get,
+    };
+}
+
+pub struct DfaRouter {
+    states: Array<DfaState>,   // state 0 is the start state
+}
+
+impl DfaRouter {
+    pub fn build(patterns: &Array<RoutePattern>) -> DfaRouter {
+        let mut r = DfaRouter { states: [] };
+        r.states.push(new_state());
+        for let p of patterns {
+            r.insert_pattern(p.method, &p.path, p.handler_id);
+        }
+        return r;
+    }
+
+    fn insert_pattern(&mut self, method: Method, path: &String, handler_id: i32) {
+        let segs = parse_pattern(path);
+        let mut cur: i32 = 0;
+        let nseg = segs.len();
+        for let mut i = 0; i < nseg; i += 1 {
+            let seg = &segs[i];
+            if let Wildcard(name) = seg {
+                self.states[cur].wildcard_handler = handler_id;
+                self.states[cur].wildcard_method = method;
+                self.states[cur].wildcard_name = *name;
+                return;
+            } else if let Param(name) = seg {
+                if self.states[cur].param_target < 0 {
+                    let new_id = self.states.len();
+                    self.states.push(new_state());
+                    self.states[cur].param_target = new_id;
+                    self.states[cur].param_name = *name;
+                }
+                cur = self.states[cur].param_target;
+            } else if let Literal(lit) = seg {
+                let key = *lit;
+                let existing = self.states[cur].literals.get(key);
+                if let Some(next) = existing {
+                    cur = next;
+                } else {
+                    let new_id = self.states.len();
+                    self.states.push(new_state());
+                    self.states[cur].literals[key] = new_id;
+                    cur = new_id;
+                }
+            }
+        }
+        self.states[cur].handler_id = handler_id;
+        self.states[cur].method = method;
+    }
+
+    pub fn match_path(&self, method: Method, path: &String) -> MatchResult {
+        let mut params = TreeMap::<String, String>::new();
+        let plen = path.len();
+        // Skip leading '/' if any.
+        let mut pos = if plen > 0 && path.get_byte(0) == 47 { 1 } else { 0 };
+        let mut state: i32 = 0;
+        while pos < plen {
+            let mut end = pos;
+            while end < plen && path.get_byte(end) != 47 {
+                end += 1;
+            }
+            if end == pos {
+                // Empty segment ("//" in path).
+                return no_match();
+            }
+            // Try literal transition first.
+            let seg = path.substr_bytes(pos, end);
+            let lit_next = self.states[state].literals.get(seg);
+            if let Some(next) = lit_next {
+                state = next;
+            } else if self.states[state].param_target >= 0 {
+                let pname = self.states[state].param_name;
+                params[pname] = seg;
+                state = self.states[state].param_target;
+            } else if self.states[state].wildcard_handler >= 0
+                && self.states[state].wildcard_method == method
+            {
+                params[self.states[state].wildcard_name] = path.substr_bytes(pos, plen);
+                return MatchResult { handler_id: self.states[state].wildcard_handler, params };
+            } else {
+                return no_match();
+            }
+            pos = end + 1;
+        }
+        // Path consumed. `pos == plen + 1` means the last segment ended at
+        // the end of the path (no trailing slash). `pos == plen` means a
+        // trailing slash was consumed.
+        if pos == plen + 1 {
+            if self.states[state].handler_id >= 0 && self.states[state].method == method {
+                return MatchResult { handler_id: self.states[state].handler_id, params };
+            }
+        } else if pos == plen {
+            // Trailing '/' was consumed; only a wildcard route matches with
+            // empty captured remainder.
+            if self.states[state].wildcard_handler >= 0
+                && self.states[state].wildcard_method == method
+            {
+                params[self.states[state].wildcard_name] = "";
+                return MatchResult { handler_id: self.states[state].wildcard_handler, params };
+            }
+        }
+        return no_match();
+    }
+}
+
+test "dfa: static routes" {
+    let routes = [
+        RoutePattern { method: Method::Get, path: "/health", handler_id: 1 },
+        RoutePattern { method: Method::Get, path: "/api/v1/users/list", handler_id: 2 },
+        RoutePattern { method: Method::Get, path: "/api/v1/users/me", handler_id: 3 },
+    ] as Array<RoutePattern>;
+    let r = DfaRouter::build(&routes);
+    assert r.match_path(Method::Get, &"/health").handler_id == 1;
+    assert r.match_path(Method::Get, &"/api/v1/users/list").handler_id == 2;
+    assert r.match_path(Method::Get, &"/api/v1/users/me").handler_id == 3;
+    assert r.match_path(Method::Get, &"/missing").handler_id == -1;
+    assert r.match_path(Method::Get, &"/api/v1/users").handler_id == -1;
+}
+
+test "dfa: param + literal sibling (literal wins)" {
+    let routes = [
+        RoutePattern { method: Method::Get, path: "/users/list", handler_id: 1 },
+        RoutePattern { method: Method::Get, path: "/users/:id", handler_id: 2 },
+        RoutePattern { method: Method::Get, path: "/users/:id/profile", handler_id: 3 },
+    ] as Array<RoutePattern>;
+    let r = DfaRouter::build(&routes);
+
+    assert r.match_path(Method::Get, &"/users/list").handler_id == 1;
+
+    let m = r.match_path(Method::Get, &"/users/42");
+    assert m.handler_id == 2;
+    assert m.params["id"] == "42";
+
+    let m2 = r.match_path(Method::Get, &"/users/42/profile");
+    assert m2.handler_id == 3;
+    assert m2.params["id"] == "42";
+}
+
+test "dfa: wildcard catch-all" {
+    let routes = [
+        RoutePattern { method: Method::Get, path: "/static/*path", handler_id: 9 },
+    ] as Array<RoutePattern>;
+    let r = DfaRouter::build(&routes);
+    let m = r.match_path(Method::Get, &"/static/css/main.css");
+    assert m.handler_id == 9;
+    assert m.params["path"] == "css/main.css";
+}
+
+test "dfa: deep param chain" {
+    let routes = [
+        RoutePattern { method: Method::Get, path: "/api/v1/users/:uid/posts/:pid/comments/:cid", handler_id: 90 },
+    ] as Array<RoutePattern>;
+    let r = DfaRouter::build(&routes);
+    let m = r.match_path(Method::Get, &"/api/v1/users/12/posts/34/comments/56");
+    assert m.handler_id == 90;
+    assert m.params["uid"] == "12";
+    assert m.params["pid"] == "34";
+    assert m.params["cid"] == "56";
+}

@@ -1,0 +1,165 @@
+//! Linear-scan HTTP router.
+//!
+//! Builds an array of pre-parsed (Method, segments, handler_id) tuples and
+//! matches by walking the array from front to back. Worst case is O(N*M)
+//! where N is route count and M is average pattern depth.
+//!
+//! Acts as the baseline (slowest) engine in the benchmark. Linear's
+//! best/worst spread is also large, so the benchmark driver measures
+//! it twice with single-route access patterns.
+
+use { TreeMap } from "core:collections";
+use {
+    Method, MatchResult, RoutePattern, Segment,
+    no_match, parse_pattern,
+} from "./router-common.wado";
+
+struct LinearRoute {
+    method: Method,
+    segments: Array<Segment>,
+    handler_id: i32,
+}
+
+pub struct LinearRouter {
+    routes: Array<LinearRoute>,
+}
+
+impl LinearRouter {
+    pub fn build(patterns: &Array<RoutePattern>) -> LinearRouter {
+        let mut routes: Array<LinearRoute> = [];
+        for let p of patterns {
+            routes.push(LinearRoute {
+                method: p.method,
+                segments: parse_pattern(&p.path),
+                handler_id: p.handler_id,
+            });
+        }
+        return LinearRouter { routes };
+    }
+
+    pub fn match_path(&self, method: Method, path: &String) -> MatchResult {
+        for let r of &self.routes {
+            if r.method != method {
+                continue;
+            }
+            let mut params = TreeMap::<String, String>::new();
+            if try_match(&r.segments, path, &mut params) {
+                return MatchResult { handler_id: r.handler_id, params };
+            }
+        }
+        return no_match();
+    }
+}
+
+/// Walks `segments` against `path`, populating `params` on success.
+/// Returns true on full match.
+fn try_match(segments: &Array<Segment>, path: &String, params: &mut TreeMap<String, String>) -> bool {
+    let plen = path.len();
+    // Skip leading '/'.
+    let mut pos = if plen > 0 && path.get_byte(0) == 47 { 1 } else { 0 };
+    let nseg = segments.len();
+    for let mut idx = 0; idx < nseg; idx += 1 {
+        let seg = &segments[idx];
+        let is_last = idx == nseg - 1;
+        if let Wildcard(name) = seg {
+            // Wildcard requires that the previous segment terminated on a
+            // '/' (so `pos <= plen`). When pos > plen the previous literal
+            // ate exactly to end-of-path with no separator, so this route
+            // does not match.
+            if pos > plen {
+                return false;
+            }
+            params[*name] = path.substr_bytes(pos, plen);
+            return true;
+        }
+        if pos > plen {
+            return false;
+        }
+        if pos == plen {
+            // Out of input but still have a segment to match.
+            return false;
+        }
+        // Find end of current path segment.
+        let mut end = pos;
+        while end < plen && path.get_byte(end) != 47 {
+            end += 1;
+        }
+        if end == pos {
+            // Empty segment in path (e.g. "//").
+            return false;
+        }
+        if let Literal(lit) = seg {
+            let llen = lit.len();
+            if end - pos != llen {
+                return false;
+            }
+            for let mut k = 0; k < llen; k += 1 {
+                if path.get_byte(pos + k) != lit.get_byte(k) {
+                    return false;
+                }
+            }
+        } else if let Param(name) = seg {
+            params[*name] = path.substr_bytes(pos, end);
+        }
+        pos = end + 1;
+        // After consuming the last segment, path should be exhausted.
+        if is_last {
+            // After consuming a literal/param segment, pos == plen + 1
+            // means end == plen (no trailing slash) — the strict-match
+            // success state. pos == plen would mean the path had a
+            // trailing '/', which we treat as a different path.
+            if pos == plen + 1 {
+                return true;
+            }
+            return false;
+        }
+    }
+    // No segments at all means we must have consumed nothing.
+    return pos == 0 && plen <= 1;
+}
+
+test "linear: static hits" {
+    let routes = [
+        RoutePattern { method: Method::Get, path: "/health", handler_id: 1 },
+        RoutePattern { method: Method::Get, path: "/api/v1/users/list", handler_id: 2 },
+    ] as Array<RoutePattern>;
+    let r = LinearRouter::build(&routes);
+    assert r.match_path(Method::Get, &"/health").handler_id == 1;
+    assert r.match_path(Method::Get, &"/api/v1/users/list").handler_id == 2;
+    assert r.match_path(Method::Get, &"/missing").handler_id == -1;
+}
+
+test "linear: param extraction" {
+    let routes = [
+        RoutePattern { method: Method::Get, path: "/api/v1/users/:id", handler_id: 7 },
+        RoutePattern { method: Method::Get, path: "/api/v1/users/:id/posts/:pid", handler_id: 8 },
+    ] as Array<RoutePattern>;
+    let r = LinearRouter::build(&routes);
+
+    let m1 = r.match_path(Method::Get, &"/api/v1/users/42");
+    assert m1.handler_id == 7;
+    assert m1.params["id"] == "42";
+
+    let m2 = r.match_path(Method::Get, &"/api/v1/users/42/posts/9");
+    assert m2.handler_id == 8;
+    assert m2.params["id"] == "42";
+    assert m2.params["pid"] == "9";
+}
+
+test "linear: wildcard captures rest" {
+    let routes = [
+        RoutePattern { method: Method::Get, path: "/static/*path", handler_id: 5 },
+    ] as Array<RoutePattern>;
+    let r = LinearRouter::build(&routes);
+    let m = r.match_path(Method::Get, &"/static/css/main.css");
+    assert m.handler_id == 5;
+    assert m.params["path"] == "css/main.css";
+}
+
+test "linear: method mismatch is a miss" {
+    let routes = [
+        RoutePattern { method: Method::Post, path: "/login", handler_id: 1 },
+    ] as Array<RoutePattern>;
+    let r = LinearRouter::build(&routes);
+    assert r.match_path(Method::Get, &"/login").handler_id == -1;
+}
