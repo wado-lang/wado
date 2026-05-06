@@ -691,21 +691,38 @@ impl<'a> Interpreter<'a> {
     /// Copy every recorded field of `src` to `dst`. Used by the
     /// driving visitor to thread field knowledge through `let dst =
     /// src` (reference-typed Local→Local copy, where both names alias
-    /// the same heap object) and `let dst = $value_copy$T(src)` (a
-    /// fresh deep copy that carries the same field values). Skipped
-    /// when `dst` is `untrackable`. Existing entries on `dst` for
-    /// fields also present on `src` are overwritten with `src`'s
-    /// values (src wins); fields present only on `dst` are
-    /// preserved.
+    /// the same heap object) and `let dst = $value_copy$T(src)`
+    /// (the synthesized one-level shallow value-copy helper from
+    /// `lower::value_copy::synthesize` — field-by-field projection
+    /// plus `array_clone` for raw arrays). Only primitive-literal
+    /// fields are recorded in `field_env`, so for the values we
+    /// actually transfer, src and dst observe the same constants
+    /// regardless of the helper's depth. Skipped when `dst` is
+    /// `untrackable`. Existing entries on `dst` for fields also
+    /// present on `src` are overwritten with `src`'s values (src
+    /// wins); fields present only on `dst` are preserved.
     pub fn copy_fields_from(&mut self, src: u32, dst: u32) {
         if src == dst || self.alias_info.untrackable.contains(&dst) {
             return;
         }
-        let Some(src_map) = self.field_env.get(&src).cloned() else {
+        // Collect from a *borrowed* `src` map into a flat Vec so the
+        // immutable borrow on `field_env` is released before we take
+        // the mutable `entry(dst)`. Cloning into a Vec is cheaper
+        // than cloning the whole inner `IndexMap` (no hash-table
+        // copy) and skips both the index-table clone and the temporary
+        // map's drop. Empty `src` short-circuits without an alloc.
+        let Some(src_map) = self.field_env.get(&src) else {
             return;
         };
+        if src_map.is_empty() {
+            return;
+        }
+        let copies: Vec<(String, Value)> = src_map
+            .iter()
+            .map(|(name, v)| (name.clone(), *v))
+            .collect();
         let dst_map = self.field_env.entry(dst).or_default();
-        for (name, v) in src_map {
+        for (name, v) in copies {
             dst_map.insert(name, v);
         }
     }

@@ -54,7 +54,8 @@ pub fn fold_constants(project: &mut FlatPackage) -> bool {
     let globals = build_global_env(project, &type_table, &callees);
     // Build the `$value_copy$T<id>` helpers map once per pass; the
     // visitor uses it to recognize calls that transfer field
-    // knowledge across deep copies.
+    // knowledge across the synthesized one-level shallow copies
+    // (see `lower::value_copy::synthesize`).
     let value_copy_helpers = build_value_copy_helpers(project);
     let mut visitor = ConstFoldVisitor {
         interpreter: Interpreter::new(&type_table),
@@ -545,8 +546,15 @@ impl ConstFoldVisitor<'_> {
     ///   (covers reference-typed `let dst = src` aliasing — for
     ///   value-typed copies the lower phase wraps in
     ///   `$value_copy$T(src)` so the next case handles them).
-    /// - `Call($value_copy$T(src))`: same as above; `dst` is a fresh
-    ///   deep copy carrying the same field values.
+    /// - `Call($value_copy$T(src))`: same as above; the helper is a
+    ///   one-level shallow copy (field-by-field projection plus
+    ///   `array_clone` for raw arrays — see
+    ///   `lower::value_copy::synthesize`), and the only fields we
+    ///   actually forward are primitive literals (`Int` / `Float` /
+    ///   `Bool` / `Char`) for which a shallow copy is observably
+    ///   equivalent to a deep copy. Reference-typed fields stay
+    ///   un-forwarded so the shared backing they preserve doesn't
+    ///   become a soundness hazard.
     fn update_field_env_from_let(&mut self, local_index: u32, value: &TirExpr) {
         // Unwrap a chained `$value_copy$T<id>(arg)` so the underlying
         // source's knowledge is what we read.
