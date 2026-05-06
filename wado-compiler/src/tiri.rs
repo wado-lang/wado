@@ -351,13 +351,6 @@ pub const DEFAULT_STEP_BUDGET: u32 = 1000;
 // Field knowledge
 // ──────────────────────────────────────────────────────────────────────────────
 
-/// Identity of a struct-field slot tracked by [`Interpreter::field_env`].
-///
-/// `(local_index, field_name)` mirrors the shape produced by
-/// `FieldAccess { expr: Local(idx), field_name }` so a leaf rewrite can
-/// look up a recorded value with a single map probe.
-pub type FieldKey = (u32, String);
-
 /// Per-function alias / aliasing-trackability annotations consumed by
 /// the interpreter's field-knowledge bookkeeping.
 ///
@@ -396,7 +389,7 @@ pub struct AliasInfo {
 /// so each arm walks against the entry state.
 #[derive(Clone, Debug)]
 pub struct FieldSnapshot {
-    fields: IndexMap<FieldKey, Value>,
+    fields: IndexMap<u32, IndexMap<String, Value>>,
 }
 
 /// Decide whether a function may be evaluated at compile time.
@@ -469,7 +462,16 @@ pub struct Interpreter<'a> {
     /// Char) — exactly the values [`Value`] models — are forwardable;
     /// `String` / `null` / aggregate fields stay un-recorded so their
     /// reads always go through the runtime.
-    field_env: IndexMap<FieldKey, Value>,
+    ///
+    /// Stored as a nested `IndexMap<local_index, IndexMap<field_name,
+    /// Value>>` so the lookup path (every `FieldAccess(Local, _)`
+    /// read in the program) can probe with a borrowed `&str` field
+    /// name — no `String` allocation per read. Per-local
+    /// invalidation (`invalidate_local`,
+    /// `invalidate_aliased_fields`) collapses to an `O(1)`
+    /// `swap_remove` on the outer map for each affected local
+    /// instead of an `O(n_fields)` `retain` over a flat key set.
+    field_env: IndexMap<u32, IndexMap<String, Value>>,
     /// Per-function alias annotations driving [`field_env`]
     /// invalidation. Empty by default; populated once per function by
     /// the driving visitor via [`set_alias_info`].
@@ -608,7 +610,7 @@ impl<'a> Interpreter<'a> {
     /// might have different ones.
     pub fn invalidate_local(&mut self, index: u32) {
         self.env.insert(index, Lattice::NonConst);
-        self.field_env.retain(|(idx, _), _| *idx != index);
+        self.field_env.swap_remove(&index);
     }
 
     /// Record `value` as the known compile-time value of
@@ -633,7 +635,9 @@ impl<'a> Interpreter<'a> {
             return;
         }
         self.field_env
-            .insert((local_index, field_name.to_string()), value);
+            .entry(local_index)
+            .or_default()
+            .insert(field_name.to_string(), value);
     }
 
     /// Drop the recorded value (if any) for `local_index.field_name`.
@@ -647,15 +651,17 @@ impl<'a> Interpreter<'a> {
     ///
     /// [`bind_field`]: Self::bind_field
     pub fn invalidate_field(&mut self, local_index: u32, field_name: &str) {
-        self.field_env
-            .swap_remove(&(local_index, field_name.to_string()));
+        if let Some(m) = self.field_env.get_mut(&local_index) {
+            m.swap_remove(field_name);
+        }
         if let Some(group) = self.alias_info.alias_groups.get(&local_index).cloned() {
             for other in &group {
                 if *other == local_index {
                     continue;
                 }
-                self.field_env
-                    .swap_remove(&(*other, field_name.to_string()));
+                if let Some(m) = self.field_env.get_mut(other) {
+                    m.swap_remove(field_name);
+                }
             }
         }
     }
@@ -665,11 +671,18 @@ impl<'a> Interpreter<'a> {
     /// side-effect boundaries (calls, dereferenced writes) where some
     /// external code could have mutated the storage through an alias.
     pub fn invalidate_aliased_fields(&mut self) {
-        if self.alias_info.aliased.is_empty() {
+        // Walking the (typically small) `aliased` set and probing
+        // the (typically larger) `field_env` outer map by `swap_remove`
+        // is O(n_aliased) — strictly better than O(n_field_env)
+        // `retain` over the flat key set. When `field_env` is empty
+        // (the common case for functions that don't construct
+        // tracked structs) the loop body is a no-op anyway.
+        if self.alias_info.aliased.is_empty() || self.field_env.is_empty() {
             return;
         }
-        let aliased = &self.alias_info.aliased;
-        self.field_env.retain(|(idx, _), _| !aliased.contains(idx));
+        for idx in &self.alias_info.aliased {
+            self.field_env.swap_remove(idx);
+        }
     }
 
     /// Copy every recorded field of `src` to `dst`. Used by the
@@ -677,24 +690,20 @@ impl<'a> Interpreter<'a> {
     /// src` (reference-typed Local→Local copy, where both names alias
     /// the same heap object) and `let dst = $value_copy$T(src)` (a
     /// fresh deep copy that carries the same field values). Skipped
-    /// when `dst` is `untrackable`.
+    /// when `dst` is `untrackable`. Existing entries on `dst` for
+    /// fields also present on `src` are overwritten with `src`'s
+    /// values (src wins); fields present only on `dst` are
+    /// preserved.
     pub fn copy_fields_from(&mut self, src: u32, dst: u32) {
-        if self.alias_info.untrackable.contains(&dst) {
+        if src == dst || self.alias_info.untrackable.contains(&dst) {
             return;
         }
-        let copies: Vec<(String, Value)> = self
-            .field_env
-            .iter()
-            .filter_map(|((idx, name), v)| {
-                if *idx == src {
-                    Some((name.clone(), *v))
-                } else {
-                    None
-                }
-            })
-            .collect();
-        for (name, v) in copies {
-            self.field_env.insert((dst, name), v);
+        let Some(src_map) = self.field_env.get(&src).cloned() else {
+            return;
+        };
+        let dst_map = self.field_env.entry(dst).or_default();
+        for (name, v) in src_map {
+            dst_map.insert(name, v);
         }
     }
 
@@ -890,7 +899,11 @@ impl<'a> Interpreter<'a> {
             ..
         } = &expr.kind
             && let TirExprKind::Local { index, .. } = &inner.kind
-            && let Some(v) = self.field_env.get(&(*index, field_name.clone())).copied()
+            && let Some(v) = self
+                .field_env
+                .get(index)
+                .and_then(|m| m.get(field_name.as_str()))
+                .copied()
         {
             expr.kind = value_to_expr_kind(v);
             return true;
@@ -1207,7 +1220,8 @@ impl<'a> Interpreter<'a> {
                 // (`outer.inner.f`) and `(*p).f` stay `Unevaluated`.
                 TirExprKind::Local { index, .. } => self
                     .field_env
-                    .get(&(*index, field_name.clone()))
+                    .get(index)
+                    .and_then(|m| m.get(field_name.as_str()))
                     .copied()
                     .map_or(Lattice::Unevaluated, Lattice::Const),
                 _ => Lattice::Unevaluated,
