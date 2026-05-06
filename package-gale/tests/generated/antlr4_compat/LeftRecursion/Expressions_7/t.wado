@@ -931,15 +931,17 @@ fn scan_e(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
                 let second_kind = if pos + 1 < tokens.len() { tokens[pos + 1].kind } else { TK_EOF };
                 if second_kind == TK_ID {
                     if 4 >= min_prec {
+                        let lr_saved_pos = pos;
                         pos = scan_e_lr_0(tokens, pos);
-                        if pos < 0 { return -1; }
+                        if pos < 0 { pos = lr_saved_pos; break; }
                     } else {
                         break;
                     }
                 } else {
                     if 3 >= min_prec {
+                        let lr_saved_pos = pos;
                         pos = scan_e_lr_1(tokens, pos);
-                        if pos < 0 { return -1; }
+                        if pos < 0 { pos = lr_saved_pos; break; }
                     } else {
                         break;
                     }
@@ -947,15 +949,17 @@ fn scan_e(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
             }
         } else if suffix_kind == TK_LIT_STAR {
             if 2 >= min_prec {
+                let lr_saved_pos = pos;
                 pos = scan_e_lr_3(tokens, pos);
-                if pos < 0 { return -1; }
+                if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
             }
         } else if _gale_kind_set_0(suffix_kind) {
             if 1 >= min_prec {
+                let lr_saved_pos = pos;
                 pos = scan_e_lr_4(tokens, pos);
-                if pos < 0 { return -1; }
+                if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
             }
@@ -1063,12 +1067,18 @@ fn parse_e(p: &mut Parser, min_prec: i32 = 0) -> Result<ENode, ParseError> {
             if suffix_kind == TK_LIT_DOT {
                 if p.peek_at(1) == TK_ID {
                     if 4 >= min_prec {
+                        if scan_e_lr_0(&p.tokens, p.pos) < 0 {
+                            break;
+                        }
                         result = parse_e_lr_0(p, result, start)?;
                     } else {
                         break;
                     }
                 } else {
                     if 3 >= min_prec {
+                        if scan_e_lr_1(&p.tokens, p.pos) < 0 {
+                            break;
+                        }
                         result = parse_e_lr_1(p, result, start)?;
                     } else {
                         break;
@@ -1077,12 +1087,18 @@ fn parse_e(p: &mut Parser, min_prec: i32 = 0) -> Result<ENode, ParseError> {
             }
         } else if suffix_kind == TK_LIT_STAR {
             if 2 >= min_prec {
+                if scan_e_lr_3(&p.tokens, p.pos) < 0 {
+                    break;
+                }
                 result = parse_e_lr_3(p, result, start)?;
             } else {
                 break;
             }
         } else if _gale_kind_set_0(suffix_kind) {
             if 1 >= min_prec {
+                if scan_e_lr_4(&p.tokens, p.pos) < 0 {
+                    break;
+                }
                 result = parse_e_lr_4(p, result, start)?;
             } else {
                 break;

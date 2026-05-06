@@ -733,6 +733,103 @@ fn parse_grammar(input: String, path: String) -> Grammar {
     return g;
 }
 
+test "LR scan loop saves pos and backs off on a suffix failure" {
+    // statement: letterA | statement letterA 'b' ;
+    // Both alts start with TK_LIT_A (letterA = 'a'), so the LR suffix's
+    // first-token check alone cannot decide whether the suffix will complete.
+    // When `scan_statement_lr_1` returns -1 (e.g. the trailing 'b' is missing),
+    // the LR loop must restore `pos` to the prior atom-end and `break` —
+    // never propagate `-1` as the whole scan failing, which would prevent
+    // the enclosing `statement*` repetition from matching anything (ANTLR4
+    // stops after the longest valid prefix).
+    let input = "grammar Test;
+prog : statement* EOF ;
+statement : letterA | statement letterA 'b' ;
+letterA : 'a' ;
+";
+    let mut grammar = parse_grammar(input, "test.g4");
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS);
+    let scan_body = extract_fn_body(&output, &"fn scan_statement(");
+    // The LR loop must save `pos` before the suffix call and restore it on
+    // failure. Look for the save+restore pair around `scan_statement_lr_1(`.
+    assert str_contains(&scan_body, "let lr_saved_pos = pos;"),
+        `scan_statement must save pos before the LR suffix call:\n{scan_body}`;
+    assert str_contains(&scan_body, "pos = lr_saved_pos; break;"),
+        `scan_statement must restore pos and break on LR suffix failure:\n{scan_body}`;
+}
+
+test "LR helper wraps left into an array when the recursive-position label uses +=" {
+    // `b+=expr ',' b+=expr` declares `b` as a list-label (`+=`). After LR
+    // rewriting the recursive `b+=expr` is consumed into the helper's `left`
+    // parameter, but the generated struct field `b` keeps its
+    // `Array<ExprNode>` type (the `+=` semantics) — the helper must build
+    // `[left]` instead of bare `left`, otherwise the struct literal mismatches
+    // the field type and the generated parser fails to compile.
+    let input = "grammar Test;
+s : expr EOF ;
+expr : b+=expr ',' b+=expr #Comma | ID #JustId ;
+ID : 'a' ;
+WS : [ \\t\\n]+ -> skip ;
+";
+    let mut grammar = parse_grammar(input, "test.g4");
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS);
+    let helper = extract_fn_body(&output, &"fn parse_expr_lr_");
+    assert str_contains(&helper, "b: [left] as Array<ExprNode>,"),
+        `LR helper must wrap a list-label \`left\` in an Array<T>-typed array literal:\n{helper}`;
+}
+
+test "LR parse loop predicts via scan when suffix's first token is shared with the atom" {
+    // Same grammar as the scan-side test. On the parse side the suffix call
+    // mutates `p.pos`, so the LR loop must consult the scan twin first to
+    // decide whether to commit. Without that check, `parse_statement_lr_1`
+    // would consume `letterA` then fail on `'b'`, leaving `p.pos` mid-suffix
+    // and corrupting the surrounding `statement*` driver.
+    let input = "grammar Test;
+prog : statement* EOF ;
+statement : letterA | statement letterA 'b' ;
+letterA : 'a' ;
+";
+    let mut grammar = parse_grammar(input, "test.g4");
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS);
+    let parse_body = extract_fn_body(&output, &"fn parse_statement(");
+    assert str_contains(&parse_body, "scan_statement_lr_1(") || str_contains(&parse_body, "scan_statement_lr_1 ("),
+        `parse_statement must consult scan_statement_lr_1 before parsing the LR suffix:\n{parse_body}`;
+}
+
+fn extract_fn_body(output: &String, header: &String) -> String {
+    let start = find_substr(output, header);
+    if start < 0 { return ""; }
+    // Find the next "\nfn " (start of the next top-level fn) or end of file.
+    let after = start + header.len();
+    let next = find_substr_from(output, &"\nfn ", after);
+    let end = if next < 0 { output.len() } else { next };
+    return output.substr_bytes(start, end);
+}
+
+fn find_substr(haystack: &String, needle: &String) -> i32 {
+    return find_substr_from(haystack, needle, 0);
+}
+
+fn find_substr_from(haystack: &String, needle: &String, from: i32) -> i32 {
+    let h_len = haystack.len();
+    let n_len = needle.len();
+    if n_len > h_len {
+        return -1;
+    }
+    let limit = h_len - n_len;
+    for let mut i = from; i <= limit; i += 1 {
+        let mut ok = true;
+        for let mut j = 0; j < n_len; j += 1 {
+            if haystack.get_byte(i + j) != needle.get_byte(j) {
+                ok = false;
+                break;
+            }
+        }
+        if ok { return i; }
+    }
+    return -1;
+}
+
 test "caseInsensitive grammar option makes literal match CI" {
     let input = "lexer grammar Test;
 options { caseInsensitive = true; }
@@ -763,12 +860,12 @@ STRICT options { caseInsensitive = false; } : 'x' ;
 WS : [ \\t]+ -> skip ;";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS);
-    // IF still CI.
+    // IF still CI: the literal 'i' must use the branchless CI helper.
     assert str_contains(&output, "!chars[pos].eq_ignore_ascii_case(&'i')"), `IF must remain CI (grammar-level):\n{output}`;
-    // STRICT must emit plain equality for 'x' (no CI fold). The keyword
-    // classifier uses `start + i` indexing.
-    assert str_contains(&output, "chars[start + 0] == 'x'"), `STRICT must not fold 'x':\n{output}`;
-    assert !str_contains(&output, "chars[start + 0].eq_ignore_ascii_case(&'x')"), `STRICT must not fold 'x' to [xX]:\n{output}`;
+    // STRICT: rule-level caseInsensitive=false means 'x' must NOT be folded,
+    // regardless of which match path the optimisation chose for the rule
+    // (keyword classifier, regular dispatch, or shared literal).
+    assert !str_contains(&output, "eq_ignore_ascii_case(&'x')"), `STRICT must not fold 'x' to [xX]:\n{output}`;
 }
 
 test "lexer rule caseInsensitive=true enables CI when grammar-level absent" {
@@ -967,6 +1064,43 @@ test "visibility comment emitted on non-default lexer rule" {
     };
     let output = generate(&mut grammar, &DEFAULT_OPTIONS);
     assert str_contains(&output, "// rule visibility: protected (ignored by codegen, matches ANTLR4)"), `expected visibility comment for Protected lexer rule:\n{output}`;
+}
+
+test "single-char literal lexer rule without an identifier carrier emits its own try_ matcher" {
+    // `A : 'A' ;` and `B : 'B' ;` look like keyword candidates (single-letter
+    // literal rules). But the keyword classifier only fires after a longer
+    // non-keyword rule has already matched the same characters — and this
+    // grammar has no such carrier (only WS, which matches whitespace). Without
+    // demotion the literals would be unreachable: the tokenize loop would not
+    // dispatch on 'A'/'B', and `classify_keyword` would never run on them.
+    let input = "grammar Test;
+r : A B ;
+A : 'A' ;
+B : 'B' ;
+WS : [ \\t\\n\\r]+ -> skip ;
+";
+    let mut grammar = parse_grammar(input, "test.g4");
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS);
+    assert str_contains(&output, "fn try_a("), `try_a should be generated when no keyword carrier exists:\n{output}`;
+    assert str_contains(&output, "fn try_b("), `try_b should be generated when no keyword carrier exists:\n{output}`;
+    assert str_contains(&output, "first_char == 'A'"), `tokenize dispatch must include 'A':\n{output}`;
+    assert str_contains(&output, "first_char == 'B'"), `tokenize dispatch must include 'B':\n{output}`;
+}
+
+test "single-char literal with an ID carrier stays a keyword (no try_ matcher)" {
+    // `A : 'A'` is a keyword candidate, and `ID : [a-zA-Z]+` covers 'A' as a
+    // first character. The classify_keyword path is therefore reachable, so
+    // `A` must keep its keyword classification — no try_a is emitted.
+    let input = "grammar Test;
+r : A ID ;
+A : 'A' ;
+ID : [a-zA-Z]+ ;
+WS : [ \\t\\n\\r]+ -> skip ;
+";
+    let mut grammar = parse_grammar(input, "test.g4");
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS);
+    assert !str_contains(&output, "fn try_a("), `try_a must not be generated when an ID carrier exists:\n{output}`;
+    assert str_contains(&output, "classify_keyword"), `keyword classifier must still be emitted:\n{output}`;
 }
 
 fn str_contains(haystack: &String, needle: &String) -> bool {

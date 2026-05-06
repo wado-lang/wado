@@ -908,15 +908,17 @@ fn scan_declarator(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
                 let second_kind = if pos + 1 < tokens.len() { tokens[pos + 1].kind } else { TK_EOF };
                 if second_kind == TK_INT {
                     if 3 >= min_prec {
+                        let lr_saved_pos = pos;
                         pos = scan_declarator_lr_0(tokens, pos);
-                        if pos < 0 { return -1; }
+                        if pos < 0 { pos = lr_saved_pos; break; }
                     } else {
                         break;
                     }
                 } else {
                     if 2 >= min_prec {
+                        let lr_saved_pos = pos;
                         pos = scan_declarator_lr_1(tokens, pos);
-                        if pos < 0 { return -1; }
+                        if pos < 0 { pos = lr_saved_pos; break; }
                     } else {
                         break;
                     }
@@ -924,8 +926,9 @@ fn scan_declarator(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
             }
         } else if suffix_kind == TK_LIT_LPAREN {
             if 1 >= min_prec {
+                let lr_saved_pos = pos;
                 pos = scan_declarator_lr_2(tokens, pos);
-                if pos < 0 { return -1; }
+                if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
             }
@@ -1035,12 +1038,18 @@ fn parse_declarator(p: &mut Parser, min_prec: i32 = 0) -> Result<DeclaratorNode,
             if suffix_kind == TK_LIT_LBRACKET {
                 if p.peek_at(1) == TK_INT {
                     if 3 >= min_prec {
+                        if scan_declarator_lr_0(&p.tokens, p.pos) < 0 {
+                            break;
+                        }
                         result = parse_declarator_lr_0(p, result, start)?;
                     } else {
                         break;
                     }
                 } else {
                     if 2 >= min_prec {
+                        if scan_declarator_lr_1(&p.tokens, p.pos) < 0 {
+                            break;
+                        }
                         result = parse_declarator_lr_1(p, result, start)?;
                     } else {
                         break;
@@ -1049,6 +1058,9 @@ fn parse_declarator(p: &mut Parser, min_prec: i32 = 0) -> Result<DeclaratorNode,
             }
         } else if suffix_kind == TK_LIT_LPAREN {
             if 1 >= min_prec {
+                if scan_declarator_lr_2(&p.tokens, p.pos) < 0 {
+                    break;
+                }
                 result = parse_declarator_lr_2(p, result, start)?;
             } else {
                 break;

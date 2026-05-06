@@ -43,21 +43,9 @@
 "ParserErrors/SingleTokenDeletionConsumption" = "trailing <! ... !> StringTemplate comment outside any rule — testsuite descriptor artifact, not a self-contained .g4"
 
 [stage_b_todo]
-"LeftRecursion/PrecedenceFilterConsidersContext" = "Stage B test parse fails with Result::Err — precedence filter behaviour gap"
 "LeftRecursion/SemPredFailOption" = "Stage B parse-tree shape diverges because action bodies are skipped (the predicate guard is dropped) — Stage C territory"
-"ParserExec/BuildParseTree_TRUE" = "Stage B test parse fails or tree shape diverges — investigation pending"
 "ParserExec/PredictionMode_LL" = "Stage B test parse fails with Result::Err — full-context LL prediction not yet enabled in generated parsers"
 "SemPredEvalParser/PredFromAltTestedInLoopBack_1" = "Stage B test parse fails with Result::Err — semantic predicate enforcement is Stage C"
 "SemPredEvalParser/PredFromAltTestedInLoopBack_2" = "Stage B test parse fails with Result::Err — semantic predicate enforcement is Stage C"
 
 [stage_b_skip]
-# All four LeftRecursion/ReturnValueAndActionsList* entries below share
-# one root cause: list-label LR alts (`b+=expr ',' b+=expr`) compile each
-# `+=` occurrence into its own Array<ExprNode> field (`b` and `b_2`)
-# instead of appending both to a single list, and the LR helper then
-# passes `left: ExprNode` into the Array<ExprNode> field — type mismatch
-# at codegen. Fixing this needs ANTLR4 `+=` semantics in the IR.
-"LeftRecursion/ReturnValueAndActionsList1_1" = "list-label LR alt: see [stage_b_skip] header"
-"LeftRecursion/ReturnValueAndActionsList1_3" = "list-label LR alt: see [stage_b_skip] header"
-"LeftRecursion/ReturnValueAndActionsList2_1" = "list-label LR alt: see [stage_b_skip] header"
-"LeftRecursion/ReturnValueAndActionsList2_3" = "list-label LR alt: see [stage_b_skip] header"

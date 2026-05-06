@@ -1567,9 +1567,18 @@ fn gen_scan_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, lr_indices
 }
 
 fn gen_scan_lr_call_with_prec(w: &mut CodeWriter, suffix_fn: &String, prec: i32) {
+    // The LR loop must always commit to the longest valid prefix it can
+    // build. If the suffix scan fails (e.g. the suffix's first token matches
+    // but a deeper element does not, as in `statement letterA 'b'` consuming
+    // the trailing `letterA` then failing on `'b'`), we restore `pos` to the
+    // last successful position and break out of the loop — never propagate
+    // the failure as the whole scan failing. ANTLR4's LL(*) prediction
+    // achieves the same result at decision time; Gale's first-token dispatch
+    // makes the same decision lazily after attempting the suffix.
     w.begin(`if {prec} >= min_prec`);
+    w.line(`let lr_saved_pos = pos;`);
     w.line(`pos = {*suffix_fn}(tokens, pos);`);
-    w.line("if pos < 0 { return -1; }");
+    w.line("if pos < 0 { pos = lr_saved_pos; break; }");
     w.else_begin("else");
     w.line("break;");
     w.end();
@@ -4997,10 +5006,18 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
         // Reserve the binding the bt-side parse function uses for the
         // self-reference (the label name for `a=e`, the rule's own
         // field_name for the bare `e` form) so subsequent dedup matches.
+        // `first_is_list_label` is true for ANTLR4's `+=` form, where the
+        // resulting struct field has type `Array<T>` rather than `T` —
+        // the helper must build `[left]` so the literal matches the field.
         let first_binding = if let Label(lab) = &alt.elements[0] {
             lab.field_name
         } else {
             rule.field_name
+        };
+        let first_is_list_label = if let Label(lab) = &alt.elements[0] {
+            lab.list
+        } else {
+            false
         };
         dedup_name(&first_binding, &mut name_counts);
 
@@ -5030,6 +5047,8 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
             } else if let Label(lab) = elem {
                 // Labeled self-recursive call: use precedence the same way
                 // as the bare-RuleRef arm above, then re-bind to the label.
+                // List labels (`+=`) declare an `Array<T>` field; wrap the
+                // single per-iteration value to match the field type.
                 if let RuleRef(rr) = &lab.element {
                     if rr.name == rule.name {
                         let lab_name = dedup_name(&lab.field_name, &mut name_counts);
@@ -5042,7 +5061,13 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
                             &lr_suffix_first_tokens,
                         );
                         w.line(`let {inner_name} = {fn_name}(p, {prec})?;`);
-                        w.line(`let {lab_name} = {inner_name};`);
+                        if lab.list {
+                            // Type-annotate the local so `[inner]` parses as
+                            // `Array<T>` rather than a 1-tuple `[T]`.
+                            w.line(`let {lab_name}: Array<{type_name}> = [{inner_name}];`);
+                        } else {
+                            w.line(`let {lab_name} = {inner_name};`);
+                        }
                         continue;
                     }
                 }
@@ -5068,7 +5093,13 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
         w.line(`return Result::<{type_name}, ParseError>::Ok({type_name}::{case_names[lr_idx]}({sname} \{`);
         w.indent();
         w.line("span: Span::new(start, p.last_end()),");
-        w.line(`{first_field}: left,`);
+        if first_is_list_label {
+            // Cast so `[left]` matches the `Array<T>` field type rather
+            // than the inferred 1-tuple `[T]`.
+            w.line(`{first_field}: [left] as Array<{type_name}>,`);
+        } else {
+            w.line(`{first_field}: left,`);
+        }
         ctx.group_counter = gc_lr;
         let mut field_counts: Array<[String, i32]> = [];
         // Reserve the field that `left` occupies so a repeat occurrence
@@ -5135,15 +5166,45 @@ fn compute_lr_second_token(shared_token: &String, elements: &Array<Element>, ctx
 }
 
 fn gen_lr_call_with_prec(w: &mut CodeWriter, suffix_fn: &String, prec: i32, use_prec: bool) {
+    // First-token dispatch alone can mis-predict an LR continuation when the
+    // suffix's first token is shared with the atom (e.g.
+    // `statement: letterA | statement letterA 'b'`). In that case the suffix
+    // can begin to match and then fail on a later element, leaving `p.pos`
+    // mid-suffix and corrupting any enclosing repetition driver. Consult the
+    // scan twin first — it has no side effects — and only commit to the
+    // (mutating) parse when the scan confirms the suffix would succeed.
+    let scan_fn = `scan_{strip_parse_prefix(suffix_fn)}`;
     if use_prec {
         w.begin(`if {prec} >= min_prec`);
+        w.begin(`if {scan_fn}(&p.tokens, p.pos) < 0`);
+        w.line("break;");
+        w.end();
         w.line(`result = {*suffix_fn}(p, result, start)?;`);
         w.else_begin("else");
         w.line("break;");
         w.end();
     } else {
+        w.begin(`if {scan_fn}(&p.tokens, p.pos) < 0`);
+        w.line("break;");
+        w.end();
         w.line(`result = {*suffix_fn}(p, result, start)?;`);
     }
+}
+
+fn strip_parse_prefix(parse_fn: &String) -> String {
+    // `suffix_fn` is generated as `parse_<rule>_lr_<idx>`; the scan twin is
+    // `scan_<rule>_lr_<idx>`. Drop the leading `parse_` so the caller can
+    // prepend `scan_`.
+    let prefix = "parse_";
+    if parse_fn.len() < prefix.len() {
+        panic("strip_parse_prefix: input does not start with `parse_`");
+    }
+    for let mut i = 0; i < prefix.len(); i += 1 {
+        if parse_fn.get_byte(i) != prefix.get_byte(i) {
+            panic("strip_parse_prefix: input does not start with `parse_`");
+        }
+    }
+    return parse_fn.substr_bytes(prefix.len(), parse_fn.len());
 }
 
 fn gen_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, rule: &ParserRule, group: &Array<i32>, valid_lr_indices: &Array<i32>, lr_precs: &Array<i32>, suffix_first_sets: &Array<Array<String>>, ctx: &mut GenContext, use_prec: bool) {
@@ -5336,15 +5397,7 @@ fn gen_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, type_name: &Str
             let lr_idx = d.valid_lr_indices[group[0]];
             let prec = d.lr_precs[group[0]];
             let suffix_fn = `{fn_name}_lr_{lr_idx}`;
-            if use_prec {
-                w.begin(`if {prec} >= min_prec`);
-                w.line(`result = {suffix_fn}(p, result, start)?;`);
-                w.else_begin("else");
-                w.line("break;");
-                w.end();
-            } else {
-                w.line(`result = {suffix_fn}(p, result, start)?;`);
-            }
+            gen_lr_call_with_prec(w, &suffix_fn, prec, use_prec);
         } else {
             gen_lr_overlap_dispatch(
                 w,
