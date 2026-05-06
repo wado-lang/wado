@@ -95,9 +95,9 @@ struct OptConfig {
 /// |-------|-----|------------|------------------|
 /// | O0    | Yes | 0          | N/A              |
 /// | O1    | Yes | 2          | 5                |
-/// | O2    | Yes | 10         | 12               |
-/// | O3    | Yes | 100        | 20               |
-/// | Os    | Yes | 10         | 12               |
+/// | O2    | Yes | 10         | 14               |
+/// | O3    | Yes | 30         | 40               |
+/// | Os    | Yes | 10         | 14               |
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum OptLevel {
     /// No optimization passes. DCE only.
@@ -110,7 +110,7 @@ pub enum OptLevel {
     #[default]
     O2,
     /// Aggressive production optimizations. All passes including DCE.
-    /// Iterations: 100, Inline threshold: 20.
+    /// Iterations: 30, Inline threshold: 40.
     O3,
     /// Size optimizations. Same as O2 plus name section stripping.
     /// Intended for frontend/browser deployment.
@@ -181,8 +181,19 @@ pub fn optimize(
             }
         }
         OptLevel::O3 => {
+            // Iteration cap of 30 is a defensive bound — the TIR
+            // optimiser does not converge at `inline_threshold ≥ 35`
+            // on Gale-generated parsers (sqlite_parse / json_highlight)
+            // because each iteration's `inline` pass shrinks bodies
+            // enough for previously-too-big callees to re-enter the
+            // candidate set on the next iteration. With 100 iterations
+            // sqlite_parse compiled in ~80 s; capping at 30 keeps the
+            // ceiling at ~25 s without measurably losing runtime perf
+            // on the convergent inputs (those fixed-point in well
+            // under 30). See https://github.com/wado-lang/wado/issues
+            // for the underlying root-cause investigation.
             let config = OptConfig {
-                iterations: opt_iterations.unwrap_or(100),
+                iterations: opt_iterations.unwrap_or(30),
                 inline_threshold: inline_threshold.unwrap_or(40),
             };
             run_dce(&mut project, profiler);
