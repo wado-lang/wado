@@ -97,6 +97,14 @@ pub struct TraitEnv {
     /// populated, the field is itself immutable; later phases either query
     /// it or replace the whole `TraitEnv` with a further-extended copy.
     pub(crate) synthesised: Option<SynthesisedImpls>,
+    /// Layer added by the monomorphization phase: the mangled-name index
+    /// of every concrete (post-substitution) trait-method instance the
+    /// monomorphizer materialised in the flat package. `None` until
+    /// `extend_with_instantiations` runs. The instantiation layer is
+    /// keyed by the full mangled function name (e.g.
+    /// `Array<i32>^Display::fmt`) because that is the granularity at
+    /// which monomorphize needs to ask "does the concrete impl exist?".
+    pub(crate) instantiations: Option<MonoInstantiations>,
 }
 
 /// Trait impls produced by the synthesis phase but not present in the AST.
@@ -126,6 +134,27 @@ impl SynthesisedImpls {
     pub fn has_impl(&self, type_name: &str, trait_name: &str) -> bool {
         self.trait_impl_modules
             .contains_key(&(type_name.to_string(), trait_name.to_string()))
+    }
+}
+
+/// Concrete trait-method instantiations produced by the monomorphizer.
+/// Populated by [`TraitEnv::extend_with_instantiations`]; the AST and
+/// synthesis layers cover impl blocks (one entry per `(type, trait)`),
+/// while this layer covers materialised function instances (one entry
+/// per fully mangled function name, including type arguments).
+#[derive(Debug, Default, Clone)]
+pub struct MonoInstantiations {
+    /// Mangled function name (e.g. `Array<i32>^Display::fmt`) → the
+    /// `ModuleSource` of the function that carries that name in the
+    /// flattened package.
+    pub functions: IndexMap<String, ModuleSource>,
+}
+
+impl MonoInstantiations {
+    /// Look up the module of an instantiated trait-method function.
+    #[must_use]
+    pub fn module_for(&self, mangled: &str) -> Option<&ModuleSource> {
+        self.functions.get(mangled)
     }
 }
 
@@ -302,6 +331,7 @@ impl TraitEnv {
                 resource_static_method_index,
                 trait_impl_modules,
                 synthesised: None,
+                instantiations: None,
             }),
             violations,
         )
@@ -339,6 +369,25 @@ impl TraitEnv {
         let mut env = Arc::try_unwrap(prev).unwrap_or_else(|shared| (*shared).clone());
         env.synthesised = Some(synth_impls);
         Arc::new(env)
+    }
+
+    /// Produce a new `TraitEnv` with the monomorphization-layer index
+    /// populated. Designed to be called once after the monomorphizer has
+    /// produced the flat package.
+    pub fn extend_with_instantiations(
+        prev: Arc<Self>,
+        instantiations: MonoInstantiations,
+    ) -> Arc<Self> {
+        let mut env = Arc::try_unwrap(prev).unwrap_or_else(|shared| (*shared).clone());
+        env.instantiations = Some(instantiations);
+        Arc::new(env)
+    }
+
+    /// Look up the module of a concrete instantiated trait method by its
+    /// fully mangled name. Returns `None` until `extend_with_instantiations`
+    /// has run (LSP path / pre-mono phases).
+    pub fn instantiation_module(&self, mangled: &str) -> Option<&ModuleSource> {
+        self.instantiations.as_ref()?.module_for(mangled)
     }
 }
 
