@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778047461014,
+  "lastUpdate": 1778054774478,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -19745,6 +19745,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 504370,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c2ad33d89bc5c60621dc02682172f49738f98ef6",
+          "message": "Merge pull request #1005 from wado-lang/claude/optimize-json-parser-X0RJF\n\ncompiler: HFS scalarisation soundness, TIR string_push pass, optimiser tuning",
+          "timestamp": "2026-05-06T17:00:37+09:00",
+          "tree_id": "b3f66eb53962ee5acaff9f562fe494bfd9624aef",
+          "url": "https://github.com/wado-lang/wado/commit/c2ad33d89bc5c60621dc02682172f49738f98ef6"
+        },
+        "date": 1778054774105,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1770,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9140,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18520,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 508287,
             "unit": "bytes"
           }
         ]
