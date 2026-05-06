@@ -19,9 +19,9 @@
 //! time. With both responsibilities in the same walk, the chain
 //! folds in a single pass.
 //!
-//! See `optimize::field_forward::build_alias_info` /
-//! `build_value_copy_helpers` for the per-function alias / helper
-//! computations the visitor consumes.
+//! See [`super::alias::build_alias_info`] /
+//! [`super::alias::build_value_copy_helpers`] for the per-function
+//! alias / helper computations the visitor consumes.
 
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
@@ -150,8 +150,7 @@ struct ConstFoldVisitor<'a> {
     /// synthesized `$value_copy$T<id>` helper. The visitor uses this
     /// to recognize `Call(helper, [Local(src)])` shapes inside `let
     /// dst = …` and propagate `src`'s recorded fields onto `dst`
-    /// (the same trick `field_forward::update_knowledge_from_let`
-    /// does).
+    /// via [`Self::update_field_env_from_let`].
     value_copy_helpers: &'a IndexMap<(ModuleSource, String), TypeId>,
 }
 
@@ -169,8 +168,7 @@ impl TirOptVisitor for ConstFoldVisitor<'_> {
                 // be `NonConst` for the body's first walk.
                 self.invalidate_locals_assigned_in(body);
                 // Loops can re-execute and re-assign anything; drop
-                // outer field knowledge entirely. (Mirrors
-                // field_forward's `forward_in_stmt` Loop arm.)
+                // outer field knowledge entirely.
                 self.interpreter.clear_fields();
                 let changed = self.visit_block(body);
                 self.interpreter.clear_fields();
@@ -240,8 +238,10 @@ impl TirOptVisitor for ConstFoldVisitor<'_> {
             return self.visit_assign(expr);
         }
 
-        // Branch / scope expressions — fork or clear field state to
-        // mirror field_forward's `forward_in_expr` semantics.
+        // Branch / scope expressions — fork or clear field state so
+        // a `local.field = …` inside one arm doesn't leak as known
+        // field knowledge to code reachable only when another arm
+        // ran.
         match &mut expr.kind {
             TirExprKind::If {
                 condition,
@@ -283,14 +283,19 @@ impl TirOptVisitor for ConstFoldVisitor<'_> {
                 ..
             } => {
                 let mut changed = self.visit_expr(scrutinee);
+                // Each arm sees the pre-Switch state and must not
+                // leak its own writes to siblings; snapshot before
+                // each, restore after. The default arm is just
+                // another sibling — by the end of the arms loop we
+                // are already back to pre-Switch state, so walking
+                // `default` directly and clearing is equivalent and
+                // saves one redundant snapshot/restore round-trip.
                 for arm in arms.iter_mut() {
                     let snap = self.interpreter.snapshot_fields();
                     changed |= self.visit_block(arm);
                     self.interpreter.restore_fields(snap);
                 }
-                let snap = self.interpreter.snapshot_fields();
                 changed |= self.visit_block(default);
-                self.interpreter.restore_fields(snap);
                 self.interpreter.clear_fields();
                 changed |= self.interpreter.reduce_local(expr);
                 return changed;
@@ -467,7 +472,7 @@ impl ConstFoldVisitor<'_> {
                 }
             }
             TirExprKind::StructLiteral { fields, .. } => {
-                let aliased = self.aliased_set();
+                let aliased = self.interpreter.aliased_locals();
                 if fields
                     .iter()
                     .any(|f| value_captures_aliased_local(&f.value, aliased))
@@ -476,7 +481,7 @@ impl ConstFoldVisitor<'_> {
                 }
             }
             TirExprKind::TupleLiteral { elements, .. } => {
-                let aliased = self.aliased_set();
+                let aliased = self.interpreter.aliased_locals();
                 if elements
                     .iter()
                     .any(|e| value_captures_aliased_local(e, aliased))
@@ -486,7 +491,7 @@ impl ConstFoldVisitor<'_> {
             }
             TirExprKind::VariantConstruct { payload, .. } => {
                 if let Some(p) = payload
-                    && value_captures_aliased_local(p, self.aliased_set())
+                    && value_captures_aliased_local(p, self.interpreter.aliased_locals())
                 {
                     self.interpreter.invalidate_aliased_fields();
                 }
@@ -565,13 +570,6 @@ impl ConstFoldVisitor<'_> {
             }
             _ => {}
         }
-    }
-
-    /// Borrow the interpreter's `aliased` set for predicate use in
-    /// `value_captures_aliased_local`. A small bridge that hides the
-    /// `alias_info` indirection from call sites.
-    fn aliased_set(&self) -> &IndexSet<u32> {
-        self.interpreter.aliased_locals()
     }
 
     /// Walk `block` (and every nested expression / statement) collecting

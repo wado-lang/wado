@@ -258,9 +258,8 @@ impl Value {
     ///
     /// Used by the const-fold visitor to turn struct-field literals
     /// (`StructLiteral { f: 5, … }`) and direct field stores
-    /// (`obj.f = 5`) into [`Interpreter::bind_field`] / [`Interpreter::field_env`]
-    /// entries — the same "forwardable" predicate
-    /// `field_forward::is_forwardable` used to express implicitly.
+    /// (`obj.f = 5`) into [`Interpreter::bind_field`] /
+    /// [`Interpreter::field_env`] entries.
     #[must_use]
     pub fn from_literal_expr(expr: &TirExpr, type_table: &TypeTable) -> Option<Self> {
         match &expr.kind {
