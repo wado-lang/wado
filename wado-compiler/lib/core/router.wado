@@ -36,7 +36,7 @@ struct LiteralEdge {
 
 struct MethodEntry {
     method: Method,
-    value_idx: i32,
+    handler_idx: i32,
 }
 
 struct DfaState {
@@ -78,40 +78,40 @@ impl<H> Router<H> {
 
     /// Registers a handler for `(method, pattern)`. Last-write-wins.
     /// Panics on a malformed pattern.
-    pub fn route(&mut self, method: Method, pattern: String, value: H)
-        with stores[value]
+    pub fn route(&mut self, method: Method, pattern: String, handler: H)
+        with stores[handler]
     {
-        self.insert(Option::Some(method), pattern, value);
+        self.insert(Option::Some(method), pattern, handler);
     }
 
-    pub fn get(&mut self, pattern: String, value: H) with stores[value] {
-        self.route(Method::Get, pattern, value);
+    pub fn get(&mut self, pattern: String, handler: H) with stores[handler] {
+        self.route(Method::Get, pattern, handler);
     }
-    pub fn post(&mut self, pattern: String, value: H) with stores[value] {
-        self.route(Method::Post, pattern, value);
+    pub fn post(&mut self, pattern: String, handler: H) with stores[handler] {
+        self.route(Method::Post, pattern, handler);
     }
-    pub fn put(&mut self, pattern: String, value: H) with stores[value] {
-        self.route(Method::Put, pattern, value);
+    pub fn put(&mut self, pattern: String, handler: H) with stores[handler] {
+        self.route(Method::Put, pattern, handler);
     }
-    pub fn patch(&mut self, pattern: String, value: H) with stores[value] {
-        self.route(Method::Patch, pattern, value);
+    pub fn patch(&mut self, pattern: String, handler: H) with stores[handler] {
+        self.route(Method::Patch, pattern, handler);
     }
-    pub fn delete(&mut self, pattern: String, value: H) with stores[value] {
-        self.route(Method::Delete, pattern, value);
+    pub fn delete(&mut self, pattern: String, handler: H) with stores[handler] {
+        self.route(Method::Delete, pattern, handler);
     }
-    pub fn options(&mut self, pattern: String, value: H) with stores[value] {
-        self.route(Method::Options, pattern, value);
+    pub fn options(&mut self, pattern: String, handler: H) with stores[handler] {
+        self.route(Method::Options, pattern, handler);
     }
 
     /// Registers a handler that matches any HTTP method (including
     /// `Method::Other(_)`) at `pattern`. Specific-method handlers at the
     /// same pattern take precedence; `any` is the fallback.
-    pub fn any(&mut self, pattern: String, value: H) with stores[value] {
-        self.insert(null, pattern, value);
+    pub fn any(&mut self, pattern: String, handler: H) with stores[handler] {
+        self.insert(null, pattern, handler);
     }
 
-    fn insert(&mut self, method_opt: Option<Method>, pattern: String, value: H)
-        with stores[value]
+    fn insert(&mut self, method_opt: Option<Method>, pattern: String, handler: H)
+        with stores[handler]
     {
         let segs = parse_pattern(&pattern);
         let mut cur: i32 = 0;
@@ -121,13 +121,13 @@ impl<H> Router<H> {
             match seg {
                 Wildcard(name) => {
                     self.states[cur].wildcard_name = *name;
-                    let value_idx = self.handlers.len();
-                    self.handlers.push(value);
+                    let handler_idx = self.handlers.len();
+                    self.handlers.push(handler);
                     if let Some(m) = method_opt {
                         set_method_specific(
-                            &mut self.states[cur].wildcard_methods, m, value_idx);
+                            &mut self.states[cur].wildcard_methods, m, handler_idx);
                     } else {
-                        self.states[cur].wildcard_any_idx = value_idx;
+                        self.states[cur].wildcard_any_idx = handler_idx;
                     }
                     return;
                 },
@@ -157,13 +157,13 @@ impl<H> Router<H> {
                 },
             }
         }
-        let value_idx = self.handlers.len();
-        self.handlers.push(value);
+        let handler_idx = self.handlers.len();
+        self.handlers.push(handler);
         if let Some(m) = method_opt {
             set_method_specific(
-                &mut self.states[cur].terminal_methods, m, value_idx);
+                &mut self.states[cur].terminal_methods, m, handler_idx);
         } else {
-            self.states[cur].terminal_any_idx = value_idx;
+            self.states[cur].terminal_any_idx = handler_idx;
         }
     }
 
@@ -312,21 +312,21 @@ fn pick_handler(entries: &Array<MethodEntry>, any_idx: i32, method: &Method) -> 
     let n = entries.len();
     for let mut i = 0; i < n; i += 1 {
         if entries[i].method == *method {
-            return entries[i].value_idx;
+            return entries[i].handler_idx;
         }
     }
     return any_idx;
 }
 
-fn set_method_specific(entries: &mut Array<MethodEntry>, method: Method, value_idx: i32) {
+fn set_method_specific(entries: &mut Array<MethodEntry>, method: Method, handler_idx: i32) {
     let n = entries.len();
     for let mut i = 0; i < n; i += 1 {
         if entries[i].method == method {
-            entries[i].value_idx = value_idx;
+            entries[i].handler_idx = handler_idx;
             return;
         }
     }
-    entries.push(MethodEntry { method, value_idx });
+    entries.push(MethodEntry { method, handler_idx });
 }
 
 fn strip_query(s: String) -> String {
