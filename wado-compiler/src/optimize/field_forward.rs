@@ -220,8 +220,15 @@ fn is_forwardable(expr: &TirExpr) -> bool {
     )
 }
 
-pub fn forward_struct_field_constants(project: &mut FlatPackage) -> bool {
-    let helpers: IndexMap<(ModuleSource, String), TypeId> = project
+/// Build the `(module_source, func_name) → type_id` map of
+/// synthesized `$value_copy$T<id>` helpers exposed by
+/// `TirFunction::value_copy_type`. Both this pass and the const-fold
+/// visitor use the map to recognize `Call(helper, [arg])` shapes that
+/// transfer field knowledge from `arg` to the binding's target.
+pub(super) fn build_value_copy_helpers(
+    project: &FlatPackage,
+) -> IndexMap<(ModuleSource, String), TypeId> {
+    project
         .functions
         .iter()
         .filter_map(|f| {
@@ -229,41 +236,69 @@ pub fn forward_struct_field_constants(project: &mut FlatPackage) -> bool {
             f.value_copy_type()
                 .map(|t| ((f.module_source.clone(), f.name.clone()), t))
         })
-        .collect();
+        .collect()
+}
+
+/// Compute per-function alias annotations for a function body.
+///
+/// Returns a [`crate::tiri::AliasInfo`] populated as field_forward
+/// would: `aliased` seeds from `address_taken_locals` ∪
+/// `stores_aliased_locals` plus a body-walk for transient inlined
+/// aliases; `untrackable` mirrors `stores_aliased_locals` exactly;
+/// `alias_groups` is the union-find of reference-typed Local→Local
+/// copies in the body.
+///
+/// Used both by [`forward_struct_field_constants`] and by the
+/// const-fold visitor (which absorbs field_forward's responsibilities
+/// to break the convergence cycle in issue #1009).
+pub(super) fn build_alias_info(
+    body: &TirBlock,
+    address_taken_locals: &IndexSet<u32>,
+    stores_aliased_locals: &IndexSet<u32>,
+    type_table: &TypeTable,
+) -> crate::tiri::AliasInfo {
+    let mut aliased = address_taken_locals.clone();
+    for idx in stores_aliased_locals {
+        aliased.insert(*idx);
+    }
+    let untrackable = stores_aliased_locals.clone();
+    collect_aliased_in_block(body, &mut aliased);
+    let alias_groups = collect_alias_groups(body, type_table);
+    crate::tiri::AliasInfo {
+        aliased,
+        untrackable,
+        alias_groups,
+    }
+}
+
+/// Public re-export of [`value_copy_call_arg`] for the const-fold
+/// visitor. Recognizes `Call(helper, [arg])` where `helper` is a
+/// synthesized `$value_copy$T<id>` registered in the helpers map and
+/// returns `arg` so the caller can copy field knowledge from it.
+pub(super) fn recognize_value_copy<'a>(
+    expr: &'a TirExpr,
+    helpers: &IndexMap<(ModuleSource, String), TypeId>,
+) -> Option<&'a TirExpr> {
+    value_copy_call_arg(expr, helpers)
+}
+
+pub fn forward_struct_field_constants(project: &mut FlatPackage) -> bool {
+    let helpers = build_value_copy_helpers(project);
     let type_table = project.type_table.clone();
     let type_table = type_table.borrow();
     let mut changed = false;
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
-        // Seed with the function's stable aliasing annotations: any
-        // local that ever had its address taken (`&x` / `&mut x`) and
-        // any local stored across a `stores`-annotated callee. These
-        // sets persist across optimization iterations, so subsequent
-        // passes (ref_elim, SROA) erasing the syntactic markers won't
-        // make us forget the alias.
-        let mut aliased = func.address_taken_locals.clone();
-        for idx in &func.stores_aliased_locals {
-            aliased.insert(*idx);
-        }
-        // `stores_aliased_locals` is the strictly stronger
-        // "untrackable" set: an inlined stores callee has stashed the
-        // reference somewhere the analyzer cannot see, so any later
-        // read may observe a mutation we never witnessed. Refuse to
-        // record fields for these locals (matches the OLD WIR-level
-        // const_forward conservatism).
-        let untrackable = func.stores_aliased_locals.clone();
+        let address_taken = func.address_taken_locals.clone();
+        let stores_aliased = func.stores_aliased_locals.clone();
         let Some(ref mut body) = func.body else {
             continue;
         };
-        // Augment `aliased` with locals whose aliasing is visible only
-        // in the current body (e.g. inlined-in copies). Conservative —
-        // extra entries only mean missed optimizations.
-        collect_aliased_in_block(body, &mut aliased);
-        let alias_groups = collect_alias_groups(body, &type_table);
+        let info = build_alias_info(body, &address_taken, &stores_aliased, &type_table);
         let mut known = FieldKnowledge {
-            aliased,
-            untrackable,
-            alias_groups,
+            aliased: info.aliased,
+            untrackable: info.untrackable,
+            alias_groups: info.alias_groups,
             ..Default::default()
         };
         changed |= forward_in_block(body, &mut known, &helpers);

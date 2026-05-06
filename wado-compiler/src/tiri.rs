@@ -246,6 +246,45 @@ impl Value {
             Self::Char(c) => format_char_repr(*c),
         }
     }
+
+    /// Project a [`TirExpr`] to a `Value` when it's a primitive
+    /// literal whose type id resolves to a tracked primitive. Returns
+    /// `None` for non-literal shapes (`Local`, `Call`, `Binary`, …),
+    /// for `String` / `Bytes` / `Null` / `Unit` (no `Value` carrier),
+    /// for the bignum primitives `i128` / `u128` (intentionally
+    /// out-of-scope for tiri folding), and for any literal whose
+    /// `type_id` doesn't resolve to a primitive (defensive — the
+    /// resolver shouldn't produce these).
+    ///
+    /// Used by the const-fold visitor to turn struct-field literals
+    /// (`StructLiteral { f: 5, … }`) and direct field stores
+    /// (`obj.f = 5`) into [`Interpreter::bind_field`] / [`Interpreter::field_env`]
+    /// entries — the same "forwardable" predicate
+    /// `field_forward::is_forwardable` used to express implicitly.
+    #[must_use]
+    pub fn from_literal_expr(expr: &TirExpr, type_table: &TypeTable) -> Option<Self> {
+        match &expr.kind {
+            TirExprKind::IntLiteral { value, .. } => {
+                let prim = prim_of(expr.type_id, type_table).filter(|p| is_int_prim(*p))?;
+                Some(Self::Int {
+                    value: *value,
+                    prim,
+                })
+            }
+            TirExprKind::FloatLiteral { value, .. } => {
+                let prim = prim_of(expr.type_id, type_table).filter(|p| {
+                    matches!(p, PrimitiveType::F32 | PrimitiveType::F64)
+                })?;
+                Some(Self::Float {
+                    value: *value,
+                    prim,
+                })
+            }
+            TirExprKind::BoolLiteral(b) => Some(Self::Bool(*b)),
+            TirExprKind::CharLiteral(c) => Some(Self::Char(*c)),
+            _ => None,
+        }
+    }
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -540,6 +579,17 @@ impl<'a> Interpreter<'a> {
     /// [`enter_function`]: Self::enter_function
     pub fn set_alias_info(&mut self, info: AliasInfo) {
         self.alias_info = info;
+    }
+
+    /// Read-only borrow of the currently-installed `aliased` set.
+    /// The const-fold visitor needs this to decide whether an
+    /// expression appearing as a struct / tuple / variant field
+    /// value captures access to an already-aliased local — a
+    /// condition that, after the constructor runs, has to invalidate
+    /// every aliased local's recorded fields.
+    #[must_use]
+    pub fn aliased_locals(&self) -> &IndexSet<u32> {
+        &self.alias_info.aliased
     }
 
     /// Record a lattice value for a `let`-bound local. The driving
