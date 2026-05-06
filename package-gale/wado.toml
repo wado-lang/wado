@@ -13,4 +13,15 @@ generator = "src/generator.wado"
 # level up). Cargo-side tests in `wado-cli/tests/kiln_*.rs` already cover
 # the pipeline; keep it out of discovery until the path-resolution gap is
 # fixed independently.
-exclude = ["tests/kiln-consumer/**"]
+#
+# `build/` holds Kiln intermediates. For split grammars (e.g.
+# `css3Parser.g4` alone, no lexer half) the parser-only intermediate
+# references TK_<lexer-rule> globals that are only declared once Kiln
+# merges the two halves. Compiling the intermediate standalone fails
+# with "or-pattern alternatives must bind the same names" because the
+# undeclared TK_* identifiers fall through to name-binding patterns
+# inside `_gale_kind_set_*` helpers. The intermediate is a build
+# artefact, not a source file (gitignored at the repo root); the
+# `wado test` walker should ignore `build/` but currently doesn't, so
+# we exclude it explicitly here.
+exclude = ["tests/kiln-consumer/**", "build/**"]

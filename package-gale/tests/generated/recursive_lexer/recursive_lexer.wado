@@ -823,7 +823,7 @@ fn parse_file(p: &mut Parser) -> Result<FileNode, ParseError> {
     }
     let eof = p.expect(TK_EOF)?;
     return Result::<FileNode, ParseError>::Ok(FileNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         block_or_ident_list,
         eof,
     });

@@ -778,7 +778,7 @@ fn parse_file_(p: &mut Parser) -> Result<FileNode, ParseError> {
     let para_2 = parse_para(p)?;
     let eof = p.expect(TK_EOF)?;
     return Result::<FileNode, ParseError>::Ok(FileNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         para,
         para_2,
         eof,
@@ -791,7 +791,7 @@ fn parse_para(p: &mut Parser) -> Result<ParaNode, ParseError> {
     let nl = p.expect(TK_NL)?;
     let nl_2 = p.expect(TK_NL)?;
     return Result::<ParaNode, ParseError>::Ok(ParaNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         para_content,
         nl,
         nl_2,
@@ -840,7 +840,7 @@ fn parse_para_content(p: &mut Parser) -> Result<ParaContentNode, ParseError> {
         lit_s_or_lit_x_or_nl_list.push(lit_s_or_lit_x_or_nl);
     }
     return Result::<ParaContentNode, ParseError>::Ok(ParaContentNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         lit_s_or_lit_x_or_nl_list,
     });
 }
@@ -849,7 +849,7 @@ fn parse_s(p: &mut Parser) -> Result<SNode, ParseError> {
     let start = p.peek().span.start;
     let lit_s = p.expect(TK_LIT_S)?;
     return Result::<SNode, ParseError>::Ok(SNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         lit_s,
     });
 }

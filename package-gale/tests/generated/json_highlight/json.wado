@@ -1245,7 +1245,7 @@ fn parse_json(p: &mut Parser) -> Result<JsonNode, ParseError> {
     let value = parse_value(p)?;
     let eof = p.expect(TK_EOF)?;
     return Result::<JsonNode, ParseError>::Ok(JsonNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         value,
         eof,
     });
@@ -1279,7 +1279,7 @@ fn parse_obj_bt_0(p: &mut Parser) -> Result<ObjNode, ParseError> {
     }
     let rbrace = p.expect(TK_LIT_RBRACE)?;
     return Result::<ObjNode, ParseError>::Ok(ObjNode::Alt0(ObjAlt0 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         lbrace,
         pair,
         comma_pair_list,
@@ -1318,7 +1318,7 @@ fn parse_obj_bt_1(p: &mut Parser) -> Result<ObjNode, ParseError> {
     let lbrace = p.expect(TK_LIT_LBRACE)?;
     let rbrace = p.expect(TK_LIT_RBRACE)?;
     return Result::<ObjNode, ParseError>::Ok(ObjNode::Alt1(ObjAlt1 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         lbrace,
         rbrace,
     }));
@@ -1364,7 +1364,7 @@ fn parse_obj(p: &mut Parser) -> Result<ObjNode, ParseError> {
             }
             let rbrace = p.expect(TK_LIT_RBRACE)?;
             return Result::<ObjNode, ParseError>::Ok(ObjNode::Alt0(ObjAlt0 {
-                span: Span::new(start, p.last_end()),
+                span: Span::new(start, i32::max(start, p.last_end())),
                 lbrace,
                 pair,
                 comma_pair_list,
@@ -1373,7 +1373,7 @@ fn parse_obj(p: &mut Parser) -> Result<ObjNode, ParseError> {
         } else if p.peek_kind() == TK_LIT_RBRACE {
             let rbrace = p.expect(TK_LIT_RBRACE)?;
             return Result::<ObjNode, ParseError>::Ok(ObjNode::Alt1(ObjAlt1 {
-                span: Span::new(start, p.last_end()),
+                span: Span::new(start, i32::max(start, p.last_end())),
                 lbrace,
                 rbrace,
             }));
@@ -1392,7 +1392,7 @@ fn parse_pair(p: &mut Parser) -> Result<PairNode, ParseError> {
     let colon = p.expect(TK_LIT_COLON)?;
     let value = parse_value(p)?;
     return Result::<PairNode, ParseError>::Ok(PairNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         string,
         colon,
         value,
@@ -1427,7 +1427,7 @@ fn parse_arr_bt_0(p: &mut Parser) -> Result<ArrNode, ParseError> {
     }
     let rbracket = p.expect(TK_LIT_RBRACKET)?;
     return Result::<ArrNode, ParseError>::Ok(ArrNode::Alt0(ArrAlt0 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         lbracket,
         value,
         comma_value_list,
@@ -1466,7 +1466,7 @@ fn parse_arr_bt_1(p: &mut Parser) -> Result<ArrNode, ParseError> {
     let lbracket = p.expect(TK_LIT_LBRACKET)?;
     let rbracket = p.expect(TK_LIT_RBRACKET)?;
     return Result::<ArrNode, ParseError>::Ok(ArrNode::Alt1(ArrAlt1 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         lbracket,
         rbracket,
     }));
@@ -1512,7 +1512,7 @@ fn parse_arr(p: &mut Parser) -> Result<ArrNode, ParseError> {
             }
             let rbracket = p.expect(TK_LIT_RBRACKET)?;
             return Result::<ArrNode, ParseError>::Ok(ArrNode::Alt0(ArrAlt0 {
-                span: Span::new(start, p.last_end()),
+                span: Span::new(start, i32::max(start, p.last_end())),
                 lbracket,
                 value,
                 comma_value_list,
@@ -1521,7 +1521,7 @@ fn parse_arr(p: &mut Parser) -> Result<ArrNode, ParseError> {
         } else if p.peek_kind() == TK_LIT_RBRACKET {
             let rbracket = p.expect(TK_LIT_RBRACKET)?;
             return Result::<ArrNode, ParseError>::Ok(ArrNode::Alt1(ArrAlt1 {
-                span: Span::new(start, p.last_end()),
+                span: Span::new(start, i32::max(start, p.last_end())),
                 lbracket,
                 rbracket,
             }));
@@ -1540,49 +1540,49 @@ fn parse_value(p: &mut Parser) -> Result<ValueNode, ParseError> {
     if kind == TK_STRING {
         let string = p.expect(TK_STRING)?;
         return Result::<ValueNode, ParseError>::Ok(ValueNode::Alt0(ValueAlt0 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             string,
         }));
     }
     if kind == TK_NUMBER {
         let number = p.expect(TK_NUMBER)?;
         return Result::<ValueNode, ParseError>::Ok(ValueNode::Alt1(ValueAlt1 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             number,
         }));
     }
     if kind == TK_LIT_LBRACE {
         let obj = parse_obj(p)?;
         return Result::<ValueNode, ParseError>::Ok(ValueNode::Alt2(ValueAlt2 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             obj,
         }));
     }
     if kind == TK_LIT_LBRACKET {
         let arr = parse_arr(p)?;
         return Result::<ValueNode, ParseError>::Ok(ValueNode::Alt3(ValueAlt3 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             arr,
         }));
     }
     if kind == TK_LIT_TRUE {
         let lit_true = p.expect(TK_LIT_TRUE)?;
         return Result::<ValueNode, ParseError>::Ok(ValueNode::Alt4(ValueAlt4 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             lit_true,
         }));
     }
     if kind == TK_LIT_FALSE {
         let lit_false = p.expect(TK_LIT_FALSE)?;
         return Result::<ValueNode, ParseError>::Ok(ValueNode::Alt5(ValueAlt5 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             lit_false,
         }));
     }
     if kind == TK_LIT_NULL {
         let lit_null = p.expect(TK_LIT_NULL)?;
         return Result::<ValueNode, ParseError>::Ok(ValueNode::Alt6(ValueAlt6 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             lit_null,
         }));
     }

@@ -752,7 +752,7 @@ fn parse_prog(p: &mut Parser) -> Result<ProgNode, ParseError> {
     }
     let eof = p.expect(TK_EOF)?;
     return Result::<ProgNode, ParseError>::Ok(ProgNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         statement_list,
         eof,
     });
@@ -764,7 +764,7 @@ fn parse_statement_atom(p: &mut Parser) -> Result<StatementNode, ParseError> {
     if kind == TK_LIT_A {
         let letter_a = parse_letter_a(p)?;
         return Result::<StatementNode, ParseError>::Ok(StatementNode::Alt0(StatementAlt0 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             letter_a,
         }));
     }
@@ -779,7 +779,7 @@ fn parse_statement_lr_1(p: &mut Parser, left: StatementNode, start: i32) -> Resu
     let letter_a = parse_letter_a(p)?;
     let lit_b = p.expect(TK_LIT_B)?;
     return Result::<StatementNode, ParseError>::Ok(StatementNode::Alt1(StatementAlt1 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         statement: left,
         letter_a,
         lit_b,
@@ -811,7 +811,7 @@ fn parse_letter_a(p: &mut Parser) -> Result<LetterANode, ParseError> {
     let start = p.peek().span.start;
     let lit_a = p.expect(TK_LIT_A)?;
     return Result::<LetterANode, ParseError>::Ok(LetterANode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         lit_a,
     });
 }

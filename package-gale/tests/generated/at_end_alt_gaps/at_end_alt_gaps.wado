@@ -903,7 +903,7 @@ fn parse_prog(p: &mut Parser) -> Result<ProgNode, ParseError> {
     }
     let eof = p.expect(TK_EOF)?;
     return Result::<ProgNode, ParseError>::Ok(ProgNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         entry_list,
         eof,
     });
@@ -917,7 +917,7 @@ fn parse_entry(p: &mut Parser) -> Result<EntryNode, ParseError> {
         let typespec = parse_typespec(p)?;
         let rparen = p.expect(TK_LIT_RPAREN)?;
         return Result::<EntryNode, ParseError>::Ok(EntryNode::Alt0(EntryAlt0 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             lparen,
             typespec,
             rparen,
@@ -930,7 +930,7 @@ fn parse_entry(p: &mut Parser) -> Result<EntryNode, ParseError> {
         let int = p.expect(TK_INT)?;
         let rbracket = p.expect(TK_LIT_RBRACKET)?;
         return Result::<EntryNode, ParseError>::Ok(EntryNode::Alt1(EntryAlt1 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             lit_new,
             typespec,
             lbracket,
@@ -951,7 +951,7 @@ fn parse_typespec_bt_1(p: &mut Parser) -> Result<TypespecNode, ParseError> {
     let lbracket = p.expect(TK_LIT_LBRACKET)?;
     let rbracket = p.expect(TK_LIT_RBRACKET)?;
     return Result::<TypespecNode, ParseError>::Ok(TypespecNode::Alt1(TypespecAlt1 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         id,
         lbracket,
         rbracket,
@@ -973,7 +973,7 @@ fn parse_typespec_bt_0(p: &mut Parser) -> Result<TypespecNode, ParseError> {
     let start = p.peek().span.start;
     let id = p.expect(TK_ID)?;
     return Result::<TypespecNode, ParseError>::Ok(TypespecNode::Alt0(TypespecAlt0 {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         id,
     }));
 }

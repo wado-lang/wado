@@ -1023,7 +1023,7 @@ fn parse_program(p: &mut Parser) -> Result<ProgramNode, ParseError> {
     }
     let eof = p.expect(TK_EOF)?;
     return Result::<ProgramNode, ParseError>::Ok(ProgramNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         stmt_list,
         eof,
     });
@@ -1035,21 +1035,21 @@ fn parse_stmt(p: &mut Parser) -> Result<StmtNode, ParseError> {
     if kind == TK_LIST {
         let list_stmt = parse_list_stmt(p)?;
         return Result::<StmtNode, ParseError>::Ok(StmtNode::Alt0(StmtAlt0 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             list_stmt,
         }));
     }
     if _gale_kind_set_1(kind) {
         let not_stmt = parse_not_stmt(p)?;
         return Result::<StmtNode, ParseError>::Ok(StmtNode::Alt1(StmtAlt1 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             not_stmt,
         }));
     }
     if kind == TK_ANY {
         let any_stmt = parse_any_stmt(p)?;
         return Result::<StmtNode, ParseError>::Ok(StmtNode::Alt2(StmtAlt2 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             any_stmt,
         }));
     }
@@ -1092,7 +1092,7 @@ fn parse_list_stmt(p: &mut Parser) -> Result<ListStmtNode, ParseError> {
     }
     let semi = p.expect(TK_SEMI)?;
     return Result::<ListStmtNode, ParseError>::Ok(ListStmtNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         list,
         items,
         comma_items_list,
@@ -1108,7 +1108,7 @@ fn parse_not_stmt(p: &mut Parser) -> Result<NotStmtNode, ParseError> {
         let not_item = p.match_not([TK_ITEM])?;
         let semi = p.expect(TK_SEMI)?;
         return Result::<NotStmtNode, ParseError>::Ok(NotStmtNode::Alt0(NotStmtAlt0 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             not,
             not_item,
             semi,
@@ -1119,7 +1119,7 @@ fn parse_not_stmt(p: &mut Parser) -> Result<NotStmtNode, ParseError> {
         let not_set = p.match_not([TK_ITEM, TK_NUMBER])?;
         let semi = p.expect(TK_SEMI)?;
         return Result::<NotStmtNode, ParseError>::Ok(NotStmtNode::Alt1(NotStmtAlt1 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             set,
             not_set,
             semi,
@@ -1138,7 +1138,7 @@ fn parse_any_stmt(p: &mut Parser) -> Result<AnyStmtNode, ParseError> {
     let wildcard = p.match_any()?;
     let semi = p.expect(TK_SEMI)?;
     return Result::<AnyStmtNode, ParseError>::Ok(AnyStmtNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         any,
         wildcard,
         semi,

@@ -2414,7 +2414,7 @@ fn parse_html_document(p: &mut Parser) -> Result<HtmlDocumentNode, ParseError> {
         html_elements_list.push(html_elements);
     }
     return Result::<HtmlDocumentNode, ParseError>::Ok(HtmlDocumentNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         scriptlet_or_sea_ws_list,
         xml,
         scriptlet_or_sea_ws_list_2,
@@ -2430,14 +2430,14 @@ fn parse_scriptlet_or_sea_ws(p: &mut Parser) -> Result<ScriptletOrSeaWsNode, Par
     if kind == TK_SCRIPTLET {
         let scriptlet = p.expect(TK_SCRIPTLET)?;
         return Result::<ScriptletOrSeaWsNode, ParseError>::Ok(ScriptletOrSeaWsNode::Alt0(ScriptletOrSeaWsAlt0 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             scriptlet,
         }));
     }
     if kind == TK_SEA_WS {
         let sea_ws = p.expect(TK_SEA_WS)?;
         return Result::<ScriptletOrSeaWsNode, ParseError>::Ok(ScriptletOrSeaWsNode::Alt1(ScriptletOrSeaWsAlt1 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             sea_ws,
         }));
     }
@@ -2482,7 +2482,7 @@ fn parse_html_elements(p: &mut Parser) -> Result<HtmlElementsNode, ParseError> {
         html_misc_list_2.push(html_misc);
     }
     return Result::<HtmlElementsNode, ParseError>::Ok(HtmlElementsNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         html_misc_list,
         html_element,
         html_misc_list_2,
@@ -2559,7 +2559,7 @@ fn parse_html_element(p: &mut Parser) -> Result<HtmlElementNode, ParseError> {
         }
         let group_0 = group_0_inner;
         return Result::<HtmlElementNode, ParseError>::Ok(HtmlElementNode::Alt0(HtmlElementAlt0 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             tag_open,
             tag_name,
             html_attribute_list,
@@ -2569,21 +2569,21 @@ fn parse_html_element(p: &mut Parser) -> Result<HtmlElementNode, ParseError> {
     if kind == TK_SCRIPTLET {
         let scriptlet = p.expect(TK_SCRIPTLET)?;
         return Result::<HtmlElementNode, ParseError>::Ok(HtmlElementNode::Alt1(HtmlElementAlt1 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             scriptlet,
         }));
     }
     if kind == TK_SCRIPT_OPEN {
         let script = parse_script(p)?;
         return Result::<HtmlElementNode, ParseError>::Ok(HtmlElementNode::Alt2(HtmlElementAlt2 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             script,
         }));
     }
     if kind == TK_STYLE_OPEN {
         let style = parse_style(p)?;
         return Result::<HtmlElementNode, ParseError>::Ok(HtmlElementNode::Alt3(HtmlElementAlt3 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             style,
         }));
     }
@@ -2674,7 +2674,7 @@ fn parse_html_content(p: &mut Parser) -> Result<HtmlContentNode, ParseError> {
         item_html_chardata_list.push(item_html_chardata);
     }
     return Result::<HtmlContentNode, ParseError>::Ok(HtmlContentNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         html_chardata,
         item_html_chardata_list,
     });
@@ -2695,7 +2695,7 @@ fn parse_html_attribute(p: &mut Parser) -> Result<HtmlAttributeNode, ParseError>
         null
     };
     return Result::<HtmlAttributeNode, ParseError>::Ok(HtmlAttributeNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         tag_name,
         tag_equals_attvalue_value,
     });
@@ -2707,14 +2707,14 @@ fn parse_html_chardata(p: &mut Parser) -> Result<HtmlChardataNode, ParseError> {
     if kind == TK_HTML_TEXT {
         let html_text = p.expect(TK_HTML_TEXT)?;
         return Result::<HtmlChardataNode, ParseError>::Ok(HtmlChardataNode::Alt0(HtmlChardataAlt0 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             html_text,
         }));
     }
     if kind == TK_SEA_WS {
         let sea_ws = p.expect(TK_SEA_WS)?;
         return Result::<HtmlChardataNode, ParseError>::Ok(HtmlChardataNode::Alt1(HtmlChardataAlt1 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             sea_ws,
         }));
     }
@@ -2731,14 +2731,14 @@ fn parse_html_misc(p: &mut Parser) -> Result<HtmlMiscNode, ParseError> {
     if _gale_kind_set_7(kind) {
         let html_comment = parse_html_comment(p)?;
         return Result::<HtmlMiscNode, ParseError>::Ok(HtmlMiscNode::Alt0(HtmlMiscAlt0 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             html_comment,
         }));
     }
     if kind == TK_SEA_WS {
         let sea_ws = p.expect(TK_SEA_WS)?;
         return Result::<HtmlMiscNode, ParseError>::Ok(HtmlMiscNode::Alt1(HtmlMiscAlt1 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             sea_ws,
         }));
     }
@@ -2755,14 +2755,14 @@ fn parse_html_comment(p: &mut Parser) -> Result<HtmlCommentNode, ParseError> {
     if kind == TK_HTML_COMMENT {
         let html_comment = p.expect(TK_HTML_COMMENT)?;
         return Result::<HtmlCommentNode, ParseError>::Ok(HtmlCommentNode::Alt0(HtmlCommentAlt0 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             html_comment,
         }));
     }
     if kind == TK_HTML_CONDITIONAL_COMMENT {
         let html_conditional_comment = p.expect(TK_HTML_CONDITIONAL_COMMENT)?;
         return Result::<HtmlCommentNode, ParseError>::Ok(HtmlCommentNode::Alt1(HtmlCommentAlt1 {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             html_conditional_comment,
         }));
     }
@@ -2778,7 +2778,7 @@ fn parse_script(p: &mut Parser) -> Result<ScriptNode, ParseError> {
     let script_open = p.expect(TK_SCRIPT_OPEN)?;
     let script_body_or_script_short_body = p.advance();
     return Result::<ScriptNode, ParseError>::Ok(ScriptNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         script_open,
         script_body_or_script_short_body,
     });
@@ -2789,7 +2789,7 @@ fn parse_style(p: &mut Parser) -> Result<StyleNode, ParseError> {
     let style_open = p.expect(TK_STYLE_OPEN)?;
     let style_body_or_style_short_body = p.advance();
     return Result::<StyleNode, ParseError>::Ok(StyleNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         style_open,
         style_body_or_style_short_body,
     });

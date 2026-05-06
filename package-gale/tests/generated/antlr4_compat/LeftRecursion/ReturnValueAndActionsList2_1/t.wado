@@ -895,7 +895,7 @@ fn parse_s(p: &mut Parser) -> Result<SNode, ParseError> {
     let expr = parse_expr(p)?;
     let eof = p.expect(TK_EOF)?;
     return Result::<SNode, ParseError>::Ok(SNode {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         expr,
         eof,
     });
@@ -907,7 +907,7 @@ fn parse_expr_atom(p: &mut Parser) -> Result<ExprNode, ParseError> {
     if kind == TK_ID {
         let id = p.expect(TK_ID)?;
         return Result::<ExprNode, ParseError>::Ok(ExprNode::JustId(ExprJustId {
-            span: Span::new(start, p.last_end()),
+            span: Span::new(start, i32::max(start, p.last_end())),
             id,
         }));
     }
@@ -923,7 +923,7 @@ fn parse_expr_lr_0(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNod
     let expr = parse_expr(p, 4)?;
     let a_2 = expr;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Factor(ExprFactor {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         a: left,
         star,
         a_2,
@@ -935,7 +935,7 @@ fn parse_expr_lr_1(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNod
     let expr = parse_expr(p, 3)?;
     let b_2: Array<ExprNode> = [expr];
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Comma(ExprComma {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         b: [left] as Array<ExprNode>,
         comma,
         b_2,
@@ -947,7 +947,7 @@ fn parse_expr_lr_2(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNod
     let expr = parse_expr(p, 2)?;
     let c = expr;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Send(ExprSend {
-        span: Span::new(start, p.last_end()),
+        span: Span::new(start, i32::max(start, p.last_end())),
         b: [left] as Array<ExprNode>,
         lit_gtgt,
         c,

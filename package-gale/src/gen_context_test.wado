@@ -1,9 +1,52 @@
+use {
+    ParserRule,
+    Alternative,
+    Element,
+    RuleRefElement,
+    TokenRefElement,
+    RepeatElement,
+    RepeatKind,
+    GroupElement,
+    Visibility,
+} from "./ir.wado";
 use { GenContext } from "./gen_context.wado";
-use { ParserRule } from "./ir.wado";
 use { LitToken } from "./lexer_gen.wado";
 
 fn mk_ctx() -> GenContext {
     let rules: Array<ParserRule> = [];
+    let toks: Array<LitToken> = [];
+    return GenContext::new(&rules, &toks);
+}
+
+fn tk(name: String) -> Element {
+    return Element::TokenRef(TokenRefElement::new(name));
+}
+
+fn rr(name: String) -> Element {
+    return Element::RuleRef(RuleRefElement::new(name));
+}
+
+fn opt(elem: Element) -> Element {
+    return Element::Repeat(RepeatElement {
+        kind: RepeatKind::Optional,
+        element: elem,
+        non_greedy: false,
+    });
+}
+
+fn group(alts: Array<Alternative>) -> Element {
+    return Element::Group(GroupElement::new(alts));
+}
+
+fn alt(elements: Array<Element>) -> Alternative {
+    return Alternative::new(elements);
+}
+
+fn mk_rule(name: String, alts: Array<Alternative>) -> ParserRule {
+    return ParserRule::new(name, Visibility::Private, [], alts);
+}
+
+fn mk_ctx_with(rules: Array<ParserRule>) -> GenContext {
     let toks: Array<LitToken> = [];
     return GenContext::new(&rules, &toks);
 }
@@ -136,4 +179,197 @@ test "kind_negate_check_str: shares ids with kind_check_str" {
     assert pos == "_gale_kind_set_0(k)";
     assert neg == "!_gale_kind_set_0(k)";
     assert ctx.kind_sets().len() == 1, "positive and negative must share";
+}
+
+// --- tail_greedy_first_of_rule ---
+
+test "tail_greedy_first: rule with tail-position Optional token" {
+    // a : X Y? ;
+    let a = mk_rule("a", [alt([tk("X"), opt(tk("Y"))])]);
+    let mut ctx = mk_ctx_with([a]);
+    let mut visiting: Array<String> = [];
+    let r = ctx.tail_greedy_first_of_rule(&"a", &mut visiting);
+    assert r.len() == 1, `expected 1 token, got {r.len()}`;
+    assert r[0] == "TK_Y", `expected TK_Y, got {r[0]}`;
+}
+
+test "tail_greedy_first: rule with non-tail Optional returns empty" {
+    // a : X Y? Z ;  // Y? is followed by required Z, so not at tail.
+    let a = mk_rule("a", [alt([tk("X"), opt(tk("Y")), tk("Z")])]);
+    let mut ctx = mk_ctx_with([a]);
+    let mut visiting: Array<String> = [];
+    let r = ctx.tail_greedy_first_of_rule(&"a", &mut visiting);
+    assert r.len() == 0, `expected empty, got {r.len()}`;
+}
+
+test "tail_greedy_first: multiple tail-position Optionals stack" {
+    // a : X Y? Z? ;  // both Z? and Y? at tail (Z? is nullable so Y? is too).
+    let a = mk_rule("a", [alt([tk("X"), opt(tk("Y")), opt(tk("Z"))])]);
+    let mut ctx = mk_ctx_with([a]);
+    let mut visiting: Array<String> = [];
+    let r = ctx.tail_greedy_first_of_rule(&"a", &mut visiting);
+    assert r.len() == 2, `expected 2 tokens, got {r.len()}`;
+    let mut sorted = r;
+    sorted.sort();
+    assert sorted[0] == "TK_Y";
+    assert sorted[1] == "TK_Z";
+}
+
+test "tail_greedy_first: rule with no Repeat returns empty" {
+    // a : X Y ;
+    let a = mk_rule("a", [alt([tk("X"), tk("Y")])]);
+    let mut ctx = mk_ctx_with([a]);
+    let mut visiting: Array<String> = [];
+    let r = ctx.tail_greedy_first_of_rule(&"a", &mut visiting);
+    assert r.len() == 0, `expected empty, got {r.len()}`;
+}
+
+test "tail_greedy_first: transitive via tail RuleRef" {
+    // s : r ;     <- last element is RuleRef r
+    // r : X Y? ;  <- r leaks Y at tail
+    let s = mk_rule("s", [alt([rr("r")])]);
+    let r = mk_rule("r", [alt([tk("X"), opt(tk("Y"))])]);
+    let mut ctx = mk_ctx_with([s, r]);
+    let mut visiting: Array<String> = [];
+    let tg = ctx.tail_greedy_first_of_rule(&"s", &mut visiting);
+    assert tg.len() == 1, `expected 1 token, got {tg.len()}`;
+    assert tg[0] == "TK_Y", `expected TK_Y, got {tg[0]}`;
+}
+
+// --- intern_follow_variant ---
+
+test "intern_follow_variant: empty intersection returns null" {
+    // a : X Y? ; tail_greedy = {Y}. caller_follow = {Z}. intersection = {}.
+    let a = mk_rule("a", [alt([tk("X"), opt(tk("Y"))])]);
+    let mut ctx = mk_ctx_with([a]);
+    let follow: Array<String> = ["TK_Z"];
+    let result = ctx.intern_follow_variant(&"a", &follow, true);
+    assert if let Some(_) = result { false } else { true }, "expected null";
+}
+
+test "intern_follow_variant: non-empty intersection returns Some(id)" {
+    // a : X Y? ; tail_greedy = {Y}. caller_follow = {Y, Z}. intersection = {Y}.
+    let a = mk_rule("a", [alt([tk("X"), opt(tk("Y"))])]);
+    let mut ctx = mk_ctx_with([a]);
+    let follow: Array<String> = ["TK_Y", "TK_Z"];
+    let result = ctx.intern_follow_variant(&"a", &follow, true);
+    let id = if let Some(id) = result {
+        id
+    } else {
+        panic("expected Some")
+    };
+    assert id == 0, `expected id 0, got {id}`;
+    let entries = ctx.follow_variants();
+    assert entries.len() == 1;
+    assert entries[0].mask.len() == 1;
+    assert entries[0].mask[0] == "TK_Y";
+    assert entries[0].scan_used;
+    assert !entries[0].parse_used;
+}
+
+test "intern_follow_variant: same intersection re-uses id and merges flags" {
+    let a = mk_rule("a", [alt([tk("X"), opt(tk("Y"))])]);
+    let mut ctx = mk_ctx_with([a]);
+    let follow1: Array<String> = ["TK_Y"];
+    let follow2: Array<String> = ["TK_Y", "TK_W"];   // same intersection {Y}
+    let id1 = ctx.intern_follow_variant(&"a", &follow1, true).unwrap();
+    let id2 = ctx.intern_follow_variant(&"a", &follow2, false).unwrap();
+    assert id1 == id2;
+    let entries = ctx.follow_variants();
+    assert entries.len() == 1;
+    assert entries[0].scan_used;
+    assert entries[0].parse_used;
+}
+
+test "intern_follow_variant: different rules get distinct ids" {
+    let a = mk_rule("a", [alt([tk("X"), opt(tk("Y"))])]);
+    let b = mk_rule("b", [alt([tk("X"), opt(tk("Y"))])]);
+    let mut ctx = mk_ctx_with([a, b]);
+    let follow: Array<String> = ["TK_Y"];
+    let id_a = ctx.intern_follow_variant(&"a", &follow, true).unwrap();
+    let id_b = ctx.intern_follow_variant(&"b", &follow, true).unwrap();
+    assert id_a != id_b, `expected distinct ids, got {id_a} and {id_b}`;
+    assert ctx.follow_variants().len() == 2;
+}
+
+// --- intern_follow_variant rejection paths ---
+
+test "intern_follow_variant: unknown rule returns null" {
+    // No rules in ctx; lookup fails up front.
+    let mut ctx = mk_ctx();
+    let follow: Array<String> = ["TK_Y"];
+    let result = ctx.intern_follow_variant(&"nonexistent", &follow, true);
+    assert if let Some(_) = result { false } else { true }, "expected null for unknown rule";
+    assert ctx.follow_variants().is_empty(), "no variant should have been registered";
+}
+
+test "intern_follow_variant: multi-alt rule rejected (registry stays empty)" {
+    // Multi-alt callees are out of scope in v1 — `gen_parse_follow_variant`
+    // only emits single-alt bodies, so registering would leak dangling
+    // `parse_<rule>__follow_<id>` references into generated source.
+    let a = mk_rule("a", [
+        alt([tk("X"), opt(tk("Y"))]),
+        alt([tk("Z")]),
+    ]);
+    let mut ctx = mk_ctx_with([a]);
+    let follow: Array<String> = ["TK_Y"];
+    let result = ctx.intern_follow_variant(&"a", &follow, true);
+    assert if let Some(_) = result { false } else { true }, "expected null for multi-alt rule";
+    assert ctx.follow_variants().is_empty(), "no variant should have been registered";
+}
+
+test "intern_follow_variant: left-recursive rule rejected" {
+    // LR rules need a separate scan_X__follow_<id>_atom + LR-suffix
+    // helper split — variant emit doesn't mirror that yet, so reject
+    // up front and leave the call site at the regular `parse_<rule>(p)`.
+    let a = mk_rule("a", [
+        alt([tk("X")]),                    // base
+        alt([rr("a"), tk("PLUS"), rr("a")]), // LR binary
+    ]);
+    let mut ctx = mk_ctx_with([a]);
+    let follow: Array<String> = ["TK_Y"];
+    let result = ctx.intern_follow_variant(&"a", &follow, true);
+    assert if let Some(_) = result { false } else { true }, "expected null for LR rule";
+    assert ctx.follow_variants().is_empty();
+}
+
+test "intern_follow_variant: empty caller_follow returns null" {
+    let a = mk_rule("a", [alt([tk("X"), opt(tk("Y"))])]);
+    let mut ctx = mk_ctx_with([a]);
+    let follow: Array<String> = [];
+    let result = ctx.intern_follow_variant(&"a", &follow, true);
+    assert if let Some(_) = result { false } else { true }, "expected null for empty caller_follow";
+    assert ctx.follow_variants().is_empty();
+}
+
+// --- tail_greedy_first single-token-only restriction ---
+
+test "tail_greedy_first: tail Optional with multi-token inner is excluded" {
+    // `(A B)?` is tail-position but the inner consumes 2 tokens per
+    // iteration. Suppressing it via a follow mask would conflict with
+    // its inner sequence (e.g. HTMLParser's `htmlContent` re-entering
+    // on TAG_OPEN). The single-token-only guard in
+    // `tail_greedy_first_of_element`'s Repeat arm filters this out.
+    let inner_seq = group([alt([tk("A"), tk("B")])]);
+    let r = mk_rule("r", [alt([tk("X"), opt(inner_seq)])]);
+    let mut ctx = mk_ctx_with([r]);
+    let mut visiting: Array<String> = [];
+    let tg = ctx.tail_greedy_first_of_rule(&"r", &mut visiting);
+    assert tg.is_empty(), `expected empty (multi-token inner suppressed), got {tg.len()} tokens`;
+}
+
+test "tail_greedy_first: tail Optional with single-token-alt Group inner is also excluded" {
+    // `(A | B)?` looks safe to suppress (each alt is one token), but
+    // `element_is_single_token` returns false for any `Group(_)` — a
+    // pre-existing conservative blanket. So tail_greedy currently
+    // emits empty for this shape too. This test pins that behaviour:
+    // if we ever relax `element_is_single_token` to peer inside
+    // single-element Group alts, this test must be updated to expect
+    // {TK_A, TK_B} (and the corresponding LL fixture would activate).
+    let inner_alt = group([alt([tk("A")]), alt([tk("B")])]);
+    let r = mk_rule("r", [alt([tk("X"), opt(inner_alt)])]);
+    let mut ctx = mk_ctx_with([r]);
+    let mut visiting: Array<String> = [];
+    let tg = ctx.tail_greedy_first_of_rule(&"r", &mut visiting);
+    assert tg.is_empty(), `expected empty (Group inner blanket-excluded), got {tg.len()} tokens`;
 }
