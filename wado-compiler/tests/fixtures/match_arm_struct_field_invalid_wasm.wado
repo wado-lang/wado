@@ -16,9 +16,11 @@
 // Fix: lower `let _ = expr;` to `TirStmtKind::LetDestructure { pattern:
 // Wildcard, value, .. }` instead. The block resolver only considers
 // `TirStmtKind::Expr` / `Return` as a trailing-expression, so the match arm
-// is now correctly typed as unit. The WIR builder gained a `Wildcard` arm
-// in `translate_let_pattern` that wraps non-unit values in `Drop` so the
-// expression's side effects still execute.
+// is now correctly typed as unit. The lower phase
+// (`lower::pattern::lower_let_pattern`) then converts the `Wildcard`
+// destructure back to a plain `TirStmtKind::Expr(value)`, which the WIR
+// builder already wraps in `Drop` for non-unit values via the existing
+// `TirStmtKind::Expr` translation path.
 
 struct S {
     a: i32,

@@ -176,19 +176,19 @@ impl FunctionTranslator<'_, '_> {
 
     /// Translate a `LetDestructure` statement.
     ///
-    /// Handles the patterns the resolver actually emits as `LetDestructure`:
-    /// * `Tuple` — destructures a tuple, binding each element to its pattern's
-    ///   binding local (or skipping wildcard slots).
-    /// * `Binding` — a plain `let name = expr;` lowered as a single binding;
-    ///   stores the value into the local.
-    /// * `Wildcard` — `let _ = expr;`. Evaluates the value for side effects
-    ///   and drops the result (wrapping non-unit values in `Drop` so the
-    ///   expression's side effects still execute). Returning `None` here
-    ///   would silently elide the value expression.
+    /// By the time WIR build runs, `lower::pattern::lower_let_pattern` has
+    /// rewritten every `LetDestructure` form *except* the multivalue-builtin
+    /// tuple shape (see `lower::pattern::is_multivalue_builtin_pattern`)
+    /// into plain `Let` / `Expr` statements. So the only variant that
+    /// reaches this translator is:
     ///
-    /// Other `TirPattern` variants are not produced by the resolver in this
-    /// position (struct destructuring uses its own path) and fall through
-    /// to `None`.
+    /// * `Tuple` — multivalue-builtin call returning a tuple; destructure
+    ///   each element into its `Binding` slot or skip `Wildcard` slots.
+    ///
+    /// Other variants are unreachable; we still match the obvious
+    /// `Binding` case (single multivalue result) defensively and leave a
+    /// catch-all `None` arm rather than `unreachable!` so a future
+    /// lower-pass change cannot turn into a hard ICE.
     pub(super) fn translate_let_pattern(
         &mut self,
         pattern: &TirPattern,
@@ -250,17 +250,6 @@ impl FunctionTranslator<'_, '_> {
                     name: local_name,
                     value: Box::new(value_instr),
                 })
-            }
-            TirPattern::Wildcard => {
-                // `let _ = expr;` — evaluate the value for side effects and
-                // drop the result. We must wrap in `Drop` (rather than
-                // discarding `value_instr` outright) so the side effects of
-                // `expr` actually execute.
-                if value.type_id == TypeTable::UNIT || value.type_id == TypeTable::NEVER {
-                    Some(value_instr)
-                } else {
-                    Some(WirInstr::Drop(Box::new(value_instr)))
-                }
             }
             _ => None,
         }
