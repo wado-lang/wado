@@ -36625,7 +36625,7 @@ fn parse_block(p: &mut Parser) -> Result<BlockNode, ParseError> {
                 gd_scan_3: {
                     let tokens = &p.tokens;
                     let mut pos: i32 = p.pos;
-                    pos = scan_any_(tokens, pos, 0);
+                    pos = scan_declaration_list(tokens, pos, 0);
                     if pos < 0 { break gd_scan_3; }
                     gd_winner = 2;
                     break gd_dispatch;
@@ -36633,7 +36633,7 @@ fn parse_block(p: &mut Parser) -> Result<BlockNode, ParseError> {
                 gd_scan_4: {
                     let tokens = &p.tokens;
                     let mut pos: i32 = p.pos;
-                    pos = scan_block(tokens, pos, 0);
+                    pos = scan_nested_statement(tokens, pos, 0);
                     if pos < 0 { break gd_scan_4; }
                     gd_winner = 3;
                     break gd_dispatch;
@@ -36641,7 +36641,7 @@ fn parse_block(p: &mut Parser) -> Result<BlockNode, ParseError> {
                 gd_scan_5: {
                     let tokens = &p.tokens;
                     let mut pos: i32 = p.pos;
-                    pos = scan_declaration_list(tokens, pos, 0);
+                    pos = scan_any_(tokens, pos, 0);
                     if pos < 0 { break gd_scan_5; }
                     gd_winner = 4;
                     break gd_dispatch;
@@ -36662,24 +36662,24 @@ fn parse_block(p: &mut Parser) -> Result<BlockNode, ParseError> {
                     ws,
                 }));
             } else if gd_winner == 2 {
-                let any_ = parse_any_(p)?;
-                group_0_opt = Option::<BlockGroup0>::Some(BlockGroup0::Alt2(BlockGroup0Alt2 {
-                    any_,
-                }));
-            } else if gd_winner == 3 {
-                let block = parse_block(p)?;
-                group_0_opt = Option::<BlockGroup0>::Some(BlockGroup0::Alt3(BlockGroup0Alt3 {
-                    block,
-                }));
-            } else if gd_winner == 4 {
                 let declaration_list = parse_declaration_list(p)?;
                 group_0_opt = Option::<BlockGroup0>::Some(BlockGroup0::Alt0(BlockGroup0Alt0 {
                     declaration_list,
                 }));
-            } else {
+            } else if gd_winner == 3 {
                 let nested_statement = parse_nested_statement(p)?;
                 group_0_opt = Option::<BlockGroup0>::Some(BlockGroup0::Alt1(BlockGroup0Alt1 {
                     nested_statement,
+                }));
+            } else if gd_winner == 4 {
+                let any_ = parse_any_(p)?;
+                group_0_opt = Option::<BlockGroup0>::Some(BlockGroup0::Alt2(BlockGroup0Alt2 {
+                    any_,
+                }));
+            } else {
+                let block = parse_block(p)?;
+                group_0_opt = Option::<BlockGroup0>::Some(BlockGroup0::Alt3(BlockGroup0Alt3 {
+                    block,
                 }));
             }
         }

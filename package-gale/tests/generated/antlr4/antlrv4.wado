@@ -5569,7 +5569,7 @@ fn scan_element_option(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i3
                 pos += 1;
                 let gp_24 = pos;
                 let sgk_24 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
-                if _gale_kind_set_19(sgk_24) {
+                if _gale_kind_set_18(sgk_24) {
                     sg_24: {
                         pos = gp_24;
                         sg_24_0: {
@@ -7143,7 +7143,7 @@ fn parse_element_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
 fn parse_element(p: &mut Parser) -> Result<ElementNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
-    if _gale_kind_set_20(kind) {
+    if _gale_kind_set_19(kind) {
         if _gale_kind_set_1(p.peek_kind()) {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
@@ -7363,7 +7363,7 @@ fn parse_labeled_element(p: &mut Parser) -> Result<LabeledElementNode, ParseErro
     let assign_or_plus_assign = p.advance();
     let mut atom_or_block_inner: Option<AtomOrBlockGroup> = null;
     let grp_kind = p.peek_kind();
-    if _gale_kind_set_20(grp_kind) {
+    if _gale_kind_set_19(grp_kind) {
         let atom = parse_atom(p)?;
         atom_or_block_inner = Option::<AtomOrBlockGroup>::Some(AtomOrBlockGroup::Atom(atom));
     } else if grp_kind == TK_LPAREN {
@@ -7629,7 +7629,7 @@ fn parse_not_set(p: &mut Parser) -> Result<NotSetNode, ParseError> {
     let kind = p.peek_kind();
     if kind == TK_NOT {
         let not = p.expect(TK_NOT)?;
-        if _gale_kind_set_21(p.peek_kind()) {
+        if _gale_kind_set_20(p.peek_kind()) {
             let set_element = parse_set_element(p)?;
             return Result::<NotSetNode, ParseError>::Ok(NotSetNode::Alt0(NotSetAlt0 {
                 span: Span::new(start, p.last_end()),
@@ -8048,7 +8048,7 @@ fn parse_element_option_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     pos += 1;
     let gp_29 = pos;
     let sgk_29 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
-    if _gale_kind_set_19(sgk_29) {
+    if _gale_kind_set_18(sgk_29) {
         sg_29: {
             pos = gp_29;
             sg_29_0: {
@@ -9265,18 +9265,14 @@ fn _gale_kind_set_17(k: i32) -> bool {
 }
 
 fn _gale_kind_set_18(k: i32) -> bool {
-    return k matches { TK_AT | TK_COLON | TK_OPTIONS };
-}
-
-fn _gale_kind_set_19(k: i32) -> bool {
     return k matches { TK_INT | TK_RULE_REF | TK_STRING_LITERAL | TK_TOKEN_REF };
 }
 
-fn _gale_kind_set_20(k: i32) -> bool {
+fn _gale_kind_set_19(k: i32) -> bool {
     return k matches { TK_DOT | TK_NOT | TK_RULE_REF | TK_STRING_LITERAL | TK_TOKEN_REF };
 }
 
-fn _gale_kind_set_21(k: i32) -> bool {
+fn _gale_kind_set_20(k: i32) -> bool {
     return k matches { TK_LEXER_CHAR_SET | TK_STRING_LITERAL | TK_TOKEN_REF };
 }
 

@@ -720,7 +720,7 @@ fn scan_r(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
         sg_0: {
             pos = gp_0;
             sg_0_0: {
-                pos = scan_a(tokens, pos, 0);
+                pos = scan_a__follow_0(tokens, pos, 0);
                 if pos < 0 { break sg_0_0; }
                 pos = scan_b(tokens, pos, 0);
                 if pos < 0 { break sg_0_0; }
@@ -770,23 +770,25 @@ fn parse_r(p: &mut Parser) -> Result<RNode, ParseError> {
             gd_scan: {
                 let tokens = &p.tokens;
                 let mut pos: i32 = p.pos;
-                pos = scan_a(tokens, pos, 0);
+                pos = scan_a__follow_0(tokens, pos, 0);
+                if pos < 0 { break gd_scan; }
+                pos = scan_b(tokens, pos, 0);
                 if pos < 0 { break gd_scan; }
                 gd_winner = 0;
                 break gd_dispatch;
             }
         }
         if gd_winner == 0 {
-            let a = parse_a(p)?;
-            group_0_inner = Option::<RGroup0>::Some(RGroup0::Alt1(RGroup0Alt1 {
-                a,
-            }));
-        } else {
-            let a = parse_a(p)?;
+            let a = parse_a__follow_0(p)?;
             let b = parse_b(p)?;
             group_0_inner = Option::<RGroup0>::Some(RGroup0::Alt0(RGroup0Alt0 {
                 a,
                 b,
+            }));
+        } else {
+            let a = parse_a(p)?;
+            group_0_inner = Option::<RGroup0>::Some(RGroup0::Alt1(RGroup0Alt1 {
+                a,
             }));
         }
     }
@@ -820,6 +822,24 @@ fn parse_b(p: &mut Parser) -> Result<BNode, ParseError> {
     let y = p.expect(TK_Y)?;
     return Result::<BNode, ParseError>::Ok(BNode {
         span: Span::new(start, p.last_end()),
+        y,
+    });
+}
+
+fn scan_a__follow_0(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_X { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn parse_a__follow_0(p: &mut Parser) -> Result<ANode, ParseError> {
+    let start = p.peek().span.start;
+    let x = p.expect(TK_X)?;
+    let y: Option<Token> = null;
+    return Result::<ANode, ParseError>::Ok(ANode {
+        span: Span::new(start, p.last_end()),
+        x,
         y,
     });
 }

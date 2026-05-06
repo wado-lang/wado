@@ -11939,7 +11939,7 @@ fn scan_property_member_declaration(tokens: &Array<Token>, pos: i32, min_prec: i
         if _gale_kind_set_46(alt_kind) {
             pos = start;
             try_0: {
-                pos = scan_property_member_base(tokens, pos, 0);
+                pos = scan_property_member_base__follow_0(tokens, pos, 0);
                 if pos < 0 { break try_0; }
                 pos = scan_property_name(tokens, pos, 0);
                 if pos < 0 { break try_0; }
@@ -11964,7 +11964,7 @@ fn scan_property_member_declaration(tokens: &Array<Token>, pos: i32, min_prec: i
             }
             pos = start;
             try_1: {
-                pos = scan_property_member_base(tokens, pos, 0);
+                pos = scan_property_member_base__follow_0(tokens, pos, 0);
                 if pos < 0 { break try_1; }
                 pos = scan_property_name(tokens, pos, 0);
                 if pos < 0 { break try_1; }
@@ -12003,7 +12003,7 @@ fn scan_property_member_declaration(tokens: &Array<Token>, pos: i32, min_prec: i
             }
             pos = start;
             try_2: {
-                pos = scan_property_member_base(tokens, pos, 0);
+                pos = scan_property_member_base__follow_1(tokens, pos, 0);
                 if pos < 0 { break try_2; }
                 let gp_66 = pos;
                 let sgk_66 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -12038,7 +12038,7 @@ fn scan_property_member_declaration(tokens: &Array<Token>, pos: i32, min_prec: i
             }
             pos = start;
             try_0: {
-                pos = scan_property_member_base(tokens, pos, 0);
+                pos = scan_property_member_base__follow_0(tokens, pos, 0);
                 if pos < 0 { break try_0; }
                 pos = scan_property_name(tokens, pos, 0);
                 if pos < 0 { break try_0; }
@@ -12063,7 +12063,7 @@ fn scan_property_member_declaration(tokens: &Array<Token>, pos: i32, min_prec: i
             }
             pos = start;
             try_1: {
-                pos = scan_property_member_base(tokens, pos, 0);
+                pos = scan_property_member_base__follow_0(tokens, pos, 0);
                 if pos < 0 { break try_1; }
                 pos = scan_property_name(tokens, pos, 0);
                 if pos < 0 { break try_1; }
@@ -12102,7 +12102,7 @@ fn scan_property_member_declaration(tokens: &Array<Token>, pos: i32, min_prec: i
             }
             pos = start;
             try_2: {
-                pos = scan_property_member_base(tokens, pos, 0);
+                pos = scan_property_member_base__follow_1(tokens, pos, 0);
                 if pos < 0 { break try_2; }
                 let gp_69 = pos;
                 let sgk_69 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -12131,7 +12131,7 @@ fn scan_property_member_declaration(tokens: &Array<Token>, pos: i32, min_prec: i
         } else if _gale_kind_set_47(alt_kind) {
             pos = start;
             try_0: {
-                pos = scan_property_member_base(tokens, pos, 0);
+                pos = scan_property_member_base__follow_0(tokens, pos, 0);
                 if pos < 0 { break try_0; }
                 pos = scan_property_name(tokens, pos, 0);
                 if pos < 0 { break try_0; }
@@ -12156,7 +12156,7 @@ fn scan_property_member_declaration(tokens: &Array<Token>, pos: i32, min_prec: i
             }
             pos = start;
             try_1: {
-                pos = scan_property_member_base(tokens, pos, 0);
+                pos = scan_property_member_base__follow_0(tokens, pos, 0);
                 if pos < 0 { break try_1; }
                 pos = scan_property_name(tokens, pos, 0);
                 if pos < 0 { break try_1; }
@@ -19145,23 +19145,25 @@ fn parse_abstract_declaration(p: &mut Parser) -> Result<AbstractDeclarationNode,
             gd_scan: {
                 let tokens = &p.tokens;
                 let mut pos: i32 = p.pos;
-                pos = scan_variable_statement(tokens, pos, 0);
+                pos = scan_identifier(tokens, pos, 0);
+                if pos < 0 { break gd_scan; }
+                pos = scan_call_signature(tokens, pos, 0);
                 if pos < 0 { break gd_scan; }
                 gd_winner = 0;
                 break gd_dispatch;
             }
         }
         if gd_winner == 0 {
-            let variable_statement = parse_variable_statement(p)?;
-            group_0_inner = Option::<AbstractDeclarationGroup0>::Some(AbstractDeclarationGroup0::Alt1(AbstractDeclarationGroup0Alt1 {
-                variable_statement,
-            }));
-        } else {
             let identifier = parse_identifier(p)?;
             let call_signature = parse_call_signature(p)?;
             group_0_inner = Option::<AbstractDeclarationGroup0>::Some(AbstractDeclarationGroup0::Alt0(AbstractDeclarationGroup0Alt0 {
                 identifier,
                 call_signature,
+            }));
+        } else {
+            let variable_statement = parse_variable_statement(p)?;
+            group_0_inner = Option::<AbstractDeclarationGroup0>::Some(AbstractDeclarationGroup0::Alt1(AbstractDeclarationGroup0Alt1 {
+                variable_statement,
             }));
         }
     }
@@ -21331,7 +21333,7 @@ fn parse_class_element(p: &mut Parser) -> Result<ClassElementNode, ParseError> {
 
 fn parse_property_member_declaration_bt_0(p: &mut Parser) -> Result<PropertyMemberDeclarationNode, ParseError> {
     let start = p.peek().span.start;
-    let property_member_base = parse_property_member_base(p)?;
+    let property_member_base = parse_property_member_base__follow_0(p)?;
     let property_name = parse_property_name(p)?;
     let question: Option<Token> = if p.peek_kind() == TK_LIT_QUESTION {
         let question = p.expect(TK_LIT_QUESTION)?;
@@ -21391,7 +21393,7 @@ fn parse_property_member_declaration_scan_0(tokens: &Array<Token>, pos: i32) -> 
 
 fn parse_property_member_declaration_bt_1(p: &mut Parser) -> Result<PropertyMemberDeclarationNode, ParseError> {
     let start = p.peek().span.start;
-    let property_member_base = parse_property_member_base(p)?;
+    let property_member_base = parse_property_member_base__follow_0(p)?;
     let property_name = parse_property_name(p)?;
     let call_signature = parse_call_signature(p)?;
     let mut group_0_inner: Option<PropertyMemberDeclarationGroup0> = null;
@@ -21466,7 +21468,7 @@ fn parse_property_member_declaration_scan_1(tokens: &Array<Token>, pos: i32) -> 
 
 fn parse_property_member_declaration_bt_2(p: &mut Parser) -> Result<PropertyMemberDeclarationNode, ParseError> {
     let start = p.peek().span.start;
-    let property_member_base = parse_property_member_base(p)?;
+    let property_member_base = parse_property_member_base__follow_1(p)?;
     let mut get_accessor_or_set_accessor_inner: Option<GetAccessorOrSetAccessorGroup> = null;
     let grp_kind = p.peek_kind();
     if _gale_kind_set_2(grp_kind) {
@@ -26282,6 +26284,76 @@ fn parse_eos(p: &mut Parser) -> Result<EosNode, ParseError> {
         p.peek().span,
         ["TK_SemiColon", "TK_EOF"],
     ));
+}
+
+fn scan_property_member_base__follow_0(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+    let mut pos = pos;
+    return pos;
+}
+
+fn parse_property_member_base__follow_0(p: &mut Parser) -> Result<PropertyMemberBaseNode, ParseError> {
+    let start = p.peek().span.start;
+    let accessibility_modifier: Option<AccessibilityModifierNode> = null;
+    let async_: Option<Token> = null;
+    let static: Option<Token> = null;
+    let readonly: Option<Token> = null;
+    return Result::<PropertyMemberBaseNode, ParseError>::Ok(PropertyMemberBaseNode {
+        span: Span::new(start, p.last_end()),
+        accessibility_modifier,
+        async_,
+        static,
+        readonly,
+    });
+}
+
+fn scan_property_member_base__follow_1(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+    let mut pos = pos;
+    if pos < tokens.len() && _gale_kind_set_20(tokens[pos].kind) {
+        let sp = pos;
+        pos = scan_accessibility_modifier(tokens, pos, 0);
+        if pos < 0 { pos = sp; }
+    }
+    if pos < tokens.len() && tokens[pos].kind == TK_Static {
+        let sp = pos;
+        if pos >= tokens.len() || tokens[pos].kind != TK_Static { pos = -1; } else { pos += 1; }
+        if pos < 0 { pos = sp; }
+    }
+    if pos < tokens.len() && tokens[pos].kind == TK_ReadOnly {
+        let sp = pos;
+        if pos >= tokens.len() || tokens[pos].kind != TK_ReadOnly { pos = -1; } else { pos += 1; }
+        if pos < 0 { pos = sp; }
+    }
+    return pos;
+}
+
+fn parse_property_member_base__follow_1(p: &mut Parser) -> Result<PropertyMemberBaseNode, ParseError> {
+    let start = p.peek().span.start;
+    let accessibility_modifier: Option<AccessibilityModifierNode> = if _gale_kind_set_20(p.peek_kind()) {
+        let accessibility_modifier = parse_accessibility_modifier(p)?;
+        Option::<AccessibilityModifierNode>::Some(accessibility_modifier)
+    } else {
+        null
+    };
+    let async_: Option<Token> = null;
+    let static: Option<Token> = if p.peek_kind() == TK_Static {
+        let static = p.expect(TK_Static)?;
+        Option::<Token>::Some(static)
+    } else {
+        null
+    };
+    let readonly: Option<Token> = if p.peek_kind() == TK_ReadOnly {
+        let readonly = p.expect(TK_ReadOnly)?;
+        Option::<Token>::Some(readonly)
+    } else {
+        null
+    };
+    return Result::<PropertyMemberBaseNode, ParseError>::Ok(PropertyMemberBaseNode {
+        span: Span::new(start, p.last_end()),
+        accessibility_modifier,
+        async_,
+        static,
+        readonly,
+    });
 }
 
 pub fn parse(input: &String) -> Result<InitializerNode, ParseError> {

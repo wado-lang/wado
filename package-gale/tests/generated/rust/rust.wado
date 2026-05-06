@@ -22663,18 +22663,34 @@ fn parse_struct_expr_field(p: &mut Parser) -> Result<StructExprFieldNode, ParseE
             gd_scan: {
                 let tokens = &p.tokens;
                 let mut pos: i32 = p.pos;
-                pos = scan_identifier(tokens, pos, 0);
+                let gp_174 = pos;
+                let sgk_174 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
+                if _gale_kind_set_65(sgk_174) {
+                    sg_174: {
+                        pos = gp_174;
+                        sg_174_0: {
+                            pos = scan_identifier(tokens, pos, 0);
+                            if pos < 0 { break sg_174_0; }
+                            break sg_174;
+                        }
+                        pos = gp_174;
+                        sg_174_1: {
+                            pos = scan_tuple_index(tokens, pos, 0);
+                            if pos < 0 { break sg_174_1; }
+                            break sg_174;
+                        }
+                        pos = gp_174;
+                    }
+                }
+                if pos >= tokens.len() || tokens[pos].kind != TK_COLON { break gd_scan; }
+                pos += 1;
+                pos = scan_expression(tokens, pos, 0);
                 if pos < 0 { break gd_scan; }
                 gd_winner = 0;
                 break gd_dispatch;
             }
         }
         if gd_winner == 0 {
-            let identifier = parse_identifier(p)?;
-            group_0_inner = Option::<StructExprFieldGroup0>::Some(StructExprFieldGroup0::Alt0(StructExprFieldGroup0Alt0 {
-                identifier,
-            }));
-        } else {
             let mut identifier_or_tuple_index_inner: Option<IdentifierOrTupleIndexGroup> = null;
             let grp_kind = p.peek_kind();
             if _gale_kind_set_17(grp_kind) {
@@ -22691,6 +22707,11 @@ fn parse_struct_expr_field(p: &mut Parser) -> Result<StructExprFieldNode, ParseE
                 identifier_or_tuple_index,
                 colon,
                 expression,
+            }));
+        } else {
+            let identifier = parse_identifier(p)?;
+            group_0_inner = Option::<StructExprFieldGroup0>::Some(StructExprFieldGroup0::Alt0(StructExprFieldGroup0Alt0 {
+                identifier,
             }));
         }
     }
@@ -23037,23 +23058,23 @@ fn parse_enum_expr_field_bt_1(p: &mut Parser) -> Result<EnumExprFieldNode, Parse
 
 fn parse_enum_expr_field_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    let gp_174 = pos;
-    let sgk_174 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
-    if _gale_kind_set_65(sgk_174) {
-        sg_174: {
-            pos = gp_174;
-            sg_174_0: {
+    let gp_175 = pos;
+    let sgk_175 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
+    if _gale_kind_set_65(sgk_175) {
+        sg_175: {
+            pos = gp_175;
+            sg_175_0: {
                 pos = scan_identifier(tokens, pos, 0);
-                if pos < 0 { break sg_174_0; }
-                break sg_174;
+                if pos < 0 { break sg_175_0; }
+                break sg_175;
             }
-            pos = gp_174;
-            sg_174_1: {
+            pos = gp_175;
+            sg_175_1: {
                 pos = scan_tuple_index(tokens, pos, 0);
-                if pos < 0 { break sg_174_1; }
-                break sg_174;
+                if pos < 0 { break sg_175_1; }
+                break sg_175;
             }
-            pos = gp_174;
+            pos = gp_175;
         }
     }
     if pos >= tokens.len() || tokens[pos].kind != TK_COLON { return -1; }
@@ -24719,15 +24740,15 @@ fn parse_struct_pattern_elements_scan_0(tokens: &Array<Token>, pos: i32) -> i32 
     pos = scan_struct_pattern_fields(tokens, pos, 0);
     if pos < 0 { return -1; }
     if pos < tokens.len() && tokens[pos].kind == TK_COMMA && pos + 1 < tokens.len() && _gale_kind_set_79(tokens[pos + 1].kind) {
-        sol_175: {
-            if pos >= tokens.len() || tokens[pos].kind != TK_COMMA { break sol_175; }
-            pos += 1;
-            pos = scan_struct_pattern_et_cetera(tokens, pos, 0);
-            if pos < 0 { break sol_175; }
-        }
-    } else if pos < tokens.len() && tokens[pos].kind == TK_COMMA {
         sol_176: {
             if pos >= tokens.len() || tokens[pos].kind != TK_COMMA { break sol_176; }
+            pos += 1;
+            pos = scan_struct_pattern_et_cetera(tokens, pos, 0);
+            if pos < 0 { break sol_176; }
+        }
+    } else if pos < tokens.len() && tokens[pos].kind == TK_COMMA {
+        sol_177: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_COMMA { break sol_177; }
             pos += 1;
         }
     }
@@ -25052,25 +25073,25 @@ fn parse_tuple_pattern_items_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_pattern(tokens, pos, 0);
     if pos < 0 { return -1; }
-    sg_177_done: {
-        sg_177: {
-            if pos >= tokens.len() || tokens[pos].kind != TK_COMMA { break sg_177; }
+    sg_178_done: {
+        sg_178: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_COMMA { break sg_178; }
             pos += 1;
             pos = scan_pattern(tokens, pos, 0);
-            if pos < 0 { break sg_177; }
-            break sg_177_done;
+            if pos < 0 { break sg_178; }
+            break sg_178_done;
         }
         return -1;
     }
     while pos < tokens.len() && tokens[pos].kind == TK_COMMA {
         let sp = pos;
-        sg_178_done: {
-            sg_178: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_COMMA { break sg_178; }
+        sg_179_done: {
+            sg_179: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_COMMA { break sg_179; }
                 pos += 1;
                 pos = scan_pattern(tokens, pos, 0);
-                if pos < 0 { break sg_178; }
-                break sg_178_done;
+                if pos < 0 { break sg_179; }
+                break sg_179_done;
             }
             pos = -1;
         }
@@ -26070,23 +26091,23 @@ fn parse_maybe_named_param(p: &mut Parser) -> Result<MaybeNamedParamNode, ParseE
     opt_scan: {
         let tokens = &p.tokens;
         let mut pos: i32 = p.pos;
-        let gp_179 = pos;
-        let sgk_179 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
-        if _gale_kind_set_18(sgk_179) {
-            sg_179: {
-                pos = gp_179;
-                sg_179_0: {
+        let gp_180 = pos;
+        let sgk_180 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
+        if _gale_kind_set_18(sgk_180) {
+            sg_180: {
+                pos = gp_180;
+                sg_180_0: {
                     pos = scan_identifier(tokens, pos, 0);
-                    if pos < 0 { break sg_179_0; }
-                    break sg_179;
+                    if pos < 0 { break sg_180_0; }
+                    break sg_180;
                 }
-                pos = gp_179;
-                sg_179_1: {
-                    if pos >= tokens.len() || tokens[pos].kind != TK_UNDERSCORE { break sg_179_1; }
+                pos = gp_180;
+                sg_180_1: {
+                    if pos >= tokens.len() || tokens[pos].kind != TK_UNDERSCORE { break sg_180_1; }
                     pos += 1;
-                    break sg_179;
+                    break sg_180;
                 }
-                pos = gp_179;
+                pos = gp_180;
             }
         }
         if pos >= tokens.len() || tokens[pos].kind != TK_COLON { break opt_scan; }
@@ -26676,13 +26697,13 @@ fn parse_generic_args_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     if pos < 0 { return -1; }
     if pos < tokens.len() && tokens[pos].kind == TK_COMMA {
         let sp = pos;
-        sg_180_done: {
-            sg_180: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_COMMA { break sg_180; }
+        sg_181_done: {
+            sg_181: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_COMMA { break sg_181; }
                 pos += 1;
                 pos = scan_generic_args_types(tokens, pos, 0);
-                if pos < 0 { break sg_180; }
-                break sg_180_done;
+                if pos < 0 { break sg_181; }
+                break sg_181_done;
             }
             pos = -1;
         }
@@ -26690,13 +26711,13 @@ fn parse_generic_args_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     }
     if pos < tokens.len() && tokens[pos].kind == TK_COMMA {
         let sp = pos;
-        sg_181_done: {
-            sg_181: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_COMMA { break sg_181; }
+        sg_182_done: {
+            sg_182: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_COMMA { break sg_182; }
                 pos += 1;
                 pos = scan_generic_args_bindings(tokens, pos, 0);
-                if pos < 0 { break sg_181; }
-                break sg_181_done;
+                if pos < 0 { break sg_182; }
+                break sg_182_done;
             }
             pos = -1;
         }
@@ -26752,13 +26773,13 @@ fn parse_generic_args_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
     if pos < 0 { return -1; }
     if pos < tokens.len() && tokens[pos].kind == TK_COMMA {
         let sp = pos;
-        sg_182_done: {
-            sg_182: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_COMMA { break sg_182; }
+        sg_183_done: {
+            sg_183: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_COMMA { break sg_183; }
                 pos += 1;
                 pos = scan_generic_args_bindings(tokens, pos, 0);
-                if pos < 0 { break sg_182; }
-                break sg_182_done;
+                if pos < 0 { break sg_183; }
+                break sg_183_done;
             }
             pos = -1;
         }
@@ -26823,13 +26844,13 @@ fn parse_generic_args_scan_3(tokens: &Array<Token>, pos: i32) -> i32 {
     pos += 1;
     while pos < tokens.len() && _gale_kind_set_90(tokens[pos].kind) {
         let sp = pos;
-        sg_183_done: {
-            sg_183: {
+        sg_184_done: {
+            sg_184: {
                 pos = scan_generic_arg(tokens, pos, 0);
-                if pos < 0 { break sg_183; }
-                if pos >= tokens.len() || tokens[pos].kind != TK_COMMA { break sg_183; }
+                if pos < 0 { break sg_184; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_COMMA { break sg_184; }
                 pos += 1;
-                break sg_183_done;
+                break sg_184_done;
             }
             pos = -1;
         }
@@ -27368,19 +27389,19 @@ fn parse_type_path_segment(p: &mut Parser) -> Result<TypePathSegmentNode, ParseE
     opt_scan: {
         let tokens = &p.tokens;
         let mut pos: i32 = p.pos;
-        let gp_184 = pos;
-        sg_184: {
-            pos = gp_184;
-            sg_184_0: {
+        let gp_185 = pos;
+        sg_185: {
+            pos = gp_185;
+            sg_185_0: {
                 pos = scan_generic_args(tokens, pos, 0);
-                if pos < 0 { break sg_184_0; }
-                break sg_184;
+                if pos < 0 { break sg_185_0; }
+                break sg_185;
             }
-            pos = gp_184;
-            sg_184_1: {
+            pos = gp_185;
+            sg_185_1: {
                 pos = scan_type_path_fn(tokens, pos, 0);
-                if pos < 0 { break sg_184_1; }
-                break sg_184;
+                if pos < 0 { break sg_185_1; }
+                break sg_185;
             }
             break opt_scan;
         }
