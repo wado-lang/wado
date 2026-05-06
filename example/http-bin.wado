@@ -15,7 +15,7 @@
 //   GET  /user-agent    — returns User-Agent as JSON
 //   GET  /status/:code  — returns the given HTTP status code
 //   GET  /base64/:val   — decodes base64-encoded value
-//   *    /anything      — returns request info for any method
+//   *    /anything      — returns request info for any method (incl. custom)
 
 use {
     Request,
@@ -35,6 +35,7 @@ use { Serialize } from "core:serde";
 use { Url } from "core:url";
 use { log_stderr } from "core:cli";
 use { MonotonicClock } from "wasi:clocks";
+use { Router } from "core:router";
 use json from "core:json";
 
 struct RequestInfo {
@@ -79,6 +80,19 @@ struct AccessLog {
 }
 impl Serialize for AccessLog;
 
+struct UrlInfo {
+    url: String,
+    path: String,
+    args: TreeMap<String, String>,
+}
+
+struct RouteResponse {
+    status: StatusCode,
+    content_type: String,
+    body: String,
+    allow: Option<String>,
+}
+
 fn scheme_name(s: Option<Scheme>) -> String {
     return match s {
         Some(Http) => "http",
@@ -86,14 +100,6 @@ fn scheme_name(s: Option<Scheme>) -> String {
         Some(Other(name)) => name,
         None => "http",
     };
-}
-
-/// Returns the substring after `prefix` if `s` starts with it, else None.
-fn strip_prefix(s: String, prefix: String) -> Option<String> {
-    if s.starts_with(prefix) {
-        return Option::Some(s.substr_bytes(prefix.len(), s.len()));
-    }
-    return null;
 }
 
 fn method_name(m: Method) -> String {
@@ -141,11 +147,20 @@ fn resolve_authority(request: &Request) -> String {
     };
 }
 
+fn parse_url(request: &Request) -> UrlInfo {
+    let scheme = scheme_name(request.get_scheme());
+    let authority = resolve_authority(request);
+    let request_url = Url::from_parts(scheme, authority, request.get_path_with_query(), null);
+    return UrlInfo {
+        url: request_url.to_string(),
+        path: request_url.path,
+        args: request_url.query_params(),
+    };
+}
+
 fn read_body_from_request(request: Request) -> String {
     let [res_future, _res_tx] = Future::<Result<(), ErrorCode>>::new();
     let [body_stream, _trailers] = Request::consume_body(request, res_future);
-    // Accumulate raw bytes first — a multi-byte UTF-8 scalar may straddle
-    // chunk boundaries, so we can't decode chunk-by-chunk.
     let mut buf: Array<u8> = [];
     loop {
         let chunk = body_stream.read(4096);
@@ -174,18 +189,18 @@ fn parse_status_code(s: String) -> Option<u16> {
     return null;
 }
 
-fn build_request_json(method: Method, url: String, path: String, args: TreeMap<String, String>, headers: &Headers, body: Option<String>) -> String {
+fn build_request_json(method: Method, info: &UrlInfo, headers: &Headers, body: Option<String>) -> String {
     let origin = match get_header(headers, "x-forwarded-for") {
         Some(s) => s,
         None => "",
     };
     return json::to_string_pretty(&RequestInfo {
         method: method_name(method),
-        path,
-        args,
+        path: info.path,
+        args: info.args,
         headers: headers_to_map(headers),
         origin,
-        url,
+        url: info.url,
         data: body,
     }).unwrap() + "\n";
 }
@@ -194,130 +209,170 @@ fn json_error(msg: String) -> String {
     return json::to_string_pretty(&ErrorResponse { error: msg }).unwrap() + "\n";
 }
 
-fn handle_fallback(request: Request, method: Method, url: String, path: String, args: TreeMap<String, String>) -> [StatusCode, String, String] {
-    if let Some(code_str) = strip_prefix(path, "/status/") {
-        if let Some(code) = parse_status_code(code_str) {
-            return [code as StatusCode, "text/plain", ""];
-        }
-        return [400, "application/json", json_error("Invalid status code") + "\n"];
-    }
-    if let Some(encoded) = strip_prefix(path, "/base64/") {
-        if let Some(decoded_bytes) = decode(encoded) {
-            return [200, "text/plain", String::from_utf8_lossy(decoded_bytes)];
-        }
-        return [400, "application/json", json_error("Invalid base64") + "\n"];
-    }
-    if path == "/anything" || path.starts_with("/anything/") {
-        let h = request.get_headers();
-        if method matches { Post | Put | Patch } {
-            let data = read_body_from_request(request);
-            return [200, "application/json", build_request_json(method, url, path, args, &h, Option::Some(data)) + "\n"];
-        }
-        return [200, "application/json", build_request_json(method, url, path, args, &h, null) + "\n"];
-    }
-    return [404, "application/json", json_error("Not Found")];
+fn json_response(status: StatusCode, body: String) -> RouteResponse {
+    return RouteResponse {
+        status, content_type: "application/json", body, allow: null,
+    };
 }
 
-fn echo_if_method(request: Request, method: Method, expected: Method, label: String, read_body: bool, url: String, path: String, args: TreeMap<String, String>) -> [StatusCode, String, Option<String>] {
-    if method != expected {
-        return [405, json_error(`Method Not Allowed. Use {label}.`), Option::Some(label)];
-    }
+fn echo(request: Request, read_body: bool) -> RouteResponse {
+    let info = parse_url(&request);
+    let method = request.get_method();
     let h = request.get_headers();
-    if read_body {
-        let data = read_body_from_request(request);
-        return [200, build_request_json(method, url, path, args, &h, Option::Some(data)), null];
+    let body = if read_body {
+        Option::Some(read_body_from_request(request))
+    } else {
+        null
+    };
+    return json_response(200, build_request_json(method, &info, &h, body));
+}
+
+fn respond_home() -> RouteResponse {
+    return RouteResponse {
+        status: 200,
+        content_type: "text/html; charset=utf-8",
+        body: HOMEPAGE,
+        allow: null,
+    };
+}
+
+fn respond_headers(request: Request) -> RouteResponse {
+    let h = request.get_headers();
+    let body = json::to_string_pretty(&HeadersResponse {
+        headers: headers_to_map(&h),
+    }).unwrap() + "\n";
+    return json_response(200, body);
+}
+
+fn respond_ip(request: Request) -> RouteResponse {
+    let h = request.get_headers();
+    let body = json::to_string_pretty(&IpResponse {
+        origin: get_header(&h, "x-forwarded-for"),
+    }).unwrap() + "\n";
+    return json_response(200, body);
+}
+
+fn respond_user_agent(request: Request) -> RouteResponse {
+    let h = request.get_headers();
+    let body = json::to_string_pretty(&UserAgentResponse {
+        user_agent: get_header(&h, "user-agent"),
+    }).unwrap() + "\n";
+    return json_response(200, body);
+}
+
+fn respond_status(code_str: String) -> RouteResponse {
+    if let Some(code) = parse_status_code(code_str) {
+        return RouteResponse {
+            status: code as StatusCode,
+            content_type: "text/plain",
+            body: "",
+            allow: null,
+        };
     }
-    return [200, build_request_json(method, url, path, args, &h, null), null];
+    return json_response(400, json_error("Invalid status code") + "\n");
+}
+
+fn respond_base64(encoded: String) -> RouteResponse {
+    if let Some(decoded_bytes) = decode(encoded) {
+        return RouteResponse {
+            status: 200,
+            content_type: "text/plain",
+            body: String::from_utf8_lossy(decoded_bytes),
+            allow: null,
+        };
+    }
+    return json_response(400, json_error("Invalid base64") + "\n");
+}
+
+fn respond_anything(request: Request) -> RouteResponse {
+    let info = parse_url(&request);
+    let method = request.get_method();
+    let h = request.get_headers();
+    let body = if method matches { Post | Put | Patch } {
+        Option::Some(read_body_from_request(request))
+    } else {
+        null
+    };
+    return json_response(200, build_request_json(method, &info, &h, body) + "\n");
+}
+
+fn format_allow(methods: &Array<Method>) -> String {
+    let mut out = "";
+    let n = methods.len();
+    for let mut i = 0; i < n; i += 1 {
+        if i > 0 {
+            out += ", ";
+        }
+        out += method_name(methods[i]);
+    }
+    return out;
+}
+
+fn build_router() -> Router<fn(Request, TreeMap<String, String>) -> RouteResponse> {
+    let mut r = Router::<fn(Request, TreeMap<String, String>) -> RouteResponse>::new();
+    r.get("/",             |_req: Request, _p: TreeMap<String, String>| respond_home());
+    r.get("/get",          |req: Request, _p: TreeMap<String, String>| echo(req, false));
+    r.post("/post",        |req: Request, _p: TreeMap<String, String>| echo(req, true));
+    r.put("/put",          |req: Request, _p: TreeMap<String, String>| echo(req, true));
+    r.patch("/patch",      |req: Request, _p: TreeMap<String, String>| echo(req, true));
+    r.delete("/delete",    |req: Request, _p: TreeMap<String, String>| echo(req, false));
+    r.get("/headers",      |req: Request, _p: TreeMap<String, String>| respond_headers(req));
+    r.get("/ip",           |req: Request, _p: TreeMap<String, String>| respond_ip(req));
+    r.get("/user-agent",   |req: Request, _p: TreeMap<String, String>| respond_user_agent(req));
+    r.get("/status/:code", |_req: Request, p: TreeMap<String, String>| respond_status(p["code"]));
+    r.get("/base64/:val",  |_req: Request, p: TreeMap<String, String>| respond_base64(p["val"]));
+    r.any("/anything",       |req: Request, _p: TreeMap<String, String>| respond_anything(req));
+    r.any("/anything/*rest", |req: Request, _p: TreeMap<String, String>| respond_anything(req));
+    return r;
 }
 
 global HOMEPAGE: String = #include_str("./http-bin-index.html");
+global ROUTER: Router<fn(Request, TreeMap<String, String>) -> RouteResponse> = build_router();
 
 export async fn handle(request: Request) -> Result<Response, ErrorCode> with MonotonicClock {
     let start_mark = MonotonicClock::now();
+    let info = parse_url(&request);
     let method = request.get_method();
-    let scheme = scheme_name(request.get_scheme());
-    let authority = resolve_authority(&request);
-    let request_url = Url::from_parts(scheme, authority, request.get_path_with_query(), null);
-    let url = request_url.to_string();
-    let path = request_url.path;
-    let args = request_url.query_params();
     let h = request.get_headers();
     let user_agent = get_header(&h, "user-agent");
 
-    let mut status: StatusCode = 200;
-    let mut content_type = "application/json";
-    let mut body_str: String;
-    let mut allow: Option<String> = null;
-
-    match path {
-        "/" => {
-            content_type = "text/html; charset=utf-8";
-            body_str = HOMEPAGE;
-        },
-        "/get" => {
-            let [s, b, a] = echo_if_method(request, method, Method::Get, "GET", false, url, path, args);
-            status = s;
-            body_str = b;
-            allow = a;
-        },
-        "/post" => {
-            let [s, b, a] = echo_if_method(request, method, Method::Post, "POST", true, url, path, args);
-            status = s;
-            body_str = b;
-            allow = a;
-        },
-        "/put" => {
-            let [s, b, a] = echo_if_method(request, method, Method::Put, "PUT", true, url, path, args);
-            status = s;
-            body_str = b;
-            allow = a;
-        },
-        "/patch" => {
-            let [s, b, a] = echo_if_method(request, method, Method::Patch, "PATCH", true, url, path, args);
-            status = s;
-            body_str = b;
-            allow = a;
-        },
-        "/delete" => {
-            let [s, b, a] = echo_if_method(request, method, Method::Delete, "DELETE", false, url, path, args);
-            status = s;
-            body_str = b;
-            allow = a;
-        },
-        "/headers" => {
-            body_str = json::to_string_pretty(&HeadersResponse { headers: headers_to_map(&h) }).unwrap() + "\n";
-        },
-        "/ip" => {
-            let origin = get_header(&h, "x-forwarded-for");
-            body_str = json::to_string_pretty(&IpResponse { origin }).unwrap() + "\n";
-        },
-        "/user-agent" => {
-            body_str = json::to_string_pretty(&UserAgentResponse { user_agent }).unwrap() + "\n";
-        },
-        _ => {
-            let [s, c, b] = handle_fallback(request, method, url, path, args);
-            status = s;
-            content_type = c;
-            body_str = b;
-        },
-    }
+    let resp = if let Some(m) = ROUTER.match_request(&request) {
+        (m.handler)(request, m.params)
+    } else {
+        let allowed = ROUTER.allowed_methods(&info.path);
+        if !allowed.is_empty() {
+            RouteResponse {
+                status: 405,
+                content_type: "application/json",
+                body: json_error("Method Not Allowed") + "\n",
+                allow: Option::Some(format_allow(&allowed)),
+            }
+        } else {
+            RouteResponse {
+                status: 404,
+                content_type: "application/json",
+                body: json_error("Not Found"),
+                allow: null,
+            }
+        }
+    };
 
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let [body_rx, body_tx] = Stream::<u8>::new();
 
     let resp_headers = Fields::new();
     resp_headers.append("server", #file.as_bytes() as FieldValue);
-    resp_headers.append("content-type", content_type.as_bytes() as FieldValue);
+    resp_headers.append("content-type", resp.content_type.as_bytes() as FieldValue);
     resp_headers.append("trailer", "server-timing".as_bytes() as FieldValue);
-    if let Some(a) = allow {
+    if let Some(a) = resp.allow {
         resp_headers.append("allow", a.as_bytes() as FieldValue);
     }
     let [response, _response_tx] = Response::new(resp_headers, Option::Some(body_rx), trailers_future);
-    response.set_status_code(status);
+    response.set_status_code(resp.status);
 
     task return Result::Ok(response);
 
-    body_tx.write(body_str.as_bytes());
+    body_tx.write(resp.body.as_bytes());
     body_tx.drop();
 
     // Server-Timing trailer carries the handler's wall-clock time so curious
@@ -332,14 +387,11 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> with Mon
     );
     trailers_tx.write(Result::Ok(Option::Some(trailers)));
 
-    // Access log: emit request summary as JSON to stderr after the
-    // response body has been written out. `log_stderr` appends its own
-    // newline so we don't add one here.
     log_stderr(json::to_string(&AccessLog {
         method: method_name(method),
-        path,
+        path: info.path,
         user_agent,
-        status,
+        status: resp.status,
         duration_us: elapsed as u64 / 1000,
     }).unwrap());
 }

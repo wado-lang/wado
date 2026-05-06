@@ -1,0 +1,437 @@
+//! HTTP path router (`core:router`).
+//!
+//! Generic over the handler type `H`. Match algorithm is a segment-level
+//! tagged DFA: routes split at `/` boundaries and each segment becomes a
+//! single transition. Hot-path is a deterministic loop with no
+//! backtracking; at each state, transitions are tried in this order:
+//! literal, then `:param`, then `*wildcard`. Once a terminal (or wildcard)
+//! is reached, method dispatch tries the specific-method list first, then
+//! falls back to the optional `any` slot.
+//!
+//! See `docs/wep-2026-05-06-core-router.md`.
+
+#![stdlib("core:router")]
+
+use { TreeMap } from "core:collections";
+use { Request } from "wasi:http";
+pub use { Method } from "wasi:http";
+
+/// Result of a successful match. `params` is keyed by parameter name; for
+/// a wildcard route the captured tail is stored under the wildcard name.
+pub struct RouteMatch<H> {
+    pub handler: H,
+    pub params: TreeMap<String, String>,
+}
+
+variant Segment {
+    Literal(String),
+    Param(String),
+    Wildcard(String),
+}
+
+struct LiteralEdge {
+    label: String,
+    target: i32,
+}
+
+struct MethodEntry {
+    method: Method,
+    value_idx: i32,
+}
+
+struct DfaState {
+    literals: Array<LiteralEdge>,
+    param_target: i32,
+    param_name: String,
+    wildcard_methods: Array<MethodEntry>,
+    wildcard_any_idx: i32,
+    wildcard_name: String,
+    terminal_methods: Array<MethodEntry>,
+    terminal_any_idx: i32,
+}
+
+fn new_state() -> DfaState {
+    return DfaState {
+        literals: [],
+        param_target: -1,
+        param_name: "",
+        wildcard_methods: [],
+        wildcard_any_idx: -1,
+        wildcard_name: "",
+        terminal_methods: [],
+        terminal_any_idx: -1,
+    };
+}
+
+/// Generic HTTP path router.
+pub struct Router<H> {
+    states: Array<DfaState>,
+    handlers: Array<H>,
+}
+
+impl<H> Router<H> {
+    pub fn new() -> Router<H> {
+        let mut r = Router { states: [], handlers: [] };
+        r.states.push(new_state());
+        return r;
+    }
+
+    /// Registers a handler for `(method, pattern)`. Last-write-wins.
+    /// Panics on a malformed pattern.
+    pub fn route(&mut self, method: Method, pattern: String, value: H)
+        with stores[value]
+    {
+        self.insert(Option::Some(method), pattern, value);
+    }
+
+    pub fn get(&mut self, pattern: String, value: H) with stores[value] {
+        self.route(Method::Get, pattern, value);
+    }
+    pub fn post(&mut self, pattern: String, value: H) with stores[value] {
+        self.route(Method::Post, pattern, value);
+    }
+    pub fn put(&mut self, pattern: String, value: H) with stores[value] {
+        self.route(Method::Put, pattern, value);
+    }
+    pub fn patch(&mut self, pattern: String, value: H) with stores[value] {
+        self.route(Method::Patch, pattern, value);
+    }
+    pub fn delete(&mut self, pattern: String, value: H) with stores[value] {
+        self.route(Method::Delete, pattern, value);
+    }
+    pub fn options(&mut self, pattern: String, value: H) with stores[value] {
+        self.route(Method::Options, pattern, value);
+    }
+
+    /// Registers a handler that matches any HTTP method (including
+    /// `Method::Other(_)`) at `pattern`. Specific-method handlers at the
+    /// same pattern take precedence; `any` is the fallback.
+    pub fn any(&mut self, pattern: String, value: H) with stores[value] {
+        self.insert(null, pattern, value);
+    }
+
+    fn insert(&mut self, method_opt: Option<Method>, pattern: String, value: H)
+        with stores[value]
+    {
+        let segs = parse_pattern(&pattern);
+        let mut cur: i32 = 0;
+        let nseg = segs.len();
+        for let mut i = 0; i < nseg; i += 1 {
+            let seg = &segs[i];
+            match seg {
+                Wildcard(name) => {
+                    self.states[cur].wildcard_name = *name;
+                    let value_idx = self.handlers.len();
+                    self.handlers.push(value);
+                    if let Some(m) = method_opt {
+                        set_method_specific(
+                            &mut self.states[cur].wildcard_methods, m, value_idx);
+                    } else {
+                        self.states[cur].wildcard_any_idx = value_idx;
+                    }
+                    return;
+                },
+                Param(name) => {
+                    if self.states[cur].param_target < 0 {
+                        let new_id = self.states.len();
+                        self.states.push(new_state());
+                        self.states[cur].param_target = new_id;
+                        self.states[cur].param_name = *name;
+                    }
+                    cur = self.states[cur].param_target;
+                },
+                Literal(lit) => {
+                    let key = *lit;
+                    let [pos, found] = bsearch_label(&self.states[cur].literals, &key);
+                    if found {
+                        cur = self.states[cur].literals[pos].target;
+                    } else {
+                        let new_id = self.states.len();
+                        self.states.push(new_state());
+                        self.states[cur].literals.insert(pos, LiteralEdge {
+                            label: key,
+                            target: new_id,
+                        });
+                        cur = new_id;
+                    }
+                },
+            }
+        }
+        let value_idx = self.handlers.len();
+        self.handlers.push(value);
+        if let Some(m) = method_opt {
+            set_method_specific(
+                &mut self.states[cur].terminal_methods, m, value_idx);
+        } else {
+            self.states[cur].terminal_any_idx = value_idx;
+        }
+    }
+
+    /// Matches `(method, path)`. The path argument must be a URL path
+    /// (no query string, no fragment).
+    pub fn match_path(&self, method: Method, path: &String) -> Option<RouteMatch<H>> {
+        let mut params = TreeMap::<String, String>::new();
+        let plen = path.len();
+        let mut pos = if plen > 0 && path.get_byte(0) == '/' as u8 { 1 } else { 0 };
+        let mut state: i32 = 0;
+        while pos < plen {
+            let mut end = pos;
+            while end < plen && path.get_byte(end) != '/' as u8 {
+                end += 1;
+            }
+            if end == pos {
+                return null;
+            }
+            let target = bsearch_target_by_bytes(&self.states[state].literals, path, pos, end);
+            if target >= 0 {
+                state = target;
+            } else if self.states[state].param_target >= 0 {
+                let pname = self.states[state].param_name;
+                params[pname] = path.substr_bytes(pos, end);
+                state = self.states[state].param_target;
+            } else if has_wildcard(&self.states[state]) {
+                let h = pick_handler(
+                    &self.states[state].wildcard_methods,
+                    self.states[state].wildcard_any_idx,
+                    &method,
+                );
+                if h < 0 {
+                    return null;
+                }
+                params[self.states[state].wildcard_name] = path.substr_bytes(pos, plen);
+                return Option::Some(RouteMatch { handler: self.handlers[h], params });
+            } else {
+                return null;
+            }
+            pos = end + 1;
+        }
+        if pos == plen + 1 {
+            let h = pick_handler(
+                &self.states[state].terminal_methods,
+                self.states[state].terminal_any_idx,
+                &method,
+            );
+            if h >= 0 {
+                return Option::Some(RouteMatch { handler: self.handlers[h], params });
+            }
+        } else if pos == plen {
+            // Either path was "/" (root) or a trailing slash after a segment.
+            if state == 0 {
+                let h = pick_handler(
+                    &self.states[0].terminal_methods,
+                    self.states[0].terminal_any_idx,
+                    &method,
+                );
+                if h >= 0 {
+                    return Option::Some(RouteMatch { handler: self.handlers[h], params });
+                }
+            }
+            if has_wildcard(&self.states[state]) {
+                let h = pick_handler(
+                    &self.states[state].wildcard_methods,
+                    self.states[state].wildcard_any_idx,
+                    &method,
+                );
+                if h >= 0 {
+                    params[self.states[state].wildcard_name] = "";
+                    return Option::Some(RouteMatch { handler: self.handlers[h], params });
+                }
+            }
+        }
+        return null;
+    }
+
+    /// Returns the specific methods registered for `path`. `any` does not
+    /// contribute. Empty array on a 404 or when only `any` is registered.
+    pub fn allowed_methods(&self, path: &String) -> Array<Method> {
+        let plen = path.len();
+        let mut pos = if plen > 0 && path.get_byte(0) == '/' as u8 { 1 } else { 0 };
+        let mut state: i32 = 0;
+        while pos < plen {
+            let mut end = pos;
+            while end < plen && path.get_byte(end) != '/' as u8 {
+                end += 1;
+            }
+            if end == pos {
+                return [];
+            }
+            let target = bsearch_target_by_bytes(&self.states[state].literals, path, pos, end);
+            if target >= 0 {
+                state = target;
+            } else if self.states[state].param_target >= 0 {
+                state = self.states[state].param_target;
+            } else if has_wildcard(&self.states[state]) {
+                return collect_methods(&self.states[state].wildcard_methods);
+            } else {
+                return [];
+            }
+            pos = end + 1;
+        }
+        if pos == plen + 1 {
+            return collect_methods(&self.states[state].terminal_methods);
+        } else if pos == plen {
+            if state == 0 {
+                let m = collect_methods(&self.states[0].terminal_methods);
+                if !m.is_empty() {
+                    return m;
+                }
+            }
+            if has_wildcard(&self.states[state]) {
+                return collect_methods(&self.states[state].wildcard_methods);
+            }
+        }
+        return [];
+    }
+
+    /// Matches against a `wasi:http` `Request`. Strips `?query` / `#frag`
+    /// from the path before matching.
+    pub fn match_request(&self, request: &Request) -> Option<RouteMatch<H>> {
+        let method = request.get_method();
+        let pq = match request.get_path_with_query() {
+            Some(s) => s,
+            None => "/",
+        };
+        let path = strip_query(pq);
+        return self.match_path(method, &path);
+    }
+}
+
+fn has_wildcard(s: &DfaState) -> bool {
+    return !s.wildcard_methods.is_empty() || s.wildcard_any_idx >= 0;
+}
+
+fn collect_methods(entries: &Array<MethodEntry>) -> Array<Method> {
+    let mut out: Array<Method> = [];
+    for let e of entries {
+        out.push(e.method);
+    }
+    return out;
+}
+
+fn pick_handler(entries: &Array<MethodEntry>, any_idx: i32, method: &Method) -> i32 {
+    let n = entries.len();
+    for let mut i = 0; i < n; i += 1 {
+        if entries[i].method == *method {
+            return entries[i].value_idx;
+        }
+    }
+    return any_idx;
+}
+
+fn set_method_specific(entries: &mut Array<MethodEntry>, method: Method, value_idx: i32) {
+    let n = entries.len();
+    for let mut i = 0; i < n; i += 1 {
+        if entries[i].method == method {
+            entries[i].value_idx = value_idx;
+            return;
+        }
+    }
+    entries.push(MethodEntry { method, value_idx });
+}
+
+fn strip_query(s: String) -> String {
+    let len = s.len();
+    for let mut i = 0; i < len; i += 1 {
+        let b = s.get_byte(i);
+        if b == '?' as u8 || b == '#' as u8 {
+            return s.substr_bytes(0, i);
+        }
+    }
+    return s;
+}
+
+/// Parse a route pattern path into a list of segments. Panics on
+/// malformed input.
+fn parse_pattern(path: &String) -> Array<Segment> {
+    let bytes = path.len();
+    if bytes == 0 || path.get_byte(0) != '/' as u8 {
+        panic("route pattern must start with '/'");
+    }
+    let mut out: Array<Segment> = [];
+    let mut wildcard_seen = false;
+    let mut i = 1;
+    while i < bytes {
+        let mut j = i;
+        while j < bytes && path.get_byte(j) != '/' as u8 {
+            j += 1;
+        }
+        if wildcard_seen {
+            panic("wildcard '*name' must be the last segment of a route pattern");
+        }
+        let seg = path.substr_bytes(i, j);
+        if seg.len() > 0 {
+            let item = match seg.get_byte(0) as char {
+                ':' => {
+                    let name = seg.substr_bytes(1, seg.len());
+                    if name.is_empty() {
+                        panic("parameter name after ':' must not be empty");
+                    }
+                    Segment::Param(name)
+                },
+                '*' => {
+                    let name = seg.substr_bytes(1, seg.len());
+                    if name.is_empty() {
+                        panic("wildcard name after '*' must not be empty");
+                    }
+                    wildcard_seen = true;
+                    Segment::Wildcard(name)
+                },
+                _ => Segment::Literal(seg),
+            };
+            out.push(item);
+        }
+        i = j + 1;
+    }
+    return out;
+}
+
+fn bsearch_label(edges: &Array<LiteralEdge>, key: &String) -> [i32, bool] {
+    let mut lo = 0;
+    let mut hi = edges.len();
+    while lo < hi {
+        let mid = (lo + hi) / 2;
+        match edges[mid].label.cmp(key) {
+            Less => { lo = mid + 1; },
+            Greater => { hi = mid; },
+            Equal => { return [mid, true]; },
+        }
+    }
+    return [lo, false];
+}
+
+fn bsearch_target_by_bytes(edges: &Array<LiteralEdge>, path: &String, start: i32, end: i32) -> i32 {
+    let mut lo = 0;
+    let mut hi = edges.len();
+    while lo < hi {
+        let mid = (lo + hi) / 2;
+        match cmp_string_to_byte_range(&edges[mid].label, path, start, end) {
+            Less => { lo = mid + 1; },
+            Greater => { hi = mid; },
+            Equal => { return edges[mid].target; },
+        }
+    }
+    return -1;
+}
+
+fn cmp_string_to_byte_range(label: &String, path: &String, start: i32, end: i32) -> Ordering {
+    let llen = label.len();
+    let blen = end - start;
+    let cmp_len = if llen < blen { llen } else { blen };
+    for let mut i = 0; i < cmp_len; i += 1 {
+        let a = label.get_byte(i);
+        let b = path.get_byte(start + i);
+        if a < b {
+            return Ordering::Less;
+        }
+        if a > b {
+            return Ordering::Greater;
+        }
+    }
+    if llen < blen {
+        return Ordering::Less;
+    }
+    if llen > blen {
+        return Ordering::Greater;
+    }
+    return Ordering::Equal;
+}

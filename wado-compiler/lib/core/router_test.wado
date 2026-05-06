@@ -1,0 +1,225 @@
+use { Router } from "core:router";
+use { Method } from "wasi:http";
+
+test "router: static routes" {
+    let mut r = Router::<i32>::new();
+    r.get("/health", 1);
+    r.get("/api/v1/users/list", 2);
+    r.get("/api/v1/users/me", 3);
+
+    assert r.match_path(Method::Get, &"/health").unwrap().handler == 1;
+    assert r.match_path(Method::Get, &"/api/v1/users/list").unwrap().handler == 2;
+    assert r.match_path(Method::Get, &"/api/v1/users/me").unwrap().handler == 3;
+    assert r.match_path(Method::Get, &"/missing") matches { None };
+    assert r.match_path(Method::Get, &"/api/v1/users") matches { None };
+}
+
+test "router: param + literal sibling, literal wins" {
+    let mut r = Router::<i32>::new();
+    r.get("/users/list", 1);
+    r.get("/users/:id", 2);
+    r.get("/users/:id/profile", 3);
+
+    assert r.match_path(Method::Get, &"/users/list").unwrap().handler == 1;
+
+    let m = r.match_path(Method::Get, &"/users/42").unwrap();
+    assert m.handler == 2;
+    assert m.params["id"] == "42";
+
+    let m2 = r.match_path(Method::Get, &"/users/42/profile").unwrap();
+    assert m2.handler == 3;
+    assert m2.params["id"] == "42";
+}
+
+test "router: no backtracking from literal dead-end" {
+    // `/users/list/extra` must NOT silently match `/users/:id/extra`
+    // by backtracking from the literal `list` after it dead-ends.
+    let mut r = Router::<i32>::new();
+    r.get("/users/list", 1);
+    r.get("/users/:id", 2);
+
+    assert r.match_path(Method::Get, &"/users/list/extra") matches { None };
+}
+
+test "router: wildcard catch-all" {
+    let mut r = Router::<i32>::new();
+    r.get("/static/*path", 9);
+
+    let m = r.match_path(Method::Get, &"/static/css/main.css").unwrap();
+    assert m.handler == 9;
+    assert m.params["path"] == "css/main.css";
+}
+
+test "router: wildcard with empty tail on trailing slash" {
+    let mut r = Router::<i32>::new();
+    r.get("/static/*path", 9);
+
+    let m = r.match_path(Method::Get, &"/static/").unwrap();
+    assert m.handler == 9;
+    assert m.params["path"] == "";
+}
+
+test "router: deep param chain" {
+    let mut r = Router::<i32>::new();
+    r.get("/api/v1/users/:uid/posts/:pid/comments/:cid", 90);
+
+    let m = r.match_path(Method::Get, &"/api/v1/users/12/posts/34/comments/56").unwrap();
+    assert m.handler == 90;
+    assert m.params["uid"] == "12";
+    assert m.params["pid"] == "34";
+    assert m.params["cid"] == "56";
+}
+
+test "router: root pattern" {
+    let mut r = Router::<i32>::new();
+    r.get("/", 7);
+    r.get("/foo", 8);
+
+    assert r.match_path(Method::Get, &"/").unwrap().handler == 7;
+    assert r.match_path(Method::Get, &"/foo").unwrap().handler == 8;
+    assert r.match_path(Method::Get, &"/bar") matches { None };
+}
+
+test "router: trailing slash differs from no slash" {
+    let mut r = Router::<i32>::new();
+    r.get("/foo", 1);
+
+    assert r.match_path(Method::Get, &"/foo").unwrap().handler == 1;
+    assert r.match_path(Method::Get, &"/foo/") matches { None };
+}
+
+test "router: 405 vs 404 via allowed_methods" {
+    let mut r = Router::<i32>::new();
+    r.get("/users", 1);
+    r.post("/users", 2);
+
+    assert r.match_path(Method::Get, &"/users").unwrap().handler == 1;
+    assert r.match_path(Method::Post, &"/users").unwrap().handler == 2;
+    assert r.match_path(Method::Put, &"/users") matches { None };
+
+    let allowed = r.allowed_methods(&"/users");
+    assert allowed.len() == 2;
+
+    let none = r.allowed_methods(&"/no-such-route");
+    assert none.is_empty();
+}
+
+test "router: any matches every method including Other" {
+    let mut r = Router::<i32>::new();
+    r.any("/anything", 5);
+
+    assert r.match_path(Method::Get, &"/anything").unwrap().handler == 5;
+    assert r.match_path(Method::Post, &"/anything").unwrap().handler == 5;
+    assert r.match_path(Method::Other("PURGE"), &"/anything").unwrap().handler == 5;
+
+    // any handler does not contribute to allowed_methods (uncountable).
+    assert r.allowed_methods(&"/anything").is_empty();
+}
+
+test "router: specific wins over any at same pattern" {
+    let mut r = Router::<i32>::new();
+    r.any("/foo", 10);
+    r.get("/foo", 11);
+
+    assert r.match_path(Method::Get, &"/foo").unwrap().handler == 11;
+    assert r.match_path(Method::Post, &"/foo").unwrap().handler == 10;
+    assert r.match_path(Method::Other("FOO"), &"/foo").unwrap().handler == 10;
+
+    let allowed = r.allowed_methods(&"/foo");
+    assert allowed.len() == 1;
+}
+
+test "router: any wildcard accepts custom methods" {
+    let mut r = Router::<i32>::new();
+    r.any("/anything/*rest", 7);
+
+    let m = r.match_path(Method::Other("FOO"), &"/anything/x/y").unwrap();
+    assert m.handler == 7;
+    assert m.params["rest"] == "x/y";
+}
+
+test "router: shorthands all delegate to route" {
+    let mut r = Router::<i32>::new();
+    r.get("/g", 1);
+    r.post("/p", 2);
+    r.put("/u", 3);
+    r.patch("/h", 4);
+    r.delete("/d", 5);
+    r.options("/o", 6);
+
+    assert r.match_path(Method::Get, &"/g").unwrap().handler == 1;
+    assert r.match_path(Method::Post, &"/p").unwrap().handler == 2;
+    assert r.match_path(Method::Put, &"/u").unwrap().handler == 3;
+    assert r.match_path(Method::Patch, &"/h").unwrap().handler == 4;
+    assert r.match_path(Method::Delete, &"/d").unwrap().handler == 5;
+    assert r.match_path(Method::Options, &"/o").unwrap().handler == 6;
+}
+
+test "router: route() escape hatch for non-shorthand methods" {
+    let mut r = Router::<i32>::new();
+    r.route(Method::Head, "/h", 1);
+    r.route(Method::Other("PURGE"), "/p", 2);
+
+    assert r.match_path(Method::Head, &"/h").unwrap().handler == 1;
+    assert r.match_path(Method::Other("PURGE"), &"/p").unwrap().handler == 2;
+    assert r.match_path(Method::Get, &"/p") matches { None };
+}
+
+test "router: last-write-wins" {
+    let mut r = Router::<i32>::new();
+    r.get("/foo", 1);
+    r.get("/foo", 2);
+    assert r.match_path(Method::Get, &"/foo").unwrap().handler == 2;
+}
+
+test "router: bsearch keeps literal edges sorted across many inserts" {
+    let mut r = Router::<i32>::new();
+    r.get("/zoo", 1);
+    r.get("/apple", 2);
+    r.get("/mango", 3);
+    r.get("/banana", 4);
+    r.get("/cherry", 5);
+
+    assert r.match_path(Method::Get, &"/zoo").unwrap().handler == 1;
+    assert r.match_path(Method::Get, &"/apple").unwrap().handler == 2;
+    assert r.match_path(Method::Get, &"/mango").unwrap().handler == 3;
+    assert r.match_path(Method::Get, &"/banana").unwrap().handler == 4;
+    assert r.match_path(Method::Get, &"/cherry").unwrap().handler == 5;
+    assert r.match_path(Method::Get, &"/coconut") matches { None };
+}
+
+test "router: generic over String handler" {
+    let mut r = Router::<String>::new();
+    r.get("/hello", "hi");
+    assert r.match_path(Method::Get, &"/hello").unwrap().handler == "hi";
+}
+
+#[expect_trap]
+test "router: panic on missing leading slash" {
+    let mut r = Router::<i32>::new();
+    r.get("foo", 1);
+}
+
+#[expect_trap]
+test "router: panic on empty pattern" {
+    let mut r = Router::<i32>::new();
+    r.get("", 1);
+}
+
+#[expect_trap]
+test "router: panic on wildcard not last" {
+    let mut r = Router::<i32>::new();
+    r.get("/a/*x/b", 1);
+}
+
+#[expect_trap]
+test "router: panic on empty param name" {
+    let mut r = Router::<i32>::new();
+    r.get("/:", 1);
+}
+
+#[expect_trap]
+test "router: panic on empty wildcard name" {
+    let mut r = Router::<i32>::new();
+    r.get("/*", 1);
+}

@@ -55,6 +55,7 @@ pub const CORE_KILN_KILN_HOST: &str = include_str!("../lib/core/kiln/kiln_host.w
 pub const CORE_KILN_TYPES: &str = include_str!("../lib/core/kiln/types.wado");
 pub const CORE_KILN_WORLDS: &str = include_str!("../lib/core/kiln/worlds.wado");
 pub const CORE_URL: &str = include_str!("../lib/core/url.wado");
+pub const CORE_ROUTER: &str = include_str!("../lib/core/router.wado");
 
 // WASI flat package files — re-export from all sub-interfaces (backward compat)
 pub const WASI_CLI: &str = include_str!("../lib/wasi/cli.wado");
@@ -216,6 +217,7 @@ pub fn get_stdlib_module(import_path: &str) -> Option<&'static str> {
         "core:json_value" => Some(CORE_JSON_VALUE),
         "core:simd" => Some(CORE_SIMD),
         "core:url" => Some(CORE_URL),
+        "core:router" => Some(CORE_ROUTER),
         "core:kiln" => Some(CORE_KILN),
         "core:kiln/kiln_host.wado" => Some(CORE_KILN_KILN_HOST),
         "core:kiln/types.wado" => Some(CORE_KILN_TYPES),
