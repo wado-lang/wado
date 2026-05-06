@@ -65,33 +65,29 @@ type "functype//wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/_
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(19)
 
-type "functype//core:cli/println" = fn(ref "core:prelude/string.wado//String");  // TypeId(20)
+type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(20)
 
-type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(21)
+type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;  // TypeId(21)
 
-type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;  // TypeId(22)
+type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(22)
 
-type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(23)
+type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);  // TypeId(23)
 
-type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);  // TypeId(24)
+type "functype//core:prelude/string.wado/String^Eq::eq_bytes" = fn(ref builtin::array<u8>, ref builtin::array<u8>, i32) -> bool;  // TypeId(24)
 
-type "functype//core:prelude/string.wado/String^Eq::eq" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> bool;  // TypeId(25)
+type "functype//wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/Pixel^Eq::eq" = fn(ref "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Pixel", ref "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Pixel") -> bool;  // TypeId(25)
 
-type "functype//core:prelude/string.wado/String^Eq::eq_bytes" = fn(ref builtin::array<u8>, ref builtin::array<u8>, i32) -> bool;  // TypeId(26)
+type "functype//wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/Container^Eq::eq" = fn(ref "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Container", ref "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Container") -> bool;  // TypeId(26)
 
-type "functype//wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/Pixel^Eq::eq" = fn(ref "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Pixel", ref "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Pixel") -> bool;  // TypeId(27)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(27)
 
-type "functype//wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/Container^Eq::eq" = fn(ref "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Container", ref "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Container") -> bool;  // TypeId(28)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(28)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(29)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(30)
+type "functype//wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/Color^Eq::eq" = fn(ref "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Color", ref "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Color") -> bool;  // TypeId(30)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(31)
-
-type "functype//wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/Color^Eq::eq" = fn(ref "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Color", ref "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Color") -> bool;  // TypeId(32)
-
-type "functype//core:prelude/types.wado/Option<i32>^Eq::eq" = fn(ref "core:prelude/types.wado//Option<i32>", ref "core:prelude/types.wado//Option<i32>") -> bool;  // TypeId(33)
+type "functype//core:prelude/types.wado/Option<i32>^Eq::eq" = fn(ref "core:prelude/types.wado//Option<i32>", ref "core:prelude/types.wado//Option<i32>") -> bool;  // TypeId(31)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -102,9 +98,9 @@ import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
-import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 fn "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/run"() with Stdout {
     let p1: ref "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Pixel";
@@ -118,6 +114,38 @@ fn "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/run"() with S
     let c2: ref "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Container";
     let c3: ref "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Container";
     let c4: ref "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Container";
+    let message_12: ref "core:prelude/string.wado//String";
+    let rx_13: i32;
+    let tx_14: i32;
+    let handle_15: i32;
+    let message_18: ref "core:prelude/string.wado//String";
+    let rx_19: i32;
+    let tx_20: i32;
+    let handle_21: i32;
+    let message_24: ref "core:prelude/string.wado//String";
+    let rx_25: i32;
+    let tx_26: i32;
+    let handle_27: i32;
+    let message_30: ref "core:prelude/string.wado//String";
+    let rx_31: i32;
+    let tx_32: i32;
+    let handle_33: i32;
+    let message_36: ref "core:prelude/string.wado//String";
+    let rx_37: i32;
+    let tx_38: i32;
+    let handle_39: i32;
+    let message_42: ref "core:prelude/string.wado//String";
+    let rx_43: i32;
+    let tx_44: i32;
+    let handle_45: i32;
+    let message_48: ref "core:prelude/string.wado//String";
+    let rx_49: i32;
+    let tx_50: i32;
+    let handle_51: i32;
+    let message_54: ref "core:prelude/string.wado//String";
+    let rx_55: i32;
+    let tx_56: i32;
+    let handle_57: i32;
     p1 = struct.new "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Pixel" { x: 1, y: 2, color: struct.new "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Color" { 0 } };
     p2 = struct.new "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Pixel" { x: 1, y: 2, color: struct.new "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Color" { 0 } };
     p3 = struct.new "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Pixel" { x: 1, y: 2, color: struct.new "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Color" { 1 } };
@@ -126,32 +154,88 @@ fn "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/run"() with S
     p6 = struct.new "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Pixel" { x: 1, y: 2, color: struct.new "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Color::Blue" { discriminant: 2, payload_0: 7 } };
     p7 = struct.new "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Pixel" { x: 3, y: 2, color: struct.new "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Color" { 0 } };
     if "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/Pixel^Eq::eq"(p1, p2) {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("same pixel"), used: 10 });
+        message_12 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("same pixel"), used: 10 };
+        let __pair_temp_1: i64;
+        __pair_temp_1 = "wasi/stream-new"();
+        rx_13 = builtin::i32_wrap_i64(__pair_temp_1);
+        tx_14 = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+        handle_15 = "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/__cm_binding__Stdout_write_via_stream"(rx_13);
+        "core:cli/write_to_stream"(tx_14, message_12, 1);
+        "wasi/future-drop-readable:transmission-cli"(handle_15);
     }
     if "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/Pixel^Eq::eq"(p1, p3) == 0 {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("different color case"), used: 20 });
+        message_18 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("different color case"), used: 20 };
+        let __pair_temp_2: i64;
+        __pair_temp_2 = "wasi/stream-new"();
+        rx_19 = builtin::i32_wrap_i64(__pair_temp_2);
+        tx_20 = builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
+        handle_21 = "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/__cm_binding__Stdout_write_via_stream"(rx_19);
+        "core:cli/write_to_stream"(tx_20, message_18, 1);
+        "wasi/future-drop-readable:transmission-cli"(handle_21);
     }
     if "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/Pixel^Eq::eq"(p4, p5) {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("same blue payload"), used: 17 });
+        message_24 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("same blue payload"), used: 17 };
+        let __pair_temp_3: i64;
+        __pair_temp_3 = "wasi/stream-new"();
+        rx_25 = builtin::i32_wrap_i64(__pair_temp_3);
+        tx_26 = builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64);
+        handle_27 = "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/__cm_binding__Stdout_write_via_stream"(rx_25);
+        "core:cli/write_to_stream"(tx_26, message_24, 1);
+        "wasi/future-drop-readable:transmission-cli"(handle_27);
     }
     if "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/Pixel^Eq::eq"(p4, p6) == 0 {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("different blue payload"), used: 22 });
+        message_30 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("different blue payload"), used: 22 };
+        let __pair_temp_4: i64;
+        __pair_temp_4 = "wasi/stream-new"();
+        rx_31 = builtin::i32_wrap_i64(__pair_temp_4);
+        tx_32 = builtin::i32_wrap_i64(__pair_temp_4 >>u 32_i64);
+        handle_33 = "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/__cm_binding__Stdout_write_via_stream"(rx_31);
+        "core:cli/write_to_stream"(tx_32, message_30, 1);
+        "wasi/future-drop-readable:transmission-cli"(handle_33);
     }
     if "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/Pixel^Eq::eq"(p1, p7) == 0 {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("different coords"), used: 16 });
+        message_36 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("different coords"), used: 16 };
+        let __pair_temp_5: i64;
+        __pair_temp_5 = "wasi/stream-new"();
+        rx_37 = builtin::i32_wrap_i64(__pair_temp_5);
+        tx_38 = builtin::i32_wrap_i64(__pair_temp_5 >>u 32_i64);
+        handle_39 = "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/__cm_binding__Stdout_write_via_stream"(rx_37);
+        "core:cli/write_to_stream"(tx_38, message_36, 1);
+        "wasi/future-drop-readable:transmission-cli"(handle_39);
     }
     c1 = struct.new "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Container" { label: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("a"), used: 1 }, value: struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 10 } };
     c2 = struct.new "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Container" { label: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("a"), used: 1 }, value: struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 10 } };
     c3 = struct.new "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Container" { label: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("a"), used: 1 }, value: struct.new "core:prelude/types.wado//Option<i32>" { 1 } };
     c4 = struct.new "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Container" { label: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("b"), used: 1 }, value: struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 10 } };
     if "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/Container^Eq::eq"(c1, c2) {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("same container"), used: 14 });
+        message_42 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("same container"), used: 14 };
+        let __pair_temp_6: i64;
+        __pair_temp_6 = "wasi/stream-new"();
+        rx_43 = builtin::i32_wrap_i64(__pair_temp_6);
+        tx_44 = builtin::i32_wrap_i64(__pair_temp_6 >>u 32_i64);
+        handle_45 = "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/__cm_binding__Stdout_write_via_stream"(rx_43);
+        "core:cli/write_to_stream"(tx_44, message_42, 1);
+        "wasi/future-drop-readable:transmission-cli"(handle_45);
     }
     if "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/Container^Eq::eq"(c1, c3) == 0 {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("some != none"), used: 12 });
+        message_48 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("some != none"), used: 12 };
+        let __pair_temp_7: i64;
+        __pair_temp_7 = "wasi/stream-new"();
+        rx_49 = builtin::i32_wrap_i64(__pair_temp_7);
+        tx_50 = builtin::i32_wrap_i64(__pair_temp_7 >>u 32_i64);
+        handle_51 = "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/__cm_binding__Stdout_write_via_stream"(rx_49);
+        "core:cli/write_to_stream"(tx_50, message_48, 1);
+        "wasi/future-drop-readable:transmission-cli"(handle_51);
     }
     if "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/Container^Eq::eq"(c1, c4) == 0 {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("different label"), used: 15 });
+        message_54 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("different label"), used: 15 };
+        let __pair_temp_8: i64;
+        __pair_temp_8 = "wasi/stream-new"();
+        rx_55 = builtin::i32_wrap_i64(__pair_temp_8);
+        tx_56 = builtin::i32_wrap_i64(__pair_temp_8 >>u 32_i64);
+        handle_57 = "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/__cm_binding__Stdout_write_via_stream"(rx_55);
+        "core:cli/write_to_stream"(tx_56, message_54, 1);
+        "wasi/future-drop-readable:transmission-cli"(handle_57);
     }
 }
 
@@ -179,19 +263,6 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
         "core:internal/cm_stream_write_raw_u8"(tx, bytes, len);
     }
     "wasi/stream-drop-writable"(tx);
-}
-
-fn "core:cli/println"(message) with Stdout {
-    let rx: i32;
-    let tx: i32;
-    let handle: i32;
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/stream-new"();
-    rx = builtin::i32_wrap_i64(__pair_temp_1);
-    tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
-    handle = "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/__cm_binding__Stdout_write_via_stream"(rx);
-    "core:cli/write_to_stream"(tx, message, 1);
-    "wasi/future-drop-readable:transmission-cli"(handle);
 }
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
@@ -247,21 +318,12 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {
     drop("mem/realloc"(ptr, raw_len, 1, 0));
 }
 
-fn "core:prelude/string.wado/String^Eq::eq"(self, other) {
-    let len_a: i32;
-    len_a = self.used;
-    if len_a != other.used {
-        return 0;
-    }
-    return "core:prelude/string.wado/String^Eq::eq_bytes"(self.repr, other.repr, len_a);
-}
-
 fn "core:prelude/string.wado/String^Eq::eq_bytes"(a, b, len) {
     let i: i32;
     __for_1: block {
         i = 0;
         block {
-            l15: loop {
+            l14: loop {
                 if i >= len {
                     break __for_1;
                 }
@@ -269,7 +331,7 @@ fn "core:prelude/string.wado/String^Eq::eq_bytes"(a, b, len) {
                     return 0;
                 }
                 i = i + 1;
-                continue l15;
+                continue l14;
             };
         };
     };
@@ -295,7 +357,19 @@ fn "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/Pixel^Eq::eq"
 }
 
 fn "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/Container^Eq::eq"(self, other) {
-    return (if "core:prelude/string.wado/String^Eq::eq"(self.label, other.label) -> i32 {
+    let self_2: ref "core:prelude/string.wado//String";
+    let other_3: ref "core:prelude/string.wado//String";
+    let len_a: i32;
+    return (if __inline_String_Eq__eq_0: block -> bool {
+        self_2 = self.label;
+        other_3 = other.label;
+        len_a = self_2.used;
+        if len_a != other_3.used {
+            break __inline_String_Eq__eq_0: 0;
+        }
+        break __inline_String_Eq__eq_0: "core:prelude/string.wado/String^Eq::eq_bytes"(self_2.repr, other_3.repr, len_a);
+        unreachable;
+    } -> i32 {
         "core:prelude/types.wado/Option<i32>^Eq::eq"(self.value, other.value);
     } else {
         0;

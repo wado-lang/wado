@@ -42,27 +42,60 @@ struct RefInfo {
 /// Pass 1: Collect all ref bindings and analyze uses in a single traversal.
 ///
 /// Walks the entire function body once, building an `IndexMap<u32, RefInfo>` for
-/// every `let r: &T = &v` binding found. Simultaneously, for every expression
-/// that uses a tracked local, checks whether the use is a field access. If any
-/// non-field-access use is found, marks the binding as non-eliminable.
+/// every binding the pass can eliminate when all uses are field-access-only:
+///
+/// 1. `let r: &T = &v` / `let r: &mut T = &mut v` — fresh reference to a local.
+///    Replace `r.field` with `v.field` and drop the binding.
+///
+/// 2. `let r: &mut T = s` (or `&T`) where `s` is itself a reference-typed
+///    local **already tracked in `refs`** — the inlined shadow pattern,
+///    e.g. the `let self = self;` that appears at the entry of an inlined
+///    `&mut self` method body. Copy `s`'s `RefInfo` into `r` so `r.field`
+///    resolves to the same root.
+///
+///    If `s` is not tracked yet we leave `r` un-tracked. The pass walks
+///    statements in source order, so by the time we encounter
+///    `let r = s` any earlier `let s = &v` is already in `refs`; an
+///    `s` that becomes tracked later cannot retroactively make `r`
+///    eligible because `r`'s uses have already been classified.
+///
+/// For every expression that uses a tracked local, classifies the use as
+/// field-access-only or not. Any non-field-access use marks the binding as
+/// non-eliminable.
 fn analyze_refs_in_block(block: &TirBlock, refs: &mut IndexMap<u32, RefInfo>) {
     for stmt in &block.stmts {
         // Check if this statement defines a new ref binding
         if let TirStmtKind::Let {
             local_index, value, ..
         } = &stmt.kind
-            && let TirExprKind::Unary { op, expr } = &value.kind
-            && matches!(op, TirUnaryOp::Ref | TirUnaryOp::MutRef)
-            && let TirExprKind::Local { index, name } = &expr.kind
         {
-            refs.insert(
-                *local_index,
-                RefInfo {
-                    target_local: *index,
-                    target_name: name.clone(),
-                    eliminable: true,
-                },
-            );
+            // Pattern (1): `let r = &v` / `let r = &mut v`
+            if let TirExprKind::Unary { op, expr } = &value.kind
+                && matches!(op, TirUnaryOp::Ref | TirUnaryOp::MutRef)
+                && let TirExprKind::Local { index, name } = &expr.kind
+            {
+                refs.insert(
+                    *local_index,
+                    RefInfo {
+                        target_local: *index,
+                        target_name: name.clone(),
+                        eliminable: true,
+                    },
+                );
+            }
+            // Pattern (2): `let r = s` where s is itself a tracked ref local
+            // (the inlined shadow). Resolve transitively to s's target so
+            // `r.field` can be replaced with `<root>.field` directly.
+            else if let TirExprKind::Local { index, .. } = &value.kind {
+                let resolved = refs.get(index).map(|info| RefInfo {
+                    target_local: info.target_local,
+                    target_name: info.target_name.clone(),
+                    eliminable: info.eliminable,
+                });
+                if let Some(info) = resolved {
+                    refs.insert(*local_index, info);
+                }
+            }
         }
         // Analyze uses within this statement
         analyze_uses_in_stmt(stmt, refs);

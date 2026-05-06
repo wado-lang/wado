@@ -12,7 +12,6 @@
 //! | `elide_struct`    | Struct local elimination (single + multi)   |
 //! | `array`           | Push collapse / data promotion / splitting  |
 //! | `const_forward`   | Struct field constant forwarding            |
-//! | `string`          | Short string push_str simplification        |
 //! | `peephole`        | Constant folding, copy elision, MV elision  |
 //! | `cleanup`         | Nop/dead-code removal, normalization        |
 //! | `dae`             | Dead argument elimination                   |
@@ -34,7 +33,6 @@ mod nullable_ref;
 mod peephole;
 mod sroa_param;
 mod sroa_return;
-mod string;
 mod util;
 
 use crate::compiler_host::SpanEmitter;
@@ -60,7 +58,6 @@ use nullable_ref::optimize_nullable_refs;
 use peephole::run_peephole;
 use sroa_param::sroa_single_field_parameters;
 use sroa_return::sroa_multi_value_returns;
-use string::simplify_short_string_pushes;
 
 /// Run a single WIR optimization pass with profiling.
 ///
@@ -160,7 +157,6 @@ pub fn optimize_wir(module: &mut WirPackage, opt_level: OptLevel, profiler: &dyn
     //
     // Rewrite library call patterns into more efficient instruction sequences.
     profiler.span_start("wir/phase4_lib_rewrites");
-    simplify_short_string_pushes(module);
     promote_constant_arrays_to_data(module);
     split_large_array_literals(module);
     profiler.span_end("wir/phase4_lib_rewrites");

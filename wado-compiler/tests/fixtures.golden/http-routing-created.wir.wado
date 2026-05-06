@@ -239,21 +239,19 @@ type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i
 
 type "functype//core:internal/cm_lower_string" = fn(ref "core:prelude/string.wado//String") -> i64;  // TypeId(48)
 
-type "functype//core:prelude/string.wado/String^Eq::eq" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> bool;  // TypeId(49)
+type "functype//core:prelude/string.wado/String^Eq::eq_bytes" = fn(ref builtin::array<u8>, ref builtin::array<u8>, i32) -> bool;  // TypeId(49)
 
-type "functype//core:prelude/string.wado/String^Eq::eq_bytes" = fn(ref builtin::array<u8>, ref builtin::array<u8>, i32) -> bool;  // TypeId(50)
+type "functype//wasi/future-new" = fn() -> i64;  // TypeId(50)
 
-type "functype//wasi/future-new" = fn() -> i64;  // TypeId(51)
+type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(51)
 
-type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(52)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(52)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(53)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(53)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(54)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(54)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(55)
-
-type "functype//wado-compiler/tests/fixtures/http-routing-created.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> [i32, i32];  // TypeId(56)
+type "functype//wado-compiler/tests/fixtures/http-routing-created.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> [i32, i32];  // TypeId(55)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
@@ -410,6 +408,8 @@ fn "wado-compiler/tests/fixtures/http-routing-created.wado/handle"(request) {
     let __ptr_157: i32;
     let __len_158: i32;
     let v: ref "core:prelude/string.wado//String";
+    let other: ref "core:prelude/string.wado//String";
+    let len_a: i32;
     path = "wado-compiler/tests/fixtures/http-routing-created.wado/__cm_binding__Request_get_path_with_query"(request);
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/future-new"();
@@ -426,7 +426,15 @@ fn "wado-compiler/tests/fixtures/http-routing-created.wado/handle"(request) {
             break __inline__value_copy_T19_2: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(v.repr)), used: v.used };
             unreachable;
         };
-        if "core:prelude/string.wado/String^Eq::eq"(p, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("/created"), used: 8 }) {
+        if __inline_String_Eq__eq_3: block -> bool {
+            other = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("/created"), used: 8 };
+            len_a = p.used;
+            if len_a != other.used {
+                break __inline_String_Eq__eq_3: 0;
+            }
+            break __inline_String_Eq__eq_3: "core:prelude/string.wado/String^Eq::eq_bytes"(p.repr, other.repr, len_a);
+            unreachable;
+        } {
             drop("wado-compiler/tests/fixtures/http-routing-created.wado/__cm_binding__Response_set_status_code"(response, 201));
         }
     }
@@ -826,13 +834,13 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {
     __for_0: block {
         i = 0;
         block {
-            l45: loop {
+            l46: loop {
                 if i >= len {
                     break __for_0;
                 }
                 builtin::array_set_u8(arr, i, builtin::load_u8(ptr + i));
                 i = i + 1;
-                continue l45;
+                continue l46;
             };
         };
     };
@@ -844,13 +852,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     __for_1: block {
         i = 0;
         block {
-            l48: loop {
+            l49: loop {
                 if i >= len {
                     break __for_1;
                 }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l48;
+                continue l49;
             };
         };
     };
@@ -865,15 +873,6 @@ fn "core:internal/cm_lower_string"(s) {
     ptr = "mem/realloc"(0, 0, 1, len);
     "core:internal/gc_array_to_memory"(bytes, ptr, len);
     return builtin::i64_extend_i32_s(ptr) | (builtin::i64_extend_i32_s(len) << 32_i64);
-}
-
-fn "core:prelude/string.wado/String^Eq::eq"(self, other) {
-    let len_a: i32;
-    len_a = self.used;
-    if len_a != other.used {
-        return 0;
-    }
-    return "core:prelude/string.wado/String^Eq::eq_bytes"(self.repr, other.repr, len_a);
 }
 
 fn "core:prelude/string.wado/String^Eq::eq_bytes"(a, b, len) {

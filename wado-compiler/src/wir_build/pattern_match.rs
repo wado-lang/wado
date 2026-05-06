@@ -174,9 +174,21 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
-    /// Translate a `LetDestructure` (tuple destructuring) statement.
-    /// Evaluates the tuple expression, stores it in a temp local,
-    /// then binds each element to its pattern binding local.
+    /// Translate a `LetDestructure` statement.
+    ///
+    /// By the time WIR build runs, `lower::pattern::lower_let_pattern` has
+    /// rewritten every `LetDestructure` form *except* the multivalue-builtin
+    /// tuple shape (see `lower::pattern::is_multivalue_builtin_pattern`)
+    /// into plain `Let` / `Expr` statements. So the only variant that
+    /// reaches this translator is:
+    ///
+    /// * `Tuple` — multivalue-builtin call returning a tuple; destructure
+    ///   each element into its `Binding` slot or skip `Wildcard` slots.
+    ///
+    /// Other variants are unreachable; we still match the obvious
+    /// `Binding` case (single multivalue result) defensively and leave a
+    /// catch-all `None` arm rather than `unreachable!` so a future
+    /// lower-pass change cannot turn into a hard ICE.
     pub(super) fn translate_let_pattern(
         &mut self,
         pattern: &TirPattern,

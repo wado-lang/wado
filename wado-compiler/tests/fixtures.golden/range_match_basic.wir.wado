@@ -33,21 +33,19 @@ type "functype//wado-compiler/tests/fixtures/range_match_basic.wado/__cm_export_
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(13)
 
-type "functype//core:cli/println" = fn(ref "core:prelude/string.wado//String");  // TypeId(14)
+type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(14)
 
-type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(15)
+type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;  // TypeId(15)
 
-type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;  // TypeId(16)
+type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(16)
 
-type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(17)
+type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);  // TypeId(17)
 
-type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);  // TypeId(18)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(18)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(19)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(19)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(20)
-
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(21)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(20)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -58,53 +56,130 @@ import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
-import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 fn "wado-compiler/tests/fixtures/range_match_basic.wado/run"() with Stdout {
-    let grade_2: ref "core:prelude/string.wado//String";
-    let grade_4: ref "core:prelude/string.wado//String";
-    let grade_6: ref "core:prelude/string.wado//String";
-    let grade_8: ref "core:prelude/string.wado//String";
-    let grade_10: ref "core:prelude/string.wado//String";
-    let grade_12: ref "core:prelude/string.wado//String";
-    let grade_14: ref "core:prelude/string.wado//String";
-    "core:cli/println"(__inline_classify_2: block -> ref "core:prelude/string.wado//String" {
-        grade_2 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("F"), used: 1 };
-        break __inline_classify_2: grade_2;
+    let message_1: ref "core:prelude/string.wado//String";
+    let rx_2: i32;
+    let tx_3: i32;
+    let handle_4: i32;
+    let grade_7: ref "core:prelude/string.wado//String";
+    let message_9: ref "core:prelude/string.wado//String";
+    let rx_10: i32;
+    let tx_11: i32;
+    let handle_12: i32;
+    let grade_15: ref "core:prelude/string.wado//String";
+    let message_17: ref "core:prelude/string.wado//String";
+    let rx_18: i32;
+    let tx_19: i32;
+    let handle_20: i32;
+    let grade_23: ref "core:prelude/string.wado//String";
+    let message_25: ref "core:prelude/string.wado//String";
+    let rx_26: i32;
+    let tx_27: i32;
+    let handle_28: i32;
+    let grade_31: ref "core:prelude/string.wado//String";
+    let message_33: ref "core:prelude/string.wado//String";
+    let rx_34: i32;
+    let tx_35: i32;
+    let handle_36: i32;
+    let grade_39: ref "core:prelude/string.wado//String";
+    let message_41: ref "core:prelude/string.wado//String";
+    let rx_42: i32;
+    let tx_43: i32;
+    let handle_44: i32;
+    let grade_47: ref "core:prelude/string.wado//String";
+    let message_49: ref "core:prelude/string.wado//String";
+    let rx_50: i32;
+    let tx_51: i32;
+    let handle_52: i32;
+    let grade_55: ref "core:prelude/string.wado//String";
+    message_1 = __inline_classify_3: block -> ref "core:prelude/string.wado//String" {
+        grade_7 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("F"), used: 1 };
+        break __inline_classify_3: grade_7;
         unreachable;
-    });
-    "core:cli/println"(__inline_classify_3: block -> ref "core:prelude/string.wado//String" {
-        grade_4 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("D"), used: 1 };
-        break __inline_classify_3: grade_4;
+    };
+    let __pair_temp_1: i64;
+    __pair_temp_1 = "wasi/stream-new"();
+    rx_2 = builtin::i32_wrap_i64(__pair_temp_1);
+    tx_3 = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    handle_4 = "wado-compiler/tests/fixtures/range_match_basic.wado/__cm_binding__Stdout_write_via_stream"(rx_2);
+    "core:cli/write_to_stream"(tx_3, message_1, 1);
+    "wasi/future-drop-readable:transmission-cli"(handle_4);
+    message_9 = __inline_classify_6: block -> ref "core:prelude/string.wado//String" {
+        grade_15 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("D"), used: 1 };
+        break __inline_classify_6: grade_15;
         unreachable;
-    });
-    "core:cli/println"(__inline_classify_4: block -> ref "core:prelude/string.wado//String" {
-        grade_6 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("C"), used: 1 };
-        break __inline_classify_4: grade_6;
+    };
+    let __pair_temp_2: i64;
+    __pair_temp_2 = "wasi/stream-new"();
+    rx_10 = builtin::i32_wrap_i64(__pair_temp_2);
+    tx_11 = builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
+    handle_12 = "wado-compiler/tests/fixtures/range_match_basic.wado/__cm_binding__Stdout_write_via_stream"(rx_10);
+    "core:cli/write_to_stream"(tx_11, message_9, 1);
+    "wasi/future-drop-readable:transmission-cli"(handle_12);
+    message_17 = __inline_classify_9: block -> ref "core:prelude/string.wado//String" {
+        grade_23 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("C"), used: 1 };
+        break __inline_classify_9: grade_23;
         unreachable;
-    });
-    "core:cli/println"(__inline_classify_5: block -> ref "core:prelude/string.wado//String" {
-        grade_8 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("B"), used: 1 };
-        break __inline_classify_5: grade_8;
+    };
+    let __pair_temp_3: i64;
+    __pair_temp_3 = "wasi/stream-new"();
+    rx_18 = builtin::i32_wrap_i64(__pair_temp_3);
+    tx_19 = builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64);
+    handle_20 = "wado-compiler/tests/fixtures/range_match_basic.wado/__cm_binding__Stdout_write_via_stream"(rx_18);
+    "core:cli/write_to_stream"(tx_19, message_17, 1);
+    "wasi/future-drop-readable:transmission-cli"(handle_20);
+    message_25 = __inline_classify_12: block -> ref "core:prelude/string.wado//String" {
+        grade_31 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("B"), used: 1 };
+        break __inline_classify_12: grade_31;
         unreachable;
-    });
-    "core:cli/println"(__inline_classify_6: block -> ref "core:prelude/string.wado//String" {
-        grade_10 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("A"), used: 1 };
-        break __inline_classify_6: grade_10;
+    };
+    let __pair_temp_4: i64;
+    __pair_temp_4 = "wasi/stream-new"();
+    rx_26 = builtin::i32_wrap_i64(__pair_temp_4);
+    tx_27 = builtin::i32_wrap_i64(__pair_temp_4 >>u 32_i64);
+    handle_28 = "wado-compiler/tests/fixtures/range_match_basic.wado/__cm_binding__Stdout_write_via_stream"(rx_26);
+    "core:cli/write_to_stream"(tx_27, message_25, 1);
+    "wasi/future-drop-readable:transmission-cli"(handle_28);
+    message_33 = __inline_classify_15: block -> ref "core:prelude/string.wado//String" {
+        grade_39 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("A"), used: 1 };
+        break __inline_classify_15: grade_39;
         unreachable;
-    });
-    "core:cli/println"(__inline_classify_7: block -> ref "core:prelude/string.wado//String" {
-        grade_12 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("A"), used: 1 };
-        break __inline_classify_7: grade_12;
+    };
+    let __pair_temp_5: i64;
+    __pair_temp_5 = "wasi/stream-new"();
+    rx_34 = builtin::i32_wrap_i64(__pair_temp_5);
+    tx_35 = builtin::i32_wrap_i64(__pair_temp_5 >>u 32_i64);
+    handle_36 = "wado-compiler/tests/fixtures/range_match_basic.wado/__cm_binding__Stdout_write_via_stream"(rx_34);
+    "core:cli/write_to_stream"(tx_35, message_33, 1);
+    "wasi/future-drop-readable:transmission-cli"(handle_36);
+    message_41 = __inline_classify_18: block -> ref "core:prelude/string.wado//String" {
+        grade_47 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("A"), used: 1 };
+        break __inline_classify_18: grade_47;
         unreachable;
-    });
-    "core:cli/println"(__inline_classify_8: block -> ref "core:prelude/string.wado//String" {
-        grade_14 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid"), used: 7 };
-        break __inline_classify_8: grade_14;
+    };
+    let __pair_temp_6: i64;
+    __pair_temp_6 = "wasi/stream-new"();
+    rx_42 = builtin::i32_wrap_i64(__pair_temp_6);
+    tx_43 = builtin::i32_wrap_i64(__pair_temp_6 >>u 32_i64);
+    handle_44 = "wado-compiler/tests/fixtures/range_match_basic.wado/__cm_binding__Stdout_write_via_stream"(rx_42);
+    "core:cli/write_to_stream"(tx_43, message_41, 1);
+    "wasi/future-drop-readable:transmission-cli"(handle_44);
+    message_49 = __inline_classify_21: block -> ref "core:prelude/string.wado//String" {
+        grade_55 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid"), used: 7 };
+        break __inline_classify_21: grade_55;
         unreachable;
-    });
+    };
+    let __pair_temp_7: i64;
+    __pair_temp_7 = "wasi/stream-new"();
+    rx_50 = builtin::i32_wrap_i64(__pair_temp_7);
+    tx_51 = builtin::i32_wrap_i64(__pair_temp_7 >>u 32_i64);
+    handle_52 = "wado-compiler/tests/fixtures/range_match_basic.wado/__cm_binding__Stdout_write_via_stream"(rx_50);
+    "core:cli/write_to_stream"(tx_51, message_49, 1);
+    "wasi/future-drop-readable:transmission-cli"(handle_52);
 }
 
 fn "wado-compiler/tests/fixtures/range_match_basic.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -131,19 +206,6 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
         "core:internal/cm_stream_write_raw_u8"(tx, bytes, len);
     }
     "wasi/stream-drop-writable"(tx);
-}
-
-fn "core:cli/println"(message) with Stdout {
-    let rx: i32;
-    let tx: i32;
-    let handle: i32;
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/stream-new"();
-    rx = builtin::i32_wrap_i64(__pair_temp_1);
-    tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
-    handle = "wado-compiler/tests/fixtures/range_match_basic.wado/__cm_binding__Stdout_write_via_stream"(rx);
-    "core:cli/write_to_stream"(tx, message, 1);
-    "wasi/future-drop-readable:transmission-cli"(handle);
 }
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {

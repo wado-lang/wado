@@ -63,7 +63,16 @@ pub fn analyze_project(project: &mut FlatPackage) -> IndexSet<FunctionId> {
     // so the inspectable set is stable under this expansion — no
     // fixpoint iteration is needed.
     let (call_graph, effect_usage) = build_analysis_graph_with(project, &inspectable);
-    let reachable = compute_reachable_from_entries(project, &call_graph);
+    let mut reachable = compute_reachable_from_entries(project, &call_graph);
+
+    // Phase 1d: Extend reachable set with optimizer-induced virtual edges.
+    // Optimizer passes (e.g. `tir/string_push`) may *synthesize* new calls
+    // during the optimization loop. Functions those passes call must
+    // survive the early DCE that runs before the loop, otherwise the
+    // synthesis target is gone and the rewrite cannot fire. The virtual
+    // edges are gated by comp_feature flags so each rule names its
+    // canonical pair (`string_push_str` → `string_push_char`, etc.).
+    extend_reachable_for_optimizer_passes(project, &call_graph, &mut reachable);
 
     // Phase 2: Resolve imports and WASI features using reachable set
     resolve_imports(project, &reachable, &effect_usage);
@@ -72,6 +81,38 @@ pub fn analyze_project(project: &mut FlatPackage) -> IndexSet<FunctionId> {
     filter_string_literals(project, &reachable);
 
     reachable
+}
+
+/// Add functions that the TIR optimizer's rewrites may *synthesize* calls
+/// to. For now this is a single pair: `tir/string_push` rewrites
+/// `String::push_str("short")` calls into `String::push(c)` calls, so
+/// `String::push` (the function flagged with `string_push_char`) must
+/// survive early DCE whenever the function flagged with `string_push_str`
+/// is reachable.
+fn extend_reachable_for_optimizer_passes(
+    project: &FlatPackage,
+    call_graph: &CallGraph,
+    reachable: &mut IndexSet<FunctionId>,
+) {
+    use crate::wir::{COMP_FEATURE_STRING_PUSH_CHAR, COMP_FEATURE_STRING_PUSH_STR};
+
+    let mut push_str_id: Option<FunctionId> = None;
+    let mut push_char_id: Option<FunctionId> = None;
+    for func_rc in &project.functions {
+        let func = func_rc.borrow();
+        if func.comp_features & COMP_FEATURE_STRING_PUSH_STR != 0 {
+            push_str_id = Some(function_id_for(&func));
+        }
+        if func.comp_features & COMP_FEATURE_STRING_PUSH_CHAR != 0 {
+            push_char_id = Some(function_id_for(&func));
+        }
+    }
+    if let (Some(str_id), Some(char_id)) = (push_str_id, push_char_id)
+        && reachable.contains(&str_id)
+        && !reachable.contains(&char_id)
+    {
+        reachable.extend(compute_reachable(call_graph, &char_id));
+    }
 }
 
 /// Compute reachable functions from all entry points via call graph traversal.
@@ -501,42 +542,7 @@ fn build_analysis_graph_with(
     for func_rc in &project.functions {
         let func = func_rc.borrow();
         let module_source = &func.module_source;
-        // Use the TirFunction's is_method() to determine if this is a method
-        let func_id = if let Some(ref info) = func.method_info {
-            // This is a method - use MethodName or FreeFunctionName with monomorph info
-            if let Some(monomorph_info) = &func.monomorph_info {
-                // Monomorphized method - use FreeFunctionName with metadata.
-                // Use the actual module_source where the function lives.
-                FunctionId::Free(FreeFunctionName::with_monomorph_info(
-                    module_source.clone(),
-                    func.name.clone(),
-                    monomorph_info.generic_name.clone(),
-                ))
-            } else {
-                // Non-monomorphized method - use method_info
-                FunctionId::Method(MethodName::new(
-                    module_source.clone(),
-                    info.struct_name.clone(),
-                    info.trait_name.clone(),
-                    info.method_name.clone(),
-                ))
-            }
-        } else {
-            // Regular function - use FreeFunctionName
-            if let Some(monomorph_info) = &func.monomorph_info {
-                // Monomorphized function - use actual module_source
-                FunctionId::Free(FreeFunctionName::with_monomorph_info(
-                    module_source.clone(),
-                    func.name.clone(),
-                    monomorph_info.generic_name.clone(),
-                ))
-            } else {
-                FunctionId::Free(FreeFunctionName::from_module_source(
-                    module_source,
-                    &func.name,
-                ))
-            }
-        };
+        let func_id = function_id_for(&func);
         let analysis = analyze_function(&func, module_source, type_table, inspectable_signatures);
         call_graph.insert(func_id.clone(), analysis.callees);
         if !analysis.effect_calls.is_empty() {

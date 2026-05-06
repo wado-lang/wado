@@ -31,21 +31,19 @@ type "functype//wado-compiler/tests/fixtures/option_match.wado/__cm_export__run"
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(12)
 
-type "functype//core:cli/println" = fn(ref "core:prelude/string.wado//String");  // TypeId(13)
+type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(13)
 
-type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(14)
+type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;  // TypeId(14)
 
-type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;  // TypeId(15)
+type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(15)
 
-type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(16)
+type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);  // TypeId(16)
 
-type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);  // TypeId(17)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(17)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(18)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(18)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(19)
-
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(20)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(19)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -56,9 +54,9 @@ import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
-import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 fn "wado-compiler/tests/fixtures/option_match.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
@@ -66,27 +64,91 @@ fn "wado-compiler/tests/fixtures/option_match.wado/__cm_binding__Stdout_write_vi
 
 fn "wado-compiler/tests/fixtures/option_match.wado/__cm_export__run"() {
     let opt_2: ref null "core:prelude/string.wado//String";
-    let opt_4: ref null "core:prelude/string.wado//String";
-    let opt_6: ref null "core:prelude/string.wado//String";
+    let message_4: ref "core:prelude/string.wado//String";
+    let rx_5: i32;
+    let tx_6: i32;
+    let handle_7: i32;
+    let message_10: ref "core:prelude/string.wado//String";
+    let rx_11: i32;
+    let tx_12: i32;
+    let handle_13: i32;
+    let opt_16: ref null "core:prelude/string.wado//String";
+    let message_18: ref "core:prelude/string.wado//String";
+    let rx_19: i32;
+    let tx_20: i32;
+    let handle_21: i32;
+    let message_24: ref "core:prelude/string.wado//String";
+    let rx_25: i32;
+    let tx_26: i32;
+    let handle_27: i32;
+    let opt_30: ref null "core:prelude/string.wado//String";
     let x: ref "core:prelude/string.wado//String";
+    let rx_34: i32;
+    let tx_35: i32;
+    let handle_36: i32;
+    let message_39: ref "core:prelude/string.wado//String";
+    let rx_40: i32;
+    let tx_41: i32;
+    let handle_42: i32;
     opt_2 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value"), used: 5 };
     if ref.is_null(opt_2) {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("matched none"), used: 12 });
+        message_4 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("matched none"), used: 12 };
+        let __pair_temp_1: i64;
+        __pair_temp_1 = "wasi/stream-new"();
+        rx_5 = builtin::i32_wrap_i64(__pair_temp_1);
+        tx_6 = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+        handle_7 = "wado-compiler/tests/fixtures/option_match.wado/__cm_binding__Stdout_write_via_stream"(rx_5);
+        "core:cli/write_to_stream"(tx_6, message_4, 1);
+        "wasi/future-drop-readable:transmission-cli"(handle_7);
     } else {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("not none"), used: 8 });
+        message_10 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("not none"), used: 8 };
+        let __pair_temp_2: i64;
+        __pair_temp_2 = "wasi/stream-new"();
+        rx_11 = builtin::i32_wrap_i64(__pair_temp_2);
+        tx_12 = builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
+        handle_13 = "wado-compiler/tests/fixtures/option_match.wado/__cm_binding__Stdout_write_via_stream"(rx_11);
+        "core:cli/write_to_stream"(tx_12, message_10, 1);
+        "wasi/future-drop-readable:transmission-cli"(handle_13);
     }
-    opt_4 = ref.null none;
-    if ref.is_null(opt_4) {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("matched none"), used: 12 });
+    opt_16 = ref.null none;
+    if ref.is_null(opt_16) {
+        message_18 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("matched none"), used: 12 };
+        let __pair_temp_3: i64;
+        __pair_temp_3 = "wasi/stream-new"();
+        rx_19 = builtin::i32_wrap_i64(__pair_temp_3);
+        tx_20 = builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64);
+        handle_21 = "wado-compiler/tests/fixtures/option_match.wado/__cm_binding__Stdout_write_via_stream"(rx_19);
+        "core:cli/write_to_stream"(tx_20, message_18, 1);
+        "wasi/future-drop-readable:transmission-cli"(handle_21);
     } else {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("has value"), used: 9 });
+        message_24 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("has value"), used: 9 };
+        let __pair_temp_4: i64;
+        __pair_temp_4 = "wasi/stream-new"();
+        rx_25 = builtin::i32_wrap_i64(__pair_temp_4);
+        tx_26 = builtin::i32_wrap_i64(__pair_temp_4 >>u 32_i64);
+        handle_27 = "wado-compiler/tests/fixtures/option_match.wado/__cm_binding__Stdout_write_via_stream"(rx_25);
+        "core:cli/write_to_stream"(tx_26, message_24, 1);
+        "wasi/future-drop-readable:transmission-cli"(handle_27);
     }
-    opt_6 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
-    if ref.is_null(opt_6) == 0 {
-        x = ref.as_non_null(opt_6);
-        "core:cli/println"(x);
+    opt_30 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
+    if ref.is_null(opt_30) == 0 {
+        x = ref.as_non_null(opt_30);
+        let __pair_temp_5: i64;
+        __pair_temp_5 = "wasi/stream-new"();
+        rx_34 = builtin::i32_wrap_i64(__pair_temp_5);
+        tx_35 = builtin::i32_wrap_i64(__pair_temp_5 >>u 32_i64);
+        handle_36 = "wado-compiler/tests/fixtures/option_match.wado/__cm_binding__Stdout_write_via_stream"(rx_34);
+        "core:cli/write_to_stream"(tx_35, x, 1);
+        "wasi/future-drop-readable:transmission-cli"(handle_36);
     } else {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("none"), used: 4 });
+        message_39 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("none"), used: 4 };
+        let __pair_temp_6: i64;
+        __pair_temp_6 = "wasi/stream-new"();
+        rx_40 = builtin::i32_wrap_i64(__pair_temp_6);
+        tx_41 = builtin::i32_wrap_i64(__pair_temp_6 >>u 32_i64);
+        handle_42 = "wado-compiler/tests/fixtures/option_match.wado/__cm_binding__Stdout_write_via_stream"(rx_40);
+        "core:cli/write_to_stream"(tx_41, message_39, 1);
+        "wasi/future-drop-readable:transmission-cli"(handle_42);
     }
     "wasi/task-return"(0);
 }
@@ -106,19 +168,6 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
         "core:internal/cm_stream_write_raw_u8"(tx, bytes, len);
     }
     "wasi/stream-drop-writable"(tx);
-}
-
-fn "core:cli/println"(message) with Stdout {
-    let rx: i32;
-    let tx: i32;
-    let handle: i32;
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/stream-new"();
-    rx = builtin::i32_wrap_i64(__pair_temp_1);
-    tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
-    handle = "wado-compiler/tests/fixtures/option_match.wado/__cm_binding__Stdout_write_via_stream"(rx);
-    "core:cli/write_to_stream"(tx, message, 1);
-    "wasi/future-drop-readable:transmission-cli"(handle);
 }
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {

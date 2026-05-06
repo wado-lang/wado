@@ -33,23 +33,21 @@ type "functype//wado-compiler/tests/fixtures/stream-writable-type.wado/__cm_expo
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(13)
 
-type "functype//core:cli/println" = fn(ref "core:prelude/string.wado//String");  // TypeId(14)
+type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(14)
 
-type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(15)
+type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;  // TypeId(15)
 
-type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;  // TypeId(16)
+type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(16)
 
-type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(17)
+type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);  // TypeId(17)
 
-type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);  // TypeId(18)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(18)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(19)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(19)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(20)
+type "functype//wasi/stream-drop-readable" = fn(i32);  // TypeId(20)
 
-type "functype//wasi/stream-drop-readable" = fn(i32);  // TypeId(21)
-
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(22)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(21)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -67,14 +65,25 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 
 fn "wado-compiler/tests/fixtures/stream-writable-type.wado/run"() with Stdout {
     let _rx: i32;
-    let tx: i32;
+    let tx_1: i32;
+    let message: ref "core:prelude/string.wado//String";
+    let rx: i32;
+    let tx_6: i32;
+    let handle: i32;
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/stream-new"();
     _rx = builtin::i32_wrap_i64(__pair_temp_1);
-    tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
-    "wasi/stream-drop-writable"(tx);
+    tx_1 = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    "wasi/stream-drop-writable"(tx_1);
     "wasi/stream-drop-readable"(_rx);
-    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("StreamWritable type exists"), used: 26 });
+    message = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("StreamWritable type exists"), used: 26 };
+    let __pair_temp_2: i64;
+    __pair_temp_2 = "wasi/stream-new"();
+    rx = builtin::i32_wrap_i64(__pair_temp_2);
+    tx_6 = builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
+    handle = "wado-compiler/tests/fixtures/stream-writable-type.wado/__cm_binding__Stdout_write_via_stream"(rx);
+    "core:cli/write_to_stream"(tx_6, message, 1);
+    "wasi/future-drop-readable:transmission-cli"(handle);
 }
 
 fn "wado-compiler/tests/fixtures/stream-writable-type.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -101,19 +110,6 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
         "core:internal/cm_stream_write_raw_u8"(tx, bytes, len);
     }
     "wasi/stream-drop-writable"(tx);
-}
-
-fn "core:cli/println"(message) with Stdout {
-    let rx: i32;
-    let tx: i32;
-    let handle: i32;
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/stream-new"();
-    rx = builtin::i32_wrap_i64(__pair_temp_1);
-    tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
-    handle = "wado-compiler/tests/fixtures/stream-writable-type.wado/__cm_binding__Stdout_write_via_stream"(rx);
-    "core:cli/write_to_stream"(tx, message, 1);
-    "wasi/future-drop-readable:transmission-cli"(handle);
 }
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {

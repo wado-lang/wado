@@ -17,6 +17,7 @@
 //! - Hot Field Scalarization (HFS) via `field_scalarize` module
 //! - Select lowering via `select_lowering` module
 //! - Value-copy elision via `value_copy_elide` module
+//! - Short `push_str` simplification via `string_push` module
 //!
 //! The `$value_copy$T` insertion + synthesis steps that materialize Wado's
 //! value-copy semantics live in the lower phase (`lower::value_copy`) — by
@@ -41,6 +42,7 @@ mod ref_elim;
 mod select_lowering;
 mod sroa;
 mod store_load_forward;
+mod string_push;
 mod tmpl_hoist;
 mod value_copy_elide;
 
@@ -63,6 +65,7 @@ use licm::apply_licm;
 use ref_elim::eliminate_unnecessary_refs;
 use sroa::scalar_replace_aggregates;
 use store_load_forward::forward_stores_to_loads;
+use string_push::simplify_short_push_str;
 use tmpl_hoist::hoist_template_buffers;
 use value_copy_elide::elide_synthesized_value_copies;
 
@@ -92,9 +95,9 @@ struct OptConfig {
 /// |-------|-----|------------|------------------|
 /// | O0    | Yes | 0          | N/A              |
 /// | O1    | Yes | 2          | 5                |
-/// | O2    | Yes | 10         | 12               |
-/// | O3    | Yes | 100        | 20               |
-/// | Os    | Yes | 10         | 12               |
+/// | O2    | Yes | 10         | 14               |
+/// | O3    | Yes | 30         | 40               |
+/// | Os    | Yes | 10         | 14               |
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum OptLevel {
     /// No optimization passes. DCE only.
@@ -107,7 +110,7 @@ pub enum OptLevel {
     #[default]
     O2,
     /// Aggressive production optimizations. All passes including DCE.
-    /// Iterations: 100, Inline threshold: 20.
+    /// Iterations: 30, Inline threshold: 40.
     O3,
     /// Size optimizations. Same as O2 plus name section stripping.
     /// Intended for frontend/browser deployment.
@@ -162,8 +165,13 @@ pub fn optimize(
         OptLevel::O2 | OptLevel::Os => {
             let config = OptConfig {
                 iterations: opt_iterations.unwrap_or(10),
-                // Threshold 12: allows index_assign (11 expressions) to be inlined
-                inline_threshold: inline_threshold.unwrap_or(12),
+                // Threshold 14 is a sweet spot for both -O2 and -Os:
+                //   * json-catalog drops from 48ms to ~45ms (~6%, captures
+                //     >80% of the gain at threshold 20).
+                //   * sqlite_highlight wasm grows by only +0.8% (cf. +29%
+                //     at threshold 18+ where Gale-generated lexer/parser
+                //     action functions chain-inline).
+                inline_threshold: inline_threshold.unwrap_or(14),
             };
             run_dce(&mut project, profiler);
             run_optimization_passes(&mut project, &config, profiler);
@@ -173,9 +181,20 @@ pub fn optimize(
             }
         }
         OptLevel::O3 => {
+            // Iteration cap of 30 is a defensive bound — the TIR
+            // optimiser does not converge at `inline_threshold ≥ 35`
+            // on Gale-generated parsers (sqlite_parse / json_highlight)
+            // because each iteration's `inline` pass shrinks bodies
+            // enough for previously-too-big callees to re-enter the
+            // candidate set on the next iteration. With 100 iterations
+            // sqlite_parse compiled in ~80 s; capping at 30 keeps the
+            // ceiling at ~25 s without measurably losing runtime perf
+            // on the convergent inputs (those fixed-point in well
+            // under 30). See https://github.com/wado-lang/wado/issues
+            // for the underlying root-cause investigation.
             let config = OptConfig {
-                iterations: opt_iterations.unwrap_or(100),
-                inline_threshold: inline_threshold.unwrap_or(30),
+                iterations: opt_iterations.unwrap_or(30),
+                inline_threshold: inline_threshold.unwrap_or(40),
             };
             run_dce(&mut project, profiler);
             run_optimization_passes(&mut project, &config, profiler);
@@ -384,6 +403,14 @@ fn run_optimization_passes(
         run_pass("tir/value_copy_elide", project, profiler, |p| {
             elide_synthesized_value_copies(p);
             false
+        });
+        // Run short-`push_str` simplification *before* inline. Once the
+        // inliner expands `String::push_str`'s body the `MethodCall` node is
+        // gone and the literal-recognising rewrite can no longer match,
+        // leaving short-string formatting paths (e.g. `fpfmt.wado`'s
+        // `buf.push_str("0.")`) paying full per-call allocation cost.
+        changed |= run_pass("tir/string_push", project, profiler, |p| {
+            simplify_short_push_str(p)
         });
         changed |= run_pass("tir/inline", project, profiler, |p| {
             inline_functions(p, threshold)

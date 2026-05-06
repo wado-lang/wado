@@ -1,0 +1,52 @@
+// Regression test: TIR `string_push` pass rewrites
+// `buf.push_str("short_constant")` (≤8 ASCII bytes) into a sequence of
+// `buf.push(c)` calls, eliminating the temporary `String` allocation that
+// the literal would otherwise materialize at lowering. The pass runs
+// *before* `inline`; once the inliner expands `push_str`'s body the
+// `MethodCall` node is gone and the literal-recognising rewrite cannot
+// match.
+//
+// Background: at high inline thresholds (e.g. -O3 = 40, well above
+// `push_str`'s body) the WIR-level idiom recogniser was bypassed because
+// `push_str` got fully inlined, producing per-call temporary `String`
+// allocations that tanked benchmarks like `fts -O3` (52ms → 449ms).
+// Lifting the rewrite to TIR pre-`inline` keeps the recognition
+// independent of inliner threshold decisions.
+//
+// We exercise three short-literal cases (1–3 ASCII bytes) and verify in
+// the WIR that:
+//   * the rewrite emitted `String::push` calls with the byte/char codes
+//     of each source byte; and
+//   * no `push_str` call survives anywhere in the program — the rewrite
+//     replaces every short-literal site, and the only remaining call to
+//     `push_str` would come from a non-literal arg (which this fixture
+//     does not produce).
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let mut buf = String::with_capacity(32);
+    buf.push_str("0.");   // 2 bytes — should rewrite to push('0'); push('.')
+    buf.push_str(".");    // 1 byte  — should rewrite to push('.')
+    buf.push_str("inf");  // 3 bytes — should rewrite to push('i'); push('n'); push('f')
+    println(buf);
+}
+
+__DATA__
+{
+    "stdout": "0..inf\n",
+    "wir_expect:O2": [
+        "String::push\"(buf, 48)",
+        "String::push\"(buf, 46)",
+        "String::push\"(buf, 105)",
+        "String::push\"(buf, 110)",
+        "String::push\"(buf, 102)"
+    ],
+    "wir_not_expect:O2": [
+        "String::push_str\"("
+    ],
+    "wir_not_expect:O3": [
+        "String::push_str\"(",
+        "__inline_String__push_str_"
+    ]
+}

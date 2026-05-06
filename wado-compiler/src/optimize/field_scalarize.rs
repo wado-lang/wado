@@ -29,8 +29,8 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::ModuleSource;
 use crate::tir::{
-    FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirStmt,
-    TirStmtKind, TirUnaryOp, TypeId, TypeTable,
+    FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirPattern,
+    TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
 
 const MIN_ACCESS_COUNT: usize = 4;
@@ -763,12 +763,49 @@ fn scalarize_function(
     let Some(ref mut body) = func.body else {
         return false;
     };
+    // Function-wide alias scan. Loop-local alias detection in
+    // `count_field_accesses_in_expr` only sees the loop body, but
+    // `tmpl_hoist`-style passes hoist a local's `&mut` capture out of
+    // the loop (e.g. `let __fmt = Formatter { buf: &mut __tmpl_buf }`
+    // ends up in the function body before the loop). When that happens
+    // the alias is *live* for the duration of the loop and writes
+    // through it bypass any HFS scalar. Collect every GC-heap local
+    // whose address is taken anywhere in the function (outside of a
+    // direct call-argument position) so loop-level scalarization can
+    // refuse those candidates.
+    let aliased_in_function = collect_function_aliased_locals(body, type_table);
+    // Inline-block-mutated locals are also computed once per function:
+    // the set is whole-function-wide (any inline-block write anywhere in
+    // the function poisons the scalar→field invariant for that local at
+    // every loop level), so per-loop recomputation would be a quadratic
+    // walk over the function body for nothing.
+    let inline_block_written_in_function =
+        collect_locals_accessed_inside_inline_blocks(body, type_table);
+    let analysis = HfsAnalysis {
+        aliased_in_function: &aliased_in_function,
+        inline_block_written: &inline_block_written_in_function,
+    };
     let mut local_count = func.local_count;
     let mut locals = func.locals.clone();
-    let changed = scalarize_block(body, &mut local_count, &mut locals, type_table, cache);
+    let changed = scalarize_block(
+        body,
+        &mut local_count,
+        &mut locals,
+        type_table,
+        cache,
+        &analysis,
+    );
     func.local_count = local_count;
     func.locals = locals;
     changed
+}
+
+/// Read-only function-wide pre-analysis shared by every `scalarize_loop`
+/// invocation in the same function. Computed once in `scalarize_function`
+/// to keep the per-loop work linear in the loop body's size.
+struct HfsAnalysis<'a> {
+    aliased_in_function: &'a IndexSet<u32>,
+    inline_block_written: &'a IndexSet<u32>,
 }
 
 fn scalarize_block(
@@ -777,6 +814,7 @@ fn scalarize_block(
     locals: &mut Vec<TirLocal>,
     type_table: &TypeTable,
     cache: &FieldUsageCache,
+    analysis: &HfsAnalysis<'_>,
 ) -> bool {
     let mut changed = false;
     let mut new_stmts = Vec::new();
@@ -785,9 +823,9 @@ fn scalarize_block(
         match &mut stmt.kind {
             TirStmtKind::Loop { body } => {
                 // Recurse into inner blocks/loops first.
-                changed |= scalarize_block(body, local_count, locals, type_table, cache);
+                changed |= scalarize_block(body, local_count, locals, type_table, cache, analysis);
                 // Try to scalarize hot fields at this loop level.
-                let result = scalarize_loop(body, local_count, locals, type_table, cache);
+                let result = scalarize_loop(body, local_count, locals, type_table, cache, analysis);
                 if result.pre_stmts.is_empty() {
                     new_stmts.push(stmt);
                 } else {
@@ -802,14 +840,16 @@ fn scalarize_block(
                 else_block,
                 ..
             } => {
-                changed |= scalarize_block(then_block, local_count, locals, type_table, cache);
+                changed |=
+                    scalarize_block(then_block, local_count, locals, type_table, cache, analysis);
                 if let Some(eb) = else_block {
-                    changed |= scalarize_block(eb, local_count, locals, type_table, cache);
+                    changed |=
+                        scalarize_block(eb, local_count, locals, type_table, cache, analysis);
                 }
                 new_stmts.push(stmt);
             }
             TirStmtKind::LabeledBlock { block: inner, .. } => {
-                changed |= scalarize_block(inner, local_count, locals, type_table, cache);
+                changed |= scalarize_block(inner, local_count, locals, type_table, cache, analysis);
                 new_stmts.push(stmt);
             }
             TirStmtKind::IfLet {
@@ -817,9 +857,11 @@ fn scalarize_block(
                 else_block,
                 ..
             } => {
-                changed |= scalarize_block(then_block, local_count, locals, type_table, cache);
+                changed |=
+                    scalarize_block(then_block, local_count, locals, type_table, cache, analysis);
                 if let Some(eb) = else_block {
-                    changed |= scalarize_block(eb, local_count, locals, type_table, cache);
+                    changed |=
+                        scalarize_block(eb, local_count, locals, type_table, cache, analysis);
                 }
                 new_stmts.push(stmt);
             }
@@ -855,10 +897,19 @@ fn scalarize_loop(
     locals: &mut Vec<TirLocal>,
     type_table: &TypeTable,
     cache: &FieldUsageCache,
+    analysis: &HfsAnalysis<'_>,
 ) -> ScalarizeResult {
     // Step 1: Count field accesses (reads + writes) in the loop body
     let mut access_counts: IndexMap<(u32, u32), FieldAccessInfo> = IndexMap::default();
     count_field_accesses_in_block(loop_body, &mut access_counts, type_table);
+
+    // Step 1b: Collect locals introduced inside the loop body. These cannot
+    // be safely scalarized at this loop level — their owning storage (the
+    // GC struct ref) is unbound at the loop's pre-header where the
+    // hoisted `let _hfs_field = local.field;` would run, producing a
+    // null-reference trap. Locals declared in the parent scope (i.e., not
+    // listed here) are fine to scalarize.
+    let inside_loop_locals = collect_locals_introduced_in_block(loop_body);
 
     // Step 2: Select candidates - fields accessed frequently enough,
     // where the field is modified only by direct assignment (not by the whole local being reassigned)
@@ -883,6 +934,30 @@ fn scalarize_loop(
         // The local must not be aliased (e.g., `other = pos` creates an alias,
         // and field modifications through the alias would bypass the scalar local)
         if info.aliased {
+            continue;
+        }
+        // The local must not have its address captured anywhere in the
+        // function (e.g. `Formatter { buf: &mut local }` stored in another
+        // local, then read inside this loop). Writes through a captured
+        // alias bypass the HFS scalar — and since the capture can be
+        // hoisted *out* of the loop by `tmpl_hoist`, the loop-local
+        // alias scan in `count_field_accesses_in_expr` does not see it.
+        if analysis.aliased_in_function.contains(&local_idx) {
+            continue;
+        }
+        // The local must not be touched inside any `__inline_*` labeled
+        // block in the loop body — those blocks read/write the scalar
+        // directly, and the surrounding sync-around-call logic that
+        // wraps a sibling method-call arm would clobber the scalar with
+        // the stale field value.
+        if analysis.inline_block_written.contains(&local_idx) {
+            continue;
+        }
+        // The local must be bound in the parent scope (visible at the loop's
+        // pre-header). A local introduced inside the loop body is unbound
+        // before its `Let`, and our hoisted `let _hfs = local.field;`
+        // would null-deref at runtime.
+        if inside_loop_locals.contains(&local_idx) {
             continue;
         }
         // The type must be a GC struct (not a primitive)
@@ -1087,6 +1162,539 @@ fn count_field_accesses_in_block(
     }
 }
 
+/// Walk the loop body once and collect every local index whose field
+/// is *written* (assigned) or whose `&mut local` is captured inside any
+/// `LabeledBlock` whose label starts with the inliner's `__inline_`
+/// prefix. Such writes survive inlining of an `&mut self` method body
+/// and are HFS-rewritten directly to the scalar; the outer
+/// sync-around-call logic that wraps a sibling non-inlined method call
+/// would clobber the scalar with a stale field value, so HFS must not
+/// scalarize the local at this loop level.
+///
+/// Reads inside an inline block are safe: HFS rewrites them to read
+/// the scalar, and no clobber happens (the scalar's value is preserved
+/// across the surrounding sync). Only the *write* path poisons the
+/// scalar→field invariant.
+fn collect_locals_accessed_inside_inline_blocks(
+    body: &TirBlock,
+    type_table: &TypeTable,
+) -> IndexSet<u32> {
+    struct Walker<'a> {
+        type_table: &'a TypeTable,
+        out: IndexSet<u32>,
+        depth: usize,
+    }
+    impl Walker<'_> {
+        /// Record a field-write of a GC-heap local: `local.f = …` inside
+        /// an inline block.
+        fn record_assign_target(&mut self, target: &TirExpr) {
+            if self.depth == 0 {
+                return;
+            }
+            if let TirExprKind::FieldAccess { expr: inner, .. } = &target.kind
+                && let TirExprKind::Local { index, .. } = &inner.kind
+                && is_gc_heap_type(inner.type_id, self.type_table)
+            {
+                self.out.insert(*index);
+            }
+        }
+        /// Record an `&mut local` taken inside an inline block: the
+        /// callee may mutate fields through the captured reference, so
+        /// the same scalar-poisoning concern applies.
+        fn record_mut_ref(&mut self, expr: &TirExpr) {
+            if self.depth == 0 {
+                return;
+            }
+            if let TirExprKind::Unary {
+                op: TirUnaryOp::MutRef,
+                expr: inner,
+            } = &expr.kind
+                && let TirExprKind::Local { index, .. } = &inner.kind
+                && is_gc_heap_type(inner.type_id, self.type_table)
+            {
+                self.out.insert(*index);
+            }
+        }
+        fn visit_expr(&mut self, expr: &TirExpr) {
+            match &expr.kind {
+                TirExprKind::LabeledBlock { label, block, .. } => {
+                    let inline = label.starts_with("__inline_");
+                    if inline {
+                        self.depth += 1;
+                    }
+                    self.visit_block(block);
+                    if inline {
+                        self.depth -= 1;
+                    }
+                }
+                TirExprKind::Block(block) => self.visit_block(block),
+                TirExprKind::If {
+                    condition,
+                    then_branch,
+                    else_branch,
+                } => {
+                    self.visit_expr(condition);
+                    self.visit_block(then_branch);
+                    if let Some(eb) = else_branch {
+                        self.visit_block(eb);
+                    }
+                }
+                TirExprKind::Match { expr, arms } => {
+                    self.visit_expr(expr);
+                    for arm in arms {
+                        if let Some(g) = &arm.guard {
+                            self.visit_expr(g);
+                        }
+                        self.visit_expr(&arm.body);
+                    }
+                }
+                TirExprKind::Switch {
+                    scrutinee,
+                    arms,
+                    default,
+                    ..
+                } => {
+                    self.visit_expr(scrutinee);
+                    for arm in arms {
+                        self.visit_block(arm);
+                    }
+                    self.visit_block(default);
+                }
+                TirExprKind::Binary { left, right, .. } => {
+                    self.visit_expr(left);
+                    self.visit_expr(right);
+                }
+                TirExprKind::Assign { target, value } => {
+                    self.record_assign_target(target);
+                    self.visit_expr(target);
+                    self.visit_expr(value);
+                }
+                TirExprKind::Index { expr, index } => {
+                    self.visit_expr(expr);
+                    self.visit_expr(index);
+                }
+                TirExprKind::Call { args, .. } => {
+                    for arg in args {
+                        self.record_mut_ref(&arg.expr);
+                        self.visit_expr(&arg.expr);
+                    }
+                }
+                TirExprKind::MethodCall { receiver, args, .. } => {
+                    self.record_mut_ref(receiver);
+                    self.visit_expr(receiver);
+                    for arg in args {
+                        self.record_mut_ref(&arg.expr);
+                        self.visit_expr(&arg.expr);
+                    }
+                }
+                TirExprKind::CmRawCall { args, .. } | TirExprKind::IndirectCall { args, .. } => {
+                    for arg in args {
+                        self.record_mut_ref(arg);
+                        self.visit_expr(arg);
+                    }
+                }
+                TirExprKind::StructLiteral { fields, .. } => {
+                    for f in fields {
+                        self.visit_expr(&f.value);
+                    }
+                }
+                TirExprKind::TupleLiteral { elements } => {
+                    for e in elements {
+                        self.visit_expr(e);
+                    }
+                }
+                TirExprKind::VariantConstruct { payload, .. } => {
+                    if let Some(p) = payload {
+                        self.visit_expr(p);
+                    }
+                }
+                TirExprKind::Unary { expr: inner, .. }
+                | TirExprKind::Cast { expr: inner, .. }
+                | TirExprKind::FieldAccess { expr: inner, .. }
+                | TirExprKind::TupleSpread { expr: inner }
+                | TirExprKind::TupleZip { expr: inner }
+                | TirExprKind::TypePackExpansion {
+                    call_expr: inner, ..
+                }
+                | TirExprKind::VariantTag { expr: inner }
+                | TirExprKind::VariantTest { expr: inner, .. }
+                | TirExprKind::VariantPayload { expr: inner, .. }
+                | TirExprKind::GlobalVarSet { value: inner, .. }
+                | TirExprKind::ClosureToCanonical { functor: inner, .. } => {
+                    self.visit_expr(inner);
+                }
+                TirExprKind::Closure { body, .. } => {
+                    self.visit_expr(body);
+                }
+                _ => {}
+            }
+        }
+        fn visit_block(&mut self, block: &TirBlock) {
+            for stmt in &block.stmts {
+                self.visit_stmt(stmt);
+            }
+        }
+        fn visit_stmt(&mut self, stmt: &TirStmt) {
+            match &stmt.kind {
+                TirStmtKind::Let { value, .. } | TirStmtKind::LetDestructure { value, .. } => {
+                    self.visit_expr(value);
+                }
+                TirStmtKind::Expr(expr) | TirStmtKind::TaskReturn { value: expr } => {
+                    self.visit_expr(expr);
+                }
+                TirStmtKind::Return { value } | TirStmtKind::Break { value, .. } => {
+                    if let Some(v) = value {
+                        self.visit_expr(v);
+                    }
+                }
+                TirStmtKind::If {
+                    condition,
+                    then_block,
+                    else_block,
+                } => {
+                    self.visit_expr(condition);
+                    self.visit_block(then_block);
+                    if let Some(eb) = else_block {
+                        self.visit_block(eb);
+                    }
+                }
+                TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+                    self.visit_block(body);
+                }
+                TirStmtKind::IfLet {
+                    scrutinee,
+                    then_block,
+                    else_block,
+                    ..
+                } => {
+                    self.visit_expr(scrutinee);
+                    self.visit_block(then_block);
+                    if let Some(eb) = else_block {
+                        self.visit_block(eb);
+                    }
+                }
+                TirStmtKind::Continue => {}
+                TirStmtKind::VariadicForOf { iterable, body, .. } => {
+                    self.visit_expr(iterable);
+                    self.visit_block(body);
+                }
+            }
+        }
+    }
+    let mut w = Walker {
+        type_table,
+        out: IndexSet::default(),
+        depth: 0,
+    };
+    w.visit_block(body);
+    w.out
+}
+
+/// Walk the function body once and collect every GC-heap-typed local
+/// whose address (`&local` / `&mut local`) is taken outside a direct
+/// call-argument position. Such locals cannot be HFS-scalarized at any
+/// loop level: writes through the captured alias bypass the scalar.
+///
+/// Direct call arguments are excluded from the set because the call's
+/// write-back/re-read mechanism synchronises HFS scalars around the
+/// call, bounding the alias's lifetime to that single call.
+fn collect_function_aliased_locals(body: &TirBlock, type_table: &TypeTable) -> IndexSet<u32> {
+    let mut out: IndexSet<u32> = IndexSet::default();
+    visit_block_for_alias(body, type_table, &mut out);
+    out
+}
+
+fn visit_block_for_alias(block: &TirBlock, type_table: &TypeTable, out: &mut IndexSet<u32>) {
+    for stmt in &block.stmts {
+        visit_stmt_for_alias(stmt, type_table, out);
+    }
+}
+
+fn visit_stmt_for_alias(stmt: &TirStmt, type_table: &TypeTable, out: &mut IndexSet<u32>) {
+    match &stmt.kind {
+        TirStmtKind::Let { value, .. } | TirStmtKind::LetDestructure { value, .. } => {
+            visit_expr_for_alias(value, false, type_table, out);
+        }
+        TirStmtKind::Expr(expr) | TirStmtKind::TaskReturn { value: expr } => {
+            visit_expr_for_alias(expr, false, type_table, out);
+        }
+        TirStmtKind::Return { value } | TirStmtKind::Break { value, .. } => {
+            if let Some(v) = value {
+                visit_expr_for_alias(v, false, type_table, out);
+            }
+        }
+        TirStmtKind::If {
+            condition,
+            then_block,
+            else_block,
+        } => {
+            visit_expr_for_alias(condition, false, type_table, out);
+            visit_block_for_alias(then_block, type_table, out);
+            if let Some(eb) = else_block {
+                visit_block_for_alias(eb, type_table, out);
+            }
+        }
+        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+            visit_block_for_alias(body, type_table, out);
+        }
+        TirStmtKind::IfLet {
+            scrutinee,
+            then_block,
+            else_block,
+            ..
+        } => {
+            visit_expr_for_alias(scrutinee, false, type_table, out);
+            visit_block_for_alias(then_block, type_table, out);
+            if let Some(eb) = else_block {
+                visit_block_for_alias(eb, type_table, out);
+            }
+        }
+        TirStmtKind::Continue => {}
+        TirStmtKind::VariadicForOf { iterable, body, .. } => {
+            visit_expr_for_alias(iterable, false, type_table, out);
+            visit_block_for_alias(body, type_table, out);
+        }
+    }
+}
+
+fn visit_expr_for_alias(
+    expr: &TirExpr,
+    in_call_arg: bool,
+    type_table: &TypeTable,
+    out: &mut IndexSet<u32>,
+) {
+    match &expr.kind {
+        TirExprKind::Unary { op, expr: inner } => {
+            // `&local` / `&mut local`: record the alias if we are not in a
+            // call-argument position (where write-back/re-read synchronises
+            // around the call), then stop — the inner `Local` is the place
+            // we take the address of, not a value-position read.
+            if matches!(op, TirUnaryOp::Ref | TirUnaryOp::MutRef)
+                && matches!(&inner.kind, TirExprKind::Local { .. })
+            {
+                if !in_call_arg
+                    && is_gc_heap_type(inner.type_id, type_table)
+                    && let TirExprKind::Local { index, .. } = &inner.kind
+                {
+                    out.insert(*index);
+                }
+                return;
+            }
+            visit_expr_for_alias(inner, false, type_table, out);
+        }
+        TirExprKind::Call { args, .. } => {
+            for arg in args {
+                visit_expr_for_alias(&arg.expr, true, type_table, out);
+            }
+        }
+        TirExprKind::MethodCall { receiver, args, .. } => {
+            visit_expr_for_alias(receiver, true, type_table, out);
+            for arg in args {
+                visit_expr_for_alias(&arg.expr, true, type_table, out);
+            }
+        }
+        TirExprKind::CmRawCall { args, .. } => {
+            for arg in args {
+                visit_expr_for_alias(arg, true, type_table, out);
+            }
+        }
+        TirExprKind::IndirectCall { callee, args, .. } => {
+            visit_expr_for_alias(callee, false, type_table, out);
+            for arg in args {
+                visit_expr_for_alias(arg, true, type_table, out);
+            }
+        }
+        TirExprKind::Binary { left, right, .. } => {
+            visit_expr_for_alias(left, false, type_table, out);
+            visit_expr_for_alias(right, false, type_table, out);
+        }
+        TirExprKind::Assign { target, value } => {
+            visit_expr_for_alias(target, false, type_table, out);
+            visit_expr_for_alias(value, false, type_table, out);
+        }
+        TirExprKind::Index { expr, index } => {
+            visit_expr_for_alias(expr, false, type_table, out);
+            visit_expr_for_alias(index, false, type_table, out);
+        }
+        TirExprKind::Cast { expr, .. }
+        | TirExprKind::FieldAccess { expr, .. }
+        | TirExprKind::TupleSpread { expr }
+        | TirExprKind::TupleZip { expr }
+        | TirExprKind::TypePackExpansion {
+            call_expr: expr, ..
+        }
+        | TirExprKind::VariantTag { expr }
+        | TirExprKind::VariantTest { expr, .. }
+        | TirExprKind::VariantPayload { expr, .. }
+        | TirExprKind::GlobalVarSet { value: expr, .. }
+        | TirExprKind::ClosureToCanonical { functor: expr, .. } => {
+            visit_expr_for_alias(expr, false, type_table, out);
+        }
+        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+            visit_block_for_alias(block, type_table, out);
+        }
+        TirExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            visit_expr_for_alias(condition, false, type_table, out);
+            visit_block_for_alias(then_branch, type_table, out);
+            if let Some(eb) = else_branch {
+                visit_block_for_alias(eb, type_table, out);
+            }
+        }
+        TirExprKind::Match { expr, arms } => {
+            visit_expr_for_alias(expr, false, type_table, out);
+            for arm in arms {
+                if let Some(g) = &arm.guard {
+                    visit_expr_for_alias(g, false, type_table, out);
+                }
+                visit_expr_for_alias(&arm.body, false, type_table, out);
+            }
+        }
+        TirExprKind::StructLiteral { fields, .. } => {
+            for field in fields {
+                visit_expr_for_alias(&field.value, false, type_table, out);
+            }
+        }
+        TirExprKind::TupleLiteral { elements } => {
+            for elem in elements {
+                visit_expr_for_alias(elem, false, type_table, out);
+            }
+        }
+        TirExprKind::VariantConstruct { payload, .. } => {
+            if let Some(p) = payload {
+                visit_expr_for_alias(p, false, type_table, out);
+            }
+        }
+        TirExprKind::Closure { body, .. } => {
+            visit_expr_for_alias(body, false, type_table, out);
+        }
+        TirExprKind::Switch {
+            scrutinee,
+            arms,
+            default,
+            ..
+        } => {
+            visit_expr_for_alias(scrutinee, false, type_table, out);
+            for arm in arms {
+                visit_block_for_alias(arm, type_table, out);
+            }
+            visit_block_for_alias(default, type_table, out);
+        }
+        TirExprKind::IntLiteral { .. }
+        | TirExprKind::FloatLiteral { .. }
+        | TirExprKind::BoolLiteral(_)
+        | TirExprKind::CharLiteral(_)
+        | TirExprKind::StringLiteral(_)
+        | TirExprKind::BytesLiteral(_)
+        | TirExprKind::Null
+        | TirExprKind::Unit
+        | TirExprKind::Local { .. }
+        | TirExprKind::FuncRef { .. }
+        | TirExprKind::GlobalVarGet { .. }
+        | TirExprKind::Capture { .. }
+        | TirExprKind::EnumConstruct { .. }
+        | TirExprKind::TemplateString { .. } => {}
+        TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => unreachable!(
+            "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
+        ),
+    }
+}
+
+/// Collects every local index introduced (by `Let`, `LetDestructure`, match-
+/// arm patterns, etc.) anywhere inside `block`, walking through nested
+/// arms / blocks but NOT through nested `Loop` bodies (those are processed
+/// independently by their own `scalarize_loop` call). Used to filter out
+/// locals whose owning storage is unbound at the loop's pre-header — those
+/// locals must not be scalarized at this loop level, otherwise the hoisted
+/// `let _hfs_field = local.field;` null-derefs at runtime.
+fn collect_locals_introduced_in_block(block: &TirBlock) -> IndexSet<u32> {
+    struct Collector {
+        out: IndexSet<u32>,
+    }
+
+    impl Collector {
+        fn visit_pattern(&mut self, pattern: &TirPattern) {
+            match pattern {
+                TirPattern::Wildcard
+                | TirPattern::Literal(_)
+                | TirPattern::Enum { .. }
+                | TirPattern::ConstantValue { .. }
+                | TirPattern::Range { .. } => {}
+                TirPattern::Binding { local_index, .. } => {
+                    self.out.insert(*local_index);
+                }
+                TirPattern::Tuple(patterns, _) | TirPattern::Or(patterns) => {
+                    for p in patterns {
+                        self.visit_pattern(p);
+                    }
+                }
+                TirPattern::Variant { bindings, .. } => {
+                    for p in bindings {
+                        self.visit_pattern(p);
+                    }
+                }
+                TirPattern::Struct { fields, .. } => {
+                    for f in fields {
+                        self.visit_pattern(&f.pattern);
+                    }
+                }
+            }
+        }
+    }
+
+    impl crate::tir_visitor::TirRefVisitor for Collector {
+        fn visit_stmt(&mut self, stmt: &TirStmt) {
+            match &stmt.kind {
+                TirStmtKind::Let { local_index, .. } => {
+                    self.out.insert(*local_index);
+                }
+                TirStmtKind::LetDestructure { pattern, .. } => {
+                    self.visit_pattern(pattern);
+                }
+                TirStmtKind::IfLet { pattern, .. } => {
+                    self.visit_pattern(pattern);
+                }
+                TirStmtKind::Loop { .. } => {
+                    // Skip nested loops: their locals are processed by their
+                    // own scalarize_loop pass and are not visible at *this*
+                    // loop's pre-header anyway.
+                    return;
+                }
+                _ => {}
+            }
+            self.walk_stmt(stmt);
+        }
+
+        fn visit_expr(&mut self, expr: &TirExpr) {
+            // Closure bodies live in a separate local-index namespace from
+            // the enclosing function. Recursing into them would mistake
+            // closure-local indices for outer-function locals and over-
+            // exclude unrelated outer locals from scalarization.
+            if matches!(
+                expr.kind,
+                TirExprKind::Closure { .. } | TirExprKind::ClosureToCanonical { .. }
+            ) {
+                return;
+            }
+            if let TirExprKind::Match { arms, .. } = &expr.kind {
+                for arm in arms {
+                    self.visit_pattern(&arm.pattern);
+                }
+            }
+            self.walk_expr(expr);
+        }
+    }
+
+    let mut c = Collector {
+        out: IndexSet::default(),
+    };
+    crate::tir_visitor::TirRefVisitor::visit_block(&mut c, block);
+    c.out
+}
+
 fn count_field_accesses_in_stmt(
     stmt: &TirStmt,
     counts: &mut IndexMap<(u32, u32), FieldAccessInfo>,
@@ -1106,14 +1714,14 @@ fn count_field_accesses_in_stmt(
             {
                 mark_local_aliased(*index, counts);
             }
-            count_field_accesses_in_expr(value, counts, false, type_table);
+            count_field_accesses_in_expr(value, counts, false, false, type_table);
         }
         TirStmtKind::Expr(expr) => {
-            count_field_accesses_in_expr(expr, counts, false, type_table);
+            count_field_accesses_in_expr(expr, counts, false, false, type_table);
         }
         TirStmtKind::Return { value } => {
             if let Some(v) = value {
-                count_field_accesses_in_expr(v, counts, false, type_table);
+                count_field_accesses_in_expr(v, counts, false, false, type_table);
             }
         }
         TirStmtKind::If {
@@ -1121,7 +1729,7 @@ fn count_field_accesses_in_stmt(
             then_block,
             else_block,
         } => {
-            count_field_accesses_in_expr(condition, counts, false, type_table);
+            count_field_accesses_in_expr(condition, counts, false, false, type_table);
             count_field_accesses_in_block(then_block, counts, type_table);
             if let Some(eb) = else_block {
                 count_field_accesses_in_block(eb, counts, type_table);
@@ -1143,7 +1751,7 @@ fn count_field_accesses_in_stmt(
             else_block,
             ..
         } => {
-            count_field_accesses_in_expr(scrutinee, counts, false, type_table);
+            count_field_accesses_in_expr(scrutinee, counts, false, false, type_table);
             count_field_accesses_in_block(then_block, counts, type_table);
             if let Some(eb) = else_block {
                 count_field_accesses_in_block(eb, counts, type_table);
@@ -1151,12 +1759,12 @@ fn count_field_accesses_in_stmt(
         }
         TirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
-                count_field_accesses_in_expr(v, counts, false, type_table);
+                count_field_accesses_in_expr(v, counts, false, false, type_table);
             }
         }
         TirStmtKind::Continue => {}
         TirStmtKind::LetDestructure { value, .. } => {
-            count_field_accesses_in_expr(value, counts, false, type_table);
+            count_field_accesses_in_expr(value, counts, false, false, type_table);
         }
         TirStmtKind::TaskReturn { .. } => {}
         TirStmtKind::VariadicForOf { .. } => {
@@ -1165,16 +1773,25 @@ fn count_field_accesses_in_stmt(
     }
 }
 
+/// `in_call_arg` is `true` only when this expression is the direct value
+/// of a `Call` / `MethodCall` / `CmRawCall` / `IndirectCall` argument (or
+/// the receiver of a method call). The call's write-back/re-read
+/// mechanism synchronises HFS scalars around the call, so `&[mut] local`
+/// in this position does NOT escape and need not mark the local aliased.
+/// Anywhere else (`Let`, struct/array literal field, `Assign` rhs,
+/// `Return` / `Break` value, …) the reference escapes and the local
+/// must be marked aliased.
 fn count_field_accesses_in_expr(
     expr: &TirExpr,
     counts: &mut IndexMap<(u32, u32), FieldAccessInfo>,
     is_assign_target: bool,
+    in_call_arg: bool,
     type_table: &TypeTable,
 ) {
     match &expr.kind {
         TirExprKind::Assign { target, value } => {
-            count_field_accesses_in_expr(target, counts, true, type_table);
-            count_field_accesses_in_expr(value, counts, false, type_table);
+            count_field_accesses_in_expr(target, counts, true, false, type_table);
+            count_field_accesses_in_expr(value, counts, false, false, type_table);
             // If target is a direct local assignment, mark it fully assigned
             if let TirExprKind::Local { index, .. } = &target.kind {
                 mark_local_fully_assigned(*index, counts);
@@ -1226,42 +1843,62 @@ fn count_field_accesses_in_expr(
                     info.read_count += 1;
                 }
             } else {
-                count_field_accesses_in_expr(inner, counts, false, type_table);
+                count_field_accesses_in_expr(inner, counts, false, false, type_table);
             }
         }
         TirExprKind::Binary { left, right, .. } => {
-            count_field_accesses_in_expr(left, counts, false, type_table);
-            count_field_accesses_in_expr(right, counts, false, type_table);
+            count_field_accesses_in_expr(left, counts, false, false, type_table);
+            count_field_accesses_in_expr(right, counts, false, false, type_table);
         }
-        TirExprKind::Unary { op: _, expr } => {
-            // &mut local does NOT mark the local as fully assigned.
-            // Taking a mutable reference for method calls or passing to functions
-            // is handled by write-back/re-read around calls via call_passed_locals.
-            // Only direct assignment (local = value) should mark as fully assigned.
-            count_field_accesses_in_expr(expr, counts, false, type_table);
+        TirExprKind::Unary { op, expr } => {
+            // `&local` / `&mut local` taken outside a direct call-argument
+            // position escapes: the reference can be stored in a struct
+            // field (e.g. `Formatter { buf: &mut __tmpl_buf }`), a local,
+            // or returned, and writes through that alias do not go via
+            // any HFS scalar. Mark the local aliased so HFS skips it.
+            //
+            // Direct call arguments are exempt because the call's write-
+            // back/re-read mechanism synchronises the scalar around the
+            // call, bounding the alias's lifetime to that single call.
+            //
+            // For `&[mut] local` we also stop the recursion: the inner
+            // `Local` is the place we take the address of, not a
+            // value-position read, so it must not trigger the Local arm
+            // below (which would over-mark the local as aliased even
+            // when the address is consumed by a call's write-back/
+            // re-read mechanism).
+            if matches!(op, TirUnaryOp::Ref | TirUnaryOp::MutRef)
+                && let TirExprKind::Local { index, .. } = &expr.kind
+            {
+                if !in_call_arg && is_gc_heap_type(expr.type_id, type_table) {
+                    mark_local_aliased(*index, counts);
+                }
+                return;
+            }
+            count_field_accesses_in_expr(expr, counts, false, false, type_table);
         }
         TirExprKind::Cast { expr, .. } => {
-            count_field_accesses_in_expr(expr, counts, false, type_table);
+            count_field_accesses_in_expr(expr, counts, false, false, type_table);
         }
         TirExprKind::Call { args, .. } => {
             for arg in args {
-                count_field_accesses_in_expr(&arg.expr, counts, false, type_table);
+                count_field_accesses_in_expr(&arg.expr, counts, false, true, type_table);
             }
         }
         TirExprKind::MethodCall { receiver, args, .. } => {
-            count_field_accesses_in_expr(receiver, counts, false, type_table);
+            count_field_accesses_in_expr(receiver, counts, false, true, type_table);
             for arg in args {
-                count_field_accesses_in_expr(&arg.expr, counts, false, type_table);
+                count_field_accesses_in_expr(&arg.expr, counts, false, true, type_table);
             }
         }
         TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
-                count_field_accesses_in_expr(arg, counts, false, type_table);
+                count_field_accesses_in_expr(arg, counts, false, true, type_table);
             }
         }
         TirExprKind::Index { expr, index } => {
-            count_field_accesses_in_expr(expr, counts, false, type_table);
-            count_field_accesses_in_expr(index, counts, false, type_table);
+            count_field_accesses_in_expr(expr, counts, false, false, type_table);
+            count_field_accesses_in_expr(index, counts, false, false, type_table);
         }
         TirExprKind::Block(block) => {
             count_field_accesses_in_block(block, counts, type_table);
@@ -1271,7 +1908,7 @@ fn count_field_accesses_in_expr(
             then_branch,
             else_branch,
         } => {
-            count_field_accesses_in_expr(condition, counts, false, type_table);
+            count_field_accesses_in_expr(condition, counts, false, false, type_table);
             count_field_accesses_in_block(then_branch, counts, type_table);
             if let Some(eb) = else_branch {
                 count_field_accesses_in_block(eb, counts, type_table);
@@ -1279,12 +1916,12 @@ fn count_field_accesses_in_expr(
         }
         TirExprKind::StructLiteral { fields, .. } => {
             for field in fields {
-                count_field_accesses_in_expr(&field.value, counts, false, type_table);
+                count_field_accesses_in_expr(&field.value, counts, false, false, type_table);
             }
         }
         TirExprKind::TupleLiteral { elements } => {
             for elem in elements {
-                count_field_accesses_in_expr(elem, counts, false, type_table);
+                count_field_accesses_in_expr(elem, counts, false, false, type_table);
             }
         }
         TirExprKind::TupleSpread { expr: inner }
@@ -1292,36 +1929,36 @@ fn count_field_accesses_in_expr(
         | TirExprKind::TypePackExpansion {
             call_expr: inner, ..
         } => {
-            count_field_accesses_in_expr(inner, counts, false, type_table);
+            count_field_accesses_in_expr(inner, counts, false, false, type_table);
         }
         TirExprKind::IndirectCall { callee, args, .. } => {
-            count_field_accesses_in_expr(callee, counts, false, type_table);
+            count_field_accesses_in_expr(callee, counts, false, false, type_table);
             for arg in args {
-                count_field_accesses_in_expr(arg, counts, false, type_table);
+                count_field_accesses_in_expr(arg, counts, false, true, type_table);
             }
         }
         TirExprKind::ClosureToCanonical { functor, .. } => {
-            count_field_accesses_in_expr(functor, counts, false, type_table);
+            count_field_accesses_in_expr(functor, counts, false, false, type_table);
         }
         TirExprKind::Closure { body, .. } => {
-            count_field_accesses_in_expr(body, counts, false, type_table);
+            count_field_accesses_in_expr(body, counts, false, false, type_table);
         }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {
-                count_field_accesses_in_expr(p, counts, false, type_table);
+                count_field_accesses_in_expr(p, counts, false, false, type_table);
             }
         }
         TirExprKind::LabeledBlock { block, .. } => {
             count_field_accesses_in_block(block, counts, type_table);
         }
         TirExprKind::GlobalVarSet { value, .. } => {
-            count_field_accesses_in_expr(value, counts, false, type_table);
+            count_field_accesses_in_expr(value, counts, false, false, type_table);
         }
         TirExprKind::VariantTag { expr } | TirExprKind::VariantTest { expr, .. } => {
-            count_field_accesses_in_expr(expr, counts, false, type_table);
+            count_field_accesses_in_expr(expr, counts, false, false, type_table);
         }
         TirExprKind::VariantPayload { expr, .. } => {
-            count_field_accesses_in_expr(expr, counts, false, type_table);
+            count_field_accesses_in_expr(expr, counts, false, false, type_table);
         }
         TirExprKind::Switch {
             scrutinee,
@@ -1329,7 +1966,7 @@ fn count_field_accesses_in_expr(
             default,
             ..
         } => {
-            count_field_accesses_in_expr(scrutinee, counts, false, type_table);
+            count_field_accesses_in_expr(scrutinee, counts, false, false, type_table);
             for arm in arms {
                 count_field_accesses_in_block(arm, counts, type_table);
             }
@@ -1343,18 +1980,39 @@ fn count_field_accesses_in_expr(
         | TirExprKind::BytesLiteral(_)
         | TirExprKind::Null
         | TirExprKind::Unit
-        | TirExprKind::Local { .. }
         | TirExprKind::FuncRef { .. }
         | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::EnumConstruct { .. } => {}
+        TirExprKind::Local { index, .. } => {
+            // Whole-local read of a GC-heap-typed local outside a direct
+            // call-argument position escapes — the value flows into a
+            // struct/tuple literal field, a break/return, a binary op, …
+            // from where the surrounding code can read or write the
+            // struct's fields without going through any HFS scalar.
+            //
+            // Concrete failure mode: `break __tmpl: __tmpl_buf` reads
+            // `__tmpl_buf.used`/`.repr` directly, but if the inlined
+            // `push_str` body that just ran wrote the new length only
+            // to the scalar, the break sees a stale `.used` and the
+            // produced `String` is truncated.
+            //
+            // Direct call arguments are exempt: the call's write-back/
+            // re-read mechanism synchronises HFS scalars around the call.
+            // Direct assignment targets are also exempt — writing TO
+            // the local is handled separately by
+            // `mark_local_fully_assigned`.
+            if !in_call_arg && !is_assign_target && is_gc_heap_type(expr.type_id, type_table) {
+                mark_local_aliased(*index, counts);
+            }
+        }
         TirExprKind::Match { expr, arms } => {
-            count_field_accesses_in_expr(expr, counts, false, type_table);
+            count_field_accesses_in_expr(expr, counts, false, false, type_table);
             for arm in arms {
                 if let Some(guard) = &arm.guard {
-                    count_field_accesses_in_expr(guard, counts, false, type_table);
+                    count_field_accesses_in_expr(guard, counts, false, false, type_table);
                 }
-                count_field_accesses_in_expr(&arm.body, counts, false, type_table);
+                count_field_accesses_in_expr(&arm.body, counts, false, false, type_table);
             }
         }
         TirExprKind::TemplateString { .. } => {}

@@ -5,7 +5,12 @@
 //
 // At O0: `p * p` is computed twice per iteration (guard and body)
 // At O2: `p * p` is computed once into a __cse_ local and reused
+//
+// `#[inline(never)]` keeps `find_sqrt_bound` a standalone function so the
+// WIR pattern check sees the CSE'd loop unchanged regardless of the
+// inliner threshold.
 
+#[inline(never)]
 fn find_sqrt_bound(limit: i32) -> i32 {
     let mut p = 2;
     let mut last_sq = 0;
