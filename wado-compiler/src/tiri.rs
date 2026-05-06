@@ -717,10 +717,8 @@ impl<'a> Interpreter<'a> {
         if src_map.is_empty() {
             return;
         }
-        let copies: Vec<(String, Value)> = src_map
-            .iter()
-            .map(|(name, v)| (name.clone(), *v))
-            .collect();
+        let copies: Vec<(String, Value)> =
+            src_map.iter().map(|(name, v)| (name.clone(), *v)).collect();
         let dst_map = self.field_env.entry(dst).or_default();
         for (name, v) in copies {
             dst_map.insert(name, v);
