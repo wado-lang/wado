@@ -37,7 +37,6 @@ fn generic_function_key(is_method: bool, module_source: &ModuleSource, name: &st
 }
 
 use crate::flat_package::FlatPackage;
-use crate::resolver::trait_env::{MonoInstantiations, TraitEnv};
 use crate::tir::{ResolvedType, TirFunction, TirModule, TirStruct, TypeId, TypeTable};
 
 use state::Monomorphizer;
@@ -109,24 +108,6 @@ pub fn monomorphize(flat: &mut FlatPackage) {
         let mut func = func_rc.borrow_mut();
         func.effects.retain(|e| !e.is_param());
     }
-
-    // Snapshot the instantiation layer onto `TraitEnv` so subsequent
-    // phases (and any future caller that needs to know which module a
-    // monomorphized trait method lives in) consult the same source of
-    // truth instead of rebuilding a parallel index.
-    let mut instantiations = MonoInstantiations::default();
-    for func_rc in &flat.functions {
-        let func = func_rc.borrow();
-        if let Some(ref info) = func.method_info
-            && info.trait_name.is_some()
-        {
-            instantiations
-                .functions
-                .entry(func.name.clone())
-                .or_insert_with(|| func.module_source.clone());
-        }
-    }
-    flat.trait_env = TraitEnv::extend_with_instantiations(flat.trait_env.clone(), instantiations);
 
     // Rebuild variant index since structs may have changed
     flat.rebuild_variant_indices();

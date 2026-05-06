@@ -16,7 +16,7 @@ use crate::hashmap::IndexSet;
 
 use crate::name::{LocalMethodName, MethodName, ModuleSource};
 use crate::package::Package;
-use crate::resolver::trait_env::{SynthesisedImpls, TraitEnv};
+use crate::resolver::trait_env::TraitEnv;
 use crate::tir::{
     CallArg, FnDispatchTrait, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ResolvedType,
     TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirModule, TirParam,
@@ -220,12 +220,15 @@ fn make_trait_method(
 pub fn synthesize_traits(project: Package) -> Package {
     let mut project = project;
     let trait_env = project.trait_env.clone();
-    // `pending` accumulates this run's auto-derives so each sub-pass can
-    // dedup against earlier-added methods *and* the AST layer (via `ctx`).
-    // The accumulator is discarded at the end: the project-wide synthesis
-    // layer is materialised in `synthesize` once `from_synth` / `serde_synth`
-    // have also run, by rescanning TIR for trait-method functions.
-    let mut pending = SynthesisedImpls::default();
+    // In-pass dedup: each sub-pass records `(type_name, trait_name)` of
+    // every impl it generates so later sub-passes within this same
+    // `synthesize_traits` run can skip emitting a duplicate. The
+    // canonical project-wide synthesis layer is rebuilt afterwards by
+    // `collect_synthesised_impls` (see `synthesis.rs`), which scans TIR
+    // and captures concrete-ness from the synthesized function itself —
+    // so this accumulator only needs the existence bit, not module or
+    // concrete-ness.
+    let mut pending: IndexSet<(String, String)> = IndexSet::default();
     for module in project.tir_modules.values_mut() {
         let mut ctx = SynthesisCtx {
             trait_env: &trait_env,
@@ -246,13 +249,13 @@ pub fn synthesize_traits(project: Package) -> Package {
 /// Threading of trait-impl knowledge through the synthesis sub-passes.
 ///
 /// `trait_env` exposes the AST-layer (and any prior synthesis-layer) impls
-/// already known to the project; `pending` is the in-progress synthesis-layer
-/// accumulator that grows as each sub-pass adds new impls. Together they let
-/// a sub-pass answer "is `impl <trait> for <type>` already in the project?"
+/// already known to the project; `pending` is the in-progress dedup set
+/// that grows as each sub-pass adds new impls. Together they let a
+/// sub-pass answer "is `impl <trait> for <type>` already in the project?"
 /// without re-scanning TIR per call.
 pub(crate) struct SynthesisCtx<'env, 'pend> {
     pub(crate) trait_env: &'env TraitEnv,
-    pub(crate) pending: &'pend mut SynthesisedImpls,
+    pub(crate) pending: &'pend mut IndexSet<(String, String)>,
 }
 
 impl SynthesisCtx<'_, '_> {
@@ -262,29 +265,18 @@ impl SynthesisCtx<'_, '_> {
         self.trait_env
             .impl_module_for(type_name, trait_name)
             .is_some()
-            || self.pending.has_impl(type_name, trait_name)
+            || self
+                .pending
+                .contains(&(type_name.to_string(), trait_name.to_string()))
     }
 
-    /// Note that this synthesis pass added `impl <trait_name> for <type_name>`
-    /// in `module`. The accumulator is purely for in-pass dedup (later
-    /// `has_impl` checks within the same `synthesize_traits` run); the
-    /// canonical synthesis-layer index is rebuilt by
-    /// `collect_synthesised_impls` after `synthesize_traits` returns, so
-    /// concrete-ness does not need to be tracked here. We pass
-    /// `is_concrete: false` to keep the concrete-only sub-index empty
-    /// in the accumulator without affecting the dedup view.
-    pub(crate) fn record_impl(
-        &mut self,
-        type_name: &str,
-        trait_name: &str,
-        module: &ModuleSource,
-    ) {
-        self.pending.record_impl(
-            type_name.to_string(),
-            trait_name.to_string(),
-            module.clone(),
-            false,
-        );
+    /// Note that this synthesis pass added `impl <trait_name> for <type_name>`.
+    /// Used for in-pass dedup only; the canonical synthesis layer is
+    /// rebuilt by `collect_synthesised_impls` after `synthesize_traits`
+    /// returns.
+    pub(crate) fn record_impl(&mut self, type_name: &str, trait_name: &str) {
+        self.pending
+            .insert((type_name.to_string(), trait_name.to_string()));
     }
 }
 
@@ -441,7 +433,7 @@ fn generate_enum_trait_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, 
         if !ctx.has_impl(enum_name, "Eq") {
             let func = generate_enum_eq_fn(enum_name, enum_type, ref_enum_type, *span);
             generated_functions.push(Rc::new(RefCell::new(func)));
-            ctx.record_impl(enum_name, "Eq", &module_source);
+            ctx.record_impl(enum_name, "Eq");
         }
 
         if !ctx.has_impl(enum_name, "Ord") {
@@ -450,7 +442,7 @@ fn generate_enum_trait_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, 
             let func =
                 generate_enum_ord_fn(enum_name, enum_type, ref_enum_type, ordering_type, *span);
             generated_functions.push(Rc::new(RefCell::new(func)));
-            ctx.record_impl(enum_name, "Ord", &module_source);
+            ctx.record_impl(enum_name, "Ord");
         }
     }
 
@@ -490,7 +482,7 @@ fn generate_struct_eq_ord_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'
                 *span,
             );
             generated.push(Rc::new(RefCell::new(func)));
-            ctx.record_impl(name, "Eq", &module_source);
+            ctx.record_impl(name, "Eq");
         }
 
         if !ctx.has_impl(name, "Ord") {
@@ -506,7 +498,7 @@ fn generate_struct_eq_ord_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'
                 *span,
             );
             generated.push(Rc::new(RefCell::new(func)));
-            ctx.record_impl(name, "Ord", &module_source);
+            ctx.record_impl(name, "Ord");
         }
     }
 
@@ -528,7 +520,7 @@ fn generate_struct_eq_ord_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'
                 *span,
             );
             generated.push(Rc::new(RefCell::new(func)));
-            ctx.record_impl(name, "Eq", &module_source);
+            ctx.record_impl(name, "Eq");
         }
 
         if !ctx.has_impl(name, "Ord") {
@@ -544,7 +536,7 @@ fn generate_struct_eq_ord_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'
                 *span,
             );
             generated.push(Rc::new(RefCell::new(func)));
-            ctx.record_impl(name, "Ord", &module_source);
+            ctx.record_impl(name, "Ord");
         }
     }
 
@@ -603,7 +595,7 @@ fn generate_struct_default_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<
         let struct_type = tt.make_struct(name.clone(), module_source.clone());
         let func = generate_struct_default_fn(name, fields, struct_type, *span);
         generated.push(Rc::new(RefCell::new(func)));
-        ctx.record_impl(name, "Default", &module_source);
+        ctx.record_impl(name, "Default");
     }
 
     drop(tt);
@@ -694,7 +686,7 @@ fn generate_variant_eq_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, 
             *span,
         );
         generated.push(Rc::new(RefCell::new(func)));
-        ctx.record_impl(name, "Eq", &module_source);
+        ctx.record_impl(name, "Eq");
     }
 
     let generic_variant_infos = collect_generic_variant_cases(module);
@@ -717,7 +709,7 @@ fn generate_variant_eq_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, 
             *span,
         );
         generated.push(Rc::new(RefCell::new(func)));
-        ctx.record_impl(name, "Eq", &module_source);
+        ctx.record_impl(name, "Eq");
     }
 
     drop(tt);
@@ -765,7 +757,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>
             string_type,
             *espan,
         ))));
-        ctx.record_impl(name, "Inspect", &module_source);
+        ctx.record_impl(name, "Inspect");
     }
 
     // Non-generic structs
@@ -792,7 +784,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>
             &mut tt,
             *sspan,
         ))));
-        ctx.record_impl(name, "Inspect", &module_source);
+        ctx.record_impl(name, "Inspect");
     }
 
     let generic_struct_infos = collect_generic_struct_visible_fields(module);
@@ -816,7 +808,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>
             &mut tt,
             *sspan,
         ))));
-        ctx.record_impl(name, "Inspect", &module_source);
+        ctx.record_impl(name, "Inspect");
     }
 
     let variant_infos = collect_variant_cases(module);
@@ -838,7 +830,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>
             &mut tt,
             *vspan,
         ))));
-        ctx.record_impl(name, "Inspect", &module_source);
+        ctx.record_impl(name, "Inspect");
     }
 
     let generic_variant_infos = collect_generic_variant_cases(module);
@@ -862,7 +854,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>
             &mut tt,
             *vspan,
         ))));
-        ctx.record_impl(name, "Inspect", &module_source);
+        ctx.record_impl(name, "Inspect");
     }
 
     // Flags types (newtypes over u32)
@@ -893,7 +885,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>
             string_type,
             fspan,
         ))));
-        ctx.record_impl(name, "Inspect", &module_source);
+        ctx.record_impl(name, "Inspect");
     }
 
     // Newtypes (e.g., `type Meters = f64`)
@@ -921,7 +913,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>
             &mut tt,
             synth_span(),
         ))));
-        ctx.record_impl(&nt.name, "Inspect", &module_source);
+        ctx.record_impl(&nt.name, "Inspect");
     }
 
     // Parameterized types (tuples, function types)
@@ -954,7 +946,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>
                     fmt_type,
                     span,
                 ))));
-                ctx.record_impl(&mangled, "Inspect", &module_source);
+                ctx.record_impl(&mangled, "Inspect");
             }
             _ => {
                 // Opaque/resource types (Future, Stream, etc.): write type name as string
@@ -968,7 +960,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>
                     string_type,
                     span,
                 ))));
-                ctx.record_impl(&mangled, "Inspect", &module_source);
+                ctx.record_impl(&mangled, "Inspect");
             }
         }
     }
@@ -1691,7 +1683,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
             vec![],
             span,
         ))));
-        ctx.record_impl(&name, "InspectAlt", &module_source);
+        ctx.record_impl(&name, "InspectAlt");
     }
 
     // Non-generic structs — pretty-print with begin_block/end_block
@@ -1718,7 +1710,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
             &mut tt,
             *sspan,
         ))));
-        ctx.record_impl(name, "InspectAlt", &module_source);
+        ctx.record_impl(name, "InspectAlt");
     }
 
     let generic_struct_infos = collect_generic_struct_visible_fields(module);
@@ -1742,7 +1734,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
             &mut tt,
             *sspan,
         ))));
-        ctx.record_impl(name, "InspectAlt", &module_source);
+        ctx.record_impl(name, "InspectAlt");
     }
 
     let variant_infos = collect_variant_cases(module);
@@ -1764,7 +1756,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
             &mut tt,
             *vspan,
         ))));
-        ctx.record_impl(name, "InspectAlt", &module_source);
+        ctx.record_impl(name, "InspectAlt");
     }
 
     let generic_variant_infos = collect_generic_variant_cases(module);
@@ -1788,7 +1780,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
             &mut tt,
             *vspan,
         ))));
-        ctx.record_impl(name, "InspectAlt", &module_source);
+        ctx.record_impl(name, "InspectAlt");
     }
 
     // Flags — delegate to Inspect (bit flags don't need pretty print)
@@ -1812,7 +1804,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
             vec![],
             span,
         ))));
-        ctx.record_impl(name, "InspectAlt", &module_source);
+        ctx.record_impl(name, "InspectAlt");
     }
 
     for nt in &module.newtypes {
@@ -1832,7 +1824,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
             vec![],
             span,
         ))));
-        ctx.record_impl(&nt.name, "InspectAlt", &module_source);
+        ctx.record_impl(&nt.name, "InspectAlt");
     }
 
     // Tuples are skipped — their `InspectAlt` is provided by the variadic impl
@@ -1871,7 +1863,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
                 fmt_type,
                 span,
             ))));
-            ctx.record_impl(&mangled, "InspectAlt", &module_source);
+            ctx.record_impl(&mangled, "InspectAlt");
             continue;
         }
         let ref_type = tt.make_ref(type_id);
@@ -1888,7 +1880,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
             vec![],
             span,
         ))));
-        ctx.record_impl(&mangled, "InspectAlt", &module_source);
+        ctx.record_impl(&mangled, "InspectAlt");
     }
 
     drop(tt);
@@ -2399,7 +2391,7 @@ fn generate_fallback_impls(
         let enum_type = tt.make_enum(name.clone(), module_source.clone());
         let ref_type = tt.make_ref(enum_type);
         generated.push(make_fallback(name, ref_type, vec![]));
-        ctx.record_impl(name, pair.target_trait, &module_source);
+        ctx.record_impl(name, pair.target_trait);
     }
 
     let struct_names: Vec<_> = module
@@ -2418,7 +2410,7 @@ fn generate_fallback_impls(
         let struct_type = tt.make_struct(name.clone(), module_source.clone());
         let ref_type = tt.make_ref(struct_type);
         generated.push(make_fallback(name, ref_type, vec![]));
-        ctx.record_impl(name, pair.target_trait, &module_source);
+        ctx.record_impl(name, pair.target_trait);
     }
 
     let generic_struct_infos: Vec<_> = module
@@ -2439,7 +2431,7 @@ fn generate_fallback_impls(
             tt.make_generic_instance(name.clone(), module_source.clone(), type_param_ids);
         let ref_type = tt.make_ref(struct_type);
         generated.push(make_fallback(name, ref_type, type_params.clone()));
-        ctx.record_impl(name, pair.target_trait, &module_source);
+        ctx.record_impl(name, pair.target_trait);
     }
 
     let variant_names: Vec<_> = module
@@ -2455,7 +2447,7 @@ fn generate_fallback_impls(
         let variant_type = tt.make_variant(name.clone(), module_source.clone());
         let ref_type = tt.make_ref(variant_type);
         generated.push(make_fallback(name, ref_type, vec![]));
-        ctx.record_impl(name, pair.target_trait, &module_source);
+        ctx.record_impl(name, pair.target_trait);
     }
 
     let generic_variant_infos: Vec<_> = module
@@ -2473,7 +2465,7 @@ fn generate_fallback_impls(
             tt.make_generic_instance(name.clone(), module_source.clone(), type_param_ids);
         let ref_type = tt.make_ref(variant_type);
         generated.push(make_fallback(name, ref_type, type_params.clone()));
-        ctx.record_impl(name, pair.target_trait, &module_source);
+        ctx.record_impl(name, pair.target_trait);
     }
 
     let flags_infos: Vec<_> = module
@@ -2487,7 +2479,7 @@ fn generate_fallback_impls(
         }
         let ref_type = tt.make_ref(*flags_type_id);
         generated.push(make_fallback(name, ref_type, vec![]));
-        ctx.record_impl(name, pair.target_trait, &module_source);
+        ctx.record_impl(name, pair.target_trait);
     }
 
     for nt in &module.newtypes {
@@ -2499,7 +2491,7 @@ fn generate_fallback_impls(
         }
         let ref_type = tt.make_ref(nt.type_id);
         generated.push(make_fallback(&nt.name, ref_type, vec![]));
-        ctx.record_impl(&nt.name, pair.target_trait, &module_source);
+        ctx.record_impl(&nt.name, pair.target_trait);
     }
 
     // Parameterized types (function types, opaque types). Tuples are skipped
@@ -2541,7 +2533,7 @@ fn generate_fallback_impls(
             vec![],
             span,
         ))));
-        ctx.record_impl(&mangled, pair.target_trait, &module_source);
+        ctx.record_impl(&mangled, pair.target_trait);
     }
 
     drop(tt);

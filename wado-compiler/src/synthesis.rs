@@ -95,7 +95,7 @@ pub fn synthesize(project: Package) -> Result<Package, String> {
 /// Concrete-ness is propagated alongside each entry so that the
 /// monomorphizer can later distinguish "the impl is fully resolved (use the
 /// impl block's module)" from "the impl is generic (fall back to the
-/// receiver type's module so call_rewrite's path-2alt mismatches the
+/// receiver type's module so `call_rewrite`'s path-2alt mismatches the
 /// queueing convention exactly the way the legacy `trait_method_locations`
 /// did)". An impl is concrete here when the synthesized function carries
 /// no impl-level type parameters.
@@ -110,8 +110,7 @@ fn collect_synthesised_impls(project: &Package) -> SynthesisedImpls {
         if ast_layer.contains_key(&key) {
             return;
         }
-        impls
-            .record_impl(key.0.clone(), key.1.clone(), module.clone(), is_concrete);
+        impls.record_impl(key.0, key.1, module.clone(), is_concrete);
     };
     for tir_module in project.tir_modules.values() {
         let module_source = &tir_module.module_source;

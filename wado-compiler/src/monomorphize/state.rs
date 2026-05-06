@@ -42,7 +42,7 @@ impl FuncInstState {
     /// this — rather than the broader [`TraitEnv::impl_module_for`] —
     /// because a generic impl's post-substitution function is materialised
     /// in the receiver type's module, not the impl block's module: that
-    /// invariant is what call_rewrite's "ref-blanket" path relies on to
+    /// invariant is what `call_rewrite`'s "ref-blanket" path relies on to
     /// route `&Array<i32>^Inspect::inspect` through the `&T`-blanket
     /// instantiation rather than collapsing it to `Array<i32>::inspect`.
     ///

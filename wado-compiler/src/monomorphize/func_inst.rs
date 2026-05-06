@@ -3550,12 +3550,15 @@ fn try_lower_comparison(
         // Match the legacy `trait_method_locations.get(mangled)` semantics:
         // only concrete (non-generic) impls live in the module the function
         // actually compiles into. Generic impls' instantiations live in the
-        // receiver type's module, surfaced here through `type_mod`.
+        // receiver type's module, surfaced here through `type_mod`. Lookup
+        // uses `info.struct_name` (the post-substitution full type name)
+        // — matches `FuncInstState::impl_module` so the same trait-method
+        // call resolves identically here and in receiver-substitution paths.
         info.trait_name
             .as_deref()
             .and_then(|tn| {
                 trait_env
-                    .concrete_impl_module_for(&info.base_struct_name, tn)
+                    .concrete_impl_module_for(&info.struct_name, tn)
                     .cloned()
             })
             .or(type_mod)
