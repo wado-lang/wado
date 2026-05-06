@@ -368,6 +368,11 @@ fn compile_after_load<H: CompilerHost>(
         entry_module_source,
         tir_modules,
         symbols,
+        // Move trait_env out of `state` rather than cloning the `Arc`,
+        // so that `Package` is the unique owner. `synthesize` later relies
+        // on `Arc::try_unwrap` succeeding to swap layers in place; a stray
+        // clone here would force a deep `TraitEnv` clone instead.
+        state.trait_env,
         implicit_modules,
         module_name,
         state.wasi_registry,
@@ -694,7 +699,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     };
 
     // === Phase 7: Resolve all modules to TIR ===
-    let tir_modules = {
+    let resolve_output = {
         let _span = logger.span("resolve");
         Resolver::resolve_all_modules(
             &symbols,
@@ -707,11 +712,17 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         )
         .ok()
     };
-
-    // Snapshot resolved TIR with an independent TypeTable clone so that
-    // later optimization passes (which call TypeTable::retain) cannot mutate it.
-    let tir_modules_by_source: Option<IndexMap<ModuleSource, tir::TirModule>> =
-        tir_modules.as_ref().map(snapshot_tir_modules);
+    // Destructure rather than clone the `Arc<TraitEnv>`: keeping a stray
+    // reference alive forces `synthesize`'s `Arc::try_unwrap` into the
+    // deep-clone fallback. Snapshotting the TIR consumes the modules, so
+    // no need to keep `resolve_output` past this point.
+    let (tir_modules_by_source, trait_env): (
+        Option<IndexMap<ModuleSource, tir::TirModule>>,
+        Option<std::sync::Arc<crate::resolver::trait_env::TraitEnv>>,
+    ) = match resolve_output {
+        Some((modules, env)) => (Some(snapshot_tir_modules(&modules)), Some(env)),
+        None => (None, None),
+    };
 
     // === Phase 7b+8+9+10: Build Package and run remaining phases ===
     // Create Package early so CM binding synthesis runs before monomorphize,
@@ -740,6 +751,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
                 load_result.entry_module_source.clone(),
                 resolved_modules,
                 symbols.clone(),
+                trait_env.expect("trait_env is set when resolve succeeded"),
                 load_result.implicit_modules.clone(),
                 module_name,
                 wasi_registry,

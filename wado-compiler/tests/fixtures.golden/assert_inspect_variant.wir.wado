@@ -90,7 +90,7 @@ type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeI
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(34)
 
-type "functype//core:prelude/primitive.wado/Option<i32>^Inspect::inspect" = fn(ref "core:prelude/types.wado//Option<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(35)
+type "functype//core:prelude/types.wado/Option<i32>^Inspect::inspect" = fn(ref "core:prelude/types.wado//Option<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(35)
 
 type "functype//wado-compiler/tests/fixtures/assert_inspect_variant.wado/Option<i32>^Eq::eq" = fn(ref "core:prelude/types.wado//Option<i32>", ref "core:prelude/types.wado//Option<i32>") -> bool;  // TypeId(36)
 
@@ -140,11 +140,11 @@ condition: v == expected
             "core:prelude/string.wado/String::push"(__local_5, 58);
             "core:prelude/string.wado/String::push"(__local_5, 32);
             __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
-            "core:prelude/primitive.wado/Option<i32>^Inspect::inspect"(v, __local_6);
+            "core:prelude/types.wado/Option<i32>^Inspect::inspect"(v, __local_6);
             "core:prelude/string.wado/String::push"(__local_5, 10);
             "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected: "), used: 10 });
             __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
-            "core:prelude/primitive.wado/Option<i32>^Inspect::inspect"(expected, __local_6);
+            "core:prelude/types.wado/Option<i32>^Inspect::inspect"(expected, __local_6);
             "core:prelude/string.wado/String::push"(__local_5, 10);
             break __tmpl: __local_5;
             unreachable;
@@ -495,7 +495,7 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/primitive.wado/Option<i32>^Inspect::inspect"(self, f) {
+fn "core:prelude/types.wado/Option<i32>^Inspect::inspect"(self, f) {
     let s_3: ref "core:prelude/string.wado//String";
     let s_9: ref "core:prelude/string.wado//String";
     let s_11: ref "core:prelude/string.wado//String";

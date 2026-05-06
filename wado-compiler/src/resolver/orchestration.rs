@@ -100,7 +100,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         included_files: &'a IndexMap<[String; 2], Vec<u8>>,
         invocations: crate::kiln::InvocationIndex,
         interner: Rc<RefCell<crate::name::ModuleSourceInterner>>,
-    ) -> Result<IndexMap<ModuleSource, TirModule>, Bail> {
+    ) -> Result<(IndexMap<ModuleSource, TirModule>, Arc<TraitEnv>), Bail> {
         let state = Self::annotate_modules(
             symbols,
             modules,
@@ -109,14 +109,16 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             invocations,
             interner,
         )?;
-        Self::lower_tir_from_state(
+        let trait_env = state.trait_env.clone();
+        let tir_modules = Self::lower_tir_from_state(
             &state,
             symbols,
             modules,
             entry_module_source,
             logger,
             included_files,
-        )
+        )?;
+        Ok((tir_modules, trait_env))
     }
 
     /// Annotate phase: collect decl-level type information and intern every

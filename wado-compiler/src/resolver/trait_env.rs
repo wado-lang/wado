@@ -54,12 +54,25 @@ pub(super) type StaticMethodIndex = IndexMap<String, Vec<(String, ModuleSource, 
 pub(super) type ResourceStaticMethodIndex =
     IndexMap<String, Vec<(String, ModuleSource, usize, usize)>>;
 
+/// Pre-built index of (`type_name`, `trait_name`) → `ModuleSource` for non-blanket
+/// trait impls. Lets downstream phases (template synthesis, etc.) ask "where
+/// does the impl live?" without re-scanning AST modules. Blanket impls are
+/// excluded — they apply structurally and don't have a concrete receiver
+/// type name.
+pub(crate) type TraitImplModuleIndex = IndexMap<(String, String), ModuleSource>;
+
 /// Immutable global knowledge base for trait resolution.
 ///
 /// Contains pre-built indices for fast lookup of trait implementations,
 /// trait declarations, and blanket impls. Built once before resolution
 /// begins and shared (via `Arc`) across all module resolvers.
-pub(crate) struct TraitEnv {
+/// `TraitEnv` is *intentionally* not `Clone`. After `build()` returns, the
+/// only legitimate way to mutate the env is `extend_with_synthesised`,
+/// which moves out of an `Arc` whose strong count must be 1. Forbidding
+/// clones at the type level surfaces accidental `Arc` sharing as a
+/// compile error rather than a silent deep-clone of every index.
+#[derive(Debug)]
+pub struct TraitEnv {
     /// Type name → impl blocks that implement traits for that type.
     pub(super) impl_index: TraitImplIndex,
     /// Trait name → trait declaration location.
@@ -76,6 +89,82 @@ pub(crate) struct TraitEnv {
     pub(super) static_method_index: StaticMethodIndex,
     /// `type_name` → `[(method_name, ModuleSource, item_idx, method_idx)]` for resource static methods.
     pub(super) resource_static_method_index: ResourceStaticMethodIndex,
+    /// `(type_name, trait_name)` → `ModuleSource` of the non-blanket impl.
+    /// Consumed by template synthesis to route trait-method calls to the
+    /// module that actually defines the impl, regardless of where the
+    /// receiver type is declared (e.g. `impl Display for String` lives in
+    /// `core:prelude/format`, not the module that declares `String`).
+    /// Includes both fully concrete impls (`impl Display for String`) and
+    /// generic impls (`impl<T: Inspect> Inspect for Array<T>`).
+    pub(crate) trait_impl_modules: TraitImplModuleIndex,
+    /// Like [`trait_impl_modules`] but restricted to **fully concrete**
+    /// impls — `impl <Trait> for <Type> { … }` blocks whose `type_params`
+    /// are empty. This mirrors the pre-Step-4 monomorphizer index, which
+    /// only catalogued trait methods belonging to non-generic, non-blanket
+    /// impl blocks. Mono needs this distinction to decide which
+    /// `module_source` a substituted trait-method call should carry: a
+    /// generic impl's instantiation lives in the receiver type's module
+    /// (preserving the legacy convention), while a concrete impl's
+    /// function lives in the impl block's module.
+    pub(crate) concrete_trait_impl_modules: TraitImplModuleIndex,
+    /// Layer added in the synthesis phase: auto-derived / generated impls
+    /// (`Eq`, `Ord`, `Inspect`, `Display`, `From`, serde adapters, …) that
+    /// were not present in the AST. `None` until `extend_with_synthesised`
+    /// runs (e.g. on the LSP path, which never reaches synthesis). Once
+    /// populated, the field is itself immutable; later phases either query
+    /// it or replace the whole `TraitEnv` with a further-extended copy.
+    pub(crate) synthesised: Option<SynthesisedImpls>,
+}
+
+/// Trait impls produced by the synthesis phase but not present in the AST.
+/// Populated by [`TraitEnv::extend_with_synthesised`].
+#[derive(Debug, Default, Clone)]
+pub struct SynthesisedImpls {
+    /// `(type_name, trait_name)` → `ModuleSource` for synthesized non-blanket
+    /// trait impls (auto-derives plus the impls produced by `from_synth` /
+    /// `serde_synth`). Mirrors the AST-level `trait_impl_modules` shape and
+    /// participates in the same lookup via [`TraitEnv::impl_module_for`].
+    /// Includes both concrete (e.g. auto-derived `Inspect for Wrapper`) and
+    /// generic synthesised impls.
+    pub trait_impl_modules: TraitImplModuleIndex,
+    /// Concrete-only subset (no impl-block type parameters). Mirrors the
+    /// AST-level [`TraitEnv::concrete_trait_impl_modules`] field; see its
+    /// docs for why mono needs to distinguish concrete impls from generic
+    /// ones.
+    pub concrete_trait_impl_modules: TraitImplModuleIndex,
+}
+
+impl SynthesisedImpls {
+    /// Record that `impl <trait_name> for <type_name>` has been synthesized
+    /// in `module`. `is_concrete` indicates whether the impl has no
+    /// generic type parameters, so it can be added to the concrete-only
+    /// view. First insert wins (matches AST-layer first-write semantics).
+    pub fn record_impl(
+        &mut self,
+        type_name: String,
+        trait_name: String,
+        module: ModuleSource,
+        is_concrete: bool,
+    ) {
+        let key = (type_name, trait_name);
+        if is_concrete {
+            // Concrete impls populate both views; clone once for the
+            // duplicated entry. Generic impls only appear in the all-impls
+            // view, so they avoid the clone entirely.
+            self.concrete_trait_impl_modules
+                .entry(key.clone())
+                .or_insert_with(|| module.clone());
+        }
+        self.trait_impl_modules.entry(key).or_insert(module);
+    }
+
+    /// `true` if `impl <trait_name> for <type_name>` has already been
+    /// recorded in this synthesis layer (regardless of concreteness).
+    #[must_use]
+    pub fn has_impl(&self, type_name: &str, trait_name: &str) -> bool {
+        self.trait_impl_modules
+            .contains_key(&(type_name.to_string(), trait_name.to_string()))
+    }
 }
 
 impl TraitEnv {
@@ -90,6 +179,8 @@ impl TraitEnv {
         let mut effect_decl_index: EffectDeclIndex = IndexMap::default();
         let mut resource_decl_index: ResourceDeclIndex = IndexMap::default();
         let mut blanket_impl_index: BlanketTraitImplIndex = Vec::new();
+        let mut trait_impl_modules: TraitImplModuleIndex = IndexMap::default();
+        let mut concrete_trait_impl_modules: TraitImplModuleIndex = IndexMap::default();
         // type name → module source, for orphan rule "is this type local?" checks
         let mut type_decl_index: IndexMap<String, ModuleSource> = IndexMap::default();
 
@@ -108,6 +199,21 @@ impl TraitEnv {
                             .any(|tp| tp.name == type_name && !tp.bounds.is_empty());
                         if is_blanket {
                             blanket_impl_index.push((module_source.clone(), item_idx));
+                        } else if let Some(trait_type) = &impl_block.trait_type {
+                            let trait_name = get_type_name_static(trait_type);
+                            let key = (type_name.clone(), trait_name);
+                            trait_impl_modules
+                                .entry(key.clone())
+                                .or_insert_with(|| module_source.clone());
+                            // Track the concrete subset separately: only impl
+                            // blocks with no type parameters at all qualify
+                            // (e.g. `impl Display for String`, not
+                            // `impl<T> Inspect for Array<T>`).
+                            if impl_block.type_params.is_empty() {
+                                concrete_trait_impl_modules
+                                    .entry(key)
+                                    .or_insert_with(|| module_source.clone());
+                            }
                         }
                         impl_index
                             .entry(type_name)
@@ -243,9 +349,72 @@ impl TraitEnv {
                 blanket_impl_index,
                 static_method_index,
                 resource_static_method_index,
+                trait_impl_modules,
+                concrete_trait_impl_modules,
+                synthesised: None,
             }),
             violations,
         )
+    }
+
+    /// Look up the module that defines `impl <trait_name> for <type_name>`.
+    /// Consults the AST layer first, then the synthesis layer (if populated).
+    /// Returns `None` for blanket impls and types not represented as a
+    /// concrete impl (e.g. anonymous function types whose `Inspect` is
+    /// auto-derived per-module by the synthesis phase).
+    pub(crate) fn impl_module_for(
+        &self,
+        type_name: &str,
+        trait_name: &str,
+    ) -> Option<&ModuleSource> {
+        let key = (type_name.to_string(), trait_name.to_string());
+        self.trait_impl_modules.get(&key).or_else(|| {
+            self.synthesised
+                .as_ref()
+                .and_then(|s| s.trait_impl_modules.get(&key))
+        })
+    }
+
+    /// Like [`impl_module_for`] but only returns a hit when the impl block
+    /// is **fully concrete** (no `impl<T, …>` type parameters). Used by
+    /// the monomorphizer when redirecting a substituted trait-method call
+    /// to the impl that actually defines its body: a concrete impl's
+    /// function lives in the impl block's module, while a generic impl's
+    /// post-substitution instance is materialised in the receiver type's
+    /// module by convention. Mirrors the legacy `trait_method_locations`
+    /// semantics that filtered on `impl_type_params.is_empty()`.
+    pub(crate) fn concrete_impl_module_for(
+        &self,
+        type_name: &str,
+        trait_name: &str,
+    ) -> Option<&ModuleSource> {
+        let key = (type_name.to_string(), trait_name.to_string());
+        self.concrete_trait_impl_modules.get(&key).or_else(|| {
+            self.synthesised
+                .as_ref()
+                .and_then(|s| s.concrete_trait_impl_modules.get(&key))
+        })
+    }
+
+    /// Produce a new `TraitEnv` with the synthesis-layer impls populated.
+    ///
+    /// `synth_impls` lists every `(type_name, trait_name) -> ModuleSource`
+    /// triple discovered in TIR after the synthesis phase has finished
+    /// adding auto-derived / generated impls. Designed to be called once
+    /// per pipeline run (the synthesis phase) — calling again replaces the
+    /// existing layer.
+    ///
+    /// `prev` must be the unique owner of the inner `TraitEnv`
+    /// (`Arc::strong_count == 1`). Since `TraitEnv: !Clone`, this is the
+    /// only viable extension shape: we move out of the `Arc`, swap one
+    /// field, and re-wrap. Callers are responsible for not handing this
+    /// function a shared `Arc`.
+    pub fn extend_with_synthesised(prev: Arc<Self>, synth_impls: SynthesisedImpls) -> Arc<Self> {
+        let Ok(mut env) = Arc::try_unwrap(prev) else {
+            panic!("extend_with_synthesised: TraitEnv Arc must be uniquely owned")
+        };
+        env.synthesised = Some(synth_impls);
+        Arc::new(env)
     }
 }
 

@@ -301,19 +301,15 @@ type "functype//core:prelude/primitive.wado/char^Display::fmt" = fn(char, ref "c
 
 type "functype//core:prelude/primitive.wado/char^Inspect::inspect" = fn(char, ref "core:prelude/format.wado//Formatter");  // TypeId(115)
 
-type "functype//core:prelude/primitive.wado/Result<String,i32>^Inspect::inspect" = fn(ref "core:prelude/types.wado//Result<String,i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(116)
+type "functype//core:prelude/types.wado/Result<String,i32>^Inspect::inspect" = fn(ref "core:prelude/types.wado//Result<String,i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(116)
 
 type "functype//core:prelude/types.wado/Result<i32,String>^Inspect::inspect" = fn(ref "core:prelude/types.wado//Result<i32,String>", ref "core:prelude/format.wado//Formatter");  // TypeId(117)
 
-type "functype//core:prelude/primitive.wado/Result<i32,String>^Inspect::inspect" = fn(ref "core:prelude/types.wado//Result<i32,String>", ref "core:prelude/format.wado//Formatter");  // TypeId(118)
+type "functype//core:prelude/types.wado/Option<Option<i32>>^Inspect::inspect" = fn(ref null "core:prelude/types.wado//Option<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(118)
 
-type "functype//core:prelude/primitive.wado/Option<Option<i32>>^Inspect::inspect" = fn(ref null "core:prelude/types.wado//Option<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(119)
+type "functype//core:prelude/types.wado/Option<String>^Inspect::inspect" = fn(ref null "core:prelude/string.wado//String", ref "core:prelude/format.wado//Formatter");  // TypeId(119)
 
 type "functype//core:prelude/types.wado/Option<i32>^Inspect::inspect" = fn(ref "core:prelude/types.wado//Option<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(120)
-
-type "functype//core:prelude/primitive.wado/Option<String>^Inspect::inspect" = fn(ref null "core:prelude/string.wado//String", ref "core:prelude/format.wado//Formatter");  // TypeId(121)
-
-type "functype//core:prelude/primitive.wado/Option<i32>^Inspect::inspect" = fn(ref "core:prelude/types.wado//Option<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(122)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -5658,7 +5654,7 @@ condition: `{with_newline:?}` == \"\"line1\\nline2\"\"
     __cond_65 = "core:prelude/string.wado/String^Eq::eq"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_235 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_236 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_235 };
-        "core:prelude/primitive.wado/Option<i32>^Inspect::inspect"(some_i32, __local_236);
+        "core:prelude/types.wado/Option<i32>^Inspect::inspect"(some_i32, __local_236);
         break __tmpl: __local_235;
         unreachable;
     }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Option::Some(42)"), used: 16 });
@@ -5715,7 +5711,7 @@ condition: `{some_i32}` == \"Option::Some(42)\"
     __cond_68 = "core:prelude/string.wado/String^Eq::eq"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_243 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_244 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_243 };
-        "core:prelude/primitive.wado/Option<i32>^Inspect::inspect"(none_i32, __local_244);
+        "core:prelude/types.wado/Option<i32>^Inspect::inspect"(none_i32, __local_244);
         break __tmpl: __local_243;
         unreachable;
     }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Option::None"), used: 12 });
@@ -5772,7 +5768,7 @@ condition: `{none_i32}` == \"Option::None\"
     __cond_71 = "core:prelude/string.wado/String^Eq::eq"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_251 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_252 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_251 };
-        "core:prelude/primitive.wado/Option<String>^Inspect::inspect"(some_str, __local_252);
+        "core:prelude/types.wado/Option<String>^Inspect::inspect"(some_str, __local_252);
         break __tmpl: __local_251;
         unreachable;
     }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Option::Some(\"world\")"), used: 21 });
@@ -5801,7 +5797,7 @@ condition: `{some_str:?}` == \"Option::Some(\"world\")\"
     __cond_73 = "core:prelude/string.wado/String^Eq::eq"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_255 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_256 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_255 };
-        "core:prelude/primitive.wado/Option<Option<i32>>^Inspect::inspect"(some_some, __local_256);
+        "core:prelude/types.wado/Option<Option<i32>>^Inspect::inspect"(some_some, __local_256);
         break __tmpl: __local_255;
         unreachable;
     }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Option::Some(Option::Some(7))"), used: 29 });
@@ -5830,7 +5826,7 @@ condition: `{some_some:?}` == \"Option::Some(Option::Some(7))\"
     __cond_75 = "core:prelude/string.wado/String^Eq::eq"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_259 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_260 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_259 };
-        "core:prelude/primitive.wado/Option<Option<i32>>^Inspect::inspect"(some_none, __local_260);
+        "core:prelude/types.wado/Option<Option<i32>>^Inspect::inspect"(some_none, __local_260);
         break __tmpl: __local_259;
         unreachable;
     }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Option::Some(Option::None)"), used: 26 });
@@ -5859,7 +5855,7 @@ condition: `{some_none:?}` == \"Option::Some(Option::None)\"
     __cond_77 = "core:prelude/string.wado/String^Eq::eq"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_263 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_264 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_263 };
-        "core:prelude/primitive.wado/Result<i32,String>^Inspect::inspect"(ok_val, __local_264);
+        "core:prelude/types.wado/Result<i32,String>^Inspect::inspect"(ok_val, __local_264);
         break __tmpl: __local_263;
         unreachable;
     }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Result::Ok(42)"), used: 14 });
@@ -5916,7 +5912,7 @@ condition: `{ok_val}` == \"Result::Ok(42)\"
     __cond_80 = "core:prelude/string.wado/String^Eq::eq"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_271 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_272 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_271 };
-        "core:prelude/primitive.wado/Result<i32,String>^Inspect::inspect"(err_val, __local_272);
+        "core:prelude/types.wado/Result<i32,String>^Inspect::inspect"(err_val, __local_272);
         break __tmpl: __local_271;
         unreachable;
     }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Result::Err(\"fail\")"), used: 19 });
@@ -5945,7 +5941,7 @@ condition: `{err_val:?}` == \"Result::Err(\"fail\")\"
     __cond_82 = "core:prelude/string.wado/String^Eq::eq"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_275 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_276 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_275 };
-        "core:prelude/primitive.wado/Result<String,i32>^Inspect::inspect"(err_int, __local_276);
+        "core:prelude/types.wado/Result<String,i32>^Inspect::inspect"(err_int, __local_276);
         break __tmpl: __local_275;
         unreachable;
     }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Result::Err(-1)"), used: 15 });
@@ -9155,7 +9151,7 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     "core:prelude/string.wado/String::push"(f.buf, 34);
 }
 
-fn "core:prelude/primitive.wado/Result<String,i32>^Inspect::inspect"(self, f) {
+fn "core:prelude/types.wado/Result<String,i32>^Inspect::inspect"(self, f) {
     let s_3: ref "core:prelude/string.wado//String";
     let s_5: ref "core:prelude/string.wado//String";
     let s_7: ref "core:prelude/string.wado//String";
@@ -9195,27 +9191,7 @@ fn "core:prelude/types.wado/Result<i32,String>^Inspect::inspect"(self, f) {
     }
 }
 
-fn "core:prelude/primitive.wado/Result<i32,String>^Inspect::inspect"(self, f) {
-    let s_3: ref "core:prelude/string.wado//String";
-    let s_9: ref "core:prelude/string.wado//String";
-    let s_11: ref "core:prelude/string.wado//String";
-    let s_13: ref "core:prelude/string.wado//String";
-    if ref.test "core:prelude/types.wado//Result<i32,String>::Ok"(self) {
-        s_3 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Result::Ok("), used: 11 };
-        "core:prelude/string.wado/String::push_str"(f.buf, s_3);
-        "core:prelude/primitive.wado/i32::fmt_decimal"(ref.cast "core:prelude/types.wado//Result<i32,String>::Ok"(self).payload_0, f);
-        s_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(")"), used: 1 };
-        "core:prelude/string.wado/String::push_str"(f.buf, s_9);
-    } else if ref.test "core:prelude/types.wado//Result<i32,String>::Err"(self) {
-        s_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Result::Err("), used: 12 };
-        "core:prelude/string.wado/String::push_str"(f.buf, s_11);
-        "core:prelude/format.wado/String^Inspect::inspect"(ref.cast "core:prelude/types.wado//Result<i32,String>::Err"(self).payload_0, f);
-        s_13 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(")"), used: 1 };
-        "core:prelude/string.wado/String::push_str"(f.buf, s_13);
-    }
-}
-
-fn "core:prelude/primitive.wado/Option<Option<i32>>^Inspect::inspect"(self, f) {
+fn "core:prelude/types.wado/Option<Option<i32>>^Inspect::inspect"(self, f) {
     let s_3: ref "core:prelude/string.wado//String";
     let s_5: ref "core:prelude/string.wado//String";
     let s_7: ref "core:prelude/string.wado//String";
@@ -9231,23 +9207,7 @@ fn "core:prelude/primitive.wado/Option<Option<i32>>^Inspect::inspect"(self, f) {
     }
 }
 
-fn "core:prelude/types.wado/Option<i32>^Inspect::inspect"(self, f) {
-    let s_3: ref "core:prelude/string.wado//String";
-    let s_9: ref "core:prelude/string.wado//String";
-    let s_11: ref "core:prelude/string.wado//String";
-    if ref.test "core:prelude/types.wado//Option<i32>::Some"(self) {
-        s_3 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Option::Some("), used: 13 };
-        "core:prelude/string.wado/String::push_str"(f.buf, s_3);
-        "core:prelude/primitive.wado/i32::fmt_decimal"(ref.cast "core:prelude/types.wado//Option<i32>::Some"(self).payload_0, f);
-        s_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(")"), used: 1 };
-        "core:prelude/string.wado/String::push_str"(f.buf, s_9);
-    } else if self.discriminant == 1 {
-        s_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Option::None"), used: 12 };
-        "core:prelude/string.wado/String::push_str"(f.buf, s_11);
-    }
-}
-
-fn "core:prelude/primitive.wado/Option<String>^Inspect::inspect"(self, f) {
+fn "core:prelude/types.wado/Option<String>^Inspect::inspect"(self, f) {
     let s_3: ref "core:prelude/string.wado//String";
     let s_5: ref "core:prelude/string.wado//String";
     let s_7: ref "core:prelude/string.wado//String";
@@ -9263,7 +9223,7 @@ fn "core:prelude/primitive.wado/Option<String>^Inspect::inspect"(self, f) {
     }
 }
 
-fn "core:prelude/primitive.wado/Option<i32>^Inspect::inspect"(self, f) {
+fn "core:prelude/types.wado/Option<i32>^Inspect::inspect"(self, f) {
     let s_3: ref "core:prelude/string.wado//String";
     let s_9: ref "core:prelude/string.wado//String";
     let s_11: ref "core:prelude/string.wado//String";

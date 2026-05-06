@@ -8,9 +8,11 @@ use crate::builtin_registry::BuiltinRegistry;
 use crate::component_model::WasiRegistry;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::ModuleSource;
+use crate::resolver::trait_env::TraitEnv;
 use crate::symbol::SymbolTable;
 use crate::tir::{TirModule, TypeId};
 use crate::world_registry::{self, WorldRegistry};
+use std::sync::Arc;
 
 /// A Wado package in per-module form.
 ///
@@ -25,6 +27,11 @@ pub struct Package {
     pub tir_modules: IndexMap<ModuleSource, TirModule>,
     /// Symbol table from analysis phase
     pub symbols: SymbolTable,
+    /// Project-wide trait knowledge built once during the resolve phase.
+    /// Synthesis, monomorphize, and friends consult this instead of
+    /// re-scanning all modules. Held by `Arc` because the resolver also
+    /// keeps a reference (LSP queries reuse the same indices).
+    pub(crate) trait_env: Arc<TraitEnv>,
     /// Implicitly imported modules (e.g., core:prelude)
     pub implicit_modules: IndexSet<ModuleSource>,
     /// Module name for the output (derived from filename)
@@ -89,10 +96,12 @@ pub struct Package {
 
 impl Package {
     /// Create a new Package from compilation artifacts (before optimization).
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         entry_module_source: ModuleSource,
         tir_modules: IndexMap<ModuleSource, TirModule>,
         symbols: SymbolTable,
+        trait_env: Arc<TraitEnv>,
         implicit_modules: IndexSet<ModuleSource>,
         module_name: String,
         wasi_registry: &'static WasiRegistry,
@@ -104,6 +113,7 @@ impl Package {
             entry_module_source,
             tir_modules,
             symbols,
+            trait_env,
             implicit_modules,
             module_name,
             wasi_registry,

@@ -105,6 +105,12 @@ pub struct FlatPackage {
     /// resolver-registered counterparts. Dropped at the
     /// `FlatPackage → WirPackage` boundary.
     pub interner: std::rc::Rc<std::cell::RefCell<crate::name::ModuleSourceInterner>>,
+
+    /// Project-wide trait knowledge inherited from `Package` and grown
+    /// here by [`crate::monomorphize::monomorphize`], which adds the
+    /// instantiation layer once it has materialised the concrete
+    /// trait-method instances.
+    pub trait_env: std::sync::Arc<crate::resolver::trait_env::TraitEnv>,
 }
 
 impl FlatPackage {

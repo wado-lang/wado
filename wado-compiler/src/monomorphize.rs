@@ -80,19 +80,6 @@ pub fn monomorphize(flat: &mut FlatPackage) {
         }
     }
 
-    // Collect trait method locations from all functions.
-    let mut trait_method_locations: IndexMap<String, ModuleSource> = IndexMap::default();
-    for func_rc in &flat.functions {
-        let func = func_rc.borrow();
-        if !func.has_real_type_params()
-            && func.impl_type_params.is_empty()
-            && let Some(ref info) = func.method_info
-            && info.trait_name.is_some()
-        {
-            trait_method_locations.insert(func.name.clone(), func.module_source.clone());
-        }
-    }
-
     // Create a temporary TirModule with all flat data for monomorphization.
     // This reuses the existing Monomorphizer infrastructure without rewriting it.
     let mut temp_module = TirModule::new(entry_module_source.clone());
@@ -103,12 +90,11 @@ pub fn monomorphize(flat: &mut FlatPackage) {
 
     // Run monomorphization on the combined module.
     // Use entry_module_source since all data is merged.
-    let mut monomorph = Monomorphizer::new(entry_module_source);
+    let mut monomorph = Monomorphizer::new(entry_module_source, flat.trait_env.clone());
     temp_module = monomorph.monomorphize_with_externals(
         temp_module,
         &all_generic_functions,
         &resolved_generic_structs,
-        &trait_method_locations,
     );
 
     // Write results back to FlatPackage
@@ -153,12 +139,7 @@ impl Monomorphizer {
         mut module: TirModule,
         external_generic_functions: &IndexMap<String, Rc<RefCell<TirFunction>>>,
         external_generic_structs: &IndexMap<(String, ModuleSource), TirStruct>,
-        trait_method_locations: &IndexMap<String, ModuleSource>,
     ) -> TirModule {
-        self.functions
-            .trait_method_locations
-            .clone_from(trait_method_locations);
-
         // Phase 1: Collect all generic struct definitions keyed by (name, module_source).
         // Same-named structs from different modules coexist; the InstantiationKey's
         // module_source selects the correct template at instantiation time.
@@ -333,7 +314,7 @@ impl Monomorphizer {
         // Phase 12.5: Lower remaining comparison operators on non-primitive types to
         // trait method calls. This handles comparisons in concrete (non-generic) functions
         // on Struct/Variant/GenericInstance types that weren't resolved at resolve time.
-        func_inst::lower_comparisons_in_module(&mut module, &self.functions.trait_method_locations);
+        func_inst::lower_comparisons_in_module(&mut module, &self.functions.trait_env);
 
         // Phase 13: Rewrite types (single pass — unified loop above ensures all structs exist)
         self.rewrite_types_in_module(&mut module);
