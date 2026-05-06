@@ -6,13 +6,15 @@ type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(0)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(1)
 
-type "functype//wado-compiler/tests/fixtures/match_arm_struct_field_invalid_wasm.wado/__cm_export__run" = fn();  // TypeId(2)
+type "functype//wado-compiler/tests/fixtures/match_arm_struct_field_invalid_wasm.wado/run" = fn();  // TypeId(2)
+
+type "functype//wado-compiler/tests/fixtures/match_arm_struct_field_invalid_wasm.wado/__cm_export__run" = fn();  // TypeId(3)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
 import memory (1) from "mem/memory";
 
-fn "wado-compiler/tests/fixtures/match_arm_struct_field_invalid_wasm.wado/__cm_export__run"() {
+fn "wado-compiler/tests/fixtures/match_arm_struct_field_invalid_wasm.wado/run"() {
     let i: i32;
     i = 0;
     b0: block {
@@ -28,6 +30,10 @@ fn "wado-compiler/tests/fixtures/match_arm_struct_field_invalid_wasm.wado/__cm_e
             continue l1;
         };
     };
+}
+
+fn "wado-compiler/tests/fixtures/match_arm_struct_field_invalid_wasm.wado/__cm_export__run"() {
+    "wado-compiler/tests/fixtures/match_arm_struct_field_invalid_wasm.wado/run"();
     "wasi/task-return"(0);
 }
 

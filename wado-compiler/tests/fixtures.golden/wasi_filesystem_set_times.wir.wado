@@ -221,39 +221,45 @@ type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wad
 
 type "functype//core:internal/memory_to_gc_array" = fn(i32, i32) -> ref builtin::array<u8>;  // TypeId(51)
 
-type "functype//core:internal/write_string_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(52)
+type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(52)
 
-type "functype//core:internal/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(53)
+type "functype//core:internal/write_string_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(53)
 
-type "functype//core:internal/cm_lower_string" = fn(ref "core:prelude/string.wado//String") -> i64;  // TypeId(54)
+type "functype//core:internal/log_stderr" = fn(ref "core:prelude/string.wado//String");  // TypeId(54)
 
-type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(55)
+type "functype//core:internal/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(55)
 
-type "functype//core:internal/cm_stream_write_u8" = fn(i32, ref "core:prelude//Array<u8>");  // TypeId(56)
+type "functype//core:internal/cm_lower_string" = fn(ref "core:prelude/string.wado//String") -> i64;  // TypeId(56)
 
-type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);  // TypeId(57)
+type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;  // TypeId(57)
 
-type "functype//core:prelude/Array<Tuple<wasi:filesystem/types.wado/Descriptor,String>>::push" = fn(ref "core:prelude//Array<Tuple<Descriptor,String>>", ref "tuple//[Descriptor, String]");  // TypeId(58)
+type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(58)
 
-type "functype//core:prelude/array.wado/Array<Tuple<wasi:filesystem/types.wado/Descriptor,String>>::grow" = fn(ref "core:prelude//Array<Tuple<Descriptor,String>>");  // TypeId(59)
+type "functype//core:internal/cm_stream_write_u8" = fn(i32, ref "core:prelude//Array<u8>");  // TypeId(59)
 
-type "functype//core:prelude/types.wado/AsyncCall<Result<DescriptorStat,wasi:filesystem/types.wado/ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<Result<DescriptorStat,wasi:filesystem/types.wado/ErrorCode>>") -> ref "core:prelude/types.wado//Result<DescriptorStat,wasi:filesystem/types.wado/ErrorCode>";  // TypeId(60)
+type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);  // TypeId(60)
 
-type "functype//core:prelude/types.wado/AsyncCall<Result<unit,wasi:filesystem/types.wado/ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<Result<unit,wasi:filesystem/types.wado/ErrorCode>>") -> ref null "wasi:filesystem/types.wado//ErrorCode";  // TypeId(61)
+type "functype//core:prelude/Array<Tuple<wasi:filesystem/types.wado/Descriptor,String>>::push" = fn(ref "core:prelude//Array<Tuple<Descriptor,String>>", ref "tuple//[Descriptor, String]");  // TypeId(61)
 
-type "functype//core:prelude/types.wado/AsyncCall<Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>") -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>";  // TypeId(62)
+type "functype//core:prelude/array.wado/Array<Tuple<wasi:filesystem/types.wado/Descriptor,String>>::grow" = fn(ref "core:prelude//Array<Tuple<Descriptor,String>>");  // TypeId(62)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(63)
+type "functype//core:prelude/types.wado/AsyncCall<Result<DescriptorStat,wasi:filesystem/types.wado/ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<Result<DescriptorStat,wasi:filesystem/types.wado/ErrorCode>>") -> ref "core:prelude/types.wado//Result<DescriptorStat,wasi:filesystem/types.wado/ErrorCode>";  // TypeId(63)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(64)
+type "functype//core:prelude/types.wado/AsyncCall<Result<unit,wasi:filesystem/types.wado/ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<Result<unit,wasi:filesystem/types.wado/ErrorCode>>") -> ref null "wasi:filesystem/types.wado//ErrorCode";  // TypeId(64)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(65)
+type "functype//core:prelude/types.wado/AsyncCall<Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>") -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>";  // TypeId(65)
 
-type "functype//wasi/future-drop-readable:transmission-filesystem" = fn(i32);  // TypeId(66)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(66)
 
-type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(67)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(67)
 
-type "functype//core:internal/cm_waitable_set_wait" = fn(i32) -> [i32, i32, u32];  // TypeId(68)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(68)
+
+type "functype//wasi/future-drop-readable:transmission-filesystem" = fn(i32);  // TypeId(69)
+
+type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(70)
+
+type "functype//core:internal/cm_waitable_set_wait" = fn(i32) -> [i32, i32, u32];  // TypeId(71)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -712,6 +718,23 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {
     return arr;
 }
 
+fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
+    let i: i32;
+    __for_1: block {
+        i = 0;
+        block {
+            l22: loop {
+                if i >= len {
+                    break __for_1;
+                }
+                builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
+                i = i + 1;
+                continue l22;
+            };
+        };
+    };
+}
+
 fn "core:internal/write_string_to_stream"(tx, message, add_newline) {
     let bytes: ref builtin::array<u8>;
     let len: i32;
@@ -729,7 +752,7 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {
     "wasi/stream-drop-writable"(tx);
 }
 
-fn "core:internal/panic"(message) {
+fn "core:internal/log_stderr"(message) {
     let rx: i32;
     let tx: i32;
     let future_handle: i32;
@@ -742,31 +765,29 @@ fn "core:internal/panic"(message) {
     "core:internal/write_string_to_stream"(tx, message, 1);
     future = future_handle;
     "wasi/future-drop-readable:transmission-cli"(future);
+}
+
+fn "core:internal/panic"(message) {
+    "core:internal/log_stderr"(message);
     unreachable;
 }
 
 fn "core:internal/cm_lower_string"(s) {
-    let len_1: i32;
+    let len: i32;
     let bytes: ref builtin::array<u8>;
-    let ptr_3: i32;
-    let i: i32;
-    len_1 = s.used;
+    let ptr: i32;
+    len = s.used;
     bytes = s.repr;
-    ptr_3 = "mem/realloc"(0, 0, 1, len_1);
-    __inline_gc_array_to_memory_2____for_1: block {
-        i = 0;
-        block {
-            l23: loop {
-                if i >= len_1 {
-                    break __inline_gc_array_to_memory_2____for_1;
-                }
-                builtin::store_u8(ptr_3 + i, builtin::array_get_u8(bytes, i));
-                i = i + 1;
-                continue l23;
-            };
-        };
-    };
-    return builtin::i64_extend_i32_s(ptr_3) | (builtin::i64_extend_i32_s(len_1) << 32_i64);
+    ptr = "mem/realloc"(0, 0, 1, len);
+    "core:internal/gc_array_to_memory"(bytes, ptr, len);
+    return builtin::i64_extend_i32_s(ptr) | (builtin::i64_extend_i32_s(len) << 32_i64);
+}
+
+fn "core:internal/cm_lower_list_u8"(data, len) {
+    let ptr: i32;
+    ptr = "mem/realloc"(0, 0, 1, len);
+    "core:internal/gc_array_to_memory"(data, ptr, len);
+    return builtin::i64_extend_i32_s(ptr) | (builtin::i64_extend_i32_s(len) << 32_i64);
 }
 
 fn "core:internal/wait_for_blocked"(handle) {
@@ -785,78 +806,39 @@ fn "core:internal/wait_for_blocked"(handle) {
 
 fn "core:internal/cm_stream_write_u8"(handle, data) {
     let packed: i64;
-    let ptr_3: i32;
+    let ptr: i32;
     let len_4: i32;
     let result: i32;
     let data_9: ref builtin::array<u8>;
     let len_10: i32;
-    let ptr_15: i32;
-    let i: i32;
     packed = __inline_cm_lower_array_u8_0: block -> i64 {
         data_9 = data.repr;
         len_10 = data.used;
-        __inline_cm_lower_list_u8_3: block -> i64 {
-            ptr_15 = "mem/realloc"(0, 0, 1, len_10);
-            __inline_gc_array_to_memory_0____for_1: block {
-                i = 0;
-                block {
-                    l26: loop {
-                        if i >= len_10 {
-                            break __inline_gc_array_to_memory_0____for_1;
-                        }
-                        builtin::store_u8(ptr_15 + i, builtin::array_get_u8(data_9, i));
-                        i = i + 1;
-                        continue l26;
-                    };
-                };
-            };
-            break __inline_cm_lower_list_u8_3: builtin::i64_extend_i32_s(ptr_15) | (builtin::i64_extend_i32_s(len_10) << 32_i64);
-            unreachable;
-        };
-        break __inline_cm_lower_array_u8_0;
+        break __inline_cm_lower_array_u8_0: "core:internal/cm_lower_list_u8"(data_9, len_10);
         unreachable;
     };
-    ptr_3 = builtin::i32_wrap_i64(packed);
+    ptr = builtin::i32_wrap_i64(packed);
     len_4 = builtin::i32_wrap_i64(packed >> 32_i64);
-    result = "wasi/stream-write"(handle, ptr_3, len_4);
+    result = "wasi/stream-write"(handle, ptr, len_4);
     if result == -1 {
         drop("core:internal/wait_for_blocked"(handle));
     }
-    drop("mem/realloc"(ptr_3, len_4, 1, 0));
+    drop("mem/realloc"(ptr, len_4, 1, 0));
 }
 
 fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {
     let packed: i64;
-    let ptr_4: i32;
+    let ptr: i32;
     let raw_len: i32;
     let result: i32;
-    let ptr_11: i32;
-    let i: i32;
-    packed = __inline_cm_lower_list_u8_0: block -> i64 {
-        ptr_11 = "mem/realloc"(0, 0, 1, len);
-        __inline_gc_array_to_memory_1____for_1: block {
-            i = 0;
-            block {
-                l30: loop {
-                    if i >= len {
-                        break __inline_gc_array_to_memory_1____for_1;
-                    }
-                    builtin::store_u8(ptr_11 + i, builtin::array_get_u8(data, i));
-                    i = i + 1;
-                    continue l30;
-                };
-            };
-        };
-        break __inline_cm_lower_list_u8_0: builtin::i64_extend_i32_s(ptr_11) | (builtin::i64_extend_i32_s(len) << 32_i64);
-        unreachable;
-    };
-    ptr_4 = builtin::i32_wrap_i64(packed);
+    packed = "core:internal/cm_lower_list_u8"(data, len);
+    ptr = builtin::i32_wrap_i64(packed);
     raw_len = builtin::i32_wrap_i64(packed >> 32_i64);
-    result = "wasi/stream-write"(handle, ptr_4, raw_len);
+    result = "wasi/stream-write"(handle, ptr, raw_len);
     if result == -1 {
         drop("core:internal/wait_for_blocked"(handle));
     }
-    drop("mem/realloc"(ptr_4, raw_len, 1, 0));
+    drop("mem/realloc"(ptr, raw_len, 1, 0));
 }
 
 fn "core:internal/cm_waitable_set_wait"(ws) {
@@ -902,13 +884,13 @@ fn "core:prelude/array.wado/Array<Tuple<wasi:filesystem/types.wado/Descriptor,St
     __for_0: block {
         i = 0;
         block {
-            l35: loop {
+            l29: loop {
                 if i >= used {
                     break __for_0;
                 }
                 builtin::array_set<ref "tuple//[Descriptor, String]">(new_repr, i, builtin::array_get<ref "tuple//[Descriptor, String]">(old_repr, i));
                 i = i + 1;
-                continue l35;
+                continue l29;
             };
         };
     };
@@ -965,16 +947,16 @@ fn "core:prelude/types.wado/AsyncCall<Result<DescriptorStat,wasi:filesystem/type
             break __inline_cm_waitable_join_0: handle_34;
             unreachable;
         });
-        b38: block {
-            l39: loop {
+        b32: block {
+            l33: loop {
                 let __sroa_event_code: i32;
                 let __sroa_event_handle: i32;
                 let __sroa_event_payload: u32;
                 multivalue_bind [__sroa_event_code, __sroa_event_handle, __sroa_event_payload] = "core:internal/cm_waitable_set_wait"(ws_3);
                 if __sroa_event_payload == 2 {
-                    break b38;
+                    break b32;
                 }
-                continue l39;
+                continue l33;
             };
         };
         "wasi/subtask-drop"(raw);
@@ -1164,16 +1146,16 @@ fn "core:prelude/types.wado/AsyncCall<Result<unit,wasi:filesystem/types.wado/Err
             break __inline_cm_waitable_join_0: handle_12;
             unreachable;
         });
-        b91: block {
-            l92: loop {
+        b85: block {
+            l86: loop {
                 let __sroa_event_code: i32;
                 let __sroa_event_handle: i32;
                 let __sroa_event_payload: u32;
                 multivalue_bind [__sroa_event_code, __sroa_event_handle, __sroa_event_payload] = "core:internal/cm_waitable_set_wait"(ws_3);
                 if __sroa_event_payload == 2 {
-                    break b91;
+                    break b85;
                 }
-                continue l92;
+                continue l86;
             };
         };
         "wasi/subtask-drop"(raw);
@@ -1305,16 +1287,16 @@ fn "core:prelude/types.wado/AsyncCall<Result<wasi:filesystem/types.wado/Descript
             break __inline_cm_waitable_join_0: handle_12;
             unreachable;
         });
-        b133: block {
-            l134: loop {
+        b127: block {
+            l128: loop {
                 let __sroa_event_code: i32;
                 let __sroa_event_handle: i32;
                 let __sroa_event_payload: u32;
                 multivalue_bind [__sroa_event_code, __sroa_event_handle, __sroa_event_payload] = "core:internal/cm_waitable_set_wait"(ws_3);
                 if __sroa_event_payload == 2 {
-                    break b133;
+                    break b127;
                 }
-                continue l134;
+                continue l128;
             };
         };
         "wasi/subtask-drop"(raw);

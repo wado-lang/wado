@@ -273,27 +273,31 @@ type "functype//wado-compiler/tests/fixtures/http-uninit-string-conditional-trap
 
 type "functype//core:internal/memory_to_gc_array" = fn(i32, i32) -> ref builtin::array<u8>;  // TypeId(57)
 
-type "functype//core:internal/cm_lower_string" = fn(ref "core:prelude/string.wado//String") -> i64;  // TypeId(58)
+type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(58)
 
-type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(59)
+type "functype//core:internal/cm_lower_string" = fn(ref "core:prelude/string.wado//String") -> i64;  // TypeId(59)
 
-type "functype//core:internal/cm_stream_write_u8" = fn(i32, ref "core:prelude//Array<u8>");  // TypeId(60)
+type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;  // TypeId(60)
 
-type "functype//core:prelude/string.wado/String::concat" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(61)
+type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(61)
 
-type "functype//core:prelude/array.wado/Array<u8>::push" = fn(ref "core:prelude//Array<u8>", u8);  // TypeId(62)
+type "functype//core:internal/cm_stream_write_u8" = fn(i32, ref "core:prelude//Array<u8>");  // TypeId(62)
 
-type "functype//core:prelude/array.wado/Array<u8>::grow" = fn(ref "core:prelude//Array<u8>");  // TypeId(63)
+type "functype//core:prelude/string.wado/String::concat" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(63)
 
-type "functype//wasi/future-new" = fn() -> i64;  // TypeId(64)
+type "functype//core:prelude/array.wado/Array<u8>::push" = fn(ref "core:prelude//Array<u8>", u8);  // TypeId(64)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(65)
+type "functype//core:prelude/array.wado/Array<u8>::grow" = fn(ref "core:prelude//Array<u8>");  // TypeId(65)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(66)
+type "functype//wasi/future-new" = fn() -> i64;  // TypeId(66)
 
-type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(67)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(67)
 
-type "functype//wado-compiler/tests/fixtures/http-uninit-string-conditional-trap.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> [i32, i32];  // TypeId(68)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(68)
+
+type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(69)
+
+type "functype//wado-compiler/tests/fixtures/http-uninit-string-conditional-trap.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> [i32, i32];  // TypeId(70)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -915,36 +919,16 @@ fn "wado-compiler/tests/fixtures/http-uninit-string-conditional-trap.wado/__cm_b
     let __vresult: ref "wasi:http/types.wado//HeaderError";
     let __disc_10: i32;
     let __option_result: ref null "core:prelude/string.wado//String";
-    let data_13: ref builtin::array<u8>;
+    let data: ref builtin::array<u8>;
     let len_14: i32;
-    let ptr_19: i32;
-    let ptr_20: i32;
-    let len_21: i32;
-    let arr_22: ref builtin::array<u8>;
-    let i: i32;
+    let ptr: i32;
+    let len_18: i32;
+    let arr_19: ref builtin::array<u8>;
     __name_packed = "core:internal/cm_lower_string"(name);
     __value_packed = __inline_cm_lower_array_u8_0: block -> i64 {
-        data_13 = value.repr;
+        data = value.repr;
         len_14 = value.used;
-        __inline_cm_lower_list_u8_3: block -> i64 {
-            ptr_19 = "mem/realloc"(0, 0, 1, len_14);
-            __inline_gc_array_to_memory_0____for_1: block {
-                i = 0;
-                block {
-                    l49: loop {
-                        if i >= len_14 {
-                            break __inline_gc_array_to_memory_0____for_1;
-                        }
-                        builtin::store_u8(ptr_19 + i, builtin::array_get_u8(data_13, i));
-                        i = i + 1;
-                        continue l49;
-                    };
-                };
-            };
-            break __inline_cm_lower_list_u8_3: builtin::i64_extend_i32_s(ptr_19) | (builtin::i64_extend_i32_s(len_14) << 32_i64);
-            unreachable;
-        };
-        break __inline_cm_lower_array_u8_0;
+        break __inline_cm_lower_array_u8_0: "core:internal/cm_lower_list_u8"(data, len_14);
         unreachable;
     };
     __outptr = "mem/realloc"(0, 0, 4, 20);
@@ -968,11 +952,11 @@ fn "wado-compiler/tests/fixtures/http-uninit-string-conditional-trap.wado/__cm_b
             __disc_10 = builtin::load_u8((__outptr + 4) + 4);
             __option_result = ref.null none;
             if __disc_10 != 0 {
-                __option_result = ref.as_non_null(__inline_memory_to_gc_string_4: block -> ref "core:prelude/string.wado//String" {
-                    ptr_20 = builtin::load_i32(((__outptr + 4) + 4) + 4);
-                    len_21 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4);
-                    arr_22 = "core:internal/memory_to_gc_array"(ptr_20, len_21);
-                    break __inline_memory_to_gc_string_4: struct.new "core:prelude/string.wado//String" { repr: arr_22, used: len_21 };
+                __option_result = ref.as_non_null(__inline_memory_to_gc_string_3: block -> ref "core:prelude/string.wado//String" {
+                    ptr = builtin::load_i32(((__outptr + 4) + 4) + 4);
+                    len_18 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4);
+                    arr_19 = "core:internal/memory_to_gc_array"(ptr, len_18);
+                    break __inline_memory_to_gc_string_3: struct.new "core:prelude/string.wado//String" { repr: arr_19, used: len_18 };
                     unreachable;
                 });
                 drop("mem/realloc"(builtin::load_i32(((__outptr + 4) + 4) + 4), builtin::load_i32((((__outptr + 4) + 4) + 4) + 4), 1, 0));
@@ -1028,41 +1012,52 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {
     __for_0: block {
         i = 0;
         block {
-            l60: loop {
+            l57: loop {
                 if i >= len {
                     break __for_0;
                 }
                 builtin::array_set_u8(arr, i, builtin::load_u8(ptr + i));
                 i = i + 1;
-                continue l60;
+                continue l57;
             };
         };
     };
     return arr;
 }
 
-fn "core:internal/cm_lower_string"(s) {
-    let len_1: i32;
-    let bytes: ref builtin::array<u8>;
-    let ptr_3: i32;
+fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
-    len_1 = s.used;
-    bytes = s.repr;
-    ptr_3 = "mem/realloc"(0, 0, 1, len_1);
-    __inline_gc_array_to_memory_2____for_1: block {
+    __for_1: block {
         i = 0;
         block {
-            l63: loop {
-                if i >= len_1 {
-                    break __inline_gc_array_to_memory_2____for_1;
+            l60: loop {
+                if i >= len {
+                    break __for_1;
                 }
-                builtin::store_u8(ptr_3 + i, builtin::array_get_u8(bytes, i));
+                builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l63;
+                continue l60;
             };
         };
     };
-    return builtin::i64_extend_i32_s(ptr_3) | (builtin::i64_extend_i32_s(len_1) << 32_i64);
+}
+
+fn "core:internal/cm_lower_string"(s) {
+    let len: i32;
+    let bytes: ref builtin::array<u8>;
+    let ptr: i32;
+    len = s.used;
+    bytes = s.repr;
+    ptr = "mem/realloc"(0, 0, 1, len);
+    "core:internal/gc_array_to_memory"(bytes, ptr, len);
+    return builtin::i64_extend_i32_s(ptr) | (builtin::i64_extend_i32_s(len) << 32_i64);
+}
+
+fn "core:internal/cm_lower_list_u8"(data, len) {
+    let ptr: i32;
+    ptr = "mem/realloc"(0, 0, 1, len);
+    "core:internal/gc_array_to_memory"(data, ptr, len);
+    return builtin::i64_extend_i32_s(ptr) | (builtin::i64_extend_i32_s(len) << 32_i64);
 }
 
 fn "core:internal/wait_for_blocked"(handle) {
@@ -1081,44 +1076,24 @@ fn "core:internal/wait_for_blocked"(handle) {
 
 fn "core:internal/cm_stream_write_u8"(handle, data) {
     let packed: i64;
-    let ptr_3: i32;
+    let ptr: i32;
     let len_4: i32;
     let result: i32;
     let data_9: ref builtin::array<u8>;
     let len_10: i32;
-    let ptr_15: i32;
-    let i: i32;
     packed = __inline_cm_lower_array_u8_0: block -> i64 {
         data_9 = data.repr;
         len_10 = data.used;
-        __inline_cm_lower_list_u8_3: block -> i64 {
-            ptr_15 = "mem/realloc"(0, 0, 1, len_10);
-            __inline_gc_array_to_memory_0____for_1: block {
-                i = 0;
-                block {
-                    l66: loop {
-                        if i >= len_10 {
-                            break __inline_gc_array_to_memory_0____for_1;
-                        }
-                        builtin::store_u8(ptr_15 + i, builtin::array_get_u8(data_9, i));
-                        i = i + 1;
-                        continue l66;
-                    };
-                };
-            };
-            break __inline_cm_lower_list_u8_3: builtin::i64_extend_i32_s(ptr_15) | (builtin::i64_extend_i32_s(len_10) << 32_i64);
-            unreachable;
-        };
-        break __inline_cm_lower_array_u8_0;
+        break __inline_cm_lower_array_u8_0: "core:internal/cm_lower_list_u8"(data_9, len_10);
         unreachable;
     };
-    ptr_3 = builtin::i32_wrap_i64(packed);
+    ptr = builtin::i32_wrap_i64(packed);
     len_4 = builtin::i32_wrap_i64(packed >> 32_i64);
-    result = "wasi/stream-write"(handle, ptr_3, len_4);
+    result = "wasi/stream-write"(handle, ptr, len_4);
     if result == -1 {
         drop("core:internal/wait_for_blocked"(handle));
     }
-    drop("mem/realloc"(ptr_3, len_4, 1, 0));
+    drop("mem/realloc"(ptr, len_4, 1, 0));
 }
 
 fn "core:prelude/string.wado/String::concat"(a, b) {
@@ -1165,13 +1140,13 @@ fn "core:prelude/array.wado/Array<u8>::grow"(self) {
     __for_0: block {
         i = 0;
         block {
-            l71: loop {
+            l65: loop {
                 if i >= used {
                     break __for_0;
                 }
                 builtin::array_set_u8(new_repr, i, builtin::array_get<u8>(old_repr, i));
                 i = i + 1;
-                continue l71;
+                continue l65;
             };
         };
     };

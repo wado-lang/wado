@@ -6,13 +6,19 @@ type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(0)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(1)
 
-type "functype//wado-compiler/tests/fixtures/default_field_basic.wado/__cm_export__run" = fn();  // TypeId(2)
+type "functype//wado-compiler/tests/fixtures/default_field_basic.wado/run" = fn();  // TypeId(2)
+
+type "functype//wado-compiler/tests/fixtures/default_field_basic.wado/__cm_export__run" = fn();  // TypeId(3)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
 import memory (1) from "mem/memory";
 
+fn "wado-compiler/tests/fixtures/default_field_basic.wado/run"() {
+}
+
 fn "wado-compiler/tests/fixtures/default_field_basic.wado/__cm_export__run"() {
+    "wado-compiler/tests/fixtures/default_field_basic.wado/run"();
     "wasi/task-return"(0);
 }
 

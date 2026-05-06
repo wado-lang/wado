@@ -9,115 +9,129 @@ struct core:prelude/string.wado//String {  // TypeId(1)
     mut used: i32,
 }
 
-struct core:prelude/types.wado//AsyncCall<Result<unit,wasi:tls/types.wado/Error>> {  // TypeId(2)
+struct core:prelude/array.wado//ArrayIter<u8> {  // TypeId(2)
+    mut repr: ref builtin::array<u8>,
+    mut used: i32,
+    mut index: i32,
+}
+
+struct core:prelude/types.wado//AsyncCall<Result<unit,wasi:tls/types.wado/Error>> {  // TypeId(3)
     mut __cm_packed: i32,
     mut __cm_outptr: i32,
     mut __cm_size: i32,
     mut __cm_align: i32,
 }
 
-variant core:prelude/types.wado//Result<unit,wasi:tls/types.wado/Error> {  // TypeId(3)
+variant core:prelude/types.wado//Result<unit,wasi:tls/types.wado/Error> {  // TypeId(4)
     Ok,
     Err(i32),
 }
 
-struct core:prelude/types.wado//Result<unit,wasi:tls/types.wado/Error>::Err {  // TypeId(4)
+struct core:prelude/types.wado//Result<unit,wasi:tls/types.wado/Error>::Err {  // TypeId(5)
     discriminant: i32,
     payload_0: i32,
 }
 
-struct core:prelude//Array<u8> {  // TypeId(5)
+struct core:prelude//Array<u8> {  // TypeId(6)
     mut repr: ref builtin::array<u8>,
     mut used: i32,
 }
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(6)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(7)
 
-type "functype//wasi/stream-read" = fn(i32, i32, i32) -> i32;  // TypeId(7)
+type "functype//wasi/stream-read" = fn(i32, i32, i32) -> i32;  // TypeId(8)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(8)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(9)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(9)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(10)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(10)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(11)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(11)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(12)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(12)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(13)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(13)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(14)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(14)
+type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(15)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(15)
+type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(16)
 
-type "functype//wasi/wasi:tls/Connector::new" = fn() -> i32;  // TypeId(16)
+type "functype//wasi/wasi:tls/Connector::new" = fn() -> i32;  // TypeId(17)
 
-type "functype//wasi/wasi:tls/Connector::send" = fn(i32, i32, i32);  // TypeId(17)
+type "functype//wasi/wasi:tls/Connector::send" = fn(i32, i32, i32);  // TypeId(18)
 
-type "functype//wasi/wasi:tls/Connector::receive" = fn(i32, i32, i32);  // TypeId(18)
+type "functype//wasi/wasi:tls/Connector::receive" = fn(i32, i32, i32);  // TypeId(19)
 
-type "functype//wasi/wasi:tls/Connector::connect" = fn(i32, i32, i32, i32) -> i32;  // TypeId(19)
+type "functype//wasi/wasi:tls/Connector::connect" = fn(i32, i32, i32, i32) -> i32;  // TypeId(20)
 
-type "functype//wasi/wasi:tls/Error::to_debug_string" = fn(i32, i32);  // TypeId(20)
+type "functype//wasi/wasi:tls/Error::to_debug_string" = fn(i32, i32);  // TypeId(21)
 
-type "functype//wado-compiler/tests/fixtures/wasi-tls-mock-recv.wado/run" = fn();  // TypeId(21)
+type "functype//wado-compiler/tests/fixtures/wasi-tls-mock-recv.wado/run" = fn();  // TypeId(22)
 
-type "functype//wado-compiler/tests/fixtures/wasi-tls-mock-recv.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(22)
+type "functype//wado-compiler/tests/fixtures/wasi-tls-mock-recv.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(23)
 
-type "functype//wado-compiler/tests/fixtures/wasi-tls-mock-recv.wado/__cm_binding__Connector_new" = fn() -> i32;  // TypeId(23)
+type "functype//wado-compiler/tests/fixtures/wasi-tls-mock-recv.wado/__cm_binding__Connector_new" = fn() -> i32;  // TypeId(24)
 
-type "functype//wado-compiler/tests/fixtures/wasi-tls-mock-recv.wado/__cm_binding__Connector_connect" = fn(i32, ref "core:prelude/string.wado//String") -> ref "core:prelude/types.wado//AsyncCall<Result<unit,wasi:tls/types.wado/Error>>";  // TypeId(24)
+type "functype//wado-compiler/tests/fixtures/wasi-tls-mock-recv.wado/__cm_binding__Connector_connect" = fn(i32, ref "core:prelude/string.wado//String") -> ref "core:prelude/types.wado//AsyncCall<Result<unit,wasi:tls/types.wado/Error>>";  // TypeId(25)
 
-type "functype//wado-compiler/tests/fixtures/wasi-tls-mock-recv.wado/__cm_binding__Error_to_debug_string" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(25)
+type "functype//wado-compiler/tests/fixtures/wasi-tls-mock-recv.wado/__cm_binding__Error_to_debug_string" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(26)
 
-type "functype//wado-compiler/tests/fixtures/wasi-tls-mock-recv.wado/__cm_export__run" = fn();  // TypeId(26)
+type "functype//wado-compiler/tests/fixtures/wasi-tls-mock-recv.wado/__cm_export__run" = fn();  // TypeId(27)
 
-type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(27)
+type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(28)
 
-type "functype//core:internal/memory_to_gc_array" = fn(i32, i32) -> ref builtin::array<u8>;  // TypeId(28)
+type "functype//core:internal/memory_to_gc_array" = fn(i32, i32) -> ref builtin::array<u8>;  // TypeId(29)
 
-type "functype//core:internal/write_string_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(29)
+type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(30)
 
-type "functype//core:internal/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(30)
+type "functype//core:internal/write_string_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(31)
 
-type "functype//core:internal/cm_lower_string" = fn(ref "core:prelude/string.wado//String") -> i64;  // TypeId(31)
+type "functype//core:internal/log_stderr" = fn(ref "core:prelude/string.wado//String");  // TypeId(32)
 
-type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(32)
+type "functype//core:internal/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(33)
 
-type "functype//core:internal/cm_stream_read_u8" = fn(i32, i32) -> ref "core:prelude//Array<u8>";  // TypeId(33)
+type "functype//core:internal/cm_lower_string" = fn(ref "core:prelude/string.wado//String") -> i64;  // TypeId(34)
 
-type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);  // TypeId(34)
+type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;  // TypeId(35)
 
-type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(35)
+type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(36)
 
-type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(36)
+type "functype//core:internal/cm_stream_read_u8" = fn(i32, i32) -> ref "core:prelude//Array<u8>";  // TypeId(37)
 
-type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(37)
+type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);  // TypeId(38)
 
-type "functype//core:prelude/array.wado/Array<u8>::extend" = fn(ref "core:prelude//Array<u8>", ref "core:prelude//Array<u8>");  // TypeId(38)
+type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(39)
 
-type "functype//core:prelude/array.wado/Array<u8>::grow_to" = fn(ref "core:prelude//Array<u8>", i32);  // TypeId(39)
+type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(40)
 
-type "functype//core:prelude/types.wado/AsyncCall<Result<unit,wasi:tls/types.wado/Error>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<Result<unit,wasi:tls/types.wado/Error>>") -> ref "core:prelude/types.wado//Result<unit,wasi:tls/types.wado/Error>";  // TypeId(40)
+type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(41)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(41)
+type "functype//core:prelude/array.wado/Array<u8>::extend" = fn(ref "core:prelude//Array<u8>", ref "core:prelude//Array<u8>");  // TypeId(42)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(42)
+type "functype//core:prelude/array.wado/Array<u8>::grow_to" = fn(ref "core:prelude//Array<u8>", i32);  // TypeId(43)
 
-type "functype//wasi/stream-drop-readable" = fn(i32);  // TypeId(43)
+type "functype//core:prelude/types.wado/AsyncCall<Result<unit,wasi:tls/types.wado/Error>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<Result<unit,wasi:tls/types.wado/Error>>") -> ref "core:prelude/types.wado//Result<unit,wasi:tls/types.wado/Error>";  // TypeId(44)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(44)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(45)
 
-type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(45)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(46)
 
-type "functype//wado-compiler/tests/fixtures/wasi-tls-mock-recv.wado/__cm_binding__Connector_send" = fn(i32, i32) -> [i32, i32];  // TypeId(46)
+type "functype//wasi/stream-drop-readable" = fn(i32);  // TypeId(47)
 
-type "functype//wado-compiler/tests/fixtures/wasi-tls-mock-recv.wado/__cm_binding__Connector_receive" = fn(i32, i32) -> [i32, i32];  // TypeId(47)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(48)
 
-type "functype//core:internal/cm_waitable_set_wait" = fn(i32) -> [i32, i32, u32];  // TypeId(48)
+type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(49)
 
-type "functype//core:prelude/string.wado/String::from_utf8<Array<u8>>" = fn(ref "core:prelude//Array<u8>") -> [i32, ref null "core:prelude/string.wado//String"];  // TypeId(49)
+type "functype//wado-compiler/tests/fixtures/wasi-tls-mock-recv.wado/__cm_binding__Connector_send" = fn(i32, i32) -> [i32, i32];  // TypeId(50)
+
+type "functype//wado-compiler/tests/fixtures/wasi-tls-mock-recv.wado/__cm_binding__Connector_receive" = fn(i32, i32) -> [i32, i32];  // TypeId(51)
+
+type "functype//core:internal/cm_waitable_set_wait" = fn(i32) -> [i32, i32, u32];  // TypeId(52)
+
+type "functype//core:prelude/string.wado/String::from_utf8<Array<u8>>" = fn(ref "core:prelude//Array<u8>") -> [i32, ref null "core:prelude/string.wado//String"];  // TypeId(53)
+
+type "functype//core:prelude/array.wado/ArrayIter<u8>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<u8>") -> [i32, u8];  // TypeId(54)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-read from "wasi/stream-read";
@@ -330,6 +344,23 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {
     return arr;
 }
 
+fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
+    let i: i32;
+    __for_1: block {
+        i = 0;
+        block {
+            l10: loop {
+                if i >= len {
+                    break __for_1;
+                }
+                builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
+                i = i + 1;
+                continue l10;
+            };
+        };
+    };
+}
+
 fn "core:internal/write_string_to_stream"(tx, message, add_newline) {
     let bytes: ref builtin::array<u8>;
     let len: i32;
@@ -347,7 +378,7 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {
     "wasi/stream-drop-writable"(tx);
 }
 
-fn "core:internal/panic"(message) {
+fn "core:internal/log_stderr"(message) {
     let rx: i32;
     let tx: i32;
     let future_handle: i32;
@@ -360,31 +391,29 @@ fn "core:internal/panic"(message) {
     "core:internal/write_string_to_stream"(tx, message, 1);
     future = future_handle;
     "wasi/future-drop-readable:transmission-cli"(future);
+}
+
+fn "core:internal/panic"(message) {
+    "core:internal/log_stderr"(message);
     unreachable;
 }
 
 fn "core:internal/cm_lower_string"(s) {
-    let len_1: i32;
+    let len: i32;
     let bytes: ref builtin::array<u8>;
-    let ptr_3: i32;
-    let i: i32;
-    len_1 = s.used;
+    let ptr: i32;
+    len = s.used;
     bytes = s.repr;
-    ptr_3 = "mem/realloc"(0, 0, 1, len_1);
-    __inline_gc_array_to_memory_2____for_1: block {
-        i = 0;
-        block {
-            l11: loop {
-                if i >= len_1 {
-                    break __inline_gc_array_to_memory_2____for_1;
-                }
-                builtin::store_u8(ptr_3 + i, builtin::array_get_u8(bytes, i));
-                i = i + 1;
-                continue l11;
-            };
-        };
-    };
-    return builtin::i64_extend_i32_s(ptr_3) | (builtin::i64_extend_i32_s(len_1) << 32_i64);
+    ptr = "mem/realloc"(0, 0, 1, len);
+    "core:internal/gc_array_to_memory"(bytes, ptr, len);
+    return builtin::i64_extend_i32_s(ptr) | (builtin::i64_extend_i32_s(len) << 32_i64);
+}
+
+fn "core:internal/cm_lower_list_u8"(data, len) {
+    let ptr: i32;
+    ptr = "mem/realloc"(0, 0, 1, len);
+    "core:internal/gc_array_to_memory"(data, ptr, len);
+    return builtin::i64_extend_i32_s(ptr) | (builtin::i64_extend_i32_s(len) << 32_i64);
 }
 
 fn "core:internal/wait_for_blocked"(handle) {
@@ -419,36 +448,17 @@ fn "core:internal/cm_stream_read_u8"(handle, max) {
 
 fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {
     let packed: i64;
-    let ptr_4: i32;
+    let ptr: i32;
     let raw_len: i32;
     let result: i32;
-    let ptr_11: i32;
-    let i: i32;
-    packed = __inline_cm_lower_list_u8_0: block -> i64 {
-        ptr_11 = "mem/realloc"(0, 0, 1, len);
-        __inline_gc_array_to_memory_1____for_1: block {
-            i = 0;
-            block {
-                l15: loop {
-                    if i >= len {
-                        break __inline_gc_array_to_memory_1____for_1;
-                    }
-                    builtin::store_u8(ptr_11 + i, builtin::array_get_u8(data, i));
-                    i = i + 1;
-                    continue l15;
-                };
-            };
-        };
-        break __inline_cm_lower_list_u8_0: builtin::i64_extend_i32_s(ptr_11) | (builtin::i64_extend_i32_s(len) << 32_i64);
-        unreachable;
-    };
-    ptr_4 = builtin::i32_wrap_i64(packed);
+    packed = "core:internal/cm_lower_list_u8"(data, len);
+    ptr = builtin::i32_wrap_i64(packed);
     raw_len = builtin::i32_wrap_i64(packed >> 32_i64);
-    result = "wasi/stream-write"(handle, ptr_4, raw_len);
+    result = "wasi/stream-write"(handle, ptr, raw_len);
     if result == -1 {
         drop("core:internal/wait_for_blocked"(handle));
     }
-    drop("mem/realloc"(ptr_4, raw_len, 1, 0));
+    drop("mem/realloc"(ptr, raw_len, 1, 0));
 }
 
 fn "core:internal/cm_waitable_set_wait"(ws) {
@@ -532,172 +542,174 @@ fn "core:prelude/string.wado/String::push"(self, c) {
 
 fn "core:prelude/string.wado/String::from_utf8<Array<u8>>"(bytes) {
     let builder: ref "core:prelude/string.wado//String";
+    let iter: ref "core:prelude/array.wado//ArrayIter<u8>";
+    let b0: u8;
     let code: u32;
-    let item_21: u8;
-    let item_23: u8;
-    let item_25: u8;
-    let item_27: u8;
-    let item_29: u8;
-    let item_31: u8;
-    let item_33: u8;
-    let _licm_used_42: i32;
-    let _licm_repr_43: ref builtin::array<u8>;
-    let __sroa_iter_repr: ref builtin::array<u8>;
-    let __sroa_iter_used: i32;
-    let __sroa_iter_index: i32;
+    let b1_5: u8;
+    let b1_6: u8;
+    let b2_7: u8;
+    let b1_8: u8;
+    let b2_9: u8;
+    let b3: u8;
     builder = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(8), used: 0 };
-    __sroa_iter_repr = bytes.repr;
-    __sroa_iter_used = bytes.used;
-    __sroa_iter_index = 0;
-    _licm_used_42 = __sroa_iter_used;
-    _licm_repr_43 = __sroa_iter_repr;
-    b25: block {
-        l26: loop {
-            __fused___inline_ArrayIter_u8__Iterator__next_2: block {
-                if __sroa_iter_index >= _licm_used_42 {
-                    break b25;
-                }
-                item_21 = builtin::array_get<u8>(_licm_repr_43, __sroa_iter_index);
-                __sroa_iter_index = __sroa_iter_index + 1;
+    iter = struct.new "core:prelude/array.wado//ArrayIter<u8>" { repr: bytes.repr, used: bytes.used, index: 0 };
+    b22: block {
+        l23: loop {
+            let __sroa___pattern_temp_0_discriminant: i32;
+            let __sroa___pattern_temp_0_payload_0: u8;
+            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = "core:prelude/array.wado/ArrayIter<u8>^Iterator::next"(iter);
+            if __sroa___pattern_temp_0_discriminant == 0 {
+                b0 = __sroa___pattern_temp_0_payload_0;
                 code = 0;
-                if item_21 <u 128 {
-                    code = item_21;
-                } else if item_21 <u 194 {
+                if b0 <u 128 {
+                    code = b0;
+                } else if b0 <u 194 {
                     return 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: unexpected byte"), used: 30 };
-                } else if item_21 <u 224 {
-                    __fused___inline_ArrayIter_u8__Iterator__next_3: block {
-                        if __sroa_iter_index >= _licm_used_42 {
-                            return 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: truncated sequence"), used: 33 };
-                        }
-                        item_23 = builtin::array_get<u8>(_licm_repr_43, __sroa_iter_index);
-                        __sroa_iter_index = __sroa_iter_index + 1;
-                        if (if item_23 <u 128 -> i32 {
+                } else if b0 <u 224 {
+                    let __sroa___pattern_temp_1_discriminant: i32;
+                    let __sroa___pattern_temp_1_payload_0: u8;
+                    multivalue_bind [__sroa___pattern_temp_1_discriminant, __sroa___pattern_temp_1_payload_0] = "core:prelude/array.wado/ArrayIter<u8>^Iterator::next"(iter);
+                    if __sroa___pattern_temp_1_discriminant == 0 {
+                        b1_5 = __sroa___pattern_temp_1_payload_0;
+                        if (if b1_5 <u 128 -> i32 {
                             1;
                         } else {
-                            item_23 >u 191;
+                            b1_5 >u 191;
                         }) {
                             return 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: bad continuation byte"), used: 36 };
                         }
-                        code = ((item_21 & 31) << 6) | (item_23 & 63);
-                        break __fused___inline_ArrayIter_u8__Iterator__next_3;
-                    };
-                } else if item_21 <u 240 {
-                    __fused___inline_ArrayIter_u8__Iterator__next_4: block {
-                        if __sroa_iter_index >= _licm_used_42 {
-                            return 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: truncated sequence"), used: 33 };
-                        }
-                        item_25 = builtin::array_get<u8>(_licm_repr_43, __sroa_iter_index);
-                        __sroa_iter_index = __sroa_iter_index + 1;
-                        __fused___inline_ArrayIter_u8__Iterator__next_5: block {
-                            if __sroa_iter_index >= _licm_used_42 {
-                                return 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: truncated sequence"), used: 33 };
-                            }
-                            item_27 = builtin::array_get<u8>(_licm_repr_43, __sroa_iter_index);
-                            __sroa_iter_index = __sroa_iter_index + 1;
-                            if (if item_21 == 224 -> i32 {
-                                item_25 <u 160;
+                        code = ((b0 & 31) << 6) | (b1_5 & 63);
+                    } else {
+                        return 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: truncated sequence"), used: 33 };
+                    }
+                } else if b0 <u 240 {
+                    let __sroa___pattern_temp_2_discriminant: i32;
+                    let __sroa___pattern_temp_2_payload_0: u8;
+                    multivalue_bind [__sroa___pattern_temp_2_discriminant, __sroa___pattern_temp_2_payload_0] = "core:prelude/array.wado/ArrayIter<u8>^Iterator::next"(iter);
+                    if __sroa___pattern_temp_2_discriminant == 0 {
+                        b1_6 = __sroa___pattern_temp_2_payload_0;
+                        let __sroa___pattern_temp_3_discriminant: i32;
+                        let __sroa___pattern_temp_3_payload_0: u8;
+                        multivalue_bind [__sroa___pattern_temp_3_discriminant, __sroa___pattern_temp_3_payload_0] = "core:prelude/array.wado/ArrayIter<u8>^Iterator::next"(iter);
+                        if __sroa___pattern_temp_3_discriminant == 0 {
+                            b2_7 = __sroa___pattern_temp_3_payload_0;
+                            if (if b0 == 224 -> i32 {
+                                b1_6 <u 160;
                             } else {
                                 0;
                             }) {
                                 return 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: overlong sequence"), used: 32 };
                             }
-                            if (if item_21 == 237 -> i32 {
-                                item_25 >=u 160;
+                            if (if b0 == 237 -> i32 {
+                                b1_6 >=u 160;
                             } else {
                                 0;
                             }) {
                                 return 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: surrogate codepoint"), used: 34 };
                             }
-                            if (if item_25 <u 128 -> i32 {
+                            if (if b1_6 <u 128 -> i32 {
                                 1;
                             } else {
-                                item_25 >u 191;
+                                b1_6 >u 191;
                             }) {
                                 return 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: bad continuation byte"), used: 36 };
                             }
-                            if (if item_27 <u 128 -> i32 {
+                            if (if b2_7 <u 128 -> i32 {
                                 1;
                             } else {
-                                item_27 >u 191;
+                                b2_7 >u 191;
                             }) {
                                 return 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: bad continuation byte"), used: 36 };
                             }
-                            code = (((item_21 & 15) << 12) | ((item_25 & 63) << 6)) | (item_27 & 63);
-                            break __fused___inline_ArrayIter_u8__Iterator__next_5;
-                        };
-                        break __fused___inline_ArrayIter_u8__Iterator__next_4;
-                    };
-                } else if item_21 <u 245 {
-                    __fused___inline_ArrayIter_u8__Iterator__next_6: block {
-                        if __sroa_iter_index >= _licm_used_42 {
+                            code = (((b0 & 15) << 12) | ((b1_6 & 63) << 6)) | (b2_7 & 63);
+                        } else {
                             return 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: truncated sequence"), used: 33 };
                         }
-                        item_29 = builtin::array_get<u8>(_licm_repr_43, __sroa_iter_index);
-                        __sroa_iter_index = __sroa_iter_index + 1;
-                        __fused___inline_ArrayIter_u8__Iterator__next_7: block {
-                            if __sroa_iter_index >= _licm_used_42 {
-                                return 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: truncated sequence"), used: 33 };
-                            }
-                            item_31 = builtin::array_get<u8>(_licm_repr_43, __sroa_iter_index);
-                            __sroa_iter_index = __sroa_iter_index + 1;
-                            __fused___inline_ArrayIter_u8__Iterator__next_8: block {
-                                if __sroa_iter_index >= _licm_used_42 {
-                                    return 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: truncated sequence"), used: 33 };
-                                }
-                                item_33 = builtin::array_get<u8>(_licm_repr_43, __sroa_iter_index);
-                                __sroa_iter_index = __sroa_iter_index + 1;
-                                if (if item_21 == 240 -> i32 {
-                                    item_29 <u 144;
+                    } else {
+                        return 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: truncated sequence"), used: 33 };
+                    }
+                } else if b0 <u 245 {
+                    let __sroa___pattern_temp_4_discriminant: i32;
+                    let __sroa___pattern_temp_4_payload_0: u8;
+                    multivalue_bind [__sroa___pattern_temp_4_discriminant, __sroa___pattern_temp_4_payload_0] = "core:prelude/array.wado/ArrayIter<u8>^Iterator::next"(iter);
+                    if __sroa___pattern_temp_4_discriminant == 0 {
+                        b1_8 = __sroa___pattern_temp_4_payload_0;
+                        let __sroa___pattern_temp_5_discriminant: i32;
+                        let __sroa___pattern_temp_5_payload_0: u8;
+                        multivalue_bind [__sroa___pattern_temp_5_discriminant, __sroa___pattern_temp_5_payload_0] = "core:prelude/array.wado/ArrayIter<u8>^Iterator::next"(iter);
+                        if __sroa___pattern_temp_5_discriminant == 0 {
+                            b2_9 = __sroa___pattern_temp_5_payload_0;
+                            let __sroa___pattern_temp_6_discriminant: i32;
+                            let __sroa___pattern_temp_6_payload_0: u8;
+                            multivalue_bind [__sroa___pattern_temp_6_discriminant, __sroa___pattern_temp_6_payload_0] = "core:prelude/array.wado/ArrayIter<u8>^Iterator::next"(iter);
+                            if __sroa___pattern_temp_6_discriminant == 0 {
+                                b3 = __sroa___pattern_temp_6_payload_0;
+                                if (if b0 == 240 -> i32 {
+                                    b1_8 <u 144;
                                 } else {
                                     0;
                                 }) {
                                     return 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: overlong sequence"), used: 32 };
                                 }
-                                if (if item_21 == 244 -> i32 {
-                                    item_29 >u 143;
+                                if (if b0 == 244 -> i32 {
+                                    b1_8 >u 143;
                                 } else {
                                     0;
                                 }) {
                                     return 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: out of Unicode range"), used: 35 };
                                 }
-                                if (if item_29 <u 128 -> i32 {
+                                if (if b1_8 <u 128 -> i32 {
                                     1;
                                 } else {
-                                    item_29 >u 191;
+                                    b1_8 >u 191;
                                 }) {
                                     return 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: bad continuation byte"), used: 36 };
                                 }
-                                if (if item_31 <u 128 -> i32 {
+                                if (if b2_9 <u 128 -> i32 {
                                     1;
                                 } else {
-                                    item_31 >u 191;
+                                    b2_9 >u 191;
                                 }) {
                                     return 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: bad continuation byte"), used: 36 };
                                 }
-                                if (if item_33 <u 128 -> i32 {
+                                if (if b3 <u 128 -> i32 {
                                     1;
                                 } else {
-                                    item_33 >u 191;
+                                    b3 >u 191;
                                 }) {
                                     return 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: bad continuation byte"), used: 36 };
                                 }
-                                code = ((((item_21 & 7) << 18) | ((item_29 & 63) << 12)) | ((item_31 & 63) << 6)) | (item_33 & 63);
-                                break __fused___inline_ArrayIter_u8__Iterator__next_8;
-                            };
-                            break __fused___inline_ArrayIter_u8__Iterator__next_7;
-                        };
-                        break __fused___inline_ArrayIter_u8__Iterator__next_6;
-                    };
+                                code = ((((b0 & 7) << 18) | ((b1_8 & 63) << 12)) | ((b2_9 & 63) << 6)) | (b3 & 63);
+                            } else {
+                                return 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: truncated sequence"), used: 33 };
+                            }
+                        } else {
+                            return 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: truncated sequence"), used: 33 };
+                        }
+                    } else {
+                        return 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: truncated sequence"), used: 33 };
+                    }
                 } else {
                     return 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: byte out of range"), used: 32 };
                 }
                 "core:prelude/string.wado/String::push"(builder, code);
-                break __fused___inline_ArrayIter_u8__Iterator__next_2;
-            };
-            continue l26;
+            } else {
+                break b22;
+            }
+            continue l23;
         };
     };
     return 0, builder;
+}
+
+fn "core:prelude/array.wado/ArrayIter<u8>^Iterator::next"(self) {
+    let item: u8;
+    if self.index >= self.used {
+        return 1, 0;
+    }
+    item = builtin::array_get<u8>(self.repr, self.index);
+    self.index = self.index + 1;
+    return 0, item;
 }
 
 fn "core:prelude/array.wado/Array<u8>::extend"(self, other) {
@@ -743,13 +755,13 @@ fn "core:prelude/array.wado/Array<u8>::grow_to"(self, min_capacity) {
     __for_1: block {
         i = 0;
         block {
-            l63: loop {
+            l61: loop {
                 if i >= used {
                     break __for_1;
                 }
                 builtin::array_set_u8(new_repr, i, builtin::array_get<u8>(old_repr, i));
                 i = i + 1;
-                continue l63;
+                continue l61;
             };
         };
     };
@@ -774,16 +786,16 @@ fn "core:prelude/types.wado/AsyncCall<Result<unit,wasi:tls/types.wado/Error>>::w
             break __inline_cm_waitable_join_0: handle_8;
             unreachable;
         });
-        b66: block {
-            l67: loop {
+        b64: block {
+            l65: loop {
                 let __sroa_event_code: i32;
                 let __sroa_event_handle: i32;
                 let __sroa_event_payload: u32;
                 multivalue_bind [__sroa_event_code, __sroa_event_handle, __sroa_event_payload] = "core:internal/cm_waitable_set_wait"(ws_3);
                 if __sroa_event_payload == 2 {
-                    break b66;
+                    break b64;
                 }
-                continue l67;
+                continue l65;
             };
         };
         "wasi/subtask-drop"(raw);

@@ -25,13 +25,15 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(8)
 
 type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(9)
 
-type "functype//wado-compiler/tests/fixtures/array_bounds_check_negative.wado/__cm_export__run" = fn();  // TypeId(10)
+type "functype//wado-compiler/tests/fixtures/array_bounds_check_negative.wado/run" = fn();  // TypeId(10)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(11)
+type "functype//wado-compiler/tests/fixtures/array_bounds_check_negative.wado/__cm_export__run" = fn();  // TypeId(11)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(12)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(12)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(13)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(13)
+
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(14)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -46,20 +48,24 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-fn "wado-compiler/tests/fixtures/array_bounds_check_negative.wado/__cm_export__run"() {
-    let __b_1: ref "core:prelude//Array<i32>";
+fn "wado-compiler/tests/fixtures/array_bounds_check_negative.wado/run"() {
+    let __b_0: ref "core:prelude//Array<i32>";
     let arr: ref "core:prelude//Array<i32>";
-    arr = __inline_run_2____seq_lit: block -> ref "core:prelude//Array<i32>" {
-        __b_1 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(10, 20, 30), used: 3 };
-        break __inline_run_2____seq_lit: __b_1;
+    arr = __seq_lit: block -> ref "core:prelude//Array<i32>" {
+        __b_0 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(10, 20, 30), used: 3 };
+        break __seq_lit: __b_0;
         unreachable;
     };
-    drop(__inline_Array_i32__IndexValue_i32___index_value_11: block -> i32 {
+    drop(__inline_Array_i32__IndexValue_i32___index_value_8: block -> i32 {
         block {
         };
-        break __inline_Array_i32__IndexValue_i32___index_value_11: builtin::array_get<i32>(arr.repr, -1);
+        break __inline_Array_i32__IndexValue_i32___index_value_8: builtin::array_get<i32>(arr.repr, -1);
         unreachable;
     });
+}
+
+fn "wado-compiler/tests/fixtures/array_bounds_check_negative.wado/__cm_export__run"() {
+    "wado-compiler/tests/fixtures/array_bounds_check_negative.wado/run"();
     "wasi/task-return"(0);
 }
 
