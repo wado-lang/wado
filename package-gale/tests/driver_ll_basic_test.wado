@@ -1,0 +1,33 @@
+use g from "./grammars/ll_basic.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "tests/generated/ll_basic",
+        },
+    };
+use { normalize_tree } from "./grammars/ll_basic.g4";
+
+fn assert_tree(input: &String, expected: &String) {
+    let root = g::parse(input).unwrap();
+    let tree = g::to_tree(&root);
+    let actual = tree.to_string_tree();
+    let norm = normalize_tree(expected);
+    assert actual == norm, `\ninput:    {*input}\nexpected: {norm}\nactual:   {actual}`;
+}
+
+// X Y matches both (a b) and (a). LL must pick (a b) so that `b` claims
+// the trailing `Y`. This exercises the `scan_a__follow_<Y>` /
+// `parse_a__follow_<Y>` variants emitted by `intern_follow_variant`.
+test "tree: X Y picks (a b)" {
+    assert_tree(&"X Y", &"
+        (r (a X) (b Y))
+    ");
+}
+
+// X alone: only (a) matches; (a b) fails because b requires Y.
+test "tree: X picks (a)" {
+    assert_tree(&"X", &"
+        (r (a X))
+    ");
+}

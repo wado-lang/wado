@@ -25,7 +25,7 @@ recognition rule. The remaining work splits into:
 
 (none currently)
 
-## Correctness: full-context LL(\*) prediction (next focus)
+## Correctness: full-context LL(\*) prediction (in progress)
 
 Gale's prediction is essentially SLL — it picks an alt by inspecting
 the current and (for some sites) one or two lookahead tokens, then
@@ -35,48 +35,61 @@ expects to follow. Real-world `.g4` files rely on this in subtle
 places, and grammars that hit those cases tokenize the same input but
 choose a different alt than ANTLR4 would.
 
-This is **the next planned correctness focus** — Stage C
-(action/predicate execution) sits behind it because the harder LL
-cases in real grammars depend on predicates as a tiebreaker, so the
+Stage C (action/predicate execution) sits behind LL because the harder
+LL cases in real grammars depend on predicates as a tiebreaker, so the
 prediction story has to be settled first.
 
-The minimal reproducer lives at
-`tests/antlr4-compat/grammars/ParserExec/PredictionMode_LL.g4`:
+### What works (v1, 2026-05)
 
-```antlr
-r : (a b | a) EOF ;
-a : X Y? ;
-b : Y ;
-```
+One-level static-analysis LL repair via `__follow_<id>` variants. At a
+`RuleRef R` call site whose immediate next sibling is **strictly
+required** (suffix not deep-nullable), Gale computes
+`FOLLOW(call) = first(suffix)`; if `tail_greedy_first(R) ∩ FOLLOW`
+is non-empty, an `intern_follow_variant`-registered variant
+`scan_R__follow_<id>` / `parse_R__follow_<id>` is generated that
+subtracts the mask from tail-position Optional/Star/Plus first-sets.
+The minimal reproducer `(a b | a) EOF; a : X Y?; b : Y` parses
+correctly: `tests/grammars/ll_basic.g4` plus
+`tests/antlr4-compat/.../ParserExec/PredictionMode_LL` are green.
 
-For input `X Y` ANTLR4 (with `predictionMode=LL`) picks alt 1
-(`a b`) so that `a` matches just `X` and `b` consumes `Y`. Gale picks
-alt 2 (`a` only) because its scan for `a` is greedy on `Y?` and has
-no way to learn that `Y` belongs to the follow set (`b` then EOF).
-Result: `(r (a X Y))` instead of `(r (a X) (b Y))`.
+Implementation references:
 
-Fixing this requires routing follow-set information into rule scans
-so that an optional whose first token is in follow stops being
-greedy at the call site. The cleanest design is to generate a
-follow-aware variant of each affected scan (or pass an explicit
-`follow_mask` parameter), invoked from the alt's scan rather than
-the generic global scan.
+- `package-gale/src/gen_context.wado` — `tail_greedy_first_of_rule`,
+  `intern_follow_variant`, `FollowVariantEntry`.
+- `package-gale/src/parser_gen.wado` — `gen_scan_follow_variant`,
+  `gen_parse_follow_variant`, the `current_follow_mask` /
+  `ruleref_call_follow` threading, and
+  `sort_group_by_element_count_desc` for LL-correct group dispatch.
 
-Sketch:
+### What does not work yet (v1 limitations)
 
-- At each call site, compute the static follow set FOLLOW(rule_call)
-  from the surrounding alt elements.
-- For each rule whose body contains a tail-position optional whose
-  first token can appear in some caller's FOLLOW, generate a
-  per-call-site scan variant (or a `follow_mask: u64` parameter on
-  the global scan) so the optional's "should I consume?" decision
-  becomes context-aware.
-- Update the alt-dispatch and LR-loop predictors to use the new
-  follow-aware scan in place of the greedy global one. The existing
-  scan remains the fallback when no caller cares about the follow.
+Each gap has a regression grammar under `tests/grammars/ll_*.g4` plus
+a `#[TODO]` driver test. Closing a gap means making the test pass
+without breaking the others.
 
-Tracked descriptor: `ParserExec/PredictionMode_LL` (`stage_b_todo`
-in `tests/antlr4-compat/status.toml`).
+| Gap | Fixture | Why v1 punts |
+| --- | --- | --- |
+| Nullable next sibling | `ll_nullable_suffix.g4` | `gen_alt_elements` skips variant registration when `is_suffix_nullable`. Closing requires CTX_FOLLOW propagation through the outer rule's follow. |
+| Multi-alt callee | `ll_multi_alt.g4` | `intern_follow_variant` rejects multi-alt rules. `gen_parse_follow_variant` only emits single-alt `gen_alt_body`; needs the multi-alt body / bt-helper duplication. |
+| Left-recursive callee | `ll_lr_atom.g4` | `intern_follow_variant` rejects LR rules. Needs `scan_R__follow_<id>_atom` + per-LR-alt suffix helpers + a precedence-climbing variant dispatcher. |
+| Caller-of-caller follow | `ll_ctx_follow.g4` | `ruleref_call_follow` is computed from the immediate alt's siblings only. Needs a per-rule FOLLOW fixed point that propagates through nullable / passthrough rules. |
+| Multi-token tail-greedy inner | (no fixture yet) | `tail_greedy_first_of_element` only counts Repeats whose inner is a single token (TokenRef / Literal / Wildcard / Not / single-token RuleRef). Needed for `(A B)?` style tail-greedy patterns where the inner sequence is multi-token. |
+
+### Beyond v1: ANTLR4 oracle integration
+
+Static analysis can only get LL so far. For full ANTLR4 LL(\*)
+behaviour we eventually need a runtime ATN simulator (the closure /
+predict / DFA cache loop in
+`vendor/antlr4/runtime/Java/src/org/antlr/v4/runtime/atn/ParserATNSimulator.java`),
+not just static FOLLOW sets. Sequencing this is open: the static
+gaps above each unblock specific real-world grammars; an ATN
+simulator is the long pole if those don't suffice.
+
+For measurement, the `vendor/antlr4` submodule has the JVM tool plus
+`runtime-testsuite/`. A future Stage B' could shell out to ANTLR4's
+JVM `tool` to compute oracle parse trees for descriptors whose
+`[output]` is action-printed (FullContextParsing/\*, etc.) and would
+otherwise be auto-skipped by `normalize_output_for_stage_b`.
 
 ## Correctness: full ANTLR4 compatibility (action / predicate execution)
 
