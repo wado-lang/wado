@@ -1,7 +1,10 @@
 //! Monomorphizer state: instantiation tracking and name generation.
 
+use std::sync::Arc;
+
 use crate::hashmap::IndexMap;
-use crate::name::{MethodName, ModuleSource, mangle_generic_name};
+use crate::name::{LocalMethodName, MethodName, ModuleSource, mangle_generic_name};
+use crate::resolver::trait_env::TraitEnv;
 use crate::tir::{InstantiationKey, ResolvedType, TypeId, TypeTable};
 
 /// Tracks struct monomorphization state
@@ -26,9 +29,50 @@ pub(super) struct FuncInstState {
     pub pending: Vec<InstantiationKey>,
     /// Reverse lookup: mangled function name -> `InstantiationKey`
     pub mangled_to_key: IndexMap<String, InstantiationKey>,
-    /// Map from concrete trait method function name → module where it's defined.
-    /// Used to resolve the correct module when substituting type param receivers.
-    pub trait_method_locations: IndexMap<String, ModuleSource>,
+    /// Project-wide trait knowledge inherited from the package. Used by
+    /// receiver-substitution and comparison-lowering paths to find the
+    /// module that owns `impl <trait> for <type>` without rebuilding a
+    /// parallel "mangled name → module" index.
+    pub trait_env: Arc<TraitEnv>,
+}
+
+impl FuncInstState {
+    /// Look up the module owning the impl that backs `info`, restricted
+    /// to fully concrete impls (no impl-level type parameters). Mono uses
+    /// this — rather than the broader [`TraitEnv::impl_module_for`] —
+    /// because a generic impl's post-substitution function is materialised
+    /// in the receiver type's module, not the impl block's module: that
+    /// invariant is what `call_rewrite`'s "ref-blanket" path relies on to
+    /// route `&Array<i32>^Inspect::inspect` through the `&T`-blanket
+    /// instantiation rather than collapsing it to `Array<i32>::inspect`.
+    ///
+    /// The lookup uses `info.struct_name` (the post-substitution type
+    /// name) rather than `info.base_struct_name`, which mirrors the
+    /// legacy `trait_method_locations.contains_key(<full mangled name>)`
+    /// semantics: a concrete impl's key is the full type name (e.g. the
+    /// `impl Ord for i32` block keys ("i32", "Ord")), and post-mono
+    /// substitution emits trait-method calls whose `struct_name` is the
+    /// resolved concrete type ("i32", not "Score"). Querying by
+    /// `base_struct_name` would miss this case for newtypes whose
+    /// `struct_name` has been resolved through the newtype.
+    pub fn impl_module(&self, info: &LocalMethodName) -> Option<ModuleSource> {
+        let trait_name = info
+            .base_trait_name
+            .as_deref()
+            .or(info.trait_name.as_deref())?;
+        self.trait_env
+            .concrete_impl_module_for(&info.struct_name, trait_name)
+            .cloned()
+    }
+
+    /// `true` when `info` denotes a trait method whose impl is already
+    /// known to the project as a concrete (non-generic) impl block. The
+    /// existence check used by mono's blanket-vs-concrete branch needs to
+    /// match the legacy `trait_method_locations.contains_key` semantics,
+    /// which only catalogued non-generic impl methods.
+    pub fn has_impl(&self, info: &LocalMethodName) -> bool {
+        self.impl_module(info).is_some()
+    }
 }
 
 /// Monomorphizer collects generic instantiations and generates concrete types
@@ -50,7 +94,7 @@ pub(super) struct Monomorphizer {
 }
 
 impl Monomorphizer {
-    pub fn new(current_module_source: ModuleSource) -> Self {
+    pub fn new(current_module_source: ModuleSource, trait_env: Arc<TraitEnv>) -> Self {
         Self {
             current_module_source,
             structs: StructInstState {
@@ -64,7 +108,7 @@ impl Monomorphizer {
                 instantiated: IndexMap::default(),
                 pending: Vec::new(),
                 mangled_to_key: IndexMap::default(),
-                trait_method_locations: IndexMap::default(),
+                trait_env,
             },
             current_impl_type_param_count: 0,
             current_impl_struct_name: String::new(),

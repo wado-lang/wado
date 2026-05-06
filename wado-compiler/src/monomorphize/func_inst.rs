@@ -3,9 +3,11 @@
 
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::{LocalMethodName, MethodName, ModuleSource, mangle_generic_name};
+use crate::resolver::trait_env::TraitEnv;
 use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InstantiationKey, MonomorphInfo, ResolvedType, TirBinaryOp,
     TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirModule, TirParam, TirPattern,
@@ -17,15 +19,12 @@ use super::state::Monomorphizer;
 use super::{generic_function_key, module_source_for_trait_impl};
 
 /// Lower remaining comparison operators on non-primitive types in all module functions.
-pub fn lower_comparisons_in_module(
-    module: &mut TirModule,
-    trait_method_locations: &IndexMap<String, ModuleSource>,
-) {
+pub fn lower_comparisons_in_module(module: &mut TirModule, trait_env: &Arc<TraitEnv>) {
     let type_table_rc = module.type_table.clone();
     let module_source = module.module_source.clone();
 
     struct ComparisonLowerer<'a> {
-        trait_method_locations: &'a IndexMap<String, ModuleSource>,
+        trait_env: &'a Arc<TraitEnv>,
         current_module_source: &'a ModuleSource,
         type_table: &'a std::rc::Rc<std::cell::RefCell<TypeTable>>,
     }
@@ -45,7 +44,7 @@ pub fn lower_comparisons_in_module(
                         | TirBinaryOp::GtEq
                 )
                 && let Some(new_kind) = try_lower_comparison(
-                    self.trait_method_locations,
+                    self.trait_env,
                     self.current_module_source,
                     expr.span,
                     *op,
@@ -60,7 +59,7 @@ pub fn lower_comparisons_in_module(
     }
 
     let mut lowerer = ComparisonLowerer {
-        trait_method_locations,
+        trait_env,
         current_module_source: &module_source,
         type_table: &type_table_rc,
     };
@@ -1190,12 +1189,8 @@ impl Monomorphizer {
                             if info.is_type_param_receiver {
                                 let mut sorted_entries: Vec<_> = substitution.iter().collect();
                                 sorted_entries.sort_by_key(|(idx, _)| **idx);
-                                let concrete_module = self
-                                    .functions
-                                    .trait_method_locations
-                                    .get(&new_func_name)
-                                    .cloned()
-                                    .or_else(|| {
+                                let concrete_module =
+                                    self.functions.impl_module(&new_info).or_else(|| {
                                         let concrete_type_id = sorted_entries[0].1;
                                         module_source_for_trait_impl(type_table, *concrete_type_id)
                                     });
@@ -1396,7 +1391,7 @@ impl Monomorphizer {
                         | TirBinaryOp::LtEq
                         | TirBinaryOp::GtEq
                 ) && let Some(new_kind) = try_lower_comparison(
-                    &self.functions.trait_method_locations,
+                    &self.functions.trait_env,
                     &self.current_module_source,
                     expr.span,
                     *op,
@@ -2015,12 +2010,7 @@ impl Monomorphizer {
             let own_mangled = type_table.mangle_type_name(inner);
             let own_base = type_table.base_type_name(inner);
             let candidate = info.with_substituted_struct_name(&own_mangled, &own_base);
-            let candidate_name = candidate.to_mangled_name();
-            if self
-                .functions
-                .trait_method_locations
-                .contains_key(&candidate_name)
-            {
+            if self.functions.has_impl(&candidate) {
                 candidate
             } else {
                 let mangled = type_table.mangle_type_name_resolving_newtypes(inner);
@@ -2058,20 +2048,15 @@ impl Monomorphizer {
 
         if info.is_type_param_receiver {
             // Type param receiver: redirect to a concrete method (e.g., T^Ord::cmp → i32^Ord::cmp)
-            let concrete_module = self
-                .functions
-                .trait_method_locations
-                .get(&new_func_name)
-                .cloned()
-                .or_else(|| {
-                    let mut inner = receiver_type_id;
-                    while let ResolvedType::Ref(t) | ResolvedType::MutRef(t) =
-                        type_table.get(inner).clone()
-                    {
-                        inner = t;
-                    }
-                    module_source_for_trait_impl(type_table, inner)
-                });
+            let concrete_module = self.functions.impl_module(&new_info).or_else(|| {
+                let mut inner = receiver_type_id;
+                while let ResolvedType::Ref(t) | ResolvedType::MutRef(t) =
+                    type_table.get(inner).clone()
+                {
+                    inner = t;
+                }
+                module_source_for_trait_impl(type_table, inner)
+            });
 
             // Determine if this is a blanket impl method.
             // - Direct concrete method: found in trait_method_locations → monomorph_info = None
@@ -2091,12 +2076,7 @@ impl Monomorphizer {
                     } if !args.is_empty()
                 ) || matches!(type_table.get(inner), ResolvedType::BuiltinArray(_))
             };
-            let monomorph_info = if self
-                .functions
-                .trait_method_locations
-                .contains_key(&new_func_name)
-                || receiver_has_type_args
-            {
+            let monomorph_info = if self.functions.has_impl(&new_info) || receiver_has_type_args {
                 None
             } else {
                 // Blanket impl: choose the right generic_name for lookup.
@@ -3504,7 +3484,7 @@ impl Monomorphizer {
 /// Convert `==`/`!=`/`<`/`>`/`<=`/`>=` on Struct/Variant/GenericInstance types to
 /// `Eq::eq` / `Ord::cmp` method calls. Returns `None` for primitives.
 fn try_lower_comparison(
-    trait_method_locations: &IndexMap<String, ModuleSource>,
+    trait_env: &Arc<TraitEnv>,
     current_module_source: &ModuleSource,
     span: crate::token::Span,
     op: TirBinaryOp,
@@ -3564,10 +3544,21 @@ fn try_lower_comparison(
         )
     };
 
-    let resolve_module = |mangled: &str, type_mod: Option<ModuleSource>| -> ModuleSource {
-        trait_method_locations
-            .get(mangled)
-            .cloned()
+    let resolve_module = |info: &LocalMethodName, type_mod: Option<ModuleSource>| -> ModuleSource {
+        // Match the legacy `trait_method_locations.get(mangled)` semantics:
+        // only concrete (non-generic) impls live in the module the function
+        // actually compiles into. Generic impls' instantiations live in the
+        // receiver type's module, surfaced here through `type_mod`. Lookup
+        // uses `info.struct_name` (the post-substitution full type name)
+        // — matches `FuncInstState::impl_module` so the same trait-method
+        // call resolves identically here and in receiver-substitution paths.
+        info.trait_name
+            .as_deref()
+            .and_then(|tn| {
+                trait_env
+                    .concrete_impl_module_for(&info.struct_name, tn)
+                    .cloned()
+            })
             .or(type_mod)
             .unwrap_or_else(|| current_module_source.clone())
     };
@@ -3579,7 +3570,7 @@ fn try_lower_comparison(
             LocalMethodName::new(base_struct_name, Some("Eq".to_string()), "eq".to_string())
                 .with_struct_type_args(&impl_type_args);
         let mangled_name = method_info.to_mangled_name();
-        let method_module = resolve_module(&mangled_name, type_module_source);
+        let method_module = resolve_module(&method_info, type_module_source);
 
         let method_call = TirExprKind::method_call(
             Box::new(receiver),
@@ -3616,7 +3607,7 @@ fn try_lower_comparison(
             LocalMethodName::new(base_struct_name, Some("Ord".to_string()), "cmp".to_string())
                 .with_struct_type_args(&impl_type_args);
         let mangled_name = method_info.to_mangled_name();
-        let method_module = resolve_module(&mangled_name, type_module_source);
+        let method_module = resolve_module(&method_info, type_module_source);
 
         let cmp_call = TirExpr::new(
             TirExprKind::method_call(
