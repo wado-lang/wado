@@ -723,6 +723,13 @@ pub fn inline_functions(project: &mut FlatPackage, inline_threshold: usize) -> b
     }
     drop(type_table);
 
+    crate::compiler_trace!(
+        "opt_loop",
+        "inline: threshold={} candidates={}",
+        inline_threshold,
+        inline_candidates.len()
+    );
+
     if inline_candidates.is_empty() {
         return false;
     }

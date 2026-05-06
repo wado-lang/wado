@@ -25,6 +25,7 @@
 //! explicit. The optimizer only *removes* redundant copies via
 //! `value_copy_elide`, which runs as a regular pass in the fixed-point loop.
 
+mod alias;
 mod condition_implication;
 mod const_branch_prune;
 mod const_folding;
@@ -33,7 +34,6 @@ mod container_sroa;
 mod copy_prop;
 mod cse;
 pub mod dce;
-mod field_forward;
 mod field_scalarize;
 mod inline;
 mod labeled_block_fusion;
@@ -57,7 +57,6 @@ use dce::{
     analyze_project, filter_bytes_literals, remove_unreachable_closure_functors,
     remove_unreachable_functions, remove_unreachable_globals, remove_unreachable_types,
 };
-use field_forward::forward_struct_field_constants;
 use field_scalarize::scalarize_hot_fields;
 use inline::inline_functions;
 use labeled_block_fusion::fuse_labeled_blocks;
@@ -181,17 +180,14 @@ pub fn optimize(
             }
         }
         OptLevel::O3 => {
-            // Iteration cap of 30 is a defensive bound — the TIR
-            // optimiser does not converge at `inline_threshold ≥ 35`
-            // on Gale-generated parsers (sqlite_parse / json_highlight)
-            // because each iteration's `inline` pass shrinks bodies
-            // enough for previously-too-big callees to re-enter the
-            // candidate set on the next iteration. With 100 iterations
-            // sqlite_parse compiled in ~80 s; capping at 30 keeps the
-            // ceiling at ~25 s without measurably losing runtime perf
-            // on the convergent inputs (those fixed-point in well
-            // under 30). See https://github.com/wado-lang/wado/issues
-            // for the underlying root-cause investigation.
+            // The iteration cap is purely defensive. Since
+            // `field_forward` was merged into `const_fold` (issue
+            // #1009), straight-line constant chains produced by
+            // inlined `Array::push` and similar patterns fold in a
+            // single iteration rather than one statement per round,
+            // so even threshold-40 Gale parsers reach a true fixed
+            // point in well under 10 iterations. 30 leaves comfortable
+            // headroom for whatever gradient new fixtures expose.
             let config = OptConfig {
                 iterations: opt_iterations.unwrap_or(30),
                 inline_threshold: inline_threshold.unwrap_or(40),
@@ -370,9 +366,22 @@ fn run_optimization_passes(
     profiler: &dyn SpanEmitter,
 ) {
     let threshold = config.inline_threshold;
+    let trace_loop = crate::trace::filter().enabled("opt_loop");
     for i in 0..config.iterations {
         profiler.span_start(&format!("tir/iteration {}", i + 1));
         let mut changed = false;
+        let mut iter_changed: Vec<&'static str> = Vec::new();
+        macro_rules! step {
+            ($name:expr, $body:expr) => {{
+                let c = run_pass($name, project, profiler, $body);
+                if c {
+                    changed = true;
+                    if trace_loop {
+                        iter_changed.push($name);
+                    }
+                }
+            }};
+        }
         // Container SROA must run *before* inline in each iteration: inline
         // expands trait methods like `IndexValue::index_value` into raw
         // `builtin::array_get` + field-access pairs, after which the
@@ -380,9 +389,7 @@ fn run_optimization_passes(
         // also means we see the `SequenceLiteralBuilder` desugaring for `[]`
         // while its inner `Constructor` call is still a plain `Call` node,
         // which `recognize_init` can match structurally.
-        changed |= run_pass("tir/container_sroa", project, profiler, |p| {
-            scalarize_containers(p)
-        });
+        step!("tir/container_sroa", scalarize_containers);
         // Run value-copy elision *before* inlining: the inliner expands
         // every reachable `$value_copy$T<id>` body into a labeled
         // block, after which the `Call($value_copy$T, [arg])` shape the
@@ -409,44 +416,40 @@ fn run_optimization_passes(
         // gone and the literal-recognising rewrite can no longer match,
         // leaving short-string formatting paths (e.g. `fpfmt.wado`'s
         // `buf.push_str("0.")`) paying full per-call allocation cost.
-        changed |= run_pass("tir/string_push", project, profiler, |p| {
-            simplify_short_push_str(p)
-        });
-        changed |= run_pass("tir/inline", project, profiler, |p| {
-            inline_functions(p, threshold)
-        });
-        changed |= run_pass("tir/labeled_block_fusion", project, profiler, |p| {
-            fuse_labeled_blocks(p)
-        });
-        changed |= run_pass("tir/ref_elim", project, profiler, |p| {
-            eliminate_unnecessary_refs(p)
-        });
-        changed |= run_pass("tir/sroa", project, profiler, |p| {
-            scalar_replace_aggregates(p)
-        });
-        changed |= run_pass("tir/copy_prop", project, profiler, propagate_copies);
-        changed |= run_pass("tir/cse", project, profiler, eliminate_common_subexprs);
-        changed |= run_pass("tir/store_load_forward", project, profiler, |p| {
-            forward_stores_to_loads(p)
-        });
-        changed |= run_pass("tir/field_forward", project, profiler, |p| {
-            forward_struct_field_constants(p)
-        });
-        changed |= run_pass("tir/const_fold", project, profiler, fold_constants);
-        changed |= run_pass("tir/const_global_promotion", project, profiler, |p| {
-            promote_constant_globals(p)
-        });
-        changed |= run_pass("tir/branch_prune", project, profiler, |p| {
-            prune_constant_branches(p)
-        });
-        changed |= run_pass("tir/licm", project, profiler, apply_licm);
-        changed |= run_pass("tir/condition_implication", project, profiler, |p| {
-            eliminate_implied_conditions(p)
-        });
-        changed |= run_pass("tir/tmpl_hoist", project, profiler, |p| {
-            hoist_template_buffers(p)
-        });
+        step!("tir/string_push", simplify_short_push_str);
+        step!("tir/inline", |p| inline_functions(p, threshold));
+        step!("tir/labeled_block_fusion", fuse_labeled_blocks);
+        step!("tir/ref_elim", eliminate_unnecessary_refs);
+        step!("tir/sroa", scalar_replace_aggregates);
+        step!("tir/copy_prop", propagate_copies);
+        step!("tir/cse", eliminate_common_subexprs);
+        step!("tir/store_load_forward", forward_stores_to_loads);
+        // `field_forward`'s rewrite responsibilities are absorbed by
+        // `const_fold` (see `optimize::const_folding::ConstFoldVisitor`).
+        // Both passes used to alternate one statement at a time on
+        // chained-`Array::push` patterns produced by Gale-generated
+        // parsers, leaving the optimizer non-convergent at `-O3`
+        // (issue #1009). The merged const-fold walk feeds the
+        // interpreter's `field_env` from `Let` / `Assign` /
+        // `$value_copy$T(arg)` shapes and forks per branch, so a
+        // chain of pushes folds in a single iteration. The alias and
+        // value-copy-helper analyses migrated to
+        // `optimize::alias`.
+        step!("tir/const_fold", fold_constants);
+        step!("tir/const_global_promotion", promote_constant_globals);
+        step!("tir/branch_prune", prune_constant_branches);
+        step!("tir/licm", apply_licm);
+        step!("tir/condition_implication", eliminate_implied_conditions);
+        step!("tir/tmpl_hoist", hoist_template_buffers);
         profiler.span_end(&format!("tir/iteration {}", i + 1));
+        if trace_loop {
+            crate::compiler_trace!(
+                "opt_loop",
+                "iter {:>3}: changed_by = [{}]",
+                i + 1,
+                iter_changed.join(", ")
+            );
+        }
         if !changed {
             profiler.debug(&format!(
                 "TIR optimizer converged after {} iteration(s)",
