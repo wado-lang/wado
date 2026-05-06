@@ -288,10 +288,7 @@ fn respond_anything(request: Request) -> RouteResponse {
 }
 
 fn format_allow(methods: &Array<Method>) -> String {
-    let mut names: Array<String> = [];
-    for let m of methods {
-        names.push(method_name(*m));
-    }
+    let names: Array<String> = methods.iter().map(|m: Method| method_name(m)).collect();
     return names.join(", ");
 }
 
