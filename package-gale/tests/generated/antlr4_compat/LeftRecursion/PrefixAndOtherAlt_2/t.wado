@@ -827,8 +827,9 @@ fn scan_expr(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
         let suffix_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
         if _gale_kind_set_0(suffix_kind) {
             if 1 >= min_prec {
+                let lr_saved_pos = pos;
                 pos = scan_expr_lr_2(tokens, pos);
-                if pos < 0 { return -1; }
+                if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
             }
@@ -962,6 +963,9 @@ fn parse_expr(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError>
         let suffix_kind = p.peek_kind();
         if _gale_kind_set_0(suffix_kind) {
             if 1 >= min_prec {
+                if scan_expr_lr_2(&p.tokens, p.pos) < 0 {
+                    break;
+                }
                 result = parse_expr_lr_2(p, result, start)?;
             } else {
                 break;

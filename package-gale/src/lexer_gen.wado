@@ -647,18 +647,70 @@ fn try_extract_keyword_info(rule: &LexerRule, all_rules: &Array<LexerRule>, gram
 }
 
 /// Collects all keyword rules from the grammar.
+///
+/// The keyword path is an optimisation: instead of dispatching keyword-shaped
+/// rules through their own first-character branch, the tokenize loop runs
+/// `classify_keyword` after a longer non-keyword rule has already matched the
+/// same characters (the gate is `best_end > start`). The optimisation is
+/// only sound when some non-keyword rule could match the keyword's first
+/// character — otherwise the classifier never runs and the rule is
+/// unreachable. ANTLR4 has no such precondition (every lexer rule is its own
+/// dispatch path); to stay compatible Gale must not classify a rule as a
+/// keyword unless that precondition holds. Candidates that fail the check
+/// fall back to the regular dispatch path (`gen_lexer_match_fn`).
 pub fn collect_keyword_rules(lexer_rules: &Array<LexerRule>, grammar_opts: &Array<GrammarOption>) -> Array<KeywordInfo> {
-    let mut result: Array<KeywordInfo> = [];
+    let mut candidates: Array<KeywordInfo> = [];
     for let rule of lexer_rules {
         if rule.is_fragment || rule.is_virtual {
             continue;
         }
         let info = try_extract_keyword_info(rule, lexer_rules, grammar_opts);
         if let Some(kw) = info {
-            result.push(kw);
+            candidates.push(kw);
+        }
+    }
+    let mut result: Array<KeywordInfo> = [];
+    for let kw of &candidates {
+        if keyword_has_carrier(kw, &candidates, lexer_rules, grammar_opts) {
+            result.push(*kw);
         }
     }
     return result;
+}
+
+/// Returns true if some non-candidate non-fragment non-virtual lexer rule has
+/// a first-character set that covers `kw`'s first character (folded to either
+/// case when `kw`'s first character is case-insensitive).
+fn keyword_has_carrier(
+    kw: &KeywordInfo,
+    candidates: &Array<KeywordInfo>,
+    lexer_rules: &Array<LexerRule>,
+    grammar_opts: &Array<GrammarOption>,
+) -> bool {
+    let first_char = kw.lowercase_text.chars().next().unwrap();
+    let first_ci = kw.char_ci[0];
+    for let rule of lexer_rules {
+        if rule.is_fragment || rule.is_virtual {
+            continue;
+        }
+        if is_keyword_rule_name(&rule.name, candidates) {
+            continue;
+        }
+        let try_call = compute_first_chars(rule, lexer_rules, false, false, false, false, grammar_opts);
+        if try_call.is_wildcard {
+            return true;
+        }
+        if char_matches_ranges(first_char, &try_call.first_chars) {
+            return true;
+        }
+        if first_ci {
+            let upper = first_char.to_ascii_uppercase();
+            if upper != first_char && char_matches_ranges(upper, &try_call.first_chars) {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 fn is_keyword_rule_name(name: &String, keywords: &Array<KeywordInfo>) -> bool {
