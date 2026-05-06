@@ -467,24 +467,26 @@ impl ConstFoldVisitor<'_> {
                 }
             }
             TirExprKind::StructLiteral { fields, .. } => {
+                let aliased = self.aliased_set();
                 if fields
                     .iter()
-                    .any(|f| value_captures_aliased_local(&f.value, &self.aliased_set()))
+                    .any(|f| value_captures_aliased_local(&f.value, aliased))
                 {
                     self.interpreter.invalidate_aliased_fields();
                 }
             }
             TirExprKind::TupleLiteral { elements, .. } => {
+                let aliased = self.aliased_set();
                 if elements
                     .iter()
-                    .any(|e| value_captures_aliased_local(e, &self.aliased_set()))
+                    .any(|e| value_captures_aliased_local(e, aliased))
                 {
                     self.interpreter.invalidate_aliased_fields();
                 }
             }
             TirExprKind::VariantConstruct { payload, .. } => {
                 if let Some(p) = payload
-                    && value_captures_aliased_local(p, &self.aliased_set())
+                    && value_captures_aliased_local(p, self.aliased_set())
                 {
                     self.interpreter.invalidate_aliased_fields();
                 }
@@ -591,10 +593,10 @@ impl ConstFoldVisitor<'_> {
 
 /// True when an expression appearing as a struct / tuple / variant
 /// field value would hand the freshly-built aggregate access to an
-/// already-aliased local. Mirrors `field_forward::value_captures_alias`
-/// — we keep a local copy here rather than re-export so a future
-/// removal of the field_forward module doesn't break the const-fold
-/// path.
+/// already-aliased local. Mirrors the predicate the original
+/// `field_forward` pass used inline; kept here so the const-fold
+/// visitor doesn't reach back into `optimize::alias`'s private
+/// module surface.
 fn value_captures_aliased_local(expr: &TirExpr, aliased: &IndexSet<u32>) -> bool {
     match &expr.kind {
         TirExprKind::Unary { op, expr: inner } => {

@@ -180,17 +180,14 @@ pub fn optimize(
             }
         }
         OptLevel::O3 => {
-            // Iteration cap of 30 is a defensive bound — the TIR
-            // optimiser does not converge at `inline_threshold ≥ 35`
-            // on Gale-generated parsers (sqlite_parse / json_highlight)
-            // because each iteration's `inline` pass shrinks bodies
-            // enough for previously-too-big callees to re-enter the
-            // candidate set on the next iteration. With 100 iterations
-            // sqlite_parse compiled in ~80 s; capping at 30 keeps the
-            // ceiling at ~25 s without measurably losing runtime perf
-            // on the convergent inputs (those fixed-point in well
-            // under 30). See https://github.com/wado-lang/wado/issues
-            // for the underlying root-cause investigation.
+            // The iteration cap is purely defensive. Since
+            // `field_forward` was merged into `const_fold` (issue
+            // #1009), straight-line constant chains produced by
+            // inlined `Array::push` and similar patterns fold in a
+            // single iteration rather than one statement per round,
+            // so even threshold-40 Gale parsers reach a true fixed
+            // point in well under 10 iterations. 30 leaves comfortable
+            // headroom for whatever gradient new fixtures expose.
             let config = OptConfig {
                 iterations: opt_iterations.unwrap_or(30),
                 inline_threshold: inline_threshold.unwrap_or(40),
@@ -392,7 +389,7 @@ fn run_optimization_passes(
         // also means we see the `SequenceLiteralBuilder` desugaring for `[]`
         // while its inner `Constructor` call is still a plain `Call` node,
         // which `recognize_init` can match structurally.
-        step!("tir/container_sroa", |p| scalarize_containers(p));
+        step!("tir/container_sroa", scalarize_containers);
         // Run value-copy elision *before* inlining: the inliner expands
         // every reachable `$value_copy$T<id>` body into a labeled
         // block, after which the `Call($value_copy$T, [arg])` shape the
@@ -419,14 +416,14 @@ fn run_optimization_passes(
         // gone and the literal-recognising rewrite can no longer match,
         // leaving short-string formatting paths (e.g. `fpfmt.wado`'s
         // `buf.push_str("0.")`) paying full per-call allocation cost.
-        step!("tir/string_push", |p| simplify_short_push_str(p));
+        step!("tir/string_push", simplify_short_push_str);
         step!("tir/inline", |p| inline_functions(p, threshold));
-        step!("tir/labeled_block_fusion", |p| fuse_labeled_blocks(p));
-        step!("tir/ref_elim", |p| eliminate_unnecessary_refs(p));
-        step!("tir/sroa", |p| scalar_replace_aggregates(p));
+        step!("tir/labeled_block_fusion", fuse_labeled_blocks);
+        step!("tir/ref_elim", eliminate_unnecessary_refs);
+        step!("tir/sroa", scalar_replace_aggregates);
         step!("tir/copy_prop", propagate_copies);
         step!("tir/cse", eliminate_common_subexprs);
-        step!("tir/store_load_forward", |p| forward_stores_to_loads(p));
+        step!("tir/store_load_forward", forward_stores_to_loads);
         // `field_forward`'s rewrite responsibilities are absorbed by
         // `const_fold` (see `optimize::const_folding::ConstFoldVisitor`).
         // Both passes used to alternate one statement at a time on
@@ -439,13 +436,11 @@ fn run_optimization_passes(
         // value-copy-helper analyses migrated to
         // `optimize::alias`.
         step!("tir/const_fold", fold_constants);
-        step!("tir/const_global_promotion", |p| promote_constant_globals(p));
-        step!("tir/branch_prune", |p| prune_constant_branches(p));
+        step!("tir/const_global_promotion", promote_constant_globals);
+        step!("tir/branch_prune", prune_constant_branches);
         step!("tir/licm", apply_licm);
-        step!("tir/condition_implication", |p| {
-            eliminate_implied_conditions(p)
-        });
-        step!("tir/tmpl_hoist", |p| hoist_template_buffers(p));
+        step!("tir/condition_implication", eliminate_implied_conditions);
+        step!("tir/tmpl_hoist", hoist_template_buffers);
         profiler.span_end(&format!("tir/iteration {}", i + 1));
         if trace_loop {
             crate::compiler_trace!(
