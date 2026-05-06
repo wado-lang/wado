@@ -1,0 +1,53 @@
+// Regression test: ref_elim Pattern 2 (Local-to-Local alias of a tracked
+// ref local). Inlining a `&mut self` method introduces a `let inner_self
+// = outer_self;` shadow at the inlined body's entry. Without Pattern 2
+// the shadow stays as a redundant binding even when every use of it is
+// field-access-only.
+//
+// The fixture exercises the shape: a `&mut Self` method with multiple
+// field-access-only writes, called repeatedly so the inliner is bound
+// to expand it. It is a correctness smoke test — Pattern 2 should never
+// change observable behaviour, only the pre-codegen IR shape. If a
+// future change to Pattern 2 incorrectly elides a use that the alias
+// resolution cannot replace, this fixture's `o.inner.*` writes would
+// no longer reach the original local and the printed values would be
+// wrong.
+
+use { println, Stdout } from "core:cli";
+
+struct Inner {
+    x: i32,
+    y: i32,
+}
+
+struct Outer {
+    inner: Inner,
+    tag: i32,
+}
+
+#[inline(always)]
+fn record(o: &mut Outer, vx: i32, vy: i32) {
+    // Field-access-only writes through `&mut self` — the alias chain
+    // ref_elim Pattern 2 was added to collapse.
+    o.inner.x = o.inner.x + vx;
+    o.inner.y = o.inner.y + vy;
+    o.tag = o.tag + 1;
+}
+
+#[inline(never)]
+fn opaque(seed: i32) -> i32 {
+    return seed * 2 + 1;
+}
+
+export fn run() with Stdout {
+    let mut o = Outer { inner: Inner { x: 0, y: 0 }, tag: 0 };
+    record(&mut o, opaque(3), opaque(4));
+    record(&mut o, opaque(5), opaque(6));
+    record(&mut o, opaque(7), opaque(8));
+    println(`{o.inner.x} {o.inner.y} {o.tag}`);
+}
+
+__DATA__
+{
+    "stdout": "33 39 3\n"
+}
