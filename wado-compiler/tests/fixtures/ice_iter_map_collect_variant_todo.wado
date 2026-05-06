@@ -1,0 +1,38 @@
+// ICE: Array<Variant>.iter().map(...).collect() panics in WIR codegen
+//   Internal compiler error: WIR pipeline generated invalid core Wasm module
+//   Validation error: type mismatch:
+//     expected (ref null $type), found (ref $type)
+//
+// The same pipeline works for `Array<i32>` (and other primitive elements),
+// and for `iter().collect()` *without* `map`. Only the combination
+// `Array<VariantType>.iter().map(...).collect()` triggers the nullability
+// mismatch — `MapIter<I, F>` does not propagate the variant-payload's
+// non-null wasm-GC reference type through the closure result slot.
+//
+// Discovered while writing `format_allow(methods: &Array<Method>) -> String`
+// in `example/http-bin.wado`. The for-of + push + join workaround is used
+// there. Remove this `#![TODO]` once `iter().map(...).collect()` works on
+// `Array<Variant>`.
+
+#![TODO]
+
+use { println, Stdout } from "core:cli";
+
+variant Color { Red, Green, Blue }
+
+fn name(c: Color) -> String {
+    return match c {
+        Red => "red",
+        Green => "green",
+        Blue => "blue",
+    };
+}
+
+export fn run() with Stdout {
+    let colors: Array<Color> = [Color::Red, Color::Green];
+    let names: Array<String> = colors.iter().map(|c: Color| name(c)).collect();
+    println(names.join(", "));
+}
+
+__DATA__
+{"stdout": "red, green\n"}

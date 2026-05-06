@@ -80,12 +80,6 @@ struct AccessLog {
 }
 impl Serialize for AccessLog;
 
-struct UrlInfo {
-    url: String,
-    path: String,
-    args: TreeMap<String, String>,
-}
-
 struct RouteResponse {
     status: StatusCode,
     content_type: String,
@@ -149,15 +143,10 @@ fn resolve_authority(request: &Request) -> String {
     };
 }
 
-fn parse_url(request: &Request) -> UrlInfo {
+fn parse_url(request: &Request) -> Url {
     let scheme = scheme_name(request.get_scheme());
     let authority = resolve_authority(request);
-    let request_url = Url::from_parts(scheme, authority, request.get_path_with_query(), null);
-    return UrlInfo {
-        url: request_url.to_string(),
-        path: request_url.path,
-        args: request_url.query_params(),
-    };
+    return Url::from_parts(scheme, authority, request.get_path_with_query(), null);
 }
 
 fn read_body_from_request(request: Request) -> String {
@@ -191,18 +180,18 @@ fn parse_status_code(s: String) -> Option<u16> {
     return null;
 }
 
-fn build_request_json(method: Method, info: &UrlInfo, headers: &Headers, body: Option<String>) -> String {
+fn build_request_json(method: Method, url: &Url, headers: &Headers, body: Option<String>) -> String {
     let origin = match get_header(headers, "x-forwarded-for") {
         Some(s) => s,
         None => "",
     };
     return json::to_string_pretty(&RequestInfo {
         method: method_name(method),
-        path: info.path,
-        args: info.args,
+        path: url.path,
+        args: url.query_params(),
         headers: headers_to_map(headers),
         origin,
-        url: info.url,
+        url: url.to_string(),
         data: body,
     }).unwrap() + "\n";
 }
@@ -218,7 +207,7 @@ fn json_response(status: StatusCode, body: String) -> RouteResponse {
 }
 
 fn echo(request: Request, read_body: bool) -> RouteResponse {
-    let info = parse_url(&request);
+    let url = parse_url(&request);
     let method = request.get_method();
     let h = request.get_headers();
     let body = if read_body {
@@ -226,7 +215,7 @@ fn echo(request: Request, read_body: bool) -> RouteResponse {
     } else {
         null
     };
-    return json_response(200, build_request_json(method, &info, &h, body));
+    return json_response(200, build_request_json(method, &url, &h, body));
 }
 
 fn respond_home() -> RouteResponse {
@@ -287,7 +276,7 @@ fn respond_base64(encoded: String) -> RouteResponse {
 }
 
 fn respond_anything(request: Request) -> RouteResponse {
-    let info = parse_url(&request);
+    let url = parse_url(&request);
     let method = request.get_method();
     let h = request.get_headers();
     let body = if method matches { Post | Put | Patch } {
@@ -295,19 +284,15 @@ fn respond_anything(request: Request) -> RouteResponse {
     } else {
         null
     };
-    return json_response(200, build_request_json(method, &info, &h, body) + "\n");
+    return json_response(200, build_request_json(method, &url, &h, body) + "\n");
 }
 
 fn format_allow(methods: &Array<Method>) -> String {
-    let mut out = "";
-    let n = methods.len();
-    for let mut i = 0; i < n; i += 1 {
-        if i > 0 {
-            out += ", ";
-        }
-        out += method_name(methods[i]);
+    let mut names: Array<String> = [];
+    for let m of methods {
+        names.push(method_name(*m));
     }
-    return out;
+    return names.join(", ");
 }
 
 fn build_router() -> Router<Handler> {
@@ -333,7 +318,7 @@ global ROUTER: Router<Handler> = build_router();
 
 export async fn handle(request: Request) -> Result<Response, ErrorCode> with MonotonicClock {
     let start_mark = MonotonicClock::now();
-    let info = parse_url(&request);
+    let url = parse_url(&request);
     let method = request.get_method();
     let h = request.get_headers();
     let user_agent = get_header(&h, "user-agent");
@@ -341,7 +326,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> with Mon
     let resp = if let Some(m) = ROUTER.match_request(&request) {
         (m.handler)(request, m.params)
     } else {
-        let allowed = ROUTER.allowed_methods(&info.path);
+        let allowed = ROUTER.allowed_methods(&url.path);
         if !allowed.is_empty() {
             RouteResponse {
                 status: 405,
@@ -391,7 +376,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> with Mon
 
     log_stderr(json::to_string(&AccessLog {
         method: method_name(method),
-        path: info.path,
+        path: url.path,
         user_agent,
         status: resp.status,
         duration_us: elapsed as u64 / 1000,
