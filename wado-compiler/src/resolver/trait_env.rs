@@ -89,7 +89,19 @@ pub struct TraitEnv {
     /// module that actually defines the impl, regardless of where the
     /// receiver type is declared (e.g. `impl Display for String` lives in
     /// `core:prelude/format`, not the module that declares `String`).
+    /// Includes both fully concrete impls (`impl Display for String`) and
+    /// generic impls (`impl<T: Inspect> Inspect for Array<T>`).
     pub(crate) trait_impl_modules: TraitImplModuleIndex,
+    /// Like [`trait_impl_modules`] but restricted to **fully concrete**
+    /// impls — `impl <Trait> for <Type> { … }` blocks whose `type_params`
+    /// are empty. This mirrors the pre-Step-4 monomorphizer index, which
+    /// only catalogued trait methods belonging to non-generic, non-blanket
+    /// impl blocks. Mono needs this distinction to decide which
+    /// `module_source` a substituted trait-method call should carry: a
+    /// generic impl's instantiation lives in the receiver type's module
+    /// (preserving the legacy convention), while a concrete impl's
+    /// function lives in the impl block's module.
+    pub(crate) concrete_trait_impl_modules: TraitImplModuleIndex,
     /// Layer added in the synthesis phase: auto-derived / generated impls
     /// (`Eq`, `Ord`, `Inspect`, `Display`, `From`, serde adapters, …) that
     /// were not present in the AST. `None` until `extend_with_synthesised`
@@ -115,21 +127,41 @@ pub struct SynthesisedImpls {
     /// trait impls (auto-derives plus the impls produced by `from_synth` /
     /// `serde_synth`). Mirrors the AST-level `trait_impl_modules` shape and
     /// participates in the same lookup via [`TraitEnv::impl_module_for`].
+    /// Includes both concrete (e.g. auto-derived `Inspect for Wrapper`) and
+    /// generic synthesised impls.
     pub trait_impl_modules: TraitImplModuleIndex,
+    /// Concrete-only subset (no impl-block type parameters). Mirrors the
+    /// AST-level [`TraitEnv::concrete_trait_impl_modules`] field; see its
+    /// docs for why mono needs to distinguish concrete impls from generic
+    /// ones.
+    pub concrete_trait_impl_modules: TraitImplModuleIndex,
 }
 
 impl SynthesisedImpls {
     /// Record that `impl <trait_name> for <type_name>` has been synthesized
-    /// in `module`. First insert wins (matches AST-layer first-write
-    /// semantics).
-    pub fn record_impl(&mut self, type_name: String, trait_name: String, module: ModuleSource) {
+    /// in `module`. `is_concrete` indicates whether the impl has no
+    /// generic type parameters, so it can be added to the concrete-only
+    /// view. First insert wins (matches AST-layer first-write semantics).
+    pub fn record_impl(
+        &mut self,
+        type_name: String,
+        trait_name: String,
+        module: ModuleSource,
+        is_concrete: bool,
+    ) {
+        let key = (type_name, trait_name);
         self.trait_impl_modules
-            .entry((type_name, trait_name))
-            .or_insert(module);
+            .entry(key.clone())
+            .or_insert_with(|| module.clone());
+        if is_concrete {
+            self.concrete_trait_impl_modules
+                .entry(key)
+                .or_insert(module);
+        }
     }
 
     /// `true` if `impl <trait_name> for <type_name>` has already been
-    /// recorded in this synthesis layer.
+    /// recorded in this synthesis layer (regardless of concreteness).
     #[must_use]
     pub fn has_impl(&self, type_name: &str, trait_name: &str) -> bool {
         self.trait_impl_modules
@@ -171,6 +203,7 @@ impl TraitEnv {
         let mut resource_decl_index: ResourceDeclIndex = IndexMap::default();
         let mut blanket_impl_index: BlanketTraitImplIndex = Vec::new();
         let mut trait_impl_modules: TraitImplModuleIndex = IndexMap::default();
+        let mut concrete_trait_impl_modules: TraitImplModuleIndex = IndexMap::default();
         // type name → module source, for orphan rule "is this type local?" checks
         let mut type_decl_index: IndexMap<String, ModuleSource> = IndexMap::default();
 
@@ -191,9 +224,19 @@ impl TraitEnv {
                             blanket_impl_index.push((module_source.clone(), item_idx));
                         } else if let Some(trait_type) = &impl_block.trait_type {
                             let trait_name = get_type_name_static(trait_type);
+                            let key = (type_name.clone(), trait_name);
                             trait_impl_modules
-                                .entry((type_name.clone(), trait_name))
+                                .entry(key.clone())
                                 .or_insert_with(|| module_source.clone());
+                            // Track the concrete subset separately: only impl
+                            // blocks with no type parameters at all qualify
+                            // (e.g. `impl Display for String`, not
+                            // `impl<T> Inspect for Array<T>`).
+                            if impl_block.type_params.is_empty() {
+                                concrete_trait_impl_modules
+                                    .entry(key)
+                                    .or_insert_with(|| module_source.clone());
+                            }
                         }
                         impl_index
                             .entry(type_name)
@@ -330,6 +373,7 @@ impl TraitEnv {
                 static_method_index,
                 resource_static_method_index,
                 trait_impl_modules,
+                concrete_trait_impl_modules,
                 synthesised: None,
                 instantiations: None,
             }),
@@ -352,6 +396,27 @@ impl TraitEnv {
             self.synthesised
                 .as_ref()
                 .and_then(|s| s.trait_impl_modules.get(&key))
+        })
+    }
+
+    /// Like [`impl_module_for`] but only returns a hit when the impl block
+    /// is **fully concrete** (no `impl<T, …>` type parameters). Used by
+    /// the monomorphizer when redirecting a substituted trait-method call
+    /// to the impl that actually defines its body: a concrete impl's
+    /// function lives in the impl block's module, while a generic impl's
+    /// post-substitution instance is materialised in the receiver type's
+    /// module by convention. Mirrors the legacy `trait_method_locations`
+    /// semantics that filtered on `impl_type_params.is_empty()`.
+    pub(crate) fn concrete_impl_module_for(
+        &self,
+        type_name: &str,
+        trait_name: &str,
+    ) -> Option<&ModuleSource> {
+        let key = (type_name.to_string(), trait_name.to_string());
+        self.concrete_trait_impl_modules.get(&key).or_else(|| {
+            self.synthesised
+                .as_ref()
+                .and_then(|s| s.concrete_trait_impl_modules.get(&key))
         })
     }
 

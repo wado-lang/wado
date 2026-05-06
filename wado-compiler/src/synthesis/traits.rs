@@ -266,16 +266,25 @@ impl SynthesisCtx<'_, '_> {
     }
 
     /// Note that this synthesis pass added `impl <trait_name> for <type_name>`
-    /// in `module`. Subsequent `has_impl` calls (in this pass or any later
-    /// pass that consults the resulting `TraitEnv`) will see it.
+    /// in `module`. The accumulator is purely for in-pass dedup (later
+    /// `has_impl` checks within the same `synthesize_traits` run); the
+    /// canonical synthesis-layer index is rebuilt by
+    /// `collect_synthesised_impls` after `synthesize_traits` returns, so
+    /// concrete-ness does not need to be tracked here. We pass
+    /// `is_concrete: false` to keep the concrete-only sub-index empty
+    /// in the accumulator without affecting the dedup view.
     pub(crate) fn record_impl(
         &mut self,
         type_name: &str,
         trait_name: &str,
         module: &ModuleSource,
     ) {
-        self.pending
-            .record_impl(type_name.to_string(), trait_name.to_string(), module.clone());
+        self.pending.record_impl(
+            type_name.to_string(),
+            trait_name.to_string(),
+            module.clone(),
+            false,
+        );
     }
 }
 

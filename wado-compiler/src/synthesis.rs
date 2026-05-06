@@ -91,17 +91,27 @@ pub fn synthesize(project: Package) -> Result<Package, String> {
 /// User-written impls already live in [`TraitEnv::trait_impl_modules`] from
 /// the AST layer, so they are excluded here to keep the synthesis layer a
 /// genuine "delta" on top of the AST.
+///
+/// Concrete-ness is propagated alongside each entry so that the
+/// monomorphizer can later distinguish "the impl is fully resolved (use the
+/// impl block's module)" from "the impl is generic (fall back to the
+/// receiver type's module so call_rewrite's path-2alt mismatches the
+/// queueing convention exactly the way the legacy `trait_method_locations`
+/// did)". An impl is concrete here when the synthesized function carries
+/// no impl-level type parameters.
 fn collect_synthesised_impls(project: &Package) -> SynthesisedImpls {
     let mut impls = SynthesisedImpls::default();
     let ast_layer = &project.trait_env.trait_impl_modules;
-    let mut record = |type_name: String, trait_name: String, module: &ModuleSource| {
+    let mut record = |type_name: String,
+                      trait_name: String,
+                      module: &ModuleSource,
+                      is_concrete: bool| {
         let key = (type_name, trait_name);
         if ast_layer.contains_key(&key) {
             return;
         }
-        impls.trait_impl_modules
-            .entry(key)
-            .or_insert_with(|| module.clone());
+        impls
+            .record_impl(key.0.clone(), key.1.clone(), module.clone(), is_concrete);
     };
     for tir_module in project.tir_modules.values() {
         let module_source = &tir_module.module_source;
@@ -110,10 +120,12 @@ fn collect_synthesised_impls(project: &Package) -> SynthesisedImpls {
             if let Some(ref info) = func.method_info
                 && let Some(ref trait_name) = info.trait_name
             {
+                let is_concrete = func.impl_type_params.is_empty();
                 record(
                     info.base_struct_name.clone(),
                     trait_name.clone(),
                     module_source,
+                    is_concrete,
                 );
             }
         }
@@ -121,11 +133,17 @@ fn collect_synthesised_impls(project: &Package) -> SynthesisedImpls {
             let Some(ref trait_name) = impl_block.trait_name else {
                 continue;
             };
+            let is_concrete = impl_block.type_params.is_empty();
             for method in &impl_block.methods {
                 if let Some(ref info) = method.method_info
                     && info.trait_name.is_some()
                 {
-                    record(info.base_struct_name.clone(), trait_name.clone(), module_source);
+                    record(
+                        info.base_struct_name.clone(),
+                        trait_name.clone(),
+                        module_source,
+                        is_concrete,
+                    );
                 }
             }
         }
