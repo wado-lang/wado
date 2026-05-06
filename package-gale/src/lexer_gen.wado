@@ -669,45 +669,49 @@ pub fn collect_keyword_rules(lexer_rules: &Array<LexerRule>, grammar_opts: &Arra
             candidates.push(kw);
         }
     }
+    // Precompute the first-char set of each potential carrier rule once, so
+    // the per-candidate filter below is O(carriers + candidates) rather than
+    // O(carriers × candidates) `compute_first_chars` calls. A single
+    // wildcard carrier (e.g. `UNEXPECTED : .;`) covers every candidate, so
+    // we short-circuit and skip the filter entirely.
+    let mut carrier_first_chars: Array<Array<[char, char]>> = [];
+    let mut any_wildcard_carrier = false;
+    for let rule of lexer_rules {
+        if rule.is_fragment || rule.is_virtual {
+            continue;
+        }
+        if is_keyword_rule_name(&rule.name, &candidates) {
+            continue;
+        }
+        let try_call = compute_first_chars(rule, lexer_rules, false, false, false, false, grammar_opts);
+        if try_call.is_wildcard {
+            any_wildcard_carrier = true;
+            break;
+        }
+        carrier_first_chars.push(try_call.first_chars);
+    }
     let mut result: Array<KeywordInfo> = [];
     for let kw of &candidates {
-        if keyword_has_carrier(kw, &candidates, lexer_rules, grammar_opts) {
+        if any_wildcard_carrier || keyword_has_carrier(kw, &carrier_first_chars) {
             result.push(*kw);
         }
     }
     return result;
 }
 
-/// Returns true if some non-candidate non-fragment non-virtual lexer rule has
-/// a first-character set that covers `kw`'s first character (folded to either
-/// case when `kw`'s first character is case-insensitive).
-fn keyword_has_carrier(
-    kw: &KeywordInfo,
-    candidates: &Array<KeywordInfo>,
-    lexer_rules: &Array<LexerRule>,
-    grammar_opts: &Array<GrammarOption>,
-) -> bool {
+/// Returns true if some precomputed carrier first-char set covers `kw`'s
+/// first character (folded to either case when `kw`'s first character is
+/// case-insensitive).
+fn keyword_has_carrier(kw: &KeywordInfo, carrier_first_chars: &Array<Array<[char, char]>>) -> bool {
     let first_char = kw.lowercase_text.chars().next().unwrap();
     let first_ci = kw.char_ci[0];
-    for let rule of lexer_rules {
-        if rule.is_fragment || rule.is_virtual {
-            continue;
-        }
-        if is_keyword_rule_name(&rule.name, candidates) {
-            continue;
-        }
-        let try_call = compute_first_chars(rule, lexer_rules, false, false, false, false, grammar_opts);
-        if try_call.is_wildcard {
+    let upper = if first_ci { first_char.to_ascii_uppercase() } else { first_char };
+    for let ranges of carrier_first_chars {
+        if char_matches_ranges(first_char, ranges) {
             return true;
         }
-        if char_matches_ranges(first_char, &try_call.first_chars) {
+        if first_ci && upper != first_char && char_matches_ranges(upper, ranges) {
             return true;
-        }
-        if first_ci {
-            let upper = first_char.to_ascii_uppercase();
-            if upper != first_char && char_matches_ranges(upper, &try_call.first_chars) {
-                return true;
-            }
         }
     }
     return false;
