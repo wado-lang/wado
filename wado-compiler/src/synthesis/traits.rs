@@ -946,7 +946,10 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>
                     fmt_type,
                     span,
                 ))));
-                ctx.record_impl(&mangled, "Inspect");
+                // Intentionally do NOT `ctx.record_impl` — Function-type
+                // stubs are per-module (every module that uses this
+                // closure shape needs its own copy so call sites resolve
+                // to a stub in the caller's module).
             }
             _ => {
                 // Opaque/resource types (Future, Stream, etc.): write type name as string
@@ -960,7 +963,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>
                     string_type,
                     span,
                 ))));
-                ctx.record_impl(&mangled, "Inspect");
+                // Same per-module rationale as the Function arm above.
             }
         }
     }
@@ -1863,7 +1866,8 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
                 fmt_type,
                 span,
             ))));
-            ctx.record_impl(&mangled, "InspectAlt");
+            // Intentionally no `ctx.record_impl` — see the Inspect twin
+            // in `generate_inspect_impls` for the per-module rationale.
             continue;
         }
         let ref_type = tt.make_ref(type_id);
@@ -1880,7 +1884,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
             vec![],
             span,
         ))));
-        ctx.record_impl(&mangled, "InspectAlt");
+        // Same per-module rationale as the Function arm above.
     }
 
     drop(tt);
@@ -2368,20 +2372,22 @@ fn generate_fallback_impls(
     // Helper to materialise the fallback function. Returns the new function
     // alongside the `(type_name, trait_name)` pair so the caller can record
     // the impl into `ctx` after pushing.
-    let make_fallback =
-        |name: &str, ref_type: TypeId, impl_type_params: Vec<TirTypeParam>| -> Rc<RefCell<TirFunction>> {
-            let target_info = trait_method_info(name, pair.target_trait, pair.target_method);
-            let delegate_info = trait_method_info(name, pair.delegate_trait, pair.delegate_method);
-            Rc::new(RefCell::new(generate_display_fallback(
-                target_info,
-                delegate_info,
-                ref_type,
-                fmt_type,
-                &module_source,
-                impl_type_params,
-                span,
-            )))
-        };
+    let make_fallback = |name: &str,
+                         ref_type: TypeId,
+                         impl_type_params: Vec<TirTypeParam>|
+     -> Rc<RefCell<TirFunction>> {
+        let target_info = trait_method_info(name, pair.target_trait, pair.target_method);
+        let delegate_info = trait_method_info(name, pair.delegate_trait, pair.delegate_method);
+        Rc::new(RefCell::new(generate_display_fallback(
+            target_info,
+            delegate_info,
+            ref_type,
+            fmt_type,
+            &module_source,
+            impl_type_params,
+            span,
+        )))
+    };
 
     let enum_names: Vec<_> = module.enums.iter().map(|e| e.name.clone()).collect();
     for name in &enum_names {
@@ -2533,7 +2539,9 @@ fn generate_fallback_impls(
             vec![],
             span,
         ))));
-        ctx.record_impl(&mangled, pair.target_trait);
+        // Per-module fallback stub for Function/opaque types — see
+        // `generate_inspect_impls` for the rationale of skipping
+        // `ctx.record_impl` here.
     }
 
     drop(tt);

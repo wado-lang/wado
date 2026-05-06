@@ -1189,10 +1189,8 @@ impl Monomorphizer {
                             if info.is_type_param_receiver {
                                 let mut sorted_entries: Vec<_> = substitution.iter().collect();
                                 sorted_entries.sort_by_key(|(idx, _)| **idx);
-                                let concrete_module = self
-                                    .functions
-                                    .impl_module(&new_info)
-                                    .or_else(|| {
+                                let concrete_module =
+                                    self.functions.impl_module(&new_info).or_else(|| {
                                         let concrete_type_id = sorted_entries[0].1;
                                         module_source_for_trait_impl(type_table, *concrete_type_id)
                                     });

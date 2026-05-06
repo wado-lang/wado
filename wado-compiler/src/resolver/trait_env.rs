@@ -409,10 +409,7 @@ impl TraitEnv {
     /// only viable extension shape: we move out of the `Arc`, swap one
     /// field, and re-wrap. Callers are responsible for not handing this
     /// function a shared `Arc`.
-    pub fn extend_with_synthesised(
-        prev: Arc<Self>,
-        synth_impls: SynthesisedImpls,
-    ) -> Arc<Self> {
+    pub fn extend_with_synthesised(prev: Arc<Self>, synth_impls: SynthesisedImpls) -> Arc<Self> {
         let Ok(mut env) = Arc::try_unwrap(prev) else {
             panic!("extend_with_synthesised: TraitEnv Arc must be uniquely owned")
         };

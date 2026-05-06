@@ -1014,4 +1014,3 @@ fn trait_impl_module(
         _ => ModuleSource::primitive(),
     }
 }
-
