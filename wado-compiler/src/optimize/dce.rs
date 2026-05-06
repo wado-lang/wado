@@ -43,24 +43,6 @@ struct FunctionAnalysis {
 /// list. Returns the set of reachable functions for use by
 /// `remove_unreachable_functions`.
 pub fn analyze_project(project: &mut FlatPackage) -> IndexSet<FunctionId> {
-<<<<<<< HEAD
-    // Phase 1: Pure analysis — build graph, compute reachable set
-    let (call_graph, effect_usage) = build_analysis_graph(project);
-    let mut reachable = compute_reachable_from_entries(project, &call_graph);
-
-    // Phase 1b: Extend reachable set with optimizer-induced virtual edges.
-    // Optimizer passes (e.g. `tir/string_push`) may *synthesize* new calls
-    // during the optimization loop. Functions those passes call must
-    // survive the early DCE that runs before the loop, otherwise the
-    // synthesis target is gone and the rewrite cannot fire. The virtual
-    // edges are gated by comp_feature flags so each rule names its
-    // canonical pair (`string_push_str` → `string_push_char`, etc.).
-    extend_reachable_for_optimizer_passes(project, &call_graph, &mut reachable);
-||||||| eeaf83e
-    // Phase 1: Pure analysis — build graph, compute reachable set
-    let (call_graph, effect_usage) = build_analysis_graph(project);
-    let reachable = compute_reachable_from_entries(project, &call_graph);
-=======
     // Phase 1a: build a provisional call graph that does NOT root the
     // per-functor `__Closure_N^Inspect[Alt]` impls from
     // `ClosureToCanonical`, then compute its reachable set. This
@@ -81,8 +63,16 @@ pub fn analyze_project(project: &mut FlatPackage) -> IndexSet<FunctionId> {
     // so the inspectable set is stable under this expansion — no
     // fixpoint iteration is needed.
     let (call_graph, effect_usage) = build_analysis_graph_with(project, &inspectable);
-    let reachable = compute_reachable_from_entries(project, &call_graph);
->>>>>>> origin/main
+    let mut reachable = compute_reachable_from_entries(project, &call_graph);
+
+    // Phase 1d: Extend reachable set with optimizer-induced virtual edges.
+    // Optimizer passes (e.g. `tir/string_push`) may *synthesize* new calls
+    // during the optimization loop. Functions those passes call must
+    // survive the early DCE that runs before the loop, otherwise the
+    // synthesis target is gone and the rewrite cannot fire. The virtual
+    // edges are gated by comp_feature flags so each rule names its
+    // canonical pair (`string_push_str` → `string_push_char`, etc.).
+    extend_reachable_for_optimizer_passes(project, &call_graph, &mut reachable);
 
     // Phase 2: Resolve imports and WASI features using reachable set
     resolve_imports(project, &reachable, &effect_usage);
@@ -122,40 +112,6 @@ fn extend_reachable_for_optimizer_passes(
         && !reachable.contains(&char_id)
     {
         reachable.extend(compute_reachable(call_graph, &char_id));
-    }
-}
-
-/// Build the canonical `FunctionId` for a TIR function. Mirrors the logic
-/// in [`build_analysis_graph`] so reachability extensions can name a
-/// function by the same key the call graph uses.
-fn function_id_for(func: &TirFunction) -> FunctionId {
-    let module_source = &func.module_source;
-    if let Some(ref info) = func.method_info {
-        if let Some(monomorph_info) = &func.monomorph_info {
-            FunctionId::Free(FreeFunctionName::with_monomorph_info(
-                module_source.clone(),
-                func.name.clone(),
-                monomorph_info.generic_name.clone(),
-            ))
-        } else {
-            FunctionId::Method(MethodName::new(
-                module_source.clone(),
-                info.struct_name.clone(),
-                info.trait_name.clone(),
-                info.method_name.clone(),
-            ))
-        }
-    } else if let Some(monomorph_info) = &func.monomorph_info {
-        FunctionId::Free(FreeFunctionName::with_monomorph_info(
-            module_source.clone(),
-            func.name.clone(),
-            monomorph_info.generic_name.clone(),
-        ))
-    } else {
-        FunctionId::Free(FreeFunctionName::from_module_source(
-            module_source,
-            &func.name,
-        ))
     }
 }
 
@@ -586,86 +542,8 @@ fn build_analysis_graph_with(
     for func_rc in &project.functions {
         let func = func_rc.borrow();
         let module_source = &func.module_source;
-<<<<<<< HEAD
         let func_id = function_id_for(&func);
-        let analysis = analyze_function(&func, module_source, type_table);
-||||||| eeaf83e
-        // Use the TirFunction's is_method() to determine if this is a method
-        let func_id = if let Some(ref info) = func.method_info {
-            // This is a method - use MethodName or FreeFunctionName with monomorph info
-            if let Some(monomorph_info) = &func.monomorph_info {
-                // Monomorphized method - use FreeFunctionName with metadata.
-                // Use the actual module_source where the function lives.
-                FunctionId::Free(FreeFunctionName::with_monomorph_info(
-                    module_source.clone(),
-                    func.name.clone(),
-                    monomorph_info.generic_name.clone(),
-                ))
-            } else {
-                // Non-monomorphized method - use method_info
-                FunctionId::Method(MethodName::new(
-                    module_source.clone(),
-                    info.struct_name.clone(),
-                    info.trait_name.clone(),
-                    info.method_name.clone(),
-                ))
-            }
-        } else {
-            // Regular function - use FreeFunctionName
-            if let Some(monomorph_info) = &func.monomorph_info {
-                // Monomorphized function - use actual module_source
-                FunctionId::Free(FreeFunctionName::with_monomorph_info(
-                    module_source.clone(),
-                    func.name.clone(),
-                    monomorph_info.generic_name.clone(),
-                ))
-            } else {
-                FunctionId::Free(FreeFunctionName::from_module_source(
-                    module_source,
-                    &func.name,
-                ))
-            }
-        };
-        let analysis = analyze_function(&func, module_source, type_table);
-=======
-        // Use the TirFunction's is_method() to determine if this is a method
-        let func_id = if let Some(ref info) = func.method_info {
-            // This is a method - use MethodName or FreeFunctionName with monomorph info
-            if let Some(monomorph_info) = &func.monomorph_info {
-                // Monomorphized method - use FreeFunctionName with metadata.
-                // Use the actual module_source where the function lives.
-                FunctionId::Free(FreeFunctionName::with_monomorph_info(
-                    module_source.clone(),
-                    func.name.clone(),
-                    monomorph_info.generic_name.clone(),
-                ))
-            } else {
-                // Non-monomorphized method - use method_info
-                FunctionId::Method(MethodName::new(
-                    module_source.clone(),
-                    info.struct_name.clone(),
-                    info.trait_name.clone(),
-                    info.method_name.clone(),
-                ))
-            }
-        } else {
-            // Regular function - use FreeFunctionName
-            if let Some(monomorph_info) = &func.monomorph_info {
-                // Monomorphized function - use actual module_source
-                FunctionId::Free(FreeFunctionName::with_monomorph_info(
-                    module_source.clone(),
-                    func.name.clone(),
-                    monomorph_info.generic_name.clone(),
-                ))
-            } else {
-                FunctionId::Free(FreeFunctionName::from_module_source(
-                    module_source,
-                    &func.name,
-                ))
-            }
-        };
         let analysis = analyze_function(&func, module_source, type_table, inspectable_signatures);
->>>>>>> origin/main
         call_graph.insert(func_id.clone(), analysis.callees);
         if !analysis.effect_calls.is_empty() {
             effect_usage.insert(func_id.clone(), analysis.effect_calls);
