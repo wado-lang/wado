@@ -103,6 +103,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::hashmap::IndexMap;
+use crate::hashmap::IndexSet;
 use crate::name::ModuleSource;
 use crate::tir::{
     PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction,
@@ -308,6 +309,58 @@ pub type GlobalEnv = IndexMap<GlobalKey, Lattice>;
 /// actually runs.
 pub const DEFAULT_STEP_BUDGET: u32 = 1000;
 
+// ──────────────────────────────────────────────────────────────────────────────
+// Field knowledge
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// Identity of a struct-field slot tracked by [`Interpreter::field_env`].
+///
+/// `(local_index, field_name)` mirrors the shape produced by
+/// `FieldAccess { expr: Local(idx), field_name }` so a leaf rewrite can
+/// look up a recorded value with a single map probe.
+pub type FieldKey = (u32, String);
+
+/// Per-function alias / aliasing-trackability annotations consumed by
+/// the interpreter's field-knowledge bookkeeping.
+///
+/// These three sets are computed once per function by the driving
+/// visitor (typically from the function's stable
+/// `address_taken_locals` / `stores_aliased_locals` plus a body walk
+/// that catches transient inlined-in copies), then handed to the
+/// interpreter via [`Interpreter::set_alias_info`].
+///
+/// - `aliased`: locals reachable through some other handle (`&x`,
+///   `&mut x`, captured by a closure, struct-field-stored, etc.).
+///   Field knowledge IS recorded for these locals; the flow-sensitive
+///   walk drops their entries at every side-effect boundary (call,
+///   dereferenced write, …) where an unseen alias could have mutated
+///   the storage.
+/// - `untrackable`: locals whose aliasing escapes our analysis (e.g.
+///   stashed across a `stores`-annotated callee). Field knowledge is
+///   **never** recorded for these; that matches the conservatism the
+///   OLD WIR-level `const_forward` had for stores-passed args.
+/// - `alias_groups`: union-find groups of locals connected by
+///   reference-typed `let dst = src` copies (`Box<T>`, `Array<T>`,
+///   `&T`, `&mut T`). Used to widen field-assignment invalidation:
+///   writing `dst.field = …` must drop the same field on every
+///   alias.
+#[derive(Default, Clone, Debug)]
+pub struct AliasInfo {
+    pub aliased: IndexSet<u32>,
+    pub untrackable: IndexSet<u32>,
+    pub alias_groups: IndexMap<u32, IndexSet<u32>>,
+}
+
+/// Snapshot of [`Interpreter::field_env`] returned by
+/// [`Interpreter::snapshot_fields`]. Restored verbatim by
+/// [`Interpreter::restore_fields`]; used by the driving visitor to
+/// fork field knowledge at branch boundaries (`if`, `match`, `if let`)
+/// so each arm walks against the entry state.
+#[derive(Clone, Debug)]
+pub struct FieldSnapshot {
+    fields: IndexMap<FieldKey, Value>,
+}
+
 /// Decide whether a function may be evaluated at compile time.
 ///
 /// The check is a conservative pure-and-safe gate, applied once when the
@@ -365,6 +418,27 @@ pub struct Interpreter<'a> {
     /// [`invalidate_local`]: Self::invalidate_local
     /// [`enter_function`]: Self::enter_function
     env: IndexMap<u32, Lattice>,
+    /// Per-(local, field) constant values for the *current function*.
+    ///
+    /// Populated by the driving visitor when it sees a `let local =
+    /// StructLiteral { f: lit, … }`, a `local.field = lit` assignment,
+    /// or a recognized `$value_copy$T(src)` / Local→Local copy that
+    /// transfers field knowledge. Reads at `FieldAccess(Local(idx),
+    /// field_name)` sites consult this map and rewrite the read to the
+    /// recorded literal.
+    ///
+    /// Only the four primitive literal kinds (Int / Float / Bool /
+    /// Char) — exactly the values [`Value`] models — are forwardable;
+    /// `String` / `null` / aggregate fields stay un-recorded so their
+    /// reads always go through the runtime.
+    field_env: IndexMap<FieldKey, Value>,
+    /// Per-function alias annotations driving [`field_env`]
+    /// invalidation. Empty by default; populated once per function by
+    /// the driving visitor via [`set_alias_info`].
+    ///
+    /// [`field_env`]: Self::field_env
+    /// [`set_alias_info`]: Self::set_alias_info
+    alias_info: AliasInfo,
     /// Pre-built map of CTFE-eligible callees. When `None`, `Call` nodes
     /// stay [`Lattice::Unevaluated`]. The visitor populates this once
     /// per pass via [`with_callees`].
@@ -397,6 +471,8 @@ impl<'a> Interpreter<'a> {
         Self {
             type_table,
             env: IndexMap::default(),
+            field_env: IndexMap::default(),
+            alias_info: AliasInfo::default(),
             callees: None,
             globals: None,
             step_budget: DEFAULT_STEP_BUDGET,
@@ -449,10 +525,21 @@ impl<'a> Interpreter<'a> {
     /// pass, not per-function.
     pub fn enter_function(&mut self) {
         self.env.clear();
+        self.field_env.clear();
+        self.alias_info = AliasInfo::default();
         debug_assert!(
             self.call_stack.is_empty(),
             "tiri call_stack leaked across function boundary",
         );
+    }
+
+    /// Install per-function alias annotations. The driving visitor
+    /// calls this after [`enter_function`] and before walking the
+    /// body. See [`AliasInfo`] for the meaning of each set.
+    ///
+    /// [`enter_function`]: Self::enter_function
+    pub fn set_alias_info(&mut self, info: AliasInfo) {
+        self.alias_info = info;
     }
 
     /// Record a lattice value for a `let`-bound local. The driving
@@ -467,9 +554,126 @@ impl<'a> Interpreter<'a> {
     /// Mark a local as definitely non-constant from this point on. The
     /// driving visitor calls this when it sees an `x = expr` assignment.
     /// Conservative — we don't track flow-sensitive new values, just
-    /// invalidate the prior binding.
+    /// invalidate the prior binding. Also drops every recorded field
+    /// of the local — the new value might not have those fields, or
+    /// might have different ones.
     pub fn invalidate_local(&mut self, index: u32) {
         self.env.insert(index, Lattice::NonConst);
+        self.field_env.retain(|(idx, _), _| *idx != index);
+    }
+
+    /// Record `value` as the known compile-time value of
+    /// `local_index.field_name`. The driving visitor calls this when
+    /// it sees a `let local = StructLiteral { field_name: lit, … }`,
+    /// a direct `local.field_name = lit` assignment, or a recognized
+    /// field-knowledge transfer (`$value_copy$T(src)` /
+    /// reference-typed `let dst = src`). Reads at `FieldAccess(Local,
+    /// field_name)` consult the recorded value through
+    /// [`expr_to_lattice`] / [`reduce_local`].
+    ///
+    /// Skipped silently when `local_index` is in the `untrackable`
+    /// set — those locals participate in aliasing the optimizer can
+    /// no longer see, so any later read may witness a mutation we
+    /// never recorded. (Same conservatism as the WIR-level
+    /// `const_forward` had for stores-passed args.)
+    ///
+    /// [`expr_to_lattice`]: Self::expr_to_lattice
+    /// [`reduce_local`]: Self::reduce_local
+    pub fn bind_field(&mut self, local_index: u32, field_name: &str, value: Value) {
+        if self.alias_info.untrackable.contains(&local_index) {
+            return;
+        }
+        self.field_env
+            .insert((local_index, field_name.to_string()), value);
+    }
+
+    /// Drop the recorded value (if any) for `local_index.field_name`.
+    /// The driving visitor calls this on `local.field = expr`
+    /// assignments before optionally re-recording with [`bind_field`]
+    /// when `expr` is a forwardable literal.
+    ///
+    /// Aliased locals in the same `alias_groups` entry are
+    /// invalidated for the same field, since they share the
+    /// underlying object's storage.
+    ///
+    /// [`bind_field`]: Self::bind_field
+    pub fn invalidate_field(&mut self, local_index: u32, field_name: &str) {
+        self.field_env
+            .swap_remove(&(local_index, field_name.to_string()));
+        if let Some(group) = self.alias_info.alias_groups.get(&local_index).cloned() {
+            for other in &group {
+                if *other == local_index {
+                    continue;
+                }
+                self.field_env
+                    .swap_remove(&(*other, field_name.to_string()));
+            }
+        }
+    }
+
+    /// Drop every field entry whose owning local is in
+    /// `alias_info.aliased`. The driving visitor calls this at
+    /// side-effect boundaries (calls, dereferenced writes) where some
+    /// external code could have mutated the storage through an alias.
+    pub fn invalidate_aliased_fields(&mut self) {
+        if self.alias_info.aliased.is_empty() {
+            return;
+        }
+        let aliased = &self.alias_info.aliased;
+        self.field_env.retain(|(idx, _), _| !aliased.contains(idx));
+    }
+
+    /// Copy every recorded field of `src` to `dst`. Used by the
+    /// driving visitor to thread field knowledge through `let dst =
+    /// src` (reference-typed Local→Local copy, where both names alias
+    /// the same heap object) and `let dst = $value_copy$T(src)` (a
+    /// fresh deep copy that carries the same field values). Skipped
+    /// when `dst` is `untrackable`.
+    pub fn copy_fields_from(&mut self, src: u32, dst: u32) {
+        if self.alias_info.untrackable.contains(&dst) {
+            return;
+        }
+        let copies: Vec<(String, Value)> = self
+            .field_env
+            .iter()
+            .filter_map(|((idx, name), v)| {
+                if *idx == src {
+                    Some((name.clone(), *v))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        for (name, v) in copies {
+            self.field_env.insert((dst, name), v);
+        }
+    }
+
+    /// Take a snapshot of the current field environment. Used by the
+    /// driving visitor to fork at branch boundaries: snapshot, walk
+    /// one arm, restore, walk the other. Locals don't need this fork
+    /// (the only mutation channel is `let mut`, recorded preemptively
+    /// as `NonConst`); fields do, because `local.field = …` inside a
+    /// branch is conditional on the branch firing.
+    #[must_use]
+    pub fn snapshot_fields(&self) -> FieldSnapshot {
+        FieldSnapshot {
+            fields: self.field_env.clone(),
+        }
+    }
+
+    /// Restore a [`FieldSnapshot`] taken via [`snapshot_fields`].
+    ///
+    /// [`snapshot_fields`]: Self::snapshot_fields
+    pub fn restore_fields(&mut self, snap: FieldSnapshot) {
+        self.field_env = snap.fields;
+    }
+
+    /// Drop every recorded field. Used at control-flow merges where
+    /// conservatively forgetting all fields is simpler than computing
+    /// the meet of per-branch knowledge.
+    pub fn clear_fields(&mut self) {
+        self.field_env.clear();
     }
 
     /// Reduce `expr` as far as possible.
