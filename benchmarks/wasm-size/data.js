@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778015162348,
+  "lastUpdate": 1778027594872,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -19593,6 +19593,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d04a4162f33cf5cb65abd2d3a0f908b16755aff9"
         },
         "date": 1778015162203,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1775,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8776,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18520,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 503688,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "93179bf4c53a6b90440066f275bf1cb3dbda630f",
+          "message": "Merge pull request #1004 from wado-lang/claude/optimize-gale-parser-OXJLR\n\ngale TODO: capture sqlite-parse perf investigation findings",
+          "timestamp": "2026-05-06T09:28:21+09:00",
+          "tree_id": "9246cebe221b4c4c15141b659f49a83c47a0f953",
+          "url": "https://github.com/wado-lang/wado/commit/93179bf4c53a6b90440066f275bf1cb3dbda630f"
+        },
+        "date": 1778027594507,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
