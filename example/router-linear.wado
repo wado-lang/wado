@@ -61,53 +61,59 @@ fn try_match(segments: &Array<Segment>, path: &String, params: &mut TreeMap<Stri
     for let mut idx = 0; idx < nseg; idx += 1 {
         let seg = &segments[idx];
         let is_last = idx == nseg - 1;
-        if let Wildcard(name) = seg {
-            // Wildcard requires that the previous segment terminated on a
-            // '/' (so `pos <= plen`). When pos > plen the previous literal
-            // ate exactly to end-of-path with no separator, so this route
-            // does not match.
-            if pos > plen {
-                return false;
-            }
-            params[*name] = path.substr_bytes(pos, plen);
-            return true;
-        }
-        if pos > plen {
-            return false;
-        }
-        if pos == plen {
-            // Out of input but still have a segment to match.
-            return false;
-        }
-        // Find end of current path segment.
-        let mut end = pos;
-        while end < plen && path.get_byte(end) != 47 {
-            end += 1;
-        }
-        if end == pos {
-            // Empty segment in path (e.g. "//").
-            return false;
-        }
-        if let Literal(lit) = seg {
-            let llen = lit.len();
-            if end - pos != llen {
-                return false;
-            }
-            for let mut k = 0; k < llen; k += 1 {
-                if path.get_byte(pos + k) != lit.get_byte(k) {
+        match seg {
+            Wildcard(name) => {
+                // Wildcard requires the previous segment terminated on a
+                // '/'. `pos > plen` means the previous literal ate to
+                // end-of-path with no separator, so this route does not
+                // match.
+                if pos > plen {
                     return false;
                 }
-            }
-        } else if let Param(name) = seg {
-            params[*name] = path.substr_bytes(pos, end);
+                params[*name] = path.substr_bytes(pos, plen);
+                return true;
+            },
+            Literal(lit) => {
+                if pos >= plen {
+                    return false;
+                }
+                let mut end = pos;
+                while end < plen && path.get_byte(end) != 47 {
+                    end += 1;
+                }
+                if end == pos {
+                    return false;
+                }
+                let llen = lit.len();
+                if end - pos != llen {
+                    return false;
+                }
+                for let mut k = 0; k < llen; k += 1 {
+                    if path.get_byte(pos + k) != lit.get_byte(k) {
+                        return false;
+                    }
+                }
+                pos = end + 1;
+            },
+            Param(name) => {
+                if pos >= plen {
+                    return false;
+                }
+                let mut end = pos;
+                while end < plen && path.get_byte(end) != 47 {
+                    end += 1;
+                }
+                if end == pos {
+                    return false;
+                }
+                params[*name] = path.substr_bytes(pos, end);
+                pos = end + 1;
+            },
         }
-        pos = end + 1;
-        // After consuming the last segment, path should be exhausted.
+        // After consuming the last (non-wildcard) segment, path should be
+        // exhausted. `pos == plen + 1` means end == plen (no trailing
+        // slash) — the strict-match success state.
         if is_last {
-            // After consuming a literal/param segment, pos == plen + 1
-            // means end == plen (no trailing slash) — the strict-match
-            // success state. pos == plen would mean the path had a
-            // trailing '/', which we treat as a different path.
             if pos == plen + 1 {
                 return true;
             }

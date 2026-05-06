@@ -236,19 +236,15 @@ pub fn parse_pattern(path: &String) -> Array<Segment> {
             j += 1;
         }
         let seg = path.substr_bytes(i, j);
-        if seg.len() == 0 {
-            // skip empty segment from doubled slashes
-        } else {
-            let first = seg.get_byte(0);
-            if first == 58 {
-                // ':' -> param
-                out.push(Segment::Param(seg.substr_bytes(1, seg.len())));
-            } else if first == 42 {
-                // '*' -> wildcard
-                out.push(Segment::Wildcard(seg.substr_bytes(1, seg.len())));
-            } else {
-                out.push(Segment::Literal(seg));
-            }
+        if seg.len() > 0 {
+            // First byte tags the segment kind: ':' (58) -> Param,
+            // '*' (42) -> Wildcard, anything else -> Literal.
+            let item = match seg.get_byte(0) {
+                58 => Segment::Param(seg.substr_bytes(1, seg.len())),
+                42 => Segment::Wildcard(seg.substr_bytes(1, seg.len())),
+                _ => Segment::Literal(seg),
+            };
+            out.push(item);
         }
         i = j + 1;
     }

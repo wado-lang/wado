@@ -76,27 +76,31 @@ impl RadixRouter {
         let nseg = segs.len();
         for let mut i = 0; i < nseg; i += 1 {
             let seg = &segs[i];
-            if let Literal(lit) = seg {
-                buffer.push_str("/");
-                buffer.push_str(*lit);
-            } else if let Param(name) = seg {
-                buffer.push_str("/");
-                cur = self.insert_literal(cur, &buffer);
-                buffer = String::with_capacity(32);
-                if self.nodes[cur].param_target < 0 {
-                    let new_id = self.nodes.len();
-                    self.nodes.push(new_node());
-                    self.nodes[cur].param_target = new_id;
-                    self.nodes[cur].param_name = *name;
-                }
-                cur = self.nodes[cur].param_target;
-            } else if let Wildcard(name) = seg {
-                buffer.push_str("/");
-                cur = self.insert_literal(cur, &buffer);
-                self.nodes[cur].wildcard_handler = handler_id;
-                self.nodes[cur].wildcard_method = method;
-                self.nodes[cur].wildcard_name = *name;
-                return;
+            match seg {
+                Literal(lit) => {
+                    buffer.push_str("/");
+                    buffer.push_str(*lit);
+                },
+                Param(name) => {
+                    buffer.push_str("/");
+                    cur = self.insert_literal(cur, &buffer);
+                    buffer = String::with_capacity(32);
+                    if self.nodes[cur].param_target < 0 {
+                        let new_id = self.nodes.len();
+                        self.nodes.push(new_node());
+                        self.nodes[cur].param_target = new_id;
+                        self.nodes[cur].param_name = *name;
+                    }
+                    cur = self.nodes[cur].param_target;
+                },
+                Wildcard(name) => {
+                    buffer.push_str("/");
+                    cur = self.insert_literal(cur, &buffer);
+                    self.nodes[cur].wildcard_handler = handler_id;
+                    self.nodes[cur].wildcard_method = method;
+                    self.nodes[cur].wildcard_name = *name;
+                    return;
+                },
             }
         }
         if buffer.len() > 0 {

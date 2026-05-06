@@ -63,30 +63,35 @@ impl DfaRouter {
         let nseg = segs.len();
         for let mut i = 0; i < nseg; i += 1 {
             let seg = &segs[i];
-            if let Wildcard(name) = seg {
-                self.states[cur].wildcard_handler = handler_id;
-                self.states[cur].wildcard_method = method;
-                self.states[cur].wildcard_name = *name;
-                return;
-            } else if let Param(name) = seg {
-                if self.states[cur].param_target < 0 {
-                    let new_id = self.states.len();
-                    self.states.push(new_state());
-                    self.states[cur].param_target = new_id;
-                    self.states[cur].param_name = *name;
-                }
-                cur = self.states[cur].param_target;
-            } else if let Literal(lit) = seg {
-                let key = *lit;
-                let existing = self.states[cur].literals.get(key);
-                if let Some(next) = existing {
-                    cur = next;
-                } else {
-                    let new_id = self.states.len();
-                    self.states.push(new_state());
-                    self.states[cur].literals[key] = new_id;
-                    cur = new_id;
-                }
+            match seg {
+                Wildcard(name) => {
+                    self.states[cur].wildcard_handler = handler_id;
+                    self.states[cur].wildcard_method = method;
+                    self.states[cur].wildcard_name = *name;
+                    return;
+                },
+                Param(name) => {
+                    if self.states[cur].param_target < 0 {
+                        let new_id = self.states.len();
+                        self.states.push(new_state());
+                        self.states[cur].param_target = new_id;
+                        self.states[cur].param_name = *name;
+                    }
+                    cur = self.states[cur].param_target;
+                },
+                Literal(lit) => {
+                    let key = *lit;
+                    let existing = self.states[cur].literals.get(key);
+                    match existing {
+                        Some(next) => { cur = next; },
+                        None => {
+                            let new_id = self.states.len();
+                            self.states.push(new_state());
+                            self.states[cur].literals[key] = new_id;
+                            cur = new_id;
+                        },
+                    }
+                },
             }
         }
         self.states[cur].handler_id = handler_id;
@@ -108,22 +113,24 @@ impl DfaRouter {
                 // Empty segment ("//" in path).
                 return no_match();
             }
-            // Try literal transition first.
+            // Try literal first; on miss fall back to param, then wildcard.
             let seg = path.substr_bytes(pos, end);
-            let lit_next = self.states[state].literals.get(seg);
-            if let Some(next) = lit_next {
-                state = next;
-            } else if self.states[state].param_target >= 0 {
-                let pname = self.states[state].param_name;
-                params[pname] = seg;
-                state = self.states[state].param_target;
-            } else if self.states[state].wildcard_handler >= 0
-                && self.states[state].wildcard_method == method
-            {
-                params[self.states[state].wildcard_name] = path.substr_bytes(pos, plen);
-                return MatchResult { handler_id: self.states[state].wildcard_handler, params };
-            } else {
-                return no_match();
+            match self.states[state].literals.get(seg) {
+                Some(next) => { state = next; },
+                None => {
+                    if self.states[state].param_target >= 0 {
+                        let pname = self.states[state].param_name;
+                        params[pname] = seg;
+                        state = self.states[state].param_target;
+                    } else if self.states[state].wildcard_handler >= 0
+                        && self.states[state].wildcard_method == method
+                    {
+                        params[self.states[state].wildcard_name] = path.substr_bytes(pos, plen);
+                        return MatchResult { handler_id: self.states[state].wildcard_handler, params };
+                    } else {
+                        return no_match();
+                    }
+                },
             }
             pos = end + 1;
         }
