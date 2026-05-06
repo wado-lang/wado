@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778100559343,
+  "lastUpdate": 1778100947512,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -19877,6 +19877,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 508287,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "fce7de8c847bf5391d886311b2d8e4bb5a359472",
+          "message": "Merge pull request #1011 from wado-lang/claude/design-ll-prediction-drrhT\n\ngale: static-analysis LL(*) repair via __follow_<id> variants",
+          "timestamp": "2026-05-07T05:44:58+09:00",
+          "tree_id": "00b25c93c196c972d763664895217f7e42c457bb",
+          "url": "https://github.com/wado-lang/wado/commit/fce7de8c847bf5391d886311b2d8e4bb5a359472"
+        },
+        "date": 1778100947281,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1770,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9140,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18520,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 514478,
             "unit": "bytes"
           }
         ]
