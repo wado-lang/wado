@@ -1262,7 +1262,8 @@ fn visit_expr_for_alias(
             if matches!(op, TirUnaryOp::Ref | TirUnaryOp::MutRef)
                 && matches!(&inner.kind, TirExprKind::Local { .. })
             {
-                if !in_call_arg && is_gc_heap_type(inner.type_id, type_table)
+                if !in_call_arg
+                    && is_gc_heap_type(inner.type_id, type_table)
                     && let TirExprKind::Local { index, .. } = &inner.kind
                 {
                     out.insert(*index);
@@ -1791,10 +1792,7 @@ fn count_field_accesses_in_expr(
             // Direct assignment targets are also exempt — writing TO
             // the local is handled separately by
             // `mark_local_fully_assigned`.
-            if !in_call_arg
-                && !is_assign_target
-                && is_gc_heap_type(expr.type_id, type_table)
-            {
+            if !in_call_arg && !is_assign_target && is_gc_heap_type(expr.type_id, type_table) {
                 mark_local_aliased(*index, counts);
             }
         }
