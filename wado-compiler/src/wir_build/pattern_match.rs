@@ -174,9 +174,21 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
-    /// Translate a `LetDestructure` (tuple destructuring) statement.
-    /// Evaluates the tuple expression, stores it in a temp local,
-    /// then binds each element to its pattern binding local.
+    /// Translate a `LetDestructure` statement.
+    ///
+    /// Handles the patterns the resolver actually emits as `LetDestructure`:
+    /// * `Tuple` — destructures a tuple, binding each element to its pattern's
+    ///   binding local (or skipping wildcard slots).
+    /// * `Binding` — a plain `let name = expr;` lowered as a single binding;
+    ///   stores the value into the local.
+    /// * `Wildcard` — `let _ = expr;`. Evaluates the value for side effects
+    ///   and drops the result (wrapping non-unit values in `Drop` so the
+    ///   expression's side effects still execute). Returning `None` here
+    ///   would silently elide the value expression.
+    ///
+    /// Other `TirPattern` variants are not produced by the resolver in this
+    /// position (struct destructuring uses its own path) and fall through
+    /// to `None`.
     pub(super) fn translate_let_pattern(
         &mut self,
         pattern: &TirPattern,
