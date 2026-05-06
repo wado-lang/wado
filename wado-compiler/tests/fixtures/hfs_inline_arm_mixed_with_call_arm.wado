@@ -26,14 +26,16 @@
 // method call (sync handles it). When the same match mixes (a) and
 // (b), the post-match re-read clobbers (a)'s writes.
 //
-// Fix (#1008): `replace_in_block` dispatches per-arm for `Expr(Match)`
-// at stmt position — each arm body computes its own sync locally and
-// wraps with write-back / re-read only when needed. The scalar arm
-// (inlined `b.v += 1`) gets no sync, the call arm gets sync local to
-// itself, and the surrounding stmt no longer propagates a clobbering
-// re-read. The same shape without inlining is also covered by
-// `hfs_match_scalar_arm_mixed_with_call_arm.wado` — the bug is
-// structural, not specific to inlined labeled blocks.
+// Fix (#1008): HFS now wraps each `&mut local` call individually,
+// turning `f(&mut b)` into a `Block { write_back; ...; re_read; ... }`
+// at the call's expression position. Branching constructs
+// (Match/If/Switch/LabeledBlock) recurse per branch, so each arm is
+// its own sync scope: the inlined scalar-update arm sees no sync, the
+// call arm gets a wrapper local to itself, and no surrounding stmt
+// propagates a clobbering re-read. The same shape without inlining is
+// also covered by `hfs_match_scalar_arm_mixed_with_call_arm.wado` —
+// the bug is structural to call-position sync, not specific to inlined
+// labeled blocks.
 //
 // This fixture exercises the exact mixed-arm shape and covers the
 // bug at every -Ox level (it manifests as wrong stdout, not a trap).
@@ -73,5 +75,10 @@ export fn run() with Stdout {
 
 __DATA__
 {
-    "stdout": "22\n"
+    "stdout": "22\n",
+    "wir_expect:O2": ["let _hfs_v_"],
+    "wir_not_expect:O2": [
+        "b_0.v = _hfs_v_18;\n            let __match_scrut_0",
+        "_hfs_v_18 = b_0.v;\n            _hfs_v_18 = _hfs_v_18 + 0;"
+    ]
 }

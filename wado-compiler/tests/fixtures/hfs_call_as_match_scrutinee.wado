@@ -1,0 +1,57 @@
+// Regression: a `&mut local` call appears at the match scrutinee
+// position. The call evaluates before any arm runs, so the sync
+// wrapper must land at the scrutinee — not around the whole match.
+// Each arm body is then its own scope (one mutates the scalar via
+// direct field write, others fall through).
+//
+// Trace per iteration:
+//   - scrutinee call mutates b.v += 5 and returns previous b.v.
+//   - arm 0 (returned 0): scalar update b.v += 1.
+//   - arm 5 (returned 5): scalar update b.v += 1.
+//   - any other return value: arm `_` is a no-op.
+//
+// i=0: scrutinee returns 0, b.v=5. arm 0 fires, scalar +1 → b.v=6.
+// i=1: scrutinee returns 6, b.v=11. arm _ fires (no-op).
+// i=2: scrutinee returns 11, b.v=16. arm _ fires.
+// i=3: scrutinee returns 16, b.v=21. arm _ fires.
+// final b.v = 21.
+
+use { println, Stdout } from "core:cli";
+
+struct Buf {
+    v: i32,
+    pad: i32,
+}
+
+#[inline(never)]
+fn pre_inc5(b: &mut Buf) -> i32 {
+    let r = b.v;
+    b.v = b.v + 5;
+    return r;
+}
+
+export fn run() with Stdout {
+    let mut b = Buf { v: 0, pad: 0 };
+    let mut i = 0;
+    while i < 4 {
+        b.v = b.v + 0;
+        b.v = b.v + 0;
+        match pre_inc5(&mut b) {
+            0 => b.v = b.v + 1,
+            5 => b.v = b.v + 1,
+            _ => {},
+        }
+        b.v = b.v + 0;
+        i = i + 1;
+    }
+    println(`{b.v}`);
+}
+
+__DATA__
+{
+    "stdout": "21\n",
+    "wir_expect:O2": [
+        "let _hfs_v_",
+        "let _hfs_call_"
+    ]
+}

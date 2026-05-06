@@ -1,0 +1,64 @@
+// Regression: a single expression contains two `&mut local` calls in a
+// row (left + right of a binary). Each call must get its own
+// independent sync wrapper — they cannot share one outer write-back /
+// re-read pair, since each call's mutation must be visible to the next
+// call's args and the scalar must reflect every call's effects.
+//
+// Trace per iteration:
+//   - pre-call f: b.v = _hfs_v
+//   - f(&mut b) reads b.v, writes b.v += 100, returns the read value
+//   - post-call f: _hfs_v = b.v
+//   - pre-call g: b.v = _hfs_v
+//   - g(&mut b) reads b.v, writes b.v += 1, returns the read value
+//   - post-call g: _hfs_v = b.v
+//   - sum += f_ret + g_ret
+//
+// i=0: starting b.v=0. f reads 0, writes 100 (b.v=100). g reads 100,
+//      writes 101 (b.v=101). sum += 0 + 100 = 100.
+// i=1: starting b.v=101. f reads 101, writes 201 (b.v=201). g reads
+//      201, writes 202 (b.v=202). sum += 101 + 201 = 302. cumulative 402.
+// final b.v = 202, sum = 402.
+
+use { println, Stdout } from "core:cli";
+
+struct Buf {
+    v: i32,
+    pad: i32,
+}
+
+#[inline(never)]
+fn f_inc100(b: &mut Buf) -> i32 {
+    let r = b.v;
+    b.v = b.v + 100;
+    return r;
+}
+
+#[inline(never)]
+fn g_inc1(b: &mut Buf) -> i32 {
+    let r = b.v;
+    b.v = b.v + 1;
+    return r;
+}
+
+export fn run() with Stdout {
+    let mut b = Buf { v: 0, pad: 0 };
+    let mut sum = 0;
+    let mut i = 0;
+    while i < 2 {
+        b.v = b.v + 0;
+        b.v = b.v + 0;
+        sum = sum + f_inc100(&mut b) + g_inc1(&mut b);
+        b.v = b.v + 0;
+        i = i + 1;
+    }
+    println(`{sum} {b.v}`);
+}
+
+__DATA__
+{
+    "stdout": "402 202\n",
+    "wir_expect:O2": [
+        "let _hfs_v_",
+        "let _hfs_call_"
+    ]
+}

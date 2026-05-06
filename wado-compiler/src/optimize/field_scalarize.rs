@@ -5,25 +5,42 @@
 //! both read and written inside the loop body.
 //!
 //! For a field `obj.field` that is accessed N times in a loop:
-//! 1. Create a mutable local `_hfs_field_N` before the loop
-//! 2. Load: `_hfs_field_N = obj.field`
-//! 3. Replace all `obj.field` reads with `_hfs_field_N`
-//! 4. Replace all `obj.field = val` writes with `_hfs_field_N = val`
-//! 5. Insert write-back `obj.field = _hfs_field_N` before function calls that receive `obj`
-//!    (only for fields the callee actually accesses)
-//! 6. Insert re-read `_hfs_field_N = obj.field` after function calls that receive `obj`
-//!    (only for fields the callee actually accesses)
-//! 7. Insert final write-back `obj.field = _hfs_field_N` after the loop
+//! 1. Create a mutable local `_hfs_field_N` before the loop.
+//! 2. Load: `_hfs_field_N = obj.field`.
+//! 3. Replace every `obj.field` read inside the loop body with `_hfs_field_N`.
+//! 4. Replace every `obj.field = val` write inside the loop body with `_hfs_field_N = val`.
+//! 5. Wrap every reachable `Call`/`MethodCall`/`IndirectCall` that receives
+//!    `obj` (as `&T` or `&mut T`) with a synthetic `Block` that performs
+//!    scalar→struct write-back before the call and struct→scalar re-read
+//!    after. Only fields the callee actually accesses are synced; an
+//!    immutable-ref parameter elides the re-read because the callee cannot
+//!    mutate through it.
+//! 6. Insert a final write-back `obj.field = _hfs_field_N` after the loop
+//!    and before any `return`/`break` that escapes the loop scope (the
+//!    unlabeled `break` at `loop_depth 0` shortcut elides this since the
+//!    post-loop write-back already covers it).
 //!
-//! This converts GC struct.get/struct.set into wasm local.get/local.set in hot loops.
+//! This converts GC `struct.get`/`struct.set` into Wasm `local.get`/
+//! `local.set` in hot loops.
 //!
-//! ## Field-Selective Sync
+//! The wrapper has two shapes depending on the call's return type:
 //!
-//! When a scalarized struct is passed to a function call, only fields that the callee
-//! actually accesses need to be written back before and re-read after the call.
-//! A pre-computed `FieldUsageCache` maps each function to the set of fields it accesses
-//! on each struct-typed parameter. If the callee cannot be resolved or passes the struct
-//! transitively to another unknown call, all fields are conservatively synced.
+//! - unit-typed call: `Block { write_back; call; re_read }`
+//! - non-unit call:   `Block { write_back; let __tmp = call; re_read; __tmp }`
+//!
+//! The walker in `replace_in_expr` descends through every branching
+//! construct (`Match`/`If`/`Switch`/`LabeledBlock`/`Block`) before
+//! reaching a call, so each branch is its own sync scope: a call in one
+//! `match` arm cannot trigger sync that clobbers a sibling
+//! scalar-update arm. (See issue #1008.)
+//!
+//! ## Field-selective sync
+//!
+//! Field information for the wrapper comes from a pre-computed
+//! `FieldUsageCache` that maps each function to the set of fields it
+//! accesses on each struct-typed parameter. If the callee cannot be
+//! resolved or passes the struct transitively to another unknown call,
+//! all fields are conservatively synced.
 
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -2055,6 +2072,17 @@ fn compute_sync_at_call(
                 }
             }
         }
+        // CmRawCall is the lowered form of a canonical-ABI Wasm import; by
+        // construction its args are primitive Wasm types (i32/i64/f32/f64),
+        // never struct refs. Any future change that pushes a struct arg
+        // into a `CmRawCall` would silently miss sync here — we leave a
+        // debug assertion in `replace_in_expr` for the call-site filter so
+        // that case fails loud rather than miscompiles.
+        TirExprKind::CmRawCall { .. } => {}
+        // Other expressions are not call sites; the walker in
+        // `replace_in_expr` is responsible for only invoking this on
+        // Call/MethodCall/IndirectCall. Returning empty here is safe even
+        // if mis-invoked.
         _ => {}
     }
     result
@@ -2225,7 +2253,12 @@ fn wrap_call_with_sync(
 ) {
     let span = expr.span;
     let type_id = expr.type_id;
-    let placeholder = TirExpr::new(TirExprKind::Unit, type_id, span);
+    // Placeholder for the in-place swap. We use an empty `Block` rather
+    // than `Unit` so the kind/type_id pair never momentarily disagrees
+    // for a non-unit call (an empty block has no last stmt, so its type
+    // is whatever the surrounding context expects). The placeholder is
+    // replaced before the function returns.
+    let placeholder = TirExpr::new(TirExprKind::Block(TirBlock::empty(span)), type_id, span);
     let original = std::mem::replace(expr, placeholder);
 
     let mut stmts = Vec::new();
@@ -2251,6 +2284,11 @@ fn wrap_call_with_sync(
             type_id,
             is_mut: false,
         });
+        // skip_value_copy: the call's return value is a fresh r-value; the
+        // temp simply binds the value the callee handed back, so the WIR
+        // builder should not synthesize a deep value-copy on the binding
+        // (matching the convention used for other HFS-synthesized bindings
+        // such as the pre-loop `let _hfs_field = local.field;`).
         stmts.push(TirStmt::new(
             TirStmtKind::Let {
                 name: tmp_name.clone(),
@@ -2316,7 +2354,14 @@ fn replace_in_stmt(
         TirStmtKind::LetDestructure { value, .. } => {
             replace_in_expr(value, candidates, locals, local_count, ctx);
         }
-        TirStmtKind::TaskReturn { .. } => {}
+        TirStmtKind::TaskReturn { .. } => {
+            // `task return expr;` is desugared by `synthesis::cm_binding`
+            // before the lower/optimize phase, so it must not reach HFS.
+            // Fail loudly if the assumption ever breaks — silently
+            // skipping a `task return` value would drop call-site sync
+            // for any call inside it.
+            unreachable!("TaskReturn should be desugared by synthesis::cm_binding before HFS")
+        }
         // Compound stmts are dispatched by replace_in_block before reaching
         // here, so they need their own scope tracking (enclosing_labels,
         // loop_depth) — the leaf path never sees them.
