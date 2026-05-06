@@ -159,33 +159,23 @@ pub fn optimize(
             // Final DCE: clean up code made dead by optimizations
             run_dce(&mut project, profiler);
         }
-        OptLevel::O2 => {
+        OptLevel::O2 | OptLevel::Os => {
             let config = OptConfig {
                 iterations: opt_iterations.unwrap_or(10),
-                // Threshold 20: covers `index_assign` (11 expressions) and
-                // medium-sized helpers like `String::push` and CITM-style
-                // `read_json_string` field accesses without bloating
-                // function bodies enough to hurt branch prediction.
-                inline_threshold: inline_threshold.unwrap_or(20),
+                // Threshold 14 is a sweet spot for both -O2 and -Os:
+                //   * json-catalog drops from 48ms to ~45ms (~6%, captures
+                //     >80% of the gain at threshold 20).
+                //   * sqlite_highlight wasm grows by only +0.8% (cf. +29%
+                //     at threshold 18+ where Gale-generated lexer/parser
+                //     action functions chain-inline).
+                inline_threshold: inline_threshold.unwrap_or(14),
             };
             run_dce(&mut project, profiler);
             run_optimization_passes(&mut project, &config, profiler);
             run_dce(&mut project, profiler);
-        }
-        OptLevel::Os => {
-            let config = OptConfig {
-                iterations: opt_iterations.unwrap_or(10),
-                // -Os keeps the inliner conservative (threshold 12) — the
-                // heuristics that pay off for runtime perf at -O2 grow
-                // the binary noticeably (e.g., sqlite_highlight grows
-                // ~30% when `String::push`/`Display::fmt`/etc. are
-                // inlined). Match the pre-tuning -O2 threshold here.
-                inline_threshold: inline_threshold.unwrap_or(12),
-            };
-            run_dce(&mut project, profiler);
-            run_optimization_passes(&mut project, &config, profiler);
-            run_dce(&mut project, profiler);
-            project.strip_names = true;
+            if opt_level == OptLevel::Os {
+                project.strip_names = true;
+            }
         }
         OptLevel::O3 => {
             let config = OptConfig {
