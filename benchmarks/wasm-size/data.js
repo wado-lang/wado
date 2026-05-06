@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778067947131,
+  "lastUpdate": 1778100559343,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -19813,6 +19813,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/ab5f1e64ac32b59f4f6776305f733c10a65c3d19"
         },
         "date": 1778067946774,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1770,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9140,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18520,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 508287,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c793d3c6e4078b914273d245738d162756133aa2",
+          "message": "Merge pull request #1012 from wado-lang/claude/fast-http-router-6Qqun\n\nexample: fast HTTP router benchmark + WEP for core:router",
+          "timestamp": "2026-05-07T05:44:14+09:00",
+          "tree_id": "901d7bbc6613acb0262478b6cc4102bd501b3a5e",
+          "url": "https://github.com/wado-lang/wado/commit/c793d3c6e4078b914273d245738d162756133aa2"
+        },
+        "date": 1778100558990,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
