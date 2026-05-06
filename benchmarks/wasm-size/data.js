@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778027594872,
+  "lastUpdate": 1778038450197,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -19657,6 +19657,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 503688,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4fc7fab6671a0b462f8418e6badb5d2c0643d6e8",
+          "message": "Merge pull request #1006 from wado-lang/claude/check-gale-compatibility-6qvdl\n\nfix(gale): close 3 ANTLR4 stage_b compatibility gaps",
+          "timestamp": "2026-05-06T12:29:13+09:00",
+          "tree_id": "37eb46a299258559380ac593d96a8c95253065c3",
+          "url": "https://github.com/wado-lang/wado/commit/4fc7fab6671a0b462f8418e6badb5d2c0643d6e8"
+        },
+        "date": 1778038449855,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1775,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8776,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18520,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 504370,
             "unit": "bytes"
           }
         ]
