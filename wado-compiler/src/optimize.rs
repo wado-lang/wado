@@ -33,7 +33,7 @@ mod container_sroa;
 mod copy_prop;
 mod cse;
 pub mod dce;
-mod field_forward;
+mod alias;
 mod field_scalarize;
 mod inline;
 mod labeled_block_fusion;
@@ -57,7 +57,6 @@ use dce::{
     analyze_project, filter_bytes_literals, remove_unreachable_closure_functors,
     remove_unreachable_functions, remove_unreachable_globals, remove_unreachable_types,
 };
-use field_forward::forward_struct_field_constants;
 use field_scalarize::scalarize_hot_fields;
 use inline::inline_functions;
 use labeled_block_fusion::fuse_labeled_blocks;
@@ -428,7 +427,17 @@ fn run_optimization_passes(
         step!("tir/copy_prop", propagate_copies);
         step!("tir/cse", eliminate_common_subexprs);
         step!("tir/store_load_forward", |p| forward_stores_to_loads(p));
-        step!("tir/field_forward", |p| forward_struct_field_constants(p));
+        // `field_forward`'s rewrite responsibilities are absorbed by
+        // `const_fold` (see `optimize::const_folding::ConstFoldVisitor`).
+        // Both passes used to alternate one statement at a time on
+        // chained-`Array::push` patterns produced by Gale-generated
+        // parsers, leaving the optimizer non-convergent at `-O3`
+        // (issue #1009). The merged const-fold walk feeds the
+        // interpreter's `field_env` from `Let` / `Assign` /
+        // `$value_copy$T(arg)` shapes and forks per branch, so a
+        // chain of pushes folds in a single iteration. The alias and
+        // value-copy-helper analyses migrated to
+        // `optimize::alias`.
         step!("tir/const_fold", fold_constants);
         step!("tir/const_global_promotion", |p| promote_constant_globals(p));
         step!("tir/branch_prune", |p| prune_constant_branches(p));

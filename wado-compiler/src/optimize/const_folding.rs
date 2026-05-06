@@ -36,7 +36,7 @@ use crate::tir_visitor::{
 };
 use crate::tiri::{CalleeMap, GlobalEnv, Interpreter, Lattice, Value, is_ctfe_eligible};
 
-use super::field_forward::{build_alias_info, build_value_copy_helpers, recognize_value_copy};
+use super::alias::{build_alias_info, build_value_copy_helpers, recognize_value_copy};
 
 /// Apply constant folding to all functions in the project.
 pub fn fold_constants(project: &mut FlatPackage) -> bool {
