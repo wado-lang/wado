@@ -161,6 +161,11 @@ test "parse JSON.g4" {
 | `RustParser.g4`       | Rust         | Split parser. Has semantic predicates and `superClass`.      |
 | `TypeScriptLexer.g4`  | TypeScript   | Split lexer. Has semantic predicates and `superClass`.       |
 | `TypeScriptParser.g4` | TypeScript   | Split parser. Has many semantic predicates and `superClass`. |
+| `ll_basic.g4`         | LL fixture   | Combined. Tail-greedy `Y?` with required follow `b : Y` — passes (v1 LL). |
+| `ll_nullable_suffix.g4` | LL fixture | Combined. Like `ll_basic` but next sibling is nullable — `#[TODO]`. |
+| `ll_multi_alt.g4`     | LL fixture   | Combined. Tail-greedy callee is multi-alt — `#[TODO]`. |
+| `ll_lr_atom.g4`       | LL fixture   | Combined. Tail-greedy callee is left-recursive — `#[TODO]`. |
+| `ll_ctx_follow.g4`    | LL fixture   | Combined. Follow propagation through a passthrough rule — `#[TODO]`. |
 
 Clean grammars (JSON, sexpression, calculator, SQLite, CSS3, HTML) contain no target-language-dependent elements and should be fully parseable and code-generatable.
 
@@ -234,3 +239,23 @@ the cases that actually arise (e.g. `expr`'s `column_ref` IDENT vs
 - Tokens from inside expanded sub-rules cannot be used for prediction at the decision point level
 - To use expansion correctly, the prediction must map expanded tokens back to the decision point's lookahead depth (essentially an ATN simulator)
 - `sll_dedup_by_alt` is too aggressive for expanded configs — alternatives sharing sub-rules get merged
+
+### LL(\*) variant emit — three over-broad attempts (2026-05)
+
+**Goal:** Static-analysis-based one-level LL(\*) repair via per-(rule, follow-mask) `__follow_<id>` variants. See `docs/wep-2026-05-06-ll-prediction.md` for the design and `tests/grammars/ll_*.g4` for the regression suite.
+
+**Three attempts that broke real grammars and had to be narrowed back:**
+
+1. **Swapping `alt_sort_priority` 2 ↔ 3 globally** (so multi-element-RuleRef alts beat single-RuleRef alts everywhere). This made `(a b | a) EOF` pick `a b` correctly but broke `LeftRecursion/PrefixAndOtherAlt_*` — `expr : literal | op expr | expr op expr` would try `op expr` before `literal` for input `-1`, committing to a non-LL alt. Fix: keep priority unchanged at the rule level; introduce `sort_group_by_mandatory_count_desc` and use it ONLY at group-level dispatch sites (`gen_consume_group*`, `gen_general_group_store*`, `gen_group_prediction_code_skip` Ambiguous).
+
+2. **Adopting any tail-position Repeat into `tail_greedy_first`** regardless of the inner element shape. This treated HTMLParser's `htmlContent` rule (`htmlChardata? ((htmlElement | CDATA | htmlComment) htmlChardata?)*`) as having tail-greedy = first set of the inner Group, including `TAG_OPEN`. The inner Group's `htmlElement` alt **legitimately** re-enters on `TAG_OPEN`, but the variant's mask suppressed all TAG_OPEN-led iterations, breaking nested-tag parses. Fix: restrict `tail_greedy_first_of_element`'s `Repeat` arm to `Repeat`s whose inner is `element_is_single_token` (single TokenRef / Literal / Wildcard / Not / single-token RuleRef).
+
+3. **Registering variants for any `RuleRef` call site with a non-empty caller-side follow** — including suffix-nullable positions where the local follow propagates the outer rule's follow. This fired on CSS3's `selector : simpleSelectorSequence ws (combinator simpleSelectorSequence ws)*`, where `ws`'s follow at position 1 is `first(combinator) = {Plus, Greater, Tilde, Space}`. The variant suppressed `ws` from consuming Space, leaving Space for the (often-empty) combinator loop and breaking `* { … }` selectors. Fix: in `gen_alt_elements` and friends, only set `ruleref_call_follow` when the immediate next sibling is **strictly required** (`!ctx.tail_is_nullable_deep(elements, i + 1)`). Suffix-nullable positions get an empty follow → no variant.
+
+**What remains:** All three guards are committed as inline conservatism with explicit comments at the relevant call sites. The corresponding gaps are catalogued in `TODO.md` and exercised by `tests/grammars/ll_{nullable_suffix,multi_alt,lr_atom,ctx_follow}.g4`.
+
+**Lessons:**
+
+- Static analysis can't distinguish "tail-greedy that should yield to caller" from "tail-greedy that legitimately re-enters." The conservative side is silent failure (variant doesn't fire); the unsound side is broken parses.
+- Each LL repair must be paired with a regression fixture covering the rejection case, not just the hit case — otherwise the next contributor relaxes the guard and quietly breaks `htmlContent` / `selector` again.
+- The ANTLR4 `ParserATNSimulator`'s closure / DFA cache exists precisely because a single global rule cannot decide "should this token be consumed here or by my caller?". A static repair will always have edges; pick the edge that matches today's grammar set and add a fixture so it stays the edge.

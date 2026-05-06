@@ -1076,69 +1076,90 @@ pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, ctx: &mut GenContext) {
 /// `scan_<rule>` body but with `current_follow_mask` set so tail-
 /// position `Optional` / `Star` / `Plus` first sets get `mask`
 /// subtracted before deciding whether to fire / iterate.
+///
+/// The registry invariant (enforced by `intern_follow_variant`) is
+/// that registered rules exist and are non-LR; we panic on contract
+/// violation rather than silently `return` so a future relaxation in
+/// `intern_follow_variant` cannot leak dangling `__follow_<id>`
+/// references into generated source.
 fn gen_scan_follow_variant(w: &mut CodeWriter, entry: &FollowVariantEntry, ctx: &mut GenContext) {
     let rule_opt = ctx.find_rule(&entry.rule_name);
-    if let Some(r) = rule_opt {
-        let rule = *r;
-        // v1 only handles non-LR rules. Skip LR rules — `intern_follow_variant`
-        // should not register them, but be defensive.
-        for let alt of &rule.alternatives {
-            if is_left_recursive(alt, &rule.name) {
-                return;
-            }
+    let rule = if let Some(r) = rule_opt {
+        *r
+    } else {
+        panic(`gen_scan_follow_variant: rule '{entry.rule_name}' not found; intern_follow_variant should reject unknown rules`)
+    };
+    for let alt of &rule.alternatives {
+        if is_left_recursive(alt, &rule.name) {
+            panic(`gen_scan_follow_variant: rule '{entry.rule_name}' is left-recursive; intern_follow_variant should reject LR rules`);
         }
-        let fn_name = `scan_{rule.snake_name}__follow_{entry.id}`;
-        let saved_mask = ctx.current_follow_mask;
-        ctx.current_follow_mask = entry.mask;
-        gen_scan_function_named(w, &rule, ctx, &fn_name, false);
-        ctx.current_follow_mask = saved_mask;
     }
+    let fn_name = `scan_{rule.snake_name}__follow_{entry.id}`;
+    let saved_mask = ctx.current_follow_mask;
+    ctx.current_follow_mask = entry.mask;
+    gen_scan_function_named(w, &rule, ctx, &fn_name, false);
+    ctx.current_follow_mask = saved_mask;
 }
 
 /// Emit a parse-side follow-aware variant for non-LR single-alt
-/// rules. v1 only supports single-alt non-LR; multi-alt and LR
-/// variants are deferred (see TODO.md).
+/// rules. v1 only supports single-alt non-LR; the registry invariant
+/// (enforced by `intern_follow_variant`) is that registered rules
+/// satisfy both. We panic on contract violation rather than silently
+/// `return` so a future relaxation in `intern_follow_variant` cannot
+/// leak dangling `__follow_<id>` references into generated source.
+///
+/// All `ctx` fields the body sets (`current_rule_name`, `group_counter`,
+/// `alt_gc_starts`, `current_follow_mask`) are saved on entry and
+/// restored on exit so subsequent variant emits and the trailing
+/// `gen_parse_entry` see the same context they would without this
+/// detour.
 fn gen_parse_follow_variant(w: &mut CodeWriter, entry: &FollowVariantEntry, ctx: &mut GenContext) {
     let rule_opt = ctx.find_rule(&entry.rule_name);
-    if let Some(r) = rule_opt {
-        let rule = *r;
-        for let alt of &rule.alternatives {
-            if is_left_recursive(alt, &rule.name) {
-                return;
-            }
+    let rule = if let Some(r) = rule_opt {
+        *r
+    } else {
+        panic(`gen_parse_follow_variant: rule '{entry.rule_name}' not found; intern_follow_variant should reject unknown rules`)
+    };
+    for let alt of &rule.alternatives {
+        if is_left_recursive(alt, &rule.name) {
+            panic(`gen_parse_follow_variant: rule '{entry.rule_name}' is left-recursive; intern_follow_variant should reject LR rules`);
         }
-        if rule.alternatives.len() != 1 {
-            // v1: only single-alt rules supported on the parse side.
-            // Multi-alt parse variants need bt-helper / multi-alt-body
-            // duplication which is deferred.
-            return;
-        }
-        ctx.current_rule_name = rule.name;
-        ctx.group_counter = 0;
-        let type_name = rule_type_name(&rule.name);
-        let fn_name = `parse_{rule.snake_name}__follow_{entry.id}`;
-        let mut alt_gc_starts: Array<i32> = [];
-        let mut gc_running: i32 = 0;
-        for let alt of &rule.alternatives {
-            alt_gc_starts.push(gc_running);
-            gc_running += count_general_groups(&alt.elements);
-        }
-        ctx.alt_gc_starts = alt_gc_starts;
-
-        let saved_mask = ctx.current_follow_mask;
-        ctx.current_follow_mask = entry.mask;
-
-        let mut f = FnSpec::new(&fn_name);
-        f.add_param("p", "&mut Parser");
-        f.set_return_type(`Result<{type_name}, ParseError>`);
-        f.emit_begin(w);
-        w.line("let start = p.peek().span.start;");
-        gen_alt_body(w, &type_name, null, null, &rule.alternatives[0], ctx);
-        w.end();
-        w.blank();
-
-        ctx.current_follow_mask = saved_mask;
     }
+    if rule.alternatives.len() != 1 {
+        panic(`gen_parse_follow_variant: rule '{entry.rule_name}' has {rule.alternatives.len()} alts; intern_follow_variant should reject multi-alt rules`);
+    }
+
+    let saved_rule_name = ctx.current_rule_name;
+    let saved_group_counter = ctx.group_counter;
+    let saved_alt_gc_starts = ctx.alt_gc_starts;
+    let saved_mask = ctx.current_follow_mask;
+
+    ctx.current_rule_name = rule.name;
+    ctx.group_counter = 0;
+    let type_name = rule_type_name(&rule.name);
+    let fn_name = `parse_{rule.snake_name}__follow_{entry.id}`;
+    let mut alt_gc_starts: Array<i32> = [];
+    let mut gc_running: i32 = 0;
+    for let alt of &rule.alternatives {
+        alt_gc_starts.push(gc_running);
+        gc_running += count_general_groups(&alt.elements);
+    }
+    ctx.alt_gc_starts = alt_gc_starts;
+    ctx.current_follow_mask = entry.mask;
+
+    let mut f = FnSpec::new(&fn_name);
+    f.add_param("p", "&mut Parser");
+    f.set_return_type(`Result<{type_name}, ParseError>`);
+    f.emit_begin(w);
+    w.line("let start = p.peek().span.start;");
+    gen_alt_body(w, &type_name, null, null, &rule.alternatives[0], ctx);
+    w.end();
+    w.blank();
+
+    ctx.current_rule_name = saved_rule_name;
+    ctx.group_counter = saved_group_counter;
+    ctx.alt_gc_starts = saved_alt_gc_starts;
+    ctx.current_follow_mask = saved_mask;
 }
 
 fn gen_parser_struct(w: &mut CodeWriter) {
@@ -2059,7 +2080,7 @@ fn gen_scan_elements(w: &mut CodeWriter, elements: &Array<Element>, start: i32, 
         // (those whose right siblings are deep-nullable). Non-tail
         // elements emit unchanged: e.g. `Y? Z` should not skip Y? when
         // Z is required next, even if the caller's follow contains Y.
-        ctx.current_follow_mask = if ctx.is_suffix_nullable(elements, i + 1) {
+        ctx.current_follow_mask = if ctx.tail_is_nullable_deep(elements, i + 1) {
             saved_mask
         } else {
             []
@@ -2073,7 +2094,7 @@ fn gen_scan_elements(w: &mut CodeWriter, elements: &Array<Element>, start: i32, 
         // ...)*` is the canonical hazard: Space is in both `ws`'s
         // tail-greedy and combinator's first set, but `ws` should still
         // consume Space when there is no combinator to follow).
-        ctx.ruleref_call_follow = if ctx.is_suffix_nullable(elements, i + 1) {
+        ctx.ruleref_call_follow = if ctx.tail_is_nullable_deep(elements, i + 1) {
             []
         } else {
             ctx.first_of_elements_from(elements, i + 1)
@@ -2132,12 +2153,12 @@ fn gen_scan_elements_in_block(w: &mut CodeWriter, elements: &Array<Element>, sta
     let saved_mask = ctx.current_follow_mask;
     let saved_call_follow = ctx.ruleref_call_follow;
     for let mut i = start; i < end; i += 1 {
-        ctx.current_follow_mask = if ctx.is_suffix_nullable(elements, i + 1) {
+        ctx.current_follow_mask = if ctx.tail_is_nullable_deep(elements, i + 1) {
             saved_mask
         } else {
             []
         };
-        ctx.ruleref_call_follow = if ctx.is_suffix_nullable(elements, i + 1) {
+        ctx.ruleref_call_follow = if ctx.tail_is_nullable_deep(elements, i + 1) {
             []
         } else {
             ctx.first_of_elements_from(elements, i + 1)
@@ -2161,15 +2182,20 @@ fn gen_scan_elements_in_block(w: &mut CodeWriter, elements: &Array<Element>, sta
 
 /// `fail_stmt` describes how to report failure to the caller when the
 /// mandatory first iteration of `+` fails (Optional/Star never fail).
+///
+/// `ruleref_call_follow` is saved, cleared, and restored around the
+/// emit body — the outer alt walker's value applies to the Repeat
+/// element's own position, but the inner element's iteration follow
+/// is different, so an inner `RuleRef` would otherwise inadvertently
+/// target a variant computed from the wrong follow set.
 fn gen_scan_repeat(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext, fail_stmt: &String) {
-    // The outer alt walker set `ruleref_call_follow` to the follow at
-    // the Repeat element's own position, which is wrong for the inner
-    // element (its iteration follow is different). Clear it here so
-    // an inner `RuleRef` does not inadvertently target a variant. The
-    // alt walker re-clears it on its next iteration, so we don't bother
-    // restoring on return.
+    let saved_call_follow = ctx.ruleref_call_follow;
     ctx.ruleref_call_follow = [];
+    gen_scan_repeat_body(w, rep, ctx, fail_stmt);
+    ctx.ruleref_call_follow = saved_call_follow;
+}
 
+fn gen_scan_repeat_body(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext, fail_stmt: &String) {
     let mut visiting: Array<String> = [];
     let inner_first = ctx.first_of_element(&rep.element, &mut visiting);
 
@@ -2797,7 +2823,7 @@ fn gen_alt_body_skip(w: &mut CodeWriter, type_name: &String, variant_case: Optio
     }
     let saved_call_follow = ctx.ruleref_call_follow;
     for let mut i = skip; i < alt.elements.len(); i += 1 {
-        ctx.ruleref_call_follow = if ctx.is_suffix_nullable(&alt.elements, i + 1) {
+        ctx.ruleref_call_follow = if ctx.tail_is_nullable_deep(&alt.elements, i + 1) {
             []
         } else {
             ctx.first_of_elements_from(&alt.elements, i + 1)
@@ -2896,12 +2922,12 @@ fn gen_alt_elements(w: &mut CodeWriter, elements: &Array<Element>, ctx: &mut Gen
     let saved_call_follow = ctx.ruleref_call_follow;
     let mut name_counts: Array<[String, i32]> = [];
     for let mut i = 0; i < elements.len(); i += 1 {
-        ctx.current_follow_mask = if ctx.is_suffix_nullable(elements, i + 1) {
+        ctx.current_follow_mask = if ctx.tail_is_nullable_deep(elements, i + 1) {
             saved_mask
         } else {
             []
         };
-        ctx.ruleref_call_follow = if ctx.is_suffix_nullable(elements, i + 1) {
+        ctx.ruleref_call_follow = if ctx.tail_is_nullable_deep(elements, i + 1) {
             []
         } else {
             ctx.first_of_elements_from(elements, i + 1)
@@ -3093,12 +3119,18 @@ fn peek_dedup_name(base: &String, counts: &Array<[String, i32]>) -> String {
     return *base;
 }
 
+/// `ruleref_call_follow` is saved, cleared, and restored around the
+/// emit body — see `gen_scan_repeat` for the rationale (the outer
+/// alt walker's value is for the Repeat element's own position, not
+/// the inner element's iteration follow).
 fn gen_repeat(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, outer_follow: &Array<String>) {
-    // Clear the outer alt walker's `ruleref_call_follow` — its value
-    // applies to the Repeat element's own position, not to the inner
-    // element's iteration follow. The alt walker re-clears on its
-    // next iteration.
+    let saved_call_follow = ctx.ruleref_call_follow;
     ctx.ruleref_call_follow = [];
+    gen_repeat_body(w, rep, ctx, name_counts, outer_follow);
+    ctx.ruleref_call_follow = saved_call_follow;
+}
+
+fn gen_repeat_body(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, outer_follow: &Array<String>) {
     let inner = &rep.element;
     let mut visiting: Array<String> = [];
     let first = ctx.first_of_element(inner, &mut visiting);
@@ -4409,7 +4441,7 @@ fn gen_consume_group(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &mut Ge
             // LL-correct: longer alts first so first-success-wins picks
             // the longer match for prefix-overlap groups (rule-level
             // dispatch keeps the priority-based sort).
-            sort_group_by_element_count_desc(&mut sorted_group, alts);
+            sort_group_by_mandatory_count_desc(&mut sorted_group, alts, ctx);
             let mut nc: Array<[String, i32]> = [];
             gen_prediction_body(w, &sorted_group, alts, ctx, &mut nc);
         }
@@ -4485,7 +4517,7 @@ fn gen_consume_group_store(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &
                 }
             } else {
                 let mut sorted_group = group.sorted();
-                sort_group_by_element_count_desc(&mut sorted_group, alts);
+                sort_group_by_mandatory_count_desc(&mut sorted_group, alts, ctx);
 
                 if !rule_ref_group_all_scannable(&sorted_group, alts, ctx) {
                     panic("rule-ref group has unscannable alt; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')");
@@ -4622,7 +4654,7 @@ fn gen_consume_group_store_optional(w: &mut CodeWriter, alts: &Array<Alternative
             }
         } else {
             let mut sorted_group = group.sorted();
-            sort_group_by_element_count_desc(&mut sorted_group, alts);
+            sort_group_by_mandatory_count_desc(&mut sorted_group, alts, ctx);
 
             if !rule_ref_group_all_scannable(&sorted_group, alts, ctx) {
                 panic("rule-ref group has unscannable alt; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')");
@@ -4720,7 +4752,7 @@ fn gen_general_group_store_optional(w: &mut CodeWriter, alts: &Array<Alternative
             gen_general_alt_parse_and_store(w, alts, alt_idx, &type_name, &inner_var, ctx, name_counts, group_index);
         } else {
             let mut sorted_group = group.sorted();
-            sort_group_by_element_count_desc(&mut sorted_group, alts);
+            sort_group_by_mandatory_count_desc(&mut sorted_group, alts, ctx);
             gen_general_group_dispatch(w, alts, &sorted_group, &type_name, &inner_var, ctx, name_counts, group_index);
         }
         if ctx.group_counter > gc_max {
@@ -4800,7 +4832,7 @@ fn gen_general_group_store(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &
                 gen_general_alt_parse_and_store(w, alts, alt_idx, &type_name, &opt_var, ctx, name_counts, group_index);
             } else {
                 let mut sorted_group = group.sorted();
-                sort_group_by_element_count_desc(&mut sorted_group, alts);
+                sort_group_by_mandatory_count_desc(&mut sorted_group, alts, ctx);
                 gen_general_group_dispatch(w, alts, &sorted_group, &type_name, &opt_var, ctx, name_counts, group_index);
             }
             if ctx.group_counter > gc_max {
@@ -5029,7 +5061,7 @@ fn gen_group_prediction_code_skip(w: &mut CodeWriter, node: &PredictionNode, alt
         // here — see ANTLR4 LL prediction in
         // `vendor/antlr4/runtime/Java/src/org/antlr/v4/runtime/atn/
         // ParserATNSimulator.java`'s full-context fallback.
-        sort_group_by_element_count_desc(&mut sorted, alts);
+        sort_group_by_mandatory_count_desc(&mut sorted, alts, ctx);
 
         // Every alt's remaining elements must be fully scannable. Backtracking
         // has been removed; an unscannable suffix is a codegen-time error.
@@ -5109,7 +5141,7 @@ fn gen_group_scan_dispatch(w: &mut CodeWriter, sorted: &Array<i32>, alts: &Array
             // Same per-position follow threading that `gen_alt_elements`
             // does, but only register a variant when the next sibling is
             // strictly required (see `gen_scan_elements`).
-            ctx.ruleref_call_follow = if ctx.is_suffix_nullable(&alt.elements, i + 1) {
+            ctx.ruleref_call_follow = if ctx.tail_is_nullable_deep(&alt.elements, i + 1) {
                 []
             } else {
                 ctx.first_of_elements_from(&alt.elements, i + 1)
@@ -6292,20 +6324,40 @@ fn sort_group_by_specificity(group: &mut Array<i32>, first_sets: &Array<Array<St
     }
 }
 
+// Priority bands consumed by `alt_sort_priority` and friends. Higher
+// = try first.
+//
+// `MultiTokenLed` (4) is most specific: a multi-element alt whose
+// first non-nullable element is a fixed token (e.g. `K_CAST '(' expr
+// K_AS type_name ')'`). The leading token uniquely identifies the
+// alt, so committing on first match is safe.
+//
+// `BareRuleRef` (3) is the catch-all rank: a single-RuleRef alt
+// whose body can match complex internal patterns (`join_clause`,
+// `expr`). Tried before `MultiRuleRefLed` so single-RuleRef
+// catch-alls win against multi-element-RuleRef siblings — this is
+// what SQLite-style `(table_or_subquery (',' tor)* | join_clause)`
+// dispatch relies on.
+//
+// `MultiRuleRefLed` (2) is a multi-element alt whose first non-
+// nullable element is itself a RuleRef. Less specific than
+// `BareRuleRef` because the RuleRef prefix is shared with the
+// catch-all sibling.
+//
+// `BareToken` (1) is a single Token/Literal alt — the cheapest
+// fallback (e.g. `K_INSERT` alone).
+global ALT_PRIORITY_MULTI_TOKEN_LED: i32 = 4;
+global ALT_PRIORITY_BARE_RULE_REF: i32 = 3;
+global ALT_PRIORITY_MULTI_RULE_REF_LED: i32 = 2;
+global ALT_PRIORITY_BARE_TOKEN: i32 = 1;
+
 fn alt_sort_priority(alt: &Alternative) -> i32 {
-    // Priority for sorting (higher = try first):
-    // 4: Multi-element starting with fixed token — most specific explicit patterns
-    //    (e.g. K_EXISTS '(' select_stmt ')', K_CAST '(' expr K_AS type_name ')')
-    // 3: Single RuleRef — can match complex internal patterns (e.g. join_clause)
-    // 2: Multi-element starting with RuleRef — less specific (e.g. function_name '(' ...)
-    //    Within this tier, more elements = more specific
-    // 1: Single Token/Literal — simple fallbacks (e.g. K_INSERT)
     if alt.elements.len() == 1 {
         let elem = &alt.elements[0];
         if let RuleRef(_) = elem {
-            return 3;
+            return ALT_PRIORITY_BARE_RULE_REF;
         }
-        return 1;
+        return ALT_PRIORITY_BARE_TOKEN;
     }
     // Multi-element: check first non-nullable element.
     for let elem of alt.elements {
@@ -6313,31 +6365,31 @@ fn alt_sort_priority(alt: &Alternative) -> i32 {
             continue;
         }
         if let TokenRef(_) | Literal(_) = elem {
-            return 4;
+            return ALT_PRIORITY_MULTI_TOKEN_LED;
         }
         break;
     }
-    return 2;
+    return ALT_PRIORITY_MULTI_RULE_REF_LED;
 }
 
-/// Sort `group` so the alt with the most NON-DEEPLY-NULLABLE elements
-/// comes first, breaking ties by `alt_sort_priority` (single-RuleRef
-/// catch-alls win against multi-element-RuleRef siblings) and finally
-/// source order. Used by the prediction tree's `Ambiguous` case (and
-/// the matching parse-side group dispatches) to pick the longer
-/// MANDATORY match between alts that share a prefix.
+/// Sort `group` so the alt with the most MANDATORY (non-deeply-
+/// nullable) elements comes first, breaking ties by `alt_sort_priority`
+/// (single-RuleRef catch-alls win against multi-element-RuleRef
+/// siblings) and finally source order. Used by the prediction tree's
+/// `Ambiguous` case (and the matching parse-side group dispatches) to
+/// pick the longer MANDATORY match between alts that share a prefix.
 ///
-/// Counting only non-deeply-nullable elements is the LL distinguisher:
+/// Counting mandatory elements only is the LL distinguisher:
 /// `( a b | a )` (where `b` is mandatory) sorts the 2-elem alt first,
-/// while `( a b? | a )` (where `b?` is optional) ties on effective
+/// while `( a b? | a )` (where `b?` is optional) ties on mandatory
 /// length and falls through to priority — which prefers the single-
 /// RuleRef catch-all the way ANTLR4's full-context fallback does for
 /// SQLite-style `( tor (',' tor)* | join_clause )` groupings.
-fn sort_group_by_element_count_desc(group: &mut Array<i32>, alts: &Array<Alternative>) {
+fn sort_group_by_mandatory_count_desc(group: &mut Array<i32>, alts: &Array<Alternative>, ctx: &mut GenContext) {
     for let mut i = 0; i < group.len(); i += 1 {
         for let mut j = i + 1; j < group.len(); j += 1 {
-            let li = effective_element_count(&alts[group[i]]);
-            let lj = effective_element_count(&alts[group[j]]);
+            let li = mandatory_element_count(&alts[group[i]], ctx);
+            let lj = mandatory_element_count(&alts[group[j]], ctx);
             let mut swap = false;
             if lj > li {
                 swap = true;
@@ -6361,17 +6413,20 @@ fn sort_group_by_element_count_desc(group: &mut Array<i32>, alts: &Array<Alterna
     }
 }
 
-/// Count of non-(deeply-)nullable top-level elements in `alt`. A `Repeat
-/// (Optional|Star)`, `Repeat (Plus)` whose inner is nullable, or a
-/// `RuleRef` to a fully-nullable rule, is shallow-only — it counts as
-/// 0 here. Used by `sort_group_by_element_count_desc` to detect when
-/// one alt's "extra" elements are mandatory vs. optional, so SQLite-
-/// shaped `( x (',' x)* | y )` ties on effective length but
-/// LL-style `( a b | a )` (mandatory `b`) does not.
-fn effective_element_count(alt: &Alternative) -> i32 {
+/// Count of MANDATORY top-level elements in `alt` — i.e. those that
+/// always consume at least one input token. A `Repeat (Optional|Star)`
+/// is nullable. A `RuleRef` to a deeply-nullable rule (e.g. `r : ;`
+/// or `r : a*` where `a` itself is nullable) is also nullable —
+/// shallow `is_nullable` would over-count it. Used by
+/// `sort_group_by_mandatory_count_desc` to detect when one alt's
+/// "extra" elements are mandatory vs. nullable, so SQLite-shaped
+/// `( x (',' x)* | y )` ties on mandatory length but LL-style
+/// `( a b | a )` (mandatory `b`) does not.
+fn mandatory_element_count(alt: &Alternative, ctx: &mut GenContext) -> i32 {
     let mut count: i32 = 0;
     for let elem of &alt.elements {
-        if !is_nullable(elem) {
+        let mut visiting: Array<String> = [];
+        if !ctx.element_is_nullable_deep(elem, &mut visiting) {
             count += 1;
         }
     }

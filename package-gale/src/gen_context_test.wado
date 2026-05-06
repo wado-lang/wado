@@ -6,6 +6,7 @@ use {
     TokenRefElement,
     RepeatElement,
     RepeatKind,
+    GroupElement,
     Visibility,
 } from "./ir.wado";
 use { GenContext } from "./gen_context.wado";
@@ -31,6 +32,10 @@ fn opt(elem: Element) -> Element {
         element: elem,
         non_greedy: false,
     });
+}
+
+fn group(alts: Array<Alternative>) -> Element {
+    return Element::Group(GroupElement::new(alts));
 }
 
 fn alt(elements: Array<Element>) -> Alternative {
@@ -285,4 +290,86 @@ test "intern_follow_variant: different rules get distinct ids" {
     let id_b = ctx.intern_follow_variant(&"b", &follow, true).unwrap();
     assert id_a != id_b, `expected distinct ids, got {id_a} and {id_b}`;
     assert ctx.follow_variants().len() == 2;
+}
+
+// --- intern_follow_variant rejection paths ---
+
+test "intern_follow_variant: unknown rule returns null" {
+    // No rules in ctx; lookup fails up front.
+    let mut ctx = mk_ctx();
+    let follow: Array<String> = ["TK_Y"];
+    let result = ctx.intern_follow_variant(&"nonexistent", &follow, true);
+    assert if let Some(_) = result { false } else { true }, "expected null for unknown rule";
+    assert ctx.follow_variants().is_empty(), "no variant should have been registered";
+}
+
+test "intern_follow_variant: multi-alt rule rejected (registry stays empty)" {
+    // Multi-alt callees are out of scope in v1 — `gen_parse_follow_variant`
+    // only emits single-alt bodies, so registering would leak dangling
+    // `parse_<rule>__follow_<id>` references into generated source.
+    let a = mk_rule("a", [
+        alt([tk("X"), opt(tk("Y"))]),
+        alt([tk("Z")]),
+    ]);
+    let mut ctx = mk_ctx_with([a]);
+    let follow: Array<String> = ["TK_Y"];
+    let result = ctx.intern_follow_variant(&"a", &follow, true);
+    assert if let Some(_) = result { false } else { true }, "expected null for multi-alt rule";
+    assert ctx.follow_variants().is_empty(), "no variant should have been registered";
+}
+
+test "intern_follow_variant: left-recursive rule rejected" {
+    // LR rules need a separate scan_X__follow_<id>_atom + LR-suffix
+    // helper split — variant emit doesn't mirror that yet, so reject
+    // up front and leave the call site at the regular `parse_<rule>(p)`.
+    let a = mk_rule("a", [
+        alt([tk("X")]),                    // base
+        alt([rr("a"), tk("PLUS"), rr("a")]), // LR binary
+    ]);
+    let mut ctx = mk_ctx_with([a]);
+    let follow: Array<String> = ["TK_Y"];
+    let result = ctx.intern_follow_variant(&"a", &follow, true);
+    assert if let Some(_) = result { false } else { true }, "expected null for LR rule";
+    assert ctx.follow_variants().is_empty();
+}
+
+test "intern_follow_variant: empty caller_follow returns null" {
+    let a = mk_rule("a", [alt([tk("X"), opt(tk("Y"))])]);
+    let mut ctx = mk_ctx_with([a]);
+    let follow: Array<String> = [];
+    let result = ctx.intern_follow_variant(&"a", &follow, true);
+    assert if let Some(_) = result { false } else { true }, "expected null for empty caller_follow";
+    assert ctx.follow_variants().is_empty();
+}
+
+// --- tail_greedy_first single-token-only restriction ---
+
+test "tail_greedy_first: tail Optional with multi-token inner is excluded" {
+    // `(A B)?` is tail-position but the inner consumes 2 tokens per
+    // iteration. Suppressing it via a follow mask would conflict with
+    // its inner sequence (e.g. HTMLParser's `htmlContent` re-entering
+    // on TAG_OPEN). The single-token-only guard in
+    // `tail_greedy_first_of_element`'s Repeat arm filters this out.
+    let inner_seq = group([alt([tk("A"), tk("B")])]);
+    let r = mk_rule("r", [alt([tk("X"), opt(inner_seq)])]);
+    let mut ctx = mk_ctx_with([r]);
+    let mut visiting: Array<String> = [];
+    let tg = ctx.tail_greedy_first_of_rule(&"r", &mut visiting);
+    assert tg.is_empty(), `expected empty (multi-token inner suppressed), got {tg.len()} tokens`;
+}
+
+test "tail_greedy_first: tail Optional with single-token-alt Group inner is also excluded" {
+    // `(A | B)?` looks safe to suppress (each alt is one token), but
+    // `element_is_single_token` returns false for any `Group(_)` — a
+    // pre-existing conservative blanket. So tail_greedy currently
+    // emits empty for this shape too. This test pins that behaviour:
+    // if we ever relax `element_is_single_token` to peer inside
+    // single-element Group alts, this test must be updated to expect
+    // {TK_A, TK_B} (and the corresponding LL fixture would activate).
+    let inner_alt = group([alt([tk("A")]), alt([tk("B")])]);
+    let r = mk_rule("r", [alt([tk("X"), opt(inner_alt)])]);
+    let mut ctx = mk_ctx_with([r]);
+    let mut visiting: Array<String> = [];
+    let tg = ctx.tail_greedy_first_of_rule(&"r", &mut visiting);
+    assert tg.is_empty(), `expected empty (Group inner blanket-excluded), got {tg.len()} tokens`;
 }

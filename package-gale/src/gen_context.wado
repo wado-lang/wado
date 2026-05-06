@@ -87,10 +87,11 @@ pub struct GenContext {
     /// + canonical_mask`. IDs are assigned in insertion order. See
     /// `FollowVariantEntry`.
     follow_variant_registry: TreeMap<String, FollowVariantEntry>,
-    /// Order in which `(rule_name, variant_id)` pairs were registered.
-    /// `gen_scan_follow_variants` / `gen_parse_follow_variants` emit
-    /// variants in this order for stable output across runs.
-    follow_variant_order: Array<[String, i32]>,
+    /// Registry keys in registration (= id) order. `follow_variants()`
+    /// returns entries in this order so generated source is stable
+    /// across runs. Each key directly indexes
+    /// `follow_variant_registry`, giving an O(n) walk.
+    follow_variant_order: Array<String>,
     /// Mask currently in effect when emitting the body of a variant
     /// function. Empty for the regular `scan_X` / `parse_X` paths.
     /// Tail-position `Optional` / `Star` / `Plus` first-sets get
@@ -292,18 +293,13 @@ impl GenContext {
         return result;
     }
 
-    /// True iff every element of `elements[start..]` is deep-nullable
-    /// (i.e. can match zero input tokens). This is the predicate used
-    /// to decide whether an element at index `start - 1` is at "tail
-    /// position" — equivalent to `tail_is_nullable_deep(elements,
-    /// start)` but named after the caller-facing semantics.
-    pub fn is_suffix_nullable(&mut self, elements: &Array<Element>, start: i32) -> bool {
-        return self.tail_is_nullable_deep(elements, start);
-    }
-
     /// Deep nullability: true if every element from `start` onwards can match
     /// zero input tokens, recursively checking referenced rules (unlike the
     /// shallow `is_nullable` which only inspects top-level Repeat kind).
+    ///
+    /// Used both as "is the suffix from `start` nullable?" (by alt
+    /// walkers gating follow propagation) and as "is the rule body
+    /// nullable?" (by tail-greedy analysis).
     pub fn tail_is_nullable_deep(&mut self, elements: &Array<Element>, start: i32) -> bool {
         for let mut i = start; i < elements.len(); i += 1 {
             let mut visiting: Array<String> = [];
@@ -648,7 +644,7 @@ impl GenContext {
     /// `Repeat (Optional|Star|Plus)` contributes `first_of_element(inner)`.
     /// A nested `Group` recurses per alt. A `RuleRef` to a rule with a
     /// non-empty `tail_greedy_first` contributes that set transitively.
-    pub fn tail_greedy_first_of_elements(&mut self, elements: &Array<Element>, visiting: &mut Array<String>) -> Array<String> {
+    fn tail_greedy_first_of_elements(&mut self, elements: &Array<Element>, visiting: &mut Array<String>) -> Array<String> {
         let mut result: Array<String> = [];
         let mut i = elements.len() - 1;
         while i >= 0 {
@@ -775,22 +771,19 @@ impl GenContext {
             parse_used: !is_scan,
         };
         self.follow_variant_registry[key] = entry;
-        self.follow_variant_order.push([*rule_name, id]);
+        self.follow_variant_order.push(key);
         return Option::<i32>::Some(id);
     }
 
     /// All registered follow variants in registration (= id) order.
     /// Consumed by `gen_scan_follow_variants` and
-    /// `gen_parse_follow_variants`.
+    /// `gen_parse_follow_variants`. O(n) — each `follow_variant_order`
+    /// entry is the registry key, so we look up directly.
     pub fn follow_variants(&self) -> Array<FollowVariantEntry> {
         let mut out: Array<FollowVariantEntry> = [];
-        let entries = self.follow_variant_registry.values();
-        for let mut id = 0; id < self.follow_variant_order.len(); id += 1 {
-            for let entry of &entries {
-                if entry.id == id {
-                    out.push(*entry);
-                    break;
-                }
+        for let key of &self.follow_variant_order {
+            if let Some(entry) = self.follow_variant_registry.get(*key) {
+                out.push(entry);
             }
         }
         return out;

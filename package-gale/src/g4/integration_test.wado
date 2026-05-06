@@ -583,3 +583,51 @@ test "pipeline: parse followed by check_references without merge accepts a combi
     let result = check_references(&merged);
     assert result matches { Ok(_) }, "valid combined grammar should pass check_references";
 }
+
+// LL(*) regression-suite grammars (`tests/grammars/ll_*.g4`). Each is a
+// hand-crafted minimal fixture targeting one LL prediction gap. Per
+// CLAUDE.md "Adding a New E2E Test Grammar" the parse leg lives here so
+// failures in the g4 frontend surface independently of the kiln-side
+// driver test.
+
+test "parse ll_basic.g4" {
+    let input = #include_str("../../tests/grammars/ll_basic.g4");
+    let g = parse(input).unwrap();
+    assert g.name == "LLBasic";
+    assert g.parser_rules.len() == 3;
+}
+
+test "parse ll_nullable_suffix.g4" {
+    let input = #include_str("../../tests/grammars/ll_nullable_suffix.g4");
+    let g = parse(input).unwrap();
+    assert g.name == "LLNullableSuffix";
+    assert g.parser_rules.len() == 3;
+}
+
+test "parse ll_multi_alt.g4" {
+    let input = #include_str("../../tests/grammars/ll_multi_alt.g4");
+    let g = parse(input).unwrap();
+    assert g.name == "LLMultiAlt";
+    assert g.parser_rules.len() == 3;
+    // `a` is the multi-alt callee — two alternatives.
+    assert g.parser_rules[1].name == "a";
+    assert g.parser_rules[1].alternatives.len() == 2;
+}
+
+test "parse ll_lr_atom.g4" {
+    let input = #include_str("../../tests/grammars/ll_lr_atom.g4");
+    let g = parse(input).unwrap();
+    assert g.name == "LLLRAtom";
+    assert g.parser_rules.len() == 3;
+    // `a` is the LR callee — alt 0 is the atom, alt 1 is `a '+' a`.
+    assert g.parser_rules[1].name == "a";
+    assert g.parser_rules[1].alternatives.len() == 2;
+}
+
+test "parse ll_ctx_follow.g4" {
+    let input = #include_str("../../tests/grammars/ll_ctx_follow.g4");
+    let g = parse(input).unwrap();
+    assert g.name == "LLCtxFollow";
+    // r, wrapper, a, b
+    assert g.parser_rules.len() == 4;
+}
