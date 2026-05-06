@@ -3091,7 +3091,6 @@ impl Parser {
             id: self.alloc_ast_id(),
             params: vec![],
             body,
-            source_text: None,
             span: start_span.merge(&body_span),
         })))
     }
@@ -3558,7 +3557,6 @@ impl Parser {
             id: self.alloc_ast_id(),
             params,
             body,
-            source_text: None,
             span: start_span.merge(&body_span),
         })))
     }

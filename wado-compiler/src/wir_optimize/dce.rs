@@ -242,6 +242,12 @@ pub fn dce_unreachable_types(module: &mut WirPackage) {
                 for field in &s.fields {
                     collect_wir_type_ref_into(&field.ty, &mut refs);
                 }
+                // A struct that declares a supertype keeps the supertype
+                // alive: Wasm GC requires the supertype to be defined for
+                // the subtype declaration to validate.
+                if let Some(super_id) = &s.supertype {
+                    refs.push(super_id.index());
+                }
             }
             WirTypeDef::Variant(v) => {
                 // If a variant is reachable, its case struct types are also reachable.
@@ -548,6 +554,9 @@ fn remap_typedef(typedef: &mut WirTypeDef, remap: &IndexMap<u32, u32>) {
         WirTypeDef::Struct(s) => {
             for field in &mut s.fields {
                 remap_wir_type(&mut field.ty, remap);
+            }
+            if let Some(super_id) = &mut s.supertype {
+                remap_type_id(super_id, remap);
             }
         }
         WirTypeDef::Variant(v) => {

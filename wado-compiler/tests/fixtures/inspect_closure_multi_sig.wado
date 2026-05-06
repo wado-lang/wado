@@ -1,0 +1,44 @@
+// Multiple closure signatures sharing the same (arity, return_type)
+// but different parameter types. The shared `Fn<1, i32>^Inspect` and
+// `Fn<1, i32>^InspectAlt` dispatch stubs must work for both — they
+// `ref.cast` to the shared `$canonical_inspectable_base` supertype, so
+// the parameter shape is irrelevant.
+
+fn fmt_def_i(f: fn(i32) -> i32) -> String {
+    return `{f:?}`;
+}
+
+fn fmt_def_s(f: fn(String) -> i32) -> String {
+    return `{f:?}`;
+}
+
+fn fmt_alt_i(f: fn(i32) -> i32) -> String {
+    return `{f:#?}`;
+}
+
+fn fmt_alt_s(f: fn(String) -> i32) -> String {
+    return `{f:#?}`;
+}
+
+test "i32 -> i32 :? via shared dispatch stub" {
+    let g = |x: i32| x + 1;
+    assert fmt_def_i(g) == "|i32| -> i32";
+}
+
+test "String -> i32 :? via shared dispatch stub" {
+    let g = |s: String| s.len();
+    assert fmt_def_s(g) == "|String| -> i32";
+}
+
+test "i32 -> i32 :#? via shared inspect_alt slot" {
+    let g = |x: i32| x + 1;
+    assert fmt_alt_i(g) == "|x: i32| (x + 1)";
+}
+
+test "String -> i32 :#? via shared inspect_alt slot" {
+    let g = |s: String| s.len();
+    assert fmt_alt_s(g) == "|s: String| s.String::len()";
+}
+
+__DATA__
+{"test": {}}

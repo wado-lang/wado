@@ -17,9 +17,9 @@ use crate::hashmap::IndexSet;
 use crate::name::{LocalMethodName, MethodName, ModuleSource};
 use crate::package::Package;
 use crate::tir::{
-    CallArg, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ResolvedType, TirBinaryOp,
-    TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirModule, TirParam, TirStmt,
-    TirStmtKind, TirTypeParam, TypeId, TypeTable,
+    CallArg, FnDispatchTrait, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ResolvedType,
+    TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirModule, TirParam,
+    TirStmt, TirStmtKind, TirTypeParam, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -932,13 +932,10 @@ fn generate_inspect_impls(module: &mut TirModule) {
             } => {
                 generated.push(Rc::new(RefCell::new(generate_fn_inspect_fn(
                     &type_arg_names,
-                    &params,
+                    params.len(),
                     return_type,
-                    type_id,
                     ref_type,
                     fmt_type,
-                    string_type,
-                    &mut tt,
                     span,
                 ))));
             }
@@ -1492,39 +1489,97 @@ fn generate_flags_inspect_fn(
     )
 }
 
-/// Generate `Fn<N,Ret>^Inspect::inspect(&self, &mut Formatter)` for a concrete function type.
+/// Generate `Fn<N, Ret>^Inspect::inspect(&self, &mut Formatter)` as
+/// an auto-derived dispatch stub.
 ///
-/// Body: writes the function type signature, e.g., `|i32, String| -> bool`.
+/// The TIR body is `None` — the function entry exists only so call
+/// sites referring to it from templates / user code resolve. A bodyless
+/// TIR function naturally bypasses the inliner and other body walkers;
+/// WIR build recognises [`FunctionKind::FnCanonicalDispatch`] and
+/// supplies the real body: a `call_ref` through the matching
+/// `CanonicalClosure_K`'s `inspect` vtable slot. See WEP: Inspect
+/// (Debug Output) > Closure Inspect via Runtime Dispatch.
 fn generate_fn_inspect_fn(
     type_arg_names: &[String],
-    param_types: &[TypeId],
+    arity: usize,
     return_type: TypeId,
-    _fn_type: TypeId,
     ref_fn_type: TypeId,
     fmt_type: TypeId,
-    string_type: TypeId,
-    tt: &mut TypeTable,
+    span: Span,
+) -> TirFunction {
+    generate_fn_canonical_dispatch_stub(
+        FnDispatchTrait::Inspect,
+        "Inspect",
+        "inspect",
+        type_arg_names,
+        arity,
+        return_type,
+        ref_fn_type,
+        fmt_type,
+        span,
+    )
+}
+
+/// Twin of [`generate_fn_inspect_fn`] for `Fn<N, Ret>^InspectAlt`.
+fn generate_fn_inspect_alt_fn(
+    type_arg_names: &[String],
+    arity: usize,
+    return_type: TypeId,
+    ref_fn_type: TypeId,
+    fmt_type: TypeId,
+    span: Span,
+) -> TirFunction {
+    generate_fn_canonical_dispatch_stub(
+        FnDispatchTrait::InspectAlt,
+        "InspectAlt",
+        "inspect_alt",
+        type_arg_names,
+        arity,
+        return_type,
+        ref_fn_type,
+        fmt_type,
+        span,
+    )
+}
+
+/// Shared body for [`generate_fn_inspect_fn`] /
+/// [`generate_fn_inspect_alt_fn`]. The two only differ in the trait
+/// label and the `FnDispatchTrait` carried in `FunctionKind`.
+#[allow(clippy::too_many_arguments)]
+fn generate_fn_canonical_dispatch_stub(
+    trait_kind: FnDispatchTrait,
+    trait_name: &str,
+    method_name: &str,
+    type_arg_names: &[String],
+    arity: usize,
+    return_type: TypeId,
+    ref_fn_type: TypeId,
+    fmt_type: TypeId,
     span: Span,
 ) -> TirFunction {
     let method_info =
-        trait_method_info("Fn", "Inspect", "inspect").with_struct_type_args(type_arg_names);
+        trait_method_info("Fn", trait_name, method_name).with_struct_type_args(type_arg_names);
     let qualified_name = method_info.to_mangled_name();
 
-    let param_names: Vec<String> = param_types.iter().map(|t| tt.type_name(*t)).collect();
-    let ret_name = tt.type_name(return_type);
-    let sig = format!("|{}| -> {}", param_names.join(", "), ret_name);
-
-    let fmt = local_expr(1, "f", fmt_type, span);
-    let body = TirBlock::new(vec![write_str_stmt(sig, fmt, string_type, span)], span);
-
-    make_synthetic_method(
+    let mut func = make_synthetic_method(
         qualified_name,
         method_info,
         inspect_params(ref_fn_type, fmt_type, span),
         TypeTable::UNIT,
-        body,
+        TirBlock::new(vec![], span),
         inspect_locals(ref_fn_type, fmt_type),
-    )
+    );
+    // No TIR body: the real instructions are supplied at WIR build
+    // time via the `FnCanonicalDispatch` arm in `translate_function_bodies`.
+    // Bodyless functions are naturally skipped by the inliner and other
+    // TIR-body walkers, so no `InlineHint::Never` is needed.
+    func.body = None;
+    func.kind = FunctionKind::FnCanonicalDispatch {
+        trait_kind,
+        arity,
+        return_type,
+    };
+    func
 }
 
 /// Generate Inspect for opaque/resource types (Future, Stream, etc.).
@@ -1772,9 +1827,36 @@ fn generate_inspect_alt_impls(module: &mut TirModule) {
         let resolved = tt.get(type_id).clone();
         if matches!(resolved, ResolvedType::GenericInstance { ref name, ref module_source, .. } if TypeTable::is_tuple_type(name, module_source))
         {
+            // Tuple InspectAlt is provided by variadic impl in core:prelude/tuple.wado
+            continue;
+        }
+        if let ResolvedType::Function {
+            params,
+            return_type,
+            ..
+        } = &resolved
+        {
+            // Function: emit a stand-alone InspectAlt dispatch stub.
+            // Crucially, do NOT use the `display_fallback` Inspect-
+            // delegate: WIR build supplies the real body — `call_ref
+            // (self.inspect_alt)` for InspectAlt, `call_ref
+            // (self.inspect)` for Inspect — and a delegate would let
+            // the optimizer collapse InspectAlt to Inspect before WIR
+            // build runs, defeating the per-literal source dispatch.
+            let ref_type = tt.make_ref(type_id);
+            generated.push(Rc::new(RefCell::new(generate_fn_inspect_alt_fn(
+                &type_arg_names,
+                params.len(),
+                *return_type,
+                ref_type,
+                fmt_type,
+                span,
+            ))));
             continue;
         }
         let ref_type = tt.make_ref(type_id);
+        // Opaque resource types (Future, Stream, etc.): delegate to
+        // Inspect via the stock `display_fallback`.
         generated.push(Rc::new(RefCell::new(generate_display_fallback(
             trait_method_info(&base_name, "InspectAlt", "inspect_alt")
                 .with_struct_type_args(&type_arg_names),

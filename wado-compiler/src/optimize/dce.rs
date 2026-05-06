@@ -43,6 +43,7 @@ struct FunctionAnalysis {
 /// list. Returns the set of reachable functions for use by
 /// `remove_unreachable_functions`.
 pub fn analyze_project(project: &mut FlatPackage) -> IndexSet<FunctionId> {
+<<<<<<< HEAD
     // Phase 1: Pure analysis — build graph, compute reachable set
     let (call_graph, effect_usage) = build_analysis_graph(project);
     let mut reachable = compute_reachable_from_entries(project, &call_graph);
@@ -55,6 +56,33 @@ pub fn analyze_project(project: &mut FlatPackage) -> IndexSet<FunctionId> {
     // edges are gated by comp_feature flags so each rule names its
     // canonical pair (`string_push_str` → `string_push_char`, etc.).
     extend_reachable_for_optimizer_passes(project, &call_graph, &mut reachable);
+||||||| eeaf83e
+    // Phase 1: Pure analysis — build graph, compute reachable set
+    let (call_graph, effect_usage) = build_analysis_graph(project);
+    let reachable = compute_reachable_from_entries(project, &call_graph);
+=======
+    // Phase 1a: build a provisional call graph that does NOT root the
+    // per-functor `__Closure_N^Inspect[Alt]` impls from
+    // `ClosureToCanonical`, then compute its reachable set. This
+    // identifies which functions can actually run.
+    let (call_graph_v1, _) = build_analysis_graph_with(project, &InspectableSignatures::default());
+    let reachable_v1 = compute_reachable_from_entries(project, &call_graph_v1);
+
+    // Phase 1b: derive the inspectable `(arity, ret)` set from the
+    // reachable functions only. A dead `:?`/`:#?` call site in
+    // unreachable code must NOT keep per-functor inspect impls alive
+    // for a reachable canonicalised closure of the matching signature.
+    let inspectable = collect_inspectable_signatures_from_reachable(project, &reachable_v1);
+
+    // Phase 1c: rebuild the call graph with inspect roots gated by the
+    // reachable-derived signatures, then compute the final reachable
+    // set. The per-functor impls themselves don't issue any
+    // `Fn^Inspect[Alt]` calls (they just write per-literal strings),
+    // so the inspectable set is stable under this expansion — no
+    // fixpoint iteration is needed.
+    let (call_graph, effect_usage) = build_analysis_graph_with(project, &inspectable);
+    let reachable = compute_reachable_from_entries(project, &call_graph);
+>>>>>>> origin/main
 
     // Phase 2: Resolve imports and WASI features using reachable set
     resolve_imports(project, &reachable, &effect_usage);
@@ -545,7 +573,10 @@ pub fn remove_unreachable_closure_functors(project: &mut FlatPackage) {
 }
 
 /// Build call graph and effect usage from all TIR functions
-fn build_analysis_graph(project: &FlatPackage) -> (CallGraph, EffectUsageMap) {
+fn build_analysis_graph_with(
+    project: &FlatPackage,
+    inspectable_signatures: &InspectableSignatures,
+) -> (CallGraph, EffectUsageMap) {
     let mut call_graph: CallGraph = IndexMap::default();
     let mut effect_usage: EffectUsageMap = IndexMap::default();
 
@@ -555,8 +586,86 @@ fn build_analysis_graph(project: &FlatPackage) -> (CallGraph, EffectUsageMap) {
     for func_rc in &project.functions {
         let func = func_rc.borrow();
         let module_source = &func.module_source;
+<<<<<<< HEAD
         let func_id = function_id_for(&func);
         let analysis = analyze_function(&func, module_source, type_table);
+||||||| eeaf83e
+        // Use the TirFunction's is_method() to determine if this is a method
+        let func_id = if let Some(ref info) = func.method_info {
+            // This is a method - use MethodName or FreeFunctionName with monomorph info
+            if let Some(monomorph_info) = &func.monomorph_info {
+                // Monomorphized method - use FreeFunctionName with metadata.
+                // Use the actual module_source where the function lives.
+                FunctionId::Free(FreeFunctionName::with_monomorph_info(
+                    module_source.clone(),
+                    func.name.clone(),
+                    monomorph_info.generic_name.clone(),
+                ))
+            } else {
+                // Non-monomorphized method - use method_info
+                FunctionId::Method(MethodName::new(
+                    module_source.clone(),
+                    info.struct_name.clone(),
+                    info.trait_name.clone(),
+                    info.method_name.clone(),
+                ))
+            }
+        } else {
+            // Regular function - use FreeFunctionName
+            if let Some(monomorph_info) = &func.monomorph_info {
+                // Monomorphized function - use actual module_source
+                FunctionId::Free(FreeFunctionName::with_monomorph_info(
+                    module_source.clone(),
+                    func.name.clone(),
+                    monomorph_info.generic_name.clone(),
+                ))
+            } else {
+                FunctionId::Free(FreeFunctionName::from_module_source(
+                    module_source,
+                    &func.name,
+                ))
+            }
+        };
+        let analysis = analyze_function(&func, module_source, type_table);
+=======
+        // Use the TirFunction's is_method() to determine if this is a method
+        let func_id = if let Some(ref info) = func.method_info {
+            // This is a method - use MethodName or FreeFunctionName with monomorph info
+            if let Some(monomorph_info) = &func.monomorph_info {
+                // Monomorphized method - use FreeFunctionName with metadata.
+                // Use the actual module_source where the function lives.
+                FunctionId::Free(FreeFunctionName::with_monomorph_info(
+                    module_source.clone(),
+                    func.name.clone(),
+                    monomorph_info.generic_name.clone(),
+                ))
+            } else {
+                // Non-monomorphized method - use method_info
+                FunctionId::Method(MethodName::new(
+                    module_source.clone(),
+                    info.struct_name.clone(),
+                    info.trait_name.clone(),
+                    info.method_name.clone(),
+                ))
+            }
+        } else {
+            // Regular function - use FreeFunctionName
+            if let Some(monomorph_info) = &func.monomorph_info {
+                // Monomorphized function - use actual module_source
+                FunctionId::Free(FreeFunctionName::with_monomorph_info(
+                    module_source.clone(),
+                    func.name.clone(),
+                    monomorph_info.generic_name.clone(),
+                ))
+            } else {
+                FunctionId::Free(FreeFunctionName::from_module_source(
+                    module_source,
+                    &func.name,
+                ))
+            }
+        };
+        let analysis = analyze_function(&func, module_source, type_table, inspectable_signatures);
+>>>>>>> origin/main
         call_graph.insert(func_id.clone(), analysis.callees);
         if !analysis.effect_calls.is_empty() {
             effect_usage.insert(func_id.clone(), analysis.effect_calls);
@@ -566,16 +675,154 @@ fn build_analysis_graph(project: &FlatPackage) -> (CallGraph, EffectUsageMap) {
     (call_graph, effect_usage)
 }
 
+/// Walk all TIR function bodies and collect every `(arity, return_type)`
+/// signature that is the receiver type of a `Fn<arity, ret>^Inspect` or
+/// `Fn<arity, ret>^InspectAlt` method call. Used by the DCE call-graph
+/// builder to gate the per-functor `inspect` / `inspect_alt` root
+/// marking emitted from `ClosureToCanonical` independently: without a
+/// real `Fn^Inspect[Alt]` caller, those per-functor impls cannot be
+/// invoked indirectly, so keeping them alive is purely waste.
+///
+/// The two trait methods are tracked separately so a program that only
+/// formats closures with `:?` doesn't keep every `__Closure_N^InspectAlt`
+/// impl (and its per-literal source-string constant) alive.
+#[derive(Default)]
+struct InspectableSignatures {
+    inspect: IndexSet<(usize, TypeId)>,
+    inspect_alt: IndexSet<(usize, TypeId)>,
+}
+
+/// Compute the inspectable `(arity, return_type)` set from the bodies
+/// of *reachable* functions only. Restricting the scan to live code
+/// keeps a dead `:?`/`:#?` call from forcing per-functor inspect impls
+/// to stay alive for an unrelated reachable closure of the same
+/// signature.
+fn collect_inspectable_signatures_from_reachable(
+    project: &FlatPackage,
+    reachable: &IndexSet<FunctionId>,
+) -> InspectableSignatures {
+    let mut sigs = InspectableSignatures::default();
+    let type_table = &*project.type_table.borrow();
+    for func_rc in &project.functions {
+        let func = func_rc.borrow();
+        let func_id = function_id_for(&func);
+        if !reachable.contains(&func_id) {
+            continue;
+        }
+        if let Some(body) = &func.body {
+            scan_inspect_signatures_block(body, type_table, &mut sigs);
+        }
+    }
+    sigs
+}
+
+/// Compute the `FunctionId` used by the call graph for a TIR function.
+/// Mirrors the keying logic in `build_analysis_graph_with`; centralising
+/// it here so other passes (notably the inspectable-signatures scan)
+/// can compare against the call graph's reachable set.
+fn function_id_for(func: &TirFunction) -> FunctionId {
+    let module_source = &func.module_source;
+    if let Some(ref info) = func.method_info {
+        if let Some(monomorph_info) = &func.monomorph_info {
+            FunctionId::Free(FreeFunctionName::with_monomorph_info(
+                module_source.clone(),
+                func.name.clone(),
+                monomorph_info.generic_name.clone(),
+            ))
+        } else {
+            FunctionId::Method(MethodName::new(
+                module_source.clone(),
+                info.struct_name.clone(),
+                info.trait_name.clone(),
+                info.method_name.clone(),
+            ))
+        }
+    } else if let Some(monomorph_info) = &func.monomorph_info {
+        FunctionId::Free(FreeFunctionName::with_monomorph_info(
+            module_source.clone(),
+            func.name.clone(),
+            monomorph_info.generic_name.clone(),
+        ))
+    } else {
+        FunctionId::Free(FreeFunctionName::from_module_source(
+            module_source,
+            &func.name,
+        ))
+    }
+}
+
+fn scan_inspect_signatures_block(
+    block: &TirBlock,
+    type_table: &TypeTable,
+    sigs: &mut InspectableSignatures,
+) {
+    for stmt in &block.stmts {
+        scan_inspect_signatures_stmt(stmt, type_table, sigs);
+    }
+}
+
+fn scan_inspect_signatures_stmt(
+    stmt: &TirStmt,
+    type_table: &TypeTable,
+    sigs: &mut InspectableSignatures,
+) {
+    use crate::tir_visitor::TirRefVisitor;
+    struct Scanner<'a> {
+        type_table: &'a TypeTable,
+        sigs: &'a mut InspectableSignatures,
+    }
+    impl TirRefVisitor for Scanner<'_> {
+        fn visit_expr(&mut self, expr: &TirExpr) {
+            if let TirExprKind::MethodCall { receiver, func, .. } = &expr.kind
+                && let Some(info) = &func.method_info
+                && info.base_struct_name == "Fn"
+                && let Some(trait_name) = info.base_trait_name.as_deref()
+            {
+                // Receiver type is `&Fn(...)` — peel the reference and read
+                // the function's arity + return type out of the type table.
+                let recv_type = self.type_table.peel_refs(receiver.type_id);
+                if let ResolvedType::Function {
+                    params,
+                    return_type,
+                    ..
+                } = self.type_table.get(recv_type)
+                {
+                    let key = (params.len(), *return_type);
+                    match trait_name {
+                        "Inspect" => {
+                            self.sigs.inspect.insert(key);
+                        }
+                        "InspectAlt" => {
+                            self.sigs.inspect_alt.insert(key);
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            self.walk_expr(expr);
+        }
+    }
+    let mut s = Scanner { type_table, sigs };
+    s.visit_stmt(stmt);
+}
+
 /// Analyze a TIR function for callees and effect usage
 fn analyze_function(
     func: &TirFunction,
     current_module: &ModuleSource,
     type_table: &TypeTable,
+    inspectable_signatures: &InspectableSignatures,
 ) -> FunctionAnalysis {
     let mut analysis = FunctionAnalysis::default();
 
     if let Some(body) = &func.body {
-        analyze_block(body, current_module, type_table, &mut analysis);
+        analyze_block(
+            body,
+            current_module,
+            type_table,
+            inspectable_signatures,
+            &mut analysis,
+        );
     }
     analysis
 }
@@ -584,19 +831,38 @@ fn analyze_block(
     block: &TirBlock,
     current_module: &ModuleSource,
     type_table: &TypeTable,
+    inspectable_signatures: &InspectableSignatures,
     analysis: &mut FunctionAnalysis,
 ) {
     for stmt in &block.stmts {
         match &stmt.kind {
             TirStmtKind::Let { value, .. } => {
-                analyze_expr(value, current_module, type_table, analysis);
+                analyze_expr(
+                    value,
+                    current_module,
+                    type_table,
+                    inspectable_signatures,
+                    analysis,
+                );
             }
             TirStmtKind::Expr(expr) => {
-                analyze_expr(expr, current_module, type_table, analysis);
+                analyze_expr(
+                    expr,
+                    current_module,
+                    type_table,
+                    inspectable_signatures,
+                    analysis,
+                );
             }
             TirStmtKind::Return { value } => {
                 if let Some(expr) = value {
-                    analyze_expr(expr, current_module, type_table, analysis);
+                    analyze_expr(
+                        expr,
+                        current_module,
+                        type_table,
+                        inspectable_signatures,
+                        analysis,
+                    );
                 }
             }
             TirStmtKind::If {
@@ -604,17 +870,47 @@ fn analyze_block(
                 then_block,
                 else_block,
             } => {
-                analyze_expr(condition, current_module, type_table, analysis);
-                analyze_block(then_block, current_module, type_table, analysis);
+                analyze_expr(
+                    condition,
+                    current_module,
+                    type_table,
+                    inspectable_signatures,
+                    analysis,
+                );
+                analyze_block(
+                    then_block,
+                    current_module,
+                    type_table,
+                    inspectable_signatures,
+                    analysis,
+                );
                 if let Some(else_blk) = else_block {
-                    analyze_block(else_blk, current_module, type_table, analysis);
+                    analyze_block(
+                        else_blk,
+                        current_module,
+                        type_table,
+                        inspectable_signatures,
+                        analysis,
+                    );
                 }
             }
             TirStmtKind::Loop { body } => {
-                analyze_block(body, current_module, type_table, analysis);
+                analyze_block(
+                    body,
+                    current_module,
+                    type_table,
+                    inspectable_signatures,
+                    analysis,
+                );
             }
             TirStmtKind::LabeledBlock { block, .. } => {
-                analyze_block(block, current_module, type_table, analysis);
+                analyze_block(
+                    block,
+                    current_module,
+                    type_table,
+                    inspectable_signatures,
+                    analysis,
+                );
             }
             TirStmtKind::IfLet {
                 scrutinee,
@@ -622,20 +918,50 @@ fn analyze_block(
                 else_block,
                 ..
             } => {
-                analyze_expr(scrutinee, current_module, type_table, analysis);
-                analyze_block(then_block, current_module, type_table, analysis);
+                analyze_expr(
+                    scrutinee,
+                    current_module,
+                    type_table,
+                    inspectable_signatures,
+                    analysis,
+                );
+                analyze_block(
+                    then_block,
+                    current_module,
+                    type_table,
+                    inspectable_signatures,
+                    analysis,
+                );
                 if let Some(else_blk) = else_block {
-                    analyze_block(else_blk, current_module, type_table, analysis);
+                    analyze_block(
+                        else_blk,
+                        current_module,
+                        type_table,
+                        inspectable_signatures,
+                        analysis,
+                    );
                 }
             }
             TirStmtKind::Break { value, .. } => {
                 if let Some(v) = value {
-                    analyze_expr(v, current_module, type_table, analysis);
+                    analyze_expr(
+                        v,
+                        current_module,
+                        type_table,
+                        inspectable_signatures,
+                        analysis,
+                    );
                 }
             }
             TirStmtKind::Continue => {}
             TirStmtKind::LetDestructure { value, .. } => {
-                analyze_expr(value, current_module, type_table, analysis);
+                analyze_expr(
+                    value,
+                    current_module,
+                    type_table,
+                    inspectable_signatures,
+                    analysis,
+                );
             }
             TirStmtKind::TaskReturn { .. } => {
                 unreachable!("TaskReturn should be eliminated by synthesis before this phase")
@@ -651,6 +977,7 @@ fn analyze_expr(
     expr: &TirExpr,
     current_module: &ModuleSource,
     type_table: &TypeTable,
+    inspectable_signatures: &InspectableSignatures,
     analysis: &mut FunctionAnalysis,
 ) {
     match &expr.kind {
@@ -734,7 +1061,13 @@ fn analyze_expr(
             }
 
             for arg in args {
-                analyze_expr(&arg.expr, current_module, type_table, analysis);
+                analyze_expr(
+                    &arg.expr,
+                    current_module,
+                    type_table,
+                    inspectable_signatures,
+                    analysis,
+                );
             }
         }
         TirExprKind::MethodCall {
@@ -1036,24 +1369,72 @@ fn analyze_expr(
                 }
             }
 
-            analyze_expr(receiver, current_module, type_table, analysis);
+            analyze_expr(
+                receiver,
+                current_module,
+                type_table,
+                inspectable_signatures,
+                analysis,
+            );
             for arg in args {
-                analyze_expr(&arg.expr, current_module, type_table, analysis);
+                analyze_expr(
+                    &arg.expr,
+                    current_module,
+                    type_table,
+                    inspectable_signatures,
+                    analysis,
+                );
             }
         }
         TirExprKind::Binary { left, right, .. } => {
-            analyze_expr(left, current_module, type_table, analysis);
-            analyze_expr(right, current_module, type_table, analysis);
+            analyze_expr(
+                left,
+                current_module,
+                type_table,
+                inspectable_signatures,
+                analysis,
+            );
+            analyze_expr(
+                right,
+                current_module,
+                type_table,
+                inspectable_signatures,
+                analysis,
+            );
         }
         TirExprKind::Unary { expr, .. } => {
-            analyze_expr(expr, current_module, type_table, analysis);
+            analyze_expr(
+                expr,
+                current_module,
+                type_table,
+                inspectable_signatures,
+                analysis,
+            );
         }
         TirExprKind::Assign { target, value } => {
-            analyze_expr(target, current_module, type_table, analysis);
-            analyze_expr(value, current_module, type_table, analysis);
+            analyze_expr(
+                target,
+                current_module,
+                type_table,
+                inspectable_signatures,
+                analysis,
+            );
+            analyze_expr(
+                value,
+                current_module,
+                type_table,
+                inspectable_signatures,
+                analysis,
+            );
         }
         TirExprKind::Cast { expr, .. } => {
-            analyze_expr(expr, current_module, type_table, analysis);
+            analyze_expr(
+                expr,
+                current_module,
+                type_table,
+                inspectable_signatures,
+                analysis,
+            );
         }
         TirExprKind::CmRawCall { local_name, args } => {
             // CmRawCall references a lowered WASI import function.
@@ -1069,7 +1450,13 @@ fn analyze_expr(
                 analysis.effect_calls.insert((interface_name, op_name));
             }
             for arg in args {
-                analyze_expr(arg, current_module, type_table, analysis);
+                analyze_expr(
+                    arg,
+                    current_module,
+                    type_table,
+                    inspectable_signatures,
+                    analysis,
+                );
             }
         }
         TirExprKind::FieldAccess { expr, .. }
@@ -1078,90 +1465,245 @@ fn analyze_expr(
         | TirExprKind::TypePackExpansion {
             call_expr: expr, ..
         } => {
-            analyze_expr(expr, current_module, type_table, analysis);
+            analyze_expr(
+                expr,
+                current_module,
+                type_table,
+                inspectable_signatures,
+                analysis,
+            );
         }
         TirExprKind::Index { expr, index } => {
-            analyze_expr(expr, current_module, type_table, analysis);
-            analyze_expr(index, current_module, type_table, analysis);
+            analyze_expr(
+                expr,
+                current_module,
+                type_table,
+                inspectable_signatures,
+                analysis,
+            );
+            analyze_expr(
+                index,
+                current_module,
+                type_table,
+                inspectable_signatures,
+                analysis,
+            );
         }
         TirExprKind::Block(block) => {
-            analyze_block(block, current_module, type_table, analysis);
+            analyze_block(
+                block,
+                current_module,
+                type_table,
+                inspectable_signatures,
+                analysis,
+            );
         }
         TirExprKind::If {
             condition,
             then_branch,
             else_branch,
         } => {
-            analyze_expr(condition, current_module, type_table, analysis);
-            analyze_block(then_branch, current_module, type_table, analysis);
+            analyze_expr(
+                condition,
+                current_module,
+                type_table,
+                inspectable_signatures,
+                analysis,
+            );
+            analyze_block(
+                then_branch,
+                current_module,
+                type_table,
+                inspectable_signatures,
+                analysis,
+            );
             if let Some(else_blk) = else_branch {
-                analyze_block(else_blk, current_module, type_table, analysis);
+                analyze_block(
+                    else_blk,
+                    current_module,
+                    type_table,
+                    inspectable_signatures,
+                    analysis,
+                );
             }
         }
         TirExprKind::Match { expr, arms } => {
-            analyze_expr(expr, current_module, type_table, analysis);
+            analyze_expr(
+                expr,
+                current_module,
+                type_table,
+                inspectable_signatures,
+                analysis,
+            );
             for arm in arms {
                 if let Some(guard) = &arm.guard {
-                    analyze_expr(guard, current_module, type_table, analysis);
+                    analyze_expr(
+                        guard,
+                        current_module,
+                        type_table,
+                        inspectable_signatures,
+                        analysis,
+                    );
                 }
-                analyze_expr(&arm.body, current_module, type_table, analysis);
+                analyze_expr(
+                    &arm.body,
+                    current_module,
+                    type_table,
+                    inspectable_signatures,
+                    analysis,
+                );
             }
         }
         TirExprKind::StructLiteral { fields, .. } => {
             for field in fields {
-                analyze_expr(&field.value, current_module, type_table, analysis);
+                analyze_expr(
+                    &field.value,
+                    current_module,
+                    type_table,
+                    inspectable_signatures,
+                    analysis,
+                );
             }
         }
         TirExprKind::TupleLiteral { elements } => {
             for elem in elements {
-                analyze_expr(elem, current_module, type_table, analysis);
+                analyze_expr(
+                    elem,
+                    current_module,
+                    type_table,
+                    inspectable_signatures,
+                    analysis,
+                );
             }
         }
         TirExprKind::Closure { body, .. } => {
-            analyze_expr(body, current_module, type_table, analysis);
+            analyze_expr(
+                body,
+                current_module,
+                type_table,
+                inspectable_signatures,
+                analysis,
+            );
         }
         TirExprKind::IndirectCall { callee, args } => {
-            analyze_expr(callee, current_module, type_table, analysis);
+            analyze_expr(
+                callee,
+                current_module,
+                type_table,
+                inspectable_signatures,
+                analysis,
+            );
             for arg in args {
-                analyze_expr(arg, current_module, type_table, analysis);
+                analyze_expr(
+                    arg,
+                    current_module,
+                    type_table,
+                    inspectable_signatures,
+                    analysis,
+                );
             }
         }
         TirExprKind::ClosureToCanonical {
             functor,
             functor_id,
+            target_fn_type,
             closure_module,
-            ..
         } => {
-            analyze_expr(functor, current_module, type_table, analysis);
-            // Mark the __call method as reachable (it's referenced via ref.func).
-            // Use closure_module (where the closure was defined) instead of
-            // current_module, because after cross-module inlining the
-            // ClosureToCanonical may appear in a different module than
-            // where __Closure_N::__call is defined.
-            let method_name = MethodName::new(
+            analyze_expr(
+                functor,
+                current_module,
+                type_table,
+                inspectable_signatures,
+                analysis,
+            );
+            // The `__call` method is always reached via `ref.func` baked
+            // into the canonical closure struct's `func` slot.
+            let struct_name = format!("__Closure_{functor_id}");
+            analysis.callees.insert(FunctionId::Method(MethodName::new(
                 closure_module.clone(),
-                format!("__Closure_{functor_id}"),
+                struct_name.clone(),
                 None,
                 "__call".to_string(),
-            );
-            analysis.callees.insert(FunctionId::Method(method_name));
+            )));
+
+            // The per-functor `__Closure_N^Inspect` and `^InspectAlt`
+            // impls (and their per-literal source-string constants) only
+            // need to stay alive when their corresponding `Fn<arity,
+            // ret>^Inspect[Alt]` dispatch stub is reachable — gated
+            // independently per trait method. A program that only ever
+            // uses `:?` keeps `__Closure_N^Inspect` but drops
+            // `__Closure_N^InspectAlt` and its source-string literal.
+            if let ResolvedType::Function {
+                params,
+                return_type,
+                ..
+            } = type_table.get(*target_fn_type)
+            {
+                let key = (params.len(), *return_type);
+                if inspectable_signatures.inspect.contains(&key) {
+                    analysis.callees.insert(FunctionId::Method(MethodName::new(
+                        closure_module.clone(),
+                        struct_name.clone(),
+                        Some("Inspect".to_string()),
+                        "inspect".to_string(),
+                    )));
+                }
+                if inspectable_signatures.inspect_alt.contains(&key) {
+                    analysis.callees.insert(FunctionId::Method(MethodName::new(
+                        closure_module.clone(),
+                        struct_name,
+                        Some("InspectAlt".to_string()),
+                        "inspect_alt".to_string(),
+                    )));
+                }
+            }
         }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(payload_expr) = payload {
-                analyze_expr(payload_expr, current_module, type_table, analysis);
+                analyze_expr(
+                    payload_expr,
+                    current_module,
+                    type_table,
+                    inspectable_signatures,
+                    analysis,
+                );
             }
         }
         TirExprKind::LabeledBlock { block, .. } => {
-            analyze_block(block, current_module, type_table, analysis);
+            analyze_block(
+                block,
+                current_module,
+                type_table,
+                inspectable_signatures,
+                analysis,
+            );
         }
         TirExprKind::GlobalVarSet { value, .. } => {
-            analyze_expr(value, current_module, type_table, analysis);
+            analyze_expr(
+                value,
+                current_module,
+                type_table,
+                inspectable_signatures,
+                analysis,
+            );
         }
         TirExprKind::VariantTag { expr } | TirExprKind::VariantTest { expr, .. } => {
-            analyze_expr(expr, current_module, type_table, analysis);
+            analyze_expr(
+                expr,
+                current_module,
+                type_table,
+                inspectable_signatures,
+                analysis,
+            );
         }
         TirExprKind::VariantPayload { expr, .. } => {
-            analyze_expr(expr, current_module, type_table, analysis);
+            analyze_expr(
+                expr,
+                current_module,
+                type_table,
+                inspectable_signatures,
+                analysis,
+            );
         }
         TirExprKind::Switch {
             scrutinee,
@@ -1169,11 +1711,29 @@ fn analyze_expr(
             default,
             ..
         } => {
-            analyze_expr(scrutinee, current_module, type_table, analysis);
+            analyze_expr(
+                scrutinee,
+                current_module,
+                type_table,
+                inspectable_signatures,
+                analysis,
+            );
             for arm in arms {
-                analyze_block(arm, current_module, type_table, analysis);
+                analyze_block(
+                    arm,
+                    current_module,
+                    type_table,
+                    inspectable_signatures,
+                    analysis,
+                );
             }
-            analyze_block(default, current_module, type_table, analysis);
+            analyze_block(
+                default,
+                current_module,
+                type_table,
+                inspectable_signatures,
+                analysis,
+            );
         }
         // Leaf nodes - no calls
         TirExprKind::IntLiteral { .. }

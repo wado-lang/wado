@@ -121,9 +121,10 @@ test "closure" {
     let always42 = || 42;
     assert `{always42:?}` == "|| -> i32";
 
-    // alternate mode shows source
-    assert `{add_one:#?}` == "|x: i32| x + 1";
-    assert `{add:#?}` == "|a: i32, b: i32| a + b";
+    // alternate mode shows source (TIR-unparsed: binary ops get
+    // parenthesised for unambiguous round-tripping).
+    assert `{add_one:#?}` == "|x: i32| (x + 1)";
+    assert `{add:#?}` == "|a: i32, b: i32| (a + b)";
     assert `{always42:#?}` == "|| 42";
 }
 

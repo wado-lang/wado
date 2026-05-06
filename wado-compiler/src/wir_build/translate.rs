@@ -102,11 +102,31 @@ fn resolve_local_names(raw: &IndexMap<u32, String>, params: &[TirParam]) -> Inde
 /// Register canonical closure wrapper functions for all closure functors.
 /// Must be called before `translate_function_bodies` so wrappers are available
 /// for `ClosureToCanonical` references.
+///
+/// For each reachable functor we register three wrappers — one per
+/// vtable slot in `CanonicalClosure_K`:
+///
+/// 1. `__closure_wrapper_N(env, args...) -> ret` — refcasts `env` to
+///    `&__Closure_N` and forwards to `__call`.
+/// 2. `__closure_inspect_wrapper_N(env, formatter)` — refcasts both
+///    args and forwards to `__Closure_N^Inspect::inspect`.
+/// 3. `__closure_inspect_alt_wrapper_N(env, formatter)` — refcasts
+///    both args and forwards to `__Closure_N^InspectAlt::inspect_alt`.
+///
+/// The per-functor `__Closure_N^Inspect` / `InspectAlt` impls are
+/// synthesised in lower (Phase 2). For non-inspectable signatures the
+/// canonical struct uses the slim `{ env, func }` schema and only the
+/// call wrapper is registered; the `inspect` / `inspect_alt` wrappers
+/// don't exist and the corresponding fields aren't on the struct, so
+/// nothing has to be filled in. For inspectable signatures all three
+/// wrappers are registered and reach the per-functor impls.
 pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
-    use crate::wir::{WirFunction, WirName, WirType};
+    use crate::wir::WirType;
 
-    let type_table = &*ctx.package.type_table.borrow();
-    for functor in &ctx.package.closure_functors {
+    // Snapshot the functor list so we can mutate ctx inside the loop.
+    let functors: Vec<crate::tir::ClosureFunctor> = ctx.package.closure_functors.clone();
+
+    for functor in &functors {
         let module_source = &functor.module_source;
         let functor_key = (module_source.clone(), functor.id);
         if ctx.closure_wrapper_funcs.contains_key(&functor_key) {
@@ -127,6 +147,7 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
         // Get the __call method's param/result types (excluding self)
         let call_func = functor.call_method.borrow();
         let user_param_count = call_func.params.len() - 1; // skip self
+        let type_table = &*ctx.package.type_table.borrow();
         let user_params: Vec<WirType> = call_func
             .params
             .iter()
@@ -140,96 +161,410 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
         } else {
             vec![ctx.type_id_to_wir_type(type_table, call_func.return_type)]
         };
-        let has_result = !result_wirs.is_empty();
+        drop(call_func);
+        let _ = type_table;
 
-        // Get canonical func type
+        // Decide vtable schema for this functor by looking the
+        // signature up in the inspectable gate computed at WirContext
+        // start. Non-inspectable signatures get the slim
+        // `{ env, func }` schema and skip inspect wrapper
+        // registration entirely.
+        let call_func = functor.call_method.borrow();
+        let return_type = call_func.return_type;
+        drop(call_func);
+        let is_inspectable = ctx
+            .inspectable_fn_dispatch
+            .contains(&(user_param_count, return_type));
+
+        // Get canonical func type, threading the gate so the schema
+        // matches what `translate_closure_to_canonical` will emit.
         let user_params_clone = user_params.clone();
-        let (fn_type_id, _) = ctx.get_or_create_canonical_closure_type(user_params, result_wirs);
+        let (call_fn_type_id, _) = ctx.get_or_create_canonical_closure_type(
+            user_params,
+            result_wirs.clone(),
+            is_inspectable,
+        );
 
         // Get functor struct type ID
+        let type_table = &*ctx.package.type_table.borrow();
         let functor_wir_type = ctx.type_id_to_wir_type(type_table, functor.ref_type_id);
+        let _ = type_table;
         let functor_struct_type_id = match &functor_wir_type {
             WirType::Ref { type_id, .. } => type_id.clone(),
             _ => continue,
         };
 
-        // Build wrapper function body
-        let env_local = "__env".to_string();
-        let typed_env_local = "__typed_env".to_string();
+        // Register the call wrapper.
+        let global_id = ctx.closure_wrapper_funcs.len();
+        let call_wrapper_fq = format!("closure/{module_source}/__closure_wrapper_{global_id}");
+        let call_wrapper_id = register_call_wrapper(
+            ctx,
+            &call_wrapper_fq,
+            call_fn_type_id,
+            functor_struct_type_id.clone(),
+            functor_wir_type.clone(),
+            user_param_count,
+            user_params_clone,
+            !result_wirs.is_empty(),
+            call_func_id,
+        );
 
-        let mut body = vec![
-            WirInstr::DeclareLocal {
-                name: typed_env_local.clone(),
-                ty: WirType::Ref {
-                    type_id: functor_struct_type_id.clone(),
+        // Register the inspect / inspect_alt wrappers only when the
+        // functor's signature is inspectable. These forward to the
+        // per-functor `__Closure_N^Inspect / InspectAlt` impls
+        // synthesised in lower (Phase 2). When DCE pruned the
+        // per-functor impl or the `Formatter` struct isn't registered,
+        // the wrapper body falls back to `Unreachable` — the slot
+        // stays populated so the canonical struct schema is consistent.
+        let (inspect_wrapper_id, inspect_alt_wrapper_id) = if is_inspectable {
+            let callback_fn_type_id = ctx.get_or_create_canonical_callback_fn_type();
+            let inspect = register_inspect_wrapper(
+                ctx,
+                module_source,
+                functor_name,
+                "Inspect",
+                "inspect",
+                global_id,
+                callback_fn_type_id.clone(),
+                functor_struct_type_id.clone(),
+            );
+            let inspect_alt = register_inspect_wrapper(
+                ctx,
+                module_source,
+                functor_name,
+                "InspectAlt",
+                "inspect_alt",
+                global_id,
+                callback_fn_type_id,
+                functor_struct_type_id,
+            );
+            (Some(inspect), Some(inspect_alt))
+        } else {
+            (None, None)
+        };
+
+        ctx.closure_wrapper_funcs.insert(
+            functor_key,
+            crate::wir_build::context::ClosureWrapperFuncs {
+                call: call_wrapper_id,
+                inspect: inspect_wrapper_id,
+                inspect_alt: inspect_alt_wrapper_id,
+            },
+        );
+    }
+}
+
+/// Build a call wrapper: refcast `env` to `&__Closure_N`, then
+/// `call __Closure_N::__call(env, args...)`.
+#[allow(clippy::too_many_arguments)]
+fn register_call_wrapper(
+    ctx: &mut WirContext<'_>,
+    wrapper_fq: &str,
+    fn_type_id: crate::wir::WirTypeId,
+    functor_struct_type_id: crate::wir::WirTypeId,
+    functor_wir_type: crate::wir::WirType,
+    user_param_count: usize,
+    user_params: Vec<crate::wir::WirType>,
+    has_result: bool,
+    call_func_id: crate::wir::WirFuncId,
+) -> crate::wir::WirFuncId {
+    use crate::wir::{WirFunction, WirName, WirType};
+
+    let env_local = "__env".to_string();
+    let typed_env_local = "__typed_env".to_string();
+    let abstract_struct_nullable = WirType::AbstractRef {
+        heap_type: crate::wir::WirAbstractHeapType::Struct,
+        nullable: true,
+    };
+
+    let mut body = vec![
+        WirInstr::DeclareLocal {
+            name: typed_env_local.clone(),
+            ty: WirType::Ref {
+                type_id: functor_struct_type_id.clone(),
+                nullable: false,
+            },
+        },
+        WirInstr::LocalSet {
+            name: typed_env_local.clone(),
+            value: Box::new(WirInstr::RefCast {
+                type_id: functor_struct_type_id,
+                nullable: false,
+                expr: Box::new(WirInstr::LocalGet {
+                    name: env_local.clone(),
+                    result_ty: abstract_struct_nullable,
+                }),
+            }),
+        },
+    ];
+
+    let mut call_args = vec![WirInstr::LocalGet {
+        name: typed_env_local,
+        result_ty: functor_wir_type,
+    }];
+    for i in 0..user_param_count {
+        call_args.push(WirInstr::LocalGet {
+            name: format!("__p{i}"),
+            result_ty: user_params[i].clone(),
+        });
+    }
+
+    let call_instr = WirInstr::Call {
+        func_id: call_func_id,
+        args: call_args,
+    };
+    if has_result {
+        body.push(WirInstr::Return {
+            value: Some(Box::new(call_instr)),
+        });
+    } else {
+        body.push(call_instr);
+    }
+
+    let mut param_names = vec![env_local];
+    for i in 0..user_param_count {
+        param_names.push(format!("__p{i}"));
+    }
+
+    let func = WirFunction {
+        name: WirName {
+            fq: wrapper_fq.to_string(),
+        },
+        type_id: fn_type_id,
+        param_names,
+        body: Some(body),
+        meta: crate::wir::WirMeta::default(),
+        generic_origin: None,
+        effects: Vec::new(),
+        stores: Vec::new(),
+        comp_features: 0,
+        export_name: None,
+    };
+
+    ctx.register_function(func)
+}
+
+/// Build an inspect / `inspect_alt` wrapper for a functor.
+///
+/// The wrapper takes `(env: ref null struct, formatter: ref null
+/// struct)` and forwards to `<module>/__Closure_N^TraitName::method`
+/// after refcasting both args. If the per-functor impl is missing
+/// (DCE pruned it) the body is `Unreachable` — the slot stays
+/// populated to keep the canonical struct schema consistent.
+#[allow(clippy::too_many_arguments)]
+fn register_inspect_wrapper(
+    ctx: &mut WirContext<'_>,
+    module_source: &crate::name::ModuleSource,
+    functor_name: &str,
+    trait_name: &str,
+    method_name: &str,
+    global_id: usize,
+    callback_fn_type_id: crate::wir::WirTypeId,
+    functor_struct_type_id: crate::wir::WirTypeId,
+) -> crate::wir::WirFuncId {
+    use crate::wir::{WirFunction, WirName, WirType};
+
+    let env_local = "__env".to_string();
+    let formatter_local = "__formatter".to_string();
+    let abstract_struct_nullable = WirType::AbstractRef {
+        heap_type: crate::wir::WirAbstractHeapType::Struct,
+        nullable: true,
+    };
+
+    let target_fq = format!("{module_source}/{functor_name}^{trait_name}::{method_name}");
+    let target_func_id = ctx.func_map.get(&target_fq).cloned();
+
+    // Look up the Formatter struct WIR type id once; needed to
+    // refcast the abstract `(ref null struct)` arg to the concrete
+    // `&Formatter` the per-functor impl expects.
+    let formatter_struct_type_id = ctx
+        .struct_type_map
+        .get(&crate::name::StructName::new(
+            crate::name::ModuleSource::format(),
+            "Formatter".to_string(),
+        ))
+        .cloned();
+
+    let body = match (target_func_id, formatter_struct_type_id) {
+        (Some(func_id), Some(formatter_tid)) => {
+            let typed_env_local = "__typed_env".to_string();
+            let typed_formatter_local = "__typed_formatter".to_string();
+            vec![
+                WirInstr::DeclareLocal {
+                    name: typed_env_local.clone(),
+                    ty: WirType::Ref {
+                        type_id: functor_struct_type_id.clone(),
+                        nullable: false,
+                    },
+                },
+                WirInstr::LocalSet {
+                    name: typed_env_local.clone(),
+                    value: Box::new(WirInstr::RefCast {
+                        type_id: functor_struct_type_id.clone(),
+                        nullable: false,
+                        expr: Box::new(WirInstr::LocalGet {
+                            name: env_local.clone(),
+                            result_ty: abstract_struct_nullable.clone(),
+                        }),
+                    }),
+                },
+                WirInstr::DeclareLocal {
+                    name: typed_formatter_local.clone(),
+                    ty: WirType::Ref {
+                        type_id: formatter_tid.clone(),
+                        nullable: false,
+                    },
+                },
+                WirInstr::LocalSet {
+                    name: typed_formatter_local.clone(),
+                    value: Box::new(WirInstr::RefCast {
+                        type_id: formatter_tid.clone(),
+                        nullable: false,
+                        expr: Box::new(WirInstr::LocalGet {
+                            name: formatter_local.clone(),
+                            result_ty: abstract_struct_nullable,
+                        }),
+                    }),
+                },
+                WirInstr::Call {
+                    func_id,
+                    args: vec![
+                        WirInstr::LocalGet {
+                            name: typed_env_local,
+                            result_ty: WirType::Ref {
+                                type_id: functor_struct_type_id,
+                                nullable: false,
+                            },
+                        },
+                        WirInstr::LocalGet {
+                            name: typed_formatter_local,
+                            result_ty: WirType::Ref {
+                                type_id: formatter_tid,
+                                nullable: false,
+                            },
+                        },
+                    ],
+                },
+            ]
+        }
+        _ => vec![WirInstr::Unreachable],
+    };
+
+    let wrapper_fq = format!("closure/{module_source}/__closure_{method_name}_wrapper_{global_id}");
+    let func = WirFunction {
+        name: WirName { fq: wrapper_fq },
+        type_id: callback_fn_type_id,
+        param_names: vec![env_local, formatter_local],
+        body: Some(body),
+        meta: crate::wir::WirMeta::default(),
+        generic_origin: None,
+        effects: Vec::new(),
+        stores: Vec::new(),
+        comp_features: 0,
+        export_name: None,
+    };
+
+    ctx.register_function(func)
+}
+
+/// Build the WIR body for a `FunctionKind::FnCanonicalDispatch`
+/// stub: cast `self` to the shared `$canonical_inspectable_base`
+/// supertype, then `call_ref (struct.get base $slot self) (self.env,
+/// f)` where `$slot` is `inspect` or `inspect_alt` depending on
+/// `trait_kind`.
+///
+/// Casting to the shared base — instead of one specific
+/// `CanonicalClosure_K` per `(arity, return_type)` — lets the same
+/// dispatch stub serve every parameter shape with that signature
+/// pair; without it the cast would trap whenever a runtime value
+/// belonged to a different per-signature canonical struct.
+///
+/// Returns `None` when no inspectable canonical struct has been
+/// registered: in that case the dispatch stub is unreachable from any
+/// emitted closure value (every canonical struct is slim `{ env, func
+/// }`), so leaving the bodyless TIR placeholder in place is fine.
+#[allow(clippy::needless_pass_by_value)] // signature mirrors the param-name plumbing in translate_function_bodies
+fn build_fn_canonical_dispatch_body(
+    ctx: &mut WirContext<'_>,
+    trait_kind: crate::tir::FnDispatchTrait,
+    self_param_name: String,
+    formatter_param_name: String,
+) -> Option<Vec<WirInstr>> {
+    use crate::tir::FnDispatchTrait;
+    use crate::wir::{WirAbstractHeapType, WirType};
+
+    // No inspectable canonical struct was ever registered → the stub is
+    // dead code. Leave the bodyless declaration in place.
+    let base_type_id = ctx.canonical_inspectable_base_type_id.clone()?;
+    let callback_fn_type_id = ctx.get_or_create_canonical_callback_fn_type();
+    let abstract_struct_nullable = WirType::AbstractRef {
+        heap_type: WirAbstractHeapType::Struct,
+        nullable: true,
+    };
+    let field_name = match trait_kind {
+        FnDispatchTrait::Inspect => "inspect",
+        FnDispatchTrait::InspectAlt => "inspect_alt",
+    };
+
+    // Local that holds the refcast `self` so we can read both
+    // `env` and the chosen vtable slot off it without re-casting.
+    let typed_self = "__typed_self".to_string();
+    Some(vec![
+        WirInstr::DeclareLocal {
+            name: typed_self.clone(),
+            ty: WirType::Ref {
+                type_id: base_type_id.clone(),
+                nullable: false,
+            },
+        },
+        WirInstr::LocalSet {
+            name: typed_self.clone(),
+            value: Box::new(WirInstr::RefCast {
+                type_id: base_type_id.clone(),
+                nullable: false,
+                expr: Box::new(WirInstr::LocalGet {
+                    name: self_param_name,
+                    result_ty: abstract_struct_nullable.clone(),
+                }),
+            }),
+        },
+        WirInstr::CallRef {
+            type_id: callback_fn_type_id.clone(),
+            func_ref: Box::new(WirInstr::StructGet {
+                type_id: base_type_id.clone(),
+                field_name: field_name.to_string(),
+                expr: Box::new(WirInstr::LocalGet {
+                    name: typed_self.clone(),
+                    result_ty: WirType::Ref {
+                        type_id: base_type_id.clone(),
+                        nullable: false,
+                    },
+                }),
+                result_ty: WirType::Ref {
+                    type_id: callback_fn_type_id,
                     nullable: false,
                 },
-            },
-            WirInstr::LocalSet {
-                name: typed_env_local.clone(),
-                value: Box::new(WirInstr::RefCast {
-                    type_id: functor_struct_type_id,
-                    nullable: false,
+            }),
+            args: vec![
+                WirInstr::StructGet {
+                    type_id: base_type_id.clone(),
+                    field_name: "env".to_string(),
                     expr: Box::new(WirInstr::LocalGet {
-                        name: env_local.clone(),
-                        result_ty: WirType::AbstractRef {
-                            heap_type: crate::wir::WirAbstractHeapType::Struct,
-                            nullable: true,
+                        name: typed_self,
+                        result_ty: WirType::Ref {
+                            type_id: base_type_id,
+                            nullable: false,
                         },
                     }),
-                }),
-            },
-        ];
-
-        let mut call_args = vec![WirInstr::LocalGet {
-            name: typed_env_local,
-            result_ty: functor_wir_type.clone(),
-        }];
-        for i in 0..user_param_count {
-            call_args.push(WirInstr::LocalGet {
-                name: format!("__p{i}"),
-                result_ty: user_params_clone[i].clone(),
-            });
-        }
-
-        let call_instr = WirInstr::Call {
-            func_id: call_func_id,
-            args: call_args,
-        };
-        if has_result {
-            body.push(WirInstr::Return {
-                value: Some(Box::new(call_instr)),
-            });
-        } else {
-            body.push(call_instr);
-        }
-
-        let mut param_names = vec![env_local];
-        for i in 0..user_param_count {
-            param_names.push(format!("__p{i}"));
-        }
-
-        // Include module source in wrapper name for debuggability
-        let global_id = ctx.closure_wrapper_funcs.len();
-        let wrapper_name = format!("{module_source}/__closure_wrapper_{global_id}");
-        let wrapper_fq = format!("closure/{wrapper_name}");
-
-        let func = WirFunction {
-            name: WirName { fq: wrapper_fq },
-            type_id: fn_type_id,
-            param_names,
-            body: Some(body),
-            meta: crate::wir::WirMeta::default(),
-            generic_origin: None,
-            effects: Vec::new(),
-            stores: Vec::new(),
-            comp_features: 0,
-            export_name: None,
-        };
-
-        let func_id = ctx.register_function(func);
-        ctx.closure_wrapper_funcs.insert(functor_key, func_id);
-    }
+                    result_ty: abstract_struct_nullable.clone(),
+                },
+                WirInstr::LocalGet {
+                    name: formatter_param_name,
+                    result_ty: abstract_struct_nullable,
+                },
+            ],
+        },
+    ])
 }
 
 /// Translate all pending function bodies from TIR to WIR instructions.
@@ -239,6 +574,37 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
     for pending_body in &pending {
         let tir_func = pending_body.tir_func.borrow();
         let type_table = pending_body.type_table.borrow();
+
+        // `Fn<arity, ret>^Inspect / InspectAlt` dispatch stubs carry
+        // an empty TIR placeholder body; substitute the real body
+        // (vtable indirect call through `CanonicalClosure_K`) here
+        // instead of translating the placeholder. Skipping the
+        // string-matching post-pass keeps name-format knowledge
+        // confined to `name.rs` and `synthesis::traits`.
+        if let Some((trait_kind, _arity, _return_type)) = tir_func.fn_canonical_dispatch() {
+            let self_param_name = tir_func
+                .params
+                .first()
+                .map(|p| p.name.clone())
+                .unwrap_or_else(|| "self".to_string());
+            let formatter_param_name = tir_func
+                .params
+                .get(1)
+                .map(|p| p.name.clone())
+                .unwrap_or_else(|| "f".to_string());
+            drop(tir_func);
+            let _ = type_table;
+            let body = build_fn_canonical_dispatch_body(
+                ctx,
+                trait_kind,
+                self_param_name,
+                formatter_param_name,
+            );
+            if let Some(body) = body {
+                ctx.functions[pending_body.wir_func_index].body = Some(body);
+            }
+            continue;
+        }
 
         if let Some(ref body) = tir_func.body {
             // Build local-name map: params first, then `Let` statement
@@ -274,7 +640,7 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
                 };
                 translator.translate_block(body)
             };
-            drop(type_table);
+            let _ = type_table;
             drop(tir_func);
             ctx.functions[pending_body.wir_func_index].body = Some(wir_body);
         }

@@ -12408,29 +12408,33 @@ fn scan_expression(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
                 let second_kind = if pos + 1 < tokens.len() { tokens[pos + 1].kind } else { TK_EOF };
                 if _gale_kind_set_55(second_kind) {
                     if 21 >= min_prec {
+                        let lr_saved_pos = pos;
                         pos = scan_expression_lr_3(tokens, pos);
-                        if pos < 0 { return -1; }
+                        if pos < 0 { pos = lr_saved_pos; break; }
                     } else {
                         break;
                     }
                 } else if _gale_kind_set_17(second_kind) {
                     if 20 >= min_prec {
+                        let lr_saved_pos = pos;
                         pos = scan_expression_lr_4(tokens, pos);
-                        if pos < 0 { return -1; }
+                        if pos < 0 { pos = lr_saved_pos; break; }
                     } else {
                         break;
                     }
                 } else if second_kind == TK_INTEGER_LITERAL {
                     if 19 >= min_prec {
+                        let lr_saved_pos = pos;
                         pos = scan_expression_lr_5(tokens, pos);
-                        if pos < 0 { return -1; }
+                        if pos < 0 { pos = lr_saved_pos; break; }
                     } else {
                         break;
                     }
                 } else {
                     if 18 >= min_prec {
+                        let lr_saved_pos = pos;
                         pos = scan_expression_lr_6(tokens, pos);
-                        if pos < 0 { return -1; }
+                        if pos < 0 { pos = lr_saved_pos; break; }
                     } else {
                         break;
                     }
@@ -12438,72 +12442,82 @@ fn scan_expression(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
             }
         } else if suffix_kind == TK_LPAREN {
             if 17 >= min_prec {
+                let lr_saved_pos = pos;
                 pos = scan_expression_lr_7(tokens, pos);
-                if pos < 0 { return -1; }
+                if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
             }
         } else if suffix_kind == TK_LSQUAREBRACKET {
             if 16 >= min_prec {
+                let lr_saved_pos = pos;
                 pos = scan_expression_lr_8(tokens, pos);
-                if pos < 0 { return -1; }
+                if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
             }
         } else if suffix_kind == TK_QUESTION {
             if 15 >= min_prec {
+                let lr_saved_pos = pos;
                 pos = scan_expression_lr_9(tokens, pos);
-                if pos < 0 { return -1; }
+                if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
             }
         } else if suffix_kind == TK_KW_AS {
             if 14 >= min_prec {
+                let lr_saved_pos = pos;
                 pos = scan_expression_lr_13(tokens, pos);
-                if pos < 0 { return -1; }
+                if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
             }
         } else if _gale_kind_set_56(suffix_kind) {
             if 13 >= min_prec {
+                let lr_saved_pos = pos;
                 pos = scan_expression_lr_14(tokens, pos);
-                if pos < 0 { return -1; }
+                if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
             }
         } else if _gale_kind_set_57(suffix_kind) {
             if 12 >= min_prec {
+                let lr_saved_pos = pos;
                 pos = scan_expression_lr_15(tokens, pos);
-                if pos < 0 { return -1; }
+                if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
             }
         } else if _gale_kind_set_58(suffix_kind) {
             if suffix_kind == TK_EQEQ {
                 if 7 >= min_prec {
+                    let lr_saved_pos = pos;
                     pos = scan_expression_lr_20(tokens, pos);
-                    if pos < 0 { return -1; }
+                    if pos < 0 { pos = lr_saved_pos; break; }
                 } else {
                     break;
                 }
             } else if suffix_kind == TK_NE {
                 if 7 >= min_prec {
+                    let lr_saved_pos = pos;
                     pos = scan_expression_lr_20(tokens, pos);
-                    if pos < 0 { return -1; }
+                    if pos < 0 { pos = lr_saved_pos; break; }
                 } else {
                     break;
                 }
             } else if suffix_kind == TK_GE {
                 if 7 >= min_prec {
+                    let lr_saved_pos = pos;
                     pos = scan_expression_lr_20(tokens, pos);
-                    if pos < 0 { return -1; }
+                    if pos < 0 { pos = lr_saved_pos; break; }
                 } else {
                     break;
                 }
             } else if suffix_kind == TK_LE {
                 if 7 >= min_prec {
+                    let lr_saved_pos = pos;
                     pos = scan_expression_lr_20(tokens, pos);
-                    if pos < 0 { return -1; }
+                    if pos < 0 { pos = lr_saved_pos; break; }
                 } else {
                     break;
                 }
@@ -12511,15 +12525,17 @@ fn scan_expression(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
                 let second_kind = if pos + 1 < tokens.len() { tokens[pos + 1].kind } else { TK_EOF };
                 if _gale_kind_set_51(second_kind) {
                     if 11 >= min_prec {
+                        let lr_saved_pos = pos;
                         pos = scan_expression_lr_16(tokens, pos);
-                        if pos < 0 { return -1; }
+                        if pos < 0 { pos = lr_saved_pos; break; }
                     } else {
                         break;
                     }
                 } else {
                     if 7 >= min_prec {
+                        let lr_saved_pos = pos;
                         pos = scan_expression_lr_20(tokens, pos);
-                        if pos < 0 { return -1; }
+                        if pos < 0 { pos = lr_saved_pos; break; }
                     } else {
                         break;
                     }
@@ -12528,15 +12544,17 @@ fn scan_expression(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
                 let second_kind = if pos + 1 < tokens.len() { tokens[pos + 1].kind } else { TK_EOF };
                 if _gale_kind_set_51(second_kind) {
                     if 11 >= min_prec {
+                        let lr_saved_pos = pos;
                         pos = scan_expression_lr_16(tokens, pos);
-                        if pos < 0 { return -1; }
+                        if pos < 0 { pos = lr_saved_pos; break; }
                     } else {
                         break;
                     }
                 } else {
                     if 7 >= min_prec {
+                        let lr_saved_pos = pos;
                         pos = scan_expression_lr_20(tokens, pos);
-                        if pos < 0 { return -1; }
+                        if pos < 0 { pos = lr_saved_pos; break; }
                     } else {
                         break;
                     }
@@ -12544,64 +12562,73 @@ fn scan_expression(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
             }
         } else if suffix_kind == TK_AND {
             if 10 >= min_prec {
+                let lr_saved_pos = pos;
                 pos = scan_expression_lr_17(tokens, pos);
-                if pos < 0 { return -1; }
+                if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
             }
         } else if suffix_kind == TK_CARET {
             if 9 >= min_prec {
+                let lr_saved_pos = pos;
                 pos = scan_expression_lr_18(tokens, pos);
-                if pos < 0 { return -1; }
+                if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
             }
         } else if suffix_kind == TK_OR {
             if 8 >= min_prec {
+                let lr_saved_pos = pos;
                 pos = scan_expression_lr_19(tokens, pos);
-                if pos < 0 { return -1; }
+                if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
             }
         } else if suffix_kind == TK_ANDAND {
             if 6 >= min_prec {
+                let lr_saved_pos = pos;
                 pos = scan_expression_lr_21(tokens, pos);
-                if pos < 0 { return -1; }
+                if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
             }
         } else if suffix_kind == TK_OROR {
             if 5 >= min_prec {
+                let lr_saved_pos = pos;
                 pos = scan_expression_lr_22(tokens, pos);
-                if pos < 0 { return -1; }
+                if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
             }
         } else if suffix_kind == TK_DOTDOT {
             if 4 >= min_prec {
+                let lr_saved_pos = pos;
                 pos = scan_expression_lr_23(tokens, pos);
-                if pos < 0 { return -1; }
+                if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
             }
         } else if suffix_kind == TK_DOTDOTEQ {
             if 3 >= min_prec {
+                let lr_saved_pos = pos;
                 pos = scan_expression_lr_26(tokens, pos);
-                if pos < 0 { return -1; }
+                if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
             }
         } else if suffix_kind == TK_EQ {
             if 2 >= min_prec {
+                let lr_saved_pos = pos;
                 pos = scan_expression_lr_27(tokens, pos);
-                if pos < 0 { return -1; }
+                if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
             }
         } else if _gale_kind_set_59(suffix_kind) {
             if 1 >= min_prec {
+                let lr_saved_pos = pos;
                 pos = scan_expression_lr_28(tokens, pos);
-                if pos < 0 { return -1; }
+                if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
             }
@@ -21439,24 +21466,36 @@ fn parse_expression(p: &mut Parser, min_prec: i32 = 0) -> Result<ExpressionNode,
             if suffix_kind == TK_DOT {
                 if _gale_kind_set_55(p.peek_at(1)) {
                     if 21 >= min_prec {
+                        if scan_expression_lr_3(&p.tokens, p.pos) < 0 {
+                            break;
+                        }
                         result = parse_expression_lr_3(p, result, start)?;
                     } else {
                         break;
                     }
                 } else if _gale_kind_set_17(p.peek_at(1)) {
                     if 20 >= min_prec {
+                        if scan_expression_lr_4(&p.tokens, p.pos) < 0 {
+                            break;
+                        }
                         result = parse_expression_lr_4(p, result, start)?;
                     } else {
                         break;
                     }
                 } else if p.peek_at(1) == TK_INTEGER_LITERAL {
                     if 19 >= min_prec {
+                        if scan_expression_lr_5(&p.tokens, p.pos) < 0 {
+                            break;
+                        }
                         result = parse_expression_lr_5(p, result, start)?;
                     } else {
                         break;
                     }
                 } else {
                     if 18 >= min_prec {
+                        if scan_expression_lr_6(&p.tokens, p.pos) < 0 {
+                            break;
+                        }
                         result = parse_expression_lr_6(p, result, start)?;
                     } else {
                         break;
@@ -21465,36 +21504,54 @@ fn parse_expression(p: &mut Parser, min_prec: i32 = 0) -> Result<ExpressionNode,
             }
         } else if suffix_kind == TK_LPAREN {
             if 17 >= min_prec {
+                if scan_expression_lr_7(&p.tokens, p.pos) < 0 {
+                    break;
+                }
                 result = parse_expression_lr_7(p, result, start)?;
             } else {
                 break;
             }
         } else if suffix_kind == TK_LSQUAREBRACKET {
             if 16 >= min_prec {
+                if scan_expression_lr_8(&p.tokens, p.pos) < 0 {
+                    break;
+                }
                 result = parse_expression_lr_8(p, result, start)?;
             } else {
                 break;
             }
         } else if suffix_kind == TK_QUESTION {
             if 15 >= min_prec {
+                if scan_expression_lr_9(&p.tokens, p.pos) < 0 {
+                    break;
+                }
                 result = parse_expression_lr_9(p, result, start)?;
             } else {
                 break;
             }
         } else if suffix_kind == TK_KW_AS {
             if 14 >= min_prec {
+                if scan_expression_lr_13(&p.tokens, p.pos) < 0 {
+                    break;
+                }
                 result = parse_expression_lr_13(p, result, start)?;
             } else {
                 break;
             }
         } else if _gale_kind_set_56(suffix_kind) {
             if 13 >= min_prec {
+                if scan_expression_lr_14(&p.tokens, p.pos) < 0 {
+                    break;
+                }
                 result = parse_expression_lr_14(p, result, start)?;
             } else {
                 break;
             }
         } else if _gale_kind_set_57(suffix_kind) {
             if 12 >= min_prec {
+                if scan_expression_lr_15(&p.tokens, p.pos) < 0 {
+                    break;
+                }
                 result = parse_expression_lr_15(p, result, start)?;
             } else {
                 break;
@@ -21502,24 +21559,36 @@ fn parse_expression(p: &mut Parser, min_prec: i32 = 0) -> Result<ExpressionNode,
         } else if _gale_kind_set_58(suffix_kind) {
             if suffix_kind == TK_EQEQ {
                 if 7 >= min_prec {
+                    if scan_expression_lr_20(&p.tokens, p.pos) < 0 {
+                        break;
+                    }
                     result = parse_expression_lr_20(p, result, start)?;
                 } else {
                     break;
                 }
             } else if suffix_kind == TK_NE {
                 if 7 >= min_prec {
+                    if scan_expression_lr_20(&p.tokens, p.pos) < 0 {
+                        break;
+                    }
                     result = parse_expression_lr_20(p, result, start)?;
                 } else {
                     break;
                 }
             } else if suffix_kind == TK_GE {
                 if 7 >= min_prec {
+                    if scan_expression_lr_20(&p.tokens, p.pos) < 0 {
+                        break;
+                    }
                     result = parse_expression_lr_20(p, result, start)?;
                 } else {
                     break;
                 }
             } else if suffix_kind == TK_LE {
                 if 7 >= min_prec {
+                    if scan_expression_lr_20(&p.tokens, p.pos) < 0 {
+                        break;
+                    }
                     result = parse_expression_lr_20(p, result, start)?;
                 } else {
                     break;
@@ -21527,12 +21596,18 @@ fn parse_expression(p: &mut Parser, min_prec: i32 = 0) -> Result<ExpressionNode,
             } else if suffix_kind == TK_LT {
                 if _gale_kind_set_51(p.peek_at(1)) {
                     if 11 >= min_prec {
+                        if scan_expression_lr_16(&p.tokens, p.pos) < 0 {
+                            break;
+                        }
                         result = parse_expression_lr_16(p, result, start)?;
                     } else {
                         break;
                     }
                 } else {
                     if 7 >= min_prec {
+                        if scan_expression_lr_20(&p.tokens, p.pos) < 0 {
+                            break;
+                        }
                         result = parse_expression_lr_20(p, result, start)?;
                     } else {
                         break;
@@ -21541,12 +21616,18 @@ fn parse_expression(p: &mut Parser, min_prec: i32 = 0) -> Result<ExpressionNode,
             } else if suffix_kind == TK_GT {
                 if _gale_kind_set_51(p.peek_at(1)) {
                     if 11 >= min_prec {
+                        if scan_expression_lr_16(&p.tokens, p.pos) < 0 {
+                            break;
+                        }
                         result = parse_expression_lr_16(p, result, start)?;
                     } else {
                         break;
                     }
                 } else {
                     if 7 >= min_prec {
+                        if scan_expression_lr_20(&p.tokens, p.pos) < 0 {
+                            break;
+                        }
                         result = parse_expression_lr_20(p, result, start)?;
                     } else {
                         break;
@@ -21555,54 +21636,81 @@ fn parse_expression(p: &mut Parser, min_prec: i32 = 0) -> Result<ExpressionNode,
             }
         } else if suffix_kind == TK_AND {
             if 10 >= min_prec {
+                if scan_expression_lr_17(&p.tokens, p.pos) < 0 {
+                    break;
+                }
                 result = parse_expression_lr_17(p, result, start)?;
             } else {
                 break;
             }
         } else if suffix_kind == TK_CARET {
             if 9 >= min_prec {
+                if scan_expression_lr_18(&p.tokens, p.pos) < 0 {
+                    break;
+                }
                 result = parse_expression_lr_18(p, result, start)?;
             } else {
                 break;
             }
         } else if suffix_kind == TK_OR {
             if 8 >= min_prec {
+                if scan_expression_lr_19(&p.tokens, p.pos) < 0 {
+                    break;
+                }
                 result = parse_expression_lr_19(p, result, start)?;
             } else {
                 break;
             }
         } else if suffix_kind == TK_ANDAND {
             if 6 >= min_prec {
+                if scan_expression_lr_21(&p.tokens, p.pos) < 0 {
+                    break;
+                }
                 result = parse_expression_lr_21(p, result, start)?;
             } else {
                 break;
             }
         } else if suffix_kind == TK_OROR {
             if 5 >= min_prec {
+                if scan_expression_lr_22(&p.tokens, p.pos) < 0 {
+                    break;
+                }
                 result = parse_expression_lr_22(p, result, start)?;
             } else {
                 break;
             }
         } else if suffix_kind == TK_DOTDOT {
             if 4 >= min_prec {
+                if scan_expression_lr_23(&p.tokens, p.pos) < 0 {
+                    break;
+                }
                 result = parse_expression_lr_23(p, result, start)?;
             } else {
                 break;
             }
         } else if suffix_kind == TK_DOTDOTEQ {
             if 3 >= min_prec {
+                if scan_expression_lr_26(&p.tokens, p.pos) < 0 {
+                    break;
+                }
                 result = parse_expression_lr_26(p, result, start)?;
             } else {
                 break;
             }
         } else if suffix_kind == TK_EQ {
             if 2 >= min_prec {
+                if scan_expression_lr_27(&p.tokens, p.pos) < 0 {
+                    break;
+                }
                 result = parse_expression_lr_27(p, result, start)?;
             } else {
                 break;
             }
         } else if _gale_kind_set_59(suffix_kind) {
             if 1 >= min_prec {
+                if scan_expression_lr_28(&p.tokens, p.pos) < 0 {
+                    break;
+                }
                 result = parse_expression_lr_28(p, result, start)?;
             } else {
                 break;

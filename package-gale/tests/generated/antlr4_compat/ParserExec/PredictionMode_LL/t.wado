@@ -533,6 +533,20 @@ impl Lexer {
     }
 }
 
+fn try_x(chars: &Array<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != 'X' { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn try_y(chars: &Array<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != 'Y' { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn try_ws(chars: &Array<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
@@ -552,18 +566,6 @@ fn try_ws(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn classify_keyword(chars: &Array<char>, start: i32, end: i32) -> i32 {
-    let len = end - start;
-    if len == 1 {
-        if chars[start].eq_ignore_ascii_case(&'x') {
-            if chars[start + 0] == 'x' { return TK_X; }
-        } else if chars[start].eq_ignore_ascii_case(&'y') {
-            if chars[start + 0] == 'y' { return TK_Y; }
-        }
-    }
-    return -1;
-}
-
 pub fn tokenize(input: &String) -> Array<Token> {
     let mut lexer = Lexer::new(input);
     let mut tokens: Array<Token> = [];
@@ -577,10 +579,12 @@ pub fn tokenize(input: &String) -> Array<Token> {
         if first_char == '\t' || first_char == '\n' || first_char == '\r' || first_char == ' ' {
             end = try_ws(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; }
-        }
-        if best_end > start {
-            let kw_kind = classify_keyword(&lexer.chars, start, best_end);
-            if kw_kind >= 0 { best_kind = kw_kind; }
+        } else if first_char == 'X' {
+            end = try_x(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_X; }
+        } else if first_char == 'Y' {
+            end = try_y(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Y; }
         }
         if best_end <= start {
             let tok = Token::with_trivia(TK_ERROR, lexer.slice(start, start + 1), Span::new(start, start + 1), trivia);

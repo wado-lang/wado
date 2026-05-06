@@ -1,0 +1,28 @@
+// Regression: a `fn(...)` global initialised with a closure literal
+// must validate. Closure construction isn't a Wasm const expression,
+// so the global slot is initialised with `ref.null` as a placeholder
+// and `__initialize_module` writes the real value at startup.
+//
+// Bug history: the WIR-level global type for a closure-typed global
+// stayed non-nullable (closure types lower to `WirType::AbstractRef`,
+// which the lazy-init nullability widening only covered for
+// `WirType::Ref`), so the placeholder `ref.null none` failed Wasm
+// validation with "expected (ref struct), found nullref".
+
+fn apply(f: fn(i32) -> i32, x: i32) -> i32 {
+    return f(x);
+}
+
+global mut CB: fn(i32) -> i32 = |x: i32| x * 10;
+
+test "global closure runs after lazy init" {
+    assert apply(CB, 5) == 50;
+}
+
+test "global closure can be reassigned" {
+    CB = |y: i32| y + 100;
+    assert apply(CB, 5) == 105;
+}
+
+__DATA__
+{"test": {}}

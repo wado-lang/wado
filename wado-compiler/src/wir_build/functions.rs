@@ -324,7 +324,11 @@ fn register_methods(ctx: &mut WirContext<'_>) {
             continue;
         }
 
-        if tir_func.body.is_none() {
+        // Bodyless methods are normally external/CM-import declarations and
+        // get skipped here. The exception is `FnCanonicalDispatch`: WIR build
+        // supplies its body in `translate_function_bodies`, so the entry must
+        // still be registered so call sites resolve.
+        if tir_func.body.is_none() && tir_func.fn_canonical_dispatch().is_none() {
             continue;
         }
 
@@ -526,14 +530,21 @@ fn register_globals(ctx: &mut WirContext<'_>) {
 
         let mut wir_type = ctx.type_id_to_wir_type(type_table, global.ty);
 
-        // For nullable globals (lazy-init reference types), ensure the WIR type is nullable
-        if global.is_nullable
-            && let WirType::Ref { type_id, .. } = wir_type
-        {
-            wir_type = WirType::Ref {
-                type_id,
-                nullable: true,
-            };
+        // For nullable globals (lazy-init reference types, or constant
+        // `null` initialisers on reference-typed globals), widen the WIR
+        // slot to its nullable form so the `ref.null` placeholder in the
+        // Wasm initialiser validates. Both `WirType::Ref` (concrete
+        // struct/array references) and `WirType::AbstractRef` (e.g.
+        // closure-typed globals lowered to abstract `structref`) need
+        // this. Codegen narrows reads back to the non-null type via
+        // `ref.as_non_null` for `lazy_init` globals.
+        if global.is_nullable {
+            match &mut wir_type {
+                WirType::Ref { nullable, .. } | WirType::AbstractRef { nullable, .. } => {
+                    *nullable = true;
+                }
+                _ => {}
+            }
         }
 
         // Convert the initializer to a WIR constant instruction

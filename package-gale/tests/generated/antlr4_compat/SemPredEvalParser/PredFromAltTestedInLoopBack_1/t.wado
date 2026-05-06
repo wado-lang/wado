@@ -545,14 +545,6 @@ fn try_lit_x(chars: &Array<char>, start: i32) -> i32 {
     return pos + 1;
 }
 
-fn classify_keyword(chars: &Array<char>, start: i32, end: i32) -> i32 {
-    let len = end - start;
-    if len == 1 {
-        if chars[start + 0] == 'x' { return TK_X; }
-    }
-    return -1;
-}
-
 pub fn tokenize(input: &String) -> Array<Token> {
     let mut lexer = Lexer::new(input);
     let mut tokens: Array<Token> = [];
@@ -570,10 +562,6 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_S; }
         } else if first_char == 'x' {
             if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_X; }
-        }
-        if best_end > start {
-            let kw_kind = classify_keyword(&lexer.chars, start, best_end);
-            if kw_kind >= 0 { best_kind = kw_kind; }
         }
         if best_end <= start {
             let tok = Token::with_trivia(TK_ERROR, lexer.slice(start, start + 1), Span::new(start, start + 1), trivia);
