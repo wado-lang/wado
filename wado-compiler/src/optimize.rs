@@ -17,6 +17,7 @@
 //! - Hot Field Scalarization (HFS) via `field_scalarize` module
 //! - Select lowering via `select_lowering` module
 //! - Value-copy elision via `value_copy_elide` module
+//! - Short `push_str` simplification via `string_push` module
 //!
 //! The `$value_copy$T` insertion + synthesis steps that materialize Wado's
 //! value-copy semantics live in the lower phase (`lower::value_copy`) — by
@@ -41,6 +42,7 @@ mod ref_elim;
 mod select_lowering;
 mod sroa;
 mod store_load_forward;
+mod string_push;
 mod tmpl_hoist;
 mod value_copy_elide;
 
@@ -63,6 +65,7 @@ use licm::apply_licm;
 use ref_elim::eliminate_unnecessary_refs;
 use sroa::scalar_replace_aggregates;
 use store_load_forward::forward_stores_to_loads;
+use string_push::simplify_short_push_str;
 use tmpl_hoist::hoist_template_buffers;
 use value_copy_elide::elide_synthesized_value_copies;
 
@@ -389,6 +392,14 @@ fn run_optimization_passes(
         run_pass("tir/value_copy_elide", project, profiler, |p| {
             elide_synthesized_value_copies(p);
             false
+        });
+        // Run short-`push_str` simplification *before* inline. Once the
+        // inliner expands `String::push_str`'s body the `MethodCall` node is
+        // gone and the literal-recognising rewrite can no longer match,
+        // leaving short-string formatting paths (e.g. `fpfmt.wado`'s
+        // `buf.push_str("0.")`) paying full per-call allocation cost.
+        changed |= run_pass("tir/string_push", project, profiler, |p| {
+            simplify_short_push_str(p)
         });
         changed |= run_pass("tir/inline", project, profiler, |p| {
             inline_functions(p, threshold)
