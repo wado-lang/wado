@@ -174,6 +174,9 @@ impl RadixRouter {
             }
             return -1;
         }
+        // At most one literal edge can share each first byte (radix
+        // invariant), so the loop becomes "find that one candidate, then
+        // either descend or fall through to param/wildcard".
         let first = path.get_byte(pos);
         let nedges = self.nodes[node_id].edges.len();
         for let mut i = 0; i < nedges; i += 1 {
@@ -182,7 +185,7 @@ impl RadixRouter {
             }
             let elen = self.nodes[node_id].edges[i].label.len();
             if plen - pos < elen {
-                continue;
+                break;
             }
             let mut k = 1;
             let mut ok = true;
@@ -194,19 +197,21 @@ impl RadixRouter {
                 k += 1;
             }
             if !ok {
-                continue;
+                break;
             }
-            let saved = params.keys();
+            // Recursive walk handles its own param/wildcard rollback, so
+            // there is no need to snapshot/restore params at this level.
             let h = self.walk(self.nodes[node_id].edges[i].target, path, pos + elen, plen, method, params);
             if h >= 0 {
                 return h;
             }
-            rollback_params(params, &saved);
-            // Per radix invariant there is at most one edge per first byte.
             break;
         }
 
-        // Param: consume one '/'-delimited segment, then descend.
+        // Param: consume one '/'-delimited segment, then descend. Save the
+        // *previous* value (if any) of the param name so a same-name param
+        // at an outer level survives a failed inner attempt — O(log n) and
+        // allocation-free, unlike a full keys() snapshot.
         if self.nodes[node_id].param_target >= 0 {
             let mut end = pos;
             while end < plen && path.get_byte(end) != '/' as u8 {
@@ -214,40 +219,26 @@ impl RadixRouter {
             }
             if end > pos {
                 let pname = self.nodes[node_id].param_name;
-                let value = path.substr_bytes(pos, end);
-                params[pname] = value;
+                let prev = params.get(pname);
+                params[pname] = path.substr_bytes(pos, end);
                 let h = self.walk(self.nodes[node_id].param_target, path, end, plen, method, params);
                 if h >= 0 {
                     return h;
                 }
-                params.remove(pname);
+                match prev {
+                    Some(v) => { params[pname] = v; },
+                    None => { params.remove(pname); },
+                }
             }
         }
 
         // Wildcard: consume the entire remaining path.
         if self.nodes[node_id].wildcard_handler >= 0 && self.nodes[node_id].wildcard_method == method {
-            let rest = path.substr_bytes(pos, plen);
-            params[self.nodes[node_id].wildcard_name] = rest;
+            params[self.nodes[node_id].wildcard_name] = path.substr_bytes(pos, plen);
             return self.nodes[node_id].wildcard_handler;
         }
 
         return -1;
-    }
-}
-
-fn rollback_params(params: &mut TreeMap<String, String>, snapshot: &Array<String>) {
-    let cur = params.keys();
-    for let k of cur {
-        let mut found = false;
-        for let s of snapshot {
-            if *s == k {
-                found = true;
-                break;
-            }
-        }
-        if !found {
-            params.remove(k);
-        }
     }
 }
 
