@@ -25,6 +25,59 @@ recognition rule. The remaining work splits into:
 
 (none currently)
 
+## Correctness: full-context LL(\*) prediction (next focus)
+
+Gale's prediction is essentially SLL — it picks an alt by inspecting
+the current and (for some sites) one or two lookahead tokens, then
+commits. ANTLR4's prediction is LL(\*): when SLL is ambiguous it
+considers the full call-stack context, including what the caller
+expects to follow. Real-world `.g4` files rely on this in subtle
+places, and grammars that hit those cases tokenize the same input but
+choose a different alt than ANTLR4 would.
+
+This is **the next planned correctness focus** — Stage C
+(action/predicate execution) sits behind it because the harder LL
+cases in real grammars depend on predicates as a tiebreaker, so the
+prediction story has to be settled first.
+
+The minimal reproducer lives at
+`tests/antlr4-compat/grammars/ParserExec/PredictionMode_LL.g4`:
+
+```antlr
+r : (a b | a) EOF ;
+a : X Y? ;
+b : Y ;
+```
+
+For input `X Y` ANTLR4 (with `predictionMode=LL`) picks alt 1
+(`a b`) so that `a` matches just `X` and `b` consumes `Y`. Gale picks
+alt 2 (`a` only) because its scan for `a` is greedy on `Y?` and has
+no way to learn that `Y` belongs to the follow set (`b` then EOF).
+Result: `(r (a X Y))` instead of `(r (a X) (b Y))`.
+
+Fixing this requires routing follow-set information into rule scans
+so that an optional whose first token is in follow stops being
+greedy at the call site. The cleanest design is to generate a
+follow-aware variant of each affected scan (or pass an explicit
+`follow_mask` parameter), invoked from the alt's scan rather than
+the generic global scan.
+
+Sketch:
+
+- At each call site, compute the static follow set FOLLOW(rule_call)
+  from the surrounding alt elements.
+- For each rule whose body contains a tail-position optional whose
+  first token can appear in some caller's FOLLOW, generate a
+  per-call-site scan variant (or a `follow_mask: u64` parameter on
+  the global scan) so the optional's "should I consume?" decision
+  becomes context-aware.
+- Update the alt-dispatch and LR-loop predictors to use the new
+  follow-aware scan in place of the greedy global one. The existing
+  scan remains the fallback when no caller cares about the follow.
+
+Tracked descriptor: `ParserExec/PredictionMode_LL` (`stage_b_todo`
+in `tests/antlr4-compat/status.toml`).
+
 ## Correctness: full ANTLR4 compatibility (action / predicate execution)
 
 Gale currently **recognizes** but **silently discards** the contents of

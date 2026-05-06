@@ -295,15 +295,13 @@ invocation), runs the generated parser on `[input]`, and compares
 
 Current numbers (run `wado test package-gale/tests/antlr4-compat`):
 
-- **70 Stage B tests emitted** — 57 pass, 13 `#[TODO]` (known
+- **74 Stage B tests emitted** — 70 pass, 4 `#[TODO]` (known
   divergences tracked in `[stage_b_todo]` of `status.toml`).
-- **4 `[stage_b_skip]`** — list-label LR alts
-  (`LeftRecursion/ReturnValueAndActionsList[12]_*`) where
-  `b+=expr ',' b+=expr` produces two distinct `Array<ExprNode>`
-  fields (`b` and `b_2`) instead of appending both to one list, and
-  the LR helper passes `left: ExprNode` into the array-typed field —
-  ANTLR4 `+=` semantic gap rather than a descriptor bug.
-- **185 auto-skip** — descriptor's `[output]` is not a parse tree at
+- **0 `[stage_b_skip]`** — the historical four
+  (`LeftRecursion/ReturnValueAndActionsList[12]_[13]`) were unblocked
+  by the LR-helper list-label fix described under
+  [Recently closed gaps](#recently-closed-gaps) below.
+- **~185 auto-skip** — descriptor's `[output]` is not a parse tree at
   all (lexer token-type names, Token.toString dumps, ATN decision
   traces, action-block prints) or its `[output]` starts with a
   rule other than `[start]` (the descriptor's `@after` action prints
@@ -328,25 +326,55 @@ Three independent pieces make up the wiring:
    `output_dir`, avoiding cross-grammar name collisions in
    generated code.
 
-The 13 `#[TODO]` entries are the natural Stage B backlog. They
-break down into three buckets:
+The 4 `#[TODO]` entries are the natural Stage B backlog. They split
+into two buckets:
 
-- **LR rewriting tree-shape divergence** —
-  `LeftRecursion/{Expressions_7, PrefixAndOtherAlt_1,
-  PrefixAndOtherAlt_2}` plus `LeftRecursion/SemPredFailOption`
-  (where the failing predicate guard is silently dropped because
-  action bodies are skipped — Stage C territory).
-- **Parse failures on left-recursion edge cases** —
-  `LeftRecursion/JavaExpressions_{7,8,9,12}` and
+- **Full-context LL(\*) prediction (next focus)** —
+  `ParserExec/PredictionMode_LL`, where `(a b | a) EOF` with a
+  greedy `a : X Y?` makes Gale's first-token dispatch pick `a` only
+  while ANTLR4's LL prediction picks `a b` based on the follow set.
+  Sketch and design notes in [`TODO.md`](./TODO.md). This is the
+  planned next compatibility track because the harder cases in the
+  Stage C bucket below depend on predicates as a prediction
+  tiebreaker, so prediction has to be sound first.
+- **Action / predicate execution (Stage C territory)** —
+  `LeftRecursion/SemPredFailOption` (the failing predicate guard is
+  silently dropped because action bodies are skipped),
+  `SemPredEvalParser/PredFromAltTestedInLoopBack_{1,2}` (semantic
+  predicate enforcement).
+
+### Recently closed gaps
+
+The following Stage B blockers are now fixed and the descriptors are
+emitted plain (no `#[TODO]` / `[stage_b_skip]`):
+
+- **Lexer keyword classification was unreachable when no carrier rule
+  existed.** Single-literal lexer rules (`A : 'A' ;`) were collected
+  as keyword candidates even when no longer non-keyword rule could
+  match their first character — the tokenize loop's
+  `if best_end > start { classify_keyword(...) }` gate could never
+  fire, so `A` and friends were never produced. `collect_keyword_rules`
+  now demotes such candidates back to the regular dispatch path.
+  Closed `ParserExec/BuildParseTree_TRUE`.
+- **LR continuation prediction failed the whole scan when a suffix's
+  first token matched but the suffix did not complete.**
+  `gen_scan_lr_call_with_prec` returned `-1` from the entire scan on
+  suffix failure; the enclosing `statement*` driver therefore matched
+  zero statements and reported `expected EOF, got "a"` at position 0.
+  The scan side now saves `pos` and restores+breaks on failure; the
+  parse side consults the scan twin first and only commits when the
+  scan confirms the suffix would succeed. Closed
   `LeftRecursion/PrecedenceFilterConsidersContext`.
-- **Predicates and full-context LL** —
-  `ParserExec/{BuildParseTree_TRUE, PredictionMode_LL}`,
-  `SemPredEvalParser/PredFromAltTestedInLoopBack_{1,2}`. All fall
-  under Stage C (action-body translation) for a full fix.
+- **List-label LR alts (`b+=expr`) generated invalid Wado.** When the
+  LR-rewritten recursive position carries a `+=` label (or any other
+  `+=` label appears later in the suffix), the IR field is
+  `Array<T>` but the helper assigned a single `T` value. The helper
+  now wraps both the inherited `left` and each per-iteration value in
+  `[...] as Array<T>`. Closed all four
+  `LeftRecursion/ReturnValueAndActionsList[12]_[13]` skips.
 
-Two recent fixes that closed earlier `[stage_b_skip]` entries are
-worth noting because they each unblocked ~10 % of the bucket and
-the underlying compiler / codegen bugs were both real:
+Earlier closed gaps worth noting (each unblocked ~10 % of the
+historical Stage B bucket and exposed real compiler / codegen bugs):
 
 - **Wado compiler ICE on struct-field rebind in `export fn`** — the
   `sroa_multi_value_returns` WIR pass scalarised the function
