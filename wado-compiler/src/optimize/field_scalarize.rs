@@ -1168,6 +1168,16 @@ fn collect_locals_introduced_in_block(block: &TirBlock) -> IndexSet<u32> {
         }
 
         fn visit_expr(&mut self, expr: &TirExpr) {
+            // Closure bodies live in a separate local-index namespace from
+            // the enclosing function. Recursing into them would mistake
+            // closure-local indices for outer-function locals and over-
+            // exclude unrelated outer locals from scalarization.
+            if matches!(
+                expr.kind,
+                TirExprKind::Closure { .. } | TirExprKind::ClosureToCanonical { .. }
+            ) {
+                return;
+            }
             if let TirExprKind::Match { arms, .. } = &expr.kind {
                 for arm in arms {
                     self.visit_pattern(&arm.pattern);
