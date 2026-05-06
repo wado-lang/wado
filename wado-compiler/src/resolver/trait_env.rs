@@ -66,7 +66,7 @@ pub(crate) type TraitImplModuleIndex = IndexMap<(String, String), ModuleSource>;
 /// Contains pre-built indices for fast lookup of trait implementations,
 /// trait declarations, and blanket impls. Built once before resolution
 /// begins and shared (via `Arc`) across all module resolvers.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TraitEnv {
     /// Type name → impl blocks that implement traits for that type.
     pub(super) impl_index: TraitImplIndex,
@@ -90,6 +90,24 @@ pub struct TraitEnv {
     /// receiver type is declared (e.g. `impl Display for String` lives in
     /// `core:prelude/format`, not the module that declares `String`).
     pub(crate) trait_impl_modules: TraitImplModuleIndex,
+    /// Layer added in the synthesis phase: auto-derived / generated impls
+    /// (`Eq`, `Ord`, `Inspect`, `Display`, `From`, serde adapters, …) that
+    /// were not present in the AST. `None` until `extend_with_synthesised`
+    /// runs (e.g. on the LSP path, which never reaches synthesis). Once
+    /// populated, the field is itself immutable; later phases either query
+    /// it or replace the whole `TraitEnv` with a further-extended copy.
+    pub(crate) synthesised: Option<SynthesisedImpls>,
+}
+
+/// Trait impls produced by the synthesis phase but not present in the AST.
+/// Populated by [`TraitEnv::extend_with_synthesised`].
+#[derive(Debug, Default, Clone)]
+pub struct SynthesisedImpls {
+    /// `(type_name, trait_name)` → `ModuleSource` for synthesized non-blanket
+    /// trait impls (auto-derives plus the impls produced by `from_synth` /
+    /// `serde_synth`). Mirrors the AST-level `trait_impl_modules` shape and
+    /// participates in the same lookup via [`TraitEnv::impl_module_for`].
+    pub trait_impl_modules: TraitImplModuleIndex,
 }
 
 impl TraitEnv {
@@ -264,21 +282,44 @@ impl TraitEnv {
                 static_method_index,
                 resource_static_method_index,
                 trait_impl_modules,
+                synthesised: None,
             }),
             violations,
         )
     }
 
     /// Look up the module that defines `impl <trait_name> for <type_name>`.
-    /// Returns `None` for blanket impls, auto-derived/synthesized impls, and
-    /// types not declared in the loaded AST (e.g. anonymous function types).
+    /// Consults the AST layer first, then the synthesis layer (if populated).
+    /// Returns `None` for blanket impls and types not represented as a
+    /// concrete impl (e.g. anonymous function types whose `Inspect` is
+    /// auto-derived per-module by the synthesis phase).
     pub(crate) fn impl_module_for(
         &self,
         type_name: &str,
         trait_name: &str,
     ) -> Option<&ModuleSource> {
-        self.trait_impl_modules
-            .get(&(type_name.to_string(), trait_name.to_string()))
+        let key = (type_name.to_string(), trait_name.to_string());
+        self.trait_impl_modules.get(&key).or_else(|| {
+            self.synthesised
+                .as_ref()
+                .and_then(|s| s.trait_impl_modules.get(&key))
+        })
+    }
+
+    /// Produce a new `TraitEnv` with the synthesis-layer impls populated.
+    ///
+    /// `synth_impls` lists every `(type_name, trait_name) -> ModuleSource`
+    /// triple discovered in TIR after the synthesis phase has finished
+    /// adding auto-derived / generated impls. Designed to be called once
+    /// per pipeline run (the synthesis phase) — calling again replaces the
+    /// existing layer.
+    pub fn extend_with_synthesised(
+        prev: Arc<Self>,
+        synth_impls: SynthesisedImpls,
+    ) -> Arc<Self> {
+        let mut env = Arc::try_unwrap(prev).unwrap_or_else(|shared| (*shared).clone());
+        env.synthesised = Some(synth_impls);
+        Arc::new(env)
     }
 }
 

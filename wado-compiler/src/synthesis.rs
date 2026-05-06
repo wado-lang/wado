@@ -19,7 +19,9 @@ pub mod serde_synth;
 pub mod template;
 pub mod traits;
 
+use crate::name::ModuleSource;
 use crate::package::Package;
+use crate::resolver::trait_env::{SynthesisedImpls, TraitEnv};
 
 /// Run pre-monomorphize synthesis phases on the project.
 ///
@@ -45,6 +47,12 @@ pub fn synthesize(project: Package) -> Result<Package, String> {
 
     // Generate Serialize/Deserialize impls from `impl Trait for Type;` requests.
     serde_synth::synthesize_serde(&mut project);
+
+    // Snapshot the synthesis-layer impls (auto-derives + From/serde adapters)
+    // onto `TraitEnv` so subsequent phases query a single source of truth
+    // instead of rescanning TIR. The AST layer is preserved unchanged.
+    let synth_impls = collect_synthesised_impls(&project);
+    project.trait_env = TraitEnv::extend_with_synthesised(project.trait_env, synth_impls);
 
     // Expand template strings into Display/Inspect trait calls.
     // This must run after traits synthesis (which generates the impls)
@@ -72,4 +80,55 @@ pub fn synthesize(project: Package) -> Result<Package, String> {
 
     let project = cm_binding::generate_adapters(project)?;
     Ok(project)
+}
+
+/// Collect every `(type_name, trait_name) -> ModuleSource` triple that the
+/// synthesis phase added to TIR, regardless of which sub-pass produced it
+/// (auto-derives, `from_synth`, `serde_synth`). Walks both `module.functions`
+/// (free functions and synthesized wrappers) and `module.impls` (user-written
+/// impl blocks lowered into TIR).
+///
+/// User-written impls already live in [`TraitEnv::trait_impl_modules`] from
+/// the AST layer, so they are excluded here to keep the synthesis layer a
+/// genuine "delta" on top of the AST.
+fn collect_synthesised_impls(project: &Package) -> SynthesisedImpls {
+    let mut impls = SynthesisedImpls::default();
+    let ast_layer = &project.trait_env.trait_impl_modules;
+    let mut record = |type_name: String, trait_name: String, module: &ModuleSource| {
+        let key = (type_name, trait_name);
+        if ast_layer.contains_key(&key) {
+            return;
+        }
+        impls.trait_impl_modules
+            .entry(key)
+            .or_insert_with(|| module.clone());
+    };
+    for tir_module in project.tir_modules.values() {
+        let module_source = &tir_module.module_source;
+        for func_rc in &tir_module.functions {
+            let func = func_rc.borrow();
+            if let Some(ref info) = func.method_info
+                && let Some(ref trait_name) = info.trait_name
+            {
+                record(
+                    info.base_struct_name.clone(),
+                    trait_name.clone(),
+                    module_source,
+                );
+            }
+        }
+        for impl_block in &tir_module.impls {
+            let Some(ref trait_name) = impl_block.trait_name else {
+                continue;
+            };
+            for method in &impl_block.methods {
+                if let Some(ref info) = method.method_info
+                    && info.trait_name.is_some()
+                {
+                    record(info.base_struct_name.clone(), trait_name.clone(), module_source);
+                }
+            }
+        }
+    }
+    impls
 }
