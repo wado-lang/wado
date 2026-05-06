@@ -202,11 +202,9 @@ type "functype//wasi/task-return" = fn(i32, i32, i32, i64, i32, i32, i32, i32); 
 
 type "functype//wado-compiler/tests/fixtures/http-error-code-variants.wado/__cm_export__handle" = fn(i32);  // TypeId(34)
 
-type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(35)
+type "functype//core:internal/cm_lower_string" = fn(ref "core:prelude/string.wado//String") -> i64;  // TypeId(35)
 
-type "functype//core:internal/cm_lower_string" = fn(ref "core:prelude/string.wado//String") -> i64;  // TypeId(36)
-
-type "functype//wado-compiler/tests/fixtures/http-error-code-variants.wado/handle" = fn();  // TypeId(37)
+type "functype//wado-compiler/tests/fixtures/http-error-code-variants.wado/handle" = fn();  // TypeId(36)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
@@ -655,32 +653,28 @@ fn "wado-compiler/tests/fixtures/http-error-code-variants.wado/__cm_export__hand
     "wado-compiler/tests/fixtures/http-error-code-variants.wado/handle"();
 }
 
-fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
+fn "core:internal/cm_lower_string"(s) {
+    let len_1: i32;
+    let bytes: ref builtin::array<u8>;
+    let ptr_3: i32;
     let i: i32;
-    __for_1: block {
+    len_1 = s.used;
+    bytes = s.repr;
+    ptr_3 = "mem/realloc"(0, 0, 1, len_1);
+    __inline_gc_array_to_memory_2____for_1: block {
         i = 0;
         block {
             l39: loop {
-                if i >= len {
-                    break __for_1;
+                if i >= len_1 {
+                    break __inline_gc_array_to_memory_2____for_1;
                 }
-                builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
+                builtin::store_u8(ptr_3 + i, builtin::array_get_u8(bytes, i));
                 i = i + 1;
                 continue l39;
             };
         };
     };
-}
-
-fn "core:internal/cm_lower_string"(s) {
-    let len: i32;
-    let bytes: ref builtin::array<u8>;
-    let ptr: i32;
-    len = s.used;
-    bytes = s.repr;
-    ptr = "mem/realloc"(0, 0, 1, len);
-    "core:internal/gc_array_to_memory"(bytes, ptr, len);
-    return builtin::i64_extend_i32_s(ptr) | (builtin::i64_extend_i32_s(len) << 32_i64);
+    return builtin::i64_extend_i32_s(ptr_3) | (builtin::i64_extend_i32_s(len_1) << 32_i64);
 }
 
 export fn "wado-compiler/tests/fixtures/http-error-code-variants.wado/__cm_export__handle" as "handle"

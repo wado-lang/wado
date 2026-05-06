@@ -79,12 +79,12 @@ Deserialize canada.json (2.3 MB, geographic coordinates).
 
 Deserialize citm_catalog.json (1.7 MB, event catalog).
 
-| Implementation              |     Time | vs best |
-| --------------------------- | -------: | ------: |
-| serde_json (Rust native)    |  2.45 ms |   1.00x |
-| JSON.parse (Node)           |  4.27 ms |   1.74x |
+| Implementation             |     Time | vs best |
+| -------------------------- | -------: | ------: |
+| serde_json (Rust native)   |  2.45 ms |   1.00x |
+| JSON.parse (Node)          |  4.27 ms |   1.74x |
 | **Wado** v2 (hand-rolled¹) | 17.95 ms |   7.33x |
-| **Wado** core:json          | 40.48 ms |  16.52x |
+| **Wado** core:json         | 40.48 ms |  16.52x |
 
 ¹ `json_catalog/json_catalog_v2.wado` is a hand-rolled CitmCatalog parser
 PoC (no `core:json` / `core:serde`). Kept as a marker of the upper bound
@@ -104,11 +104,11 @@ Parse 81 SQL statements (13 KB) x 100 iterations. Gale-generated parser vs sqlpa
 
 Highlight 81 SQL statements (13 KB) x 100 iterations. Gale-generated highlighter vs tree-sitter.
 
-| Implementation             |     Time | vs best |
-| -------------------------- | -------: | ------: |
-| tree-sitter (Rust native)  |   498 ms |   1.00x |
-| tree-sitter (Wasm)         |   677 ms |   1.36x |
-| **Wado** (Gale)            | 4,672 ms |   9.38x |
+| Implementation            |     Time | vs best |
+| ------------------------- | -------: | ------: |
+| tree-sitter (Rust native) |   498 ms |   1.00x |
+| tree-sitter (Wasm)        |   677 ms |   1.36x |
+| **Wado** (Gale)           | 4,672 ms |   9.38x |
 
 ## Running
 

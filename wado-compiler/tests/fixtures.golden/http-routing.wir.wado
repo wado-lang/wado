@@ -235,25 +235,19 @@ type "functype//wado-compiler/tests/fixtures/http-routing.wado/__cm_export__hand
 
 type "functype//core:internal/memory_to_gc_array" = fn(i32, i32) -> ref builtin::array<u8>;  // TypeId(46)
 
-type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(47)
+type "functype//core:internal/cm_lower_string" = fn(ref "core:prelude/string.wado//String") -> i64;  // TypeId(47)
 
-type "functype//core:internal/cm_lower_string" = fn(ref "core:prelude/string.wado//String") -> i64;  // TypeId(48)
+type "functype//wasi/future-new" = fn() -> i64;  // TypeId(48)
 
-type "functype//core:prelude/string.wado/String^Eq::eq" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> bool;  // TypeId(49)
+type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(49)
 
-type "functype//core:prelude/string.wado/String^Eq::eq_bytes" = fn(ref builtin::array<u8>, ref builtin::array<u8>, i32) -> bool;  // TypeId(50)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(50)
 
-type "functype//wasi/future-new" = fn() -> i64;  // TypeId(51)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(51)
 
-type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(52)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(52)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(53)
-
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(54)
-
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(55)
-
-type "functype//wado-compiler/tests/fixtures/http-routing.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> [i32, i32];  // TypeId(56)
+type "functype//wado-compiler/tests/fixtures/http-routing.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> [i32, i32];  // TypeId(53)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
@@ -410,6 +404,16 @@ fn "wado-compiler/tests/fixtures/http-routing.wado/handle"(request) {
     let __ptr_157: i32;
     let __len_158: i32;
     let v: ref "core:prelude/string.wado//String";
+    let other_165: ref "core:prelude/string.wado//String";
+    let len_a_166: i32;
+    let other_168: ref "core:prelude/string.wado//String";
+    let len_a_169: i32;
+    let a_174: ref builtin::array<u8>;
+    let b_175: ref builtin::array<u8>;
+    let i_177: i32;
+    let a_182: ref builtin::array<u8>;
+    let b_183: ref builtin::array<u8>;
+    let i_185: i32;
     path = "wado-compiler/tests/fixtures/http-routing.wado/__cm_binding__Request_get_path_with_query"(request);
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/future-new"();
@@ -426,9 +430,67 @@ fn "wado-compiler/tests/fixtures/http-routing.wado/handle"(request) {
             break __inline__value_copy_T19_2: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(v.repr)), used: v.used };
             unreachable;
         };
-        if "core:prelude/string.wado/String^Eq::eq"(p, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("/not-found"), used: 10 }) {
+        if __inline_String_Eq__eq_3: block -> bool {
+            other_165 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("/not-found"), used: 10 };
+            len_a_166 = p.used;
+            if len_a_166 != 10 {
+                break __inline_String_Eq__eq_3: 0;
+            }
+            __inline_String_Eq__eq_bytes_4: block -> bool {
+                a_174 = p.repr;
+                b_175 = other_165.repr;
+                __inline_String_Eq__eq_bytes_4____for_1: block {
+                    i_177 = 0;
+                    block {
+                        l4: loop {
+                            if i_177 >= len_a_166 {
+                                break __inline_String_Eq__eq_bytes_4____for_1;
+                            }
+                            if builtin::array_get_u8(a_174, i_177) != builtin::array_get_u8(b_175, i_177) {
+                                break __inline_String_Eq__eq_bytes_4: 0;
+                            }
+                            i_177 = i_177 + 1;
+                            continue l4;
+                        };
+                    };
+                };
+                break __inline_String_Eq__eq_bytes_4: 1;
+                unreachable;
+            };
+            break __inline_String_Eq__eq_3;
+            unreachable;
+        } {
             drop("wado-compiler/tests/fixtures/http-routing.wado/__cm_binding__Response_set_status_code"(response, 404));
-        } else if "core:prelude/string.wado/String^Eq::eq"(p, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("/created"), used: 8 }) {
+        } else if __inline_String_Eq__eq_4: block -> bool {
+            other_168 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("/created"), used: 8 };
+            len_a_169 = p.used;
+            if len_a_169 != 8 {
+                break __inline_String_Eq__eq_4: 0;
+            }
+            __inline_String_Eq__eq_bytes_9: block -> bool {
+                a_182 = p.repr;
+                b_183 = other_168.repr;
+                __inline_String_Eq__eq_bytes_9____for_1: block {
+                    i_185 = 0;
+                    block {
+                        l10: loop {
+                            if i_185 >= len_a_169 {
+                                break __inline_String_Eq__eq_bytes_9____for_1;
+                            }
+                            if builtin::array_get_u8(a_182, i_185) != builtin::array_get_u8(b_183, i_185) {
+                                break __inline_String_Eq__eq_bytes_9: 0;
+                            }
+                            i_185 = i_185 + 1;
+                            continue l10;
+                        };
+                    };
+                };
+                break __inline_String_Eq__eq_bytes_9: 1;
+                unreachable;
+            };
+            break __inline_String_Eq__eq_4;
+            unreachable;
+        } {
             drop("wado-compiler/tests/fixtures/http-routing.wado/__cm_binding__Response_set_status_code"(response, 201));
         }
     }
@@ -828,74 +890,41 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {
     __for_0: block {
         i = 0;
         block {
-            l46: loop {
+            l56: loop {
                 if i >= len {
                     break __for_0;
                 }
                 builtin::array_set_u8(arr, i, builtin::load_u8(ptr + i));
                 i = i + 1;
-                continue l46;
+                continue l56;
             };
         };
     };
     return arr;
 }
 
-fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
-    let i: i32;
-    __for_1: block {
-        i = 0;
-        block {
-            l49: loop {
-                if i >= len {
-                    break __for_1;
-                }
-                builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
-                i = i + 1;
-                continue l49;
-            };
-        };
-    };
-}
-
 fn "core:internal/cm_lower_string"(s) {
-    let len: i32;
+    let len_1: i32;
     let bytes: ref builtin::array<u8>;
-    let ptr: i32;
-    len = s.used;
-    bytes = s.repr;
-    ptr = "mem/realloc"(0, 0, 1, len);
-    "core:internal/gc_array_to_memory"(bytes, ptr, len);
-    return builtin::i64_extend_i32_s(ptr) | (builtin::i64_extend_i32_s(len) << 32_i64);
-}
-
-fn "core:prelude/string.wado/String^Eq::eq"(self, other) {
-    let len_a: i32;
-    len_a = self.used;
-    if len_a != other.used {
-        return 0;
-    }
-    return "core:prelude/string.wado/String^Eq::eq_bytes"(self.repr, other.repr, len_a);
-}
-
-fn "core:prelude/string.wado/String^Eq::eq_bytes"(a, b, len) {
+    let ptr_3: i32;
     let i: i32;
-    __for_1: block {
+    len_1 = s.used;
+    bytes = s.repr;
+    ptr_3 = "mem/realloc"(0, 0, 1, len_1);
+    __inline_gc_array_to_memory_2____for_1: block {
         i = 0;
         block {
-            l53: loop {
-                if i >= len {
-                    break __for_1;
+            l59: loop {
+                if i >= len_1 {
+                    break __inline_gc_array_to_memory_2____for_1;
                 }
-                if builtin::array_get_u8(a, i) != builtin::array_get_u8(b, i) {
-                    return 0;
-                }
+                builtin::store_u8(ptr_3 + i, builtin::array_get_u8(bytes, i));
                 i = i + 1;
-                continue l53;
+                continue l59;
             };
         };
     };
-    return 1;
+    return builtin::i64_extend_i32_s(ptr_3) | (builtin::i64_extend_i32_s(len_1) << 32_i64);
 }
 
 export fn "wado-compiler/tests/fixtures/http-routing.wado/__cm_export__handle" as "handle"

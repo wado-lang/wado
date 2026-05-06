@@ -273,27 +273,25 @@ type "functype//wado-compiler/tests/fixtures/http-client-send-error.wado/__cm_ex
 
 type "functype//core:internal/memory_to_gc_array" = fn(i32, i32) -> ref builtin::array<u8>;  // TypeId(56)
 
-type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(57)
+type "functype//core:internal/cm_lower_string" = fn(ref "core:prelude/string.wado//String") -> i64;  // TypeId(57)
 
-type "functype//core:internal/cm_lower_string" = fn(ref "core:prelude/string.wado//String") -> i64;  // TypeId(58)
+type "functype//core:prelude/types.wado/AsyncCall<Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>") -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(58)
 
-type "functype//core:prelude/types.wado/AsyncCall<Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>") -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(59)
+type "functype//wasi/future-new" = fn() -> i64;  // TypeId(59)
 
-type "functype//wasi/future-new" = fn() -> i64;  // TypeId(60)
+type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(60)
 
-type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(61)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(61)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(62)
+type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(62)
 
-type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(63)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(63)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(64)
+type "functype//wado-compiler/tests/fixtures/http-client-send-error.wado/__cm_binding__Request_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32, ref "core:prelude/types.wado//Option<wasi:http/types.wado/RequestOptions>") -> [i32, i32];  // TypeId(64)
 
-type "functype//wado-compiler/tests/fixtures/http-client-send-error.wado/__cm_binding__Request_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32, ref "core:prelude/types.wado//Option<wasi:http/types.wado/RequestOptions>") -> [i32, i32];  // TypeId(65)
+type "functype//core:internal/cm_waitable_set_wait" = fn(i32) -> [i32, i32, u32];  // TypeId(65)
 
-type "functype//core:internal/cm_waitable_set_wait" = fn(i32) -> [i32, i32, u32];  // TypeId(66)
-
-type "functype//wado-compiler/tests/fixtures/http-client-send-error.wado/handle" = fn();  // TypeId(67)
+type "functype//wado-compiler/tests/fixtures/http-client-send-error.wado/handle" = fn();  // TypeId(66)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
@@ -937,32 +935,28 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {
     return arr;
 }
 
-fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
+fn "core:internal/cm_lower_string"(s) {
+    let len_1: i32;
+    let bytes: ref builtin::array<u8>;
+    let ptr_3: i32;
     let i: i32;
-    __for_1: block {
+    len_1 = s.used;
+    bytes = s.repr;
+    ptr_3 = "mem/realloc"(0, 0, 1, len_1);
+    __inline_gc_array_to_memory_2____for_1: block {
         i = 0;
         block {
             l52: loop {
-                if i >= len {
-                    break __for_1;
+                if i >= len_1 {
+                    break __inline_gc_array_to_memory_2____for_1;
                 }
-                builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
+                builtin::store_u8(ptr_3 + i, builtin::array_get_u8(bytes, i));
                 i = i + 1;
                 continue l52;
             };
         };
     };
-}
-
-fn "core:internal/cm_lower_string"(s) {
-    let len: i32;
-    let bytes: ref builtin::array<u8>;
-    let ptr: i32;
-    len = s.used;
-    bytes = s.repr;
-    ptr = "mem/realloc"(0, 0, 1, len);
-    "core:internal/gc_array_to_memory"(bytes, ptr, len);
-    return builtin::i64_extend_i32_s(ptr) | (builtin::i64_extend_i32_s(len) << 32_i64);
+    return builtin::i64_extend_i32_s(ptr_3) | (builtin::i64_extend_i32_s(len_1) << 32_i64);
 }
 
 fn "core:internal/cm_waitable_set_wait"(ws) {

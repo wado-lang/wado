@@ -217,65 +217,51 @@ type "functype//wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(48)
 
-type "functype//core:cli/println" = fn(ref "core:prelude/string.wado//String");  // TypeId(49)
+type "functype//core:internal/memory_to_gc_array" = fn(i32, i32) -> ref builtin::array<u8>;  // TypeId(49)
 
-type "functype//core:cli/eprintln" = fn(ref "core:prelude/string.wado//String");  // TypeId(50)
+type "functype//core:internal/write_string_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(50)
 
-type "functype//core:internal/memory_to_gc_array" = fn(i32, i32) -> ref builtin::array<u8>;  // TypeId(51)
+type "functype//core:internal/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(51)
 
-type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(52)
+type "functype//core:internal/cm_lower_string" = fn(ref "core:prelude/string.wado//String") -> i64;  // TypeId(52)
 
-type "functype//core:internal/write_string_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(53)
+type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(53)
 
-type "functype//core:internal/log_stderr" = fn(ref "core:prelude/string.wado//String");  // TypeId(54)
+type "functype//core:internal/cm_stream_write_u8" = fn(i32, ref "core:prelude//Array<u8>");  // TypeId(54)
 
-type "functype//core:internal/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(55)
+type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);  // TypeId(55)
 
-type "functype//core:internal/cm_lower_string" = fn(ref "core:prelude/string.wado//String") -> i64;  // TypeId(56)
+type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(56)
 
-type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;  // TypeId(57)
+type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(57)
 
-type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(58)
+type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(58)
 
-type "functype//core:internal/cm_stream_write_u8" = fn(i32, ref "core:prelude//Array<u8>");  // TypeId(59)
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(59)
 
-type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);  // TypeId(60)
+type "functype//core:prelude/Array<Tuple<wasi:filesystem/types.wado/Descriptor,String>>::push" = fn(ref "core:prelude//Array<Tuple<Descriptor,String>>", ref "tuple//[Descriptor, String]");  // TypeId(60)
 
-type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(61)
+type "functype//core:prelude/array.wado/Array<Tuple<wasi:filesystem/types.wado/Descriptor,String>>::grow" = fn(ref "core:prelude//Array<Tuple<Descriptor,String>>");  // TypeId(61)
 
-type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(62)
+type "functype//core:prelude/types.wado/AsyncCall<Result<DescriptorStat,wasi:filesystem/types.wado/ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<Result<DescriptorStat,wasi:filesystem/types.wado/ErrorCode>>") -> ref "core:prelude/types.wado//Result<DescriptorStat,wasi:filesystem/types.wado/ErrorCode>";  // TypeId(62)
 
-type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(63)
+type "functype//core:prelude/types.wado/AsyncCall<Result<unit,wasi:filesystem/types.wado/ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<Result<unit,wasi:filesystem/types.wado/ErrorCode>>") -> ref null "wasi:filesystem/types.wado//ErrorCode";  // TypeId(63)
 
-type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(64)
+type "functype//core:prelude/types.wado/AsyncCall<Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>") -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>";  // TypeId(64)
 
-type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(65)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(65)
 
-type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(66)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(66)
 
-type "functype//core:prelude/Array<Tuple<wasi:filesystem/types.wado/Descriptor,String>>::push" = fn(ref "core:prelude//Array<Tuple<Descriptor,String>>", ref "tuple//[Descriptor, String]");  // TypeId(67)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(67)
 
-type "functype//core:prelude/array.wado/Array<Tuple<wasi:filesystem/types.wado/Descriptor,String>>::grow" = fn(ref "core:prelude//Array<Tuple<Descriptor,String>>");  // TypeId(68)
+type "functype//wasi/future-drop-readable:transmission-filesystem" = fn(i32);  // TypeId(68)
 
-type "functype//core:prelude/types.wado/AsyncCall<Result<DescriptorStat,wasi:filesystem/types.wado/ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<Result<DescriptorStat,wasi:filesystem/types.wado/ErrorCode>>") -> ref "core:prelude/types.wado//Result<DescriptorStat,wasi:filesystem/types.wado/ErrorCode>";  // TypeId(69)
+type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(69)
 
-type "functype//core:prelude/types.wado/AsyncCall<Result<unit,wasi:filesystem/types.wado/ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<Result<unit,wasi:filesystem/types.wado/ErrorCode>>") -> ref null "wasi:filesystem/types.wado//ErrorCode";  // TypeId(70)
+type "functype//core:internal/cm_waitable_set_wait" = fn(i32) -> [i32, i32, u32];  // TypeId(70)
 
-type "functype//core:prelude/types.wado/AsyncCall<Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>") -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>";  // TypeId(71)
-
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(72)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(73)
-
-type "functype//wasi/future-drop-readable:transmission-filesystem" = fn(i32);  // TypeId(74)
-
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(75)
-
-type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(76)
-
-type "functype//core:internal/cm_waitable_set_wait" = fn(i32) -> [i32, i32, u32];  // TypeId(77)
-
-type "functype//core:prelude/primitive.wado/u64::fmt_decimal" = fn(u64, ref "core:prelude/format.wado//Formatter");  // TypeId(78)
+type "functype//core:prelude/primitive.wado/u64::fmt_decimal" = fn(u64, ref "core:prelude/format.wado//Formatter");  // TypeId(71)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -294,9 +280,9 @@ import fn wasi/wasi:filesystem/Descriptor::rename_at from "wasi/wasi:filesystem/
 import fn wasi/wasi:filesystem/Descriptor::unlink_file_at from "wasi/wasi:filesystem/Descriptor::unlink_file_at";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
+import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-drop-readable:transmission-filesystem from "wasi/future-drop-readable:transmission-filesystem";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 import fn wasi/subtask-drop from "wasi/subtask-drop";
 
 fn "wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/run"() with Stdout, Stderr, Preopens {
@@ -323,26 +309,109 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/run"() with 
     let unlink_missing: ref null "wasi:filesystem/types.wado//ErrorCode";
     let __local_21: ref "core:prelude/string.wado//String";
     let __local_22: ref "core:prelude/format.wado//Formatter";
+    let message_34: ref "core:prelude/string.wado//String";
+    let rx_35: i32;
+    let tx_36: i32;
+    let handle_37: i32;
+    let message_57: ref "core:prelude/string.wado//String";
+    let rx_58: i32;
+    let tx_59: i32;
+    let handle_60: i32;
+    let message_63: ref "core:prelude/string.wado//String";
+    let rx_64: i32;
+    let tx_65: i32;
+    let handle_66: i32;
+    let message_69: ref "core:prelude/string.wado//String";
+    let rx_70: i32;
+    let tx_71: i32;
+    let handle_72: i32;
+    let message_75: ref "core:prelude/string.wado//String";
+    let rx_76: i32;
+    let tx_77: i32;
+    let handle_78: i32;
+    let message_81: ref "core:prelude/string.wado//String";
+    let rx_82: i32;
+    let tx_83: i32;
+    let handle_84: i32;
+    let message_87: ref "core:prelude/string.wado//String";
+    let rx_88: i32;
+    let tx_89: i32;
+    let handle_90: i32;
+    let message_93: ref "core:prelude/string.wado//String";
+    let rx_94: i32;
+    let tx_95: i32;
+    let handle_96: i32;
+    let message_99: ref "core:prelude/string.wado//String";
+    let rx_100: i32;
+    let tx_101: i32;
+    let handle_102: i32;
+    let message_105: ref "core:prelude/string.wado//String";
+    let rx_106: i32;
+    let tx_107: i32;
+    let handle_108: i32;
+    let message_117: ref "core:prelude/string.wado//String";
+    let rx_118: i32;
+    let tx_119: i32;
+    let handle_120: i32;
+    let message_123: ref "core:prelude/string.wado//String";
+    let rx_124: i32;
+    let tx_125: i32;
+    let handle_126: i32;
+    let message_129: ref "core:prelude/string.wado//String";
+    let rx_130: i32;
+    let tx_131: i32;
+    let handle_132: i32;
+    let message_135: ref "core:prelude/string.wado//String";
+    let rx_136: i32;
+    let tx_137: i32;
+    let handle_138: i32;
+    let message_141: ref "core:prelude/string.wado//String";
+    let rx_142: i32;
+    let tx_143: i32;
+    let handle_144: i32;
+    let message_147: ref "core:prelude/string.wado//String";
+    let rx_148: i32;
+    let tx_149: i32;
+    let handle_150: i32;
+    let message_153: ref "core:prelude/string.wado//String";
+    let rx_154: i32;
+    let tx_155: i32;
+    let handle_156: i32;
+    let message_159: ref "core:prelude/string.wado//String";
+    let rx_160: i32;
+    let tx_161: i32;
+    let handle_162: i32;
+    let message_165: ref "core:prelude/string.wado//String";
+    let rx_166: i32;
+    let tx_167: i32;
+    let handle_168: i32;
     dirs = "wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/__cm_binding__Preopens_get_directories"();
     if dirs.used == 0 {
-        "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no preopened directories available"), used: 34 });
+        message_34 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no preopened directories available"), used: 34 };
+        let __pair_temp_1: i64;
+        __pair_temp_1 = "wasi/stream-new"();
+        rx_35 = builtin::i32_wrap_i64(__pair_temp_1);
+        tx_36 = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+        handle_37 = "wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/__cm_binding__Stderr_write_via_stream"(rx_35);
+        "core:cli/write_to_stream"(tx_36, message_34, 1);
+        "wasi/future-drop-readable:transmission-cli"(handle_37);
         return;
     }
-    dir = __inline_Array_Tuple_wasi_filesystem_types_wado_Descriptor_String___IndexValue_i32___index_value_3: block -> ref "tuple//[Descriptor, String]" {
+    dir = __inline_Array_Tuple_wasi_filesystem_types_wado_Descriptor_String___IndexValue_i32___index_value_5: block -> ref "tuple//[Descriptor, String]" {
         if 0 >= dirs.used {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
-        break __inline_Array_Tuple_wasi_filesystem_types_wado_Descriptor_String___IndexValue_i32___index_value_3: builtin::array_get<ref "tuple//[Descriptor, String]">(dirs.repr, 0);
+        break __inline_Array_Tuple_wasi_filesystem_types_wado_Descriptor_String___IndexValue_i32___index_value_5: builtin::array_get<ref "tuple//[Descriptor, String]">(dirs.repr, 0);
         unreachable;
     }.0;
     src_result = "core:prelude/types.wado/AsyncCall<Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/__cm_binding__Descriptor_open_at"(dir, 0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("rename_src.txt"), used: 14 }, 9, 2));
     if ref.test "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"(src_result) {
         src_file = ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"(src_result).payload_0;
-        let __pair_temp_1: i64;
-        __pair_temp_1 = "wasi/stream-new"();
-        write_rx = builtin::i32_wrap_i64(__pair_temp_1);
-        write_tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+        let __pair_temp_2: i64;
+        __pair_temp_2 = "wasi/stream-new"();
+        write_rx = builtin::i32_wrap_i64(__pair_temp_2);
+        write_tx = builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
         sub = "wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/__cm_binding__Descriptor_write_via_stream"(src_file, write_rx, 0_i64);
         data = __seq_lit: block -> ref "core:prelude//Array<u8>" {
             __b_7 = struct.new "core:prelude//Array<u8>" { repr: array.new_fixed<u8>(82, 69, 78, 65, 77, 69), used: 6 };
@@ -352,16 +421,44 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/run"() with 
         "core:internal/cm_stream_write_u8"(write_tx, data);
         "wasi/stream-drop-writable"(write_tx);
         "wasi/future-drop-readable:transmission-filesystem"(sub);
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("rename: source file created"), used: 27 });
+        message_57 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("rename: source file created"), used: 27 };
+        let __pair_temp_3: i64;
+        __pair_temp_3 = "wasi/stream-new"();
+        rx_58 = builtin::i32_wrap_i64(__pair_temp_3);
+        tx_59 = builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64);
+        handle_60 = "wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/__cm_binding__Stdout_write_via_stream"(rx_58);
+        "core:cli/write_to_stream"(tx_59, message_57, 1);
+        "wasi/future-drop-readable:transmission-cli"(handle_60);
     } else {
-        "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("rename: failed to create source file"), used: 36 });
+        message_63 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("rename: failed to create source file"), used: 36 };
+        let __pair_temp_4: i64;
+        __pair_temp_4 = "wasi/stream-new"();
+        rx_64 = builtin::i32_wrap_i64(__pair_temp_4);
+        tx_65 = builtin::i32_wrap_i64(__pair_temp_4 >>u 32_i64);
+        handle_66 = "wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/__cm_binding__Stderr_write_via_stream"(rx_64);
+        "core:cli/write_to_stream"(tx_65, message_63, 1);
+        "wasi/future-drop-readable:transmission-cli"(handle_66);
         return;
     }
     rename_result = "core:prelude/types.wado/AsyncCall<Result<unit,wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/__cm_binding__Descriptor_rename_at"(dir, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("rename_src.txt"), used: 14 }, dir, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("rename_dst.txt"), used: 14 }));
     if ref.is_null(rename_result) {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("rename: rename_at succeeded"), used: 27 });
+        message_69 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("rename: rename_at succeeded"), used: 27 };
+        let __pair_temp_5: i64;
+        __pair_temp_5 = "wasi/stream-new"();
+        rx_70 = builtin::i32_wrap_i64(__pair_temp_5);
+        tx_71 = builtin::i32_wrap_i64(__pair_temp_5 >>u 32_i64);
+        handle_72 = "wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/__cm_binding__Stdout_write_via_stream"(rx_70);
+        "core:cli/write_to_stream"(tx_71, message_69, 1);
+        "wasi/future-drop-readable:transmission-cli"(handle_72);
     } else {
-        "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("rename: rename_at failed"), used: 24 });
+        message_75 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("rename: rename_at failed"), used: 24 };
+        let __pair_temp_6: i64;
+        __pair_temp_6 = "wasi/stream-new"();
+        rx_76 = builtin::i32_wrap_i64(__pair_temp_6);
+        tx_77 = builtin::i32_wrap_i64(__pair_temp_6 >>u 32_i64);
+        handle_78 = "wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/__cm_binding__Stderr_write_via_stream"(rx_76);
+        "core:cli/write_to_stream"(tx_77, message_75, 1);
+        "wasi/future-drop-readable:transmission-cli"(handle_78);
         return;
     }
     old_result = "core:prelude/types.wado/AsyncCall<Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/__cm_binding__Descriptor_open_at"(dir, 0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("rename_src.txt"), used: 14 }, 0, 1));
@@ -370,12 +467,33 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/run"() with 
         let __match_scrut_0: ref "wasi:filesystem/types.wado//ErrorCode";
         __match_scrut_0 = err_11;
         if __match_scrut_0.discriminant == 19 {
-            "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("rename: old path returns NoEntry (correct)"), used: 42 });
+            message_81 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("rename: old path returns NoEntry (correct)"), used: 42 };
+            let __pair_temp_7: i64;
+            __pair_temp_7 = "wasi/stream-new"();
+            rx_82 = builtin::i32_wrap_i64(__pair_temp_7);
+            tx_83 = builtin::i32_wrap_i64(__pair_temp_7 >>u 32_i64);
+            handle_84 = "wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/__cm_binding__Stdout_write_via_stream"(rx_82);
+            "core:cli/write_to_stream"(tx_83, message_81, 1);
+            "wasi/future-drop-readable:transmission-cli"(handle_84);
         } else {
-            "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("rename: old path returned unexpected error"), used: 42 });
+            message_87 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("rename: old path returned unexpected error"), used: 42 };
+            let __pair_temp_8: i64;
+            __pair_temp_8 = "wasi/stream-new"();
+            rx_88 = builtin::i32_wrap_i64(__pair_temp_8);
+            tx_89 = builtin::i32_wrap_i64(__pair_temp_8 >>u 32_i64);
+            handle_90 = "wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/__cm_binding__Stderr_write_via_stream"(rx_88);
+            "core:cli/write_to_stream"(tx_89, message_87, 1);
+            "wasi/future-drop-readable:transmission-cli"(handle_90);
         }
     } else {
-        "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("rename: old path should not exist"), used: 33 });
+        message_93 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("rename: old path should not exist"), used: 33 };
+        let __pair_temp_9: i64;
+        __pair_temp_9 = "wasi/stream-new"();
+        rx_94 = builtin::i32_wrap_i64(__pair_temp_9);
+        tx_95 = builtin::i32_wrap_i64(__pair_temp_9 >>u 32_i64);
+        handle_96 = "wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/__cm_binding__Stderr_write_via_stream"(rx_94);
+        "core:cli/write_to_stream"(tx_95, message_93, 1);
+        "wasi/future-drop-readable:transmission-cli"(handle_96);
     }
     dst_result = "core:prelude/types.wado/AsyncCall<Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/__cm_binding__Descriptor_open_at"(dir, 0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("rename_dst.txt"), used: 14 }, 0, 1));
     if ref.test "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"(dst_result) {
@@ -384,10 +502,17 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/run"() with 
         if ref.test "core:prelude/types.wado//Result<DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Ok"(stat_result) {
             stat = ref.cast "core:prelude/types.wado//Result<DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Ok"(stat_result).payload_0;
             if stat.size == 6_i64 {
-                "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("rename: destination has correct size (correct)"), used: 46 });
+                message_99 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("rename: destination has correct size (correct)"), used: 46 };
+                let __pair_temp_10: i64;
+                __pair_temp_10 = "wasi/stream-new"();
+                rx_100 = builtin::i32_wrap_i64(__pair_temp_10);
+                tx_101 = builtin::i32_wrap_i64(__pair_temp_10 >>u 32_i64);
+                handle_102 = "wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/__cm_binding__Stdout_write_via_stream"(rx_100);
+                "core:cli/write_to_stream"(tx_101, message_99, 1);
+                "wasi/future-drop-readable:transmission-cli"(handle_102);
             } else {
                 sz = stat.size;
-                "core:cli/eprintln"(__tmpl: block -> ref "core:prelude/string.wado//String" {
+                message_105 = __tmpl: block -> ref "core:prelude/string.wado//String" {
                     __local_21 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(56), used: 0 };
                     "core:prelude/string.wado/String::push_str"(__local_21, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("rename: destination size is "), used: 28 });
                     __local_22 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_21 };
@@ -395,17 +520,45 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/run"() with 
                     "core:prelude/string.wado/String::push_str"(__local_21, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(", expected 6"), used: 12 });
                     break __tmpl: __local_21;
                     unreachable;
-                });
+                };
+                let __pair_temp_11: i64;
+                __pair_temp_11 = "wasi/stream-new"();
+                rx_106 = builtin::i32_wrap_i64(__pair_temp_11);
+                tx_107 = builtin::i32_wrap_i64(__pair_temp_11 >>u 32_i64);
+                handle_108 = "wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/__cm_binding__Stderr_write_via_stream"(rx_106);
+                "core:cli/write_to_stream"(tx_107, message_105, 1);
+                "wasi/future-drop-readable:transmission-cli"(handle_108);
             }
         }
     } else {
-        "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("rename: failed to open destination file"), used: 39 });
+        message_117 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("rename: failed to open destination file"), used: 39 };
+        let __pair_temp_12: i64;
+        __pair_temp_12 = "wasi/stream-new"();
+        rx_118 = builtin::i32_wrap_i64(__pair_temp_12);
+        tx_119 = builtin::i32_wrap_i64(__pair_temp_12 >>u 32_i64);
+        handle_120 = "wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/__cm_binding__Stderr_write_via_stream"(rx_118);
+        "core:cli/write_to_stream"(tx_119, message_117, 1);
+        "wasi/future-drop-readable:transmission-cli"(handle_120);
     }
     unlink_result = "core:prelude/types.wado/AsyncCall<Result<unit,wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/__cm_binding__Descriptor_unlink_file_at"(dir, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("rename_dst.txt"), used: 14 }));
     if ref.is_null(unlink_result) {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unlink: removed rename_dst.txt"), used: 30 });
+        message_123 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unlink: removed rename_dst.txt"), used: 30 };
+        let __pair_temp_13: i64;
+        __pair_temp_13 = "wasi/stream-new"();
+        rx_124 = builtin::i32_wrap_i64(__pair_temp_13);
+        tx_125 = builtin::i32_wrap_i64(__pair_temp_13 >>u 32_i64);
+        handle_126 = "wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/__cm_binding__Stdout_write_via_stream"(rx_124);
+        "core:cli/write_to_stream"(tx_125, message_123, 1);
+        "wasi/future-drop-readable:transmission-cli"(handle_126);
     } else {
-        "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unlink: failed to remove rename_dst.txt"), used: 39 });
+        message_129 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unlink: failed to remove rename_dst.txt"), used: 39 };
+        let __pair_temp_14: i64;
+        __pair_temp_14 = "wasi/stream-new"();
+        rx_130 = builtin::i32_wrap_i64(__pair_temp_14);
+        tx_131 = builtin::i32_wrap_i64(__pair_temp_14 >>u 32_i64);
+        handle_132 = "wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/__cm_binding__Stderr_write_via_stream"(rx_130);
+        "core:cli/write_to_stream"(tx_131, message_129, 1);
+        "wasi/future-drop-readable:transmission-cli"(handle_132);
     }
     gone_result = "core:prelude/types.wado/AsyncCall<Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/__cm_binding__Descriptor_open_at"(dir, 0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("rename_dst.txt"), used: 14 }, 0, 1));
     if ref.test "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Err"(gone_result) {
@@ -413,20 +566,62 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/run"() with 
         let __match_scrut_1: ref "wasi:filesystem/types.wado//ErrorCode";
         __match_scrut_1 = err_19;
         if __match_scrut_1.discriminant == 19 {
-            "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unlink: file is gone (correct)"), used: 30 });
+            message_135 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unlink: file is gone (correct)"), used: 30 };
+            let __pair_temp_15: i64;
+            __pair_temp_15 = "wasi/stream-new"();
+            rx_136 = builtin::i32_wrap_i64(__pair_temp_15);
+            tx_137 = builtin::i32_wrap_i64(__pair_temp_15 >>u 32_i64);
+            handle_138 = "wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/__cm_binding__Stdout_write_via_stream"(rx_136);
+            "core:cli/write_to_stream"(tx_137, message_135, 1);
+            "wasi/future-drop-readable:transmission-cli"(handle_138);
         } else {
-            "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unlink: unexpected error after removal"), used: 38 });
+            message_141 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unlink: unexpected error after removal"), used: 38 };
+            let __pair_temp_16: i64;
+            __pair_temp_16 = "wasi/stream-new"();
+            rx_142 = builtin::i32_wrap_i64(__pair_temp_16);
+            tx_143 = builtin::i32_wrap_i64(__pair_temp_16 >>u 32_i64);
+            handle_144 = "wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/__cm_binding__Stderr_write_via_stream"(rx_142);
+            "core:cli/write_to_stream"(tx_143, message_141, 1);
+            "wasi/future-drop-readable:transmission-cli"(handle_144);
         }
     } else {
-        "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unlink: file should not exist after removal"), used: 43 });
+        message_147 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unlink: file should not exist after removal"), used: 43 };
+        let __pair_temp_17: i64;
+        __pair_temp_17 = "wasi/stream-new"();
+        rx_148 = builtin::i32_wrap_i64(__pair_temp_17);
+        tx_149 = builtin::i32_wrap_i64(__pair_temp_17 >>u 32_i64);
+        handle_150 = "wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/__cm_binding__Stderr_write_via_stream"(rx_148);
+        "core:cli/write_to_stream"(tx_149, message_147, 1);
+        "wasi/future-drop-readable:transmission-cli"(handle_150);
     }
     unlink_missing = "core:prelude/types.wado/AsyncCall<Result<unit,wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/__cm_binding__Descriptor_unlink_file_at"(dir, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("nonexistent_file.txt"), used: 20 }));
     if ref.is_null(unlink_missing) == 0 {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unlink: nonexistent file returns error (correct)"), used: 48 });
+        message_153 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unlink: nonexistent file returns error (correct)"), used: 48 };
+        let __pair_temp_18: i64;
+        __pair_temp_18 = "wasi/stream-new"();
+        rx_154 = builtin::i32_wrap_i64(__pair_temp_18);
+        tx_155 = builtin::i32_wrap_i64(__pair_temp_18 >>u 32_i64);
+        handle_156 = "wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/__cm_binding__Stdout_write_via_stream"(rx_154);
+        "core:cli/write_to_stream"(tx_155, message_153, 1);
+        "wasi/future-drop-readable:transmission-cli"(handle_156);
     } else {
-        "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unlink: nonexistent file should return error"), used: 44 });
+        message_159 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unlink: nonexistent file should return error"), used: 44 };
+        let __pair_temp_19: i64;
+        __pair_temp_19 = "wasi/stream-new"();
+        rx_160 = builtin::i32_wrap_i64(__pair_temp_19);
+        tx_161 = builtin::i32_wrap_i64(__pair_temp_19 >>u 32_i64);
+        handle_162 = "wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/__cm_binding__Stderr_write_via_stream"(rx_160);
+        "core:cli/write_to_stream"(tx_161, message_159, 1);
+        "wasi/future-drop-readable:transmission-cli"(handle_162);
     }
-    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("all rename/unlink tests passed"), used: 30 });
+    message_165 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("all rename/unlink tests passed"), used: 30 };
+    let __pair_temp_20: i64;
+    __pair_temp_20 = "wasi/stream-new"();
+    rx_166 = builtin::i32_wrap_i64(__pair_temp_20);
+    tx_167 = builtin::i32_wrap_i64(__pair_temp_20 >>u 32_i64);
+    handle_168 = "wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/__cm_binding__Stdout_write_via_stream"(rx_166);
+    "core:cli/write_to_stream"(tx_167, message_165, 1);
+    "wasi/future-drop-readable:transmission-cli"(handle_168);
 }
 
 fn "wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -564,32 +759,6 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
     "wasi/stream-drop-writable"(tx);
 }
 
-fn "core:cli/println"(message) with Stdout {
-    let rx: i32;
-    let tx: i32;
-    let handle: i32;
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/stream-new"();
-    rx = builtin::i32_wrap_i64(__pair_temp_1);
-    tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
-    handle = "wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/__cm_binding__Stdout_write_via_stream"(rx);
-    "core:cli/write_to_stream"(tx, message, 1);
-    "wasi/future-drop-readable:transmission-cli"(handle);
-}
-
-fn "core:cli/eprintln"(message) with Stderr {
-    let rx: i32;
-    let tx: i32;
-    let handle: i32;
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/stream-new"();
-    rx = builtin::i32_wrap_i64(__pair_temp_1);
-    tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
-    handle = "wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/__cm_binding__Stderr_write_via_stream"(rx);
-    "core:cli/write_to_stream"(tx, message, 1);
-    "wasi/future-drop-readable:transmission-cli"(handle);
-}
-
 fn "core:internal/memory_to_gc_array"(ptr, len) {
     let arr: ref builtin::array<u8>;
     let i: i32;
@@ -610,23 +779,6 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {
     return arr;
 }
 
-fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
-    let i: i32;
-    __for_1: block {
-        i = 0;
-        block {
-            l22: loop {
-                if i >= len {
-                    break __for_1;
-                }
-                builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
-                i = i + 1;
-                continue l22;
-            };
-        };
-    };
-}
-
 fn "core:internal/write_string_to_stream"(tx, message, add_newline) {
     let bytes: ref builtin::array<u8>;
     let len: i32;
@@ -644,7 +796,7 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {
     "wasi/stream-drop-writable"(tx);
 }
 
-fn "core:internal/log_stderr"(message) {
+fn "core:internal/panic"(message) {
     let rx: i32;
     let tx: i32;
     let future_handle: i32;
@@ -657,29 +809,31 @@ fn "core:internal/log_stderr"(message) {
     "core:internal/write_string_to_stream"(tx, message, 1);
     future = future_handle;
     "wasi/future-drop-readable:transmission-cli"(future);
-}
-
-fn "core:internal/panic"(message) {
-    "core:internal/log_stderr"(message);
     unreachable;
 }
 
 fn "core:internal/cm_lower_string"(s) {
-    let len: i32;
+    let len_1: i32;
     let bytes: ref builtin::array<u8>;
-    let ptr: i32;
-    len = s.used;
+    let ptr_3: i32;
+    let i: i32;
+    len_1 = s.used;
     bytes = s.repr;
-    ptr = "mem/realloc"(0, 0, 1, len);
-    "core:internal/gc_array_to_memory"(bytes, ptr, len);
-    return builtin::i64_extend_i32_s(ptr) | (builtin::i64_extend_i32_s(len) << 32_i64);
-}
-
-fn "core:internal/cm_lower_list_u8"(data, len) {
-    let ptr: i32;
-    ptr = "mem/realloc"(0, 0, 1, len);
-    "core:internal/gc_array_to_memory"(data, ptr, len);
-    return builtin::i64_extend_i32_s(ptr) | (builtin::i64_extend_i32_s(len) << 32_i64);
+    ptr_3 = "mem/realloc"(0, 0, 1, len_1);
+    __inline_gc_array_to_memory_2____for_1: block {
+        i = 0;
+        block {
+            l23: loop {
+                if i >= len_1 {
+                    break __inline_gc_array_to_memory_2____for_1;
+                }
+                builtin::store_u8(ptr_3 + i, builtin::array_get_u8(bytes, i));
+                i = i + 1;
+                continue l23;
+            };
+        };
+    };
+    return builtin::i64_extend_i32_s(ptr_3) | (builtin::i64_extend_i32_s(len_1) << 32_i64);
 }
 
 fn "core:internal/wait_for_blocked"(handle) {
@@ -698,39 +852,78 @@ fn "core:internal/wait_for_blocked"(handle) {
 
 fn "core:internal/cm_stream_write_u8"(handle, data) {
     let packed: i64;
-    let ptr: i32;
+    let ptr_3: i32;
     let len_4: i32;
     let result: i32;
     let data_9: ref builtin::array<u8>;
     let len_10: i32;
+    let ptr_15: i32;
+    let i: i32;
     packed = __inline_cm_lower_array_u8_0: block -> i64 {
         data_9 = data.repr;
         len_10 = data.used;
-        break __inline_cm_lower_array_u8_0: "core:internal/cm_lower_list_u8"(data_9, len_10);
+        __inline_cm_lower_list_u8_3: block -> i64 {
+            ptr_15 = "mem/realloc"(0, 0, 1, len_10);
+            __inline_gc_array_to_memory_0____for_1: block {
+                i = 0;
+                block {
+                    l26: loop {
+                        if i >= len_10 {
+                            break __inline_gc_array_to_memory_0____for_1;
+                        }
+                        builtin::store_u8(ptr_15 + i, builtin::array_get_u8(data_9, i));
+                        i = i + 1;
+                        continue l26;
+                    };
+                };
+            };
+            break __inline_cm_lower_list_u8_3: builtin::i64_extend_i32_s(ptr_15) | (builtin::i64_extend_i32_s(len_10) << 32_i64);
+            unreachable;
+        };
+        break __inline_cm_lower_array_u8_0;
         unreachable;
     };
-    ptr = builtin::i32_wrap_i64(packed);
+    ptr_3 = builtin::i32_wrap_i64(packed);
     len_4 = builtin::i32_wrap_i64(packed >> 32_i64);
-    result = "wasi/stream-write"(handle, ptr, len_4);
+    result = "wasi/stream-write"(handle, ptr_3, len_4);
     if result == -1 {
         drop("core:internal/wait_for_blocked"(handle));
     }
-    drop("mem/realloc"(ptr, len_4, 1, 0));
+    drop("mem/realloc"(ptr_3, len_4, 1, 0));
 }
 
 fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {
     let packed: i64;
-    let ptr: i32;
+    let ptr_4: i32;
     let raw_len: i32;
     let result: i32;
-    packed = "core:internal/cm_lower_list_u8"(data, len);
-    ptr = builtin::i32_wrap_i64(packed);
+    let ptr_11: i32;
+    let i: i32;
+    packed = __inline_cm_lower_list_u8_0: block -> i64 {
+        ptr_11 = "mem/realloc"(0, 0, 1, len);
+        __inline_gc_array_to_memory_1____for_1: block {
+            i = 0;
+            block {
+                l30: loop {
+                    if i >= len {
+                        break __inline_gc_array_to_memory_1____for_1;
+                    }
+                    builtin::store_u8(ptr_11 + i, builtin::array_get_u8(data, i));
+                    i = i + 1;
+                    continue l30;
+                };
+            };
+        };
+        break __inline_cm_lower_list_u8_0: builtin::i64_extend_i32_s(ptr_11) | (builtin::i64_extend_i32_s(len) << 32_i64);
+        unreachable;
+    };
+    ptr_4 = builtin::i32_wrap_i64(packed);
     raw_len = builtin::i32_wrap_i64(packed >> 32_i64);
-    result = "wasi/stream-write"(handle, ptr, raw_len);
+    result = "wasi/stream-write"(handle, ptr_4, raw_len);
     if result == -1 {
         drop("core:internal/wait_for_blocked"(handle));
     }
-    drop("mem/realloc"(ptr, raw_len, 1, 0));
+    drop("mem/realloc"(ptr_4, raw_len, 1, 0));
 }
 
 fn "core:internal/cm_waitable_set_wait"(ws) {
@@ -777,10 +970,10 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal"(self, f) {
     }
     digit_count = 0;
     temp = val_i64;
-    b28: block {
-        l29: loop {
+    b34: block {
+        l35: loop {
             if temp == 0_i64 {
-                break b28;
+                break b34;
             }
             digit_count = digit_count + 1;
             if temp >= 0_i64 {
@@ -795,7 +988,7 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal"(self, f) {
                 }
                 temp = (signed_quot_9 + 1844674407370955161_i64) + carry_10;
             }
-            continue l29;
+            continue l35;
         };
     };
     offset_11 = "core:prelude/format.wado/Formatter::prepare_int_write"(f, 0, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
@@ -806,10 +999,10 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal"(self, f) {
     };
     pos = offset_11 + digit_count;
     temp = val_i64;
-    b33: block {
-        l34: loop {
+    b39: block {
+        l40: loop {
             if temp == 0_i64 {
-                break b33;
+                break b39;
             }
             pos = pos - 1;
             digit = 0;
@@ -832,7 +1025,7 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal"(self, f) {
                 temp = (signed_quot_17 + 1844674407370955161_i64) + carry_18;
             }
             builtin::array_set_u8(repr, pos, (48 + digit) & 255);
-            continue l34;
+            continue l40;
         };
     };
 }
@@ -859,18 +1052,6 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
-}
-
-fn "core:prelude/string.wado/String::internal_reserve_uninit"(self, n) {
-    let new_used: i32;
-    let start: i32;
-    new_used = self.used + n;
-    if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
-        "core:prelude/string.wado/String::grow"(self, new_used);
-    }
-    start = self.used;
-    self.used = new_used;
-    return start;
 }
 
 fn "core:prelude/string.wado/String::push_str"(self, other) {
@@ -915,25 +1096,6 @@ fn "core:prelude/string.wado/String::push"(self, c) {
     }
 }
 
-fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
-    let i: i32;
-    let _licm_buf_4: ref "core:prelude/string.wado//String";
-    __for_0: block {
-        i = 0;
-        _licm_buf_4 = self.buf;
-        block {
-            l48: loop {
-                if i >= n {
-                    break __for_0;
-                }
-                "core:prelude/string.wado/String::push"(_licm_buf_4, c);
-                i = i + 1;
-                continue l48;
-            };
-        };
-    };
-}
-
 fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, prefix, digit_count) {
     let sign: ref "core:prelude/string.wado//String";
     let sign_len: i32;
@@ -945,6 +1107,35 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     let left_pad: i32;
     let right_pad: i32;
     let offset_13: i32;
+    let self_16: ref "core:prelude/string.wado//String";
+    let new_used_18: i32;
+    let start_19: i32;
+    let i_23: i32;
+    let self_24: ref "core:prelude/string.wado//String";
+    let new_used_26: i32;
+    let start_27: i32;
+    let self_28: ref "core:prelude/string.wado//String";
+    let new_used_30: i32;
+    let start_31: i32;
+    let c_33: char;
+    let i_35: i32;
+    let c_37: char;
+    let i_39: i32;
+    let self_40: ref "core:prelude/string.wado//String";
+    let new_used_42: i32;
+    let start_43: i32;
+    let c_45: char;
+    let i_47: i32;
+    let c_49: char;
+    let i_51: i32;
+    let self_52: ref "core:prelude/string.wado//String";
+    let new_used_54: i32;
+    let start_55: i32;
+    let _licm_buf_56: ref "core:prelude/string.wado//String";
+    let _licm_buf_57: ref "core:prelude/string.wado//String";
+    let _licm_buf_58: ref "core:prelude/string.wado//String";
+    let _licm_buf_59: ref "core:prelude/string.wado//String";
+    let _licm_buf_60: ref "core:prelude/string.wado//String";
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
         sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("-"), used: 1 };
@@ -965,7 +1156,17 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
         if prefix_len > 0 {
             "core:prelude/string.wado/String::push_str"(self.buf, prefix);
         }
-        return "core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
+        return __inline_String__internal_reserve_uninit_2: block -> i32 {
+            self_16 = self.buf;
+            new_used_18 = self_16.used + digit_count;
+            if builtin::unlikely(new_used_18 > builtin::array_len(self_16.repr)) {
+                "core:prelude/string.wado/String::grow"(self_16, new_used_18);
+            }
+            start_19 = self_16.used;
+            self_16.used = new_used_18;
+            break __inline_String__internal_reserve_uninit_2: start_19;
+            unreachable;
+        };
     }
     padding = self.width - content_len;
     if self.zero_pad {
@@ -975,8 +1176,31 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
         if prefix_len > 0 {
             "core:prelude/string.wado/String::push_str"(self.buf, prefix);
         }
-        "core:prelude/format.wado/Formatter::write_char_n"(self, 48, padding);
-        return "core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
+        __inline_Formatter__write_char_n_3____for_0: block {
+            i_23 = 0;
+            _licm_buf_56 = self.buf;
+            block {
+                l63: loop {
+                    if i_23 >= padding {
+                        break __inline_Formatter__write_char_n_3____for_0;
+                    }
+                    "core:prelude/string.wado/String::push"(_licm_buf_56, 48);
+                    i_23 = i_23 + 1;
+                    continue l63;
+                };
+            };
+        };
+        return __inline_String__internal_reserve_uninit_4: block -> i32 {
+            self_24 = self.buf;
+            new_used_26 = self_24.used + digit_count;
+            if builtin::unlikely(new_used_26 > builtin::array_len(self_24.repr)) {
+                "core:prelude/string.wado/String::grow"(self_24, new_used_26);
+            }
+            start_27 = self_24.used;
+            self_24.used = new_used_26;
+            break __inline_String__internal_reserve_uninit_4: start_27;
+            unreachable;
+        };
     }
     align = self.align;
     let __match_scrut_0: "core:prelude/format.wado//enum:Alignment";
@@ -988,31 +1212,117 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
         if prefix_len > 0 {
             "core:prelude/string.wado/String::push_str"(self.buf, prefix);
         }
-        offset_10 = "core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
-        "core:prelude/format.wado/Formatter::write_char_n"(self, self.fill, padding);
+        offset_10 = __inline_String__internal_reserve_uninit_5: block -> i32 {
+            self_28 = self.buf;
+            new_used_30 = self_28.used + digit_count;
+            if builtin::unlikely(new_used_30 > builtin::array_len(self_28.repr)) {
+                "core:prelude/string.wado/String::grow"(self_28, new_used_30);
+            }
+            start_31 = self_28.used;
+            self_28.used = new_used_30;
+            break __inline_String__internal_reserve_uninit_5: start_31;
+            unreachable;
+        };
+        c_33 = self.fill;
+        __inline_Formatter__write_char_n_6____for_0: block {
+            i_35 = 0;
+            _licm_buf_57 = self.buf;
+            block {
+                l71: loop {
+                    if i_35 >= padding {
+                        break __inline_Formatter__write_char_n_6____for_0;
+                    }
+                    "core:prelude/string.wado/String::push"(_licm_buf_57, c_33);
+                    i_35 = i_35 + 1;
+                    continue l71;
+                };
+            };
+        };
         return offset_10;
     } else if align == 1 {
         left_pad = padding / 2;
         right_pad = padding - left_pad;
-        "core:prelude/format.wado/Formatter::write_char_n"(self, self.fill, left_pad);
+        c_37 = self.fill;
+        __inline_Formatter__write_char_n_7____for_0: block {
+            i_39 = 0;
+            _licm_buf_58 = self.buf;
+            block {
+                l75: loop {
+                    if i_39 >= left_pad {
+                        break __inline_Formatter__write_char_n_7____for_0;
+                    }
+                    "core:prelude/string.wado/String::push"(_licm_buf_58, c_37);
+                    i_39 = i_39 + 1;
+                    continue l75;
+                };
+            };
+        };
         if sign_len > 0 {
             "core:prelude/string.wado/String::push_str"(self.buf, sign);
         }
         if prefix_len > 0 {
             "core:prelude/string.wado/String::push_str"(self.buf, prefix);
         }
-        offset_13 = "core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
-        "core:prelude/format.wado/Formatter::write_char_n"(self, self.fill, right_pad);
+        offset_13 = __inline_String__internal_reserve_uninit_8: block -> i32 {
+            self_40 = self.buf;
+            new_used_42 = self_40.used + digit_count;
+            if builtin::unlikely(new_used_42 > builtin::array_len(self_40.repr)) {
+                "core:prelude/string.wado/String::grow"(self_40, new_used_42);
+            }
+            start_43 = self_40.used;
+            self_40.used = new_used_42;
+            break __inline_String__internal_reserve_uninit_8: start_43;
+            unreachable;
+        };
+        c_45 = self.fill;
+        __inline_Formatter__write_char_n_9____for_0: block {
+            i_47 = 0;
+            _licm_buf_59 = self.buf;
+            block {
+                l81: loop {
+                    if i_47 >= right_pad {
+                        break __inline_Formatter__write_char_n_9____for_0;
+                    }
+                    "core:prelude/string.wado/String::push"(_licm_buf_59, c_45);
+                    i_47 = i_47 + 1;
+                    continue l81;
+                };
+            };
+        };
         return offset_13;
     } else {
-        "core:prelude/format.wado/Formatter::write_char_n"(self, self.fill, padding);
+        c_49 = self.fill;
+        __inline_Formatter__write_char_n_10____for_0: block {
+            i_51 = 0;
+            _licm_buf_60 = self.buf;
+            block {
+                l84: loop {
+                    if i_51 >= padding {
+                        break __inline_Formatter__write_char_n_10____for_0;
+                    }
+                    "core:prelude/string.wado/String::push"(_licm_buf_60, c_49);
+                    i_51 = i_51 + 1;
+                    continue l84;
+                };
+            };
+        };
         if sign_len > 0 {
             "core:prelude/string.wado/String::push_str"(self.buf, sign);
         }
         if prefix_len > 0 {
             "core:prelude/string.wado/String::push_str"(self.buf, prefix);
         }
-        return "core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
+        return __inline_String__internal_reserve_uninit_11: block -> i32 {
+            self_52 = self.buf;
+            new_used_54 = self_52.used + digit_count;
+            if builtin::unlikely(new_used_54 > builtin::array_len(self_52.repr)) {
+                "core:prelude/string.wado/String::grow"(self_52, new_used_54);
+            }
+            start_55 = self_52.used;
+            self_52.used = new_used_54;
+            break __inline_String__internal_reserve_uninit_11: start_55;
+            unreachable;
+        };
     }
 }
 
@@ -1046,13 +1356,13 @@ fn "core:prelude/array.wado/Array<Tuple<wasi:filesystem/types.wado/Descriptor,St
     __for_0: block {
         i = 0;
         block {
-            l69: loop {
+            l91: loop {
                 if i >= used {
                     break __for_0;
                 }
                 builtin::array_set<ref "tuple//[Descriptor, String]">(new_repr, i, builtin::array_get<ref "tuple//[Descriptor, String]">(old_repr, i));
                 i = i + 1;
-                continue l69;
+                continue l91;
             };
         };
     };
@@ -1109,16 +1419,16 @@ fn "core:prelude/types.wado/AsyncCall<Result<DescriptorStat,wasi:filesystem/type
             break __inline_cm_waitable_join_0: handle_34;
             unreachable;
         });
-        b72: block {
-            l73: loop {
+        b94: block {
+            l95: loop {
                 let __sroa_event_code: i32;
                 let __sroa_event_handle: i32;
                 let __sroa_event_payload: u32;
                 multivalue_bind [__sroa_event_code, __sroa_event_handle, __sroa_event_payload] = "core:internal/cm_waitable_set_wait"(ws_3);
                 if __sroa_event_payload == 2 {
-                    break b72;
+                    break b94;
                 }
-                continue l73;
+                continue l95;
             };
         };
         "wasi/subtask-drop"(raw);
@@ -1308,16 +1618,16 @@ fn "core:prelude/types.wado/AsyncCall<Result<unit,wasi:filesystem/types.wado/Err
             break __inline_cm_waitable_join_0: handle_12;
             unreachable;
         });
-        b125: block {
-            l126: loop {
+        b147: block {
+            l148: loop {
                 let __sroa_event_code: i32;
                 let __sroa_event_handle: i32;
                 let __sroa_event_payload: u32;
                 multivalue_bind [__sroa_event_code, __sroa_event_handle, __sroa_event_payload] = "core:internal/cm_waitable_set_wait"(ws_3);
                 if __sroa_event_payload == 2 {
-                    break b125;
+                    break b147;
                 }
-                continue l126;
+                continue l148;
             };
         };
         "wasi/subtask-drop"(raw);
@@ -1449,16 +1759,16 @@ fn "core:prelude/types.wado/AsyncCall<Result<wasi:filesystem/types.wado/Descript
             break __inline_cm_waitable_join_0: handle_12;
             unreachable;
         });
-        b167: block {
-            l168: loop {
+        b189: block {
+            l190: loop {
                 let __sroa_event_code: i32;
                 let __sroa_event_handle: i32;
                 let __sroa_event_payload: u32;
                 multivalue_bind [__sroa_event_code, __sroa_event_handle, __sroa_event_payload] = "core:internal/cm_waitable_set_wait"(ws_3);
                 if __sroa_event_payload == 2 {
-                    break b167;
+                    break b189;
                 }
-                continue l168;
+                continue l190;
             };
         };
         "wasi/subtask-drop"(raw);
