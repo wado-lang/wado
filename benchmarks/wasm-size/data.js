@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778116833607,
+  "lastUpdate": 1778147486995,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -20009,6 +20009,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 514478,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d79fca538a21092539f166ad168037525b049318",
+          "message": "Merge pull request #1015 from wado-lang/claude/fix-hfs-sync-inlining-GQhZ1\n\nfield_scalarize: dataflow-driven sync placement",
+          "timestamp": "2026-05-07T18:46:33+09:00",
+          "tree_id": "58d6ff56118c473b00a2d8ebbb88f8a0352fb667",
+          "url": "https://github.com/wado-lang/wado/commit/d79fca538a21092539f166ad168037525b049318"
+        },
+        "date": 1778147486647,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1770,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9140,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16987,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 514574,
             "unit": "bytes"
           }
         ]
