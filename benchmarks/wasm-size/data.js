@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778166279020,
+  "lastUpdate": 1778167631116,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -20165,6 +20165,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/1fc9303dd367ee02fe1feec887db2923c7d3c874"
         },
         "date": 1778166278645,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1770,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9140,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16987,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 514574,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "49c75a4392221d3ced27f1fa35ebb958431c57cc",
+          "message": "Merge pull request #1019 from wado-lang/codex/2026-05-07-convert-kebab-case-to-snake_case\n\nRename .wado files to snake_case and update references",
+          "timestamp": "2026-05-08T00:21:58+09:00",
+          "tree_id": "0c865302bcdade05583e5f5a93f62eaf64fc402f",
+          "url": "https://github.com/wado-lang/wado/commit/49c75a4392221d3ced27f1fa35ebb958431c57cc"
+        },
+        "date": 1778167630747,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
