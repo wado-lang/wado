@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778113052279,
+  "lastUpdate": 1778116833607,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -19945,6 +19945,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/b49a799a1cc25ae21e2652a96b88af6c3d58f8ad"
         },
         "date": 1778113052154,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1770,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9140,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18520,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 514478,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0b1bf037e6cc819fd618f62be42b0b81ed799377",
+          "message": "Merge pull request #1014 from wado-lang/claude/plan-router-implementation-Kvel6\n\ncore:router: ship segment-DFA router; dogfood in http-bin",
+          "timestamp": "2026-05-07T10:15:41+09:00",
+          "tree_id": "205485188afb79bacb14dacd1b94c2ae034dfb36",
+          "url": "https://github.com/wado-lang/wado/commit/0b1bf037e6cc819fd618f62be42b0b81ed799377"
+        },
+        "date": 1778116833331,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
