@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778163643436,
+  "lastUpdate": 1778164397342,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -20077,6 +20077,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/2b6c0f0533cd00f113bef87ccc6a7e596e1a7f63"
         },
         "date": 1778163643251,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1770,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9140,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16987,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 514574,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2896309c9b1a6cb70b265aa6178f66fbc52d2155",
+          "message": "Merge pull request #1017 from wado-lang/gfx/wado_skill\n\nchore: add wado/rust skills, reducing amount of AGENTS.md",
+          "timestamp": "2026-05-07T23:28:35+09:00",
+          "tree_id": "dc298db426184183697498a26755e243b57998b6",
+          "url": "https://github.com/wado-lang/wado/commit/2896309c9b1a6cb70b265aa6178f66fbc52d2155"
+        },
+        "date": 1778164397049,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
