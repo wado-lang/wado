@@ -610,7 +610,6 @@ fn power_of_two_minus_one_width(v: i32) -> Option<u32> {
     }
 }
 
-/// Returns true if the instruction is guaranteed to produce 0 or 1.
 /// Returns true if evaluating `instr` (or any of its sub-instructions)
 /// performs `local.set` / `local.tee` against the local named
 /// `target_name`. Used by `fold_branchless_increment` to refuse the
@@ -631,6 +630,7 @@ fn writes_local(instr: &WirInstr, target_name: &str) -> bool {
     found
 }
 
+/// Returns true if the instruction is guaranteed to produce 0 or 1.
 fn is_boolean_valued(instr: &WirInstr) -> bool {
     matches!(
         instr,

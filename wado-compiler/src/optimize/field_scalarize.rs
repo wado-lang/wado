@@ -1,46 +1,74 @@
 //! Hot Field Scalarization for Wado TIR
 //!
-//! This pass promotes frequently-accessed struct fields to local variables within loops.
-//! Unlike LICM which handles loop-invariant fields, this pass handles fields that are
-//! both read and written inside the loop body.
+//! Promotes a hot struct field `obj.field` (read+written inside a loop)
+//! to a mutable local `__hfs_field_N`, hoisted out of the loop. Reads
+//! and writes inside the loop become `local.get`/`local.set`; sync with
+//! the underlying GC field happens only when control leaves the
+//! scalar's domain (calls, escape paths, loop back-edges).
 //!
-//! For a field `obj.field` that is accessed N times in a loop:
-//! 1. Create a mutable local `__hfs_field_N` before the loop.
-//! 2. Load: `__hfs_field_N = obj.field`.
-//! 3. Replace every `obj.field` read inside the loop body with `__hfs_field_N`.
-//! 4. Replace every `obj.field = val` write inside the loop body with `__hfs_field_N = val`.
-//! 5. Wrap every reachable `Call`/`MethodCall`/`IndirectCall` that receives
-//!    `obj` (as `&T` or `&mut T`) with a synthetic `Block` that performs
-//!    scalar→struct write-back before the call and struct→scalar re-read
-//!    after. Only fields the callee actually accesses are synced; an
-//!    immutable-ref parameter elides the re-read because the callee cannot
-//!    mutate through it.
-//! 6. Insert a final write-back `obj.field = __hfs_field_N` after the loop
-//!    and before any `return`/`break` that escapes the loop scope (the
-//!    unlabeled `break` at `loop_depth 0` shortcut elides this since the
-//!    post-loop write-back already covers it).
+//! For a field `obj.field` accessed at least `MIN_ACCESS_COUNT` times:
+//! 1. Allocate a mutable local `__hfs_field_N`.
+//! 2. Pre-load `let __hfs_field_N = obj.field;` before the loop.
+//! 3. Rewrite every `obj.field` read in the body to `__hfs_field_N`.
+//! 4. Rewrite every `obj.field = v` write in the body to
+//!    `__hfs_field_N = v`.
+//! 5. Walk the body with a dataflow lattice that tracks which side
+//!    holds the truth and emits sync only at transitions (see below).
 //!
-//! This converts GC `struct.get`/`struct.set` into Wasm `local.get`/
-//! `local.set` in hot loops.
+//! ## Sync placement (dataflow-driven)
 //!
-//! The wrapper has two shapes depending on the call's return type:
+//! For each scalarized candidate `(L, F)` the walker tracks one of:
 //!
-//! - unit-typed call: `Block { write_back; call; re_read }`
-//! - non-unit call:   `Block { write_back; let __tmp = call; re_read; __tmp }`
+//! - `Both`        — `__hfs_F == L.F` (no sync needed for either side).
+//! - `ScalarOnly`  — `__hfs_F` holds the latest value; `L.F` is stale.
+//! - `FieldOnly`   — `L.F` holds the latest value; `__hfs_F` is stale.
 //!
-//! The walker in `replace_in_expr` descends through every branching
-//! construct (`Match`/`If`/`Switch`/`LabeledBlock`/`Block`) before
-//! reaching a call, so each branch is its own sync scope: a call in one
-//! `match` arm cannot trigger sync that clobbers a sibling
-//! scalar-update arm. (See issue #1008.)
+//! Transitions:
+//!
+//! - Scalar write `__hfs_F = v`     → state becomes `ScalarOnly`.
+//! - `&mut T` call touching `L.F`   → pre-call: `write_back` if not
+//!   field-canonical; post-call: state becomes `FieldOnly`.
+//! - `&T` call touching `L.F`       → pre-call: `write_back` if not
+//!   field-canonical; state unchanged otherwise.
+//! - Field read `obj.field`         → re-read if not scalar-canonical;
+//!   state becomes `Both`.
+//!
+//! Sync is emitted only at canonical-side transitions:
+//! `ScalarOnly → Both/FieldOnly` writes back, `FieldOnly → Both/ScalarOnly`
+//! re-reads, `Both → *` is a relabel with no sync. Consecutive `&mut`
+//! calls therefore emit zero inter-call sync — once `FieldOnly`, every
+//! subsequent `&mut` call's pre-state is already satisfied.
+//!
+//! Branch joins (`If`/`Switch`/`Match`) walk each arm with a cloned
+//! entry state and pick a per-candidate join target; convergence sync
+//! is inserted at each arm's exit. A call in one match arm cannot
+//! trigger sync that clobbers a sibling scalar-update arm (issue #1008).
+//!
+//! Loop boundaries:
+//! - The body-end of the HFS loop appends sync to drive every
+//!   candidate back to `Both`, restoring the loop back-edge invariant.
+//! - `return` / `break` to a non-enclosing target / `continue` emit
+//!   sync inline before the control-flow stmt, since none of those
+//!   reach the body-end fall-through.
+//! - Nested loops commit any `ScalarOnly` candidate before recursing
+//!   so inner reads see an up-to-date field, then set the outer state
+//!   to `JOIN(entry_state, body_exit_state)` per candidate.
 //!
 //! ## Field-selective sync
 //!
-//! Field information for the wrapper comes from a pre-computed
-//! `FieldUsageCache` that maps each function to the set of fields it
-//! accesses on each struct-typed parameter. If the callee cannot be
-//! resolved or passes the struct transitively to another unknown call,
-//! all fields are conservatively synced.
+//! For each call site, the walker queries a pre-computed
+//! `FieldUsageCache` to determine which scalarized fields the callee
+//! actually touches. An immutable-ref parameter elides the post-call
+//! `re_read` since the callee cannot mutate through it. Unresolved
+//! callees fall back to "all fields" conservatively.
+//!
+//! ## Generated locals
+//!
+//! - `__hfs_<field>_<idx>` — the scalar holding `obj.field`.
+//! - `__hfs_call_<idx>`    — pooled per-type temps used to capture the
+//!   trailing value of a non-unit `Match` arm body / `If`/`Switch`
+//!   block when convergence sync must run after the value-producing
+//!   expression.
 
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -1891,11 +1919,6 @@ struct WalkCtx<'a> {
     /// constructed. Each temp's def/use are confined to one Block, so
     /// reuse across separate Blocks is sound.
     temp_pool: IndexMap<TypeId, Vec<u32>>,
-    /// Lexically enclosing labels — `break <label>` inside this set stays
-    /// in the HFS scope; any other `break` (and `return`) escapes.
-    enclosing_labels: IndexSet<String>,
-    /// Loop nesting depth from the HFS root (0 inside the HFS loop body).
-    loop_depth: usize,
 }
 
 impl WalkCtx<'_> {
@@ -1945,8 +1968,6 @@ fn process_loop_body(
         locals,
         local_count,
         temp_pool: IndexMap::default(),
-        enclosing_labels: IndexSet::default(),
-        loop_depth: 0,
     };
     walk_block(body, &mut states, &mut ctx);
     let span = crate::token::Span::new(0, 0, 0, 0);
@@ -2027,9 +2048,7 @@ fn pick_join_target_for_candidate(arm_exits: &[CanonState]) -> CanonState {
         (true, false, true) => CanonState::ScalarOnly,
         (false, true, true) => CanonState::FieldOnly,
         // {ScalarOnly, FieldOnly} or all three: must converge — heuristic
-        // ScalarOnly preserves typical post-branch scalar reads. (A
-        // lookahead-based variant could pick FieldOnly when the next op
-        // is a call; not implemented yet.)
+        // ScalarOnly preserves typical post-branch scalar reads.
         (true, true, _) => CanonState::ScalarOnly,
         (false, false, false) => CanonState::Both,
     }
@@ -2205,9 +2224,8 @@ fn walk_stmt(
             label,
             block: inner,
         } => {
-            ctx.enclosing_labels.insert(label.clone());
+            let _ = label;
             walk_block(inner, states, ctx);
-            ctx.enclosing_labels.shift_remove(label.as_str());
             out.push(stmt);
         }
         TirStmtKind::Return { value } => {
@@ -2224,22 +2242,29 @@ fn walk_stmt(
             if let Some(v) = value {
                 walk_expr(v, states, true, out, ctx);
             }
-            // A break to an enclosing label stays in the HFS scope; only
-            // breaks that escape the loop need a pre-stmt write-back.
-            let escapes = !label
-                .as_ref()
-                .is_some_and(|l| ctx.enclosing_labels.contains(l.as_str()));
-            // The existing optimization: an unlabeled break at
-            // loop_depth 0 exits the HFS loop directly, so the post-loop
-            // (= body-end-force-Both) write-back already covers the
-            // commit. Skip the inline pre-break write-back in that case.
-            let skip_inline = ctx.loop_depth == 0 && label.is_none() && escapes;
-            if escapes && !skip_inline {
-                commit_scalar_for_escape(states, out, ctx, span);
-            }
+            // Any non-fall-through exit (return / break / continue) skips
+            // the body-end force-Both, so any `ScalarOnly` candidate must
+            // be committed inline. We commit unconditionally — even for a
+            // `break label` that stays inside the HFS scope — because the
+            // walker tracks only the linear (fall-through) state and does
+            // not JOIN labeled-block break-paths with fall-through at the
+            // block exit; without inline commit, post-block code could
+            // run with a state different from what the walker analyzed.
+            // Over-committing is sound (it forces Both, the strongest
+            // state); the only cost is a redundant write-back on
+            // already-canonical paths.
+            let _ = label;
+            commit_scalar_for_escape(states, out, ctx, span);
             out.push(stmt);
         }
         TirStmtKind::Continue => {
+            // `continue` jumps back to the loop header, skipping the
+            // body-end force-Both. Drive every candidate to `Both` so
+            // the next iteration's invariant (every candidate is `Both`
+            // at body entry) holds at runtime as well as at
+            // compile-time.
+            let sync_stmts = sync_to_target(states, CanonState::Both, ctx, span);
+            out.extend(sync_stmts);
             out.push(stmt);
         }
         TirStmtKind::Let { value, .. } => {
@@ -2318,14 +2343,38 @@ fn walk_branching_block_if(
     *states = target;
 }
 
-/// Walk a nested loop's body. Treat the inner loop as a region that may
-/// touch every candidate's field via its own pre-load and
-/// post-write-back (added by inner scalarize). State tracking inside
-/// the inner body proceeds normally, but to keep the analysis
-/// converging without needing fixed-point iteration, the outer state at
-/// inner-loop entry is committed to field-canonical before the recurse,
-/// and the post-loop state is set to `FieldOnly` (the conservative
-/// model: any candidate may have been mutated by the inner loop).
+/// Walk a nested loop's body and update the outer state for the
+/// post-loop point.
+///
+/// **Limitation: this is a single walk, not a fixpoint iteration.** The
+/// inner body is walked once with `entry_states`, so any program point
+/// inside the body is analyzed under the assumption that the iteration
+/// just entered with `entry_states`. At runtime, iterations 2+ of the
+/// inner loop start with whatever `body_exit_states` was, which can
+/// differ — that mismatch is unmodeled here. In practice, outer
+/// candidates inside a nested loop typically either (a) are not
+/// touched, (b) only read (state stays scalar-canonical across
+/// iterations), or (c) are touched via a `&mut` call which leaves the
+/// state field-canonical and stable across iterations. The Continue /
+/// Break inline syncs (`commit_scalar_for_escape` and
+/// `sync_to_target(..., Both)`) drive the state back to `Both` on
+/// control-flow exits, which covers the typical shapes; if a
+/// pathological body ends `ScalarOnly` after fall-through inside an
+/// inner loop, iterations 2+ would reach calls without write-back. No
+/// committed fixture exercises that pattern, but a regression test
+/// should accompany any future change here.
+///
+/// Convergence strategy:
+/// - Pre-recurse: commit any `ScalarOnly` outer candidate to the field
+///   so inner reads (and a nested HFS's pre-load) observe an
+///   up-to-date value.
+/// - Post-loop state per candidate = `JOIN(entry_state,
+///   body_exit_state)`. This captures both the zero-iterations and
+///   `>= 1`-iteration paths; when a nested HFS scalarized the same
+///   field, its body-end force-Both rewrites to a scalar write at the
+///   outer level, leaving body-exit at `ScalarOnly`, and the join with
+///   `entry`'s `Both` stays scalar-canonical so subsequent reads use
+///   the up-to-date outer scalar.
 fn walk_nested_loop(
     body: &mut TirBlock,
     states: &mut ScalarStates,
@@ -2345,10 +2394,8 @@ fn walk_nested_loop(
         }
     }
     let entry_states = states.clone();
-    ctx.loop_depth += 1;
     let mut body_exit_states = states.clone();
     walk_block(body, &mut body_exit_states, ctx);
-    ctx.loop_depth -= 1;
     // Post-loop state: the loop may run zero or more iterations, so
     // each candidate's post-loop state is the join of its entry state
     // (zero iterations) and body-exit state (>= 1 iteration). When a
@@ -2721,9 +2768,8 @@ fn walk_other_expr_kinds(
             }
         }
         TirExprKind::LabeledBlock { label, block, .. } => {
-            ctx.enclosing_labels.insert(label.clone());
+            let _ = label;
             walk_inline_block(block, states, result_used, ctx);
-            ctx.enclosing_labels.shift_remove(label.as_str());
         }
         TirExprKind::GlobalVarSet { value, .. } => {
             walk_expr(value, states, true, out, ctx);
@@ -2750,10 +2796,6 @@ fn walk_other_expr_kinds(
             walk_expr(scrutinee, states, true, out, ctx);
             walk_expr_branches_match(arms, states, result_used, ctx, span);
         }
-        TirExprKind::Assign { target, value } => {
-            walk_expr(target, states, true, out, ctx);
-            walk_expr(value, states, true, out, ctx);
-        }
         TirExprKind::TemplateString { parts } => {
             for part in parts {
                 if let crate::tir::TirTemplatePart::Interpolation { expr, .. } = part {
@@ -2779,6 +2821,9 @@ fn walk_other_expr_kinds(
         | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::EnumConstruct { .. } => {}
+        TirExprKind::Assign { .. } => {
+            unreachable!("Assign handled at the top of walk_expr")
+        }
         TirExprKind::Call { .. }
         | TirExprKind::MethodCall { .. }
         | TirExprKind::IndirectCall { .. } => {
