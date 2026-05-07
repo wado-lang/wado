@@ -130,29 +130,27 @@ fn "wado-compiler/tests/fixtures/opt_hfs_immut_ref_sync.wado/run"() {
     let f_35: ref "core:prelude/format.wado//Formatter";
     let f_41: ref "core:prelude/format.wado//Formatter";
     let f_46: ref "core:prelude/format.wado//Formatter";
-    let _hfs_x_49: i32;
+    let __hfs_x_49: i32;
     c = struct.new "wado-compiler/tests/fixtures/opt_hfs_immut_ref_sync.wado//Counter" { x: 0, y: 0 };
     total = 0;
     __for_0: block {
         i = 0;
-        _hfs_x_49 = c.x;
+        __hfs_x_49 = c.x;
         block {
             l1: loop {
                 if i >= 5 {
-                    c.x = _hfs_x_49;
                     break __for_0;
                 }
-                _hfs_x_49 = _hfs_x_49 + 1;
-                total = total + _hfs_x_49;
-                total = total + _hfs_x_49;
-                c.x = _hfs_x_49;
+                __hfs_x_49 = __hfs_x_49 + 1;
+                total = total + __hfs_x_49;
+                total = total + __hfs_x_49;
+                c.x = __hfs_x_49;
                 total = total + "wado-compiler/tests/fixtures/opt_hfs_immut_ref_sync.wado/read_x"(c);
                 "wado-compiler/tests/fixtures/opt_hfs_immut_ref_sync.wado/bump_y"(c);
                 i = i + 1;
                 continue l1;
             };
         };
-        c.x = _hfs_x_49;
     };
     __v0_3 = total;
     __cond_4 = __v0_3 == 45;

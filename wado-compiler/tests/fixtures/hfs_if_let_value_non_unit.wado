@@ -1,0 +1,60 @@
+// Regression: `let x = if cond { call_arm } else { scalar_arm };` —
+// non-unit `If` used as a Let value with mixed arms (one calls
+// `&mut local`, the other reads/updates the scalar). Each arm is its
+// own sync scope, so the call arm gets a wrapper local to itself
+// (write_back / let __tmp / re_read / __tmp) and the scalar arm sees
+// no sync. The Let value flows through naturally.
+//
+// Trace per iteration:
+//   - i=0: cond i % 2 == 0 → arm 0 (scalar). val = __hfs_v + 1 (=1).
+//          sum += 1. b.v not modified.
+//   - i=1: cond fails → arm 1 (call). pre b.v = 1; call sets b.v=11
+//          and returns 11; re-read __hfs_v = 11. val = 11. sum += 11.
+//   - i=2: arm 0. val = 12 (=11+1). sum += 12.
+//   - i=3: arm 1. pre b.v=12; call → b.v=22, ret 22; __hfs_v=22.
+//          val=22. sum += 22.
+//   sum = 1+11+12+22 = 46. final b.v = 22.
+
+use { println, Stdout } from "core:cli";
+
+struct Buf {
+    v: i32,
+    pad: i32,
+}
+
+#[inline(never)]
+fn external_inc_and_read(b: &mut Buf) -> i32 {
+    b.v = b.v + 10;
+    return b.v;
+}
+
+export fn run() with Stdout {
+    let mut b = Buf { v: 0, pad: 0 };
+    let mut sum = 0;
+    let mut i = 0;
+    while i < 4 {
+        b.v = b.v + 0;
+        b.v = b.v + 0;
+        let val = if i % 2 == 0 {
+            b.v + 1
+        } else {
+            external_inc_and_read(&mut b)
+        };
+        if i % 2 == 0 {
+            b.v = b.v + 1;
+        }
+        sum = sum + val;
+        b.v = b.v + 0;
+        i = i + 1;
+    }
+    println(`{sum} {b.v}`);
+}
+
+__DATA__
+{
+    "stdout": "46 22\n",
+    "wir_expect:O2": [
+        "let __hfs_v_",
+        "let __hfs_call_"
+    ]
+}

@@ -1,0 +1,85 @@
+// Regression: in a nested non-HFS loop, the OUTER HFS walker analyzes
+// the inner body once with `entry_states`. At runtime, iter 2+ of the
+// inner loop starts with the previous iteration's body-end state,
+// which can differ. A "read scalarized field, then &mut call" pattern
+// miscompiles: walker emits the read with no re-read (state=`Both`),
+// but iter 2's runtime state after iter 1's call is `FieldOnly` —
+// scalar is stale.
+//
+// Shape (mirrors gale's parser for-loops, which exposed the bug at
+// -O2/-O3 once `&mut self` helpers got inlined into the body):
+//
+//   for ... {
+//       let v = state.pos;          // outer-scalar read
+//       state.pos = state.pos + 1;  // outer-scalar write (keeps HFS hot)
+//       bump(&mut state);            // mutates state.pos, → FieldOnly
+//   }
+//
+// HFS scalarizes `state.pos` (4+ accesses inside the outer loop). The
+// inner non-HFS loop body has the read–write–&mut-call pattern. Without
+// the back-edge sync added by `walk_nested_loop`, iter 2's
+// `let v = state.pos` reads the stale scalar — the one initialised by
+// iter 1's pre-load and overwritten by iter 1's scalar write, but
+// never refreshed from the field that `bump` mutated.
+
+use { println, Stdout } from "core:cli";
+
+struct State {
+    pos: i32,
+    pad: i32,
+}
+
+#[inline(never)]
+fn bump(s: &mut State) {
+    s.pos = s.pos + 10;
+}
+
+export fn run() with Stdout {
+    let mut state = State { pos: 0, pad: 0 };
+    let mut sum = 0;
+    let mut outer = 0;
+    // Outer HFS-eligible loop. count_field_accesses_in_stmt does NOT
+    // recurse through nested `Loop` stmts, so we need >=4 direct
+    // accesses to `state.pos` in the OUTER body itself for HFS to fire
+    // here. The inner loop's accesses don't count toward the outer
+    // threshold — that's the design that this test exercises.
+    loop {
+        if outer >= 3 { break; }
+        sum = sum + state.pos;          // OUTER read 1
+        state.pos = state.pos + 100;    // OUTER write 1, read 2
+        sum = sum + state.pos;          // OUTER read 3 — pushes total to 4
+        // Inner non-HFS loop. The OUTER walker handles this via
+        // walk_nested_loop. Inside the inner body, `state.pos` is read
+        // through the outer scalar (rewritten to __hfs_pos), then
+        // `bump` mutates the field via &mut. Without the back-edge
+        // sync added by walk_nested_loop, iter 2+ of the inner loop
+        // reads the stale __hfs_pos (set by iter 1 before bump) rather
+        // than the bump()-updated field.
+        let mut inner = 0;
+        loop {
+            if inner >= 2 { break; }
+            sum = sum + state.pos;
+            bump(&mut state);
+            inner = inner + 1;
+        }
+        outer = outer + 1;
+    }
+    // outer 0: sum += 0  (=0), pos → 100, sum += 100 (=100).
+    //          inner 0: sum += 100 (=200), bump → pos=110.
+    //          inner 1: sum += 110 (=310), bump → pos=120.
+    // outer 1: sum += 120 (=430), pos → 220, sum += 220 (=650).
+    //          inner 0: sum += 220 (=870), bump → pos=230.
+    //          inner 1: sum += 230 (=1100), bump → pos=240.
+    // outer 2: sum += 240 (=1340), pos → 340, sum += 340 (=1680).
+    //          inner 0: sum += 340 (=2020), bump → pos=350.
+    //          inner 1: sum += 350 (=2370), bump → pos=360.
+    println(`{sum} {state.pos}`);
+}
+
+__DATA__
+{
+    "stdout": "2370 360\n",
+    "wir_expect:O2": [
+        "let __hfs_pos_"
+    ]
+}

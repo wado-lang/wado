@@ -1,0 +1,58 @@
+// Regression: `let x = match { scalar_arm, call_arm }` where the match's
+// value (and each arm body) is non-unit (i32). Before per-call-site sync,
+// HFS would either fall back to whole-stmt sync (clobbering the scalar arm
+// via the post-let re-read) or refuse to scalarize. With call-site sync,
+// each arm is its own scope: the call arm's wrapper captures the call's
+// value into a `Block { write_back; let __tmp = call; re_read; __tmp }`
+// and re-reads only locally, so the scalar arm's update survives.
+//
+// Expected trace (per iteration, 4 iterations of i = 0..4):
+//   - i=0 arm 0 (scalar):   __hfs_v += 1 → 1; val = __hfs_v = 1; sum += 1
+//   - i=1 arm 1 (call):     pre-call b.v = __hfs_v (1); call sets b.v = 11
+//                           returns 11; re-read __hfs_v = b.v = 11; val = 11; sum += 11
+//   - i=2 arm 0 (scalar):   __hfs_v += 1 → 12; val = 12; sum += 12
+//   - i=3 arm 1 (call):     pre b.v = 12; call → b.v = 22, ret 22; __hfs_v = 22; sum += 22
+//   sum = 1 + 11 + 12 + 22 = 46; final b.v = __hfs_v = 22.
+
+use { println, Stdout } from "core:cli";
+
+struct Buf {
+    v: i32,
+    pad: i32,
+}
+
+#[inline(never)]
+fn external_inc_and_read(b: &mut Buf) -> i32 {
+    b.v = b.v + 10;
+    return b.v;
+}
+
+export fn run() with Stdout {
+    let mut b = Buf { v: 0, pad: 0 };
+    let mut sum = 0;
+    let mut i = 0;
+    while i < 4 {
+        b.v = b.v + 0;
+        b.v = b.v + 0;
+        let val = match i % 2 {
+            0 => {
+                b.v = b.v + 1;
+                b.v
+            },
+            _ => external_inc_and_read(&mut b),
+        };
+        sum = sum + val;
+        b.v = b.v + 0;
+        i = i + 1;
+    }
+    println(`{sum} {b.v}`);
+}
+
+__DATA__
+{
+    "stdout": "46 22\n",
+    "wir_expect:O2": [
+        "let __hfs_v_",
+        "let __hfs_call_"
+    ]
+}

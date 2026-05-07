@@ -919,23 +919,22 @@ fn "core:json/JsonDeserializer::skip_whitespace"(self) {
     let _licm_input_5: ref "core:prelude/string.wado//String";
     let _licm_used_6: i32;
     let _licm_repr_7: ref builtin::array<u8>;
-    let _hfs_pos_8: i32;
+    let __hfs_pos_8: i32;
     _licm_input_5 = self.input;
     _licm_used_6 = _licm_input_5.used;
     _licm_repr_7 = _licm_input_5.repr;
-    _hfs_pos_8 = self.pos;
+    __hfs_pos_8 = self.pos;
     b102: block {
         l103: loop {
-            if _hfs_pos_8 >= _licm_used_6 {
+            if __hfs_pos_8 >= _licm_used_6 {
                 break b102;
             }
             b = __inline_String__get_byte_1: block -> u8 {
-                index = _hfs_pos_8;
+                index = __hfs_pos_8;
                 break __inline_String__get_byte_1: builtin::array_get_u8(_licm_repr_7, index);
                 unreachable;
             };
             if b > 32 {
-                self.pos = _hfs_pos_8;
                 return;
             }
             if (if (if (if b == 32 -> i32 {
@@ -951,15 +950,14 @@ fn "core:json/JsonDeserializer::skip_whitespace"(self) {
             } else {
                 b == 13;
             }) {
-                _hfs_pos_8 = _hfs_pos_8 + 1;
+                __hfs_pos_8 = __hfs_pos_8 + 1;
             } else {
-                self.pos = _hfs_pos_8;
                 return;
             }
+            self.pos = __hfs_pos_8;
             continue l103;
         };
     };
-    self.pos = _hfs_pos_8;
 }
 
 fn "core:json/JsonDeserializer::parse_i32_direct"(self) {
@@ -997,9 +995,9 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {
     let _licm_input_46: ref "core:prelude/string.wado//String";
     let _licm_used_47: i32;
     let _licm_repr_48: ref builtin::array<u8>;
-    let _hfs_pos_49: i32;
-    let _hfs_pos_50: i32;
-    let _hfs_pos_51: i32;
+    let __hfs_pos_49: i32;
+    let __hfs_pos_50: i32;
+    let __hfs_pos_51: i32;
     "core:json/JsonDeserializer::skip_whitespace"(self);
     start = builtin::i64_extend_i32_s(self.pos);
     if self.pos >= __inline_String__len_0: block -> i32 {
@@ -1053,14 +1051,14 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {
     _licm_input_46 = self.input;
     _licm_used_47 = _licm_input_46.used;
     _licm_repr_48 = _licm_input_46.repr;
-    _hfs_pos_51 = self.pos;
+    __hfs_pos_51 = self.pos;
     b115: block {
         l116: loop {
-            if _hfs_pos_51 >= _licm_used_47 {
+            if __hfs_pos_51 >= _licm_used_47 {
                 break b115;
             }
             b = __inline_String__get_byte_8: block -> u8 {
-                index_28 = _hfs_pos_51;
+                index_28 = __hfs_pos_51;
                 break __inline_String__get_byte_8: builtin::array_get_u8(_licm_repr_48, index_28);
                 unreachable;
             };
@@ -1070,7 +1068,7 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {
                 0;
             }) {
                 result = (result * 10) + (b - 48);
-                _hfs_pos_51 = _hfs_pos_51 + 1;
+                __hfs_pos_51 = __hfs_pos_51 + 1;
             } else if (if (if b == 46 -> i32 {
                 1;
             } else {
@@ -1083,16 +1081,16 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {
                 d = builtin::i64_extend_i32_s(result);
                 frac = 0;
                 if b == 46 {
-                    _hfs_pos_51 = _hfs_pos_51 + 1;
-                    _hfs_pos_49 = _hfs_pos_51;
+                    __hfs_pos_51 = __hfs_pos_51 + 1;
+                    __hfs_pos_49 = __hfs_pos_51;
+                    self.pos = __hfs_pos_51;
                     b124: block {
                         l125: loop {
-                            if _hfs_pos_49 >= _licm_used_47 {
-                                self.pos = _hfs_pos_51;
+                            if __hfs_pos_49 >= _licm_used_47 {
                                 break b124;
                             }
                             b2 = __inline_String__get_byte_10: block -> u8 {
-                                index_31 = _hfs_pos_49;
+                                index_31 = __hfs_pos_49;
                                 break __inline_String__get_byte_10: builtin::array_get_u8(_licm_repr_48, index_31);
                                 unreachable;
                             };
@@ -1103,20 +1101,21 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {
                             }) {
                                 d = (d * 10_i64) + builtin::i64_extend_i32_s(b2 - 48);
                                 frac = frac + 1;
-                                _hfs_pos_49 = _hfs_pos_49 + 1;
+                                __hfs_pos_49 = __hfs_pos_49 + 1;
                             } else {
-                                self.pos = _hfs_pos_51;
                                 break b124;
                             }
+                            __hfs_pos_51 = __hfs_pos_49;
+                            self.pos = __hfs_pos_51;
                             continue l125;
                         };
                     };
-                    _hfs_pos_51 = _hfs_pos_49;
+                } else {
                 }
                 exp = 0;
-                if _hfs_pos_51 < _licm_used_47 {
+                if __hfs_pos_51 < _licm_used_47 {
                     eb = __inline_String__get_byte_12: block -> u8 {
-                        index_34 = _hfs_pos_51;
+                        index_34 = __hfs_pos_51;
                         break __inline_String__get_byte_12: builtin::array_get_u8(_licm_repr_48, index_34);
                         unreachable;
                     };
@@ -1125,30 +1124,30 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {
                     } else {
                         eb == 69;
                     }) {
-                        _hfs_pos_51 = _hfs_pos_51 + 1;
+                        __hfs_pos_51 = __hfs_pos_51 + 1;
                         exp_neg = 0;
-                        if _hfs_pos_51 < _licm_used_47 {
+                        if __hfs_pos_51 < _licm_used_47 {
                             sb = __inline_String__get_byte_14: block -> u8 {
-                                index_37 = _hfs_pos_51;
+                                index_37 = __hfs_pos_51;
                                 break __inline_String__get_byte_14: builtin::array_get_u8(_licm_repr_48, index_37);
                                 unreachable;
                             };
                             if sb == 45 {
                                 exp_neg = 1;
-                                _hfs_pos_51 = _hfs_pos_51 + 1;
+                                __hfs_pos_51 = __hfs_pos_51 + 1;
                             } else {
-                                _hfs_pos_51 = _hfs_pos_51 + (sb == 43);
+                                __hfs_pos_51 = __hfs_pos_51 + (sb == 43);
                             }
                         }
-                        _hfs_pos_50 = _hfs_pos_51;
+                        __hfs_pos_50 = __hfs_pos_51;
+                        self.pos = __hfs_pos_51;
                         b134: block {
                             l135: loop {
-                                if _hfs_pos_50 >= _licm_used_47 {
-                                    self.pos = _hfs_pos_51;
+                                if __hfs_pos_50 >= _licm_used_47 {
                                     break b134;
                                 }
                                 b3 = __inline_String__get_byte_16: block -> u8 {
-                                    index_40 = _hfs_pos_50;
+                                    index_40 = __hfs_pos_50;
                                     break __inline_String__get_byte_16: builtin::array_get_u8(_licm_repr_48, index_40);
                                     unreachable;
                                 };
@@ -1158,15 +1157,15 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {
                                     0;
                                 }) {
                                     exp = (exp * 10) + (b3 - 48);
-                                    _hfs_pos_50 = _hfs_pos_50 + 1;
+                                    __hfs_pos_50 = __hfs_pos_50 + 1;
                                 } else {
-                                    self.pos = _hfs_pos_51;
                                     break b134;
                                 }
+                                __hfs_pos_51 = __hfs_pos_50;
+                                self.pos = __hfs_pos_51;
                                 continue l135;
                             };
                         };
-                        _hfs_pos_51 = _hfs_pos_50;
                         if exp_neg {
                             exp = 0 - exp;
                         }
@@ -1179,7 +1178,7 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {
                     v;
                 });
                 if v_signed != builtin::f64_floor(v_signed) {
-                    self.pos = _hfs_pos_51;
+                    self.pos = __hfs_pos_51;
                     return struct.new "core:prelude/types.wado//Result<i32,DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__unexpected_type_18: block -> ref "core:serde//DeserializeError" {
                         msg_42 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected integer, got float"), used: 27 };
                         break __inline_DeserializeError__unexpected_type_18: struct.new "core:serde//DeserializeError" { kind: 0, message: msg_42, offset: start };
@@ -1191,22 +1190,22 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {
                 } else {
                     v_signed > 2147483647;
                 }) {
-                    self.pos = _hfs_pos_51;
+                    self.pos = __hfs_pos_51;
                     return struct.new "core:prelude/types.wado//Result<i32,DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__overflow_19: block -> ref "core:serde//DeserializeError" {
                         msg_44 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value out of range for i32"), used: 26 };
                         break __inline_DeserializeError__overflow_19: struct.new "core:serde//DeserializeError" { kind: 5, message: msg_44, offset: start };
                         unreachable;
                     }) };
                 }
-                self.pos = _hfs_pos_51;
+                self.pos = __hfs_pos_51;
                 return struct.new "core:prelude/types.wado//Result<i32,DeserializeError>::Ok" { discriminant: 0, payload_0: builtin::i32_trunc_f64_s(v_signed) };
             } else {
                 break b115;
             }
+            self.pos = __hfs_pos_51;
             continue l116;
         };
     };
-    self.pos = _hfs_pos_51;
     if neg {
         result = 0 - result;
     }

@@ -1,0 +1,48 @@
+// Regression: a guarded match arm sits next to a scalar-update arm.
+// Before per-call-site sync, any arm with a guard forced HFS to fall
+// back to whole-stmt sync, clobbering the sibling scalar-update arm.
+// With call-site sync, the guard is just another expression position;
+// each call inside guard or body gets its own wrapper, and the scalar
+// arm is unaffected.
+//
+// Per iteration:
+//   - i=0: arm 0 fires (i % 2 == 0). scalar update +1.
+//   - i=1: arm 0 fails (1 != 0); arm 1 guard `i > 0` is true. call (+10).
+//   - i=2: arm 0 fires. scalar update +1.
+//   - i=3: arm 1 fires. call (+10).
+//   final b.v = 0 + 1 + 10 + 1 + 10 = 22.
+
+use { println, Stdout } from "core:cli";
+
+struct Buf {
+    v: i32,
+    pad: i32,
+}
+
+#[inline(never)]
+fn external_inc(b: &mut Buf) {
+    b.v = b.v + 10;
+}
+
+export fn run() with Stdout {
+    let mut b = Buf { v: 0, pad: 0 };
+    let mut i = 0;
+    while i < 4 {
+        b.v = b.v + 0;
+        b.v = b.v + 0;
+        match i % 2 {
+            0 => b.v = b.v + 1,
+            _ && i > 0 => external_inc(&mut b),
+            _ => {},
+        }
+        b.v = b.v + 0;
+        i = i + 1;
+    }
+    println(`{b.v}`);
+}
+
+__DATA__
+{
+    "stdout": "22\n",
+    "wir_expect:O2": ["let __hfs_v_"]
+}

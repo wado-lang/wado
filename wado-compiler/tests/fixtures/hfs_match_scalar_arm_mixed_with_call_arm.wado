@@ -1,0 +1,68 @@
+// P0 regression test: HFS scalarized `b.v` for a loop whose match
+// body has a *scalar-write arm* (`b.v = b.v + 1`, written directly in
+// source — no inlining involved) AND a method-call arm
+// (`#[inline(never)] external_inc` stays a real call).
+//
+// This is the same shape as `hfs_inline_arm_mixed_with_call_arm.wado`
+// but with the scalar-update arm written by the user instead of being
+// produced by the inline pass. It demonstrates that the bug is
+// structural to HFS's stmt-level sync granularity, not specific to
+// inlined labeled blocks.
+//
+// Trace at -O2 with the broken sync logic:
+//   - i=0 (scalar): pre `b.v = __hfs_v` (=0), arm 0 sets `__hfs_v = 1`,
+//                   post `__hfs_v = b.v` clobbers __hfs_v back to 0
+//   - i=1 (call):   pre `b.v = 0`, external_inc → b.v = 10,
+//                   post `__hfs_v = 10`
+//   - i=2 (scalar): pre `b.v = __hfs_v` (=10), arm 0 sets `__hfs_v = 11`,
+//                   post clobbers __hfs_v back to 10
+//   - i=3 (call):   pre `b.v = 10`, external_inc → b.v = 20,
+//                   post `__hfs_v = 20`
+//   Result: 20. Expected: 22 (every scalar-arm increment dropped).
+//
+// Root cause (same as #1008): `compute_sync_fields_in_stmt` walks the
+// whole match stmt, finds a `&mut local` call in arm 1, and emits
+// write-back / re-read around the *entire* match. The post-match
+// re-read clobbers the scalar updates that arm 0 made.
+//
+// PR #1005's band-aid (`collect_locals_accessed_inside_inline_blocks`)
+// does NOT cover this case because no `__inline_*` block is involved
+// — confirming the band-aid is too narrow.
+
+use { println, Stdout } from "core:cli";
+
+struct Buf {
+    v: i32,
+    pad: i32,
+}
+
+#[inline(never)]
+fn external_inc(b: &mut Buf) {
+    b.v = b.v + 10;
+}
+
+export fn run() with Stdout {
+    let mut b = Buf { v: 0, pad: 0 };
+    let mut i = 0;
+    while i < 4 {
+        b.v = b.v + 0;
+        b.v = b.v + 0;
+        match i % 2 {
+            0 => b.v = b.v + 1,
+            _ => external_inc(&mut b),
+        }
+        b.v = b.v + 0;
+        i = i + 1;
+    }
+    println(`{b.v}`);
+}
+
+__DATA__
+{
+    "stdout": "22\n",
+    "wir_expect:O2": ["let __hfs_v_"],
+    "wir_not_expect:O2": [
+        "b.v = __hfs_v_17;\n            let __match_scrut_0",
+        "__hfs_v_17 = b.v;\n            __hfs_v_17 = __hfs_v_17 + 0;"
+    ]
+}

@@ -1,0 +1,59 @@
+// Regression: an early `return f(&mut local)` exits the HFS loop
+// scope while carrying a wrapped call as its value. With per-call-site
+// sync the call inside the return value gets its own wrapper
+// (write_back / let __tmp / re_read / __tmp), and the
+// escape-write-back mechanism then commits the loop scalar before
+// the return jumps. The post-loop write-back catches any tail
+// updates.
+//
+// Trace (per iteration):
+//   - i=0,1,2: scalar update via __hfs_v: b.v += 1 each iteration.
+//     Through HFS this happens via __hfs_v += 1 with no struct-side
+//     write until something forces a sync (return, break, post-loop).
+//   - i=3: return with `external_inc_and_read(&mut b)`. The call's
+//     wrapper write-backs scalar to b.v (=3), the call mutates b.v
+//     to 13 and returns 13, the wrapper re-reads __hfs_v = 13. The
+//     return carries 13. `step` returns 13 to caller.
+// final last_val = 13, b.v = 13.
+
+use { println, Stdout } from "core:cli";
+
+struct Buf {
+    v: i32,
+    pad: i32,
+}
+
+#[inline(never)]
+fn external_inc_and_read(b: &mut Buf) -> i32 {
+    b.v = b.v + 10;
+    return b.v;
+}
+
+fn step(b: &mut Buf) -> i32 {
+    let mut i = 0;
+    while i < 100 {
+        b.v = b.v + 0;
+        b.v = b.v + 0;
+        if i >= 3 {
+            return external_inc_and_read(b);
+        }
+        b.v = b.v + 1;
+        b.v = b.v + 0;
+        i = i + 1;
+    }
+    return 0;
+}
+
+export fn run() with Stdout {
+    let mut b = Buf { v: 0, pad: 0 };
+    let last_val = step(&mut b);
+    println(`{last_val} {b.v}`);
+}
+
+__DATA__
+{
+    "stdout": "13 13\n",
+    "wir_expect:O2": [
+        "let __hfs_v_"
+    ]
+}

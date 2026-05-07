@@ -251,12 +251,14 @@ fn "wado-compiler/tests/fixtures/opt_inline_backtrack_miscompile.wado/parse_all"
     let index_26: i32;
     let self_27: ref "core:prelude//Array<i32>";
     let index_28: i32;
+    let __hfs_pos_29: i32;
     total = 0;
+    __hfs_pos_29 = p.pos;
     b8: block {
         l9: loop {
             if __inline_Array_i32__IndexValue_i32___index_value_0: block -> i32 {
                 self_27 = p.data;
-                index_28 = p.pos;
+                index_28 = __hfs_pos_29;
                 if index_28 >= self_27.used {
                     "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
@@ -268,7 +270,7 @@ fn "wado-compiler/tests/fixtures/opt_inline_backtrack_miscompile.wado/parse_all"
             }
             drop(__inline_Array_i32__IndexValue_i32___index_value_2: block -> i32 {
                 self_9 = p.data;
-                index_10 = p.pos;
+                index_10 = __hfs_pos_29;
                 if index_10 >= self_9.used {
                     "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
@@ -278,7 +280,7 @@ fn "wado-compiler/tests/fixtures/opt_inline_backtrack_miscompile.wado/parse_all"
             });
             drop(__inline_Array_i32__IndexValue_i32___index_value_4: block -> i32 {
                 self_12 = p.data;
-                index_13 = p.pos;
+                index_13 = __hfs_pos_29;
                 if index_13 >= self_12.used {
                     "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
@@ -288,7 +290,7 @@ fn "wado-compiler/tests/fixtures/opt_inline_backtrack_miscompile.wado/parse_all"
             });
             drop(__inline_Array_i32__IndexValue_i32___index_value_6: block -> i32 {
                 self_15 = p.data;
-                index_16 = p.pos;
+                index_16 = __hfs_pos_29;
                 if index_16 >= self_15.used {
                     "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
@@ -298,7 +300,7 @@ fn "wado-compiler/tests/fixtures/opt_inline_backtrack_miscompile.wado/parse_all"
             });
             drop(__inline_Array_i32__IndexValue_i32___index_value_8: block -> i32 {
                 self_18 = p.data;
-                index_19 = p.pos;
+                index_19 = __hfs_pos_29;
                 if index_19 >= self_18.used {
                     "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
@@ -310,7 +312,7 @@ fn "wado-compiler/tests/fixtures/opt_inline_backtrack_miscompile.wado/parse_all"
                 skipped = __inline_Parser__advance_10: block -> i32 {
                     v = __inline_Array_i32__IndexValue_i32___index_value_11: block -> i32 {
                         self_25 = p.data;
-                        index_26 = p.pos;
+                        index_26 = __hfs_pos_29;
                         if index_26 >= self_25.used {
                             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                             unreachable;
@@ -318,15 +320,17 @@ fn "wado-compiler/tests/fixtures/opt_inline_backtrack_miscompile.wado/parse_all"
                         break __inline_Array_i32__IndexValue_i32___index_value_11: builtin::array_get<i32>(self_25.repr, index_26);
                         unreachable;
                     };
-                    p.pos = p.pos + 1;
+                    __hfs_pos_29 = __hfs_pos_29 + 1;
                     break __inline_Parser__advance_10: v;
                     unreachable;
                 };
+                p.pos = __hfs_pos_29;
                 result = "wado-compiler/tests/fixtures/opt_inline_backtrack_miscompile.wado/consume_three"(p);
                 break __inline_advance_then_consume_9: skipped + result;
                 unreachable;
             };
             total = total + r;
+            __hfs_pos_29 = p.pos;
             continue l9;
         };
     };
