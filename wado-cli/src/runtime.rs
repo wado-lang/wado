@@ -202,5 +202,6 @@ pub fn create_linker(engine: &Engine) -> Result<Linker<WasiState>> {
     wasmtime_wasi::p3::add_to_linker(&mut linker)?;
     wasmtime_wasi_http::p3::add_to_linker(&mut linker)?;
     wasmtime_wasi_tls::p3::add_to_linker(&mut linker)?;
+    crate::timezone_host::add_to_linker(&mut linker)?;
     Ok(linker)
 }
