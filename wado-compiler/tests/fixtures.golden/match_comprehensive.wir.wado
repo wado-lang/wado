@@ -55,7 +55,7 @@ struct core:prelude/array.wado//ArrayIter<Option<i32>> {  // TypeId(10)
     mut index: i32,
 }
 
-struct core:prelude/array.wado//ArrayIter<Tree> {  // TypeId(11)
+struct core:prelude/array.wado//ArrayIter<wado-compiler/tests/fixtures/match_comprehensive.wado/Tree> {  // TypeId(11)
     mut repr: ref builtin::array<Tree>,
     mut used: i32,
     mut index: i32,
@@ -143,7 +143,7 @@ type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref 
 
 type "functype//core:prelude/array.wado/ArrayIter<Option<i32>>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<Option<i32>>") -> ref null "core:prelude/types.wado//Option<i32>";  // TypeId(46)
 
-type "functype//core:prelude/array.wado/ArrayIter<Tree>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<Tree>") -> ref null "wado-compiler/tests/fixtures/match_comprehensive.wado//Tree";  // TypeId(47)
+type "functype//core:prelude/array.wado/ArrayIter<wado-compiler/tests/fixtures/match_comprehensive.wado/Tree>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<wado-compiler/tests/fixtures/match_comprehensive.wado/Tree>") -> ref null "wado-compiler/tests/fixtures/match_comprehensive.wado//Tree";  // TypeId(47)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(48)
 
@@ -355,7 +355,7 @@ fn "wado-compiler/tests/fixtures/match_comprehensive.wado/match_option_chained"(
 fn "wado-compiler/tests/fixtures/match_comprehensive.wado/match_variant_comprehensive"() with Stdout {
     let __b: ref "core:prelude//Array<Tree>";
     let trees: ref "core:prelude//Array<Tree>";
-    let __iter_2: ref "core:prelude/array.wado//ArrayIter<Tree>";
+    let __iter_2: ref "core:prelude/array.wado//ArrayIter<wado-compiler/tests/fixtures/match_comprehensive.wado/Tree>";
     let tree: ref "wado-compiler/tests/fixtures/match_comprehensive.wado//Tree";
     let n_4: i32;
     let n_5: i32;
@@ -381,10 +381,10 @@ fn "wado-compiler/tests/fixtures/match_comprehensive.wado/match_variant_comprehe
         break __seq_lit: __b;
         unreachable;
     };
-    __iter_2 = struct.new "core:prelude/array.wado//ArrayIter<Tree>" { repr: trees.repr, used: 4, index: 0 };
+    __iter_2 = struct.new "core:prelude/array.wado//ArrayIter<wado-compiler/tests/fixtures/match_comprehensive.wado/Tree>" { repr: trees.repr, used: 4, index: 0 };
     b8: block {
         l9: loop {
-            __pattern_temp_0_14 = "core:prelude/array.wado/ArrayIter<Tree>^Iterator::next"(__iter_2);
+            __pattern_temp_0_14 = "core:prelude/array.wado/ArrayIter<wado-compiler/tests/fixtures/match_comprehensive.wado/Tree>^Iterator::next"(__iter_2);
             if ref.is_null(__pattern_temp_0_14) == 0 {
                 tree = ref.as_non_null(__pattern_temp_0_14);
                 let __match_scrut_0: ref "wado-compiler/tests/fixtures/match_comprehensive.wado//Tree";
@@ -1373,7 +1373,7 @@ fn "core:prelude/array.wado/ArrayIter<Option<i32>>^Iterator::next"(self) {
     return item;
 }
 
-fn "core:prelude/array.wado/ArrayIter<Tree>^Iterator::next"(self) {
+fn "core:prelude/array.wado/ArrayIter<wado-compiler/tests/fixtures/match_comprehensive.wado/Tree>^Iterator::next"(self) {
     let item: ref "wado-compiler/tests/fixtures/match_comprehensive.wado//Tree";
     if self.index >= self.used {
         return ref.null none;

@@ -54,7 +54,7 @@ struct ./sub/cross_module_variant_iter_helper.wado//Choice::B {  // TypeId(9)
 
 array builtin::array<Choice> (mut ref "./sub/cross_module_variant_iter_helper.wado//Choice");  // TypeId(10)
 
-struct core:prelude/array.wado//ArrayRefIter<Choice> {  // TypeId(11)
+struct core:prelude/array.wado//ArrayRefIter<./sub/cross_module_variant_iter_helper.wado/Choice> {  // TypeId(11)
     mut repr: ref builtin::array<Choice>,
     mut used: i32,
     mut index: i32,
@@ -117,7 +117,7 @@ type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/st
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(38)
 
-type "functype//core:prelude/array.wado/ArrayRefIter<Choice>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayRefIter<Choice>") -> ref null "core:prelude/types.wado//Box<Choice>";  // TypeId(39)
+type "functype//core:prelude/array.wado/ArrayRefIter<./sub/cross_module_variant_iter_helper.wado/Choice>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayRefIter<./sub/cross_module_variant_iter_helper.wado/Choice>") -> ref null "core:prelude/types.wado//Box<Choice>";  // TypeId(39)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(40)
 
@@ -368,7 +368,7 @@ fn "./sub/cross_module_variant_iter_helper.wado/make_tree"() {
 
 fn "./sub/cross_module_variant_iter_helper.wado/./sub/cross_module_variant_iter_helper.wado/walk<Counter>"(h, c) {
     let a: ref "./sub/cross_module_variant_iter_helper.wado//AData";
-    let __iter_3: ref "core:prelude/array.wado//ArrayRefIter<Choice>";
+    let __iter_3: ref "core:prelude/array.wado//ArrayRefIter<./sub/cross_module_variant_iter_helper.wado/Choice>";
     let child: ref "core:prelude/types.wado//Box<Choice>";
     let b: ref "./sub/cross_module_variant_iter_helper.wado//BData";
     let __local_6: ref null "core:prelude/types.wado//Box<Choice>";
@@ -381,15 +381,15 @@ fn "./sub/cross_module_variant_iter_helper.wado/./sub/cross_module_variant_iter_
         let __cast_2: ref "./sub/cross_module_variant_iter_helper.wado//Choice::A";
         __cast_2 = ref.cast "./sub/cross_module_variant_iter_helper.wado//Choice::A"(__match_scrut_0);
         a = __cast_2.payload_0;
-        __iter_3 = __inline__Choice_IntoIterator__into_iter_0: block -> ref "core:prelude/array.wado//ArrayRefIter<Choice>" {
+        __iter_3 = __inline____sub_cross_module_variant_iter_helper_wado_Choice_IntoIterator__into_iter_0: block -> ref "core:prelude/array.wado//ArrayRefIter<./sub/cross_module_variant_iter_helper.wado/Choice>" {
             self_7 = a.children;
             arr = self_7;
-            break __inline__Choice_IntoIterator__into_iter_0: struct.new "core:prelude/array.wado//ArrayRefIter<Choice>" { repr: arr.repr, used: arr.used, index: 0 };
+            break __inline____sub_cross_module_variant_iter_helper_wado_Choice_IntoIterator__into_iter_0: struct.new "core:prelude/array.wado//ArrayRefIter<./sub/cross_module_variant_iter_helper.wado/Choice>" { repr: arr.repr, used: arr.used, index: 0 };
             unreachable;
         };
         b15: block {
             l16: loop {
-                __local_6 = "core:prelude/array.wado/ArrayRefIter<Choice>^Iterator::next"(__iter_3);
+                __local_6 = "core:prelude/array.wado/ArrayRefIter<./sub/cross_module_variant_iter_helper.wado/Choice>^Iterator::next"(__iter_3);
                 if ref.is_null(__local_6) == 0 {
                     child = ref.as_non_null(__local_6);
                     "./sub/cross_module_variant_iter_helper.wado/./sub/cross_module_variant_iter_helper.wado/walk<Counter>"(h, child.value);
@@ -674,7 +674,7 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/array.wado/ArrayRefIter<Choice>^Iterator::next"(self) {
+fn "core:prelude/array.wado/ArrayRefIter<./sub/cross_module_variant_iter_helper.wado/Choice>^Iterator::next"(self) {
     let val: ref "core:prelude/types.wado//Box<Choice>";
     if self.index >= self.used {
         return ref.null none;

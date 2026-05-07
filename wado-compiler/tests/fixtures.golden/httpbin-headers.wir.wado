@@ -75,7 +75,7 @@ variant core:json_value//Value {  // TypeId(11)
     Number(f64),
     String(ref "core:prelude/string.wado//String"),
     Array(ref "core:prelude//Array<Value>"),
-    Object(ref "core:collections//TreeMap<String,Value>"),
+    Object(ref "core:collections//TreeMap<String,core:json_value/Value>"),
 }
 
 struct core:json_value//Value::Bool {  // TypeId(12)
@@ -100,7 +100,7 @@ struct core:json_value//Value::Array {  // TypeId(15)
 
 struct core:json_value//Value::Object {  // TypeId(16)
     discriminant: i32,
-    payload_0: ref "core:collections//TreeMap<String,Value>",
+    payload_0: ref "core:collections//TreeMap<String,core:json_value/Value>",
 }
 
 struct core:prelude/format.wado//Formatter {  // TypeId(17)
@@ -290,9 +290,9 @@ array builtin::array<u64> (mut u64);  // TypeId(47)
 
 array builtin::array<Array<u8>> (mut ref "core:prelude//Array<u8>");  // TypeId(48)
 
-array builtin::array<TreeMapEntry<String,Value>> (mut ref "core:collections//TreeMapEntry<String,Value>");  // TypeId(49)
+array builtin::array<TreeMapEntry<String,core:json_value/Value>> (mut ref "core:collections//TreeMapEntry<String,core:json_value/Value>");  // TypeId(49)
 
-struct core:prelude/array.wado//ArrayIter<Value> {  // TypeId(50)
+struct core:prelude/array.wado//ArrayIter<core:json_value/Value> {  // TypeId(50)
     mut repr: ref builtin::array<Value>,
     mut used: i32,
     mut index: i32,
@@ -316,14 +316,14 @@ struct core:prelude/array.wado//ArrayIter<Tuple<wasi:http/types.wado/FieldName,w
     mut index: i32,
 }
 
-struct core:collections//TreeMap<String,Value> {  // TypeId(54)
+struct core:collections//TreeMap<String,core:json_value/Value> {  // TypeId(54)
     mut root: ref null "core:collections//TreeMapNode<String>",
-    mut entries: ref "core:prelude//Array<TreeMapEntry<String,Value>>",
+    mut entries: ref "core:prelude//Array<TreeMapEntry<String,core:json_value/Value>>",
     mut size: i32,
     mut deleted_count: i32,
 }
 
-struct core:collections//TreeMapEntry<String,Value> {  // TypeId(55)
+struct core:collections//TreeMapEntry<String,core:json_value/Value> {  // TypeId(55)
     mut key: ref "core:prelude/string.wado//String",
     mut value: ref "core:json_value//Value",
     mut deleted: bool,
@@ -337,8 +337,8 @@ struct core:collections//TreeMapNode<String> {  // TypeId(56)
     mut right: ref null "core:collections//TreeMapNode<String>",
 }
 
-struct core:prelude/array.wado//ArrayIter<TreeMapEntry<String,Value>> {  // TypeId(57)
-    mut repr: ref builtin::array<TreeMapEntry<String,Value>>,
+struct core:prelude/array.wado//ArrayIter<TreeMapEntry<String,core:json_value/Value>> {  // TypeId(57)
+    mut repr: ref "builtin::array<TreeMapEntry<String,core:json_value/Value>>",
     mut used: i32,
     mut index: i32,
 }
@@ -493,8 +493,8 @@ struct core:prelude//Array<u64> {  // TypeId(87)
     mut used: i32,
 }
 
-struct core:prelude//Array<TreeMapEntry<String,Value>> {  // TypeId(88)
-    mut repr: ref builtin::array<TreeMapEntry<String,Value>>,
+struct core:prelude//Array<TreeMapEntry<String,core:json_value/Value>> {  // TypeId(88)
+    mut repr: ref "builtin::array<TreeMapEntry<String,core:json_value/Value>>",
     mut used: i32,
 }
 
@@ -577,7 +577,7 @@ type "functype//wado-compiler/tests/fixtures/httpbin-headers.wado/$value_copy$T8
 
 type "functype//wado-compiler/tests/fixtures/httpbin-headers.wado/$value_copy$T88" = fn(ref "core:json//JsonMapSerializer") -> ref "core:json//JsonMapSerializer";  // TypeId(126)
 
-type "functype//./sub/httpbin_handler.wado/parse_query_params" = fn(ref "core:prelude/string.wado//String") -> ref "core:collections//TreeMap<String,Value>";  // TypeId(127)
+type "functype//./sub/httpbin_handler.wado/parse_query_params" = fn(ref "core:prelude/string.wado//String") -> ref "core:collections//TreeMap<String,core:json_value/Value>";  // TypeId(127)
 
 type "functype//./sub/httpbin_handler.wado/headers_to_json" = fn(i32) -> ref "core:json_value//Value";  // TypeId(128)
 
@@ -677,17 +677,17 @@ type "functype//core:prelude/Array<u8>::push" = fn(ref "core:prelude//Array<u8>"
 
 type "functype//core:prelude/array.wado/Array<u8>::grow" = fn(ref "core:prelude//Array<u8>");  // TypeId(176)
 
-type "functype//core:collections/TreeMap<String,Value>::find_index" = fn(ref "core:collections//TreeMap<String,Value>", ref "core:prelude/string.wado//String") -> i32;  // TypeId(177)
+type "functype//core:collections/TreeMap<String,core:json_value/Value>::find_index" = fn(ref "core:collections//TreeMap<String,core:json_value/Value>", ref "core:prelude/string.wado//String") -> i32;  // TypeId(177)
 
 type "functype//core:prelude/array.wado/ArrayIter<Tuple<String,core:json_value/Value>>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<Tuple<String,core:json_value/Value>>") -> ref null "tuple//[String, Value]";  // TypeId(178)
 
-type "functype//core:collections/TreeMap<String,Value>::entries" = fn(ref "core:collections//TreeMap<String,Value>") -> ref "core:prelude//Array<Tuple<String,Value>>";  // TypeId(179)
+type "functype//core:collections/TreeMap<String,core:json_value/Value>::entries" = fn(ref "core:collections//TreeMap<String,core:json_value/Value>") -> ref "core:prelude//Array<Tuple<String,Value>>";  // TypeId(179)
 
 type "functype//core:prelude/array.wado/Array<Tuple<String,core:json_value/Value>>::push" = fn(ref "core:prelude//Array<Tuple<String,Value>>", ref "tuple//[String, Value]");  // TypeId(180)
 
 type "functype//core:prelude/array.wado/Array<Tuple<String,core:json_value/Value>>::grow" = fn(ref "core:prelude//Array<Tuple<String,Value>>");  // TypeId(181)
 
-type "functype//core:prelude/array.wado/ArrayIter<TreeMapEntry<String,Value>>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<TreeMapEntry<String,Value>>") -> ref null "core:collections//TreeMapEntry<String,Value>";  // TypeId(182)
+type "functype//core:prelude/array.wado/ArrayIter<TreeMapEntry<String,core:json_value/Value>>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<TreeMapEntry<String,core:json_value/Value>>") -> ref null "core:collections//TreeMapEntry<String,core:json_value/Value>";  // TypeId(182)
 
 type "functype//core:prelude/array.wado/Array<u8>::push" = fn(ref "core:prelude//Array<u8>", u8);  // TypeId(183)
 
@@ -697,19 +697,19 @@ type "functype//core:prelude/array.wado/ArrayIter<u8>^Iterator::next" = fn(ref "
 
 type "functype//core:json/JsonMapSerializer^SerializeMap::key<String>" = fn(ref "core:json//JsonMapSerializer", ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(186)
 
-type "functype//core:prelude/array.wado/ArrayIter<Value>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<Value>") -> ref null "core:json_value//Value";  // TypeId(187)
+type "functype//core:prelude/array.wado/ArrayIter<core:json_value/Value>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<core:json_value/Value>") -> ref null "core:json_value//Value";  // TypeId(187)
 
-type "functype//core:prelude/string.wado/String::from_utf8_lossy<FieldValue>" = fn(ref "core:prelude//Array<u8>") -> ref "core:prelude/string.wado//String";  // TypeId(188)
+type "functype//core:prelude/string.wado/String::from_utf8_lossy<wasi:http/types.wado/FieldValue>" = fn(ref "core:prelude//Array<u8>") -> ref "core:prelude/string.wado//String";  // TypeId(188)
 
 type "functype//core:prelude/array.wado/ArrayIter<Tuple<wasi:http/types.wado/FieldName,wasi:http/types.wado/FieldValue>>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<Tuple<wasi:http/types.wado/FieldName,wasi:http/types.wado/FieldValue>>") -> ref null "tuple//[String, Array<u8>]";  // TypeId(189)
 
-type "functype//core:collections/TreeMap<String,Value>::insert" = fn(ref "core:collections//TreeMap<String,Value>", ref "core:prelude/string.wado//String", ref "core:json_value//Value");  // TypeId(190)
+type "functype//core:collections/TreeMap<String,core:json_value/Value>::insert" = fn(ref "core:collections//TreeMap<String,core:json_value/Value>", ref "core:prelude/string.wado//String", ref "core:json_value//Value");  // TypeId(190)
 
-type "functype//core:collections/TreeMap<String,Value>::insert_node" = fn(ref "core:collections//TreeMap<String,Value>", ref null "core:collections//TreeMapNode<String>", ref "core:prelude/string.wado//String", i32) -> ref null "core:collections//TreeMapNode<String>";  // TypeId(191)
+type "functype//core:collections/TreeMap<String,core:json_value/Value>::insert_node" = fn(ref "core:collections//TreeMap<String,core:json_value/Value>", ref null "core:collections//TreeMapNode<String>", ref "core:prelude/string.wado//String", i32) -> ref null "core:collections//TreeMapNode<String>";  // TypeId(191)
 
-type "functype//core:prelude/array.wado/Array<TreeMapEntry<String,Value>>::push" = fn(ref "core:prelude//Array<TreeMapEntry<String,Value>>", ref "core:collections//TreeMapEntry<String,Value>");  // TypeId(192)
+type "functype//core:prelude/array.wado/Array<TreeMapEntry<String,core:json_value/Value>>::push" = fn(ref "core:prelude//Array<TreeMapEntry<String,core:json_value/Value>>", ref "core:collections//TreeMapEntry<String,core:json_value/Value>");  // TypeId(192)
 
-type "functype//core:prelude/array.wado/Array<TreeMapEntry<String,Value>>::grow" = fn(ref "core:prelude//Array<TreeMapEntry<String,Value>>");  // TypeId(193)
+type "functype//core:prelude/array.wado/Array<TreeMapEntry<String,core:json_value/Value>>::grow" = fn(ref "core:prelude//Array<TreeMapEntry<String,core:json_value/Value>>");  // TypeId(193)
 
 type "functype//wasi/future-new" = fn() -> i64;  // TypeId(194)
 
@@ -757,7 +757,7 @@ type "functype//core:prelude/string.wado/String::find" = fn(ref "core:prelude/st
 
 type "functype//core:prelude/string.wado/String::from_utf8<Array<u8>>" = fn(ref "core:prelude//Array<u8>") -> [i32, ref null "core:prelude/string.wado//String"];  // TypeId(216)
 
-type "functype//core:json/core/json/to_string<Value>" = fn(ref "core:json_value//Value") -> ref "core:prelude/types.wado//Result<String,SerializeError>";  // TypeId(217)
+type "functype//core:json/core/json/to_string<core:json_value/Value>" = fn(ref "core:json_value//Value") -> ref "core:prelude/types.wado//Result<String,SerializeError>";  // TypeId(217)
 
 type "functype//core:prelude/primitive.wado/i64::fmt_base" = fn(i64, bool, ref "core:prelude/format.wado//Formatter", i32, bool, ref "core:prelude/string.wado//String");  // TypeId(218)
 
@@ -775,13 +775,13 @@ type "functype//core:json/JsonSerializer^Serializer::serialize_null" = fn(ref "c
 
 type "functype//core:json_value/Value^Serialize::serialize<JsonSerializer>" = fn(ref "core:json_value//Value", ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(225)
 
-type "functype//core:json/JsonMapSerializer^SerializeMap::value<Value>" = fn(ref "core:json//JsonMapSerializer", ref "core:json_value//Value") -> ref null "core:serde//SerializeError";  // TypeId(226)
+type "functype//core:json/JsonMapSerializer^SerializeMap::value<core:json_value/Value>" = fn(ref "core:json//JsonMapSerializer", ref "core:json_value//Value") -> ref null "core:serde//SerializeError";  // TypeId(226)
 
-type "functype//core:json/JsonSeqSerializer^SerializeSeq::element<Value>" = fn(ref "core:json//JsonSeqSerializer", ref "core:json_value//Value") -> ref null "core:serde//SerializeError";  // TypeId(227)
+type "functype//core:json/JsonSeqSerializer^SerializeSeq::element<core:json_value/Value>" = fn(ref "core:json//JsonSeqSerializer", ref "core:json_value//Value") -> ref null "core:serde//SerializeError";  // TypeId(227)
 
-type "functype//core:collections/TreeMap<String,Value>::split" = fn(ref null "core:collections//TreeMapNode<String>") -> ref null "core:collections//TreeMapNode<String>";  // TypeId(228)
+type "functype//core:collections/TreeMap<String,core:json_value/Value>::split" = fn(ref null "core:collections//TreeMapNode<String>") -> ref null "core:collections//TreeMapNode<String>";  // TypeId(228)
 
-type "functype//core:collections/TreeMap<String,Value>::skew" = fn(ref null "core:collections//TreeMapNode<String>") -> ref null "core:collections//TreeMapNode<String>";  // TypeId(229)
+type "functype//core:collections/TreeMap<String,core:json_value/Value>::skew" = fn(ref null "core:collections//TreeMapNode<String>") -> ref null "core:collections//TreeMapNode<String>";  // TypeId(229)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-read from "wasi/stream-read";
@@ -1775,21 +1775,21 @@ fn "./sub/httpbin_handler.wado/split_path_query"(full) {
 }
 
 fn "./sub/httpbin_handler.wado/parse_query_params"(query) {
-    let params: ref "core:collections//TreeMap<String,Value>";
+    let params: ref "core:collections//TreeMap<String,core:json_value/Value>";
     let __iter_2: ref "core:prelude/string.wado//StrSplitIter";
     let pair: ref "core:prelude/string.wado//String";
     let eq: i32;
     let key_5: ref "core:prelude/string.wado//String";
     let val: ref "core:prelude/string.wado//String";
     let __pattern_temp_0: ref null "core:prelude/string.wado//String";
-    let __b: ref "core:prelude//Array<TreeMapEntry<String,Value>>";
+    let __b: ref "core:prelude//Array<TreeMapEntry<String,core:json_value/Value>>";
     let self_14: ref "core:prelude/string.wado//StrSplitIter";
     let sep: ref "core:prelude/string.wado//String";
     let value_21: ref "core:json_value//Value";
     let value_24: ref "core:json_value//Value";
-    params = struct.new "core:collections//TreeMap<String,Value>" { root: ref.null none, entries: ref.as_non_null(__inline_TreeMap_String_Value___new_0____seq_lit: block -> ref "core:prelude//Array<TreeMapEntry<String,Value>>" {
-        __b = struct.new "core:prelude//Array<TreeMapEntry<String,Value>>" { repr: builtin::array_new<ref "core:collections//TreeMapEntry<String,Value>">(0), used: 0 };
-        break __inline_TreeMap_String_Value___new_0____seq_lit: __b;
+    params = struct.new "core:collections//TreeMap<String,core:json_value/Value>" { root: ref.null none, entries: ref.as_non_null(__inline_TreeMap_String_core_json_value_Value___new_0____seq_lit: block -> ref "core:prelude//Array<TreeMapEntry<String,core:json_value/Value>>" {
+        __b = struct.new "core:prelude//Array<TreeMapEntry<String,core:json_value/Value>>" { repr: builtin::array_new<ref "core:collections//TreeMapEntry<String,core:json_value/Value>">(0), used: 0 };
+        break __inline_TreeMap_String_core_json_value_Value___new_0____seq_lit: __b;
         unreachable;
     }), size: 0, deleted_count: 0 };
     if query.used == 0 {
@@ -1820,10 +1820,10 @@ fn "./sub/httpbin_handler.wado/parse_query_params"(query) {
                     key_5 = "core:prelude/string.wado/String::substr_bytes"(pair, 0, eq);
                     val = "core:prelude/string.wado/String::substr_bytes"(pair, eq + 1, pair.used);
                     value_21 = struct.new "core:json_value//Value::String" { discriminant: 3, payload_0: val };
-                    "core:collections/TreeMap<String,Value>::insert"(params, key_5, value_21);
+                    "core:collections/TreeMap<String,core:json_value/Value>::insert"(params, key_5, value_21);
                 } else {
                     value_24 = struct.new "core:json_value//Value::String" { discriminant: 3, payload_0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
-                    "core:collections/TreeMap<String,Value>::insert"(params, pair, value_24);
+                    "core:collections/TreeMap<String,core:json_value/Value>::insert"(params, pair, value_24);
                 }
             } else {
                 break b93;
@@ -1836,18 +1836,18 @@ fn "./sub/httpbin_handler.wado/parse_query_params"(query) {
 
 fn "./sub/httpbin_handler.wado/headers_to_json"(headers) with Fields {
     let all: ref "core:prelude//Array<Tuple<String,Array<u8>>>";
-    let map: ref "core:collections//TreeMap<String,Value>";
+    let map: ref "core:collections//TreeMap<String,core:json_value/Value>";
     let __iter_3: ref "core:prelude/array.wado//ArrayIter<Tuple<wasi:http/types.wado/FieldName,wasi:http/types.wado/FieldValue>>";
     let entry: ref "tuple//[String, Array<u8>]";
     let name: ref "core:prelude/string.wado//String";
     let value_6: ref "core:prelude//Array<u8>";
     let __pattern_temp_0: ref null "tuple//[String, Array<u8>]";
-    let __b: ref "core:prelude//Array<TreeMapEntry<String,Value>>";
+    let __b: ref "core:prelude//Array<TreeMapEntry<String,core:json_value/Value>>";
     let value_16: ref "core:json_value//Value";
     all = "wado-compiler/tests/fixtures/httpbin-headers.wado/__cm_binding__Fields_copy_all"(headers);
-    map = struct.new "core:collections//TreeMap<String,Value>" { root: ref.null none, entries: ref.as_non_null(__inline_TreeMap_String_Value___new_0____seq_lit: block -> ref "core:prelude//Array<TreeMapEntry<String,Value>>" {
-        __b = struct.new "core:prelude//Array<TreeMapEntry<String,Value>>" { repr: builtin::array_new<ref "core:collections//TreeMapEntry<String,Value>">(0), used: 0 };
-        break __inline_TreeMap_String_Value___new_0____seq_lit: __b;
+    map = struct.new "core:collections//TreeMap<String,core:json_value/Value>" { root: ref.null none, entries: ref.as_non_null(__inline_TreeMap_String_core_json_value_Value___new_0____seq_lit: block -> ref "core:prelude//Array<TreeMapEntry<String,core:json_value/Value>>" {
+        __b = struct.new "core:prelude//Array<TreeMapEntry<String,core:json_value/Value>>" { repr: builtin::array_new<ref "core:collections//TreeMapEntry<String,core:json_value/Value>">(0), used: 0 };
+        break __inline_TreeMap_String_core_json_value_Value___new_0____seq_lit: __b;
         unreachable;
     }), size: 0, deleted_count: 0 };
     __iter_3 = struct.new "core:prelude/array.wado//ArrayIter<Tuple<wasi:http/types.wado/FieldName,wasi:http/types.wado/FieldValue>>" { repr: all.repr, used: all.used, index: 0 };
@@ -1858,8 +1858,8 @@ fn "./sub/httpbin_handler.wado/headers_to_json"(headers) with Fields {
                 entry = ref.as_non_null(__pattern_temp_0);
                 name = entry.0;
                 value_6 = entry.1;
-                value_16 = struct.new "core:json_value//Value::String" { discriminant: 3, payload_0: ref.as_non_null("core:prelude/string.wado/String::from_utf8_lossy<FieldValue>"(value_6)) };
-                "core:collections/TreeMap<String,Value>::insert"(map, name, value_16);
+                value_16 = struct.new "core:json_value//Value::String" { discriminant: 3, payload_0: ref.as_non_null("core:prelude/string.wado/String::from_utf8_lossy<wasi:http/types.wado/FieldValue>"(value_6)) };
+                "core:collections/TreeMap<String,core:json_value/Value>::insert"(map, name, value_16);
             } else {
                 break b98;
             }
@@ -1932,10 +1932,10 @@ fn "./sub/httpbin_handler.wado/parse_status_code"(s) {
 }
 
 fn "./sub/httpbin_handler.wado/build_request_json"(method, path, query, headers, body) with Fields {
-    let obj: ref "core:collections//TreeMap<String,Value>";
+    let obj: ref "core:collections//TreeMap<String,core:json_value/Value>";
     let url: ref "core:prelude/string.wado//String";
     let data: ref "core:prelude/string.wado//String";
-    let __b: ref "core:prelude//Array<TreeMapEntry<String,Value>>";
+    let __b: ref "core:prelude//Array<TreeMapEntry<String,core:json_value/Value>>";
     let key_14: ref "core:prelude/string.wado//String";
     let value_15: ref "core:json_value//Value";
     let key_17: ref "core:prelude/string.wado//String";
@@ -1956,23 +1956,23 @@ fn "./sub/httpbin_handler.wado/build_request_json"(method, path, query, headers,
     let value_41: ref "core:json_value//Value";
     let v: ref "core:prelude/string.wado//String";
     let __sroa_self_value: ref "core:prelude/types.wado//Result<String,SerializeError>";
-    obj = struct.new "core:collections//TreeMap<String,Value>" { root: ref.null none, entries: ref.as_non_null(__inline_TreeMap_String_Value___new_0____seq_lit: block -> ref "core:prelude//Array<TreeMapEntry<String,Value>>" {
-        __b = struct.new "core:prelude//Array<TreeMapEntry<String,Value>>" { repr: builtin::array_new<ref "core:collections//TreeMapEntry<String,Value>">(0), used: 0 };
-        break __inline_TreeMap_String_Value___new_0____seq_lit: __b;
+    obj = struct.new "core:collections//TreeMap<String,core:json_value/Value>" { root: ref.null none, entries: ref.as_non_null(__inline_TreeMap_String_core_json_value_Value___new_0____seq_lit: block -> ref "core:prelude//Array<TreeMapEntry<String,core:json_value/Value>>" {
+        __b = struct.new "core:prelude//Array<TreeMapEntry<String,core:json_value/Value>>" { repr: builtin::array_new<ref "core:collections//TreeMapEntry<String,core:json_value/Value>">(0), used: 0 };
+        break __inline_TreeMap_String_core_json_value_Value___new_0____seq_lit: __b;
         unreachable;
     }), size: 0, deleted_count: 0 };
     key_14 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("method"), used: 6 };
     value_15 = struct.new "core:json_value//Value::String" { discriminant: 3, payload_0: method };
-    "core:collections/TreeMap<String,Value>::insert"(obj, key_14, value_15);
+    "core:collections/TreeMap<String,core:json_value/Value>::insert"(obj, key_14, value_15);
     key_17 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("path"), used: 4 };
     value_18 = struct.new "core:json_value//Value::String" { discriminant: 3, payload_0: path };
-    "core:collections/TreeMap<String,Value>::insert"(obj, key_17, value_18);
+    "core:collections/TreeMap<String,core:json_value/Value>::insert"(obj, key_17, value_18);
     key_20 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("args"), used: 4 };
     value_21 = struct.new "core:json_value//Value::Object" { discriminant: 5, payload_0: ref.as_non_null("./sub/httpbin_handler.wado/parse_query_params"(query)) };
-    "core:collections/TreeMap<String,Value>::insert"(obj, key_20, value_21);
+    "core:collections/TreeMap<String,core:json_value/Value>::insert"(obj, key_20, value_21);
     key_23 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("headers"), used: 7 };
     value_24 = "./sub/httpbin_handler.wado/headers_to_json"(headers);
-    "core:collections/TreeMap<String,Value>::insert"(obj, key_23, value_24);
+    "core:collections/TreeMap<String,core:json_value/Value>::insert"(obj, key_23, value_24);
     key_26 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("origin"), used: 6 };
     value_27 = struct.new "core:json_value//Value::String" { discriminant: 3, payload_0: ref.as_non_null(__inline_get_header_9: block -> ref "core:prelude/string.wado//String" {
         name = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-forwarded-for"), used: 15 };
@@ -1980,17 +1980,17 @@ fn "./sub/httpbin_handler.wado/build_request_json"(method, path, query, headers,
         if values.used == 0 {
             break __inline_get_header_9: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
         }
-        break __inline_get_header_9: "core:prelude/string.wado/String::from_utf8_lossy<FieldValue>"(__inline_Array_FieldValue__IndexValue_i32___index_value_1: block -> ref "core:prelude//Array<u8>" {
+        break __inline_get_header_9: "core:prelude/string.wado/String::from_utf8_lossy<wasi:http/types.wado/FieldValue>"(__inline_Array_wasi_http_types_wado_FieldValue__IndexValue_i32___index_value_1: block -> ref "core:prelude//Array<u8>" {
             if 0 >= values.used {
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
-            break __inline_Array_FieldValue__IndexValue_i32___index_value_1: builtin::array_get<ref "core:prelude//Array<u8>">(values.repr, 0);
+            break __inline_Array_wasi_http_types_wado_FieldValue__IndexValue_i32___index_value_1: builtin::array_get<ref "core:prelude//Array<u8>">(values.repr, 0);
             unreachable;
         });
         unreachable;
     }) };
-    "core:collections/TreeMap<String,Value>::insert"(obj, key_26, value_27);
+    "core:collections/TreeMap<String,core:json_value/Value>::insert"(obj, key_26, value_27);
     url = (if query.used == 0 -> ref "core:prelude/string.wado//String" {
         path;
     } else {
@@ -2006,15 +2006,15 @@ fn "./sub/httpbin_handler.wado/build_request_json"(method, path, query, headers,
     });
     key_37 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("url"), used: 3 };
     value_38 = struct.new "core:json_value//Value::String" { discriminant: 3, payload_0: url };
-    "core:collections/TreeMap<String,Value>::insert"(obj, key_37, value_38);
+    "core:collections/TreeMap<String,core:json_value/Value>::insert"(obj, key_37, value_38);
     if ref.is_null(body) == 0 {
         data = ref.as_non_null(body);
         key_40 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("data"), used: 4 };
         value_41 = struct.new "core:json_value//Value::String" { discriminant: 3, payload_0: data };
-        "core:collections/TreeMap<String,Value>::insert"(obj, key_40, value_41);
+        "core:collections/TreeMap<String,core:json_value/Value>::insert"(obj, key_40, value_41);
     }
     return __inline_Result_String_SerializeError___unwrap_15: block -> ref "core:prelude/string.wado//String" {
-        __sroa_self_value = "core:json/core/json/to_string<Value>"(struct.new "core:json_value//Value::Object" { discriminant: 5, payload_0: obj });
+        __sroa_self_value = "core:json/core/json/to_string<core:json_value/Value>"(struct.new "core:json_value//Value::Object" { discriminant: 5, payload_0: obj });
         if ref.test "core:prelude/types.wado//Result<String,SerializeError>::Ok"(__sroa_self_value) {
             v = ref.cast "core:prelude/types.wado//Result<String,SerializeError>::Ok"(__sroa_self_value).payload_0;
             break __inline_Result_String_SerializeError___unwrap_15: v;
@@ -2034,13 +2034,13 @@ fn "./sub/httpbin_handler.wado/route"(request, method_str, path, query) {
     let data_10: ref "core:prelude/string.wado//String";
     let h_11: i32;
     let h_12: i32;
-    let obj_13: ref "core:collections//TreeMap<String,Value>";
+    let obj_13: ref "core:collections//TreeMap<String,core:json_value/Value>";
     let h_14: i32;
     let origin: ref "core:prelude/string.wado//String";
-    let obj_16: ref "core:collections//TreeMap<String,Value>";
+    let obj_16: ref "core:collections//TreeMap<String,core:json_value/Value>";
     let h_17: i32;
     let ua: ref "core:prelude/string.wado//String";
-    let obj_19: ref "core:collections//TreeMap<String,Value>";
+    let obj_19: ref "core:collections//TreeMap<String,core:json_value/Value>";
     let code_str: ref "core:prelude/string.wado//String";
     let code: u16;
     let encoded_22: ref "core:prelude/string.wado//String";
@@ -2056,7 +2056,7 @@ fn "./sub/httpbin_handler.wado/route"(request, method_str, path, query) {
     let other_36: ref "core:prelude/string.wado//String";
     let len_a_37: i32;
     let msg_38: ref "core:prelude/string.wado//String";
-    let obj_39: ref "core:collections//TreeMap<String,Value>";
+    let obj_39: ref "core:collections//TreeMap<String,core:json_value/Value>";
     let self_40: ref "core:prelude/string.wado//String";
     let other_41: ref "core:prelude/string.wado//String";
     let self_42: ref "core:prelude/string.wado//String";
@@ -2066,7 +2066,7 @@ fn "./sub/httpbin_handler.wado/route"(request, method_str, path, query) {
     let other_48: ref "core:prelude/string.wado//String";
     let len_a_49: i32;
     let msg_50: ref "core:prelude/string.wado//String";
-    let obj_51: ref "core:collections//TreeMap<String,Value>";
+    let obj_51: ref "core:collections//TreeMap<String,core:json_value/Value>";
     let self_52: ref "core:prelude/string.wado//String";
     let other_53: ref "core:prelude/string.wado//String";
     let self_54: ref "core:prelude/string.wado//String";
@@ -2076,7 +2076,7 @@ fn "./sub/httpbin_handler.wado/route"(request, method_str, path, query) {
     let other_60: ref "core:prelude/string.wado//String";
     let len_a_61: i32;
     let msg_62: ref "core:prelude/string.wado//String";
-    let obj_63: ref "core:collections//TreeMap<String,Value>";
+    let obj_63: ref "core:collections//TreeMap<String,core:json_value/Value>";
     let self_64: ref "core:prelude/string.wado//String";
     let other_65: ref "core:prelude/string.wado//String";
     let self_66: ref "core:prelude/string.wado//String";
@@ -2086,7 +2086,7 @@ fn "./sub/httpbin_handler.wado/route"(request, method_str, path, query) {
     let other_72: ref "core:prelude/string.wado//String";
     let len_a_73: i32;
     let msg_74: ref "core:prelude/string.wado//String";
-    let obj_75: ref "core:collections//TreeMap<String,Value>";
+    let obj_75: ref "core:collections//TreeMap<String,core:json_value/Value>";
     let self_76: ref "core:prelude/string.wado//String";
     let other_77: ref "core:prelude/string.wado//String";
     let self_78: ref "core:prelude/string.wado//String";
@@ -2096,14 +2096,14 @@ fn "./sub/httpbin_handler.wado/route"(request, method_str, path, query) {
     let other_84: ref "core:prelude/string.wado//String";
     let len_a_85: i32;
     let msg_86: ref "core:prelude/string.wado//String";
-    let obj_87: ref "core:collections//TreeMap<String,Value>";
+    let obj_87: ref "core:collections//TreeMap<String,core:json_value/Value>";
     let self_88: ref "core:prelude/string.wado//String";
     let other_89: ref "core:prelude/string.wado//String";
     let self_90: ref "core:prelude/string.wado//String";
     let other_91: ref "core:prelude/string.wado//String";
     let other_93: ref "core:prelude/string.wado//String";
     let len_a_94: i32;
-    let __b_95: ref "core:prelude//Array<TreeMapEntry<String,Value>>";
+    let __b_95: ref "core:prelude//Array<TreeMapEntry<String,core:json_value/Value>>";
     let key_100: ref "core:prelude/string.wado//String";
     let value_101: ref "core:json_value//Value";
     let v_103: ref "core:prelude/string.wado//String";
@@ -2115,7 +2115,7 @@ fn "./sub/httpbin_handler.wado/route"(request, method_str, path, query) {
     let headers_110: i32;
     let name_111: ref "core:prelude/string.wado//String";
     let values_112: ref "core:prelude//Array<Array<u8>>";
-    let __b_116: ref "core:prelude//Array<TreeMapEntry<String,Value>>";
+    let __b_116: ref "core:prelude//Array<TreeMapEntry<String,core:json_value/Value>>";
     let key_121: ref "core:prelude/string.wado//String";
     let value_122: ref "core:json_value//Value";
     let v_125: ref "core:prelude/string.wado//String";
@@ -2127,7 +2127,7 @@ fn "./sub/httpbin_handler.wado/route"(request, method_str, path, query) {
     let headers_132: i32;
     let name_133: ref "core:prelude/string.wado//String";
     let values_134: ref "core:prelude//Array<Array<u8>>";
-    let __b_138: ref "core:prelude//Array<TreeMapEntry<String,Value>>";
+    let __b_138: ref "core:prelude//Array<TreeMapEntry<String,core:json_value/Value>>";
     let key_143: ref "core:prelude/string.wado//String";
     let value_144: ref "core:json_value//Value";
     let v_146: ref "core:prelude/string.wado//String";
@@ -2135,7 +2135,7 @@ fn "./sub/httpbin_handler.wado/route"(request, method_str, path, query) {
     let self_148: ref "core:prelude/string.wado//String";
     let other_149: ref "core:prelude/string.wado//String";
     let msg_151: ref "core:prelude/string.wado//String";
-    let obj_152: ref "core:collections//TreeMap<String,Value>";
+    let obj_152: ref "core:collections//TreeMap<String,core:json_value/Value>";
     let self_153: ref "core:prelude/string.wado//String";
     let other_154: ref "core:prelude/string.wado//String";
     let bytes: ref "core:prelude//Array<u8>";
@@ -2144,7 +2144,7 @@ fn "./sub/httpbin_handler.wado/route"(request, method_str, path, query) {
     let result: ref "core:prelude//Array<u8>";
     let byte: u8;
     let msg_170: ref "core:prelude/string.wado//String";
-    let obj_171: ref "core:collections//TreeMap<String,Value>";
+    let obj_171: ref "core:collections//TreeMap<String,core:json_value/Value>";
     let self_172: ref "core:prelude/string.wado//String";
     let other_173: ref "core:prelude/string.wado//String";
     let other_175: ref "core:prelude/string.wado//String";
@@ -2160,45 +2160,45 @@ fn "./sub/httpbin_handler.wado/route"(request, method_str, path, query) {
     let self_188: ref "core:prelude/string.wado//String";
     let other_189: ref "core:prelude/string.wado//String";
     let msg_190: ref "core:prelude/string.wado//String";
-    let obj_191: ref "core:collections//TreeMap<String,Value>";
+    let obj_191: ref "core:collections//TreeMap<String,core:json_value/Value>";
     let self_192: ref "core:prelude/string.wado//String";
     let other_193: ref "core:prelude/string.wado//String";
-    let __b_207: ref "core:prelude//Array<TreeMapEntry<String,Value>>";
+    let __b_207: ref "core:prelude//Array<TreeMapEntry<String,core:json_value/Value>>";
     let key_212: ref "core:prelude/string.wado//String";
     let value_213: ref "core:json_value//Value";
     let v_215: ref "core:prelude/string.wado//String";
     let __local_2_216: ref "core:prelude/types.wado//Result<String,SerializeError>";
-    let __b_225: ref "core:prelude//Array<TreeMapEntry<String,Value>>";
+    let __b_225: ref "core:prelude//Array<TreeMapEntry<String,core:json_value/Value>>";
     let key_230: ref "core:prelude/string.wado//String";
     let value_231: ref "core:json_value//Value";
     let v_233: ref "core:prelude/string.wado//String";
     let __local_2_234: ref "core:prelude/types.wado//Result<String,SerializeError>";
-    let __b_243: ref "core:prelude//Array<TreeMapEntry<String,Value>>";
+    let __b_243: ref "core:prelude//Array<TreeMapEntry<String,core:json_value/Value>>";
     let key_248: ref "core:prelude/string.wado//String";
     let value_249: ref "core:json_value//Value";
     let v_251: ref "core:prelude/string.wado//String";
     let __local_2_252: ref "core:prelude/types.wado//Result<String,SerializeError>";
-    let __b_261: ref "core:prelude//Array<TreeMapEntry<String,Value>>";
+    let __b_261: ref "core:prelude//Array<TreeMapEntry<String,core:json_value/Value>>";
     let key_266: ref "core:prelude/string.wado//String";
     let value_267: ref "core:json_value//Value";
     let v_269: ref "core:prelude/string.wado//String";
     let __local_2_270: ref "core:prelude/types.wado//Result<String,SerializeError>";
-    let __b_279: ref "core:prelude//Array<TreeMapEntry<String,Value>>";
+    let __b_279: ref "core:prelude//Array<TreeMapEntry<String,core:json_value/Value>>";
     let key_284: ref "core:prelude/string.wado//String";
     let value_285: ref "core:json_value//Value";
     let v_287: ref "core:prelude/string.wado//String";
     let __local_2_288: ref "core:prelude/types.wado//Result<String,SerializeError>";
-    let __b_301: ref "core:prelude//Array<TreeMapEntry<String,Value>>";
+    let __b_301: ref "core:prelude//Array<TreeMapEntry<String,core:json_value/Value>>";
     let key_306: ref "core:prelude/string.wado//String";
     let value_307: ref "core:json_value//Value";
     let v_309: ref "core:prelude/string.wado//String";
     let __local_2_310: ref "core:prelude/types.wado//Result<String,SerializeError>";
-    let __b_311: ref "core:prelude//Array<TreeMapEntry<String,Value>>";
+    let __b_311: ref "core:prelude//Array<TreeMapEntry<String,core:json_value/Value>>";
     let key_316: ref "core:prelude/string.wado//String";
     let value_317: ref "core:json_value//Value";
     let v_319: ref "core:prelude/string.wado//String";
     let __local_2_320: ref "core:prelude/types.wado//Result<String,SerializeError>";
-    let __b_337: ref "core:prelude//Array<TreeMapEntry<String,Value>>";
+    let __b_337: ref "core:prelude//Array<TreeMapEntry<String,core:json_value/Value>>";
     let key_342: ref "core:prelude/string.wado//String";
     let value_343: ref "core:json_value//Value";
     let v_345: ref "core:prelude/string.wado//String";
@@ -2236,16 +2236,16 @@ fn "./sub/httpbin_handler.wado/route"(request, method_str, path, query) {
             return 405, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("application/json"), used: 16 }, ref.as_non_null(__inline_String_Add__add_4: block -> ref "core:prelude/string.wado//String" {
                 self_40 = __inline_json_error_3: block -> ref "core:prelude/string.wado//String" {
                     msg_38 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Method Not Allowed. Use GET."), used: 28 };
-                    obj_39 = struct.new "core:collections//TreeMap<String,Value>" { root: ref.null none, entries: ref.as_non_null(__inline_TreeMap_String_Value___new_12____seq_lit: block -> ref "core:prelude//Array<TreeMapEntry<String,Value>>" {
-                        __b_207 = struct.new "core:prelude//Array<TreeMapEntry<String,Value>>" { repr: builtin::array_new<ref "core:collections//TreeMapEntry<String,Value>">(0), used: 0 };
-                        break __inline_TreeMap_String_Value___new_12____seq_lit: __b_207;
+                    obj_39 = struct.new "core:collections//TreeMap<String,core:json_value/Value>" { root: ref.null none, entries: ref.as_non_null(__inline_TreeMap_String_core_json_value_Value___new_12____seq_lit: block -> ref "core:prelude//Array<TreeMapEntry<String,core:json_value/Value>>" {
+                        __b_207 = struct.new "core:prelude//Array<TreeMapEntry<String,core:json_value/Value>>" { repr: builtin::array_new<ref "core:collections//TreeMapEntry<String,core:json_value/Value>">(0), used: 0 };
+                        break __inline_TreeMap_String_core_json_value_Value___new_12____seq_lit: __b_207;
                         unreachable;
                     }), size: 0, deleted_count: 0 };
                     key_212 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("error"), used: 5 };
                     value_213 = struct.new "core:json_value//Value::String" { discriminant: 3, payload_0: msg_38 };
-                    "core:collections/TreeMap<String,Value>::insert"(obj_39, key_212, value_213);
+                    "core:collections/TreeMap<String,core:json_value/Value>::insert"(obj_39, key_212, value_213);
                     __inline_Result_String_SerializeError___unwrap_14: block -> ref "core:prelude/string.wado//String" {
-                        __local_2_216 = ref.as_non_null("core:json/core/json/to_string<Value>"(struct.new "core:json_value//Value::Object" { discriminant: 5, payload_0: obj_39 }));
+                        __local_2_216 = ref.as_non_null("core:json/core/json/to_string<core:json_value/Value>"(struct.new "core:json_value//Value::Object" { discriminant: 5, payload_0: obj_39 }));
                         if ref.test "core:prelude/types.wado//Result<String,SerializeError>::Ok"(__local_2_216) {
                             v_215 = ref.cast "core:prelude/types.wado//Result<String,SerializeError>::Ok"(__local_2_216).payload_0;
                             break __inline_Result_String_SerializeError___unwrap_14: v_215;
@@ -2292,16 +2292,16 @@ fn "./sub/httpbin_handler.wado/route"(request, method_str, path, query) {
             return 405, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("application/json"), used: 16 }, ref.as_non_null(__inline_String_Add__add_9: block -> ref "core:prelude/string.wado//String" {
                 self_52 = __inline_json_error_8: block -> ref "core:prelude/string.wado//String" {
                     msg_50 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Method Not Allowed. Use POST."), used: 29 };
-                    obj_51 = struct.new "core:collections//TreeMap<String,Value>" { root: ref.null none, entries: ref.as_non_null(__inline_TreeMap_String_Value___new_23____seq_lit: block -> ref "core:prelude//Array<TreeMapEntry<String,Value>>" {
-                        __b_225 = struct.new "core:prelude//Array<TreeMapEntry<String,Value>>" { repr: builtin::array_new<ref "core:collections//TreeMapEntry<String,Value>">(0), used: 0 };
-                        break __inline_TreeMap_String_Value___new_23____seq_lit: __b_225;
+                    obj_51 = struct.new "core:collections//TreeMap<String,core:json_value/Value>" { root: ref.null none, entries: ref.as_non_null(__inline_TreeMap_String_core_json_value_Value___new_23____seq_lit: block -> ref "core:prelude//Array<TreeMapEntry<String,core:json_value/Value>>" {
+                        __b_225 = struct.new "core:prelude//Array<TreeMapEntry<String,core:json_value/Value>>" { repr: builtin::array_new<ref "core:collections//TreeMapEntry<String,core:json_value/Value>">(0), used: 0 };
+                        break __inline_TreeMap_String_core_json_value_Value___new_23____seq_lit: __b_225;
                         unreachable;
                     }), size: 0, deleted_count: 0 };
                     key_230 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("error"), used: 5 };
                     value_231 = struct.new "core:json_value//Value::String" { discriminant: 3, payload_0: msg_50 };
-                    "core:collections/TreeMap<String,Value>::insert"(obj_51, key_230, value_231);
+                    "core:collections/TreeMap<String,core:json_value/Value>::insert"(obj_51, key_230, value_231);
                     __inline_Result_String_SerializeError___unwrap_25: block -> ref "core:prelude/string.wado//String" {
-                        __local_2_234 = ref.as_non_null("core:json/core/json/to_string<Value>"(struct.new "core:json_value//Value::Object" { discriminant: 5, payload_0: obj_51 }));
+                        __local_2_234 = ref.as_non_null("core:json/core/json/to_string<core:json_value/Value>"(struct.new "core:json_value//Value::Object" { discriminant: 5, payload_0: obj_51 }));
                         if ref.test "core:prelude/types.wado//Result<String,SerializeError>::Ok"(__local_2_234) {
                             v_233 = ref.cast "core:prelude/types.wado//Result<String,SerializeError>::Ok"(__local_2_234).payload_0;
                             break __inline_Result_String_SerializeError___unwrap_25: v_233;
@@ -2349,16 +2349,16 @@ fn "./sub/httpbin_handler.wado/route"(request, method_str, path, query) {
             return 405, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("application/json"), used: 16 }, ref.as_non_null(__inline_String_Add__add_14: block -> ref "core:prelude/string.wado//String" {
                 self_64 = __inline_json_error_13: block -> ref "core:prelude/string.wado//String" {
                     msg_62 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Method Not Allowed. Use PUT."), used: 28 };
-                    obj_63 = struct.new "core:collections//TreeMap<String,Value>" { root: ref.null none, entries: ref.as_non_null(__inline_TreeMap_String_Value___new_34____seq_lit: block -> ref "core:prelude//Array<TreeMapEntry<String,Value>>" {
-                        __b_243 = struct.new "core:prelude//Array<TreeMapEntry<String,Value>>" { repr: builtin::array_new<ref "core:collections//TreeMapEntry<String,Value>">(0), used: 0 };
-                        break __inline_TreeMap_String_Value___new_34____seq_lit: __b_243;
+                    obj_63 = struct.new "core:collections//TreeMap<String,core:json_value/Value>" { root: ref.null none, entries: ref.as_non_null(__inline_TreeMap_String_core_json_value_Value___new_34____seq_lit: block -> ref "core:prelude//Array<TreeMapEntry<String,core:json_value/Value>>" {
+                        __b_243 = struct.new "core:prelude//Array<TreeMapEntry<String,core:json_value/Value>>" { repr: builtin::array_new<ref "core:collections//TreeMapEntry<String,core:json_value/Value>">(0), used: 0 };
+                        break __inline_TreeMap_String_core_json_value_Value___new_34____seq_lit: __b_243;
                         unreachable;
                     }), size: 0, deleted_count: 0 };
                     key_248 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("error"), used: 5 };
                     value_249 = struct.new "core:json_value//Value::String" { discriminant: 3, payload_0: msg_62 };
-                    "core:collections/TreeMap<String,Value>::insert"(obj_63, key_248, value_249);
+                    "core:collections/TreeMap<String,core:json_value/Value>::insert"(obj_63, key_248, value_249);
                     __inline_Result_String_SerializeError___unwrap_36: block -> ref "core:prelude/string.wado//String" {
-                        __local_2_252 = ref.as_non_null("core:json/core/json/to_string<Value>"(struct.new "core:json_value//Value::Object" { discriminant: 5, payload_0: obj_63 }));
+                        __local_2_252 = ref.as_non_null("core:json/core/json/to_string<core:json_value/Value>"(struct.new "core:json_value//Value::Object" { discriminant: 5, payload_0: obj_63 }));
                         if ref.test "core:prelude/types.wado//Result<String,SerializeError>::Ok"(__local_2_252) {
                             v_251 = ref.cast "core:prelude/types.wado//Result<String,SerializeError>::Ok"(__local_2_252).payload_0;
                             break __inline_Result_String_SerializeError___unwrap_36: v_251;
@@ -2406,16 +2406,16 @@ fn "./sub/httpbin_handler.wado/route"(request, method_str, path, query) {
             return 405, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("application/json"), used: 16 }, ref.as_non_null(__inline_String_Add__add_19: block -> ref "core:prelude/string.wado//String" {
                 self_76 = __inline_json_error_18: block -> ref "core:prelude/string.wado//String" {
                     msg_74 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Method Not Allowed. Use PATCH."), used: 30 };
-                    obj_75 = struct.new "core:collections//TreeMap<String,Value>" { root: ref.null none, entries: ref.as_non_null(__inline_TreeMap_String_Value___new_45____seq_lit: block -> ref "core:prelude//Array<TreeMapEntry<String,Value>>" {
-                        __b_261 = struct.new "core:prelude//Array<TreeMapEntry<String,Value>>" { repr: builtin::array_new<ref "core:collections//TreeMapEntry<String,Value>">(0), used: 0 };
-                        break __inline_TreeMap_String_Value___new_45____seq_lit: __b_261;
+                    obj_75 = struct.new "core:collections//TreeMap<String,core:json_value/Value>" { root: ref.null none, entries: ref.as_non_null(__inline_TreeMap_String_core_json_value_Value___new_45____seq_lit: block -> ref "core:prelude//Array<TreeMapEntry<String,core:json_value/Value>>" {
+                        __b_261 = struct.new "core:prelude//Array<TreeMapEntry<String,core:json_value/Value>>" { repr: builtin::array_new<ref "core:collections//TreeMapEntry<String,core:json_value/Value>">(0), used: 0 };
+                        break __inline_TreeMap_String_core_json_value_Value___new_45____seq_lit: __b_261;
                         unreachable;
                     }), size: 0, deleted_count: 0 };
                     key_266 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("error"), used: 5 };
                     value_267 = struct.new "core:json_value//Value::String" { discriminant: 3, payload_0: msg_74 };
-                    "core:collections/TreeMap<String,Value>::insert"(obj_75, key_266, value_267);
+                    "core:collections/TreeMap<String,core:json_value/Value>::insert"(obj_75, key_266, value_267);
                     __inline_Result_String_SerializeError___unwrap_47: block -> ref "core:prelude/string.wado//String" {
-                        __local_2_270 = ref.as_non_null("core:json/core/json/to_string<Value>"(struct.new "core:json_value//Value::Object" { discriminant: 5, payload_0: obj_75 }));
+                        __local_2_270 = ref.as_non_null("core:json/core/json/to_string<core:json_value/Value>"(struct.new "core:json_value//Value::Object" { discriminant: 5, payload_0: obj_75 }));
                         if ref.test "core:prelude/types.wado//Result<String,SerializeError>::Ok"(__local_2_270) {
                             v_269 = ref.cast "core:prelude/types.wado//Result<String,SerializeError>::Ok"(__local_2_270).payload_0;
                             break __inline_Result_String_SerializeError___unwrap_47: v_269;
@@ -2463,16 +2463,16 @@ fn "./sub/httpbin_handler.wado/route"(request, method_str, path, query) {
             return 405, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("application/json"), used: 16 }, ref.as_non_null(__inline_String_Add__add_24: block -> ref "core:prelude/string.wado//String" {
                 self_88 = __inline_json_error_23: block -> ref "core:prelude/string.wado//String" {
                     msg_86 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Method Not Allowed. Use DELETE."), used: 31 };
-                    obj_87 = struct.new "core:collections//TreeMap<String,Value>" { root: ref.null none, entries: ref.as_non_null(__inline_TreeMap_String_Value___new_56____seq_lit: block -> ref "core:prelude//Array<TreeMapEntry<String,Value>>" {
-                        __b_279 = struct.new "core:prelude//Array<TreeMapEntry<String,Value>>" { repr: builtin::array_new<ref "core:collections//TreeMapEntry<String,Value>">(0), used: 0 };
-                        break __inline_TreeMap_String_Value___new_56____seq_lit: __b_279;
+                    obj_87 = struct.new "core:collections//TreeMap<String,core:json_value/Value>" { root: ref.null none, entries: ref.as_non_null(__inline_TreeMap_String_core_json_value_Value___new_56____seq_lit: block -> ref "core:prelude//Array<TreeMapEntry<String,core:json_value/Value>>" {
+                        __b_279 = struct.new "core:prelude//Array<TreeMapEntry<String,core:json_value/Value>>" { repr: builtin::array_new<ref "core:collections//TreeMapEntry<String,core:json_value/Value>">(0), used: 0 };
+                        break __inline_TreeMap_String_core_json_value_Value___new_56____seq_lit: __b_279;
                         unreachable;
                     }), size: 0, deleted_count: 0 };
                     key_284 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("error"), used: 5 };
                     value_285 = struct.new "core:json_value//Value::String" { discriminant: 3, payload_0: msg_86 };
-                    "core:collections/TreeMap<String,Value>::insert"(obj_87, key_284, value_285);
+                    "core:collections/TreeMap<String,core:json_value/Value>::insert"(obj_87, key_284, value_285);
                     __inline_Result_String_SerializeError___unwrap_58: block -> ref "core:prelude/string.wado//String" {
-                        __local_2_288 = ref.as_non_null("core:json/core/json/to_string<Value>"(struct.new "core:json_value//Value::Object" { discriminant: 5, payload_0: obj_87 }));
+                        __local_2_288 = ref.as_non_null("core:json/core/json/to_string<core:json_value/Value>"(struct.new "core:json_value//Value::Object" { discriminant: 5, payload_0: obj_87 }));
                         if ref.test "core:prelude/types.wado//Result<String,SerializeError>::Ok"(__local_2_288) {
                             v_287 = ref.cast "core:prelude/types.wado//Result<String,SerializeError>::Ok"(__local_2_288).payload_0;
                             break __inline_Result_String_SerializeError___unwrap_58: v_287;
@@ -2508,17 +2508,17 @@ fn "./sub/httpbin_handler.wado/route"(request, method_str, path, query) {
         unreachable;
     } {
         h_12 = "wado-compiler/tests/fixtures/httpbin-headers.wado/__cm_binding__Request_get_headers"(request);
-        obj_13 = struct.new "core:collections//TreeMap<String,Value>" { root: ref.null none, entries: ref.as_non_null(__inline_TreeMap_String_Value___new_27____seq_lit: block -> ref "core:prelude//Array<TreeMapEntry<String,Value>>" {
-            __b_95 = struct.new "core:prelude//Array<TreeMapEntry<String,Value>>" { repr: builtin::array_new<ref "core:collections//TreeMapEntry<String,Value>">(0), used: 0 };
-            break __inline_TreeMap_String_Value___new_27____seq_lit: __b_95;
+        obj_13 = struct.new "core:collections//TreeMap<String,core:json_value/Value>" { root: ref.null none, entries: ref.as_non_null(__inline_TreeMap_String_core_json_value_Value___new_27____seq_lit: block -> ref "core:prelude//Array<TreeMapEntry<String,core:json_value/Value>>" {
+            __b_95 = struct.new "core:prelude//Array<TreeMapEntry<String,core:json_value/Value>>" { repr: builtin::array_new<ref "core:collections//TreeMapEntry<String,core:json_value/Value>">(0), used: 0 };
+            break __inline_TreeMap_String_core_json_value_Value___new_27____seq_lit: __b_95;
             unreachable;
         }), size: 0, deleted_count: 0 };
         key_100 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("headers"), used: 7 };
         value_101 = "./sub/httpbin_handler.wado/headers_to_json"(h_12);
-        "core:collections/TreeMap<String,Value>::insert"(obj_13, key_100, value_101);
+        "core:collections/TreeMap<String,core:json_value/Value>::insert"(obj_13, key_100, value_101);
         return 200, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("application/json"), used: 16 }, ref.as_non_null(__inline_String_Add__add_33: block -> ref "core:prelude/string.wado//String" {
             self_105 = __inline_Result_String_SerializeError___unwrap_32: block -> ref "core:prelude/string.wado//String" {
-                __local_2_104 = ref.as_non_null("core:json/core/json/to_string<Value>"(struct.new "core:json_value//Value::Object" { discriminant: 5, payload_0: obj_13 }));
+                __local_2_104 = ref.as_non_null("core:json/core/json/to_string<core:json_value/Value>"(struct.new "core:json_value//Value::Object" { discriminant: 5, payload_0: obj_13 }));
                 if ref.test "core:prelude/types.wado//Result<String,SerializeError>::Ok"(__local_2_104) {
                     v_103 = ref.cast "core:prelude/types.wado//Result<String,SerializeError>::Ok"(__local_2_104).payload_0;
                     break __inline_Result_String_SerializeError___unwrap_32: v_103;
@@ -2549,19 +2549,19 @@ fn "./sub/httpbin_handler.wado/route"(request, method_str, path, query) {
             if values_112.used == 0 {
                 break __inline_get_header_35: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
             }
-            break __inline_get_header_35: "core:prelude/string.wado/String::from_utf8_lossy<FieldValue>"(__inline_Array_FieldValue__IndexValue_i32___index_value_37: block -> ref "core:prelude//Array<u8>" {
+            break __inline_get_header_35: "core:prelude/string.wado/String::from_utf8_lossy<wasi:http/types.wado/FieldValue>"(__inline_Array_wasi_http_types_wado_FieldValue__IndexValue_i32___index_value_37: block -> ref "core:prelude//Array<u8>" {
                 if 0 >= values_112.used {
                     "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 }
-                break __inline_Array_FieldValue__IndexValue_i32___index_value_37: builtin::array_get<ref "core:prelude//Array<u8>">(values_112.repr, 0);
+                break __inline_Array_wasi_http_types_wado_FieldValue__IndexValue_i32___index_value_37: builtin::array_get<ref "core:prelude//Array<u8>">(values_112.repr, 0);
                 unreachable;
             });
             unreachable;
         };
-        obj_16 = struct.new "core:collections//TreeMap<String,Value>" { root: ref.null none, entries: ref.as_non_null(__inline_TreeMap_String_Value___new_38____seq_lit: block -> ref "core:prelude//Array<TreeMapEntry<String,Value>>" {
-            __b_116 = struct.new "core:prelude//Array<TreeMapEntry<String,Value>>" { repr: builtin::array_new<ref "core:collections//TreeMapEntry<String,Value>">(0), used: 0 };
-            break __inline_TreeMap_String_Value___new_38____seq_lit: __b_116;
+        obj_16 = struct.new "core:collections//TreeMap<String,core:json_value/Value>" { root: ref.null none, entries: ref.as_non_null(__inline_TreeMap_String_core_json_value_Value___new_38____seq_lit: block -> ref "core:prelude//Array<TreeMapEntry<String,core:json_value/Value>>" {
+            __b_116 = struct.new "core:prelude//Array<TreeMapEntry<String,core:json_value/Value>>" { repr: builtin::array_new<ref "core:collections//TreeMapEntry<String,core:json_value/Value>">(0), used: 0 };
+            break __inline_TreeMap_String_core_json_value_Value___new_38____seq_lit: __b_116;
             unreachable;
         }), size: 0, deleted_count: 0 };
         key_121 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("origin"), used: 6 };
@@ -2570,10 +2570,10 @@ fn "./sub/httpbin_handler.wado/route"(request, method_str, path, query) {
         } else {
             origin;
         })) };
-        "core:collections/TreeMap<String,Value>::insert"(obj_16, key_121, value_122);
+        "core:collections/TreeMap<String,core:json_value/Value>::insert"(obj_16, key_121, value_122);
         return 200, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("application/json"), used: 16 }, ref.as_non_null(__inline_String_Add__add_45: block -> ref "core:prelude/string.wado//String" {
             self_127 = __inline_Result_String_SerializeError___unwrap_44: block -> ref "core:prelude/string.wado//String" {
-                __local_2_126 = ref.as_non_null("core:json/core/json/to_string<Value>"(struct.new "core:json_value//Value::Object" { discriminant: 5, payload_0: obj_16 }));
+                __local_2_126 = ref.as_non_null("core:json/core/json/to_string<core:json_value/Value>"(struct.new "core:json_value//Value::Object" { discriminant: 5, payload_0: obj_16 }));
                 if ref.test "core:prelude/types.wado//Result<String,SerializeError>::Ok"(__local_2_126) {
                     v_125 = ref.cast "core:prelude/types.wado//Result<String,SerializeError>::Ok"(__local_2_126).payload_0;
                     break __inline_Result_String_SerializeError___unwrap_44: v_125;
@@ -2604,27 +2604,27 @@ fn "./sub/httpbin_handler.wado/route"(request, method_str, path, query) {
             if values_134.used == 0 {
                 break __inline_get_header_47: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
             }
-            break __inline_get_header_47: "core:prelude/string.wado/String::from_utf8_lossy<FieldValue>"(__inline_Array_FieldValue__IndexValue_i32___index_value_49: block -> ref "core:prelude//Array<u8>" {
+            break __inline_get_header_47: "core:prelude/string.wado/String::from_utf8_lossy<wasi:http/types.wado/FieldValue>"(__inline_Array_wasi_http_types_wado_FieldValue__IndexValue_i32___index_value_49: block -> ref "core:prelude//Array<u8>" {
                 if 0 >= values_134.used {
                     "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 }
-                break __inline_Array_FieldValue__IndexValue_i32___index_value_49: builtin::array_get<ref "core:prelude//Array<u8>">(values_134.repr, 0);
+                break __inline_Array_wasi_http_types_wado_FieldValue__IndexValue_i32___index_value_49: builtin::array_get<ref "core:prelude//Array<u8>">(values_134.repr, 0);
                 unreachable;
             });
             unreachable;
         };
-        obj_19 = struct.new "core:collections//TreeMap<String,Value>" { root: ref.null none, entries: ref.as_non_null(__inline_TreeMap_String_Value___new_50____seq_lit: block -> ref "core:prelude//Array<TreeMapEntry<String,Value>>" {
-            __b_138 = struct.new "core:prelude//Array<TreeMapEntry<String,Value>>" { repr: builtin::array_new<ref "core:collections//TreeMapEntry<String,Value>">(0), used: 0 };
-            break __inline_TreeMap_String_Value___new_50____seq_lit: __b_138;
+        obj_19 = struct.new "core:collections//TreeMap<String,core:json_value/Value>" { root: ref.null none, entries: ref.as_non_null(__inline_TreeMap_String_core_json_value_Value___new_50____seq_lit: block -> ref "core:prelude//Array<TreeMapEntry<String,core:json_value/Value>>" {
+            __b_138 = struct.new "core:prelude//Array<TreeMapEntry<String,core:json_value/Value>>" { repr: builtin::array_new<ref "core:collections//TreeMapEntry<String,core:json_value/Value>">(0), used: 0 };
+            break __inline_TreeMap_String_core_json_value_Value___new_50____seq_lit: __b_138;
             unreachable;
         }), size: 0, deleted_count: 0 };
         key_143 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("user-agent"), used: 10 };
         value_144 = struct.new "core:json_value//Value::String" { discriminant: 3, payload_0: ua };
-        "core:collections/TreeMap<String,Value>::insert"(obj_19, key_143, value_144);
+        "core:collections/TreeMap<String,core:json_value/Value>::insert"(obj_19, key_143, value_144);
         return 200, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("application/json"), used: 16 }, ref.as_non_null(__inline_String_Add__add_56: block -> ref "core:prelude/string.wado//String" {
             self_148 = __inline_Result_String_SerializeError___unwrap_55: block -> ref "core:prelude/string.wado//String" {
-                __local_2_147 = ref.as_non_null("core:json/core/json/to_string<Value>"(struct.new "core:json_value//Value::Object" { discriminant: 5, payload_0: obj_19 }));
+                __local_2_147 = ref.as_non_null("core:json/core/json/to_string<core:json_value/Value>"(struct.new "core:json_value//Value::Object" { discriminant: 5, payload_0: obj_19 }));
                 if ref.test "core:prelude/types.wado//Result<String,SerializeError>::Ok"(__local_2_147) {
                     v_146 = ref.cast "core:prelude/types.wado//Result<String,SerializeError>::Ok"(__local_2_147).payload_0;
                     break __inline_Result_String_SerializeError___unwrap_55: v_146;
@@ -2650,16 +2650,16 @@ fn "./sub/httpbin_handler.wado/route"(request, method_str, path, query) {
         return 400, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("application/json"), used: 16 }, ref.as_non_null(__inline_String_Add__add_59: block -> ref "core:prelude/string.wado//String" {
             self_153 = __inline_json_error_58: block -> ref "core:prelude/string.wado//String" {
                 msg_151 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Invalid status code"), used: 19 };
-                obj_152 = struct.new "core:collections//TreeMap<String,Value>" { root: ref.null none, entries: ref.as_non_null(__inline_TreeMap_String_Value___new_71____seq_lit: block -> ref "core:prelude//Array<TreeMapEntry<String,Value>>" {
-                    __b_301 = struct.new "core:prelude//Array<TreeMapEntry<String,Value>>" { repr: builtin::array_new<ref "core:collections//TreeMapEntry<String,Value>">(0), used: 0 };
-                    break __inline_TreeMap_String_Value___new_71____seq_lit: __b_301;
+                obj_152 = struct.new "core:collections//TreeMap<String,core:json_value/Value>" { root: ref.null none, entries: ref.as_non_null(__inline_TreeMap_String_core_json_value_Value___new_71____seq_lit: block -> ref "core:prelude//Array<TreeMapEntry<String,core:json_value/Value>>" {
+                    __b_301 = struct.new "core:prelude//Array<TreeMapEntry<String,core:json_value/Value>>" { repr: builtin::array_new<ref "core:collections//TreeMapEntry<String,core:json_value/Value>">(0), used: 0 };
+                    break __inline_TreeMap_String_core_json_value_Value___new_71____seq_lit: __b_301;
                     unreachable;
                 }), size: 0, deleted_count: 0 };
                 key_306 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("error"), used: 5 };
                 value_307 = struct.new "core:json_value//Value::String" { discriminant: 3, payload_0: msg_151 };
-                "core:collections/TreeMap<String,Value>::insert"(obj_152, key_306, value_307);
+                "core:collections/TreeMap<String,core:json_value/Value>::insert"(obj_152, key_306, value_307);
                 __inline_Result_String_SerializeError___unwrap_73: block -> ref "core:prelude/string.wado//String" {
-                    __local_2_310 = ref.as_non_null("core:json/core/json/to_string<Value>"(struct.new "core:json_value//Value::Object" { discriminant: 5, payload_0: obj_152 }));
+                    __local_2_310 = ref.as_non_null("core:json/core/json/to_string<core:json_value/Value>"(struct.new "core:json_value//Value::Object" { discriminant: 5, payload_0: obj_152 }));
                     if ref.test "core:prelude/types.wado//Result<String,SerializeError>::Ok"(__local_2_310) {
                         v_309 = ref.cast "core:prelude/types.wado//Result<String,SerializeError>::Ok"(__local_2_310).payload_0;
                         break __inline_Result_String_SerializeError___unwrap_73: v_309;
@@ -2714,16 +2714,16 @@ fn "./sub/httpbin_handler.wado/route"(request, method_str, path, query) {
         return 400, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("application/json"), used: 16 }, ref.as_non_null(__inline_String_Add__add_70: block -> ref "core:prelude/string.wado//String" {
             self_172 = __inline_json_error_69: block -> ref "core:prelude/string.wado//String" {
                 msg_170 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Invalid base64"), used: 14 };
-                obj_171 = struct.new "core:collections//TreeMap<String,Value>" { root: ref.null none, entries: ref.as_non_null(__inline_TreeMap_String_Value___new_74____seq_lit: block -> ref "core:prelude//Array<TreeMapEntry<String,Value>>" {
-                    __b_311 = struct.new "core:prelude//Array<TreeMapEntry<String,Value>>" { repr: builtin::array_new<ref "core:collections//TreeMapEntry<String,Value>">(0), used: 0 };
-                    break __inline_TreeMap_String_Value___new_74____seq_lit: __b_311;
+                obj_171 = struct.new "core:collections//TreeMap<String,core:json_value/Value>" { root: ref.null none, entries: ref.as_non_null(__inline_TreeMap_String_core_json_value_Value___new_74____seq_lit: block -> ref "core:prelude//Array<TreeMapEntry<String,core:json_value/Value>>" {
+                    __b_311 = struct.new "core:prelude//Array<TreeMapEntry<String,core:json_value/Value>>" { repr: builtin::array_new<ref "core:collections//TreeMapEntry<String,core:json_value/Value>">(0), used: 0 };
+                    break __inline_TreeMap_String_core_json_value_Value___new_74____seq_lit: __b_311;
                     unreachable;
                 }), size: 0, deleted_count: 0 };
                 key_316 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("error"), used: 5 };
                 value_317 = struct.new "core:json_value//Value::String" { discriminant: 3, payload_0: msg_170 };
-                "core:collections/TreeMap<String,Value>::insert"(obj_171, key_316, value_317);
+                "core:collections/TreeMap<String,core:json_value/Value>::insert"(obj_171, key_316, value_317);
                 __inline_Result_String_SerializeError___unwrap_76: block -> ref "core:prelude/string.wado//String" {
-                    __local_2_320 = ref.as_non_null("core:json/core/json/to_string<Value>"(struct.new "core:json_value//Value::Object" { discriminant: 5, payload_0: obj_171 }));
+                    __local_2_320 = ref.as_non_null("core:json/core/json/to_string<core:json_value/Value>"(struct.new "core:json_value//Value::Object" { discriminant: 5, payload_0: obj_171 }));
                     if ref.test "core:prelude/types.wado//Result<String,SerializeError>::Ok"(__local_2_320) {
                         v_319 = ref.cast "core:prelude/types.wado//Result<String,SerializeError>::Ok"(__local_2_320).payload_0;
                         break __inline_Result_String_SerializeError___unwrap_76: v_319;
@@ -2807,16 +2807,16 @@ fn "./sub/httpbin_handler.wado/route"(request, method_str, path, query) {
     return 404, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("application/json"), used: 16 }, ref.as_non_null(__inline_String_Add__add_78: block -> ref "core:prelude/string.wado//String" {
         self_192 = __inline_json_error_77: block -> ref "core:prelude/string.wado//String" {
             msg_190 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Not Found"), used: 9 };
-            obj_191 = struct.new "core:collections//TreeMap<String,Value>" { root: ref.null none, entries: ref.as_non_null(__inline_TreeMap_String_Value___new_93____seq_lit: block -> ref "core:prelude//Array<TreeMapEntry<String,Value>>" {
-                __b_337 = struct.new "core:prelude//Array<TreeMapEntry<String,Value>>" { repr: builtin::array_new<ref "core:collections//TreeMapEntry<String,Value>">(0), used: 0 };
-                break __inline_TreeMap_String_Value___new_93____seq_lit: __b_337;
+            obj_191 = struct.new "core:collections//TreeMap<String,core:json_value/Value>" { root: ref.null none, entries: ref.as_non_null(__inline_TreeMap_String_core_json_value_Value___new_93____seq_lit: block -> ref "core:prelude//Array<TreeMapEntry<String,core:json_value/Value>>" {
+                __b_337 = struct.new "core:prelude//Array<TreeMapEntry<String,core:json_value/Value>>" { repr: builtin::array_new<ref "core:collections//TreeMapEntry<String,core:json_value/Value>">(0), used: 0 };
+                break __inline_TreeMap_String_core_json_value_Value___new_93____seq_lit: __b_337;
                 unreachable;
             }), size: 0, deleted_count: 0 };
             key_342 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("error"), used: 5 };
             value_343 = struct.new "core:json_value//Value::String" { discriminant: 3, payload_0: msg_190 };
-            "core:collections/TreeMap<String,Value>::insert"(obj_191, key_342, value_343);
+            "core:collections/TreeMap<String,core:json_value/Value>::insert"(obj_191, key_342, value_343);
             __inline_Result_String_SerializeError___unwrap_95: block -> ref "core:prelude/string.wado//String" {
-                __local_2_346 = ref.as_non_null("core:json/core/json/to_string<Value>"(struct.new "core:json_value//Value::Object" { discriminant: 5, payload_0: obj_191 }));
+                __local_2_346 = ref.as_non_null("core:json/core/json/to_string<core:json_value/Value>"(struct.new "core:json_value//Value::Object" { discriminant: 5, payload_0: obj_191 }));
                 if ref.test "core:prelude/types.wado//Result<String,SerializeError>::Ok"(__local_2_346) {
                     v_345 = ref.cast "core:prelude/types.wado//Result<String,SerializeError>::Ok"(__local_2_346).payload_0;
                     break __inline_Result_String_SerializeError___unwrap_95: v_345;
@@ -4720,7 +4720,7 @@ fn "core:json/write_escaped_string"(buf, s) {
     "core:prelude/string.wado/String::push"(buf, 34);
 }
 
-fn "core:json/core/json/to_string<Value>"(value) {
+fn "core:json/core/json/to_string<core:json_value/Value>"(value) {
     let buf: ref "core:prelude/string.wado//String";
     let __qm_e: ref "core:serde//SerializeError";
     buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
@@ -5776,15 +5776,15 @@ fn "core:prelude/array.wado/Array<u8>::grow"(self) {
     self.repr = new_repr;
 }
 
-fn "core:collections/TreeMap<String,Value>::find_index"(self, key) {
+fn "core:collections/TreeMap<String,core:json_value/Value>::find_index"(self, key) {
     let current: ref null "core:collections//TreeMapNode<String>";
     let n: ref "core:collections//TreeMapNode<String>";
-    let entry: ref "core:collections//TreeMapEntry<String,Value>";
+    let entry: ref "core:collections//TreeMapEntry<String,core:json_value/Value>";
     let other: ref "core:prelude/string.wado//String";
     let index: i32;
-    let _licm_entries_11: ref "core:prelude//Array<TreeMapEntry<String,Value>>";
+    let _licm_entries_11: ref "core:prelude//Array<TreeMapEntry<String,core:json_value/Value>>";
     let _licm_used_12: i32;
-    let _licm_repr_13: ref builtin::array<TreeMapEntry<String,Value>>;
+    let _licm_repr_13: ref "builtin::array<TreeMapEntry<String,core:json_value/Value>>";
     let _licm_used_18: i32;
     current = self.root;
     _licm_entries_11 = self.entries;
@@ -5803,13 +5803,13 @@ fn "core:collections/TreeMap<String,Value>::find_index"(self, key) {
                     break __inline_String_Eq__eq_0: "core:prelude/string.wado/String^Eq::eq_bytes"(key.repr, other.repr, _licm_used_18);
                     unreachable;
                 } {
-                    entry = __inline_Array_TreeMapEntry_String_Value___IndexValue_i32___index_value_1: block -> ref "core:collections//TreeMapEntry<String,Value>" {
+                    entry = __inline_Array_TreeMapEntry_String_core_json_value_Value___IndexValue_i32___index_value_1: block -> ref "core:collections//TreeMapEntry<String,core:json_value/Value>" {
                         index = n.index;
                         if index >= _licm_used_12 {
                             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                             unreachable;
                         }
-                        break __inline_Array_TreeMapEntry_String_Value___IndexValue_i32___index_value_1: builtin::array_get<ref "core:collections//TreeMapEntry<String,Value>">(_licm_repr_13, index);
+                        break __inline_Array_TreeMapEntry_String_core_json_value_Value___IndexValue_i32___index_value_1: builtin::array_get<ref "core:collections//TreeMapEntry<String,core:json_value/Value>">(_licm_repr_13, index);
                         unreachable;
                     };
                     if entry.deleted {
@@ -5841,26 +5841,26 @@ fn "core:prelude/array.wado/ArrayIter<Tuple<String,core:json_value/Value>>^Itera
     return item;
 }
 
-fn "core:collections/TreeMap<String,Value>::entries"(self) {
+fn "core:collections/TreeMap<String,core:json_value/Value>::entries"(self) {
     let __b: ref "core:prelude//Array<Tuple<String,Value>>";
     let result: ref "core:prelude//Array<Tuple<String,Value>>";
-    let __iter_3: ref "core:prelude/array.wado//ArrayIter<TreeMapEntry<String,Value>>";
-    let entry: ref "core:collections//TreeMapEntry<String,Value>";
-    let __pattern_temp_0: ref null "core:collections//TreeMapEntry<String,Value>";
-    let self_9: ref "core:prelude//Array<TreeMapEntry<String,Value>>";
+    let __iter_3: ref "core:prelude/array.wado//ArrayIter<TreeMapEntry<String,core:json_value/Value>>";
+    let entry: ref "core:collections//TreeMapEntry<String,core:json_value/Value>";
+    let __pattern_temp_0: ref null "core:collections//TreeMapEntry<String,core:json_value/Value>";
+    let self_9: ref "core:prelude//Array<TreeMapEntry<String,core:json_value/Value>>";
     result = __seq_lit: block -> ref "core:prelude//Array<Tuple<String,Value>>" {
         __b = struct.new "core:prelude//Array<Tuple<String,Value>>" { repr: builtin::array_new<ref "tuple//[String, Value]">(0), used: 0 };
         break __seq_lit: __b;
         unreachable;
     };
-    __iter_3 = __inline_Array_TreeMapEntry_String_Value___IntoIterator__into_iter_3: block -> ref "core:prelude/array.wado//ArrayIter<TreeMapEntry<String,Value>>" {
+    __iter_3 = __inline_Array_TreeMapEntry_String_core_json_value_Value___IntoIterator__into_iter_3: block -> ref "core:prelude/array.wado//ArrayIter<TreeMapEntry<String,core:json_value/Value>>" {
         self_9 = self.entries;
-        break __inline_Array_TreeMapEntry_String_Value___IntoIterator__into_iter_3: struct.new "core:prelude/array.wado//ArrayIter<TreeMapEntry<String,Value>>" { repr: self_9.repr, used: self_9.used, index: 0 };
+        break __inline_Array_TreeMapEntry_String_core_json_value_Value___IntoIterator__into_iter_3: struct.new "core:prelude/array.wado//ArrayIter<TreeMapEntry<String,core:json_value/Value>>" { repr: self_9.repr, used: self_9.used, index: 0 };
         unreachable;
     };
     b573: block {
         l574: loop {
-            __pattern_temp_0 = "core:prelude/array.wado/ArrayIter<TreeMapEntry<String,Value>>^Iterator::next"(__iter_3);
+            __pattern_temp_0 = "core:prelude/array.wado/ArrayIter<TreeMapEntry<String,core:json_value/Value>>^Iterator::next"(__iter_3);
             if ref.is_null(__pattern_temp_0) == 0 {
                 entry = ref.as_non_null(__pattern_temp_0);
                 if entry.deleted == 0 {
@@ -5918,12 +5918,12 @@ fn "core:prelude/array.wado/Array<Tuple<String,core:json_value/Value>>::grow"(se
     self.repr = new_repr;
 }
 
-fn "core:prelude/array.wado/ArrayIter<TreeMapEntry<String,Value>>^Iterator::next"(self) {
-    let item: ref "core:collections//TreeMapEntry<String,Value>";
+fn "core:prelude/array.wado/ArrayIter<TreeMapEntry<String,core:json_value/Value>>^Iterator::next"(self) {
+    let item: ref "core:collections//TreeMapEntry<String,core:json_value/Value>";
     if self.index >= self.used {
         return ref.null none;
     }
-    item = builtin::array_get<ref "core:collections//TreeMapEntry<String,Value>">(self.repr, self.index);
+    item = builtin::array_get<ref "core:collections//TreeMapEntry<String,core:json_value/Value>">(self.repr, self.index);
     self.index = self.index + 1;
     return item;
 }
@@ -6138,9 +6138,9 @@ fn "core:json_value/Value^Serialize::serialize<JsonSerializer>"(self, s) {
     let __qm_v_6: ref "core:json//JsonSeqSerializer";
     let __qm_e_7: ref "core:serde//SerializeError";
     let seq: ref "core:json//JsonSeqSerializer";
-    let __iter_9: ref "core:prelude/array.wado//ArrayIter<Value>";
+    let __iter_9: ref "core:prelude/array.wado//ArrayIter<core:json_value/Value>";
     let __qm_e_12: ref "core:serde//SerializeError";
-    let map: ref "core:collections//TreeMap<String,Value>";
+    let map: ref "core:collections//TreeMap<String,core:json_value/Value>";
     let __qm_v_14: ref "core:json//JsonMapSerializer";
     let __qm_e_15: ref "core:serde//SerializeError";
     let m: ref "core:json//JsonMapSerializer";
@@ -6197,17 +6197,17 @@ fn "core:json_value/Value^Serialize::serialize<JsonSerializer>"(self, s) {
             unreachable;
             unreachable;
         }));
-        __iter_9 = __inline_Array_Value__IntoIterator__into_iter_3: block -> ref "core:prelude/array.wado//ArrayIter<Value>" {
+        __iter_9 = __inline_Array_core_json_value_Value__IntoIterator__into_iter_3: block -> ref "core:prelude/array.wado//ArrayIter<core:json_value/Value>" {
             self_32 = arr;
-            break __inline_Array_Value__IntoIterator__into_iter_3: struct.new "core:prelude/array.wado//ArrayIter<Value>" { repr: self_32.repr, used: self_32.used, index: 0 };
+            break __inline_Array_core_json_value_Value__IntoIterator__into_iter_3: struct.new "core:prelude/array.wado//ArrayIter<core:json_value/Value>" { repr: self_32.repr, used: self_32.used, index: 0 };
             unreachable;
         };
         b625: block {
             l626: loop {
-                __local_24 = "core:prelude/array.wado/ArrayIter<Value>^Iterator::next"(__iter_9);
+                __local_24 = "core:prelude/array.wado/ArrayIter<core:json_value/Value>^Iterator::next"(__iter_9);
                 if ref.is_null(__local_24) == 0 {
                     let __match_scrut_5: ref null "core:serde//SerializeError";
-                    __match_scrut_5 = "core:json/JsonSeqSerializer^SerializeSeq::element<Value>"(seq, ref.as_non_null(__local_24));
+                    __match_scrut_5 = "core:json/JsonSeqSerializer^SerializeSeq::element<core:json_value/Value>"(seq, ref.as_non_null(__local_24));
                     if ref.is_null(__match_scrut_5) {
                     } else {
                         let __cast_9: ref null "core:serde//SerializeError";
@@ -6251,7 +6251,7 @@ fn "core:json_value/Value^Serialize::serialize<JsonSerializer>"(self, s) {
             unreachable;
         }));
         __iter_17 = __inline_Array_Tuple_String_core_json_value_Value___IntoIterator__into_iter_7: block -> ref "core:prelude/array.wado//ArrayIter<Tuple<String,core:json_value/Value>>" {
-            self_37 = "core:collections/TreeMap<String,Value>::entries"(map);
+            self_37 = "core:collections/TreeMap<String,core:json_value/Value>::entries"(map);
             break __inline_Array_Tuple_String_core_json_value_Value___IntoIterator__into_iter_7: struct.new "core:prelude/array.wado//ArrayIter<Tuple<String,core:json_value/Value>>" { repr: self_37.repr, used: self_37.used, index: 0 };
             unreachable;
         };
@@ -6274,7 +6274,7 @@ fn "core:json_value/Value^Serialize::serialize<JsonSerializer>"(self, s) {
                         unreachable;
                     }
                     let __match_scrut_3: ref null "core:serde//SerializeError";
-                    __match_scrut_3 = "core:json/JsonMapSerializer^SerializeMap::value<Value>"(m, val.value);
+                    __match_scrut_3 = "core:json/JsonMapSerializer^SerializeMap::value<core:json_value/Value>"(m, val.value);
                     if ref.is_null(__match_scrut_3) {
                     } else {
                         let __cast_5: ref null "core:serde//SerializeError";
@@ -6298,7 +6298,7 @@ fn "core:json_value/Value^Serialize::serialize<JsonSerializer>"(self, s) {
     });
 }
 
-fn "core:json/JsonMapSerializer^SerializeMap::value<Value>"(self, value) {
+fn "core:json/JsonMapSerializer^SerializeMap::value<core:json_value/Value>"(self, value) {
     let ser: ref "core:json//JsonSerializer";
     let r: ref null "core:serde//SerializeError";
     ser = struct.new "core:json//JsonSerializer" { buf: self.buf };
@@ -6327,7 +6327,7 @@ fn "core:json/JsonMapSerializer^SerializeMap::key<String>"(self, key) {
     return r;
 }
 
-fn "core:json/JsonSeqSerializer^SerializeSeq::element<Value>"(self, value) {
+fn "core:json/JsonSeqSerializer^SerializeSeq::element<core:json_value/Value>"(self, value) {
     let ser: ref "core:json//JsonSerializer";
     let r: ref null "core:serde//SerializeError";
     if self.count > 0 {
@@ -6340,7 +6340,7 @@ fn "core:json/JsonSeqSerializer^SerializeSeq::element<Value>"(self, value) {
     return r;
 }
 
-fn "core:prelude/array.wado/ArrayIter<Value>^Iterator::next"(self) {
+fn "core:prelude/array.wado/ArrayIter<core:json_value/Value>^Iterator::next"(self) {
     let item: ref "core:json_value//Value";
     if self.index >= self.used {
         return ref.null none;
@@ -6505,7 +6505,7 @@ fn "core:prelude/string.wado/String::from_utf8<Array<u8>>"(bytes) {
     return 0, builder;
 }
 
-fn "core:prelude/string.wado/String::from_utf8_lossy<FieldValue>"(bytes) {
+fn "core:prelude/string.wado/String::from_utf8_lossy<wasi:http/types.wado/FieldValue>"(bytes) {
     let builder: ref "core:prelude/string.wado//String";
     let iter: ref "core:prelude/array.wado//ArrayIter<u8>";
     let pending: ref "core:prelude/types.wado//Option<u8>";
@@ -6699,37 +6699,37 @@ fn "core:prelude/array.wado/ArrayIter<Tuple<wasi:http/types.wado/FieldName,wasi:
     return item;
 }
 
-fn "core:collections/TreeMap<String,Value>::insert"(self, key, value) {
+fn "core:collections/TreeMap<String,core:json_value/Value>::insert"(self, key, value) {
     let existing_index: i32;
     let new_index: i32;
-    let entry: ref "core:collections//TreeMapEntry<String,Value>";
-    let self_6: ref "core:prelude//Array<TreeMapEntry<String,Value>>";
-    let self_8: ref "core:prelude//Array<TreeMapEntry<String,Value>>";
-    existing_index = "core:collections/TreeMap<String,Value>::find_index"(self, key);
+    let entry: ref "core:collections//TreeMapEntry<String,core:json_value/Value>";
+    let self_6: ref "core:prelude//Array<TreeMapEntry<String,core:json_value/Value>>";
+    let self_8: ref "core:prelude//Array<TreeMapEntry<String,core:json_value/Value>>";
+    existing_index = "core:collections/TreeMap<String,core:json_value/Value>::find_index"(self, key);
     if existing_index >= 0 {
-        __inline_Array_TreeMapEntry_String_Value___IndexValue_i32___index_value_0: block -> ref "core:collections//TreeMapEntry<String,Value>" {
+        __inline_Array_TreeMapEntry_String_core_json_value_Value___IndexValue_i32___index_value_0: block -> ref "core:collections//TreeMapEntry<String,core:json_value/Value>" {
             self_6 = self.entries;
             if existing_index >= self_6.used {
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
-            break __inline_Array_TreeMapEntry_String_Value___IndexValue_i32___index_value_0: builtin::array_get<ref "core:collections//TreeMapEntry<String,Value>">(self_6.repr, existing_index);
+            break __inline_Array_TreeMapEntry_String_core_json_value_Value___IndexValue_i32___index_value_0: builtin::array_get<ref "core:collections//TreeMapEntry<String,core:json_value/Value>">(self_6.repr, existing_index);
             unreachable;
         }.value = value;
         return;
     }
-    new_index = __inline_Array_TreeMapEntry_String_Value____len_1: block -> i32 {
+    new_index = __inline_Array_TreeMapEntry_String_core_json_value_Value____len_1: block -> i32 {
         self_8 = self.entries;
-        break __inline_Array_TreeMapEntry_String_Value____len_1: self_8.used;
+        break __inline_Array_TreeMapEntry_String_core_json_value_Value____len_1: self_8.used;
         unreachable;
     };
-    entry = struct.new "core:collections//TreeMapEntry<String,Value>" { key: key, value: value, deleted: 0 };
-    "core:prelude/array.wado/Array<TreeMapEntry<String,Value>>::push"(self.entries, entry);
-    self.root = "core:collections/TreeMap<String,Value>::insert_node"(self, self.root, key, new_index);
+    entry = struct.new "core:collections//TreeMapEntry<String,core:json_value/Value>" { key: key, value: value, deleted: 0 };
+    "core:prelude/array.wado/Array<TreeMapEntry<String,core:json_value/Value>>::push"(self.entries, entry);
+    self.root = "core:collections/TreeMap<String,core:json_value/Value>::insert_node"(self, self.root, key, new_index);
     self.size = self.size + 1;
 }
 
-fn "core:collections/TreeMap<String,Value>::insert_node"(self, node, key, index) {
+fn "core:collections/TreeMap<String,core:json_value/Value>::insert_node"(self, node, key, index) {
     let n: ref "core:collections//TreeMapNode<String>";
     let after_skew: ref null "core:collections//TreeMapNode<String>";
     let new_node: ref "core:collections//TreeMapNode<String>";
@@ -6750,18 +6750,18 @@ fn "core:collections/TreeMap<String,Value>::insert_node"(self, node, key, index)
             return n;
         }
         if "core:prelude/string.wado/String^Ord::cmp"(key, n.key) == 0 {
-            n.left = "core:collections/TreeMap<String,Value>::insert_node"(self, n.left, key, index);
+            n.left = "core:collections/TreeMap<String,core:json_value/Value>::insert_node"(self, n.left, key, index);
         } else {
-            n.right = "core:collections/TreeMap<String,Value>::insert_node"(self, n.right, key, index);
+            n.right = "core:collections/TreeMap<String,core:json_value/Value>::insert_node"(self, n.right, key, index);
         }
-        after_skew = "core:collections/TreeMap<String,Value>::skew"(n);
-        return "core:collections/TreeMap<String,Value>::split"(after_skew);
+        after_skew = "core:collections/TreeMap<String,core:json_value/Value>::skew"(n);
+        return "core:collections/TreeMap<String,core:json_value/Value>::split"(after_skew);
     }
     new_node = struct.new "core:collections//TreeMapNode<String>" { key: key, index: index, level: 1, left: ref.null none, right: ref.null none };
     return new_node;
 }
 
-fn "core:collections/TreeMap<String,Value>::split"(node) {
+fn "core:collections/TreeMap<String,core:json_value/Value>::split"(node) {
     let n: ref "core:collections//TreeMapNode<String>";
     let right: ref "core:collections//TreeMapNode<String>";
     let rr: ref "core:collections//TreeMapNode<String>";
@@ -6788,7 +6788,7 @@ fn "core:collections/TreeMap<String,Value>::split"(node) {
     return ref.null none;
 }
 
-fn "core:collections/TreeMap<String,Value>::skew"(node) {
+fn "core:collections/TreeMap<String,core:json_value/Value>::skew"(node) {
     let n: ref "core:collections//TreeMapNode<String>";
     let left: ref "core:collections//TreeMapNode<String>";
     let __pattern_temp_1: ref null "core:collections//TreeMapNode<String>";
@@ -6808,21 +6808,21 @@ fn "core:collections/TreeMap<String,Value>::skew"(node) {
     return ref.null none;
 }
 
-fn "core:prelude/array.wado/Array<TreeMapEntry<String,Value>>::push"(self, value) {
+fn "core:prelude/array.wado/Array<TreeMapEntry<String,core:json_value/Value>>::push"(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<TreeMapEntry<String,Value>>::grow"(self);
+        "core:prelude/array.wado/Array<TreeMapEntry<String,core:json_value/Value>>::grow"(self);
     }
-    builtin::array_set<ref "core:collections//TreeMapEntry<String,Value>">(self.repr, used, value);
+    builtin::array_set<ref "core:collections//TreeMapEntry<String,core:json_value/Value>">(self.repr, used, value);
     self.used = used + 1;
 }
 
-fn "core:prelude/array.wado/Array<TreeMapEntry<String,Value>>::grow"(self) {
+fn "core:prelude/array.wado/Array<TreeMapEntry<String,core:json_value/Value>>::grow"(self) {
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref builtin::array<TreeMapEntry<String,Value>>;
-    let old_repr: ref builtin::array<TreeMapEntry<String,Value>>;
+    let new_repr: ref "builtin::array<TreeMapEntry<String,core:json_value/Value>>";
+    let old_repr: ref "builtin::array<TreeMapEntry<String,core:json_value/Value>>";
     let used: i32;
     let i: i32;
     let a: i32;
@@ -6832,7 +6832,7 @@ fn "core:prelude/array.wado/Array<TreeMapEntry<String,Value>>::grow"(self) {
         break __inline_i32_max_0: select i32(a > 4, a, 4);
         unreachable;
     };
-    new_repr = builtin::array_new<ref "core:collections//TreeMapEntry<String,Value>">(new_capacity);
+    new_repr = builtin::array_new<ref "core:collections//TreeMapEntry<String,core:json_value/Value>">(new_capacity);
     old_repr = self.repr;
     used = self.used;
     __for_0: block {
@@ -6842,7 +6842,7 @@ fn "core:prelude/array.wado/Array<TreeMapEntry<String,Value>>::grow"(self) {
                 if i >= used {
                     break __for_0;
                 }
-                builtin::array_set<ref "core:collections//TreeMapEntry<String,Value>">(new_repr, i, builtin::array_get<ref "core:collections//TreeMapEntry<String,Value>">(old_repr, i));
+                builtin::array_set<ref "core:collections//TreeMapEntry<String,core:json_value/Value>">(new_repr, i, builtin::array_get<ref "core:collections//TreeMapEntry<String,core:json_value/Value>">(old_repr, i));
                 i = i + 1;
                 continue l723;
             };
