@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778164397342,
+  "lastUpdate": 1778166279020,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -20121,6 +20121,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/2896309c9b1a6cb70b265aa6178f66fbc52d2155"
         },
         "date": 1778164397049,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1770,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9140,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16987,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 514574,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1fc9303dd367ee02fe1feec887db2923c7d3c874",
+          "message": "Merge pull request #1018 from wado-lang/gfx/timezone\n\nfeat: wasi-clocks: implement timezone host",
+          "timestamp": "2026-05-07T23:59:23+09:00",
+          "tree_id": "d68a122bf518b51f35062e28f36c86c2de6e58a1",
+          "url": "https://github.com/wado-lang/wado/commit/1fc9303dd367ee02fe1feec887db2923c7d3c874"
+        },
+        "date": 1778166278645,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
