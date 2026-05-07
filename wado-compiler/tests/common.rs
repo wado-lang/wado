@@ -613,7 +613,63 @@ pub fn linker(engine: &Engine) -> anyhow::Result<Linker<WasiState>> {
     wasmtime_wasi::p3::add_to_linker(&mut linker)?;
     wasmtime_wasi_http::p3::add_to_linker(&mut linker)?;
     wasmtime_wasi_tls::p3::add_to_linker(&mut linker)?;
+    timezone_host::add_to_linker(&mut linker)?;
     Ok(linker)
+}
+
+/// Host implementation for `wasi:clocks/timezone`. Mirrors
+/// `wado_cli::timezone_host` (we cannot depend on `wado-cli` from the
+/// compiler tests because of the dependency direction).
+mod timezone_host {
+    use wasmtime::component::{HasData, Linker};
+    use wasmtime_wasi::p3::bindings::clocks::timezone::{self, Host, Instant, LinkOptions};
+
+    pub struct WadoTimezone;
+
+    impl HasData for WadoTimezone {
+        type Data<'a> = TimezoneCtx;
+    }
+
+    pub struct TimezoneCtx;
+
+    impl Host for TimezoneCtx {
+        fn iana_id(&mut self) -> wasmtime::Result<Option<String>> {
+            Ok(iana_time_zone::get_timezone().ok())
+        }
+
+        fn utc_offset(&mut self, when: Instant) -> wasmtime::Result<Option<i64>> {
+            Ok(local_offset_nanos(when.seconds))
+        }
+
+        fn to_debug_string(&mut self) -> wasmtime::Result<String> {
+            Ok(iana_time_zone::get_timezone().unwrap_or_else(|_| "UTC".to_string()))
+        }
+    }
+
+    pub fn add_to_linker<T: 'static>(linker: &mut Linker<T>) -> anyhow::Result<()> {
+        let mut options = LinkOptions::default();
+        options.clocks_timezone(true);
+        timezone::add_to_linker::<T, WadoTimezone>(linker, &options, |_| TimezoneCtx)?;
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    fn local_offset_nanos(secs: i64) -> Option<i64> {
+        use std::mem::MaybeUninit;
+        let t: libc::time_t = secs.try_into().ok()?;
+        let mut tm: MaybeUninit<libc::tm> = MaybeUninit::uninit();
+        let ret = unsafe { libc::localtime_r(&t, tm.as_mut_ptr()) };
+        if ret.is_null() {
+            return None;
+        }
+        let tm = unsafe { tm.assume_init() };
+        Some(i64::from(tm.tm_gmtoff) * 1_000_000_000)
+    }
+
+    #[cfg(not(unix))]
+    fn local_offset_nanos(_secs: i64) -> Option<i64> {
+        None
+    }
 }
 
 /// Backward-compat alias

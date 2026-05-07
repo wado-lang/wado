@@ -35,5 +35,6 @@ pub mod runtime;
 pub mod serve;
 pub mod syntax;
 pub mod test;
+pub mod timezone_host;
 
 pub use compiler_host::FilesystemCompilerHost;
