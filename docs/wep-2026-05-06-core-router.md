@@ -95,7 +95,8 @@ Rules:
 - A leading `/` is required. Patterns without one panic at registration.
 - A `:` segment must contain a non-empty parameter name.
 - A `*` segment must contain a non-empty parameter name and be the last segment.
-- Path matching is strict on trailing slashes: `/users` and `/users/` are different routes. `/` is the canonical root and matches the empty-segment pattern `"/"`.
+- Empty segments are rejected: a trailing `/` (e.g. `/foo/`) or doubled `/` (e.g. `/a//b`) panics at registration. Path matching is correspondingly strict on trailing slashes — `/users` and `/users/` are different routes — and `/` is the canonical root, matching the empty-segment pattern `"/"`.
+- Param and wildcard names must agree across registrations that share the same node. `/users/:id` followed by `/users/:name/profile` panics; reuse the same name (`:id` in both) instead.
 
 ### Types
 

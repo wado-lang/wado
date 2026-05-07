@@ -260,7 +260,7 @@ fn respond_status(code_str: String) -> RouteResponse {
             allow: null,
         };
     }
-    return json_response(400, json_error("Invalid status code") + "\n");
+    return json_response(400, json_error("Invalid status code"));
 }
 
 fn respond_base64(encoded: String) -> RouteResponse {
@@ -272,7 +272,7 @@ fn respond_base64(encoded: String) -> RouteResponse {
             allow: null,
         };
     }
-    return json_response(400, json_error("Invalid base64") + "\n");
+    return json_response(400, json_error("Invalid base64"));
 }
 
 fn respond_anything(request: Request) -> RouteResponse {
@@ -284,7 +284,7 @@ fn respond_anything(request: Request) -> RouteResponse {
     } else {
         null
     };
-    return json_response(200, build_request_json(method, &url, &h, body) + "\n");
+    return json_response(200, build_request_json(method, &url, &h, body));
 }
 
 fn format_allow(methods: &Array<Method>) -> String {
@@ -328,7 +328,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> with Mon
             RouteResponse {
                 status: 405,
                 content_type: "application/json",
-                body: json_error("Method Not Allowed") + "\n",
+                body: json_error("Method Not Allowed"),
                 allow: Option::Some(format_allow(&allowed)),
             }
         } else {

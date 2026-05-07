@@ -120,7 +120,12 @@ impl<H> Router<H> {
             let seg = &segs[i];
             match seg {
                 Wildcard(name) => {
-                    self.states[cur].wildcard_name = *name;
+                    let existing = self.states[cur].wildcard_name;
+                    if existing.is_empty() {
+                        self.states[cur].wildcard_name = *name;
+                    } else if existing != *name {
+                        panic(`wildcard name conflict: '*{existing}' vs '*{*name}' at the same node`);
+                    }
                     let handler_idx = self.handlers.len();
                     self.handlers.push(handler);
                     if let Some(m) = method_opt {
@@ -137,6 +142,8 @@ impl<H> Router<H> {
                         self.states.push(new_state());
                         self.states[cur].param_target = new_id;
                         self.states[cur].param_name = *name;
+                    } else if self.states[cur].param_name != *name {
+                        panic(`param name conflict: ':{self.states[cur].param_name}' vs ':{*name}' at the same node`);
                     }
                     cur = self.states[cur].param_target;
                 },
@@ -347,6 +354,9 @@ fn parse_pattern(path: &String) -> Array<Segment> {
     if bytes == 0 || path.get_byte(0) != '/' as u8 {
         panic("route pattern must start with '/'");
     }
+    if bytes > 1 && path.get_byte(bytes - 1) == '/' as u8 {
+        panic("route pattern must not contain empty segments (no '//' or trailing '/')");
+    }
     let mut out: Array<Segment> = [];
     let mut wildcard_seen = false;
     let mut i = 1;
@@ -359,27 +369,28 @@ fn parse_pattern(path: &String) -> Array<Segment> {
             panic("wildcard '*name' must be the last segment of a route pattern");
         }
         let seg = path.substr_bytes(i, j);
-        if seg.len() > 0 {
-            let item = match seg.get_byte(0) as char {
-                ':' => {
-                    let name = seg.substr_bytes(1, seg.len());
-                    if name.is_empty() {
-                        panic("parameter name after ':' must not be empty");
-                    }
-                    Segment::Param(name)
-                },
-                '*' => {
-                    let name = seg.substr_bytes(1, seg.len());
-                    if name.is_empty() {
-                        panic("wildcard name after '*' must not be empty");
-                    }
-                    wildcard_seen = true;
-                    Segment::Wildcard(name)
-                },
-                _ => Segment::Literal(seg),
-            };
-            out.push(item);
+        if seg.is_empty() {
+            panic("route pattern must not contain empty segments (no '//' or trailing '/')");
         }
+        let item = match seg.get_byte(0) as char {
+            ':' => {
+                let name = seg.substr_bytes(1, seg.len());
+                if name.is_empty() {
+                    panic("parameter name after ':' must not be empty");
+                }
+                Segment::Param(name)
+            },
+            '*' => {
+                let name = seg.substr_bytes(1, seg.len());
+                if name.is_empty() {
+                    panic("wildcard name after '*' must not be empty");
+                }
+                wildcard_seen = true;
+                Segment::Wildcard(name)
+            },
+            _ => Segment::Literal(seg),
+        };
+        out.push(item);
         i = j + 1;
     }
     return out;

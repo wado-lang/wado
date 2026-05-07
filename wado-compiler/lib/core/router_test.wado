@@ -223,3 +223,29 @@ test "router: panic on empty wildcard name" {
     let mut r = Router::<i32>::new();
     r.get("/*", 1);
 }
+
+#[expect_trap]
+test "router: panic on trailing slash in pattern" {
+    let mut r = Router::<i32>::new();
+    r.get("/foo/", 1);
+}
+
+#[expect_trap]
+test "router: panic on doubled slash in pattern" {
+    let mut r = Router::<i32>::new();
+    r.get("/a//b", 1);
+}
+
+#[expect_trap]
+test "router: panic on conflicting param names at same node" {
+    let mut r = Router::<i32>::new();
+    r.get("/users/:id", 1);
+    r.get("/users/:name/profile", 2);
+}
+
+#[expect_trap]
+test "router: panic on conflicting wildcard names at same node" {
+    let mut r = Router::<i32>::new();
+    r.get("/static/*path", 1);
+    r.post("/static/*tail", 2);
+}
