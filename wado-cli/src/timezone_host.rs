@@ -54,12 +54,12 @@ fn local_offset_nanos(secs: i64) -> Option<i64> {
     use std::mem::MaybeUninit;
     let t: libc::time_t = secs.try_into().ok()?;
     let mut tm: MaybeUninit<libc::tm> = MaybeUninit::uninit();
-    let ret = unsafe { libc::localtime_r(&t, tm.as_mut_ptr()) };
+    let ret = unsafe { libc::localtime_r(&raw const t, tm.as_mut_ptr()) };
     if ret.is_null() {
         return None;
     }
     let tm = unsafe { tm.assume_init() };
-    Some(i64::from(tm.tm_gmtoff) * 1_000_000_000)
+    Some(tm.tm_gmtoff * 1_000_000_000)
 }
 
 #[cfg(not(unix))]
