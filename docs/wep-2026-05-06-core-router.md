@@ -241,7 +241,7 @@ In addition, each terminal carries a single optional `any` handler (likewise for
 
 ### Implementation Notes
 
-The implementation lives in `wado-compiler/lib/core/router.wado` and is ported from `example/router-dfa.wado`, with the following changes:
+The implementation lives in `wado-compiler/lib/core/router.wado` and is ported from `example/router_dfa.wado`, with the following changes:
 
 - `RouteMatch` is generic over `H`; the example uses a concrete `i32 handler_id`.
 - A `handlers: Array<H>` arena is added to `Router<H>`; terminal states reference handlers by `i32` index. This keeps `DfaState` non-generic, which avoids the monomorphization blow-up of including `H` inside every state.

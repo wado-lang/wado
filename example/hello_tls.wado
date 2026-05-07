@@ -1,6 +1,6 @@
 // Raw TLS example: fetch https://httpbin.org/get directly over TCP + wasi:tls.
 //
-// Port of wasmtime's p3_tls_sample_application.rs. Unlike example/http-get.wado
+// Port of wasmtime's p3_tls_sample_application.rs. Unlike example/http_get.wado
 // (which uses the high-level wasi:http Client), this example wires a wasi:tls
 // Connector between a wasi:sockets TcpSocket and the application's own byte
 // streams, then speaks HTTP/1.1 by hand.
@@ -8,7 +8,7 @@
 // Status: most of the plumbing now exists — the wasi:tls bindings are
 // registered in `wado-compiler/src/stdlib.rs`, `wasmtime-wasi-tls` is linked
 // into both `wado-cli/src/runtime.rs` and the e2e test harness, and a smoke
-// fixture (`wasi-tls-import.wado`) verifies that user code can import wasi:tls
+// fixture (`wasi_tls_import.wado`) verifies that user code can import wasi:tls
 // types and call `Connector::new`. What still blocks compiling THIS file:
 //   1. The codegen lowers `Result<T, E>` by always reusing the canonical
 //      `wasi:cli/types#error-code` enum for `E`. wasi:tls's `Future<Result<(),

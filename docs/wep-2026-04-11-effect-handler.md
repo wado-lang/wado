@@ -562,7 +562,7 @@ stdout.drain():
 
 #### HTTP Client Handler Example
 
-Testing code that calls `Client::send` (e.g., `example/http-get.wado`). The mock constructs a Response with body data pre-written to a buffered stream — this is safe because `MockCM` streams are buffered, so `body_tx.write()` succeeds immediately without a concurrent reader:
+Testing code that calls `Client::send` (e.g., `example/http_get.wado`). The mock constructs a Response with body data pre-written to a buffered stream — this is safe because `MockCM` streams are buffered, so `body_tx.write()` succeeds immediately without a concurrent reader:
 
 ```wado
 struct MockClient {
@@ -603,7 +603,7 @@ test "http-get fetches and prints" {
         status: 200,
     };
     with &mut cm, Stdout => &mut stdout, Client => &mut client do {
-        run();  // example/http-get.wado's export fn run()
+        run();  // example/http_get.wado's export fn run()
         assert client.requests[0] == "/get";
         let output = stdout.drain();
         assert output contains "Status: 200";

@@ -388,7 +388,7 @@ fn fuse_adjacent_pairs(
             // context. The fused labeled block's breaks carry no value, so its
             // type is Unit; replacing a value-yielding if-expression with it
             // would corrupt the block's type. See
-            // tests/fixtures/if-let-some-ref-from-fn.wado.
+            // tests/fixtures/if_let_some_ref_from_fn.wado.
             if yields_value && iter.peek().is_none() {
                 new_stmts.push(let_stmt);
                 new_stmts.push(if_stmt);
