@@ -110,7 +110,6 @@ fn "wado-compiler/tests/fixtures/hfs_early_return_with_wrapped_call.wado/externa
 fn "wado-compiler/tests/fixtures/hfs_early_return_with_wrapped_call.wado/step"(b) {
     let i: i32;
     let _hfs_v_2: i32;
-    let _hfs_call_3: i32;
     i = 0;
     _hfs_v_2 = b.v;
     b0: block {
@@ -122,15 +121,16 @@ fn "wado-compiler/tests/fixtures/hfs_early_return_with_wrapped_call.wado/step"(b
             _hfs_v_2 = _hfs_v_2 + 0;
             if i >= 3 {
                 b.v = _hfs_v_2;
-                return b.v = _hfs_v_2, _hfs_call_3 = "wado-compiler/tests/fixtures/hfs_early_return_with_wrapped_call.wado/external_inc_and_read"(b), _hfs_v_2 = b.v, _hfs_call_3;
+                return "wado-compiler/tests/fixtures/hfs_early_return_with_wrapped_call.wado/external_inc_and_read"(b);
+                _hfs_v_2 = b.v;
             }
             _hfs_v_2 = _hfs_v_2 + 1;
             _hfs_v_2 = _hfs_v_2 + 0;
             i = i + 1;
+            b.v = _hfs_v_2;
             continue l1;
         };
     };
-    b.v = _hfs_v_2;
     return 0;
 }
 

@@ -125,7 +125,6 @@ fn "wado-compiler/tests/fixtures/opt_hfs_mixed_ref_sync.wado/run"() {
     let f_26: ref "core:prelude/format.wado//Formatter";
     let f_31: ref "core:prelude/format.wado//Formatter";
     let _hfs_x_34: i32;
-    let _hfs_call_35: i32;
     c = struct.new "wado-compiler/tests/fixtures/opt_hfs_mixed_ref_sync.wado//Counter" { x: 1, y: 100 };
     total = 0;
     __for_0: block {
@@ -134,14 +133,13 @@ fn "wado-compiler/tests/fixtures/opt_hfs_mixed_ref_sync.wado/run"() {
         block {
             l1: loop {
                 if i >= 3 {
-                    c.x = _hfs_x_34;
                     break __for_0;
                 }
                 _hfs_x_34 = _hfs_x_34 + 1;
                 total = total + _hfs_x_34;
                 total = total + _hfs_x_34;
-                total = total + c.x = _hfs_x_34; _hfs_call_35 = "wado-compiler/tests/fixtures/opt_hfs_mixed_ref_sync.wado/read_counter"(c); _hfs_call_35;
                 c.x = _hfs_x_34;
+                total = total + "wado-compiler/tests/fixtures/opt_hfs_mixed_ref_sync.wado/read_counter"(c);
                 "wado-compiler/tests/fixtures/opt_hfs_mixed_ref_sync.wado/scale_x"(c, 2);
                 _hfs_x_34 = c.x;
                 total = total + _hfs_x_34;
@@ -149,7 +147,6 @@ fn "wado-compiler/tests/fixtures/opt_hfs_mixed_ref_sync.wado/run"() {
                 continue l1;
             };
         };
-        c.x = _hfs_x_34;
     };
     __v0_3 = total;
     __cond_4 = __v0_3 == 390;

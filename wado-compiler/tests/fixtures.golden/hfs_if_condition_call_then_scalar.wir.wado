@@ -111,7 +111,6 @@ fn "wado-compiler/tests/fixtures/hfs_if_condition_call_then_scalar.wado/run"() w
     let tx: i32;
     let handle: i32;
     let _hfs_v_17: i32;
-    let _hfs_call_18: i32;
     b = struct.new "wado-compiler/tests/fixtures/hfs_if_condition_call_then_scalar.wado//Buf" { v: 0, pad: 0 };
     i = 0;
     _hfs_v_17 = b.v;
@@ -122,15 +121,19 @@ fn "wado-compiler/tests/fixtures/hfs_if_condition_call_then_scalar.wado/run"() w
             }
             _hfs_v_17 = _hfs_v_17 + 0;
             _hfs_v_17 = _hfs_v_17 + 0;
-            if b.v = _hfs_v_17; _hfs_call_18 = "wado-compiler/tests/fixtures/hfs_if_condition_call_then_scalar.wado/probe"(b); _hfs_v_17 = b.v; _hfs_call_18 > 0 {
+            b.v = _hfs_v_17;
+            if "wado-compiler/tests/fixtures/hfs_if_condition_call_then_scalar.wado/probe"(b) > 0 {
+                _hfs_v_17 = b.v;
                 _hfs_v_17 = _hfs_v_17 + 1;
+            } else {
+                _hfs_v_17 = b.v;
             }
             _hfs_v_17 = _hfs_v_17 + 0;
             i = i + 1;
+            b.v = _hfs_v_17;
             continue l1;
         };
     };
-    b.v = _hfs_v_17;
     message = __tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };

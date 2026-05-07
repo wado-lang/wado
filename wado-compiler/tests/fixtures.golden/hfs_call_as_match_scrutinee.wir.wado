@@ -113,7 +113,6 @@ fn "wado-compiler/tests/fixtures/hfs_call_as_match_scrutinee.wado/run"() with St
     let tx: i32;
     let handle: i32;
     let _hfs_v_17: i32;
-    let _hfs_call_18: i32;
     b = struct.new "wado-compiler/tests/fixtures/hfs_call_as_match_scrutinee.wado//Buf" { v: 0, pad: 0 };
     i = 0;
     _hfs_v_17 = b.v;
@@ -124,23 +123,24 @@ fn "wado-compiler/tests/fixtures/hfs_call_as_match_scrutinee.wado/run"() with St
             }
             _hfs_v_17 = _hfs_v_17 + 0;
             _hfs_v_17 = _hfs_v_17 + 0;
-            let __match_scrut_0: i32;
             b.v = _hfs_v_17;
-            _hfs_call_18 = "wado-compiler/tests/fixtures/hfs_call_as_match_scrutinee.wado/pre_inc5"(b);
-            _hfs_v_17 = b.v;
-            __match_scrut_0 = _hfs_call_18;
+            let __match_scrut_0: i32;
+            __match_scrut_0 = "wado-compiler/tests/fixtures/hfs_call_as_match_scrutinee.wado/pre_inc5"(b);
             if __match_scrut_0 == 0 {
+                _hfs_v_17 = b.v;
                 _hfs_v_17 = _hfs_v_17 + 1;
             } else if __match_scrut_0 == 5 {
+                _hfs_v_17 = b.v;
                 _hfs_v_17 = _hfs_v_17 + 1;
             } else {
+                _hfs_v_17 = b.v;
             }
             _hfs_v_17 = _hfs_v_17 + 0;
             i = i + 1;
+            b.v = _hfs_v_17;
             continue l1;
         };
     };
-    b.v = _hfs_v_17;
     message = __tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };

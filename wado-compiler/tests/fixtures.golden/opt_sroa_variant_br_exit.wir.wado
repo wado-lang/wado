@@ -1747,7 +1747,6 @@ fn "core:json/JsonDeserializer::skip_whitespace"(self) {
                 unreachable;
             };
             if b > 32 {
-                self.pos = _hfs_pos_8;
                 return;
             }
             if (if (if (if b == 32 -> i32 {
@@ -1765,13 +1764,12 @@ fn "core:json/JsonDeserializer::skip_whitespace"(self) {
             }) {
                 _hfs_pos_8 = _hfs_pos_8 + 1;
             } else {
-                self.pos = _hfs_pos_8;
                 return;
             }
+            self.pos = _hfs_pos_8;
             continue l164;
         };
     };
-    self.pos = _hfs_pos_8;
 }
 
 fn "core:json/JsonDeserializer::parse_f64_direct"(self) {
@@ -1903,10 +1901,10 @@ fn "core:json/JsonDeserializer::parse_f64_direct"(self) {
             } else {
                 break b176;
             }
+            self.pos = _hfs_pos_57;
             continue l177;
         };
     };
-    self.pos = _hfs_pos_57;
     frac = 0;
     if (if self.pos < __inline_String__len_9: block -> i32 {
         self_33 = self.input;
@@ -1951,10 +1949,10 @@ fn "core:json/JsonDeserializer::parse_f64_direct"(self) {
                 } else {
                     break b184;
                 }
+                self.pos = _hfs_pos_58;
                 continue l185;
             };
         };
-        self.pos = _hfs_pos_58;
     }
     exp = 0;
     if self.pos < __inline_String__len_13: block -> i32 {
@@ -2017,10 +2015,10 @@ fn "core:json/JsonDeserializer::parse_f64_direct"(self) {
                     } else {
                         break b196;
                     }
+                    self.pos = _hfs_pos_59;
                     continue l197;
                 };
             };
-            self.pos = _hfs_pos_59;
             if exp_neg {
                 exp = 0 - exp;
             }

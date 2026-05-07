@@ -112,7 +112,6 @@ fn "wado-compiler/tests/fixtures/hfs_match_guard_with_call.wado/run"() with Stdo
     let tx: i32;
     let handle: i32;
     let _hfs_v_18: i32;
-    let _hfs_call_19: i32;
     b = struct.new "wado-compiler/tests/fixtures/hfs_match_guard_with_call.wado//Buf" { v: 0, pad: 0 };
     i = 0;
     _hfs_v_18 = b.v;
@@ -124,16 +123,18 @@ fn "wado-compiler/tests/fixtures/hfs_match_guard_with_call.wado/run"() with Stdo
             _hfs_v_18 = _hfs_v_18 + 0;
             _hfs_v_18 = _hfs_v_18 + 0;
             x = i;
-            if b.v = _hfs_v_18; _hfs_call_19 = "wado-compiler/tests/fixtures/hfs_match_guard_with_call.wado/probe"(b); _hfs_v_18 = b.v; _hfs_call_19 > 0 {
+            b.v = _hfs_v_18;
+            if "wado-compiler/tests/fixtures/hfs_match_guard_with_call.wado/probe"(b) > 0 {
+                _hfs_v_18 = b.v;
                 _hfs_v_18 = _hfs_v_18 + 1;
             } else {
             }
             _hfs_v_18 = _hfs_v_18 + 0;
             i = i + 1;
+            b.v = _hfs_v_18;
             continue l1;
         };
     };
-    b.v = _hfs_v_18;
     message = __tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 };

@@ -252,7 +252,6 @@ fn "wado-compiler/tests/fixtures/opt_inline_backtrack_miscompile.wado/parse_all"
     let self_27: ref "core:prelude//Array<i32>";
     let index_28: i32;
     let _hfs_pos_29: i32;
-    let _hfs_call_30: i32;
     total = 0;
     _hfs_pos_29 = p.pos;
     b8: block {
@@ -326,17 +325,15 @@ fn "wado-compiler/tests/fixtures/opt_inline_backtrack_miscompile.wado/parse_all"
                     unreachable;
                 };
                 p.pos = _hfs_pos_29;
-                _hfs_call_30 = "wado-compiler/tests/fixtures/opt_inline_backtrack_miscompile.wado/consume_three"(p);
-                _hfs_pos_29 = p.pos;
-                result = _hfs_call_30;
+                result = "wado-compiler/tests/fixtures/opt_inline_backtrack_miscompile.wado/consume_three"(p);
                 break __inline_advance_then_consume_9: skipped + result;
                 unreachable;
             };
             total = total + r;
+            _hfs_pos_29 = p.pos;
             continue l9;
         };
     };
-    p.pos = _hfs_pos_29;
     return total;
 }
 

@@ -650,7 +650,6 @@ fn "wado-compiler/tests/fixtures/opt_hfs_immut_ref_method_reread.wado/Lexer::rea
     block {
         l41: loop {
             if _hfs_pos_16 >= _licm_used_15 {
-                self.pos = _hfs_pos_16;
                 return text;
             }
             c = __inline_Array_char__IndexValue_i32___index_value_2: block -> char {
@@ -685,10 +684,10 @@ fn "wado-compiler/tests/fixtures/opt_hfs_immut_ref_method_reread.wado/Lexer::rea
                 return text;
             }
             "core:prelude/string.wado/String::push"(text, c);
+            self.pos = _hfs_pos_16;
             continue l41;
         };
     };
-    self.pos = _hfs_pos_16;
 }
 
 fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, prefix, digit_count) {

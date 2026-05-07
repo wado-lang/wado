@@ -130,8 +130,6 @@ fn "wado-compiler/tests/fixtures/hfs_multi_call_in_expression.wado/run"() with S
     let self_18: ref "core:prelude/types.wado//Box<i32>";
     let f_19: ref "core:prelude/format.wado//Formatter";
     let _hfs_v_23: i32;
-    let _hfs_call_24: i32;
-    let _hfs_call_25: i32;
     b = struct.new "wado-compiler/tests/fixtures/hfs_multi_call_in_expression.wado//Buf" { v: 0, pad: 0 };
     sum = 0;
     i = 0;
@@ -143,13 +141,15 @@ fn "wado-compiler/tests/fixtures/hfs_multi_call_in_expression.wado/run"() with S
             }
             _hfs_v_23 = _hfs_v_23 + 0;
             _hfs_v_23 = _hfs_v_23 + 0;
-            sum = (sum + b.v = _hfs_v_23; _hfs_call_24 = "wado-compiler/tests/fixtures/hfs_multi_call_in_expression.wado/f_inc100"(b); _hfs_v_23 = b.v; _hfs_call_24) + b.v = _hfs_v_23; _hfs_call_25 = "wado-compiler/tests/fixtures/hfs_multi_call_in_expression.wado/g_inc1"(b); _hfs_v_23 = b.v; _hfs_call_25;
+            b.v = _hfs_v_23;
+            sum = (sum + "wado-compiler/tests/fixtures/hfs_multi_call_in_expression.wado/f_inc100"(b)) + "wado-compiler/tests/fixtures/hfs_multi_call_in_expression.wado/g_inc1"(b);
+            _hfs_v_23 = b.v;
             _hfs_v_23 = _hfs_v_23 + 0;
             i = i + 1;
+            b.v = _hfs_v_23;
             continue l1;
         };
     };
-    b.v = _hfs_v_23;
     message = __tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
         __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 };

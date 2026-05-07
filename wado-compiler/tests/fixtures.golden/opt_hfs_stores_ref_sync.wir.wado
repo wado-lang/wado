@@ -136,7 +136,6 @@ fn "wado-compiler/tests/fixtures/opt_hfs_stores_ref_sync.wado/run"() {
     let f_42: ref "core:prelude/format.wado//Formatter";
     let f_47: ref "core:prelude/format.wado//Formatter";
     let _hfs_x_50: i32;
-    let _hfs_call_51: ref "wado-compiler/tests/fixtures/opt_hfs_stores_ref_sync.wado//Holder";
     c = struct.new "wado-compiler/tests/fixtures/opt_hfs_stores_ref_sync.wado//Counter" { x: 0, y: 0 };
     total = 0;
     __for_0: block {
@@ -145,22 +144,19 @@ fn "wado-compiler/tests/fixtures/opt_hfs_stores_ref_sync.wado/run"() {
         block {
             l1: loop {
                 if i >= 5 {
-                    c.x = _hfs_x_50;
                     break __for_0;
                 }
                 _hfs_x_50 = _hfs_x_50 + 1;
                 total = total + _hfs_x_50;
                 total = total + _hfs_x_50;
                 c.x = _hfs_x_50;
-                _hfs_call_51 = "wado-compiler/tests/fixtures/opt_hfs_stores_ref_sync.wado/store_ref"(c);
-                h = _hfs_call_51;
+                h = "wado-compiler/tests/fixtures/opt_hfs_stores_ref_sync.wado/store_ref"(c);
                 total = total + h.c.x;
                 "wado-compiler/tests/fixtures/opt_hfs_stores_ref_sync.wado/bump_y"(c);
                 i = i + 1;
                 continue l1;
             };
         };
-        c.x = _hfs_x_50;
     };
     __v0_4 = total;
     __cond_5 = __v0_4 == 45;
