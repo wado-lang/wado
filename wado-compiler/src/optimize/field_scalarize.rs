@@ -2242,19 +2242,24 @@ fn walk_stmt(
             if let Some(v) = value {
                 walk_expr(v, states, true, out, ctx);
             }
-            // Any non-fall-through exit (return / break / continue) skips
-            // the body-end force-Both, so any `ScalarOnly` candidate must
-            // be committed inline. We commit unconditionally — even for a
-            // `break label` that stays inside the HFS scope — because the
-            // walker tracks only the linear (fall-through) state and does
-            // not JOIN labeled-block break-paths with fall-through at the
-            // block exit; without inline commit, post-block code could
-            // run with a state different from what the walker analyzed.
-            // Over-committing is sound (it forces Both, the strongest
-            // state); the only cost is a redundant write-back on
-            // already-canonical paths.
-            let _ = label;
-            commit_scalar_for_escape(states, out, ctx, span);
+            // Unlabeled `break` exits the innermost loop; at the HFS-loop
+            // top level (the common case) this leaves the HFS scope, so
+            // any `ScalarOnly` candidate must be committed inline before
+            // the break — the body-end force-Both is not reached.
+            //
+            // Labeled `break <name>` exits a labeled block. Without
+            // tracking break-target states the walker can't precisely
+            // model the post-block JOIN; leave it uncommitted. The
+            // alternative — committing on every labeled break — was
+            // tried during this PR and proved a runtime-perf disaster
+            // on gale's parser, where labeled-break-heavy hot loops
+            // produced many redundant write-backs per iteration. If a
+            // future fixture surfaces a labeled-break correctness gap,
+            // fix it by tracking break-target states, not by
+            // over-syncing.
+            if label.is_none() {
+                commit_scalar_for_escape(states, out, ctx, span);
+            }
             out.push(stmt);
         }
         TirStmtKind::Continue => {
@@ -2346,35 +2351,27 @@ fn walk_branching_block_if(
 /// Walk a nested loop's body and update the outer state for the
 /// post-loop point.
 ///
-/// **Limitation: this is a single walk, not a fixpoint iteration.** The
-/// inner body is walked once with `entry_states`, so any program point
-/// inside the body is analyzed under the assumption that the iteration
-/// just entered with `entry_states`. At runtime, iterations 2+ of the
-/// inner loop start with whatever `body_exit_states` was, which can
-/// differ — that mismatch is unmodeled here. In practice, outer
-/// candidates inside a nested loop typically either (a) are not
-/// touched, (b) only read (state stays scalar-canonical across
-/// iterations), or (c) are touched via a `&mut` call which leaves the
-/// state field-canonical and stable across iterations. The Continue /
-/// Break inline syncs (`commit_scalar_for_escape` and
-/// `sync_to_target(..., Both)`) drive the state back to `Both` on
-/// control-flow exits, which covers the typical shapes; if a
-/// pathological body ends `ScalarOnly` after fall-through inside an
-/// inner loop, iterations 2+ would reach calls without write-back. No
-/// committed fixture exercises that pattern, but a regression test
-/// should accompany any future change here.
+/// Two things must hold for the single-walk analysis to match runtime:
 ///
-/// Convergence strategy:
-/// - Pre-recurse: commit any `ScalarOnly` outer candidate to the field
-///   so inner reads (and a nested HFS's pre-load) observe an
-///   up-to-date value.
-/// - Post-loop state per candidate = `JOIN(entry_state,
-///   body_exit_state)`. This captures both the zero-iterations and
-///   `>= 1`-iteration paths; when a nested HFS scalarized the same
-///   field, its body-end force-Both rewrites to a scalar write at the
-///   outer level, leaving body-exit at `ScalarOnly`, and the join with
-///   `entry`'s `Both` stays scalar-canonical so subsequent reads use
-///   the up-to-date outer scalar.
+/// 1. **Back-edge invariant.** Iter 2+ at runtime starts with whatever
+///    state the previous iteration's body left. The walker analyzed
+///    iter 2+ assuming `entry_states`. Bridge that gap by appending
+///    sync stmts at body-end that drive `body_exit_states` back to
+///    `entry_states`. Same shape as `process_loop_body`'s body-end
+///    force-Both, but targets `entry_states`. Without this, a
+///    `read → &mut call` pattern miscompiles: walker emits no
+///    re-read at the read (state=Both), but iter 2's runtime state
+///    after iter 1's call is `FieldOnly` — scalar is stale.
+///
+/// 2. **Post-loop conservatism.** The TIR `Loop` only exits via
+///    `break`/`return`, so the post-loop state at runtime is the
+///    state at the break-point. The walker doesn't track break-paths
+///    precisely; the OLD `pick_join_target_for_candidate(entry,
+///    body_exit_pre_sync)` is a reasonable over-approximation since
+///    `body_exit_pre_sync` captures the linear-walk's belief about
+///    the body's running state, which in typical shapes coincides
+///    with break-state. Use `body_exit_pre_sync` here, NOT the
+///    post-back-edge-sync state, so the JOIN keeps that information.
 fn walk_nested_loop(
     body: &mut TirBlock,
     states: &mut ScalarStates,
@@ -2382,11 +2379,8 @@ fn walk_nested_loop(
     ctx: &mut WalkCtx,
     span: crate::token::Span,
 ) {
-    // Commit any ScalarOnly candidates to the field BEFORE the inner
-    // loop runs. Without this, an inner loop that reads the field (or
-    // a nested HFS that pre-loads from the field) would observe a
-    // stale value. After the commit, every candidate is `Both` —
-    // scalar and field agree — at inner-loop entry.
+    // Pre-recurse: commit any `ScalarOnly` outer candidate so inner
+    // reads (and a nested HFS's pre-load) observe an up-to-date field.
     for (i, c) in ctx.candidates.iter().enumerate() {
         if states[i] == CanonState::ScalarOnly {
             out.push(make_write_back_stmt(c, span));
@@ -2396,17 +2390,21 @@ fn walk_nested_loop(
     let entry_states = states.clone();
     let mut body_exit_states = states.clone();
     walk_block(body, &mut body_exit_states, ctx);
-    // Post-loop state: the loop may run zero or more iterations, so
-    // each candidate's post-loop state is the join of its entry state
-    // (zero iterations) and body-exit state (>= 1 iteration). When a
-    // nested HFS scalarized the same field as a sub-scalar, its
-    // body-end force-Both rewrites to a scalar write at the outer
-    // level, leaving body-exit state at `ScalarOnly` — the join with
-    // entry's `Both` stays scalar-canonical, so subsequent reads use
-    // the (up-to-date) outer scalar instead of re-reading a stale
-    // field.
+    // Snapshot for post-loop JOIN before we overwrite body_exit with
+    // the body-end sync.
+    let body_exit_pre_sync = body_exit_states.clone();
+    // Restore back-edge invariant: drive body_exit back to entry so
+    // iter 2+ starts at the same state the walker analyzed.
+    for (i, c) in ctx.candidates.iter().enumerate() {
+        if let Some(stmt) = state_transition_stmt(body_exit_states[i], entry_states[i], c, span) {
+            body.stmts.push(stmt);
+        }
+    }
+    // Post-loop state: JOIN(entry_states, body_exit_pre_sync). The
+    // outer scope sees the conservative over-approximation; subsequent
+    // scalar reads emit re-reads when break could leave `FieldOnly`.
     for i in 0..states.len() {
-        states[i] = pick_join_target_for_candidate(&[entry_states[i], body_exit_states[i]]);
+        states[i] = pick_join_target_for_candidate(&[entry_states[i], body_exit_pre_sync[i]]);
     }
 }
 
