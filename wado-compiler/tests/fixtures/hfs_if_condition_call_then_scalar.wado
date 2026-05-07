@@ -1,10 +1,10 @@
 // P0 regression test: an `if` condition contains a `&mut local` call
 // and the then-branch updates the same field via the scalar. Before
 // the fold_branchless_increment guard against side-effecting
-// conditions, HFS's call-site sync wrapper placed `local.set _hfs_v`
+// conditions, HFS's call-site sync wrapper placed `local.set __hfs_v`
 // inside the condition expression; the WIR peephole then folded
-// `if cond { _hfs_v += 1 }` into `_hfs_v = _hfs_v + cond`, with
-// Wasm's left-to-right evaluation reading the OLD `_hfs_v` for the
+// `if cond { __hfs_v += 1 }` into `__hfs_v = __hfs_v + cond`, with
+// Wasm's left-to-right evaluation reading the OLD `__hfs_v` for the
 // LHS before the cond's re-read updated it. The fold's post-store
 // then clobbered the re-read.
 //
@@ -12,13 +12,13 @@
 //   - probe(&mut b) adds 5 to b.v and returns the new value.
 //   - condition's wrapper write-backs scalar, runs probe (b.v += 5),
 //     re-reads scalar = new b.v, returns __tmp > 0 (true).
-//   - then-branch: _hfs_v += 1.
+//   - then-branch: __hfs_v += 1.
 //
-// i=0: probe → b.v=5, _hfs_v=5; then: _hfs_v=6.
-// i=1: probe → b.v=11, _hfs_v=11; then: _hfs_v=12.
-// i=2: probe → b.v=17, _hfs_v=17; then: _hfs_v=18.
-// i=3: probe → b.v=23, _hfs_v=23; then: _hfs_v=24.
-// post-loop: b.v = _hfs_v = 24.
+// i=0: probe → b.v=5, __hfs_v=5; then: __hfs_v=6.
+// i=1: probe → b.v=11, __hfs_v=11; then: __hfs_v=12.
+// i=2: probe → b.v=17, __hfs_v=17; then: __hfs_v=18.
+// i=3: probe → b.v=23, __hfs_v=23; then: __hfs_v=24.
+// post-loop: b.v = __hfs_v = 24.
 
 use { println, Stdout } from "core:cli";
 
@@ -52,6 +52,6 @@ __DATA__
 {
     "stdout": "24\n",
     "wir_expect:O2": [
-        "let _hfs_v_"
+        "let __hfs_v_"
     ]
 }

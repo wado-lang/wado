@@ -7,12 +7,12 @@
 // updates.
 //
 // Trace (per iteration):
-//   - i=0,1,2: scalar update via _hfs_v: b.v += 1 each iteration.
-//     Through HFS this happens via _hfs_v += 1 with no struct-side
+//   - i=0,1,2: scalar update via __hfs_v: b.v += 1 each iteration.
+//     Through HFS this happens via __hfs_v += 1 with no struct-side
 //     write until something forces a sync (return, break, post-loop).
 //   - i=3: return with `external_inc_and_read(&mut b)`. The call's
 //     wrapper write-backs scalar to b.v (=3), the call mutates b.v
-//     to 13 and returns 13, the wrapper re-reads _hfs_v = 13. The
+//     to 13 and returns 13, the wrapper re-reads __hfs_v = 13. The
 //     return carries 13. `step` returns 13 to caller.
 // final last_val = 13, b.v = 13.
 
@@ -54,6 +54,6 @@ __DATA__
 {
     "stdout": "13 13\n",
     "wir_expect:O2": [
-        "let _hfs_v_"
+        "let __hfs_v_"
     ]
 }

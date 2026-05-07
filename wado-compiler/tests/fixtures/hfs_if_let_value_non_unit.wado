@@ -6,12 +6,12 @@
 // no sync. The Let value flows through naturally.
 //
 // Trace per iteration:
-//   - i=0: cond i % 2 == 0 → arm 0 (scalar). val = _hfs_v + 1 (=1).
+//   - i=0: cond i % 2 == 0 → arm 0 (scalar). val = __hfs_v + 1 (=1).
 //          sum += 1. b.v not modified.
 //   - i=1: cond fails → arm 1 (call). pre b.v = 1; call sets b.v=11
-//          and returns 11; re-read _hfs_v = 11. val = 11. sum += 11.
+//          and returns 11; re-read __hfs_v = 11. val = 11. sum += 11.
 //   - i=2: arm 0. val = 12 (=11+1). sum += 12.
-//   - i=3: arm 1. pre b.v=12; call → b.v=22, ret 22; _hfs_v=22.
+//   - i=3: arm 1. pre b.v=12; call → b.v=22, ret 22; __hfs_v=22.
 //          val=22. sum += 22.
 //   sum = 1+11+12+22 = 46. final b.v = 22.
 
@@ -54,7 +54,7 @@ __DATA__
 {
     "stdout": "46 22\n",
     "wir_expect:O2": [
-        "let _hfs_v_",
-        "let _hfs_call_"
+        "let __hfs_v_",
+        "let __hfs_call_"
     ]
 }

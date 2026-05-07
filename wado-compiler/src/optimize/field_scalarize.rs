@@ -5,17 +5,17 @@
 //! both read and written inside the loop body.
 //!
 //! For a field `obj.field` that is accessed N times in a loop:
-//! 1. Create a mutable local `_hfs_field_N` before the loop.
-//! 2. Load: `_hfs_field_N = obj.field`.
-//! 3. Replace every `obj.field` read inside the loop body with `_hfs_field_N`.
-//! 4. Replace every `obj.field = val` write inside the loop body with `_hfs_field_N = val`.
+//! 1. Create a mutable local `__hfs_field_N` before the loop.
+//! 2. Load: `__hfs_field_N = obj.field`.
+//! 3. Replace every `obj.field` read inside the loop body with `__hfs_field_N`.
+//! 4. Replace every `obj.field = val` write inside the loop body with `__hfs_field_N = val`.
 //! 5. Wrap every reachable `Call`/`MethodCall`/`IndirectCall` that receives
 //!    `obj` (as `&T` or `&mut T`) with a synthetic `Block` that performs
 //!    scalar→struct write-back before the call and struct→scalar re-read
 //!    after. Only fields the callee actually accesses are synced; an
 //!    immutable-ref parameter elides the re-read because the callee cannot
 //!    mutate through it.
-//! 6. Insert a final write-back `obj.field = _hfs_field_N` after the loop
+//! 6. Insert a final write-back `obj.field = __hfs_field_N` after the loop
 //!    and before any `return`/`break` that escapes the loop scope (the
 //!    unlabeled `break` at `loop_depth 0` shortcut elides this since the
 //!    post-loop write-back already covers it).
@@ -914,7 +914,7 @@ fn scalarize_loop(
     // Step 1b: Collect locals introduced inside the loop body. These cannot
     // be safely scalarized at this loop level — their owning storage (the
     // GC struct ref) is unbound at the loop's pre-header where the
-    // hoisted `let _hfs_field = local.field;` would run, producing a
+    // hoisted `let __hfs_field = local.field;` would run, producing a
     // null-reference trap. Locals declared in the parent scope (i.e., not
     // listed here) are fine to scalarize.
     let inside_loop_locals = collect_locals_introduced_in_block(loop_body);
@@ -975,7 +975,7 @@ fn scalarize_loop(
             new_local_index: next_local,
         });
         locals.push(TirLocal {
-            name: format!("_hfs_{}_{}", info.field_name, next_local),
+            name: format!("__hfs_{}_{}", info.field_name, next_local),
             type_id: info.field_type_id,
             is_mut: true,
         });
@@ -1003,7 +1003,7 @@ fn scalarize_loop(
 
         let load_stmt = TirStmt::new(
             TirStmtKind::Let {
-                name: format!("_hfs_{}_{}", c.field_name, c.new_local_index),
+                name: format!("__hfs_{}_{}", c.field_name, c.new_local_index),
                 local_index: c.new_local_index,
                 is_mut: true,
                 is_reactive: false,
@@ -1080,7 +1080,7 @@ fn make_write_back_stmt(c: &ScalarizeCandidate, span: crate::token::Span) -> Tir
                 value: Box::new(TirExpr::new(
                     TirExprKind::Local {
                         index: c.new_local_index,
-                        name: format!("_hfs_{}_{}", c.field_name, c.new_local_index),
+                        name: format!("__hfs_{}_{}", c.field_name, c.new_local_index),
                     },
                     c.type_id,
                     span,
@@ -1100,7 +1100,7 @@ fn make_re_read_stmt(c: &ScalarizeCandidate, span: crate::token::Span) -> TirStm
                 target: Box::new(TirExpr::new(
                     TirExprKind::Local {
                         index: c.new_local_index,
-                        name: format!("_hfs_{}_{}", c.field_name, c.new_local_index),
+                        name: format!("__hfs_{}_{}", c.field_name, c.new_local_index),
                     },
                     c.type_id,
                     span,
@@ -1376,7 +1376,7 @@ fn visit_expr_for_alias(
 /// independently by their own `scalarize_loop` call). Used to filter out
 /// locals whose owning storage is unbound at the loop's pre-header — those
 /// locals must not be scalarized at this loop level, otherwise the hoisted
-/// `let _hfs_field = local.field;` null-derefs at runtime.
+/// `let __hfs_field = local.field;` null-derefs at runtime.
 fn collect_locals_introduced_in_block(block: &TirBlock) -> IndexSet<u32> {
     struct Collector {
         out: IndexSet<u32>,
@@ -1811,12 +1811,12 @@ fn mark_local_aliased(local_idx: u32, counts: &mut IndexMap<(u32, u32), FieldAcc
 // Replacement pass — dataflow-driven sync placement
 //
 // For each scalarized field `(L, F)` (with associated scalar local
-// `_hfs_F`), the walker tracks one of three canonical-side states at
+// `__hfs_F`), the walker tracks one of three canonical-side states at
 // each program point:
 //
-//   - `Both`        : `_hfs_F == L.F` (both sides agree).
-//   - `ScalarOnly`  : `_hfs_F` is the truth, `L.F` is stale.
-//   - `FieldOnly`   : `L.F` is the truth, `_hfs_F` is stale.
+//   - `Both`        : `__hfs_F == L.F` (both sides agree).
+//   - `ScalarOnly`  : `__hfs_F` is the truth, `L.F` is stale.
+//   - `FieldOnly`   : `L.F` is the truth, `__hfs_F` is stale.
 //
 // Each operation has a state requirement and a state effect:
 //
@@ -1860,7 +1860,7 @@ enum CanonState {
 }
 
 impl CanonState {
-    /// Whether `_hfs_F` holds the latest value (scalar reads are safe).
+    /// Whether `__hfs_F` holds the latest value (scalar reads are safe).
     fn scalar_canonical(self) -> bool {
         matches!(self, CanonState::Both | CanonState::ScalarOnly)
     }
@@ -1885,7 +1885,7 @@ struct WalkCtx<'a> {
     cache: &'a FieldUsageCache,
     locals: &'a mut Vec<TirLocal>,
     local_count: &'a mut u32,
-    /// Per-type free pool of `_hfs_call_*` temp local indices. Each call
+    /// Per-type free pool of `__hfs_call_*` temp local indices. Each call
     /// wrap that captures a non-unit return value pulls an index from the
     /// pool of the matching type and returns it when the wrap is fully
     /// constructed. Each temp's def/use are confined to one Block, so
@@ -1910,7 +1910,7 @@ impl WalkCtx<'_> {
         let idx = *self.local_count;
         *self.local_count += 1;
         self.locals.push(TirLocal {
-            name: format!("_hfs_call_{idx}"),
+            name: format!("__hfs_call_{idx}"),
             type_id,
             is_mut: false,
         });
@@ -1922,7 +1922,7 @@ impl WalkCtx<'_> {
     }
 
     fn temp_name(&self, idx: u32) -> String {
-        format!("_hfs_call_{idx}")
+        format!("__hfs_call_{idx}")
     }
 }
 
@@ -2277,7 +2277,7 @@ fn commit_scalar_for_escape(
         if states[i] == CanonState::ScalarOnly {
             out.push(make_write_back_stmt(c, span));
             // The escape leaves the loop scope; subsequent code does not
-            // observe `_hfs_F`, but recording the post-commit state keeps
+            // observe `__hfs_F`, but recording the post-commit state keeps
             // the invariant for any downstream walker logic.
             states[i] = CanonState::Both;
         }
@@ -2383,7 +2383,7 @@ fn walk_expr(
 ) {
     let span = expr.span;
 
-    // Field assignment: `local.field = value` becomes `_hfs_F = value`.
+    // Field assignment: `local.field = value` becomes `__hfs_F = value`.
     if let TirExprKind::Assign { target, value } = &mut expr.kind {
         if let Some((cand_idx, c)) = field_assign_to_candidate(target, ctx) {
             // Walk RHS first (state may transition through it).
@@ -2392,7 +2392,7 @@ fn walk_expr(
             let new_target = TirExpr::new(
                 TirExprKind::Local {
                     index: c.new_local_index,
-                    name: format!("_hfs_{}_{}", c.field_name, c.new_local_index),
+                    name: format!("__hfs_{}_{}", c.field_name, c.new_local_index),
                 },
                 c.type_id,
                 target.span,
@@ -2407,7 +2407,7 @@ fn walk_expr(
         return;
     }
 
-    // Field read: `local.field` becomes `_hfs_F`. Requires scalar canonical;
+    // Field read: `local.field` becomes `__hfs_F`. Requires scalar canonical;
     // insert re-read at stmt level if state is FieldOnly.
     if let Some((cand_idx, c)) = field_read_to_candidate(expr, ctx) {
         if !states[cand_idx].scalar_canonical() {
@@ -2416,7 +2416,7 @@ fn walk_expr(
         }
         expr.kind = TirExprKind::Local {
             index: c.new_local_index,
-            name: format!("_hfs_{}_{}", c.field_name, c.new_local_index),
+            name: format!("__hfs_{}_{}", c.field_name, c.new_local_index),
         };
         return;
     }

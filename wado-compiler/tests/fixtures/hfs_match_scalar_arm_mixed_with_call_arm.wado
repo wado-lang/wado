@@ -10,14 +10,14 @@
 // inlined labeled blocks.
 //
 // Trace at -O2 with the broken sync logic:
-//   - i=0 (scalar): pre `b.v = _hfs_v` (=0), arm 0 sets `_hfs_v = 1`,
-//                   post `_hfs_v = b.v` clobbers _hfs_v back to 0
+//   - i=0 (scalar): pre `b.v = __hfs_v` (=0), arm 0 sets `__hfs_v = 1`,
+//                   post `__hfs_v = b.v` clobbers __hfs_v back to 0
 //   - i=1 (call):   pre `b.v = 0`, external_inc → b.v = 10,
-//                   post `_hfs_v = 10`
-//   - i=2 (scalar): pre `b.v = _hfs_v` (=10), arm 0 sets `_hfs_v = 11`,
-//                   post clobbers _hfs_v back to 10
+//                   post `__hfs_v = 10`
+//   - i=2 (scalar): pre `b.v = __hfs_v` (=10), arm 0 sets `__hfs_v = 11`,
+//                   post clobbers __hfs_v back to 10
 //   - i=3 (call):   pre `b.v = 10`, external_inc → b.v = 20,
-//                   post `_hfs_v = 20`
+//                   post `__hfs_v = 20`
 //   Result: 20. Expected: 22 (every scalar-arm increment dropped).
 //
 // Root cause (same as #1008): `compute_sync_fields_in_stmt` walks the
@@ -60,9 +60,9 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "22\n",
-    "wir_expect:O2": ["let _hfs_v_"],
+    "wir_expect:O2": ["let __hfs_v_"],
     "wir_not_expect:O2": [
-        "b.v = _hfs_v_17;\n            let __match_scrut_0",
-        "_hfs_v_17 = b.v;\n            _hfs_v_17 = _hfs_v_17 + 0;"
+        "b.v = __hfs_v_17;\n            let __match_scrut_0",
+        "__hfs_v_17 = b.v;\n            __hfs_v_17 = __hfs_v_17 + 0;"
     ]
 }

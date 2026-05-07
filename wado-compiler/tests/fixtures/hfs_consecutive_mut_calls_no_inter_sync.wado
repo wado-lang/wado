@@ -12,7 +12,7 @@
 // across stmts, and only true transitions emit sync.
 //
 // Trace per iteration (2 iterations, starting b.v=0):
-//   pre-call a: write_back b.v = _hfs_v (only first call)
+//   pre-call a: write_back b.v = __hfs_v (only first call)
 //   a(&mut b): b.v += 1, returns b.v
 //   pre-call b: state=FieldOnly already, NO sync
 //   b(&mut b): b.v += 10, returns b.v
@@ -72,12 +72,12 @@ __DATA__
 {
     "stdout": "579 222\n",
     "wir_expect:O2": [
-        "let _hfs_v_"
+        "let __hfs_v_"
     ],
     "wir_not_expect:O2": [
-        "/add1\"(b);\n            _hfs_v_",
-        "/add10\"(b);\n            _hfs_v_",
-        "/add10\"(b);\n            b.v = _hfs_v_",
-        "/add1\"(b);\n            b.v = _hfs_v_"
+        "/add1\"(b);\n            __hfs_v_",
+        "/add10\"(b);\n            __hfs_v_",
+        "/add10\"(b);\n            b.v = __hfs_v_",
+        "/add1\"(b);\n            b.v = __hfs_v_"
     ]
 }

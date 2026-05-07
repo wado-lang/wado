@@ -393,27 +393,27 @@ fn "wado-compiler/tests/fixtures/hfs_inline_break_no_writeback.wado/Scanner::ski
     let _licm_data_5: ref "core:prelude/string.wado//String";
     let _licm_used_6: i32;
     let _licm_repr_7: ref builtin::array<u8>;
-    let _hfs_pos_8: i32;
+    let __hfs_pos_8: i32;
     _licm_data_5 = self.data;
     _licm_used_6 = _licm_data_5.used;
     _licm_repr_7 = _licm_data_5.repr;
-    _hfs_pos_8 = self.pos;
+    __hfs_pos_8 = self.pos;
     b27: block {
         l28: loop {
-            if _hfs_pos_8 >= _licm_used_6 {
+            if __hfs_pos_8 >= _licm_used_6 {
                 break b27;
             }
             b = __inline_String__get_byte_1: block -> u8 {
-                index = _hfs_pos_8;
+                index = __hfs_pos_8;
                 break __inline_String__get_byte_1: builtin::array_get_u8(_licm_repr_7, index);
                 unreachable;
             };
             if b == 32 {
-                _hfs_pos_8 = _hfs_pos_8 + 1;
+                __hfs_pos_8 = __hfs_pos_8 + 1;
             } else {
                 return;
             }
-            self.pos = _hfs_pos_8;
+            self.pos = __hfs_pos_8;
             continue l28;
         };
     };
