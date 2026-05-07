@@ -1147,19 +1147,26 @@ test "not yet implemented" {
 For full API reference, see:
 
 - Core library:
-  - [`core:prelude`](./stdlib-core-prelude.md) - auto-imported types, traits, primitive APIs
+  - [`core:prelude`](./stdlib-core-prelude.md) - auto-imported types and traits
   - [`core:cli`](./stdlib-core-cli.md) - stdout/stderr printing
   - [`core:collections`](./stdlib-core-collections.md) - `TreeMap<K,V>` and `TreeSet<T>`
   - [`core:serde`](./stdlib-core-serde.md) - `Serialize` and `Deserialize` framework
-  - [`core:json`](./stdlib-core-json.md) - JSON (self-describing)
-  - [`core:json_nsd`](./stdlib-core-json_nsd.md) - JSON (non-self-describing)
-  - [`core:json_value`](./stdlib-core-json_value.md) - dynamic JSON value
-  - [`core:base64`](./stdlib-core-base64.md) - base64 encoding
-  - [`core:zlib`](./stdlib-core-zlib.md) - zlib (de)compression
+  - [`core:json`](./stdlib-core-json.md) - JSON and its serde integration
+  - [`core:json_nsd`](./stdlib-core-json_nsd.md) - non-self-describing JSON and its serde integration
+  - [`core:json_value`](./stdlib-core-json_value.md) - dynamic JSON value and its serde integration
+  - [`core:base64`](./stdlib-core-base64.md) - base64 encoding and decoding
+  - [`core:zlib`](./stdlib-core-zlib.md) - zlib/gzip compression and decompression
   - [`core:simd`](./stdlib-core-simd.md) - Wasm 128-bit SIMD
   - [`core:url`](./stdlib-core-url.md) - WHATWG URL parsing
   - [`core:kiln`](./stdlib-core-kiln.md) - Kiln IDL host bindings
-- [WASI Standard Library Reference](./stdlib-wasi.md) - `wasi:cli`, `wasi:filesystem`, `wasi:http`, `wasi:clocks`, `wasi:random`, `wasi:sockets`
+- [WASI Standard Library Reference](./stdlib-wasi.md)
+  - `wasi:cli`
+  - `wasi:random`
+  - `wasi:clocks`
+  - `wasi:http`
+  - `wasi:filesystem`
+  - `wasi:sockets`
+  - `wasi:tls`
 
 ```wado
 // core:prelude (auto-imported)
