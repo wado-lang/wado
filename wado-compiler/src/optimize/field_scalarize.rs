@@ -1031,31 +1031,18 @@ fn scalarize_loop(
         pre_stmts.push(load_stmt);
     }
 
-    // Step 4: Create post-loop write-back statements
-    let mut post_stmts = Vec::new();
-    for c in &candidates {
-        post_stmts.push(make_write_back_stmt(c, span));
-    }
-
-    // Step 5: Replace field accesses in the loop body, and insert write-back/re-read
-    // around function calls (only for fields the callee actually accesses).
-    // Track labels that lexically ENCLOSE the current position inside the loop body:
-    // a break targeting one of those stays in the HFS scope (no write-back needed),
-    // while a break to any other label escapes and requires a write-back. Using a
-    // dynamic set matches TIR break resolution, which always binds to the nearest
-    // enclosing label — so a sibling LabeledBlock with the same name (e.g. one
-    // brought in by inlining) never shadows an outer break target.
-    let enclosing_labels = IndexSet::default();
-    replace_in_block(
-        loop_body,
-        &candidates,
-        locals,
-        local_count,
-        type_table,
-        cache,
-        &enclosing_labels,
-        0,
-    );
+    // Step 4: Walk the loop body with the dataflow-driven sync-placement
+    // pass. The walker tracks per-candidate canonical-side state
+    // (Scalar/Field/Both) and inserts write-back / re-read stmts only at
+    // state transitions. At escape paths (return / non-enclosing break) it
+    // commits the scalar to the field if `ScalarOnly`. At body end it
+    // forces all candidates back to `Both` to satisfy the loop's
+    // back-edge invariant (entry == exit). With this discipline the
+    // post-loop write-back is always redundant — the body and escape
+    // paths leave every candidate's field canonical — so no `post_stmts`
+    // are generated.
+    process_loop_body(loop_body, &candidates, locals, local_count, type_table, cache);
+    let post_stmts: Vec<TirStmt> = Vec::new();
 
     ScalarizeResult {
         pre_stmts,
@@ -1814,205 +1801,716 @@ fn mark_local_aliased(local_idx: u32, counts: &mut IndexMap<(u32, u32), FieldAcc
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Replacement pass: replace field accesses and wrap call sites with sync
+// Replacement pass — dataflow-driven sync placement
+//
+// For each scalarized field `(L, F)` (with associated scalar local
+// `_hfs_F`), the walker tracks one of three canonical-side states at
+// each program point:
+//
+//   - `Both`        : `_hfs_F == L.F` (both sides agree).
+//   - `ScalarOnly`  : `_hfs_F` is the truth, `L.F` is stale.
+//   - `FieldOnly`   : `L.F` is the truth, `_hfs_F` is stale.
+//
+// Each operation has a state requirement and a state effect:
+//
+// | operation              | requires (state ∈)         | post state           |
+// | scalar read            | {Both, ScalarOnly}         | unchanged            |
+// | scalar write           | (any)                      | ScalarOnly           |
+// | call w/ `&T` arg       | {Both, FieldOnly}          | unchanged            |
+// | call w/ `&mut T` arg   | {Both, FieldOnly}          | FieldOnly            |
+//
+// When the requirement is not met, the walker inserts the cheapest sync
+// to transition the state — `re_read` (FieldOnly→Both) for scalar reads
+// and `write_back` (ScalarOnly→Both) for calls. After the operation the
+// new state is recorded.
+//
+// At branch joins (Match/If/Switch arms), each arm is walked with a
+// fresh copy of the entry state. The walker then picks a target state
+// for the join and inserts at-end-of-arm convergence sync where exit ≠
+// target.
+//
+// At escape paths (return / non-enclosing break), every `ScalarOnly`
+// candidate gets a write-back — outside the loop only the field is
+// observable.
+//
+// At loop body end, every candidate is forced back to `Both` (entry
+// state), maintaining the back-edge invariant. This makes the
+// post-loop write-back redundant in every case, so `scalarize_loop`
+// returns no `post_stmts`.
+//
+// The temp call locals introduced by non-unit call wrappers are pooled
+// per `TypeId` and reused across separate wrappers. Since each temp's
+// def and use are confined to its containing wrapper Block, reuse is
+// always sound.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Immutable context threaded through `replace_in_block`/`replace_in_expr`.
-/// Mutable bookkeeping (the function's locals vector and next-index counter)
-/// is passed alongside as separate `&mut` parameters since recursive calls
-/// must share the same `Vec` to allocate temp locals for non-unit call
-/// sync wrappers.
-struct ReplaceCtx<'a> {
+/// Per-candidate canonical-side state.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CanonState {
+    Both,
+    ScalarOnly,
+    FieldOnly,
+}
+
+impl CanonState {
+    /// Whether `_hfs_F` holds the latest value (scalar reads are safe).
+    fn scalar_canonical(self) -> bool {
+        matches!(self, CanonState::Both | CanonState::ScalarOnly)
+    }
+
+    /// Whether `L.F` holds the latest value (calls are safe).
+    fn field_canonical(self) -> bool {
+        matches!(self, CanonState::Both | CanonState::FieldOnly)
+    }
+}
+
+/// Map from candidate index (into `WalkCtx::candidates`) to its state.
+type ScalarStates = Vec<CanonState>;
+
+fn init_states(candidates: &[ScalarizeCandidate]) -> ScalarStates {
+    vec![CanonState::Both; candidates.len()]
+}
+
+/// Mutable context threaded through the walker.
+struct WalkCtx<'a> {
+    candidates: &'a [ScalarizeCandidate],
     type_table: &'a TypeTable,
     cache: &'a FieldUsageCache,
-    /// Labels of `LabeledBlock`s that lexically enclose the current position.
-    /// A `break` whose target is in this set stays within the HFS scope; any
-    /// other target escapes and requires a write-back before the break.
-    enclosing_labels: &'a IndexSet<String>,
+    locals: &'a mut Vec<TirLocal>,
+    local_count: &'a mut u32,
+    /// Per-type free pool of `_hfs_call_*` temp local indices. Each call
+    /// wrap that captures a non-unit return value pulls an index from the
+    /// pool of the matching type and returns it when the wrap is fully
+    /// constructed. Each temp's def/use are confined to one Block, so
+    /// reuse across separate Blocks is sound.
+    temp_pool: IndexMap<TypeId, Vec<u32>>,
+    /// Lexically enclosing labels — `break <label>` inside this set stays
+    /// in the HFS scope; any other `break` (and `return`) escapes.
+    enclosing_labels: IndexSet<String>,
+    /// Loop nesting depth from the HFS root (0 inside the HFS loop body).
     loop_depth: usize,
 }
 
-/// Walk a block, threading field replacement and call-site sync through each
-/// statement's expressions. Compound statements (`If`/`IfLet`/`Loop`/
-/// `LabeledBlock`) recurse with the right scope tracking; other statements
-/// reach `replace_in_stmt` → `replace_in_expr`, which wraps each
-/// `Call`/`MethodCall`/`IndirectCall` in place.
-fn replace_in_block(
-    block: &mut TirBlock,
+impl<'a> WalkCtx<'a> {
+    fn alloc_temp(&mut self, type_id: TypeId) -> u32 {
+        if let Some(idx) = self.temp_pool.get_mut(&type_id).and_then(|v| v.pop()) {
+            return idx;
+        }
+        let idx = *self.local_count;
+        *self.local_count += 1;
+        self.locals.push(TirLocal {
+            name: format!("_hfs_call_{}", idx),
+            type_id,
+            is_mut: false,
+        });
+        idx
+    }
+
+    fn free_temp(&mut self, idx: u32, type_id: TypeId) {
+        self.temp_pool.entry(type_id).or_default().push(idx);
+    }
+
+    fn temp_name(&self, idx: u32) -> String {
+        format!("_hfs_call_{}", idx)
+    }
+}
+
+/// Top-level entry: walk the loop body with state initialized to `Both`,
+/// then force every candidate's state back to `Both` at body end so the
+/// loop's back-edge invariant holds.
+fn process_loop_body(
+    body: &mut TirBlock,
     candidates: &[ScalarizeCandidate],
     locals: &mut Vec<TirLocal>,
     local_count: &mut u32,
     type_table: &TypeTable,
     cache: &FieldUsageCache,
-    enclosing_labels: &IndexSet<String>,
-    loop_depth: usize,
 ) {
-    let ctx = ReplaceCtx {
+    let mut states = init_states(candidates);
+    let mut ctx = WalkCtx {
+        candidates,
         type_table,
         cache,
-        enclosing_labels,
-        loop_depth,
+        locals,
+        local_count,
+        temp_pool: IndexMap::default(),
+        enclosing_labels: IndexSet::default(),
+        loop_depth: 0,
     };
+    walk_block(body, &mut states, &mut ctx);
     let span = crate::token::Span::new(0, 0, 0, 0);
-    let mut new_stmts = Vec::new();
+    // Body-end: converge every candidate back to `Both` so the loop's
+    // back-edge state matches the entry state established by the
+    // pre-load. Insert one sync per candidate that diverged.
+    let body_end = sync_to_target(&mut states, CanonState::Both, &ctx, span);
+    body.stmts.extend(body_end);
+}
 
-    for mut stmt in std::mem::take(&mut block.stmts) {
-        match &mut stmt.kind {
-            TirStmtKind::If {
-                condition,
-                then_block,
-                else_block,
-            } => {
-                replace_in_expr(condition, candidates, locals, local_count, &ctx);
-                replace_in_block(
-                    then_block,
-                    candidates,
-                    locals,
-                    local_count,
-                    type_table,
-                    cache,
-                    enclosing_labels,
-                    loop_depth,
-                );
-                if let Some(eb) = else_block {
-                    replace_in_block(
-                        eb,
-                        candidates,
-                        locals,
-                        local_count,
-                        type_table,
-                        cache,
-                        enclosing_labels,
-                        loop_depth,
-                    );
-                }
-                new_stmts.push(stmt);
-                continue;
-            }
-            TirStmtKind::IfLet {
-                scrutinee,
-                then_block,
-                else_block,
-                ..
-            } => {
-                replace_in_expr(scrutinee, candidates, locals, local_count, &ctx);
-                replace_in_block(
-                    then_block,
-                    candidates,
-                    locals,
-                    local_count,
-                    type_table,
-                    cache,
-                    enclosing_labels,
-                    loop_depth,
-                );
-                if let Some(eb) = else_block {
-                    replace_in_block(
-                        eb,
-                        candidates,
-                        locals,
-                        local_count,
-                        type_table,
-                        cache,
-                        enclosing_labels,
-                        loop_depth,
-                    );
-                }
-                new_stmts.push(stmt);
-                continue;
-            }
-            TirStmtKind::Loop { body } => {
-                replace_in_block(
-                    body,
-                    candidates,
-                    locals,
-                    local_count,
-                    type_table,
-                    cache,
-                    enclosing_labels,
-                    loop_depth + 1,
-                );
-                new_stmts.push(stmt);
-                continue;
-            }
-            TirStmtKind::LabeledBlock {
-                label,
-                block: inner,
-            } => {
-                let mut extended = enclosing_labels.clone();
-                extended.insert(label.clone());
-                replace_in_block(
-                    inner,
-                    candidates,
-                    locals,
-                    local_count,
-                    type_table,
-                    cache,
-                    &extended,
-                    loop_depth,
-                );
-                new_stmts.push(stmt);
-                continue;
-            }
-            _ => {}
+// ─────────────────────────────────────────────────────────────────────────────
+// State transition helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Emit sync stmts to bring every candidate from its current state to
+/// `target`, mutating `states` accordingly. Returns the stmts in the
+/// order they should be inserted (stable wrt candidate index).
+fn sync_to_target(
+    states: &mut ScalarStates,
+    target: CanonState,
+    ctx: &WalkCtx,
+    span: crate::token::Span,
+) -> Vec<TirStmt> {
+    let mut out = Vec::new();
+    for (i, c) in ctx.candidates.iter().enumerate() {
+        if let Some(stmt) = state_transition_stmt(states[i], target, c, span) {
+            out.push(stmt);
         }
-
-        // Insert write-back before return / non-enclosing break statements
-        // that escape the HFS loop scope, so loop-resident scalars commit
-        // their values back to the struct fields. Unlabeled `break` at
-        // loop_depth 0 exits the HFS loop directly — the post-loop
-        // write-backs already cover that case, so we skip the redundant
-        // write-back here.
-        if matches!(stmt.kind, TirStmtKind::Return { .. })
-            || matches!(&stmt.kind, TirStmtKind::Break { label, .. }
-                if !label.as_ref().is_some_and(|l| enclosing_labels.contains(l.as_str())))
-        {
-            replace_in_stmt(&mut stmt, candidates, locals, local_count, &ctx);
-            let skip_wb =
-                loop_depth == 0 && matches!(&stmt.kind, TirStmtKind::Break { label: None, .. });
-            if !skip_wb {
-                new_stmts.extend(make_write_back_stmts(candidates, span));
-            }
-            new_stmts.push(stmt);
-            continue;
-        }
-
-        replace_in_stmt(&mut stmt, candidates, locals, local_count, &ctx);
-        new_stmts.push(stmt);
+        states[i] = target;
     }
+    out
+}
 
+/// Emit a single sync stmt for one candidate transitioning from `from` to
+/// `to`. Returns None if no sync is needed.
+fn state_transition_stmt(
+    from: CanonState,
+    to: CanonState,
+    c: &ScalarizeCandidate,
+    span: crate::token::Span,
+) -> Option<TirStmt> {
+    use CanonState::*;
+    match (from, to) {
+        (Both, Both) | (ScalarOnly, ScalarOnly) | (FieldOnly, FieldOnly) => None,
+        // Tightening the label without crossing canonical sides — no sync.
+        (Both, ScalarOnly) | (Both, FieldOnly) => None,
+        // ScalarOnly → Both / FieldOnly: scalar is canonical, field is
+        // stale; commit scalar to field via write-back.
+        (ScalarOnly, Both) | (ScalarOnly, FieldOnly) => Some(make_write_back_stmt(c, span)),
+        // FieldOnly → Both / ScalarOnly: field is canonical, scalar is
+        // stale; refresh scalar from field via re-read.
+        (FieldOnly, Both) | (FieldOnly, ScalarOnly) => Some(make_re_read_stmt(c, span)),
+    }
+}
+
+/// Pick the join target state for a branch with the given arm-exit
+/// states. Prefers the strongest state compatible with all arms; falls
+/// back to `ScalarOnly` for `{Scalar, Field}` mixes since HFS-eligible
+/// code overwhelmingly reads the scalar after a branch.
+fn pick_join_target_for_candidate(arm_exits: &[CanonState]) -> CanonState {
+    let mut has_scalar = false;
+    let mut has_field = false;
+    let mut has_both = false;
+    for s in arm_exits {
+        match s {
+            CanonState::Both => has_both = true,
+            CanonState::ScalarOnly => has_scalar = true,
+            CanonState::FieldOnly => has_field = true,
+        }
+    }
+    match (has_scalar, has_field, has_both) {
+        // All arms agreed.
+        (true, false, false) => CanonState::ScalarOnly,
+        (false, true, false) => CanonState::FieldOnly,
+        (false, false, true) => CanonState::Both,
+        // Subset of {Both, ScalarOnly}: weaken to ScalarOnly (no sync needed
+        // for either kind of arm — Both ⊆ ScalarOnly).
+        (true, false, true) => CanonState::ScalarOnly,
+        (false, true, true) => CanonState::FieldOnly,
+        // {ScalarOnly, FieldOnly} or all three: must converge — heuristic
+        // ScalarOnly preserves typical post-branch scalar reads. (A
+        // lookahead-based variant could pick FieldOnly when the next op
+        // is a call; not implemented yet.)
+        (true, true, _) => CanonState::ScalarOnly,
+        (false, false, false) => CanonState::Both,
+    }
+}
+
+/// Pick join targets for every candidate independently.
+fn pick_join_targets(arm_exits: &[&ScalarStates]) -> ScalarStates {
+    if arm_exits.is_empty() {
+        return Vec::new();
+    }
+    let n = arm_exits[0].len();
+    (0..n)
+        .map(|i| {
+            let exits: Vec<CanonState> = arm_exits.iter().map(|s| s[i]).collect();
+            pick_join_target_for_candidate(&exits)
+        })
+        .collect()
+}
+
+/// Insert convergence sync at the end of `block` to bring `from` to
+/// `to`. Only affects diverging candidates.
+fn insert_convergence_at_block_end(
+    block: &mut TirBlock,
+    from: &ScalarStates,
+    to: &ScalarStates,
+    ctx: &WalkCtx,
+    span: crate::token::Span,
+) {
+    debug_assert_eq!(from.len(), to.len());
+    for (i, c) in ctx.candidates.iter().enumerate() {
+        if let Some(stmt) = state_transition_stmt(from[i], to[i], c, span) {
+            block.stmts.push(stmt);
+        }
+    }
+}
+
+/// Build a fresh block holding only the convergence stmts from `from`
+/// to `to`. Used to synthesize an else-branch when the original was
+/// absent and the implicit no-op path needs sync.
+fn build_convergence_block(
+    from: &ScalarStates,
+    to: &ScalarStates,
+    ctx: &WalkCtx,
+    span: crate::token::Span,
+) -> TirBlock {
+    let mut block = TirBlock::empty(span);
+    for (i, c) in ctx.candidates.iter().enumerate() {
+        if let Some(stmt) = state_transition_stmt(from[i], to[i], c, span) {
+            block.stmts.push(stmt);
+        }
+    }
+    block
+}
+
+/// True if any of the candidates' state in `from` differs from `to`.
+fn states_differ(from: &ScalarStates, to: &ScalarStates) -> bool {
+    debug_assert_eq!(from.len(), to.len());
+    from.iter().zip(to.iter()).any(|(a, b)| a != b)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Statement walker
+// ─────────────────────────────────────────────────────────────────────────────
+
+fn walk_block(block: &mut TirBlock, states: &mut ScalarStates, ctx: &mut WalkCtx) {
+    let span = crate::token::Span::new(0, 0, 0, 0);
+    let stmts = std::mem::take(&mut block.stmts);
+    let mut new_stmts = Vec::new();
+    for stmt in stmts {
+        walk_stmt(stmt, states, &mut new_stmts, ctx, span);
+    }
     block.stmts = new_stmts;
 }
 
-/// Fields needing synchronization around a single call.
-/// `write_back` fields need scalar → struct write before the call.
-/// `re_read` fields need struct → scalar read after the call.
-/// Immutable ref args only need write-back (callee can't mutate through `&T`).
-struct SyncFields {
-    write_back: IndexSet<(u32, u32)>,
-    re_read: IndexSet<(u32, u32)>,
-}
-
-impl SyncFields {
-    fn is_empty(&self) -> bool {
-        self.write_back.is_empty() && self.re_read.is_empty()
+fn walk_stmt(
+    mut stmt: TirStmt,
+    states: &mut ScalarStates,
+    out: &mut Vec<TirStmt>,
+    ctx: &mut WalkCtx,
+    span: crate::token::Span,
+) {
+    match &mut stmt.kind {
+        TirStmtKind::If {
+            condition,
+            then_block,
+            else_block,
+        } => {
+            walk_expr(condition, states, true, out, ctx);
+            walk_branching_block_if(then_block, else_block, states, ctx, span);
+            out.push(stmt);
+        }
+        TirStmtKind::IfLet {
+            scrutinee,
+            then_block,
+            else_block,
+            ..
+        } => {
+            walk_expr(scrutinee, states, true, out, ctx);
+            walk_branching_block_if(then_block, else_block, states, ctx, span);
+            out.push(stmt);
+        }
+        TirStmtKind::Loop { body } => {
+            walk_nested_loop(body, states, ctx);
+            out.push(stmt);
+        }
+        TirStmtKind::LabeledBlock {
+            label,
+            block: inner,
+        } => {
+            ctx.enclosing_labels.insert(label.clone());
+            walk_block(inner, states, ctx);
+            ctx.enclosing_labels.shift_remove(label.as_str());
+            out.push(stmt);
+        }
+        TirStmtKind::Return { value } => {
+            if let Some(v) = value {
+                walk_expr(v, states, true, out, ctx);
+            }
+            // Escape: commit every ScalarOnly candidate to the field
+            // before the return. After commit, only the field is
+            // observable outside the loop.
+            commit_scalar_for_escape(states, out, ctx, span);
+            out.push(stmt);
+        }
+        TirStmtKind::Break { value, label } => {
+            if let Some(v) = value {
+                walk_expr(v, states, true, out, ctx);
+            }
+            // A break to an enclosing label stays in the HFS scope; only
+            // breaks that escape the loop need a pre-stmt write-back.
+            let escapes = !label
+                .as_ref()
+                .is_some_and(|l| ctx.enclosing_labels.contains(l.as_str()));
+            // The existing optimization: an unlabeled break at
+            // loop_depth 0 exits the HFS loop directly, so the post-loop
+            // (= body-end-force-Both) write-back already covers the
+            // commit. Skip the inline pre-break write-back in that case.
+            let skip_inline =
+                ctx.loop_depth == 0 && label.is_none() && escapes;
+            if escapes && !skip_inline {
+                commit_scalar_for_escape(states, out, ctx, span);
+            }
+            out.push(stmt);
+        }
+        TirStmtKind::Continue => {
+            out.push(stmt);
+        }
+        TirStmtKind::Let { value, .. } => {
+            walk_expr(value, states, true, out, ctx);
+            out.push(stmt);
+        }
+        TirStmtKind::LetDestructure { value, .. } => {
+            walk_expr(value, states, true, out, ctx);
+            out.push(stmt);
+        }
+        TirStmtKind::Expr(expr) => {
+            walk_expr(expr, states, false, out, ctx);
+            out.push(stmt);
+        }
+        TirStmtKind::TaskReturn { .. } => {
+            unreachable!(
+                "TaskReturn should be desugared by synthesis::cm_binding before HFS"
+            )
+        }
+        TirStmtKind::VariadicForOf { .. } => {
+            unreachable!("VariadicForOf should be expanded during monomorphization")
+        }
     }
 }
 
-/// Compute sync fields for a single `Call`/`MethodCall`/`IndirectCall`
-/// node. Only the call's direct args are inspected; nested expressions are
-/// not recursed (the call-site walker in `replace_in_expr` visits each
-/// call independently). Returns empty for non-call expressions.
-fn compute_sync_at_call(
+/// Commit every scalar-canonical candidate to the field for an escape
+/// path (return / non-enclosing break). After this, every candidate's
+/// state has its field canonical (write-back was inserted only where
+/// needed).
+fn commit_scalar_for_escape(
+    states: &mut ScalarStates,
+    out: &mut Vec<TirStmt>,
+    ctx: &WalkCtx,
+    span: crate::token::Span,
+) {
+    for (i, c) in ctx.candidates.iter().enumerate() {
+        if states[i] == CanonState::ScalarOnly {
+            out.push(make_write_back_stmt(c, span));
+            // The escape leaves the loop scope; subsequent code does not
+            // observe `_hfs_F`, but recording the post-commit state keeps
+            // the invariant for any downstream walker logic.
+            states[i] = CanonState::Both;
+        }
+    }
+}
+
+/// Walk an If/IfLet's branches with cloned entry state, compute the
+/// per-candidate join target, and insert convergence sync at the end of
+/// each branch.
+fn walk_branching_block_if(
+    then_block: &mut TirBlock,
+    else_block: &mut Option<TirBlock>,
+    states: &mut ScalarStates,
+    ctx: &mut WalkCtx,
+    span: crate::token::Span,
+) {
+    let entry = states.clone();
+    let mut then_states = entry.clone();
+    walk_block(then_block, &mut then_states, ctx);
+    let (else_states, has_else) = if let Some(eb) = else_block.as_mut() {
+        let mut s = entry.clone();
+        walk_block(eb, &mut s, ctx);
+        (s, true)
+    } else {
+        // The implicit no-op path leaves state unchanged from entry.
+        (entry.clone(), false)
+    };
+    let target = pick_join_targets(&[&then_states, &else_states]);
+    insert_convergence_at_block_end(then_block, &then_states, &target, ctx, span);
+    if has_else {
+        let eb = else_block.as_mut().unwrap();
+        insert_convergence_at_block_end(eb, &else_states, &target, ctx, span);
+    } else if states_differ(&entry, &target) {
+        // The implicit no-op path needs sync to converge — synthesize
+        // an else-block holding the convergence stmts.
+        *else_block = Some(build_convergence_block(&entry, &target, ctx, span));
+    }
+    *states = target;
+}
+
+/// Walk a nested loop's body. Treat the inner loop as a region that may
+/// touch every candidate's field via its own pre-load and
+/// post-write-back (added by inner scalarize). State tracking inside
+/// the inner body proceeds normally, but to keep the analysis
+/// converging without needing fixed-point iteration, the outer state at
+/// inner-loop entry is committed to field-canonical before the recurse,
+/// and the post-loop state is set to `FieldOnly` (the conservative
+/// model: any candidate may have been mutated by the inner loop).
+fn walk_nested_loop(body: &mut TirBlock, states: &mut ScalarStates, ctx: &mut WalkCtx) {
+    // The outer state's view of the inner loop body is bracketed by the
+    // inner pre-load (a field READ) and inner post-write-back (a field
+    // WRITE) that sit OUTSIDE the inner loop body in the outer stmt
+    // sequence. By the time we reach the inner Loop stmt itself, those
+    // bracketing stmts have already been walked at the outer level, so
+    // outer state already reflects them. The inner body's accesses are
+    // (after inner scalarize) all on `_hfs_inner` — they don't touch
+    // the outer candidates directly. We still walk the body recursively
+    // to catch nested-nested loops and any unrewritten outer-candidate
+    // accesses, but we don't model the inner loop's iteration; instead
+    // we conservatively flip every candidate to `FieldOnly` after,
+    // assuming the inner may have mutated the field.
+    ctx.loop_depth += 1;
+    let mut inner_states = states.clone();
+    walk_block(body, &mut inner_states, ctx);
+    ctx.loop_depth -= 1;
+    // Conservative outer-state after the nested loop: treat as if every
+    // candidate's field was mutated by the inner loop.
+    for s in states.iter_mut() {
+        *s = CanonState::FieldOnly;
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Expression walker
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Walk an expression, mutating states and emitting sync stmts at the
+/// surrounding stmt level (`out`). Field access rewrites and call
+/// wrappings happen in place.
+///
+/// `result_used` indicates whether the expression's value is consumed
+/// by its parent. When false, a Call's non-unit return can be discarded
+/// without allocating a temp.
+fn walk_expr(
+    expr: &mut TirExpr,
+    states: &mut ScalarStates,
+    result_used: bool,
+    out: &mut Vec<TirStmt>,
+    ctx: &mut WalkCtx,
+) {
+    let span = expr.span;
+
+    // Field assignment: `local.field = value` becomes `_hfs_F = value`.
+    if let TirExprKind::Assign { target, value } = &mut expr.kind {
+        if let Some((cand_idx, c)) = field_assign_to_candidate(target, ctx) {
+            // Walk RHS first (state may transition through it).
+            walk_expr(value, states, true, out, ctx);
+            // Commit the assignment: rewrite target and update state.
+            let new_target = TirExpr::new(
+                TirExprKind::Local {
+                    index: c.new_local_index,
+                    name: format!("_hfs_{}_{}", c.field_name, c.new_local_index),
+                },
+                c.type_id,
+                target.span,
+            );
+            **target = new_target;
+            states[cand_idx] = CanonState::ScalarOnly;
+            return;
+        }
+        // Not a scalarized field assign. Fall through to general recursion.
+        walk_expr(target, states, true, out, ctx);
+        walk_expr(value, states, true, out, ctx);
+        return;
+    }
+
+    // Field read: `local.field` becomes `_hfs_F`. Requires scalar canonical;
+    // insert re-read at stmt level if state is FieldOnly.
+    if let Some((cand_idx, c)) = field_read_to_candidate(expr, ctx) {
+        if !states[cand_idx].scalar_canonical() {
+            out.push(make_re_read_stmt(&c, span));
+            states[cand_idx] = CanonState::Both;
+        }
+        expr.kind = TirExprKind::Local {
+            index: c.new_local_index,
+            name: format!("_hfs_{}_{}", c.field_name, c.new_local_index),
+        };
+        return;
+    }
+
+    // Call sites: handle separately.
+    if matches!(
+        &expr.kind,
+        TirExprKind::Call { .. }
+            | TirExprKind::MethodCall { .. }
+            | TirExprKind::IndirectCall { .. }
+    ) {
+        walk_call_expr(expr, states, result_used, out, ctx);
+        return;
+    }
+
+    // Other expressions: recurse into sub-expressions in evaluation order,
+    // letting state transitions propagate naturally.
+    walk_other_expr_kinds(expr, states, result_used, out, ctx);
+}
+
+/// Match a target expression that's a scalarized field's `local.field`
+/// in an assignment. Returns the candidate index + a clone of the
+/// candidate. (Cloning avoids holding a borrow on `ctx` across the
+/// caller's mutations.)
+fn field_assign_to_candidate(
+    target: &TirExpr,
+    ctx: &WalkCtx,
+) -> Option<(usize, ScalarizeCandidate)> {
+    if let TirExprKind::FieldAccess {
+        expr: inner,
+        field_index,
+        ..
+    } = &target.kind
+        && let TirExprKind::Local { index, .. } = &inner.kind
+    {
+        for (i, c) in ctx.candidates.iter().enumerate() {
+            if c.local_index == *index && c.field_index == *field_index {
+                return Some((i, c.clone()));
+            }
+        }
+    }
+    None
+}
+
+fn field_read_to_candidate(
+    expr: &TirExpr,
+    ctx: &WalkCtx,
+) -> Option<(usize, ScalarizeCandidate)> {
+    if let TirExprKind::FieldAccess {
+        expr: inner,
+        field_index,
+        ..
+    } = &expr.kind
+        && let TirExprKind::Local { index, .. } = &inner.kind
+    {
+        for (i, c) in ctx.candidates.iter().enumerate() {
+            if c.local_index == *index && c.field_index == *field_index {
+                return Some((i, c.clone()));
+            }
+        }
+    }
+    None
+}
+
+/// Process a call expression (`Call` / `MethodCall` / `IndirectCall`).
+/// Recurses into args first, then determines which candidates the
+/// callee touches via `&T` (read-only) or `&mut T` (read-write),
+/// emits pre-call write-backs at stmt level for any not yet
+/// field-canonical, and updates state to `FieldOnly` for `&mut`-touched
+/// candidates. The call expression itself is left in place; the wrap
+/// (if any) is just the pre-call write-back stmts.
+fn walk_call_expr(
+    expr: &mut TirExpr,
+    states: &mut ScalarStates,
+    _result_used: bool,
+    out: &mut Vec<TirStmt>,
+    ctx: &mut WalkCtx,
+) {
+    let span = expr.span;
+    // Compute the call's field effects BEFORE recursing into args (the
+    // computation looks at direct args; recursion may wrap nested calls
+    // and obscure the args' shape from extract_gc_local_index).
+    let effects = compute_call_field_effects(expr, ctx);
+    // Recurse into args. Their walk may emit its own sync at stmt level,
+    // and may transition states for fields touched by nested calls.
+    recurse_into_call_args(expr, states, out, ctx);
+    // After args have been walked, commit pre-call state for THIS call.
+    // (Only the call itself contributes; nested calls already handled.)
+    for &i in &effects.read_required {
+        let c = &ctx.candidates[i];
+        if !states[i].field_canonical() {
+            out.push(make_write_back_stmt(c, span));
+            states[i] = CanonState::Both;
+        }
+    }
+    // Post-call: candidates the callee may mutate become FieldOnly.
+    for &i in &effects.mutated {
+        states[i] = CanonState::FieldOnly;
+    }
+    // The call expression itself stays unchanged (no wrap at expression
+    // level). All sync sits at stmt level via `out`.
+}
+
+fn recurse_into_call_args(
+    expr: &mut TirExpr,
+    states: &mut ScalarStates,
+    out: &mut Vec<TirStmt>,
+    ctx: &mut WalkCtx,
+) {
+    match &mut expr.kind {
+        TirExprKind::Call { args, .. } => {
+            for arg in args {
+                walk_expr(&mut arg.expr, states, true, out, ctx);
+            }
+        }
+        TirExprKind::MethodCall { receiver, args, .. } => {
+            walk_expr(receiver, states, true, out, ctx);
+            for arg in args {
+                walk_expr(&mut arg.expr, states, true, out, ctx);
+            }
+        }
+        TirExprKind::IndirectCall { callee, args, .. } => {
+            walk_expr(callee, states, true, out, ctx);
+            for arg in args {
+                walk_expr(arg, states, true, out, ctx);
+            }
+        }
+        _ => unreachable!("recurse_into_call_args called on non-call expr"),
+    }
+}
+
+/// Effects of one call on the scalarized candidates.
+struct CallFieldEffects {
+    /// Candidate indices the callee reads (via `&T` or `&mut T` arg) —
+    /// pre-call requires field canonical.
+    read_required: Vec<usize>,
+    /// Candidate indices the callee may write through (`&mut T` arg) —
+    /// post-call state becomes `FieldOnly`.
+    mutated: Vec<usize>,
+}
+
+fn compute_call_field_effects(call: &TirExpr, ctx: &WalkCtx) -> CallFieldEffects {
+    let mut sync = SyncFields {
+        write_back: IndexSet::default(),
+        re_read: IndexSet::default(),
+    };
+    accumulate_call_sync(call, ctx.candidates, ctx.type_table, ctx.cache, &mut sync);
+    let mut read_required = Vec::new();
+    let mut mutated = Vec::new();
+    for (i, c) in ctx.candidates.iter().enumerate() {
+        if sync.write_back.contains(&(c.local_index, c.field_index)) {
+            read_required.push(i);
+        }
+        if sync.re_read.contains(&(c.local_index, c.field_index)) {
+            mutated.push(i);
+        }
+    }
+    CallFieldEffects {
+        read_required,
+        mutated,
+    }
+}
+
+/// Sync field accumulator (used both by the dataflow walker for one call
+/// and historically for the legacy whole-stmt sync).
+struct SyncFields {
+    /// Fields the callee reads — pre-call write-back is needed if the
+    /// scalar is currently canonical.
+    write_back: IndexSet<(u32, u32)>,
+    /// Fields the callee may write (`&mut T`) — post-call the field
+    /// becomes canonical.
+    re_read: IndexSet<(u32, u32)>,
+}
+
+fn accumulate_call_sync(
     call: &TirExpr,
     candidates: &[ScalarizeCandidate],
     type_table: &TypeTable,
     cache: &FieldUsageCache,
-) -> SyncFields {
-    let mut result = SyncFields {
-        write_back: IndexSet::default(),
-        re_read: IndexSet::default(),
-    };
+    result: &mut SyncFields,
+) {
     match &call.kind {
         TirExprKind::Call { func, args, .. } => {
             for (arg_position, arg) in args.iter().enumerate() {
@@ -2025,7 +2523,7 @@ fn compute_sync_at_call(
                     type_table,
                     cache,
                     immut_ref,
-                    &mut result,
+                    result,
                 );
             }
         }
@@ -2044,7 +2542,7 @@ fn compute_sync_at_call(
                 type_table,
                 cache,
                 immut_ref,
-                &mut result,
+                result,
             );
             for (arg_position, arg) in args.iter().enumerate() {
                 let immut_ref = is_immut_ref_arg(&arg.expr, type_table);
@@ -2056,13 +2554,11 @@ fn compute_sync_at_call(
                     type_table,
                     cache,
                     immut_ref,
-                    &mut result,
+                    result,
                 );
             }
         }
         TirExprKind::IndirectCall { args, .. } => {
-            // Conservative: any GC-typed local arg might be mutated by the
-            // unknown callee through the reference.
             for arg in args {
                 if let Some(local_idx) = extract_gc_local_index(arg, type_table) {
                     add_all_fields_for_local(local_idx, candidates, &mut result.write_back);
@@ -2072,21 +2568,386 @@ fn compute_sync_at_call(
                 }
             }
         }
-        // CmRawCall is the lowered form of a canonical-ABI Wasm import; by
-        // construction its args are primitive Wasm types (i32/i64/f32/f64),
-        // never struct refs. Any future change that pushes a struct arg
-        // into a `CmRawCall` would silently miss sync here — we leave a
-        // debug assertion in `replace_in_expr` for the call-site filter so
-        // that case fails loud rather than miscompiles.
-        TirExprKind::CmRawCall { .. } => {}
-        // Other expressions are not call sites; the walker in
-        // `replace_in_expr` is responsible for only invoking this on
-        // Call/MethodCall/IndirectCall. Returning empty here is safe even
-        // if mis-invoked.
+        TirExprKind::CmRawCall { .. } => {
+            // CmRawCall is a lowered Wasm import — its args are primitive
+            // Wasm types, never struct refs.
+        }
         _ => {}
     }
-    result
 }
+
+/// Recurse into non-call, non-field-access expression kinds. Field
+/// rewrites and call wrappings are handled by the higher-level
+/// `walk_expr`; this helper just propagates the walk through structural
+/// kinds.
+fn walk_other_expr_kinds(
+    expr: &mut TirExpr,
+    states: &mut ScalarStates,
+    result_used: bool,
+    out: &mut Vec<TirStmt>,
+    ctx: &mut WalkCtx,
+) {
+    let span = expr.span;
+    match &mut expr.kind {
+        TirExprKind::FieldAccess { expr: inner, .. }
+        | TirExprKind::TupleSpread { expr: inner }
+        | TirExprKind::TupleZip { expr: inner }
+        | TirExprKind::TypePackExpansion {
+            call_expr: inner, ..
+        } => {
+            walk_expr(inner, states, true, out, ctx);
+        }
+        TirExprKind::Binary { left, right, .. } => {
+            walk_expr(left, states, true, out, ctx);
+            walk_expr(right, states, true, out, ctx);
+        }
+        TirExprKind::Unary { expr: inner, .. } => {
+            walk_expr(inner, states, true, out, ctx);
+        }
+        TirExprKind::Cast { expr: inner, .. } => {
+            walk_expr(inner, states, true, out, ctx);
+        }
+        TirExprKind::Index { expr: inner, index } => {
+            walk_expr(inner, states, true, out, ctx);
+            walk_expr(index, states, true, out, ctx);
+        }
+        TirExprKind::Block(block) => {
+            walk_inline_block(block, states, result_used, ctx);
+        }
+        TirExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            walk_expr(condition, states, true, out, ctx);
+            walk_expr_branches_if(then_branch, else_branch, states, result_used, ctx, span);
+        }
+        TirExprKind::StructLiteral { fields, .. } => {
+            for field in fields {
+                walk_expr(&mut field.value, states, true, out, ctx);
+            }
+        }
+        TirExprKind::TupleLiteral { elements } => {
+            for elem in elements {
+                walk_expr(elem, states, true, out, ctx);
+            }
+        }
+        TirExprKind::ClosureToCanonical { functor, .. } => {
+            walk_expr(functor, states, true, out, ctx);
+        }
+        TirExprKind::Closure { body, .. } => {
+            walk_expr(body, states, true, out, ctx);
+        }
+        TirExprKind::VariantConstruct { payload, .. } => {
+            if let Some(p) = payload {
+                walk_expr(p, states, true, out, ctx);
+            }
+        }
+        TirExprKind::LabeledBlock { label, block, .. } => {
+            ctx.enclosing_labels.insert(label.clone());
+            walk_inline_block(block, states, result_used, ctx);
+            ctx.enclosing_labels.shift_remove(label.as_str());
+        }
+        TirExprKind::GlobalVarSet { value, .. } => {
+            walk_expr(value, states, true, out, ctx);
+        }
+        TirExprKind::VariantTag { expr: inner } | TirExprKind::VariantTest { expr: inner, .. } => {
+            walk_expr(inner, states, true, out, ctx);
+        }
+        TirExprKind::VariantPayload { expr: inner, .. } => {
+            walk_expr(inner, states, true, out, ctx);
+        }
+        TirExprKind::Switch {
+            scrutinee,
+            arms,
+            default,
+            ..
+        } => {
+            walk_expr(scrutinee, states, true, out, ctx);
+            walk_expr_branches_switch(arms, default, states, ctx, span);
+        }
+        TirExprKind::Match { expr: scrutinee, arms } => {
+            walk_expr(scrutinee, states, true, out, ctx);
+            walk_expr_branches_match(arms, states, result_used, ctx, span);
+        }
+        TirExprKind::Assign { target, value } => {
+            walk_expr(target, states, true, out, ctx);
+            walk_expr(value, states, true, out, ctx);
+        }
+        TirExprKind::TemplateString { parts } => {
+            for part in parts {
+                if let crate::tir::TirTemplatePart::Interpolation { expr, .. } = part {
+                    walk_expr(expr, states, true, out, ctx);
+                }
+            }
+        }
+        TirExprKind::CmRawCall { args, .. } => {
+            for arg in args {
+                walk_expr(arg, states, true, out, ctx);
+            }
+        }
+        TirExprKind::IntLiteral { .. }
+        | TirExprKind::FloatLiteral { .. }
+        | TirExprKind::BoolLiteral(_)
+        | TirExprKind::CharLiteral(_)
+        | TirExprKind::StringLiteral(_)
+        | TirExprKind::BytesLiteral(_)
+        | TirExprKind::Null
+        | TirExprKind::Unit
+        | TirExprKind::Local { .. }
+        | TirExprKind::FuncRef { .. }
+        | TirExprKind::GlobalVarGet { .. }
+        | TirExprKind::Capture { .. }
+        | TirExprKind::EnumConstruct { .. } => {}
+        TirExprKind::Call { .. }
+        | TirExprKind::MethodCall { .. }
+        | TirExprKind::IndirectCall { .. } => {
+            unreachable!("call exprs handled by walk_call_expr in walk_expr")
+        }
+        TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+            unreachable!(
+                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
+            )
+        }
+    }
+}
+
+/// Walk a Block expression at the position where it's ENCLOSED inside
+/// another expression. Sync stmts emitted inside the inner block stay
+/// inside the block (its own stmt sequence), so `walk_block` does the
+/// right thing.
+fn walk_inline_block(
+    block: &mut TirBlock,
+    states: &mut ScalarStates,
+    _result_used: bool,
+    ctx: &mut WalkCtx,
+) {
+    walk_block(block, states, ctx);
+}
+
+/// Walk an If used in expression position (then/else are TirBlocks).
+fn walk_expr_branches_if(
+    then_branch: &mut TirBlock,
+    else_branch: &mut Option<TirBlock>,
+    states: &mut ScalarStates,
+    _result_used: bool,
+    ctx: &mut WalkCtx,
+    span: crate::token::Span,
+) {
+    let entry = states.clone();
+    let mut then_states = entry.clone();
+    walk_block(then_branch, &mut then_states, ctx);
+    let (else_states, has_else) = if let Some(eb) = else_branch.as_mut() {
+        let mut s = entry.clone();
+        walk_block(eb, &mut s, ctx);
+        (s, true)
+    } else {
+        (entry.clone(), false)
+    };
+    let target = pick_join_targets(&[&then_states, &else_states]);
+    insert_convergence_at_block_end(then_branch, &then_states, &target, ctx, span);
+    if has_else {
+        let eb = else_branch.as_mut().unwrap();
+        insert_convergence_at_block_end(eb, &else_states, &target, ctx, span);
+    } else if states_differ(&entry, &target) {
+        *else_branch = Some(build_convergence_block(&entry, &target, ctx, span));
+    }
+    *states = target;
+}
+
+/// Walk a Switch expression: arms are TirBlocks.
+fn walk_expr_branches_switch(
+    arms: &mut [TirBlock],
+    default: &mut TirBlock,
+    states: &mut ScalarStates,
+    ctx: &mut WalkCtx,
+    span: crate::token::Span,
+) {
+    let entry = states.clone();
+    let mut arm_states: Vec<ScalarStates> = Vec::new();
+    for arm in arms.iter_mut() {
+        let mut s = entry.clone();
+        walk_block(arm, &mut s, ctx);
+        arm_states.push(s);
+    }
+    let mut default_states = entry.clone();
+    walk_block(default, &mut default_states, ctx);
+    let mut all_refs: Vec<&ScalarStates> = arm_states.iter().collect();
+    all_refs.push(&default_states);
+    let target = pick_join_targets(&all_refs);
+    for (arm, exit) in arms.iter_mut().zip(arm_states.iter()) {
+        insert_convergence_at_block_end(arm, exit, &target, ctx, span);
+    }
+    insert_convergence_at_block_end(default, &default_states, &target, ctx, span);
+    *states = target;
+}
+
+/// Walk a Match expression: each arm.body is a TirExpr (NOT a TirBlock).
+/// The guard (if any) and the body each get their own per-expression
+/// sync wrapper so that pre-stmts emitted while walking the guard run
+/// BEFORE the guard's evaluation (not after — which would let the
+/// guard's mutations be observed before the wrap committed scalar
+/// values), and pre-stmts emitted while walking the body run BEFORE
+/// the body's value-producing expression.
+fn walk_expr_branches_match(
+    arms: &mut [crate::tir::TirMatchArm],
+    states: &mut ScalarStates,
+    result_used: bool,
+    ctx: &mut WalkCtx,
+    span: crate::token::Span,
+) {
+    let entry = states.clone();
+    let mut arm_states: Vec<ScalarStates> = Vec::with_capacity(arms.len());
+    for arm in arms.iter_mut() {
+        let mut s = entry.clone();
+        // Guard (if any). Pre-stmts emitted by walking the guard must
+        // run BEFORE the guard's expression evaluates; wrap the guard
+        // in a Block to hold them.
+        if let Some(guard) = &mut arm.guard {
+            let mut guard_pre: Vec<TirStmt> = Vec::new();
+            walk_expr(guard, &mut s, true, &mut guard_pre, ctx);
+            if !guard_pre.is_empty() {
+                wrap_expr_with_prefix(guard, guard_pre, span);
+            }
+        }
+        // Body. Pre-stmts emitted by walking the body must run BEFORE
+        // the body's value-producing expression; wrap the body in a
+        // Block to hold them.
+        let mut body_pre: Vec<TirStmt> = Vec::new();
+        walk_expr(&mut arm.body, &mut s, result_used, &mut body_pre, ctx);
+        if !body_pre.is_empty() {
+            wrap_expr_with_prefix(&mut arm.body, body_pre, span);
+        }
+        arm_states.push(s);
+    }
+    let arm_refs: Vec<&ScalarStates> = arm_states.iter().collect();
+    let target = pick_join_targets(&arm_refs);
+    for (arm, exit) in arms.iter_mut().zip(arm_states.iter()) {
+        // Emit convergence sync at the end of the arm body.
+        emit_convergence_at_arm_body_end(&mut arm.body, exit, &target, ctx, span);
+    }
+    *states = target;
+}
+
+/// Prepend prefix stmts into an expression's evaluation by wrapping it
+/// in a Block expression that holds the prefix stmts followed by the
+/// original expression as its value-producing stmt. The Block carries
+/// the original's type id so the surrounding context still sees the
+/// same result type.
+fn wrap_expr_with_prefix(expr: &mut TirExpr, prefix: Vec<TirStmt>, _span: crate::token::Span) {
+    let expr_type = expr.type_id;
+    let expr_span = expr.span;
+    let placeholder = TirExpr::new(
+        TirExprKind::Block(TirBlock::empty(expr_span)),
+        expr_type,
+        expr_span,
+    );
+    let original = std::mem::replace(expr, placeholder);
+    let mut stmts = Vec::with_capacity(prefix.len() + 1);
+    stmts.extend(prefix);
+    stmts.push(TirStmt::new(TirStmtKind::Expr(original), expr_span));
+    *expr = TirExpr::new(
+        TirExprKind::Block(TirBlock::new(stmts, expr_span)),
+        expr_type,
+        expr_span,
+    );
+}
+
+/// Insert convergence sync at the end of an arm body (which is a
+/// TirExpr). If the body is already a Block, append the sync stmts
+/// directly. Otherwise wrap the body in a Block { body_as_stmt; sync }
+/// (when body is unit-typed) or Block { let __tmp = body; sync; __tmp }
+/// (when non-unit, so the temp preserves the value across the trailing
+/// sync). The temp uses the per-type pool.
+fn emit_convergence_at_arm_body_end(
+    body: &mut TirExpr,
+    from: &ScalarStates,
+    to: &ScalarStates,
+    ctx: &mut WalkCtx,
+    span: crate::token::Span,
+) {
+    let mut sync_stmts: Vec<TirStmt> = Vec::new();
+    for (i, c) in ctx.candidates.iter().enumerate() {
+        if let Some(stmt) = state_transition_stmt(from[i], to[i], c, span) {
+            sync_stmts.push(stmt);
+        }
+    }
+    if sync_stmts.is_empty() {
+        return;
+    }
+    // Existing Block bodies: just append.
+    if let TirExprKind::Block(block) = &mut body.kind {
+        block.stmts.extend(sync_stmts);
+        return;
+    }
+    let body_type = body.type_id;
+    let body_span = body.span;
+    if body_type == TypeTable::UNIT {
+        // Unit body: Block { Expr(body); sync... }
+        let placeholder = TirExpr::new(
+            TirExprKind::Block(TirBlock::empty(body_span)),
+            body_type,
+            body_span,
+        );
+        let original = std::mem::replace(body, placeholder);
+        let mut stmts = Vec::with_capacity(1 + sync_stmts.len());
+        stmts.push(TirStmt::new(TirStmtKind::Expr(original), body_span));
+        stmts.extend(sync_stmts);
+        *body = TirExpr::new(
+            TirExprKind::Block(TirBlock::new(stmts, body_span)),
+            body_type,
+            body_span,
+        );
+        return;
+    }
+    // Non-unit body: capture into a pooled temp so the Block evaluates
+    // to the original body's value after sync.
+    let tmp_idx = ctx.alloc_temp(body_type);
+    let tmp_name = ctx.temp_name(tmp_idx);
+    let placeholder = TirExpr::new(
+        TirExprKind::Block(TirBlock::empty(body_span)),
+        body_type,
+        body_span,
+    );
+    let original = std::mem::replace(body, placeholder);
+    let mut stmts = Vec::with_capacity(2 + sync_stmts.len());
+    stmts.push(TirStmt::new(
+        TirStmtKind::Let {
+            name: tmp_name.clone(),
+            local_index: tmp_idx,
+            is_mut: false,
+            is_reactive: false,
+            type_id: body_type,
+            value: original,
+            // The temp captures a fresh r-value; no deep value-copy is
+            // appropriate (we just bind whatever the arm body produced).
+            skip_value_copy: true,
+        },
+        body_span,
+    ));
+    stmts.extend(sync_stmts);
+    stmts.push(TirStmt::new(
+        TirStmtKind::Expr(TirExpr::new(
+            TirExprKind::Local {
+                index: tmp_idx,
+                name: tmp_name,
+            },
+            body_type,
+            body_span,
+        )),
+        body_span,
+    ));
+    *body = TirExpr::new(
+        TirExprKind::Block(TirBlock::new(stmts, body_span)),
+        body_type,
+        body_span,
+    );
+    ctx.free_temp(tmp_idx, body_type);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Shared sync calculation helpers (used by walk_call_expr)
+// ─────────────────────────────────────────────────────────────────────────────
 
 /// Check if an expression is an immutable ref to a local (`Unary{Ref, Local}`).
 /// Also returns true for bare locals with `Ref(T)` type (after `ref_elim`).
@@ -2104,8 +2965,8 @@ fn is_immut_ref_arg(expr: &TirExpr, type_table: &TypeTable) -> bool {
     }
 }
 
-/// For a call argument that might be a scalarized local, determine which fields
-/// need syncing based on the callee's field usage cache.
+/// For a call argument that might be a scalarized local, determine which
+/// fields need syncing based on the callee's field usage cache.
 fn add_sync_fields_for_arg(
     arg_expr: &TirExpr,
     func_ref: &FunctionRef,
@@ -2119,7 +2980,6 @@ fn add_sync_fields_for_arg(
     let Some(local_idx) = extract_gc_local_index(arg_expr, type_table) else {
         return;
     };
-
     let has_scalarized = candidates.iter().any(|c| c.local_index == local_idx);
     if !has_scalarized {
         return;
@@ -2128,10 +2988,9 @@ fn add_sync_fields_for_arg(
     let cache_key = (func_ref.module_source.clone(), func_ref.name.clone());
     let callee = cache.get(&cache_key);
 
-    // If the callee's parameter at this position is typed `&T` (not `&mut T`),
-    // the callee cannot mutate through the reference — re-read is unnecessary
-    // regardless of how the caller typed the argument. This matters for
-    // `self.method()` calls where `self: &mut T` is coerced to an `&T` parameter.
+    // If the callee's parameter at this position is typed `&T` (not
+    // `&mut T`), the callee cannot mutate through the reference — re-read
+    // is unnecessary regardless of how the caller typed the argument.
     let callee_immut = callee.is_some_and(|e| e.immut_ref_params.contains(&param_position));
     let is_immut_ref = is_immut_ref || callee_immut;
 
@@ -2142,8 +3001,8 @@ fn add_sync_fields_for_arg(
         }
     };
 
-    // Treat an entry with empty `params` the same as a cache miss — we have no
-    // field usage info, so we must be conservative.
+    // An entry with empty `params` is treated as a cache miss — no
+    // field-usage info, so be conservative.
     match callee.filter(|e| !e.params.is_empty()) {
         Some(entry) => match entry.params.get(&param_position) {
             Some(Some(field_set)) => {
@@ -2155,8 +3014,8 @@ fn add_sync_fields_for_arg(
                 }
             }
             Some(None) => {
-                // Conservative: callee passes the struct further; all fields
-                // potentially touched.
+                // Conservative: callee passes the struct further; all
+                // fields may be touched.
                 for c in candidates {
                     if c.local_index == local_idx {
                         add_field(c.local_index, c.field_index);
@@ -2164,12 +3023,12 @@ fn add_sync_fields_for_arg(
                 }
             }
             None => {
-                // Param at this position is not struct-typed in callee, or
+                // Param at this position not struct-typed in callee, or
                 // not tracked. No fields need syncing.
             }
         },
         None => {
-            // Callee not in cache (external/imported/etc.). Conservative.
+            // Callee not in cache — conservative.
             for c in candidates {
                 if c.local_index == local_idx {
                     add_field(c.local_index, c.field_index);
@@ -2179,7 +3038,6 @@ fn add_sync_fields_for_arg(
     }
 }
 
-/// Extract local index from an expression if it's a GC-typed local or `&mut local`.
 fn extract_gc_local_index(expr: &TirExpr, type_table: &TypeTable) -> Option<u32> {
     match &expr.kind {
         TirExprKind::Local { index, .. } => {
@@ -2207,7 +3065,6 @@ fn extract_gc_local_index(expr: &TirExpr, type_table: &TypeTable) -> Option<u32>
     }
 }
 
-/// Add all scalarized fields for a local (conservative fallback).
 fn add_all_fields_for_local(
     local_idx: u32,
     candidates: &[ScalarizeCandidate],
@@ -2227,450 +3084,5 @@ fn is_gc_heap_type(type_id: TypeId, type_table: &TypeTable) -> bool {
             is_gc_heap_type(*inner, type_table)
         }
         _ => false,
-    }
-}
-
-/// Wrap a call expression with surrounding write-back / re-read sync,
-/// replacing it in place with a `Block` expression of the same type.
-///
-/// Unit-typed call → `Block { write_back; call; re_read }`. The trailing
-/// re-read assign is itself unit-typed, so the block evaluates to unit.
-///
-/// Non-unit call → `Block { write_back; let __tmp = call; re_read; __tmp }`.
-/// A fresh temp local captures the call's value so the block evaluates to
-/// the original call's type after re-read runs.
-///
-/// This is the atom of HFS sync placement: each call site gets its own
-/// wrapper, isolated from sibling expressions in any enclosing branching
-/// construct. The structural recursion in `replace_in_expr` ensures every
-/// reachable call is visited exactly once.
-fn wrap_call_with_sync(
-    expr: &mut TirExpr,
-    sync: &SyncFields,
-    candidates: &[ScalarizeCandidate],
-    locals: &mut Vec<TirLocal>,
-    local_count: &mut u32,
-) {
-    let span = expr.span;
-    let type_id = expr.type_id;
-    // Placeholder for the in-place swap. We use an empty `Block` rather
-    // than `Unit` so the kind/type_id pair never momentarily disagrees
-    // for a non-unit call (an empty block has no last stmt, so its type
-    // is whatever the surrounding context expects). The placeholder is
-    // replaced before the function returns.
-    let placeholder = TirExpr::new(TirExprKind::Block(TirBlock::empty(span)), type_id, span);
-    let original = std::mem::replace(expr, placeholder);
-
-    let mut stmts = Vec::new();
-    for c in candidates {
-        if sync.write_back.contains(&(c.local_index, c.field_index)) {
-            stmts.push(make_write_back_stmt(c, span));
-        }
-    }
-
-    if type_id == TypeTable::UNIT {
-        stmts.push(TirStmt::new(TirStmtKind::Expr(original), span));
-        for c in candidates {
-            if sync.re_read.contains(&(c.local_index, c.field_index)) {
-                stmts.push(make_re_read_stmt(c, span));
-            }
-        }
-    } else {
-        let tmp_idx = *local_count;
-        *local_count += 1;
-        let tmp_name = format!("_hfs_call_{tmp_idx}");
-        locals.push(TirLocal {
-            name: tmp_name.clone(),
-            type_id,
-            is_mut: false,
-        });
-        // skip_value_copy: the call's return value is a fresh r-value; the
-        // temp simply binds the value the callee handed back, so the WIR
-        // builder should not synthesize a deep value-copy on the binding
-        // (matching the convention used for other HFS-synthesized bindings
-        // such as the pre-loop `let _hfs_field = local.field;`).
-        stmts.push(TirStmt::new(
-            TirStmtKind::Let {
-                name: tmp_name.clone(),
-                local_index: tmp_idx,
-                is_mut: false,
-                is_reactive: false,
-                type_id,
-                value: original,
-                skip_value_copy: true,
-            },
-            span,
-        ));
-        for c in candidates {
-            if sync.re_read.contains(&(c.local_index, c.field_index)) {
-                stmts.push(make_re_read_stmt(c, span));
-            }
-        }
-        stmts.push(TirStmt::new(
-            TirStmtKind::Expr(TirExpr::new(
-                TirExprKind::Local {
-                    index: tmp_idx,
-                    name: tmp_name,
-                },
-                type_id,
-                span,
-            )),
-            span,
-        ));
-    }
-
-    *expr = TirExpr::new(
-        TirExprKind::Block(TirBlock::new(stmts, span)),
-        type_id,
-        span,
-    );
-}
-
-fn replace_in_stmt(
-    stmt: &mut TirStmt,
-    candidates: &[ScalarizeCandidate],
-    locals: &mut Vec<TirLocal>,
-    local_count: &mut u32,
-    ctx: &ReplaceCtx,
-) {
-    match &mut stmt.kind {
-        TirStmtKind::Let { value, .. } => {
-            replace_in_expr(value, candidates, locals, local_count, ctx);
-        }
-        TirStmtKind::Expr(expr) => {
-            replace_in_expr(expr, candidates, locals, local_count, ctx);
-        }
-        TirStmtKind::Return { value } => {
-            if let Some(v) = value {
-                replace_in_expr(v, candidates, locals, local_count, ctx);
-            }
-        }
-        TirStmtKind::Break { value, .. } => {
-            if let Some(v) = value {
-                replace_in_expr(v, candidates, locals, local_count, ctx);
-            }
-        }
-        TirStmtKind::Continue => {}
-        TirStmtKind::LetDestructure { value, .. } => {
-            replace_in_expr(value, candidates, locals, local_count, ctx);
-        }
-        TirStmtKind::TaskReturn { .. } => {
-            // `task return expr;` is desugared by `synthesis::cm_binding`
-            // before the lower/optimize phase, so it must not reach HFS.
-            // Fail loudly if the assumption ever breaks — silently
-            // skipping a `task return` value would drop call-site sync
-            // for any call inside it.
-            unreachable!("TaskReturn should be desugared by synthesis::cm_binding before HFS")
-        }
-        // Compound stmts are dispatched by replace_in_block before reaching
-        // here, so they need their own scope tracking (enclosing_labels,
-        // loop_depth) — the leaf path never sees them.
-        TirStmtKind::If { .. }
-        | TirStmtKind::IfLet { .. }
-        | TirStmtKind::Loop { .. }
-        | TirStmtKind::LabeledBlock { .. } => {
-            unreachable!("compound stmts are handled by replace_in_block")
-        }
-        TirStmtKind::VariadicForOf { .. } => {
-            unreachable!("VariadicForOf should be expanded during monomorphization")
-        }
-    }
-}
-
-fn make_write_back_stmts(
-    candidates: &[ScalarizeCandidate],
-    span: crate::token::Span,
-) -> Vec<TirStmt> {
-    candidates
-        .iter()
-        .map(|c| make_write_back_stmt(c, span))
-        .collect()
-}
-
-/// Walk an expression: replace scalarized field accesses with their scalar
-/// locals, recurse into sub-expressions (each branching construct's
-/// arms/branches are its own sync scope), and wrap each
-/// `Call`/`MethodCall`/`IndirectCall` with sync at the call site if the
-/// callee touches scalarized fields. (See issue #1008 for why per-arm
-/// independence matters.)
-fn replace_in_expr(
-    expr: &mut TirExpr,
-    candidates: &[ScalarizeCandidate],
-    locals: &mut Vec<TirLocal>,
-    local_count: &mut u32,
-    ctx: &ReplaceCtx,
-) {
-    // `obj.field = val` → `_hfs_local = val` for a scalarized field.
-    if let TirExprKind::Assign { target, value } = &mut expr.kind {
-        if let TirExprKind::FieldAccess {
-            expr: inner,
-            field_index,
-            ..
-        } = &target.kind
-            && let TirExprKind::Local { index, .. } = &inner.kind
-        {
-            for c in candidates {
-                if c.local_index == *index && c.field_index == *field_index {
-                    replace_in_expr(value, candidates, locals, local_count, ctx);
-                    let new_target = TirExpr::new(
-                        TirExprKind::Local {
-                            index: c.new_local_index,
-                            name: format!("_hfs_{}_{}", c.field_name, c.new_local_index),
-                        },
-                        c.type_id,
-                        expr.span,
-                    );
-                    **target = new_target;
-                    return;
-                }
-            }
-        }
-        replace_in_expr(target, candidates, locals, local_count, ctx);
-        replace_in_expr(value, candidates, locals, local_count, ctx);
-        return;
-    }
-    // `obj.field` → `_hfs_local` for a scalarized field read.
-    if let TirExprKind::FieldAccess {
-        expr: inner,
-        field_index,
-        ..
-    } = &expr.kind
-        && let TirExprKind::Local { index, .. } = &inner.kind
-    {
-        for c in candidates {
-            if c.local_index == *index && c.field_index == *field_index {
-                expr.kind = TirExprKind::Local {
-                    index: c.new_local_index,
-                    name: format!("_hfs_{}_{}", c.field_name, c.new_local_index),
-                };
-                return;
-            }
-        }
-    }
-
-    let is_call = matches!(
-        &expr.kind,
-        TirExprKind::Call { .. }
-            | TirExprKind::MethodCall { .. }
-            | TirExprKind::IndirectCall { .. }
-    );
-
-    match &mut expr.kind {
-        TirExprKind::FieldAccess { expr: inner, .. }
-        | TirExprKind::TupleSpread { expr: inner }
-        | TirExprKind::TupleZip { expr: inner }
-        | TirExprKind::TypePackExpansion {
-            call_expr: inner, ..
-        } => {
-            replace_in_expr(inner, candidates, locals, local_count, ctx);
-        }
-        TirExprKind::Binary { left, right, .. } => {
-            replace_in_expr(left, candidates, locals, local_count, ctx);
-            replace_in_expr(right, candidates, locals, local_count, ctx);
-        }
-        TirExprKind::Unary { expr, .. } => {
-            replace_in_expr(expr, candidates, locals, local_count, ctx);
-        }
-        TirExprKind::Cast { expr, .. } => {
-            replace_in_expr(expr, candidates, locals, local_count, ctx);
-        }
-        TirExprKind::Call { args, .. } => {
-            for arg in args {
-                replace_in_expr(&mut arg.expr, candidates, locals, local_count, ctx);
-            }
-        }
-        TirExprKind::MethodCall { receiver, args, .. } => {
-            replace_in_expr(receiver, candidates, locals, local_count, ctx);
-            for arg in args {
-                replace_in_expr(&mut arg.expr, candidates, locals, local_count, ctx);
-            }
-        }
-        TirExprKind::CmRawCall { args, .. } => {
-            // CmRawCall doesn't take struct refs; no sync needed at this
-            // boundary (its args are primitive Wasm types after lowering).
-            for arg in args {
-                replace_in_expr(arg, candidates, locals, local_count, ctx);
-            }
-        }
-        TirExprKind::Index { expr, index } => {
-            replace_in_expr(expr, candidates, locals, local_count, ctx);
-            replace_in_expr(index, candidates, locals, local_count, ctx);
-        }
-        TirExprKind::Block(block) => {
-            replace_in_block(
-                block,
-                candidates,
-                locals,
-                local_count,
-                ctx.type_table,
-                ctx.cache,
-                ctx.enclosing_labels,
-                ctx.loop_depth,
-            );
-        }
-        TirExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            replace_in_expr(condition, candidates, locals, local_count, ctx);
-            replace_in_block(
-                then_branch,
-                candidates,
-                locals,
-                local_count,
-                ctx.type_table,
-                ctx.cache,
-                ctx.enclosing_labels,
-                ctx.loop_depth,
-            );
-            if let Some(eb) = else_branch {
-                replace_in_block(
-                    eb,
-                    candidates,
-                    locals,
-                    local_count,
-                    ctx.type_table,
-                    ctx.cache,
-                    ctx.enclosing_labels,
-                    ctx.loop_depth,
-                );
-            }
-        }
-        TirExprKind::StructLiteral { fields, .. } => {
-            for field in fields {
-                replace_in_expr(&mut field.value, candidates, locals, local_count, ctx);
-            }
-        }
-        TirExprKind::TupleLiteral { elements } => {
-            for elem in elements {
-                replace_in_expr(elem, candidates, locals, local_count, ctx);
-            }
-        }
-        TirExprKind::IndirectCall { callee, args, .. } => {
-            replace_in_expr(callee, candidates, locals, local_count, ctx);
-            for arg in args {
-                replace_in_expr(arg, candidates, locals, local_count, ctx);
-            }
-        }
-        TirExprKind::ClosureToCanonical { functor, .. } => {
-            replace_in_expr(functor, candidates, locals, local_count, ctx);
-        }
-        TirExprKind::Closure { body, .. } => {
-            replace_in_expr(body, candidates, locals, local_count, ctx);
-        }
-        TirExprKind::VariantConstruct { payload, .. } => {
-            if let Some(p) = payload {
-                replace_in_expr(p, candidates, locals, local_count, ctx);
-            }
-        }
-        TirExprKind::LabeledBlock { label, block, .. } => {
-            let mut extended = ctx.enclosing_labels.clone();
-            extended.insert(label.clone());
-            replace_in_block(
-                block,
-                candidates,
-                locals,
-                local_count,
-                ctx.type_table,
-                ctx.cache,
-                &extended,
-                ctx.loop_depth,
-            );
-        }
-        TirExprKind::GlobalVarSet { value, .. } => {
-            replace_in_expr(value, candidates, locals, local_count, ctx);
-        }
-        TirExprKind::VariantTag { expr } | TirExprKind::VariantTest { expr, .. } => {
-            replace_in_expr(expr, candidates, locals, local_count, ctx);
-        }
-        TirExprKind::VariantPayload { expr, .. } => {
-            replace_in_expr(expr, candidates, locals, local_count, ctx);
-        }
-        TirExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            replace_in_expr(scrutinee, candidates, locals, local_count, ctx);
-            for arm in arms {
-                replace_in_block(
-                    arm,
-                    candidates,
-                    locals,
-                    local_count,
-                    ctx.type_table,
-                    ctx.cache,
-                    ctx.enclosing_labels,
-                    ctx.loop_depth,
-                );
-            }
-            replace_in_block(
-                default,
-                candidates,
-                locals,
-                local_count,
-                ctx.type_table,
-                ctx.cache,
-                ctx.enclosing_labels,
-                ctx.loop_depth,
-            );
-        }
-        TirExprKind::Assign { target, value } => {
-            replace_in_expr(target, candidates, locals, local_count, ctx);
-            replace_in_expr(value, candidates, locals, local_count, ctx);
-        }
-        TirExprKind::Match { expr, arms } => {
-            // Each arm body is its own sync scope: any call in one arm
-            // gets wrapped only at that arm's call site, so a sibling
-            // scalar-update arm is unaffected. Guards are likewise
-            // recursed independently — a call inside a guard gets its
-            // own per-call wrap.
-            replace_in_expr(expr, candidates, locals, local_count, ctx);
-            for arm in arms {
-                if let Some(guard) = &mut arm.guard {
-                    replace_in_expr(guard, candidates, locals, local_count, ctx);
-                }
-                replace_in_expr(&mut arm.body, candidates, locals, local_count, ctx);
-            }
-        }
-        TirExprKind::TemplateString { parts } => {
-            for part in parts {
-                if let crate::tir::TirTemplatePart::Interpolation { expr, .. } = part {
-                    replace_in_expr(expr, candidates, locals, local_count, ctx);
-                }
-            }
-        }
-        TirExprKind::IntLiteral { .. }
-        | TirExprKind::FloatLiteral { .. }
-        | TirExprKind::BoolLiteral(_)
-        | TirExprKind::CharLiteral(_)
-        | TirExprKind::StringLiteral(_)
-        | TirExprKind::BytesLiteral(_)
-        | TirExprKind::Null
-        | TirExprKind::Unit
-        | TirExprKind::Local { .. }
-        | TirExprKind::FuncRef { .. }
-        | TirExprKind::GlobalVarGet { .. }
-        | TirExprKind::Capture { .. }
-        | TirExprKind::EnumConstruct { .. } => {}
-        TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
-            unreachable!(
-                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
-            )
-        }
-    }
-
-    // After args/sub-expressions are processed (any nested call has already
-    // been wrapped), wrap THIS call with sync if it touches a scalarized
-    // local. The wrap is local to the call site, so a sibling expression
-    // in the enclosing branching construct keeps its own sync (or lack
-    // thereof) independent of this one.
-    if is_call {
-        let sync = compute_sync_at_call(expr, candidates, ctx.type_table, ctx.cache);
-        if !sync.is_empty() {
-            wrap_call_with_sync(expr, &sync, candidates, locals, local_count);
-        }
     }
 }
