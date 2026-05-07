@@ -2221,10 +2221,9 @@ fn walk_stmt(
             out.push(stmt);
         }
         TirStmtKind::LabeledBlock {
-            label,
+            label: _,
             block: inner,
         } => {
-            let _ = label;
             walk_block(inner, states, ctx);
             out.push(stmt);
         }
@@ -2473,7 +2472,7 @@ fn walk_expr(
             | TirExprKind::MethodCall { .. }
             | TirExprKind::IndirectCall { .. }
     ) {
-        walk_call_expr(expr, states, result_used, out, ctx);
+        walk_call_expr(expr, states, out, ctx);
         return;
     }
 
@@ -2533,7 +2532,6 @@ fn field_read_to_candidate(expr: &TirExpr, ctx: &WalkCtx) -> Option<(usize, Scal
 fn walk_call_expr(
     expr: &mut TirExpr,
     states: &mut ScalarStates,
-    _result_used: bool,
     out: &mut Vec<TirStmt>,
     ctx: &mut WalkCtx,
 ) {
@@ -2694,7 +2692,13 @@ fn accumulate_call_sync(
             // CmRawCall is a lowered Wasm import — its args are primitive
             // Wasm types, never struct refs.
         }
-        _ => {}
+        // The remaining TirExprKind variants are not call sites. The
+        // single caller (`compute_call_field_effects`) is reached only
+        // from `walk_call_expr`, which dispatches exclusively for
+        // `Call` / `MethodCall` / `IndirectCall`. Fail loud if a future
+        // refactor pushes a different shape into here, rather than
+        // silently producing no sync.
+        _ => unreachable!("accumulate_call_sync called on non-call expression"),
     }
 }
 
@@ -2757,16 +2761,27 @@ fn walk_other_expr_kinds(
         TirExprKind::ClosureToCanonical { functor, .. } => {
             walk_expr(functor, states, true, out, ctx);
         }
-        TirExprKind::Closure { body, .. } => {
-            walk_expr(body, states, true, out, ctx);
+        TirExprKind::Closure { body: _, .. } => {
+            // A closure body executes when the closure is *called*, not
+            // here. Recursing with the surrounding `out` and `states`
+            // would land any sync stmts emitted from inside the closure
+            // at the wrong scope, and propagate state transitions into
+            // the surrounding code path that does not actually run them.
+            //
+            // Today this is harmless because outer locals appear inside
+            // closure bodies as `Capture`, not `Local`, so
+            // `field_*_to_candidate` and `extract_gc_local_index` all
+            // miss; nothing fires. Skipping the recursion makes that
+            // implicit guarantee an explicit one — a future inliner
+            // change that surfaces a captured local as `Local` would
+            // not silently miscompile.
         }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {
                 walk_expr(p, states, true, out, ctx);
             }
         }
-        TirExprKind::LabeledBlock { label, block, .. } => {
-            let _ = label;
+        TirExprKind::LabeledBlock { block, .. } => {
             walk_inline_block(block, states, result_used, ctx);
         }
         TirExprKind::GlobalVarSet { value, .. } => {
@@ -2912,6 +2927,15 @@ fn walk_expr_branches_switch(
 /// guard's mutations be observed before the wrap committed scalar
 /// values), and pre-stmts emitted while walking the body run BEFORE
 /// the body's value-producing expression.
+///
+/// Cross-arm guard side effects: at runtime, arm K's guard runs only
+/// after arms 1..K-1's patterns matched-and-their-guards-failed. A
+/// `&mut` call inside arm 1's guard mutates the field state before
+/// arm 2's pattern is even tested. The walker reflects this by
+/// carrying an `accumulated_pre`: the join over {entry, `arm_i_after_guard`}
+/// for each prior side-effecting guard. arm K's guard and body are
+/// then walked starting from `accumulated_pre`, matching the runtime
+/// state at the dispatch point.
 fn walk_expr_branches_match(
     arms: &mut [crate::tir::TirMatchArm],
     states: &mut ScalarStates,
@@ -2920,17 +2944,28 @@ fn walk_expr_branches_match(
     span: crate::token::Span,
 ) {
     let entry = states.clone();
+    let mut accumulated_pre = entry;
     let mut arm_states: Vec<ScalarStates> = Vec::with_capacity(arms.len());
     for arm in arms.iter_mut() {
-        let mut s = entry.clone();
+        let mut s = accumulated_pre.clone();
         // Guard (if any). Pre-stmts emitted by walking the guard must
         // run BEFORE the guard's expression evaluates; wrap the guard
         // in a Block to hold them.
+        let has_guard = arm.guard.is_some();
         if let Some(guard) = &mut arm.guard {
             let mut guard_pre: Vec<TirStmt> = Vec::new();
             walk_expr(guard, &mut s, true, &mut guard_pre, ctx);
             if !guard_pre.is_empty() {
                 wrap_expr_with_prefix(guard, guard_pre, span);
+            }
+        }
+        // After the guard ran (whether matched or not), state for
+        // subsequent arms includes JOIN(accumulated_pre, s).
+        // Patterns themselves are side-effect-free in Wado, so the
+        // pattern-mismatch path leaves state at the prior accumulated_pre.
+        if has_guard {
+            for i in 0..accumulated_pre.len() {
+                accumulated_pre[i] = pick_join_target_for_candidate(&[accumulated_pre[i], s[i]]);
             }
         }
         // Body. Pre-stmts emitted by walking the body must run BEFORE
