@@ -2288,10 +2288,10 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {
             }
             if __hfs_pos_80 >= __inline_String__len_16: block -> i32 {
                 self_53 = self.input;
+                self.pos = __hfs_pos_80;
                 break __inline_String__len_16: self_53.used;
                 unreachable;
             } {
-                self.pos = __hfs_pos_80;
                 return struct.new "core:prelude/types.wado//Result<String,DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__eof_17: block -> ref "core:serde//DeserializeError" {
                     offset_54 = builtin::i64_extend_i32_s(__hfs_pos_80);
                     break __inline_DeserializeError__eof_17: struct.new "core:serde//DeserializeError" { kind: 8, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: offset_54 };
@@ -2312,10 +2312,10 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {
             __hfs_pos_80 = __hfs_pos_80 + 1;
             if __hfs_pos_80 >= __inline_String__len_19: block -> i32 {
                 self_57 = self.input;
+                self.pos = __hfs_pos_80;
                 break __inline_String__len_19: self_57.used;
                 unreachable;
             } {
-                self.pos = __hfs_pos_80;
                 return struct.new "core:prelude/types.wado//Result<String,DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__eof_20: block -> ref "core:serde//DeserializeError" {
                     offset_58 = builtin::i64_extend_i32_s(__hfs_pos_80);
                     break __inline_DeserializeError__eof_20: struct.new "core:serde//DeserializeError" { kind: 8, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: offset_58 };
@@ -2345,7 +2345,6 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {
             } else if esc == 102 {
                 "core:prelude/string.wado/String::push"(result_9, 12);
             } else if esc == 117 {
-                self.pos = __hfs_pos_80;
                 "core:prelude/string.wado/String::push"(result_9, let __match_scrut_1: ref "core:prelude/types.wado//Result<char,DeserializeError>"; __match_scrut_1 = "core:json/JsonDeserializer::read_unicode_escape"(self); (if ref.test "core:prelude/types.wado//Result<char,DeserializeError>::Ok"(__match_scrut_1) -> char {
                     let __cast_2: ref "core:prelude/types.wado//Result<char,DeserializeError>::Ok";
                     __cast_2 = ref.cast "core:prelude/types.wado//Result<char,DeserializeError>::Ok"(__match_scrut_1);
@@ -2359,9 +2358,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {
                     unreachable;
                     unreachable;
                 }));
-                __hfs_pos_80 = self.pos;
             } else {
-                self.pos = __hfs_pos_80;
                 return struct.new "core:prelude/types.wado//Result<String,DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__malformed_24: block -> ref "core:serde//DeserializeError" {
                     msg_63 = __tmpl: block -> ref "core:prelude/string.wado//String" {
                         __local_21 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 };
@@ -2379,6 +2376,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {
                 unreachable;
                 unreachable;
             }
+            __hfs_pos_80 = self.pos;
             __hfs_pos_80 = __hfs_pos_80 + 1;
             self.pos = __hfs_pos_80;
             continue l207;
@@ -2956,20 +2954,22 @@ fn "core:json/JsonDeserializer::skip_string"(self) {
             if b == 92 {
                 __hfs_pos_14 = __hfs_pos_14 + 1;
                 if __hfs_pos_14 >= _licm_used_12 {
-                    self.pos = __hfs_pos_14;
                     return ref.as_non_null(__inline_DeserializeError__eof_3: block -> ref "core:serde//DeserializeError" {
                         offset_7 = builtin::i64_extend_i32_s(__hfs_pos_14);
+                        self.pos = __hfs_pos_14;
                         break __inline_DeserializeError__eof_3: struct.new "core:serde//DeserializeError" { kind: 8, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: offset_7 };
                         unreachable;
                     });
                 }
                 esc = __inline_String__get_byte_4: block -> u8 {
                     index_9 = __hfs_pos_14;
+                    self.pos = __hfs_pos_14;
                     break __inline_String__get_byte_4: builtin::array_get_u8(_licm_repr_13, index_9);
                     unreachable;
                 };
                 if esc == 117 {
                     __hfs_pos_14 = __hfs_pos_14 + 4;
+                } else {
                 }
             } else {
             }
