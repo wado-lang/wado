@@ -642,7 +642,10 @@ mod timezone_host {
         }
 
         fn to_debug_string(&mut self) -> wasmtime::Result<String> {
-            Ok(iana_time_zone::get_timezone().unwrap_or_else(|_| "UTC".to_string()))
+            Ok(match iana_time_zone::get_timezone() {
+                Ok(timezone) => timezone,
+                Err(err) => format!("timezone unavailable: {err}"),
+            })
         }
     }
 
