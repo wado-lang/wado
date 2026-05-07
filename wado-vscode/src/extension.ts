@@ -9,6 +9,7 @@ const CLIENT_ID = 'wadoLanguageServer';
 const CLIENT_NAME = 'Wado Language Server';
 const WASM_PATH_SEGMENTS = ['out', 'wado_lsp.wasm'] as const;
 const RESTART_DEBOUNCE_MS = 250;
+const STDLIB_SCHEMES = ['core', 'wasi'] as const;
 
 let outputChannel: vscode.LogOutputChannel | undefined;
 let client: LanguageClient | undefined;
@@ -80,7 +81,45 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         }),
     );
 
+    registerStdlibContentProvider(context);
+
     await enqueueLifecycle(() => startClientLocked(context));
+}
+
+// Bridges `core:` / `wasi:` URIs (emitted by the LSP for jump-to-definition into
+// bundled stdlib modules) to the server's `workspace/textDocumentContent`
+// request, so VS Code can open them as read-only virtual documents. The
+// `wado` language is forced on the resulting documents because opaque URIs
+// (e.g. `core:cli`) carry no extension for VS Code's language detector.
+function registerStdlibContentProvider(context: vscode.ExtensionContext): void {
+    const provider: vscode.TextDocumentContentProvider = {
+        async provideTextDocumentContent(uri: vscode.Uri): Promise<string> {
+            const active = client;
+            if (!active) {
+                throw new Error('Wado language server is not running.');
+            }
+            const result = await active.sendRequest<{ text: string }>(
+                'workspace/textDocumentContent',
+                { uri: uri.toString() },
+            );
+            return result.text;
+        },
+    };
+    for (const scheme of STDLIB_SCHEMES) {
+        context.subscriptions.push(
+            vscode.workspace.registerTextDocumentContentProvider(scheme, provider),
+        );
+    }
+    context.subscriptions.push(
+        vscode.workspace.onDidOpenTextDocument((doc) => {
+            if (
+                (STDLIB_SCHEMES as readonly string[]).includes(doc.uri.scheme) &&
+                doc.languageId !== LANGUAGE_ID
+            ) {
+                void vscode.languages.setTextDocumentLanguage(doc, LANGUAGE_ID);
+            }
+        }),
+    );
 }
 
 export async function deactivate(): Promise<void> {

@@ -10,10 +10,13 @@ use crate::server::rpc::{
     DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams,
     InitializeResult, JsonRpcRequest, PublishDiagnosticsParams, ReferenceParams, SemanticTokens,
     SemanticTokensLegend, SemanticTokensOptions, SemanticTokensParams, ServerCapabilities,
-    ServerInfo, TextDocumentPositionParams, TextDocumentSyncOptions, error_codes,
+    ServerInfo, TextDocumentContentOptions, TextDocumentContentParams, TextDocumentContentResult,
+    TextDocumentPositionParams, TextDocumentSyncOptions, WorkspaceServerCapabilities, error_codes,
     text_document_sync_kind,
 };
 use crate::server::transport;
+
+const STDLIB_SCHEMES: &[&str] = &["core", "wasi"];
 
 /// Tracks server lifecycle per LSP 3.18 §Server lifecycle.
 ///
@@ -95,6 +98,11 @@ pub async fn dispatch<W: Write>(
                                 token_modifiers: crate::semantic_tokens::TOKEN_MODIFIERS,
                             },
                             full: true,
+                        }),
+                        workspace: Some(WorkspaceServerCapabilities {
+                            text_document_content: Some(TextDocumentContentOptions {
+                                schemes: STDLIB_SCHEMES,
+                            }),
                         }),
                     },
                     server_info: Some(ServerInfo {
@@ -202,6 +210,31 @@ pub async fn dispatch<W: Write>(
                 let data = engine.semantic_tokens(&p.text_document.uri);
                 let result = SemanticTokens { data };
                 transport::send_response(writer, id, result)?;
+            }
+        }
+        "workspace/textDocumentContent" => {
+            if let Some(id) = id {
+                let Some(p) =
+                    transport::decode_or_error::<TextDocumentContentParams, _>(writer, id, params)?
+                else {
+                    return Ok(());
+                };
+                match engine.text_document_content(&p.uri) {
+                    Some(text) => {
+                        let result = TextDocumentContentResult {
+                            text: text.to_string(),
+                        };
+                        transport::send_response(writer, id, result)?;
+                    }
+                    None => {
+                        transport::send_error(
+                            writer,
+                            id,
+                            error_codes::INVALID_PARAMS,
+                            format!("no bundled content for URI: {}", p.uri),
+                        )?;
+                    }
+                }
             }
         }
         "textDocument/didClose" => {

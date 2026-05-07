@@ -243,7 +243,7 @@ description = "Run wado-vscode tests"
 run = "cd wado-vscode && npm install && npm run test:unit && npm run test"
 
 [tasks.build-wado-lsp-wasm]
-description = "Build wado-lsp for wasm32-wasip1 and copy into wado-vscode/out/"
+description = "Build wado-lsp wasm + wado-vscode TS into wado-vscode/out/"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
@@ -253,18 +253,42 @@ set -xe -o pipefail
 cargo build -p wado-lsp --bin wado-lsp --target wasm32-wasip1 --release
 mkdir -p wado-vscode/out
 cp target/wasm32-wasip1/release/wado-lsp.wasm wado-vscode/out/wado_lsp.wasm
+
+# Compile the extension TS so wado-vscode/out/extension.js stays in sync —
+# otherwise a Reload Window picks up stale JS that doesn't match the wasm.
+( cd wado-vscode && [ -d node_modules ] || npm install )
+( cd wado-vscode && npm run compile )
 """
 
 [tasks.watch-wado-lsp-wasm]
-description = "Watch wado-lsp and rebuild the wasm32-wasip1 artifact on change"
+description = "Watch wado-lsp + wado-vscode TS; keep wado-vscode/out/ continuously fresh"
 run = """
 #!/usr/bin/env bash
-set -xe -o pipefail
-cargo watch \
-    -w wado-lsp \
-    -w wado-compiler \
-    -w wado-manifest \
-    -s 'mise run build-wado-lsp-wasm'
+set -e -o pipefail
+
+# Make sure node_modules exists before launching tsc -watch.
+( cd wado-vscode && [ -d node_modules ] || npm install )
+
+# tsc -watch rebuilds wado-vscode/out/extension.js on every TS edit. VS Code
+# does not auto-reload extension code, so you still need
+# "Developer: Reload Window" after a TS change — but extension.js is always
+# in sync once tsc has rebuilt it.
+( cd wado-vscode && exec npm run watch ) &
+TSC_PID=$!
+trap 'kill -TERM $TSC_PID 2>/dev/null || true; wait $TSC_PID 2>/dev/null || true' EXIT INT TERM
+
+# cargo watch rebuilds the wasm on every Rust change. The extension's
+# FileSystemWatcher picks the new wasm up and restarts the LSP server,
+# so Rust-only changes do not require a Reload Window.
+#
+# Inline the wasm rebuild rather than `mise run build-wado-lsp-wasm` so we
+# don't kick off a redundant `npm run compile` (already handled by the tsc
+# watcher above) on every Rust edit.
+cargo watch \\
+    -w wado-lsp \\
+    -w wado-compiler \\
+    -w wado-manifest \\
+    -s 'cargo build -p wado-lsp --bin wado-lsp --target wasm32-wasip1 --release && mkdir -p wado-vscode/out && cp target/wasm32-wasip1/release/wado-lsp.wasm wado-vscode/out/wado_lsp.wasm'
 """
 
 [tasks.update-wado-vscode-grammar]

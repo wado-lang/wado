@@ -83,6 +83,18 @@ pub struct SemanticTokensParams {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TextDocumentContentParams {
+    pub uri: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TextDocumentContentResult {
+    pub text: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SemanticTokens {
     pub data: Vec<u32>,
 }
@@ -124,6 +136,20 @@ pub struct ServerCapabilities {
     pub document_highlight_provider: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub semantic_tokens_provider: Option<SemanticTokensOptions>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub workspace: Option<WorkspaceServerCapabilities>,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceServerCapabilities {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub text_document_content: Option<TextDocumentContentOptions>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TextDocumentContentOptions {
+    pub schemes: &'static [&'static str],
 }
 
 #[derive(Debug, Clone, Serialize)]
