@@ -73,7 +73,7 @@ impl SyntaxDefinition {
             keywords: KeywordCategories {
                 control: vec![
                     "if", "else", "while", "for", "loop", "break", "continue", "return", "match",
-                    "task", "handler", "do", "resume",
+                    "task", "do", "resume",
                 ],
                 storage_type: vec![
                     "fn",
@@ -242,7 +242,6 @@ mod tests {
             "pub",
             "effect",
             "interface",
-            "handler",
             "reactive",
             "move",
             "unique",

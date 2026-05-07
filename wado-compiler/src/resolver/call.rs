@@ -28,8 +28,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
             if !ident.name.contains("::")
                 && let Some(local) = ctx.lookup(&ident.name)
             {
-                // Check if the local has a function type (possibly behind references)
-                let peeled_type_id = self.type_table.borrow().peel_refs(local.type_id);
+                // Check if the local has a function type (possibly behind references
+                // or fn-type newtypes such as `type Handler = fn(...);`).
+                let peeled_ref = self.type_table.borrow().peel_refs(local.type_id);
+                let peeled_type_id = self.type_table.borrow().get_ultimate_base_type(peeled_ref);
                 let peeled_type = self.type_table.borrow().get(peeled_type_id).clone();
                 if let ResolvedType::Function {
                     params: fn_params,
@@ -115,7 +117,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
         if let Expr::FieldAccess(_field_access) = &call.callee {
             // Resolve the callee expression to get the field type
             let callee_expr = self.resolve_expr(&call.callee, ctx, None);
-            let peeled_type_id = self.type_table.borrow().peel_refs(callee_expr.type_id);
+            let peeled_ref = self.type_table.borrow().peel_refs(callee_expr.type_id);
+            let peeled_type_id = self.type_table.borrow().get_ultimate_base_type(peeled_ref);
             let peeled_type = self.type_table.borrow().get(peeled_type_id).clone();
 
             if let ResolvedType::Function {

@@ -33,7 +33,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
     fn extract_expected_fn(&self, expected_type: Option<TypeId>) -> Option<ExpectedFn> {
         let tid = expected_type?;
         let tt = self.type_table.borrow();
-        match tt.get(tid) {
+        // See through newtype layers so a closure assigned to a `type Handler =
+        // fn(...)` newtype still gets its parameter types inferred from the
+        // underlying fn signature.
+        let base_id = tt.get_ultimate_base_type(tid);
+        match tt.get(base_id) {
             ResolvedType::Function {
                 params,
                 return_type,

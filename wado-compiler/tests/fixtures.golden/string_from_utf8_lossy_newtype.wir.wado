@@ -101,7 +101,7 @@ type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref 
 
 type "functype//core:prelude/format.wado/String^Inspect::inspect" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/format.wado//Formatter");  // TypeId(34)
 
-type "functype//core:prelude/string.wado/String::from_utf8_lossy<MyBytes>" = fn(ref "core:prelude//Array<u8>") -> ref "core:prelude/string.wado//String";  // TypeId(35)
+type "functype//core:prelude/string.wado/String::from_utf8_lossy<wado-compiler/tests/fixtures/string_from_utf8_lossy_newtype.wado/MyBytes>" = fn(ref "core:prelude//Array<u8>") -> ref "core:prelude/string.wado//String";  // TypeId(35)
 
 type "functype//core:prelude/array.wado/ArrayIter<u8>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<u8>") -> ref "core:prelude/types.wado//Option<u8>";  // TypeId(36)
 
@@ -144,7 +144,7 @@ fn "wado-compiler/tests/fixtures/string_from_utf8_lossy_newtype.wado/run"() {
         break __seq_lit: __b_0;
         unreachable;
     };
-    s = "core:prelude/string.wado/String::from_utf8_lossy<MyBytes>"(bytes);
+    s = "core:prelude/string.wado/String::from_utf8_lossy<wado-compiler/tests/fixtures/string_from_utf8_lossy_newtype.wado/MyBytes>"(bytes);
     __v0 = s;
     __cond = __inline_String_Eq__eq_10: block -> bool {
         other = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Hello"), used: 5 };
@@ -709,7 +709,7 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     "core:prelude/string.wado/String::push"(f.buf, 34);
 }
 
-fn "core:prelude/string.wado/String::from_utf8_lossy<MyBytes>"(bytes) {
+fn "core:prelude/string.wado/String::from_utf8_lossy<wado-compiler/tests/fixtures/string_from_utf8_lossy_newtype.wado/MyBytes>"(bytes) {
     let builder: ref "core:prelude/string.wado//String";
     let iter: ref "core:prelude/array.wado//ArrayIter<u8>";
     let pending: ref "core:prelude/types.wado//Option<u8>";

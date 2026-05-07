@@ -1,0 +1,39 @@
+// Regression: `Array<Variant>.iter().map(...).collect()` previously
+// ICEd the WIR pipeline with
+//   Validation error: type mismatch:
+//     expected (ref null $type), found (ref $type)
+//
+// Root cause: `monomorphize/state.rs::instantiation_name` mangled struct
+// type-args via `mangle_type_name`, which returns the unqualified name
+// for variants. The matching lookup in `monomorphize/substitute.rs` did
+// the same. Other paths (`get_type_name_info` for `GenericInstance`)
+// already used `mangle_type_arg_for_generic`, which qualifies variants
+// with their declaring `ModuleSource`. Result: the same monomorphized
+// struct (e.g. `IterMap<ArrayIter<Color>, String>`) was registered with
+// an unqualified name from one side and looked up with a qualified name
+// from the other, producing two distinct wasm-GC type ids for the same
+// struct and the validation failure above.
+//
+// Fix: route every generic-instance type-arg mangling site through
+// `mangle_type_arg_for_generic`.
+
+use { println, Stdout } from "core:cli";
+
+variant Color { Red, Green, Blue }
+
+fn name(c: Color) -> String {
+    return match c {
+        Red => "red",
+        Green => "green",
+        Blue => "blue",
+    };
+}
+
+export fn run() with Stdout {
+    let colors: Array<Color> = [Color::Red, Color::Green];
+    let names: Array<String> = colors.iter().map(|c: Color| name(c)).collect();
+    println(names.join(", "));
+}
+
+__DATA__
+{"stdout": "red, green\n"}

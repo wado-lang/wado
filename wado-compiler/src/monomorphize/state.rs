@@ -145,12 +145,25 @@ impl Monomorphizer {
         true
     }
 
-    /// Generate monomorphized struct name: `Box` + `[i32]` -> `"Box<i32>"`
+    /// Generate monomorphized struct name: `Box` + `[i32]` -> `"Box<i32>"`.
+    ///
+    /// Uses `mangle_type_arg_for_generic` so that `Variant`/`Enum`/
+    /// `Resource`/`Newtype`/`Flags` type arguments are qualified by their
+    /// declaring `ModuleSource`. This matches what the type-table-side
+    /// `get_type_name_info(GenericInstance)` produces for the same type
+    /// arg, so the struct registered here and the `GenericInstance`
+    /// looked up by mangled name in `substitute_type` agree on a single
+    /// identity. Without this, a generic instantiated over a variant
+    /// (e.g. `IterMap<ArrayIter<Color>, String>`) was registered with an
+    /// unqualified name from one side and looked up with a qualified
+    /// name from the other, producing two distinct wasm-GC types for the
+    /// same struct and an "expected (ref $type), found (ref $type)" ICE
+    /// at codegen-time validation.
     pub fn instantiation_name(&self, key: &InstantiationKey, type_table: &TypeTable) -> String {
         let args: Vec<String> = key
             .impl_type_args
             .iter()
-            .map(|&t| type_table.mangle_type_name(t))
+            .map(|&t| type_table.mangle_type_arg_for_generic(t))
             .collect();
         mangle_generic_name(&key.name, &args)
     }
@@ -167,12 +180,12 @@ impl Monomorphizer {
         let mut args: Vec<String> = key
             .impl_type_args
             .iter()
-            .map(|t| type_table.mangle_type_name(*t))
+            .map(|t| type_table.mangle_type_arg_for_generic(*t))
             .collect();
         args.extend(
             key.method_type_args
                 .iter()
-                .map(|t| type_table.mangle_type_name(*t)),
+                .map(|t| type_table.mangle_type_arg_for_generic(*t)),
         );
         mangle_generic_name(&key.name, &args)
     }
@@ -208,7 +221,7 @@ impl Monomorphizer {
         let impl_arg_names: Vec<String> = key
             .impl_type_args
             .iter()
-            .map(|t| type_table.mangle_type_name(*t))
+            .map(|t| type_table.mangle_type_arg_for_generic(*t))
             .collect();
 
         // Blanket impl: struct name IS the type param (e.g., "I").
@@ -237,7 +250,7 @@ impl Monomorphizer {
         let method_arg_names: Vec<String> = key
             .method_type_args
             .iter()
-            .map(|t| type_table.mangle_type_name(*t))
+            .map(|t| type_table.mangle_type_arg_for_generic(*t))
             .collect();
         let mangled_method =
             MethodName::format_method_with_args(&method_info.method_name, &method_arg_names);
@@ -264,7 +277,7 @@ impl Monomorphizer {
                 // Return the mangled name with type args (e.g., "Array<i32>", "Box<String>")
                 let args: Vec<String> = type_args
                     .iter()
-                    .map(|arg| type_table.mangle_type_name(*arg))
+                    .map(|arg| type_table.mangle_type_arg_for_generic(*arg))
                     .collect();
                 Some(mangle_generic_name(name, &args))
             }

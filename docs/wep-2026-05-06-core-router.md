@@ -95,7 +95,8 @@ Rules:
 - A leading `/` is required. Patterns without one panic at registration.
 - A `:` segment must contain a non-empty parameter name.
 - A `*` segment must contain a non-empty parameter name and be the last segment.
-- Path matching is strict on trailing slashes: `/users` and `/users/` are different routes. `/` is the canonical root and matches the empty-segment pattern `"/"`.
+- Empty segments are rejected: a trailing `/` (e.g. `/foo/`) or doubled `/` (e.g. `/a//b`) panics at registration. Path matching is correspondingly strict on trailing slashes — `/users` and `/users/` are different routes — and `/` is the canonical root, matching the empty-segment pattern `"/"`.
+- Param and wildcard names must agree across registrations that share the same node. `/users/:id` followed by `/users/:name/profile` panics; reuse the same name (`:id` in both) instead.
 
 ### Types
 
@@ -126,15 +127,33 @@ impl<H> Router<H> {
     /// name).
     pub fn route(&mut self, method: Method, pattern: String, handler: H) with stores[handler]
 
+    /// Method-specific shorthands. Each delegates to `route(Method::X, ...)`.
+    /// Provided for `Get`, `Post`, `Put`, `Patch`, `Delete`, `Options`.
+    /// `Head`, `Connect`, `Trace`, and custom `Other(_)` methods go through
+    /// `route()`.
+    pub fn get(&mut self, pattern: String, handler: H)     with stores[handler]
+    pub fn post(&mut self, pattern: String, handler: H)    with stores[handler]
+    pub fn put(&mut self, pattern: String, handler: H)     with stores[handler]
+    pub fn patch(&mut self, pattern: String, handler: H)   with stores[handler]
+    pub fn delete(&mut self, pattern: String, handler: H)  with stores[handler]
+    pub fn options(&mut self, pattern: String, handler: H) with stores[handler]
+
+    /// Registers a handler that matches any method (including `Method::Other(_)`)
+    /// at `pattern`. Specific-method handlers at the same pattern take
+    /// precedence; `any` is the fallback when no specific entry matched.
+    /// Same panic rules as `route()`.
+    pub fn any(&mut self, pattern: String, handler: H) with stores[handler]
+
     /// Matches a method/path pair. Returns `Some(RouteMatch)` on a hit and
     /// `None` on a miss. The path argument must be the URL path only (no
     /// query string, no fragment).
     pub fn match_path(&self, method: Method, path: &String) -> Option<RouteMatch<H>>
 
-    /// If `path` matches a registered route under any method, returns the
-    /// list of methods registered for that path. Useful for emitting the
-    /// `Allow:` header on a 405 response. Returns an empty array on a
-    /// genuine 404.
+    /// If `path` matches a registered route under any specific method, returns
+    /// the list of those methods. `any` handlers do not contribute (they are
+    /// uncountable). Useful for emitting the `Allow:` header on a 405
+    /// response. Returns an empty array on a genuine 404 or when only an
+    /// `any` handler is registered (in which case 405 is unreachable).
     pub fn allowed_methods(&self, path: &String) -> Array<Method>
 
     /// Matches against a `wasi:http` `Request`, splitting the path from the
@@ -204,6 +223,12 @@ At each state during traversal, transitions are tried in this fixed order; there
 2. Parameter — there is a `:name` child; the current segment is captured and traversal descends
 3. Wildcard — there is a `*name` child; the entire remainder of the path is captured
 
+Once a terminal or wildcard is reached, method dispatch follows this order:
+
+1. Specific method — the request's method is found in the terminal's specific-method list
+2. `any` — the terminal has an `any`-registered handler (registered via `Router::any`)
+3. Miss — return `None` (caller emits 405 if `allowed_methods(path)` is non-empty, otherwise 404)
+
 This means that `/users/list` registered alongside `/users/:id` will route exactly `/users/list` to the literal handler and any other single-segment value to the param handler. A path like `/users/list/extra` is **not** automatically re-tried against the param branch; it is a 404 unless `/users/:id/extra` is also registered.
 
 This is the same rule used by `httprouter`, `gin`, `echo`, and `matchit`. The alternative — backtracking from a literal dead-end into the param branch — produces surprising matches where a literal "wins" at one level but later fails and silently falls into a `:id` capture that swallows the literal name as the id.
@@ -212,6 +237,8 @@ This is the same rule used by `httprouter`, `gin`, `echo`, and `matchit`. The al
 
 Each terminal stores a small list of `(Method, H)` entries. Registering `(Get, "/users", h1)` and `(Post, "/users", h2)` produces two entries at the same terminal; `match_path(Get, ...)` returns `h1`, `match_path(Post, ...)` returns `h2`, and `match_path(Put, ...)` returns `None` while `allowed_methods("/users")` returns `[Get, Post]`.
 
+In addition, each terminal carries a single optional `any` handler (likewise for wildcard nodes). `Router::any(pattern, h)` populates that slot. Specific-method entries are checked first; on a miss the `any` handler is dispatched. This lets services like a `httpbin`-style `/anything` accept every HTTP method, including non-standard ones (`Method::Other("PURGE")`), without enumerating them at registration time.
+
 ### Implementation Notes
 
 The implementation lives in `wado-compiler/lib/core/router.wado` and is ported from `example/router-dfa.wado`, with the following changes:
@@ -219,7 +246,8 @@ The implementation lives in `wado-compiler/lib/core/router.wado` and is ported f
 - `RouteMatch` is generic over `H`; the example uses a concrete `i32 handler_id`.
 - A `handlers: Array<H>` arena is added to `Router<H>`; terminal states reference handlers by `i32` index. This keeps `DfaState` non-generic, which avoids the monomorphization blow-up of including `H` inside every state.
 - `route()` validates patterns and panics on malformed input.
-- Method dispatch supports multiple methods per terminal via a sorted `Array<MethodEntry>` per terminal, binary-searched on lookup. (The example assumes one method per terminal.)
+- Method dispatch supports multiple methods per terminal via an `Array<MethodEntry>` per terminal, scanned linearly on lookup (per-terminal method count is in the single digits, so a sorted array + binary search is overkill). (The example assumes one method per terminal.)
+- Each terminal and wildcard node carries an extra `any_handler_idx: i32` (`-1` when absent) for `Router::any` dispatch.
 - A `match_request` adapter handles path/query split.
 
 ```

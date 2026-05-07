@@ -418,6 +418,22 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
         }
 
+        // Closure literal → fn-type newtype. Resolve the closure against the
+        // unwrapped base fn type (so unannotated params are inferred from the
+        // expected signature) and retag the result with the newtype id.
+        if matches!(expr, Expr::Closure(_)) {
+            let base_id = self.type_table.borrow().get_ultimate_base_type(target_type);
+            let is_fn_newtype = matches!(
+                self.type_table.borrow().get(base_id),
+                ResolvedType::Function { .. }
+            ) && target_type != base_id;
+            if is_fn_newtype {
+                let mut resolved = self.resolve_expr(expr, ctx, Some(base_id));
+                resolved.type_id = target_type;
+                return Some(resolved);
+            }
+        }
+
         // Tuple literal → type implementing SequenceLiteralBuilder (Array<T> and user types)
         if let Some(coerced) = self.try_coerce_tuple_to_sequence(expr, ctx, target_type) {
             return Some(coerced);

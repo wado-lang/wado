@@ -630,6 +630,19 @@ fn translate_global_init(
 
 /// Build a mangled function name from TIR function and module source.
 fn build_mangled_name(tir_func: &TirFunction, _module_source: &ModuleSource) -> String {
+    // For monomorphized functions, prefer `tir_func.name` because the
+    // monomorphizer set it to the canonical mangled name produced by
+    // `function_instantiation_name` / `method_instantiation_name`. The
+    // string-typed `method_info.method_type_args` field is populated by
+    // resolver/monomorphizer call sites that historically used
+    // `mangle_type_name` (unqualified for `Variant`/`Newtype`/etc.); calling
+    // `method_info.to_mangled_name()` on a monomorphized function would
+    // therefore drop the module qualification that the call-rewrite path
+    // already baked into `tir_func.name`, leaving the func_map registered
+    // under a name no call site looks up.
+    if tir_func.monomorph_info.is_some() {
+        return tir_func.name.clone();
+    }
     if let Some(ref method_info) = tir_func.method_info {
         method_info.to_mangled_name()
     } else {
