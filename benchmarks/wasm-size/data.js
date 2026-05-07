@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778147486995,
+  "lastUpdate": 1778163643436,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -20033,6 +20033,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d79fca538a21092539f166ad168037525b049318"
         },
         "date": 1778147486647,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1770,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9140,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16987,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 514574,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2b6c0f0533cd00f113bef87ccc6a7e596e1a7f63",
+          "message": "Merge pull request #1016 from wado-lang/gfx/cleanup_claude_commands\n\nchore: remove unused claude commands",
+          "timestamp": "2026-05-07T23:15:31+09:00",
+          "tree_id": "d2d6b10bb49ed31e5487dda5031edf66996ecc7f",
+          "url": "https://github.com/wado-lang/wado/commit/2b6c0f0533cd00f113bef87ccc6a7e596e1a7f63"
+        },
+        "date": 1778163643251,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
