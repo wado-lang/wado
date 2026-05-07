@@ -4,9 +4,9 @@ This document describes how to develop the Wado compiler toolchain.
 
 Wado is a Rust-like programming language minus lifetime management, targeting Wasm/WASI.
 
-## The Language
+## The Wado Language
 
-Read @docs/cheatsheet.md to understand Wado language.
+Use `wado` skill.
 
 If you need detailed specification, read the `docs/spec.md`.
 
@@ -61,8 +61,8 @@ wado compile --no-validate --wat-to-stdout file.wado
 Three allocators are available via `--allocator <mode>`:
 
 - `bump` (default for CLI): Bump pointer, never frees. Fast, minimal code.
-- `freelist` (default for HTTP): Reclaims freed memory via free list. For long-living processes.
-- `debug` (default for test): Never reuses freed memory, poisons with `0xFF`. For use-after-free detection.
+- `freelist` (default for HTTP world): Reclaims freed memory via free list. For long-living processes.
+- `debug` (default for test world): Never reuses freed memory, poisons with `0xFF`. For use-after-free detection.
 
 ```sh
 wado compile --allocator freelist file.wado  # free-list allocator
@@ -70,7 +70,7 @@ wado compile --allocator debug file.wado     # debug allocator
 wado compile --allocator bump file.wado      # bump allocator
 ```
 
-The debug allocator is selected when compiling for the test world, and enabled in E2E tests as well.
+The `debug` allocator is selected when compiling for the test world, and enabled in E2E tests as well.
 
 ### Serve Command
 
@@ -102,11 +102,17 @@ wado dump --tir-lowered file.wado    # show TIR after lowering
 
 Optimization levels: `-O0` (none), `-O1` (development), `-O2` (production, default), `-O3` (aggressive), `-Os` (`-O2` + strip symbols).
 
+### Compilation Log and Timing
+
+The compiler emits timestamped diagnostics to stderr. Use `--log-level` to control verbosity.
+
+```sh
+wado compile --log-level debug file.wado
+```
+
 ## The LSP
 
-The LSP engine is implemented in `wado-lsp` as a protocol-agnostic language service engine.
-
-The LSP interface is provided by `wado-cli/`.
+The LSP engine is implemented in `wado-lsp`.
 
 ## The Formatter
 
@@ -161,17 +167,14 @@ To initialize: `git submodule update --init --recommend-shallow`
 ## General Rules
 
 - Documents and comments must be written in English.
+- Avoid ad-hoc workarounds. Write proper code based on a sound design.
+- Do not use any comment sections to separate or organize code.
+- Perform red/green TDD.
 - If you find a compiler bug, always write a minimum reproducible e2e fixture as a P0 task. If the bug blocks the current task, fix it immediately before continuing.
-- `CLAUDE.md` is a symlink to `AGENTS.md`.
 
 ## Rules for Rust
 
-- Avoid ad-hoc workarounds. Write proper code based on a sound design.
-- Manage dependencies in the workspace `Cargo.toml`.
-- Use `panic!` macro instead of falling back to dummy results.
-- Do not use any comment sections to separate or organize code.
-- Perform red/green TDD.
-- Do not use `--release` profile for cargo even on benchmarking because it may cause ENOSPC; necessary crates has its own optimization level configurations for debug profile.
+Use the `rust` skill for coding Rust.
 
 ## Wado Evolution Proposals (WEP)
 
@@ -179,7 +182,11 @@ Wado has a set of document for significant language features and architecture de
 
 See `docs/` for existing WEPs.
 
-## Project Development
+## Notes
+
+- `CLAUDE.md` is a symlink to `AGENTS.md`.
+
+## Development
 
 ### Tool Management
 
@@ -200,19 +207,9 @@ mise run test        # test Rust crates
 mise run test-wado   # test Wado modules
 mise run format      # format Rust files and Markdown files
 
-mise run benchmark-all # count-prime, mandelbrot, sieve, fts, and zlib
-mise run report-wasm-size # hello_world, pi_approx, and zlib
+mise run benchmark-all # count-prime, mandelbrot, sieve, fts, zlib, and so on
+mise run report-wasm-size # hello_world, pi_approx, zlib, and so on
 ```
-
-## Compilation Log and Timing
-
-The compiler emits timestamped diagnostics to stderr. Use `--log-level` to control verbosity.
-
-```sh
-wado compile --log-level debug file.wado
-```
-
-## Development Workflow
 
 ### When Starting a Task
 
@@ -225,4 +222,4 @@ mise run on-task-started   # install project tools
 
 ### When Completing a Task
 
-When you have completed a task, make sure everything is up-to-date and tested by `time mise run on-task-done` (use skill for that).
+When you are completing a task, use `on-task-done` skill to finish it.
