@@ -570,8 +570,8 @@ __DATA__
   16. [x] Update prelude exports (WaitableSet/Subtask/ErrorContext)
 -
   17. [x] Add e2e tests for WaitableSet/Subtask/ErrorContext
-          — `cm-waitable-set-poll.wado`, `cm-error-context.wado` pass;
-          `cm-future-read.wado` remains TODO (blocked by TaskReturn synthesis)
+          — `cm_waitable_set_poll.wado`, `cm_error_context.wado` pass;
+          `cm_future_read.wado` remains TODO (blocked by TaskReturn synthesis)
 -
   18. [x] Implement `emit_future_read`, `emit_waitable_set_wait`, `emit_waitable_set_poll`,
           `emit_error_context_*` synthesis functions (stubs — panic as "not yet implemented")

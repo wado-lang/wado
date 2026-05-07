@@ -1,0 +1,327 @@
+//! Radix-tree HTTP router (compressed byte-level trie).
+//!
+//! Nodes are stored in a flat arena (`Array<RadixNode>`) addressed by `i32`
+//! ids; this avoids the `&mut` re-borrow gymnastics that arise when chains
+//! of mutations would have to walk through `Option<RadixNode>` fields.
+//!
+//! Each literal edge carries a byte-level label that *includes* the path
+//! separators. So `/api/v1/users/list` enters the tree as a single edge
+//! (which then splits whenever a sibling shares a prefix). Param and
+//! wildcard segments are stored on the parent node and consume one
+//! '/'-delimited segment or the whole tail respectively.
+
+use { TreeMap } from "core:collections";
+use {
+    Method, MatchResult, RoutePattern, Segment,
+    no_match, parse_pattern,
+} from "./router_common.wado";
+
+struct RadixEdge {
+    label: String,
+    target: i32,
+}
+
+struct RadixNode {
+    edges: Array<RadixEdge>,
+    param_target: i32,         // -1 if no param child
+    param_name: String,
+    wildcard_handler: i32,     // -1 if no wildcard route
+    wildcard_method: Method,
+    wildcard_name: String,
+    handler_id: i32,           // -1 if not terminal
+    method: Method,
+}
+
+fn new_node() -> RadixNode {
+    return RadixNode {
+        edges: [],
+        param_target: -1,
+        param_name: "",
+        wildcard_handler: -1,
+        wildcard_method: Method::Get,
+        wildcard_name: "",
+        handler_id: -1,
+        method: Method::Get,
+    };
+}
+
+pub struct RadixRouter {
+    nodes: Array<RadixNode>,   // node 0 is the root
+}
+
+impl RadixRouter {
+    pub fn build(patterns: &Array<RoutePattern>) -> RadixRouter {
+        let mut r = RadixRouter { nodes: [] };
+        r.nodes.push(new_node());
+        for let p of patterns {
+            r.insert_pattern(p.method, &p.path, p.handler_id);
+        }
+        return r;
+    }
+
+    pub fn match_path(&self, method: Method, path: &String) -> MatchResult {
+        let mut params = TreeMap::<String, String>::new();
+        let plen = path.len();
+        // Empty pattern ("/") registers a handler at the root with no edge,
+        // so walk's edge-driven traversal cannot reach it. Match path "/"
+        // against root.handler_id directly before falling back to walk —
+        // walk still handles a wildcard registered at root (`/*x`).
+        if plen == 1 && path.get_byte(0) == '/' as u8
+            && self.nodes[0].handler_id >= 0
+            && self.nodes[0].method == method {
+            return MatchResult { handler_id: self.nodes[0].handler_id, params };
+        }
+        let hit = self.walk(0, path, 0, plen, method, &mut params);
+        if hit < 0 {
+            return no_match();
+        }
+        return MatchResult { handler_id: hit, params };
+    }
+
+    fn insert_pattern(&mut self, method: Method, path: &String, handler_id: i32) {
+        let segs = parse_pattern(path);
+        let mut cur: i32 = 0;
+        let mut buffer = String::with_capacity(64);
+        let nseg = segs.len();
+        for let mut i = 0; i < nseg; i += 1 {
+            let seg = &segs[i];
+            match seg {
+                Literal(lit) => {
+                    buffer.push_str("/");
+                    buffer.push_str(*lit);
+                },
+                Param(name) => {
+                    buffer.push_str("/");
+                    cur = self.insert_literal(cur, &buffer);
+                    buffer = String::with_capacity(32);
+                    if self.nodes[cur].param_target < 0 {
+                        let new_id = self.nodes.len();
+                        self.nodes.push(new_node());
+                        self.nodes[cur].param_target = new_id;
+                        self.nodes[cur].param_name = *name;
+                    }
+                    cur = self.nodes[cur].param_target;
+                },
+                Wildcard(name) => {
+                    buffer.push_str("/");
+                    cur = self.insert_literal(cur, &buffer);
+                    self.nodes[cur].wildcard_handler = handler_id;
+                    self.nodes[cur].wildcard_method = method;
+                    self.nodes[cur].wildcard_name = *name;
+                    return;
+                },
+            }
+        }
+        if buffer.len() > 0 {
+            cur = self.insert_literal(cur, &buffer);
+        }
+        self.nodes[cur].handler_id = handler_id;
+        self.nodes[cur].method = method;
+    }
+
+    /// Inserts (or finds) the literal `label` starting at `node_id`. Splits
+    /// existing edges as needed to preserve longest-common-prefix sharing.
+    /// Returns the id of the node that sits at the end of the label.
+    fn insert_literal(&mut self, node_id: i32, label: &String) -> i32 {
+        let mut current = node_id;
+        let mut remaining: String = *label;
+        loop {
+            let nedges = self.nodes[current].edges.len();
+            let mut found_idx = -1;
+            let first = remaining.get_byte(0);
+            for let mut i = 0; i < nedges; i += 1 {
+                if self.nodes[current].edges[i].label.get_byte(0) == first {
+                    found_idx = i;
+                    break;
+                }
+            }
+            if found_idx < 0 {
+                let new_id = self.nodes.len();
+                self.nodes.push(new_node());
+                self.nodes[current].edges.push(RadixEdge { label: remaining, target: new_id });
+                return new_id;
+            }
+            let elen = self.nodes[current].edges[found_idx].label.len();
+            let llen = remaining.len();
+            let mut cp = 0;
+            while cp < elen && cp < llen
+                && self.nodes[current].edges[found_idx].label.get_byte(cp) == remaining.get_byte(cp) {
+                cp += 1;
+            }
+            if cp == elen {
+                if cp == llen {
+                    return self.nodes[current].edges[found_idx].target;
+                }
+                current = self.nodes[current].edges[found_idx].target;
+                remaining = remaining.substr_bytes(cp, llen);
+                continue;
+            }
+            // Split the existing edge at cp.
+            let head = self.nodes[current].edges[found_idx].label.substr_bytes(0, cp);
+            let tail = self.nodes[current].edges[found_idx].label.substr_bytes(cp, elen);
+            let original_target = self.nodes[current].edges[found_idx].target;
+            let inner_id = self.nodes.len();
+            self.nodes.push(new_node());
+            self.nodes[inner_id].edges.push(RadixEdge { label: tail, target: original_target });
+            self.nodes[current].edges[found_idx] = RadixEdge { label: head, target: inner_id };
+            if cp == llen {
+                return inner_id;
+            }
+            current = inner_id;
+            remaining = remaining.substr_bytes(cp, llen);
+        }
+    }
+
+    fn walk(&self, node_id: i32, path: &String, pos: i32, plen: i32, method: Method, params: &mut TreeMap<String, String>) -> i32 {
+        if pos >= plen {
+            if self.nodes[node_id].handler_id >= 0 && self.nodes[node_id].method == method {
+                return self.nodes[node_id].handler_id;
+            }
+            if self.nodes[node_id].wildcard_handler >= 0 && self.nodes[node_id].wildcard_method == method {
+                params[self.nodes[node_id].wildcard_name] = "";
+                return self.nodes[node_id].wildcard_handler;
+            }
+            return -1;
+        }
+        // At most one literal edge can share each first byte (radix
+        // invariant), so the loop becomes "find that one candidate, then
+        // either descend or fall through to param/wildcard".
+        let first = path.get_byte(pos);
+        let nedges = self.nodes[node_id].edges.len();
+        for let mut i = 0; i < nedges; i += 1 {
+            if self.nodes[node_id].edges[i].label.get_byte(0) != first {
+                continue;
+            }
+            let elen = self.nodes[node_id].edges[i].label.len();
+            if plen - pos < elen {
+                break;
+            }
+            let mut k = 1;
+            let mut ok = true;
+            while k < elen {
+                if path.get_byte(pos + k) != self.nodes[node_id].edges[i].label.get_byte(k) {
+                    ok = false;
+                    break;
+                }
+                k += 1;
+            }
+            if !ok {
+                break;
+            }
+            // Recursive walk handles its own param/wildcard rollback, so
+            // there is no need to snapshot/restore params at this level.
+            let h = self.walk(self.nodes[node_id].edges[i].target, path, pos + elen, plen, method, params);
+            if h >= 0 {
+                return h;
+            }
+            break;
+        }
+
+        // Param: consume one '/'-delimited segment, then descend. Save the
+        // *previous* value (if any) of the param name so a same-name param
+        // at an outer level survives a failed inner attempt — O(log n) and
+        // allocation-free, unlike a full keys() snapshot.
+        if self.nodes[node_id].param_target >= 0 {
+            let mut end = pos;
+            while end < plen && path.get_byte(end) != '/' as u8 {
+                end += 1;
+            }
+            if end > pos {
+                let pname = self.nodes[node_id].param_name;
+                let prev = params.get(pname);
+                params[pname] = path.substr_bytes(pos, end);
+                let h = self.walk(self.nodes[node_id].param_target, path, end, plen, method, params);
+                if h >= 0 {
+                    return h;
+                }
+                match prev {
+                    Some(v) => { params[pname] = v; },
+                    None => { params.remove(pname); },
+                }
+            }
+        }
+
+        // Wildcard: consume the entire remaining path.
+        if self.nodes[node_id].wildcard_handler >= 0 && self.nodes[node_id].wildcard_method == method {
+            params[self.nodes[node_id].wildcard_name] = path.substr_bytes(pos, plen);
+            return self.nodes[node_id].wildcard_handler;
+        }
+
+        return -1;
+    }
+}
+
+test "radix: static routes" {
+    let routes = [
+        RoutePattern { method: Method::Get, path: "/health", handler_id: 1 },
+        RoutePattern { method: Method::Get, path: "/api/v1/users/list", handler_id: 2 },
+        RoutePattern { method: Method::Get, path: "/api/v1/users/me", handler_id: 3 },
+    ] as Array<RoutePattern>;
+    let r = RadixRouter::build(&routes);
+    assert r.match_path(Method::Get, &"/health").handler_id == 1;
+    assert r.match_path(Method::Get, &"/api/v1/users/list").handler_id == 2;
+    assert r.match_path(Method::Get, &"/api/v1/users/me").handler_id == 3;
+    assert r.match_path(Method::Get, &"/missing").handler_id == -1;
+    assert r.match_path(Method::Get, &"/api/v1/users").handler_id == -1;
+}
+
+test "radix: param + literal sibling" {
+    let routes = [
+        RoutePattern { method: Method::Get, path: "/users/list", handler_id: 1 },
+        RoutePattern { method: Method::Get, path: "/users/:id", handler_id: 2 },
+        RoutePattern { method: Method::Get, path: "/users/:id/profile", handler_id: 3 },
+    ] as Array<RoutePattern>;
+    let r = RadixRouter::build(&routes);
+
+    assert r.match_path(Method::Get, &"/users/list").handler_id == 1;
+
+    let m = r.match_path(Method::Get, &"/users/42");
+    assert m.handler_id == 2;
+    assert m.params["id"] == "42";
+
+    let m2 = r.match_path(Method::Get, &"/users/42/profile");
+    assert m2.handler_id == 3;
+    assert m2.params["id"] == "42";
+}
+
+test "radix: wildcard catch-all" {
+    let routes = [
+        RoutePattern { method: Method::Get, path: "/static/*path", handler_id: 9 },
+    ] as Array<RoutePattern>;
+    let r = RadixRouter::build(&routes);
+    let m = r.match_path(Method::Get, &"/static/css/main.css");
+    assert m.handler_id == 9;
+    assert m.params["path"] == "css/main.css";
+}
+
+test "radix: deep param chain" {
+    let routes = [
+        RoutePattern { method: Method::Get, path: "/api/v1/users/:uid/posts/:pid/comments/:cid", handler_id: 90 },
+    ] as Array<RoutePattern>;
+    let r = RadixRouter::build(&routes);
+    let m = r.match_path(Method::Get, &"/api/v1/users/12/posts/34/comments/56");
+    assert m.handler_id == 90;
+    assert m.params["uid"] == "12";
+    assert m.params["pid"] == "34";
+    assert m.params["cid"] == "56";
+}
+
+test "radix: method mismatch is a miss" {
+    let routes = [
+        RoutePattern { method: Method::Post, path: "/login", handler_id: 1 },
+    ] as Array<RoutePattern>;
+    let r = RadixRouter::build(&routes);
+    assert r.match_path(Method::Get, &"/login").handler_id == -1;
+    assert r.match_path(Method::Post, &"/login").handler_id == 1;
+}
+
+test "radix: root pattern matches /" {
+    let routes = [
+        RoutePattern { method: Method::Get, path: "/", handler_id: 7 },
+        RoutePattern { method: Method::Get, path: "/foo", handler_id: 8 },
+    ] as Array<RoutePattern>;
+    let r = RadixRouter::build(&routes);
+    assert r.match_path(Method::Get, &"/").handler_id == 7;
+    assert r.match_path(Method::Get, &"/foo").handler_id == 8;
+    assert r.match_path(Method::Get, &"/bar").handler_id == -1;
+}

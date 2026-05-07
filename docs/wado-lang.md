@@ -55,12 +55,12 @@ See [`wasm-size/README.md`](../wasm-size/README.md) for the full size comparison
 
 ## A Real Example: an HTTP Service
 
-The rest of this page tours [`example/http-bin.wado`](../example/http-bin.wado) — a single-file httpbin clone implementing `/get`, `/post`, `/headers`, `/status/:code`, `/base64/:val`, and more, served via the Component Model `wasi:http/service` world.
+The rest of this page tours [`example/http_bin.wado`](../example/http_bin.wado) — a single-file httpbin clone implementing `/get`, `/post`, `/headers`, `/status/:code`, `/base64/:val`, and more, served via the Component Model `wasi:http/service` world.
 
 Run it:
 
 ```sh
-cargo run --bin wado -- serve example/http-bin.wado
+cargo run --bin wado -- serve example/http_bin.wado
 curl http://localhost:8080/get
 ```
 
@@ -212,7 +212,7 @@ if let Some(a) = request.get_authority() && !a.is_empty() {
 
 Pattern binding and a boolean guard combine in a single condition. The bound name `a` is in scope for both the guard and the body.
 
-The full source is at [`example/http-bin.wado`](../example/http-bin.wado) (~345 lines).
+The full source is at [`example/http_bin.wado`](../example/http_bin.wado) (~345 lines).
 
 ---
 
@@ -289,7 +289,7 @@ cargo run --bin wado -- run example/hello.wado
 Or serve the httpbin clone from this page:
 
 ```sh
-cargo run --bin wado -- serve example/http-bin.wado
+cargo run --bin wado -- serve example/http_bin.wado
 # in another terminal:
 curl http://localhost:8080/get
 ```
