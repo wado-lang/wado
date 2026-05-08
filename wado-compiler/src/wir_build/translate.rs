@@ -414,11 +414,16 @@ fn register_call_wrapper(
 
 /// Build an inspect / `inspect_alt` wrapper for a functor.
 ///
-/// The wrapper takes `(env: ref null struct, formatter: ref null
-/// struct)` and forwards to `<module>/__Closure_N^TraitName::method`
-/// after refcasting both args. If the per-functor impl is missing
-/// (DCE pruned it) the body is `Unreachable` — the slot stays
-/// populated to keep the canonical struct schema consistent.
+/// The wrapper's external signature is fixed by the canonical inspect
+/// callback type `(env: ref null struct, formatter: ref null struct)`,
+/// so the function-table slot type stays stable across DAE shrinkage on
+/// the per-functor impl. Internally, we look up the impl's surviving
+/// params and forward only the matching wrapper-locals: `self` (env) is
+/// fed by `__typed_env` (refcast of `__env`), `f` (formatter) is fed by
+/// `__typed_formatter`. Either or both refcasts are skipped when the
+/// corresponding param has been DAE'd. If the impl was DCE'd entirely
+/// the body falls back to `Unreachable` — the slot stays populated to
+/// keep the canonical struct schema consistent.
 #[allow(clippy::too_many_arguments)]
 fn register_inspect_wrapper(
     ctx: &mut WirContext<'_>,
@@ -453,19 +458,37 @@ fn register_inspect_wrapper(
         ))
         .cloned();
 
-    let body = match (target_func_id, formatter_struct_type_id) {
-        (Some(func_id), Some(formatter_tid)) => {
+    // Look up the per-functor impl's TIR function so we can read its
+    // current `params` (post-DAE) and only forward the surviving slots.
+    // The unqualified function name is `__Closure_N^TraitName::method`;
+    // module + name together must equal `target_fq`.
+    let impl_unqualified_name = format!("{functor_name}^{trait_name}::{method_name}");
+    let impl_param_names: Option<Vec<String>> = ctx.package.functions.iter().find_map(|f| {
+        let f = f.borrow();
+        if f.module_source == *module_source && f.name == impl_unqualified_name {
+            Some(f.params.iter().map(|p| p.name.clone()).collect())
+        } else {
+            None
+        }
+    });
+
+    let body = match (target_func_id, formatter_struct_type_id, impl_param_names) {
+        (Some(func_id), Some(formatter_tid), Some(impl_params)) => {
             let typed_env_local = "__typed_env".to_string();
             let typed_formatter_local = "__typed_formatter".to_string();
-            vec![
-                WirInstr::DeclareLocal {
+            let needs_typed_env = impl_params.iter().any(|n| n == "self");
+            let needs_typed_formatter = impl_params.iter().any(|n| n == "f");
+
+            let mut body = Vec::new();
+            if needs_typed_env {
+                body.push(WirInstr::DeclareLocal {
                     name: typed_env_local.clone(),
                     ty: WirType::Ref {
                         type_id: functor_struct_type_id.clone(),
                         nullable: false,
                     },
-                },
-                WirInstr::LocalSet {
+                });
+                body.push(WirInstr::LocalSet {
                     name: typed_env_local.clone(),
                     value: Box::new(WirInstr::RefCast {
                         type_id: functor_struct_type_id.clone(),
@@ -475,15 +498,17 @@ fn register_inspect_wrapper(
                             result_ty: abstract_struct_nullable.clone(),
                         }),
                     }),
-                },
-                WirInstr::DeclareLocal {
+                });
+            }
+            if needs_typed_formatter {
+                body.push(WirInstr::DeclareLocal {
                     name: typed_formatter_local.clone(),
                     ty: WirType::Ref {
                         type_id: formatter_tid.clone(),
                         nullable: false,
                     },
-                },
-                WirInstr::LocalSet {
+                });
+                body.push(WirInstr::LocalSet {
                     name: typed_formatter_local.clone(),
                     value: Box::new(WirInstr::RefCast {
                         type_id: formatter_tid.clone(),
@@ -493,27 +518,39 @@ fn register_inspect_wrapper(
                             result_ty: abstract_struct_nullable,
                         }),
                     }),
-                },
-                WirInstr::Call {
-                    func_id,
-                    args: vec![
-                        WirInstr::LocalGet {
-                            name: typed_env_local,
-                            result_ty: WirType::Ref {
-                                type_id: functor_struct_type_id,
-                                nullable: false,
-                            },
+                });
+            }
+
+            let call_args: Vec<WirInstr> = impl_params
+                .iter()
+                .map(|name| match name.as_str() {
+                    "self" => WirInstr::LocalGet {
+                        name: typed_env_local.clone(),
+                        result_ty: WirType::Ref {
+                            type_id: functor_struct_type_id.clone(),
+                            nullable: false,
                         },
-                        WirInstr::LocalGet {
-                            name: typed_formatter_local,
-                            result_ty: WirType::Ref {
-                                type_id: formatter_tid,
-                                nullable: false,
-                            },
+                    },
+                    "f" => WirInstr::LocalGet {
+                        name: typed_formatter_local.clone(),
+                        result_ty: WirType::Ref {
+                            type_id: formatter_tid.clone(),
+                            nullable: false,
                         },
-                    ],
-                },
-            ]
+                    },
+                    other => panic!(
+                        "closure {functor_name}^{trait_name}::{method_name} param \
+                         `{other}` is neither self nor formatter; the canonical layout \
+                         is `(self, f)`."
+                    ),
+                })
+                .collect();
+
+            body.push(WirInstr::Call {
+                func_id,
+                args: call_args,
+            });
+            body
         }
         _ => vec![WirInstr::Unreachable],
     };

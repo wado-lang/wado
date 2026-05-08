@@ -49,11 +49,12 @@ pub fn eliminate_dead_arguments(project: &mut FlatPackage) -> bool {
     let mut candidates: IndexMap<FnKey, Vec<bool>> = IndexMap::default();
     for func_rc in &project.functions {
         let func = func_rc.borrow();
-        if !is_eligible(&func, &pinned) {
+        let key = (func.module_source.clone(), func.name.clone());
+        let is_closure_dae_relaxed = closure_call_keys.contains(&key);
+        if !is_eligible(&func, &pinned, is_closure_dae_relaxed) {
             continue;
         }
-        let key = (func.module_source.clone(), func.name.clone());
-        let dead = find_dead_params(&func, closure_call_keys.contains(&key));
+        let dead = find_dead_params(&func, is_closure_dae_relaxed);
         if dead.iter().any(|&d| d) {
             candidates.insert(key, dead);
         }
@@ -75,26 +76,62 @@ pub fn eliminate_dead_arguments(project: &mut FlatPackage) -> bool {
 }
 
 /// Functions whose `dead[0]` (receiver-position deadness) is honoured rather
-/// than forced to `false`. Closure functor `__call` methods have a special
-/// dispatch path: their only call sites are `wir_build`'s synthesised
-/// wrapper (which derives its external signature from
-/// `ClosureFunctor::canonical_user_params` and adapts the inner call to
-/// match `call_method.params` post-DAE) and the typed
-/// `MethodCall(g, __call, args)`s that `lower::closure`'s
-/// fn-param-specialisation produces. Both paths can be retargeted when
-/// `self` (env) becomes unread, so we let DAE drop position 0 for them.
+/// than forced to `false`, AND whose trait-method pin is lifted. These are
+/// the closure-functor methods that have a controlled dispatch path:
+///
+/// - `__Closure_N::__call` (the closure body). Reached via the
+///   synthesised `__closure_wrapper_*` (function-table dispatch) and via
+///   `lower::closure`'s fn-param-specialisation `MethodCall(g, __call,
+///   args)`. `wir_build::register_closure_wrappers` adapts the wrapper
+///   body to the surviving `call_method.params`.
+///
+/// - `__Closure_N^Inspect::inspect` and `^InspectAlt::inspect_alt`. The
+///   only callers are the corresponding `__closure_inspect_wrapper_*` /
+///   `__closure_inspect_alt_wrapper_*` (function-table dispatch, looked
+///   up off `CanonicalClosure_K`'s `inspect` / `inspect_alt` slot). User
+///   code reaches these via `Fn<N,Ret>^Inspect::inspect(closure_ref,
+///   formatter)` / its alt twin, both of which dispatch through the
+///   canonical struct rather than the per-functor impl directly.
+///   `register_inspect_wrapper` adapts the wrapper body the same way the
+///   call wrapper does, so DAE can safely drop the `self` (env) param
+///   from the inspect impl when its synthesised body
+///   (`f.write_str("...")`) doesn't read it.
 fn collect_closure_call_keys(project: &FlatPackage) -> IndexSet<FnKey> {
-    project
+    let mut keys: IndexSet<FnKey> = IndexSet::default();
+    let functor_struct_names: IndexSet<(ModuleSource, String)> = project
         .closure_functors
         .iter()
-        .map(|f| {
-            let cm = f.call_method.borrow();
-            (cm.module_source.clone(), cm.name.clone())
-        })
-        .collect()
+        .map(|f| (f.module_source.clone(), f.struct_name.clone()))
+        .collect();
+    for f in &project.closure_functors {
+        let cm = f.call_method.borrow();
+        keys.insert((cm.module_source.clone(), cm.name.clone()));
+    }
+    // Sweep the function list for synthesised
+    // `__Closure_N^{Inspect,InspectAlt}::{inspect,inspect_alt}` impls.
+    // These don't have a direct field on `ClosureFunctor`, so we
+    // discriminate by `(struct_name == __Closure_N, trait_name in
+    // {Inspect, InspectAlt})`.
+    for func_rc in &project.functions {
+        let func = func_rc.borrow();
+        let Some(mi) = &func.method_info else {
+            continue;
+        };
+        let Some(trait_name) = &mi.trait_name else {
+            continue;
+        };
+        if trait_name != "Inspect" && trait_name != "InspectAlt" {
+            continue;
+        }
+        if !functor_struct_names.contains(&(func.module_source.clone(), mi.struct_name.clone())) {
+            continue;
+        }
+        keys.insert((func.module_source.clone(), func.name.clone()));
+    }
+    keys
 }
 
-fn is_eligible(func: &TirFunction, pinned: &IndexSet<FnKey>) -> bool {
+fn is_eligible(func: &TirFunction, pinned: &IndexSet<FnKey>, is_closure_dae_relaxed: bool) -> bool {
     if func.body.is_none() {
         return false;
     }
@@ -117,10 +154,17 @@ fn is_eligible(func: &TirFunction, pinned: &IndexSet<FnKey>) -> bool {
     // (and reachable via vtable / trait dispatch). Removing a param from
     // a single impl desynchronises the impl from the trait declaration
     // and from sibling impls, which then trap on dispatch. Skip them.
-    if func
-        .method_info
-        .as_ref()
-        .is_some_and(|mi| mi.trait_name.is_some())
+    //
+    // The closure-functor `^Inspect` / `^InspectAlt` impls are the
+    // exception: their only callers are the matching
+    // `__closure_inspect_wrapper_*` (vtable-shaped, but the wrapper body
+    // is generated per-functor and adapts to surviving impl params), so
+    // shrinking the impl signature is safe.
+    if !is_closure_dae_relaxed
+        && func
+            .method_info
+            .as_ref()
+            .is_some_and(|mi| mi.trait_name.is_some())
     {
         return false;
     }
