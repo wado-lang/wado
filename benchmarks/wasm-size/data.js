@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778206866501,
+  "lastUpdate": 1778214260175,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -20341,6 +20341,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/2bcad113b468c3c0042629c23960744bf306ca63"
         },
         "date": 1778206866269,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1770,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9140,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16987,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 514574,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "922027a7917aa1156e691df489aa7179a56f5c72",
+          "message": "Merge pull request #1023 from wado-lang/gfx/wado-cli-unify-capabilities\n\nrefactor(wado-cli): unify compile/run/serve/test capabilities",
+          "timestamp": "2026-05-08T13:14:44+09:00",
+          "tree_id": "942ae0f4241a7db1820fe2593d0e90a1c64f846b",
+          "url": "https://github.com/wado-lang/wado/commit/922027a7917aa1156e691df489aa7179a56f5c72"
+        },
+        "date": 1778214259815,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
