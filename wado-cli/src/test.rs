@@ -5,7 +5,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-use anyhow::Result;
+use anyhow::{Result, anyhow};
+use futures::stream::{self, StreamExt};
 use glob::Pattern;
 use lexopt::Arg::Value;
 use tokio::sync::mpsc;
@@ -535,13 +536,98 @@ struct CompileFailure {
     path: String,
 }
 
+/// Outcome of compiling one source file in Phase 1.
+enum CompileTaskResult {
+    Compiled {
+        path: String,
+        engine: Arc<Engine>,
+        component: Arc<Component>,
+        test_names: Vec<String>,
+    },
+    TodoCompileError {
+        path: String,
+    },
+    CompileFailure {
+        path: String,
+    },
+}
+
+/// Compile a single source file and prepare the wasmtime Component.
+///
+/// Runs in its own tokio task so that Phase 1 can fan out across worker
+/// threads. Per-file log lines are emitted here so progress is visible as
+/// each file finishes (interleaved with other workers); the leading
+/// `[elapsed]` timestamp captures the actual completion order.
+async fn compile_one_file(
+    path: String,
+    opt_level: OptLevel,
+    overall_start: Instant,
+) -> Result<CompileTaskResult> {
+    // Compile with --world test so test functions become component exports
+    // and non-test code is subject to DCE.
+    let compile_start = Instant::now();
+    let compile_result = compile::try_compile_with_full_opts(
+        &path,
+        opt_level,
+        wado_compiler::LogLevel::default(),
+        Some("test".to_string()),
+        false,
+        None,
+        None,
+        None, // auto-selects debug allocator for test world
+    )
+    .await;
+    let compile_duration = compile_start.elapsed();
+    let elapsed = format_duration(overall_start.elapsed());
+
+    let compile_result = match compile_result {
+        Ok(result) => result,
+        Err(failure) if failure.is_todo_module => {
+            let dur = format_duration(compile_duration);
+            println!("[{elapsed}] Compiled {path} (TODO module, compile error expected, {dur})");
+            return Ok(CompileTaskResult::TodoCompileError { path });
+        }
+        Err(_) => {
+            let dur = format_duration(compile_duration);
+            eprintln!("[{elapsed}] FAILED to compile {path} ({dur})");
+            return Ok(CompileTaskResult::CompileFailure { path });
+        }
+    };
+
+    let load_start = Instant::now();
+    let engine = Arc::new(runtime::create_test_engine(wasmtime::OptLevel::None)?);
+    let component = Arc::new(Component::new(&engine, &compile_result.wasm)?);
+    let load_duration = load_start.elapsed();
+
+    let dur = format_duration(compile_duration);
+    let load_dur = format_duration(load_duration);
+    println!("[{elapsed}] Compiled {path} ({dur}, loaded in {load_dur})");
+
+    let component_ty = component.component_type();
+    let mut test_names: Vec<String> = Vec::new();
+    for (name, _) in component_ty.exports(&engine) {
+        if name.starts_with("test-") {
+            test_names.push(name.to_string());
+        }
+    }
+
+    Ok(CompileTaskResult::Compiled {
+        path,
+        engine,
+        component,
+        test_names,
+    })
+}
+
 /// Phase 1: Compile all test files and collect test jobs.
 ///
-/// Prints a log line for each file as compilation finishes (with elapsed time),
-/// so the user can see progress during long compilation runs.
+/// Compilation fans out across `parallelism` worker tasks (`-p` / `--parallel`).
+/// Per-file log lines stream as each file finishes — order is non-deterministic,
+/// but the `[elapsed]` prefix reflects actual completion time.
 async fn collect_test_jobs(
     paths: &[String],
     opt_level: OptLevel,
+    parallelism: usize,
     overall_start: Instant,
 ) -> Result<(
     Vec<Arc<CompiledTestModule>>,
@@ -549,90 +635,67 @@ async fn collect_test_jobs(
     Vec<TodoCompileError>,
     Vec<CompileFailure>,
 )> {
+    // The compile future borrows `Cell`/`RefCell` internals (non-Send), so we
+    // can't `tokio::spawn` it onto the multi-thread runtime. Instead, hop each
+    // file onto the blocking pool and drive it on a per-thread current-thread
+    // runtime — the non-Send state never crosses threads. `buffer_unordered`
+    // bounds the in-flight count to `parallelism`.
+    let task_results: Vec<_> = stream::iter(paths.iter().cloned())
+        .map(|path| {
+            tokio::task::spawn_blocking(move || -> Result<CompileTaskResult> {
+                let rt = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .map_err(|e| anyhow!("failed to create compile runtime: {e}"))?;
+                rt.block_on(compile_one_file(path, opt_level, overall_start))
+            })
+        })
+        .buffer_unordered(parallelism.max(1))
+        .collect()
+        .await;
+
     let mut modules = Vec::new();
     let mut jobs = Vec::new();
     let mut todo_compile_errors = Vec::new();
     let mut compile_failures = Vec::new();
 
-    for path in paths {
-        // Compile with --world test so test functions become component exports
-        // and non-test code is subject to DCE.
-        let compile_start = Instant::now();
-        let compile_result = compile::try_compile_with_full_opts(
-            path,
-            opt_level,
-            wado_compiler::LogLevel::default(),
-            Some("test".to_string()),
-            false,
-            None,
-            None,
-            None, // auto-selects debug allocator for test world
-        )
-        .await;
-        let compile_duration = compile_start.elapsed();
-        let elapsed = format_duration(overall_start.elapsed());
-
-        let compile_result = match compile_result {
-            Ok(result) => result,
-            Err(failure) if failure.is_todo_module => {
-                // #![TODO] module failed to compile — expected, count as pass
-                let dur = format_duration(compile_duration);
-                println!(
-                    "[{elapsed}] Compiled {path} (TODO module, compile error expected, {dur})"
-                );
-                todo_compile_errors.push(TodoCompileError { path: path.clone() });
-                continue;
+    for join_result in task_results {
+        let task_result = join_result
+            .map_err(|e| anyhow!("compile worker panicked: {e}"))??;
+        match task_result {
+            CompileTaskResult::Compiled {
+                path,
+                engine,
+                component,
+                test_names,
+            } => {
+                let module_idx = modules.len();
+                for test_name in &test_names {
+                    let expect_trap = test_name.starts_with("test-trap-");
+                    let is_todo = test_name.starts_with("test-todo-");
+                    let timeout_ms = parse_timeout_ms(test_name).unwrap_or(DEFAULT_TIMEOUT_MS);
+                    jobs.push(TestJob {
+                        module_idx,
+                        test_name: test_name.clone(),
+                        display_name: extract_display_name(test_name),
+                        expect_trap,
+                        is_todo,
+                        timeout_ms,
+                    });
+                }
+                modules.push(Arc::new(CompiledTestModule {
+                    path,
+                    engine,
+                    component,
+                }));
             }
-            Err(_) => {
-                // Non-TODO module failed to compile — record on the compile
-                // axis and continue with the next file.
-                let dur = format_duration(compile_duration);
-                eprintln!("[{elapsed}] FAILED to compile {path} ({dur})");
-                compile_failures.push(CompileFailure { path: path.clone() });
-                continue;
+            CompileTaskResult::TodoCompileError { path } => {
+                todo_compile_errors.push(TodoCompileError { path });
             }
-        };
-
-        let load_start = Instant::now();
-        let engine = Arc::new(runtime::create_test_engine(wasmtime::OptLevel::None)?);
-        let component = Arc::new(Component::new(&engine, &compile_result.wasm)?);
-        let load_duration = load_start.elapsed();
-
-        // Print per-file compilation log with elapsed time
-        let dur = format_duration(compile_duration);
-        let load_dur = format_duration(load_duration);
-        println!("[{elapsed}] Compiled {path} ({dur}, loaded in {load_dur})");
-
-        // Find test functions from exports
-        let component_ty = component.component_type();
-        let mut test_names: Vec<String> = Vec::new();
-
-        for (name, _) in component_ty.exports(&engine) {
-            if name.starts_with("test-") {
-                test_names.push(name.to_string());
+            CompileTaskResult::CompileFailure { path } => {
+                compile_failures.push(CompileFailure { path });
             }
         }
-
-        let module_idx = modules.len();
-        for test_name in &test_names {
-            let expect_trap = test_name.starts_with("test-trap-");
-            let is_todo = test_name.starts_with("test-todo-");
-            let timeout_ms = parse_timeout_ms(test_name).unwrap_or(DEFAULT_TIMEOUT_MS);
-            jobs.push(TestJob {
-                module_idx,
-                test_name: test_name.clone(),
-                display_name: extract_display_name(test_name),
-                expect_trap,
-                is_todo,
-                timeout_ms,
-            });
-        }
-
-        modules.push(Arc::new(CompiledTestModule {
-            path: path.clone(),
-            engine,
-            component,
-        }));
     }
 
     Ok((modules, jobs, todo_compile_errors, compile_failures))
@@ -911,7 +974,7 @@ async fn run_one_package(
 
     // Phase 1: Compile all files and collect test jobs
     let (modules, jobs, todo_compile_errors, compile_failures) =
-        match collect_test_jobs(&pkg_run.paths, opt_level, overall_start).await {
+        match collect_test_jobs(&pkg_run.paths, opt_level, parallelism, overall_start).await {
             Ok(result) => result,
             Err(e) => {
                 eprintln!("Error collecting tests: {e}");
