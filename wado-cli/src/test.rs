@@ -5,10 +5,12 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-use anyhow::Result;
+use anyhow::{Result, anyhow};
+use futures::stream::{self, StreamExt};
 use glob::Pattern;
 use lexopt::Arg::Value;
 use tokio::sync::mpsc;
+use wado_compiler::hashmap::IndexMap;
 use wasmtime::Engine;
 use wasmtime::component::Component;
 
@@ -16,6 +18,7 @@ use crate::args::{self, CliExit};
 use crate::compile::{self, OptLevel};
 use crate::discover;
 use crate::manifest as project_manifest;
+use crate::runtime;
 
 const DEFAULT_TIMEOUT_MS: u64 = 5000;
 // Epoch tick interval for wasmtime's epoch-based interruption.
@@ -23,7 +26,6 @@ const DEFAULT_TIMEOUT_MS: u64 = 5000;
 // of overshoot beyond the nominal timeout, which is acceptable since timeouts
 // only fire on runaway tests, not on normal execution.
 const EPOCH_INTERVAL_MS: u64 = 1000;
-use crate::runtime;
 
 pub struct TestOptions {
     /// Each entry corresponds to one package context. The first entry is the
@@ -535,13 +537,96 @@ struct CompileFailure {
     path: String,
 }
 
+/// Outcome of compiling one source file in Phase 1.
+enum CompileTaskResult {
+    Compiled {
+        path: String,
+        engine: Arc<Engine>,
+        component: Arc<Component>,
+        test_names: Vec<String>,
+    },
+    TodoCompileError(TodoCompileError),
+    CompileFailure(CompileFailure),
+}
+
+/// Compile a single source file and prepare the wasmtime Component.
+///
+/// Per-file log lines are emitted here as compilation finishes; under
+/// parallel Phase 1 they interleave across workers, but the leading
+/// `[elapsed]` prefix records actual completion time. See
+/// [`collect_test_jobs`] for how this is driven across threads.
+async fn compile_one_file(
+    path: String,
+    opt_level: OptLevel,
+    overall_start: Instant,
+) -> Result<CompileTaskResult> {
+    // Compile with --world test so test functions become component exports
+    // and non-test code is subject to DCE.
+    let compile_start = Instant::now();
+    let compile_result = compile::try_compile_with_full_opts(
+        &path,
+        opt_level,
+        wado_compiler::LogLevel::default(),
+        Some("test".to_string()),
+        false,
+        None,
+        None,
+        None, // auto-selects debug allocator for test world
+    )
+    .await;
+    let compile_duration = compile_start.elapsed();
+    let elapsed = format_duration(overall_start.elapsed());
+
+    let compile_result = match compile_result {
+        Ok(result) => result,
+        Err(failure) if failure.is_todo_module => {
+            let dur = format_duration(compile_duration);
+            println!("[{elapsed}] Compiled {path} (TODO module, compile error expected, {dur})");
+            return Ok(CompileTaskResult::TodoCompileError(TodoCompileError {
+                path,
+            }));
+        }
+        Err(_) => {
+            let dur = format_duration(compile_duration);
+            eprintln!("[{elapsed}] FAILED to compile {path} ({dur})");
+            return Ok(CompileTaskResult::CompileFailure(CompileFailure { path }));
+        }
+    };
+
+    let load_start = Instant::now();
+    let engine = Arc::new(runtime::create_test_engine(wasmtime::OptLevel::None)?);
+    let component = Arc::new(Component::new(&engine, &compile_result.wasm)?);
+    let load_duration = load_start.elapsed();
+
+    let dur = format_duration(compile_duration);
+    let load_dur = format_duration(load_duration);
+    println!("[{elapsed}] Compiled {path} ({dur}, loaded in {load_dur})");
+
+    let component_ty = component.component_type();
+    let mut test_names: Vec<String> = Vec::new();
+    for (name, _) in component_ty.exports(&engine) {
+        if name.starts_with("test-") {
+            test_names.push(name.to_string());
+        }
+    }
+
+    Ok(CompileTaskResult::Compiled {
+        path,
+        engine,
+        component,
+        test_names,
+    })
+}
+
 /// Phase 1: Compile all test files and collect test jobs.
 ///
-/// Prints a log line for each file as compilation finishes (with elapsed time),
-/// so the user can see progress during long compilation runs.
+/// Compilation fans out across `parallelism` worker tasks (`-p` / `--parallel`).
+/// Per-file log lines stream as each file finishes — order is non-deterministic,
+/// but the `[elapsed]` prefix reflects actual completion time.
 async fn collect_test_jobs(
     paths: &[String],
     opt_level: OptLevel,
+    parallelism: usize,
     overall_start: Instant,
 ) -> Result<(
     Vec<Arc<CompiledTestModule>>,
@@ -549,93 +634,82 @@ async fn collect_test_jobs(
     Vec<TodoCompileError>,
     Vec<CompileFailure>,
 )> {
+    // The compile future borrows `Cell`/`RefCell` internals (non-Send), so we
+    // can't `tokio::spawn` it onto the multi-thread runtime. Instead, hop each
+    // file onto the blocking pool and drive it on a per-thread current-thread
+    // runtime — the non-Send state never crosses threads. `buffer_unordered`
+    // bounds the in-flight count to `parallelism`.
+    let task_results: Vec<_> = stream::iter(paths.iter().cloned())
+        .map(|path| {
+            tokio::task::spawn_blocking(move || -> Result<CompileTaskResult> {
+                let rt = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .map_err(|e| anyhow!("failed to create compile runtime: {e}"))?;
+                rt.block_on(compile_one_file(path, opt_level, overall_start))
+            })
+        })
+        .buffer_unordered(parallelism.max(1))
+        .collect()
+        .await;
+
     let mut modules = Vec::new();
     let mut jobs = Vec::new();
     let mut todo_compile_errors = Vec::new();
     let mut compile_failures = Vec::new();
 
-    for path in paths {
-        // Compile with --world test so test functions become component exports
-        // and non-test code is subject to DCE.
-        let compile_start = Instant::now();
-        let compile_result = compile::try_compile_with_full_opts(
-            path,
-            opt_level,
-            wado_compiler::LogLevel::default(),
-            Some("test".to_string()),
-            false,
-            None,
-            None,
-            None, // auto-selects debug allocator for test world
-        )
-        .await;
-        let compile_duration = compile_start.elapsed();
-        let elapsed = format_duration(overall_start.elapsed());
-
-        let compile_result = match compile_result {
-            Ok(result) => result,
-            Err(failure) if failure.is_todo_module => {
-                // #![TODO] module failed to compile — expected, count as pass
-                let dur = format_duration(compile_duration);
-                println!(
-                    "[{elapsed}] Compiled {path} (TODO module, compile error expected, {dur})"
-                );
-                todo_compile_errors.push(TodoCompileError { path: path.clone() });
-                continue;
+    for join_result in task_results {
+        let task_result = join_result.map_err(|e| anyhow!("compile worker panicked: {e}"))??;
+        match task_result {
+            CompileTaskResult::Compiled {
+                path,
+                engine,
+                component,
+                test_names,
+            } => {
+                let module_idx = modules.len();
+                for test_name in &test_names {
+                    let expect_trap = test_name.starts_with("test-trap-");
+                    let is_todo = test_name.starts_with("test-todo-");
+                    let timeout_ms = parse_timeout_ms(test_name).unwrap_or(DEFAULT_TIMEOUT_MS);
+                    jobs.push(TestJob {
+                        module_idx,
+                        test_name: test_name.clone(),
+                        display_name: extract_display_name(test_name),
+                        expect_trap,
+                        is_todo,
+                        timeout_ms,
+                    });
+                }
+                modules.push(Arc::new(CompiledTestModule {
+                    path,
+                    engine,
+                    component,
+                }));
             }
-            Err(_) => {
-                // Non-TODO module failed to compile — record on the compile
-                // axis and continue with the next file.
-                let dur = format_duration(compile_duration);
-                eprintln!("[{elapsed}] FAILED to compile {path} ({dur})");
-                compile_failures.push(CompileFailure { path: path.clone() });
-                continue;
-            }
-        };
-
-        let load_start = Instant::now();
-        let engine = Arc::new(runtime::create_test_engine(wasmtime::OptLevel::None)?);
-        let component = Arc::new(Component::new(&engine, &compile_result.wasm)?);
-        let load_duration = load_start.elapsed();
-
-        // Print per-file compilation log with elapsed time
-        let dur = format_duration(compile_duration);
-        let load_dur = format_duration(load_duration);
-        println!("[{elapsed}] Compiled {path} ({dur}, loaded in {load_dur})");
-
-        // Find test functions from exports
-        let component_ty = component.component_type();
-        let mut test_names: Vec<String> = Vec::new();
-
-        for (name, _) in component_ty.exports(&engine) {
-            if name.starts_with("test-") {
-                test_names.push(name.to_string());
-            }
+            CompileTaskResult::TodoCompileError(e) => todo_compile_errors.push(e),
+            CompileTaskResult::CompileFailure(e) => compile_failures.push(e),
         }
-
-        let module_idx = modules.len();
-        for test_name in &test_names {
-            let expect_trap = test_name.starts_with("test-trap-");
-            let is_todo = test_name.starts_with("test-todo-");
-            let timeout_ms = parse_timeout_ms(test_name).unwrap_or(DEFAULT_TIMEOUT_MS);
-            jobs.push(TestJob {
-                module_idx,
-                test_name: test_name.clone(),
-                display_name: extract_display_name(test_name),
-                expect_trap,
-                is_todo,
-                timeout_ms,
-            });
-        }
-
-        modules.push(Arc::new(CompiledTestModule {
-            path: path.clone(),
-            engine,
-            component,
-        }));
     }
 
     Ok((modules, jobs, todo_compile_errors, compile_failures))
+}
+
+/// Build a `TestResult` for a setup-time failure (store/linker/instance/etc.).
+fn fail_result(
+    module: &CompiledTestModule,
+    job: &TestJob,
+    error: String,
+    start: Instant,
+) -> TestResult {
+    TestResult {
+        file_path: module.path.clone(),
+        test_name: job.test_name.clone(),
+        display_name: job.display_name.clone(),
+        outcome: TestOutcome::Fail,
+        error: Some(error),
+        duration: start.elapsed(),
+    }
 }
 
 /// Run a single test in its own Store
@@ -646,57 +720,27 @@ async fn run_single_test(
 ) -> TestResult {
     let start = Instant::now();
 
-    // Create fresh Store and Linker for this test
     let mut store = match runtime::create_store(&module.engine, preopened_dirs, &[]) {
         Ok(s) => s,
-        Err(e) => {
-            return TestResult {
-                file_path: module.path.clone(),
-                test_name: job.test_name.clone(),
-                display_name: job.display_name.clone(),
-                outcome: TestOutcome::Fail,
-                error: Some(format!("failed to set up store: {e}")),
-                duration: start.elapsed(),
-            };
-        }
+        Err(e) => return fail_result(module, job, format!("failed to set up store: {e}"), start),
     };
 
-    // Set epoch deadline for timeout enforcement
     let deadline_ticks = (job.timeout_ms / EPOCH_INTERVAL_MS).max(1);
     store.set_epoch_deadline(deadline_ticks);
+
     let linker = match runtime::create_linker(&module.engine) {
         Ok(l) => l,
-        Err(e) => {
-            return TestResult {
-                file_path: module.path.clone(),
-                test_name: job.test_name.clone(),
-                display_name: job.display_name.clone(),
-                outcome: TestOutcome::Fail,
-                error: Some(format!("failed to set up linker: {e}")),
-                duration: start.elapsed(),
-            };
-        }
+        Err(e) => return fail_result(module, job, format!("failed to set up linker: {e}"), start),
     };
 
-    // Instantiate and run
     let instance = match linker
         .instantiate_async(&mut store, &module.component)
         .await
     {
         Ok(inst) => inst,
-        Err(e) => {
-            return TestResult {
-                file_path: module.path.clone(),
-                test_name: job.test_name.clone(),
-                display_name: job.display_name.clone(),
-                outcome: TestOutcome::Fail,
-                error: Some(format!("failed to instantiate: {e}")),
-                duration: start.elapsed(),
-            };
-        }
+        Err(e) => return fail_result(module, job, format!("failed to instantiate: {e}"), start),
     };
 
-    // Get and call the test function
     let test_func = instance.get_typed_func::<(), (Result<(), ()>,)>(&mut store, &job.test_name);
 
     let (outcome, error) = match test_func {
@@ -788,7 +832,9 @@ async fn execute_tests_parallel(
         })
         .collect();
 
-    let (tx, mut rx) = mpsc::channel(jobs.len());
+    // Modest buffer keeps backpressure between workers and the collector
+    // without sizing the channel to the full job count.
+    let (tx, mut rx) = mpsc::channel((num_workers * 2).max(8));
     let jobs = Arc::new(std::sync::Mutex::new(jobs.into_iter()));
 
     let handles: Vec<_> = (0..num_workers)
@@ -896,6 +942,166 @@ fn print_three_axis(totals: &PackageTotals, duration: Option<&str>) {
     }
 }
 
+/// One entry in the post-summary "TODO tests" section.
+struct TodoEntry {
+    file_path: String,
+    display_name: String,
+    resolved: bool,
+}
+
+/// One entry in the post-summary "failures:" section.
+struct FailEntry {
+    file_path: String,
+    display_name: String,
+    error: Option<String>,
+}
+
+/// Tally + per-entry detail produced by [`display_test_results`].
+#[derive(Default)]
+struct RunReport {
+    test_passed: u32,
+    test_failed: u32,
+    todo_pending: u32,
+    todo_resolved: u32,
+    todo_entries: Vec<TodoEntry>,
+    fail_entries: Vec<FailEntry>,
+}
+
+/// Print per-file/per-test results in source order while accumulating
+/// totals and the entries needed for the post-run summary sections.
+fn display_test_results(
+    pkg_paths: &[String],
+    results_by_file: &IndexMap<&str, Vec<&TestResult>>,
+    todo_error_by_path: &IndexMap<&str, &TodoCompileError>,
+) -> RunReport {
+    let mut report = RunReport::default();
+    for path in pkg_paths {
+        if todo_error_by_path.contains_key(path.as_str()) {
+            println!("  \x1b[33m·\x1b[0m #![TODO] module — compile error (expected)  ({path})");
+            report.todo_pending += 1;
+            report.todo_entries.push(TodoEntry {
+                file_path: path.clone(),
+                display_name: "#![TODO] module".to_string(),
+                resolved: false,
+            });
+            continue;
+        }
+        let Some(file_results) = results_by_file.get(path.as_str()) else {
+            continue;
+        };
+        println!("Running tests in {path}...");
+
+        let mut sorted_results: Vec<_> = file_results.clone();
+        sorted_results.sort_by(|a, b| a.test_name.cmp(&b.test_name));
+        for result in sorted_results {
+            let dur = format_duration(result.duration);
+            match result.outcome {
+                TestOutcome::Pass => {
+                    println!("  ok   {} ({dur})", result.display_name);
+                    report.test_passed += 1;
+                }
+                TestOutcome::Fail => {
+                    println!("  \x1b[31mFAILED\x1b[0m {} ({dur})", result.display_name);
+                    report.fail_entries.push(FailEntry {
+                        file_path: result.file_path.clone(),
+                        display_name: result.display_name.clone(),
+                        error: result.error.clone(),
+                    });
+                    report.test_failed += 1;
+                }
+                TestOutcome::TodoPending => {
+                    println!(
+                        "  \x1b[33m·\x1b[0m {} \x1b[33m# TODO\x1b[0m ({dur})",
+                        result.display_name
+                    );
+                    report.todo_pending += 1;
+                    report.todo_entries.push(TodoEntry {
+                        file_path: result.file_path.clone(),
+                        display_name: result.display_name.clone(),
+                        resolved: false,
+                    });
+                }
+                TestOutcome::TodoResolved => {
+                    println!(
+                        "  \x1b[36m✓\x1b[0m {} \x1b[36m# TODO resolved\x1b[0m ({dur})",
+                        result.display_name
+                    );
+                    if let Some(ref error) = result.error {
+                        println!("    {error}");
+                    }
+                    report.todo_resolved += 1;
+                    report.todo_entries.push(TodoEntry {
+                        file_path: result.file_path.clone(),
+                        display_name: result.display_name.clone(),
+                        resolved: true,
+                    });
+                }
+            }
+        }
+    }
+    report
+}
+
+fn print_failure_section(fail_entries: &[FailEntry]) {
+    if fail_entries.is_empty() {
+        return;
+    }
+    println!();
+    println!("failures:");
+    println!();
+    for entry in fail_entries {
+        if let Some(ref error) = entry.error {
+            println!("---- {} ({}) ----", entry.display_name, entry.file_path);
+            println!("{error}");
+            println!();
+        }
+    }
+    println!("failures:");
+    for entry in fail_entries {
+        println!("    {} ({})", entry.display_name, entry.file_path);
+    }
+}
+
+fn print_todo_section(todo_entries: &[TodoEntry], todo_resolved: u32) {
+    if todo_entries.is_empty() {
+        return;
+    }
+    println!();
+    let todo_total = todo_entries.len();
+    println!("TODO tests ({todo_total}):");
+    for entry in todo_entries {
+        if entry.resolved {
+            println!(
+                "  \x1b[36m✓ resolved\x1b[0m  {} — {}",
+                entry.file_path, entry.display_name
+            );
+        } else {
+            println!(
+                "  \x1b[33m· pending\x1b[0m   {} — {}",
+                entry.file_path, entry.display_name
+            );
+        }
+    }
+    if todo_resolved > 0 {
+        println!();
+        println!(
+            "\x1b[36m{todo_resolved} TODO test(s) resolved — \
+             remove the #[TODO] attribute\x1b[0m"
+        );
+    }
+}
+
+fn print_compile_failures_section(failures: &[CompileFailure]) {
+    if failures.is_empty() {
+        return;
+    }
+    println!();
+    println!("compile failures:");
+    for entry in failures {
+        println!("    {}", entry.path);
+    }
+}
+
 async fn run_one_package(
     pkg_run: &PackageRun,
     opt_level: OptLevel,
@@ -911,7 +1117,7 @@ async fn run_one_package(
 
     // Phase 1: Compile all files and collect test jobs
     let (modules, jobs, todo_compile_errors, compile_failures) =
-        match collect_test_jobs(&pkg_run.paths, opt_level, overall_start).await {
+        match collect_test_jobs(&pkg_run.paths, opt_level, parallelism, overall_start).await {
             Ok(result) => result,
             Err(e) => {
                 eprintln!("Error collecting tests: {e}");
@@ -926,8 +1132,8 @@ async fn run_one_package(
     let compile_ok = modules.len() + todo_compile_errors.len();
     let compile_failed = compile_failures.len();
 
-    let total_tests = jobs.len() + todo_compile_errors.len();
-    if total_tests == 0 && compile_failed == 0 {
+    let displayable = jobs.len() + todo_compile_errors.len();
+    if displayable == 0 && compile_failed == 0 {
         // Compile-only validation finished cleanly with no tests to run.
         // Still emit the three-axis summary so the compile total is visible.
         let totals = PackageTotals {
@@ -942,166 +1148,32 @@ async fn run_one_package(
     // Phase 2: Execute tests in parallel
     let results = execute_tests_parallel(&modules, jobs, parallelism, preopened_dirs).await;
 
-    // Group results by file for display
-    let mut results_by_file: indexmap::IndexMap<String, Vec<&TestResult>> =
-        indexmap::IndexMap::new();
+    // Group results by file for display. Iteration order doesn't matter —
+    // display walks `pkg_run.paths` and looks each one up here.
+    let mut results_by_file: IndexMap<&str, Vec<&TestResult>> = IndexMap::default();
     for result in &results {
         results_by_file
-            .entry(result.file_path.clone())
+            .entry(result.file_path.as_str())
             .or_default()
             .push(result);
     }
-
-    // Build lookup maps for display
-    let todo_error_by_path: indexmap::IndexMap<&str, &TodoCompileError> = todo_compile_errors
+    let todo_error_by_path: IndexMap<&str, &TodoCompileError> = todo_compile_errors
         .iter()
         .map(|e| (e.path.as_str(), e))
         .collect();
 
-    // Display results in file order (matching input order)
-    let mut total_passed = 0u32;
-    let mut total_failed = 0u32;
-    let mut total_todo = 0u32;
-    let mut total_todo_resolved = 0u32;
-
-    struct TodoEntry {
-        file_path: String,
-        display_name: String,
-        resolved: bool,
-    }
-    let mut todo_entries: Vec<TodoEntry> = Vec::new();
-
-    struct FailEntry {
-        file_path: String,
-        display_name: String,
-        error: Option<String>,
-    }
-    let mut fail_entries: Vec<FailEntry> = Vec::new();
-
-    for path in &pkg_run.paths {
-        if todo_error_by_path.contains_key(path.as_str()) {
-            println!("  \x1b[33m·\x1b[0m #![TODO] module — compile error (expected)  ({path})");
-            total_todo += 1;
-            todo_entries.push(TodoEntry {
-                file_path: path.clone(),
-                display_name: "#![TODO] module".to_string(),
-                resolved: false,
-            });
-            continue;
-        }
-
-        if let Some(file_results) = results_by_file.get(path) {
-            println!("Running tests in {path}...");
-
-            let mut sorted_results: Vec<_> = file_results.clone();
-            sorted_results.sort_by(|a, b| a.test_name.cmp(&b.test_name));
-
-            for result in sorted_results {
-                let dur = format_duration(result.duration);
-                match result.outcome {
-                    TestOutcome::Pass => {
-                        println!("  ok   {} ({dur})", result.display_name);
-                        total_passed += 1;
-                    }
-                    TestOutcome::Fail => {
-                        println!("  \x1b[31mFAILED\x1b[0m {} ({dur})", result.display_name);
-                        fail_entries.push(FailEntry {
-                            file_path: result.file_path.clone(),
-                            display_name: result.display_name.clone(),
-                            error: result.error.clone(),
-                        });
-                        total_failed += 1;
-                    }
-                    TestOutcome::TodoPending => {
-                        println!(
-                            "  \x1b[33m·\x1b[0m {} \x1b[33m# TODO\x1b[0m ({dur})",
-                            result.display_name
-                        );
-                        total_todo += 1;
-                        todo_entries.push(TodoEntry {
-                            file_path: result.file_path.clone(),
-                            display_name: result.display_name.clone(),
-                            resolved: false,
-                        });
-                    }
-                    TestOutcome::TodoResolved => {
-                        println!(
-                            "  \x1b[36m✓\x1b[0m {} \x1b[36m# TODO resolved\x1b[0m ({dur})",
-                            result.display_name
-                        );
-                        if let Some(ref error) = result.error {
-                            println!("    {error}");
-                        }
-                        total_todo_resolved += 1;
-                        todo_entries.push(TodoEntry {
-                            file_path: result.file_path.clone(),
-                            display_name: result.display_name.clone(),
-                            resolved: true,
-                        });
-                    }
-                }
-            }
-        }
-    }
-
-    if !fail_entries.is_empty() {
-        println!();
-        println!("failures:");
-        println!();
-        for entry in &fail_entries {
-            if let Some(ref error) = entry.error {
-                println!("---- {} ({}) ----", entry.display_name, entry.file_path);
-                println!("{error}");
-                println!();
-            }
-        }
-        println!("failures:");
-        for entry in &fail_entries {
-            println!("    {} ({})", entry.display_name, entry.file_path);
-        }
-    }
-
-    if !todo_entries.is_empty() {
-        println!();
-        let todo_total = total_todo + total_todo_resolved;
-        println!("TODO tests ({todo_total}):");
-        for entry in &todo_entries {
-            if entry.resolved {
-                println!(
-                    "  \x1b[36m✓ resolved\x1b[0m  {} — {}",
-                    entry.file_path, entry.display_name
-                );
-            } else {
-                println!(
-                    "  \x1b[33m· pending\x1b[0m   {} — {}",
-                    entry.file_path, entry.display_name
-                );
-            }
-        }
-        if total_todo_resolved > 0 {
-            println!();
-            println!(
-                "\x1b[36m{total_todo_resolved} TODO test(s) resolved — \
-                 remove the #[TODO] attribute\x1b[0m"
-            );
-        }
-    }
-
-    if compile_failed > 0 {
-        println!();
-        println!("compile failures:");
-        for entry in &compile_failures {
-            println!("    {}", entry.path);
-        }
-    }
+    let report = display_test_results(&pkg_run.paths, &results_by_file, &todo_error_by_path);
+    print_failure_section(&report.fail_entries);
+    print_todo_section(&report.todo_entries, report.todo_resolved);
+    print_compile_failures_section(&compile_failures);
 
     let totals = PackageTotals {
         compile_ok,
         compile_failed,
-        test_passed: total_passed,
-        test_failed: total_failed,
-        todo_pending: total_todo,
-        todo_resolved: total_todo_resolved,
+        test_passed: report.test_passed,
+        test_failed: report.test_failed,
+        todo_pending: report.todo_pending,
+        todo_resolved: report.todo_resolved,
     };
 
     // Per-package three-axis summary (no duration; the aggregate or the run
