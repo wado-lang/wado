@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778201308002,
+  "lastUpdate": 1778204128200,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -20253,6 +20253,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d85052b0f1096c8c3bd00dd6f061b2c3891cbfde"
         },
         "date": 1778201307622,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1770,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9140,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16987,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 514574,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "40f6f8d88012ab997716eef0f5392ebd6ccc19f7",
+          "message": "Merge pull request #1021 from wado-lang/gfx/gale-test-performance\n\nperf(wado test): parallelize Phase 1 compilation",
+          "timestamp": "2026-05-08T10:30:16+09:00",
+          "tree_id": "e28947e8c24996d1f89e8cff4b871de47a5bbf7d",
+          "url": "https://github.com/wado-lang/wado/commit/40f6f8d88012ab997716eef0f5392ebd6ccc19f7"
+        },
+        "date": 1778204127842,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
