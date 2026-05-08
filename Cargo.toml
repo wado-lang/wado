@@ -3,6 +3,7 @@ members = ["wado-compiler", "wado-cli", "wado-from-idl", "wado-bundled-libm", "w
 resolver = "3" # v3 resolver
 
 [workspace.package]
+version = "0.0.1"
 license = "MIT"
 rust-version = "1.94"
 
@@ -92,6 +93,18 @@ debug-assertions = false
 # Cranelift compiles Wasm→native for every test; without this it runs in debug mode.
 [profile.dev.package.cranelift-codegen]
 opt-level = 2
+
+# `release` is the profile for distributed `wado` binaries. `thin` LTO
+# captures most of fat LTO's size/perf benefit at a fraction of the
+# build cost. `codegen-units = 1` lets thin LTO see the whole crate
+# graph as one unit, and `strip = "symbols"` drops the symbol table
+# from the final binary. `panic = "unwind"` (the default) is kept
+# intentionally because wasmtime relies on Rust unwinding to surface
+# guest traps as catchable errors.
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
 
 [workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }

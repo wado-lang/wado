@@ -63,6 +63,33 @@ cargo check -p wado-compiler --target wasm32-unknown-unknown
 cargo check -p wado-manifest --target wasm32-unknown-unknown
 """
 
+[tasks.release-build]
+description = "Build the wado CLI with the release profile (LTO, fully optimized)"
+run = """
+#!/usr/bin/env bash
+set -xe -o pipefail
+cargo build --release -p wado-cli
+ls -lh target/release/wado
+"""
+
+[tasks.bump-version]
+description = """\
+Bump [workspace.package].version in Cargo.toml. \
+Usage: mise run bump-version 0.2.0 | --bump major|minor|patch | --check 0.2.0 | --show\
+"""
+run = """
+#!/usr/bin/env bash
+set -e -o pipefail
+cargo run --quiet --bin wado-dev-tools -- bump-version "$@"
+# Skip cargo update for read-only modes (--check, --show); they don't touch Cargo.toml.
+for arg in "$@"; do
+    case "$arg" in
+        --check|--show) exit 0 ;;
+    esac
+done
+cargo update --workspace
+"""
+
 [tasks.hello]
 description = "Compile example/hello.wado to WAT and Wasm"
 run = """

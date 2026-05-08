@@ -10,6 +10,32 @@ Existing solutions bundle their own memory management runtime into every `.wasm`
 
 The timing matters too. With Wasm Component Model and WASI P3 maturing in 2026, Wado is designed from the ground up for this new era — no legacy baggage, no retrofitting.
 
+## Installing
+
+### Pre-built binary (recommended)
+
+Download the latest release for your platform from
+[GitHub Releases](https://github.com/wado-lang/wado/releases/latest).
+Pre-built binaries are published for:
+
+- Linux (`x86_64`, `aarch64`) — `tar.gz`
+- macOS (Apple Silicon) — `tar.gz`
+- Windows (`x86_64`, `aarch64`) — `zip`
+
+Each archive contains the `wado` binary plus `LICENSE` and `README.md`.
+Verify the download against `SHA256SUMS.txt` attached to the same release.
+
+### From source
+
+If you have a Rust toolchain installed:
+
+```sh
+cargo install --git https://github.com/wado-lang/wado wado-cli
+```
+
+This builds the current `main` branch from source. Re-run the same command
+to update.
+
 ## Examples
 
 ### Hello World
@@ -239,6 +265,24 @@ See [wado-vscode/README.md](wado-vscode/README.md) for more details.
 
 ```sh
 mise run on-task-done # format, clippy-fix, update resources, test
+```
+
+### Releasing
+
+Releases are cut manually on a roughly weekly cadence via [tagpr](https://github.com/Songmu/tagpr).
+
+How it works:
+
+1. Every push to `main` (re)opens a **Release PR** that bumps `[workspace.package].version` in `Cargo.toml`, regenerates `Cargo.lock`, and updates `CHANGELOG.md` from PRs merged since the previous tag.
+2. Merging the Release PR pushes tag `v<next>`, which triggers `.github/workflows/release.yml` to build pre-built binaries for five targets in parallel — Linux (`x86_64`, `aarch64`), macOS (Apple Silicon), Windows (`x86_64`, `aarch64`) — and publishes them to a [GitHub Release](https://github.com/wado-lang/wado/releases) with `SHA256SUMS.txt`.
+3. Default bump is **patch**. Add a `tagpr:minor` or `tagpr:major` label on the Release PR to override.
+
+To bump the workspace version locally without going through tagpr:
+
+```sh
+mise run bump-version 0.2.0           # explicit
+mise run bump-version --bump minor    # patch / minor / major
+mise run bump-version --check 0.2.0   # CI guard: fail unless versions match
 ```
 
 ## Benchmarks

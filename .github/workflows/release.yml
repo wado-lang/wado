@@ -1,0 +1,146 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to (re)build (e.g. v0.1.0)'
+        required: true
+
+permissions:
+  contents: write   # to create / update the GitHub Release
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.v.outputs.tag }}
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # On workflow_dispatch, github.ref is the default branch — check
+          # out the requested tag instead so validate/build see the tagged
+          # source, not main.
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Determine version from tag
+        id: v
+        shell: bash
+        run: |
+          tag="${{ inputs.tag || github.ref_name }}"
+          echo "tag=$tag"         >> "$GITHUB_OUTPUT"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Verify Cargo.toml version matches tag
+        run: |
+          cargo run --quiet --bin wado-dev-tools -- \
+            bump-version --check "${{ steps.v.outputs.version }}"
+
+  build:
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            ext: ''
+            archive: tar.gz
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-24.04-arm     # native ARM runner; no `*-latest` alias exists
+            ext: ''
+            archive: tar.gz
+          - target: aarch64-apple-darwin
+            os: macos-latest         # `macos-latest` is Apple Silicon since macos-14
+            ext: ''
+            archive: tar.gz
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            ext: '.exe'
+            archive: zip
+          - target: aarch64-pc-windows-msvc
+            os: windows-11-arm       # native ARM Windows runner; no `*-latest` alias
+            ext: '.exe'
+            archive: zip
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.validate.outputs.tag }}
+
+      - name: Install Rust target
+        # rust-toolchain.toml is honored automatically by rustup; we only
+        # need to add the target triple when it differs from the runner's
+        # native architecture.
+        run: rustup target add ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-${{ matrix.target }}
+
+      - name: Build wado
+        run: cargo build --release -p wado-cli --target ${{ matrix.target }}
+
+      - name: Stage artifacts
+        shell: bash
+        run: |
+          name="wado-${{ needs.validate.outputs.tag }}-${{ matrix.target }}"
+          mkdir -p "dist/$name"
+          cp "target/${{ matrix.target }}/release/wado${{ matrix.ext }}" "dist/$name/"
+          cp LICENSE README.md "dist/$name/"
+          echo "STAGE_NAME=$name" >> "$GITHUB_ENV"
+
+      - name: Archive (tar.gz)
+        if: matrix.archive == 'tar.gz'
+        shell: bash
+        run: |
+          cd dist
+          tar czf "$STAGE_NAME.tar.gz" "$STAGE_NAME"
+
+      - name: Archive (zip)
+        if: matrix.archive == 'zip'
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "dist/$env:STAGE_NAME" `
+                           -DestinationPath "dist/$env:STAGE_NAME.zip"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist-${{ matrix.target }}
+          path: dist/wado-*.${{ matrix.archive }}
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    needs: [validate, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          pattern: dist-*
+          merge-multiple: true
+
+      - name: Compute SHA256SUMS
+        run: |
+          cd dist
+          sha256sum wado-* > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ needs.validate.outputs.tag }}
+          name: ${{ needs.validate.outputs.tag }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            dist/wado-*.tar.gz
+            dist/wado-*.zip
+            dist/SHA256SUMS.txt
