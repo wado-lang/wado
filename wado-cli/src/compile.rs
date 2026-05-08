@@ -34,7 +34,7 @@ pub enum OptLevel {
 }
 
 impl OptLevel {
-    /// Convert to the matching wasmtime Cranelift opt_level so the runtime
+    /// Convert to the matching wasmtime Cranelift `opt_level` so the runtime
     /// JIT pipeline tracks the Wado front-end optimization level. wasmtime
     /// has only three Cranelift settings (`None`/`Speed`/`SpeedAndSize`),
     /// so `O1`/`O2`/`O3` collapse to the same `Speed`. This mirrors what

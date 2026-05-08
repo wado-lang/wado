@@ -17,9 +17,9 @@ use hyper_util::server::conn::auto;
 use lexopt::Arg::Value;
 use tokio::net::TcpListener;
 use tokio::sync::Mutex;
+use wasmtime::Engine;
 use wasmtime::Store;
 use wasmtime::component::{Component, Linker};
-use wasmtime::Engine;
 use wasmtime_wasi_http::p3::Request as WasiRequest;
 use wasmtime_wasi_http::p3::bindings::Service;
 
