@@ -403,7 +403,7 @@ type "functype//core:prelude/array.wado/ArrayRefIter<i32>^Iterator::next" = fn(r
 
 type "functype//core:json/JsonStructSerializer^SerializeStruct::field<String>" = fn(ref "core:json//JsonStructSerializer", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(120)
 
-type "functype//wado-compiler/tests/fixtures/serde_json_option_array_fields.wado/__Closure_2::__call" = fn(ref "wado-compiler/tests/fixtures/serde_json_option_array_fields.wado//__Closure_2", ref "core:prelude/string.wado//String", i32, i32) -> ref "core:prelude/types.wado//Option<i32>";  // TypeId(121)
+type "functype//wado-compiler/tests/fixtures/serde_json_option_array_fields.wado/__Closure_2::__call" = fn(ref "core:prelude/string.wado//String", i32, i32) -> ref "core:prelude/types.wado//Option<i32>";  // TypeId(121)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(122)
 
@@ -4640,14 +4640,12 @@ fn "core:json/JsonStructSerializer^SerializeStruct::field<String>"(self, name, v
     return r;
 }
 
-fn "wado-compiler/tests/fixtures/serde_json_option_array_fields.wado/__Closure_2::__call"(self, __input, __start, __end) {
+fn "wado-compiler/tests/fixtures/serde_json_option_array_fields.wado/__Closure_2::__call"(__input, __start, __end) {
     return "wado-compiler/tests/fixtures/serde_json_option_array_fields.wado/_user_field_lookup"(__input, __start, __end);
 }
 
 fn "closure/wado-compiler/tests/fixtures/serde_json_option_array_fields.wado/__closure_wrapper_0"(__env, __p0, __p1, __p2) {
-    let __typed_env: ref "wado-compiler/tests/fixtures/serde_json_option_array_fields.wado//__Closure_2";
-    __typed_env = ref.cast "wado-compiler/tests/fixtures/serde_json_option_array_fields.wado//__Closure_2"(__env);
-    return "wado-compiler/tests/fixtures/serde_json_option_array_fields.wado/__Closure_2::__call"(__typed_env, __p0, __p1, __p2);
+    return "wado-compiler/tests/fixtures/serde_json_option_array_fields.wado/__Closure_2::__call"(__p0, __p1, __p2);
 }
 
 export fn "wado-compiler/tests/fixtures/serde_json_option_array_fields.wado/__cm_export____test_0_serialize_with_some_and_non_empty_array" as "__test_0_serialize_with_some_and_non_empty_array"

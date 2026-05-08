@@ -118,9 +118,9 @@ type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeI
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(47)
 
-type "functype//wado-compiler/tests/fixtures/generic_advanced.wado/__Closure_2::__call" = fn(ref "wado-compiler/tests/fixtures/generic_advanced.wado//__Closure_2", i32, i32) -> bool;  // TypeId(48)
+type "functype//wado-compiler/tests/fixtures/generic_advanced.wado/__Closure_2::__call" = fn(i32, i32) -> bool;  // TypeId(48)
 
-type "functype//wado-compiler/tests/fixtures/generic_advanced.wado/__Closure_3::__call" = fn(ref "wado-compiler/tests/fixtures/generic_advanced.wado//__Closure_3", i32, i32) -> bool;  // TypeId(49)
+type "functype//wado-compiler/tests/fixtures/generic_advanced.wado/__Closure_3::__call" = fn(i32, i32) -> bool;  // TypeId(49)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -1157,24 +1157,20 @@ fn "core:prelude/array.wado/Array<i32>::grow"(self) {
     self.repr = new_repr;
 }
 
-fn "wado-compiler/tests/fixtures/generic_advanced.wado/__Closure_2::__call"(self, a, b) {
+fn "wado-compiler/tests/fixtures/generic_advanced.wado/__Closure_2::__call"(a, b) {
     return a < b;
 }
 
-fn "wado-compiler/tests/fixtures/generic_advanced.wado/__Closure_3::__call"(self, a, b) {
+fn "wado-compiler/tests/fixtures/generic_advanced.wado/__Closure_3::__call"(a, b) {
     return a > b;
 }
 
 fn "closure/wado-compiler/tests/fixtures/generic_advanced.wado/__closure_wrapper_0"(__env, __p0, __p1) {
-    let __typed_env: ref "wado-compiler/tests/fixtures/generic_advanced.wado//__Closure_2";
-    __typed_env = ref.cast "wado-compiler/tests/fixtures/generic_advanced.wado//__Closure_2"(__env);
-    return "wado-compiler/tests/fixtures/generic_advanced.wado/__Closure_2::__call"(__typed_env, __p0.value, __p1.value);
+    return "wado-compiler/tests/fixtures/generic_advanced.wado/__Closure_2::__call"(__p0.value, __p1.value);
 }
 
 fn "closure/wado-compiler/tests/fixtures/generic_advanced.wado/__closure_wrapper_1"(__env, __p0, __p1) {
-    let __typed_env: ref "wado-compiler/tests/fixtures/generic_advanced.wado//__Closure_3";
-    __typed_env = ref.cast "wado-compiler/tests/fixtures/generic_advanced.wado//__Closure_3"(__env);
-    return "wado-compiler/tests/fixtures/generic_advanced.wado/__Closure_3::__call"(__typed_env, __p0.value, __p1.value);
+    return "wado-compiler/tests/fixtures/generic_advanced.wado/__Closure_3::__call"(__p0.value, __p1.value);
 }
 
 export fn "wado-compiler/tests/fixtures/generic_advanced.wado/__cm_export____test_0_box_with_trait_method" as "__test_0_box_with_trait_method"

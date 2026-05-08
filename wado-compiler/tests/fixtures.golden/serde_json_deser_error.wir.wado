@@ -283,7 +283,7 @@ type "functype//core:prelude/format.wado/String^Inspect::inspect" = fn(ref "core
 
 type "functype//wado-compiler/tests/fixtures/serde_json_deser_error.wado/User^Deserialize::deserialize<JsonDeserializer>" = fn(ref "core:json//JsonDeserializer") -> ref "core:prelude/types.wado//Result<User,DeserializeError>";  // TypeId(94)
 
-type "functype//wado-compiler/tests/fixtures/serde_json_deser_error.wado/__Closure_2::__call" = fn(ref "wado-compiler/tests/fixtures/serde_json_deser_error.wado//__Closure_2", ref "core:prelude/string.wado//String", i32, i32) -> ref "core:prelude/types.wado//Option<i32>";  // TypeId(95)
+type "functype//wado-compiler/tests/fixtures/serde_json_deser_error.wado/__Closure_2::__call" = fn(ref "core:prelude/string.wado//String", i32, i32) -> ref "core:prelude/types.wado//Option<i32>";  // TypeId(95)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(96)
 
@@ -4030,14 +4030,12 @@ fn "wado-compiler/tests/fixtures/serde_json_deser_error.wado/User^Deserialize::d
     return struct.new "core:prelude/types.wado//Result<User,DeserializeError>::Ok" { discriminant: 0, payload_0: struct.new "wado-compiler/tests/fixtures/serde_json_deser_error.wado//User" { name: name_4, age: age, active: active } };
 }
 
-fn "wado-compiler/tests/fixtures/serde_json_deser_error.wado/__Closure_2::__call"(self, __input, __start, __end) {
+fn "wado-compiler/tests/fixtures/serde_json_deser_error.wado/__Closure_2::__call"(__input, __start, __end) {
     return "wado-compiler/tests/fixtures/serde_json_deser_error.wado/_user_field_lookup"(__input, __start, __end);
 }
 
 fn "closure/wado-compiler/tests/fixtures/serde_json_deser_error.wado/__closure_wrapper_0"(__env, __p0, __p1, __p2) {
-    let __typed_env: ref "wado-compiler/tests/fixtures/serde_json_deser_error.wado//__Closure_2";
-    __typed_env = ref.cast "wado-compiler/tests/fixtures/serde_json_deser_error.wado//__Closure_2"(__env);
-    return "wado-compiler/tests/fixtures/serde_json_deser_error.wado/__Closure_2::__call"(__typed_env, __p0, __p1, __p2);
+    return "wado-compiler/tests/fixtures/serde_json_deser_error.wado/__Closure_2::__call"(__p0, __p1, __p2);
 }
 
 export fn "wado-compiler/tests/fixtures/serde_json_deser_error.wado/__cm_export____test_0_invalid_json___not_an_object" as "__test_0_invalid_json___not_an_object"

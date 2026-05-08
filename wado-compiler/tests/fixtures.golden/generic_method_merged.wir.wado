@@ -130,7 +130,7 @@ type "functype//core:prelude/string.wado/StrCharIter^Iterator::next" = fn(ref "c
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(51)
 
-type "functype//wado-compiler/tests/fixtures/generic_method_merged.wado/__Closure_3::__call" = fn(ref "wado-compiler/tests/fixtures/generic_method_merged.wado//__Closure_3", i32) -> i32;  // TypeId(52)
+type "functype//wado-compiler/tests/fixtures/generic_method_merged.wado/__Closure_3::__call" = fn(i32) -> i32;  // TypeId(52)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -1067,14 +1067,12 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     "core:prelude/string.wado/String::push"(f.buf, 34);
 }
 
-fn "wado-compiler/tests/fixtures/generic_method_merged.wado/__Closure_3::__call"(self, x) {
+fn "wado-compiler/tests/fixtures/generic_method_merged.wado/__Closure_3::__call"(x) {
     return x * 2;
 }
 
 fn "closure/wado-compiler/tests/fixtures/generic_method_merged.wado/__closure_wrapper_0"(__env, __p0) {
-    let __typed_env: ref "wado-compiler/tests/fixtures/generic_method_merged.wado//__Closure_3";
-    __typed_env = ref.cast "wado-compiler/tests/fixtures/generic_method_merged.wado//__Closure_3"(__env);
-    return "wado-compiler/tests/fixtures/generic_method_merged.wado/__Closure_3::__call"(__typed_env, __p0.value);
+    return "wado-compiler/tests/fixtures/generic_method_merged.wado/__Closure_3::__call"(__p0.value);
 }
 
 export fn "wado-compiler/tests/fixtures/generic_method_merged.wado/__cm_export____test_0_basic_turbofish" as "__test_0_basic_turbofish"

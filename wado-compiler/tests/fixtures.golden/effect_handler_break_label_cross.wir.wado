@@ -104,17 +104,17 @@ type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/st
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(39)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(40)
+type "functype//wado-compiler/tests/fixtures/effect_handler_break_label_cross.wado/__Closure_2::__call" = fn() -> i32;  // TypeId(40)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(41)
+type "functype//wado-compiler/tests/fixtures/effect_handler_break_label_cross.wado/__Closure_3::__call" = fn() -> i32;  // TypeId(41)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(42)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(42)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(43)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(43)
 
-type "functype//wado-compiler/tests/fixtures/effect_handler_break_label_cross.wado/__Closure_2::__call" = fn(ref "wado-compiler/tests/fixtures/effect_handler_break_label_cross.wado//Inner") -> i32;  // TypeId(44)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(44)
 
-type "functype//wado-compiler/tests/fixtures/effect_handler_break_label_cross.wado/__Closure_3::__call" = fn(ref "wado-compiler/tests/fixtures/effect_handler_break_label_cross.wado//Outer") -> i32;  // TypeId(45)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(45)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -651,24 +651,20 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "wado-compiler/tests/fixtures/effect_handler_break_label_cross.wado/__Closure_2::__call"(self) {
+fn "wado-compiler/tests/fixtures/effect_handler_break_label_cross.wado/__Closure_2::__call"() {
     return 2;
 }
 
-fn "wado-compiler/tests/fixtures/effect_handler_break_label_cross.wado/__Closure_3::__call"(self) {
+fn "wado-compiler/tests/fixtures/effect_handler_break_label_cross.wado/__Closure_3::__call"() {
     return 1;
 }
 
 fn "closure/wado-compiler/tests/fixtures/effect_handler_break_label_cross.wado/__closure_wrapper_0"(__env) {
-    let __typed_env: ref "wado-compiler/tests/fixtures/effect_handler_break_label_cross.wado//__Closure_2";
-    __typed_env = ref.cast "wado-compiler/tests/fixtures/effect_handler_break_label_cross.wado//__Closure_2"(__env);
-    return "wado-compiler/tests/fixtures/effect_handler_break_label_cross.wado/__Closure_2::__call"(__typed_env.__capture_0);
+    return "wado-compiler/tests/fixtures/effect_handler_break_label_cross.wado/__Closure_2::__call"();
 }
 
 fn "closure/wado-compiler/tests/fixtures/effect_handler_break_label_cross.wado/__closure_wrapper_1"(__env) {
-    let __typed_env: ref "wado-compiler/tests/fixtures/effect_handler_break_label_cross.wado//__Closure_3";
-    __typed_env = ref.cast "wado-compiler/tests/fixtures/effect_handler_break_label_cross.wado//__Closure_3"(__env);
-    return "wado-compiler/tests/fixtures/effect_handler_break_label_cross.wado/__Closure_3::__call"(__typed_env.__capture_0);
+    return "wado-compiler/tests/fixtures/effect_handler_break_label_cross.wado/__Closure_3::__call"();
 }
 
 export fn "wado-compiler/tests/fixtures/effect_handler_break_label_cross.wado/__cm_export__run" as "run"

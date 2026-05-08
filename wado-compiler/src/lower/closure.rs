@@ -677,6 +677,8 @@ impl ClosureLowerer {
                 ref_type_id: self_ref_type,
                 call_method: call_method_rc,
                 captures: collected.captures.clone(),
+                canonical_user_params: collected.params.clone(),
+                canonical_return: return_type,
             });
 
             // Synthesize per-functor Inspect / InspectAlt impls so trait

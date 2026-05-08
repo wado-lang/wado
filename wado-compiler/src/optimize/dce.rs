@@ -1815,9 +1815,35 @@ fn compute_reachable_types(project: &FlatPackage) -> IndexSet<TypeId> {
             collect_types_from_expr(&global.initializer, &type_table, &mut reachable_types);
         }
 
-        // Closure functor types are collected transitively from ClosureToCanonical
-        // expressions in reachable functions. No need to unconditionally mark all
-        // functor types as reachable — unused closures should have their types DCE'd.
+        // Closure functor types are collected transitively from
+        // ClosureToCanonical expressions in reachable functions. No need
+        // to unconditionally mark all functor types as reachable — unused
+        // closures should have their types DCE'd.
+        //
+        // BUT: if the functor's `__call` method is still reachable (kept
+        // by function DCE), the functor's struct / ref types must stay
+        // live too. `wir_build::register_closure_wrappers` reads
+        // `ClosureFunctor::ref_type_id` to emit the wrapper's `ref.cast`,
+        // and TIR DAE may have removed the struct ref from
+        // `call_method.params[0]` (dropping the env `self`) — at which
+        // point the only remaining TIR-side reference is the
+        // `ClosureFunctor` record itself. Without this insertion, that
+        // type-table lookup panics with `TypeId not found`.
+        let surviving_funcs: IndexSet<(crate::name::ModuleSource, String)> = project
+            .functions
+            .iter()
+            .map(|f| {
+                let f = f.borrow();
+                (f.module_source.clone(), f.name.clone())
+            })
+            .collect();
+        for functor in &project.closure_functors {
+            let cm = functor.call_method.borrow();
+            if surviving_funcs.contains(&(cm.module_source.clone(), cm.name.clone())) {
+                reachable_types.insert(functor.struct_type_id);
+                reachable_types.insert(functor.ref_type_id);
+            }
+        }
     }
 
     // Phase 2: Transitive closure - include struct fields, variant payloads, and type dependencies

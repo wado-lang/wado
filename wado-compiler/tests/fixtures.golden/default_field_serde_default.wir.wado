@@ -253,7 +253,7 @@ type "functype//core:prelude/format.wado/String^Inspect::inspect" = fn(ref "core
 
 type "functype//wado-compiler/tests/fixtures/default_field_serde_default.wado/Config^Deserialize::deserialize<JsonDeserializer>" = fn(ref "core:json//JsonDeserializer") -> ref "core:prelude/types.wado//Result<Config,DeserializeError>";  // TypeId(79)
 
-type "functype//wado-compiler/tests/fixtures/default_field_serde_default.wado/__Closure_2::__call" = fn(ref "wado-compiler/tests/fixtures/default_field_serde_default.wado//__Closure_2", ref "core:prelude/string.wado//String", i32, i32) -> ref "core:prelude/types.wado//Option<i32>";  // TypeId(80)
+type "functype//wado-compiler/tests/fixtures/default_field_serde_default.wado/__Closure_2::__call" = fn(ref "core:prelude/string.wado//String", i32, i32) -> ref "core:prelude/types.wado//Option<i32>";  // TypeId(80)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(81)
 
@@ -3669,14 +3669,12 @@ fn "wado-compiler/tests/fixtures/default_field_serde_default.wado/Config^Deseria
     return struct.new "core:prelude/types.wado//Result<Config,DeserializeError>::Ok" { discriminant: 0, payload_0: struct.new "wado-compiler/tests/fixtures/default_field_serde_default.wado//Config" { host: host, port: port, verbose: verbose } };
 }
 
-fn "wado-compiler/tests/fixtures/default_field_serde_default.wado/__Closure_2::__call"(self, __input, __start, __end) {
+fn "wado-compiler/tests/fixtures/default_field_serde_default.wado/__Closure_2::__call"(__input, __start, __end) {
     return "wado-compiler/tests/fixtures/default_field_serde_default.wado/_config_field_lookup"(__input, __start, __end);
 }
 
 fn "closure/wado-compiler/tests/fixtures/default_field_serde_default.wado/__closure_wrapper_0"(__env, __p0, __p1, __p2) {
-    let __typed_env: ref "wado-compiler/tests/fixtures/default_field_serde_default.wado//__Closure_2";
-    __typed_env = ref.cast "wado-compiler/tests/fixtures/default_field_serde_default.wado//__Closure_2"(__env);
-    return "wado-compiler/tests/fixtures/default_field_serde_default.wado/__Closure_2::__call"(__typed_env, __p0, __p1, __p2);
+    return "wado-compiler/tests/fixtures/default_field_serde_default.wado/__Closure_2::__call"(__p0, __p1, __p2);
 }
 
 export fn "wado-compiler/tests/fixtures/default_field_serde_default.wado/__cm_export____test_0_missing_fields_fall_back_to_declared_defaults" as "__test_0_missing_fields_fall_back_to_declared_defaults"

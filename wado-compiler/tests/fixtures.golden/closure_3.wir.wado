@@ -230,15 +230,15 @@ type "functype//core:prelude/array.wado/ArrayIter<i32>^Iterator::next" = fn(ref 
 
 type "functype//core:prelude/traits.wado/IterFilter<ArrayIter<i32>>^Iterator::next" = fn(ref "core:prelude/traits.wado//IterFilter<ArrayIter<i32>>") -> ref "core:prelude/types.wado//Option<i32>";  // TypeId(84)
 
-type "functype//wado-compiler/tests/fixtures/closure_3.wado/__Closure_6::__call" = fn(ref "wado-compiler/tests/fixtures/closure_3.wado//__Closure_6", i32) -> bool;  // TypeId(85)
+type "functype//wado-compiler/tests/fixtures/closure_3.wado/__Closure_6::__call" = fn(i32) -> bool;  // TypeId(85)
 
-type "functype//wado-compiler/tests/fixtures/closure_3.wado/__Closure_7::__call" = fn(ref "wado-compiler/tests/fixtures/closure_3.wado//__Closure_7", i32) -> i32;  // TypeId(86)
+type "functype//wado-compiler/tests/fixtures/closure_3.wado/__Closure_7::__call" = fn(i32) -> i32;  // TypeId(86)
 
-type "functype//wado-compiler/tests/fixtures/closure_3.wado/__Closure_8::__call" = fn(ref "wado-compiler/tests/fixtures/closure_3.wado//__Closure_8", i32) -> i32;  // TypeId(87)
+type "functype//wado-compiler/tests/fixtures/closure_3.wado/__Closure_8::__call" = fn(i32) -> i32;  // TypeId(87)
 
-type "functype//wado-compiler/tests/fixtures/closure_3.wado/__Closure_10::__call" = fn(ref "wado-compiler/tests/fixtures/closure_3.wado//__Closure_10", i32) -> bool;  // TypeId(88)
+type "functype//wado-compiler/tests/fixtures/closure_3.wado/__Closure_10::__call" = fn(i32) -> bool;  // TypeId(88)
 
-type "functype//wado-compiler/tests/fixtures/closure_3.wado/__Closure_16::__call" = fn(ref "wado-compiler/tests/fixtures/closure_3.wado//__Closure_16", i32) -> i32;  // TypeId(89)
+type "functype//wado-compiler/tests/fixtures/closure_3.wado/__Closure_16::__call" = fn(i32) -> i32;  // TypeId(89)
 
 type "functype//wado-compiler/tests/fixtures/closure_3.wado/Array<i32>::sort_by$__Closure_18" = fn(ref "core:prelude//Array<i32>");  // TypeId(90)
 
@@ -264,7 +264,7 @@ type "functype//wado-compiler/tests/fixtures/closure_3.wado/__Closure_11::__call
 
 type "functype//wado-compiler/tests/fixtures/closure_3.wado/__Closure_17::__call" = fn(i32, i32) -> i32;  // TypeId(101)
 
-type "functype//wado-compiler/tests/fixtures/closure_3.wado/__Closure_20::__call" = fn(ref "wado-compiler/tests/fixtures/closure_3.wado//__Closure_20", i32, i32) -> "core:prelude/traits.wado//enum:Ordering";  // TypeId(102)
+type "functype//wado-compiler/tests/fixtures/closure_3.wado/__Closure_20::__call" = fn(i32, i32) -> "core:prelude/traits.wado//enum:Ordering";  // TypeId(102)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -2943,19 +2943,19 @@ fn "wado-compiler/tests/fixtures/closure_3.wado/__Closure_5::__call"(self) {
     return self.value;
 }
 
-fn "wado-compiler/tests/fixtures/closure_3.wado/__Closure_6::__call"(self, x) {
+fn "wado-compiler/tests/fixtures/closure_3.wado/__Closure_6::__call"(x) {
     return (x % 2) == 0;
 }
 
-fn "wado-compiler/tests/fixtures/closure_3.wado/__Closure_7::__call"(self, x) {
+fn "wado-compiler/tests/fixtures/closure_3.wado/__Closure_7::__call"(x) {
     return x * x;
 }
 
-fn "wado-compiler/tests/fixtures/closure_3.wado/__Closure_8::__call"(self, x) {
+fn "wado-compiler/tests/fixtures/closure_3.wado/__Closure_8::__call"(x) {
     return x * 2;
 }
 
-fn "wado-compiler/tests/fixtures/closure_3.wado/__Closure_10::__call"(self, x) {
+fn "wado-compiler/tests/fixtures/closure_3.wado/__Closure_10::__call"(x) {
     return (x % 2) == 0;
 }
 
@@ -2963,7 +2963,7 @@ fn "wado-compiler/tests/fixtures/closure_3.wado/__Closure_11::__call"(self, x) {
     return x > self;
 }
 
-fn "wado-compiler/tests/fixtures/closure_3.wado/__Closure_16::__call"(self, x) {
+fn "wado-compiler/tests/fixtures/closure_3.wado/__Closure_16::__call"(x) {
     return x * 2;
 }
 
@@ -2971,7 +2971,7 @@ fn "wado-compiler/tests/fixtures/closure_3.wado/__Closure_17::__call"(self, x) {
     return x * self;
 }
 
-fn "wado-compiler/tests/fixtures/closure_3.wado/__Closure_20::__call"(self, a, b) {
+fn "wado-compiler/tests/fixtures/closure_3.wado/__Closure_20::__call"(a, b) {
     if a < b {
         return 0;
     }
@@ -3210,27 +3210,19 @@ fn "closure/wado-compiler/tests/fixtures/closure_3.wado/__closure_wrapper_2"(__e
 }
 
 fn "closure/wado-compiler/tests/fixtures/closure_3.wado/__closure_wrapper_3"(__env, __p0) {
-    let __typed_env: ref "wado-compiler/tests/fixtures/closure_3.wado//__Closure_6";
-    __typed_env = ref.cast "wado-compiler/tests/fixtures/closure_3.wado//__Closure_6"(__env);
-    return "wado-compiler/tests/fixtures/closure_3.wado/__Closure_6::__call"(__typed_env, __p0);
+    return "wado-compiler/tests/fixtures/closure_3.wado/__Closure_6::__call"(__p0);
 }
 
 fn "closure/wado-compiler/tests/fixtures/closure_3.wado/__closure_wrapper_4"(__env, __p0) {
-    let __typed_env: ref "wado-compiler/tests/fixtures/closure_3.wado//__Closure_7";
-    __typed_env = ref.cast "wado-compiler/tests/fixtures/closure_3.wado//__Closure_7"(__env);
-    return "wado-compiler/tests/fixtures/closure_3.wado/__Closure_7::__call"(__typed_env, __p0);
+    return "wado-compiler/tests/fixtures/closure_3.wado/__Closure_7::__call"(__p0);
 }
 
 fn "closure/wado-compiler/tests/fixtures/closure_3.wado/__closure_wrapper_5"(__env, __p0) {
-    let __typed_env: ref "wado-compiler/tests/fixtures/closure_3.wado//__Closure_8";
-    __typed_env = ref.cast "wado-compiler/tests/fixtures/closure_3.wado//__Closure_8"(__env);
-    return "wado-compiler/tests/fixtures/closure_3.wado/__Closure_8::__call"(__typed_env, __p0);
+    return "wado-compiler/tests/fixtures/closure_3.wado/__Closure_8::__call"(__p0);
 }
 
 fn "closure/wado-compiler/tests/fixtures/closure_3.wado/__closure_wrapper_6"(__env, __p0) {
-    let __typed_env: ref "wado-compiler/tests/fixtures/closure_3.wado//__Closure_10";
-    __typed_env = ref.cast "wado-compiler/tests/fixtures/closure_3.wado//__Closure_10"(__env);
-    return "wado-compiler/tests/fixtures/closure_3.wado/__Closure_10::__call"(__typed_env, __p0);
+    return "wado-compiler/tests/fixtures/closure_3.wado/__Closure_10::__call"(__p0);
 }
 
 fn "closure/wado-compiler/tests/fixtures/closure_3.wado/__closure_wrapper_7"(__env, __p0) {
@@ -3240,9 +3232,7 @@ fn "closure/wado-compiler/tests/fixtures/closure_3.wado/__closure_wrapper_7"(__e
 }
 
 fn "closure/wado-compiler/tests/fixtures/closure_3.wado/__closure_wrapper_8"(__env, __p0) {
-    let __typed_env: ref "wado-compiler/tests/fixtures/closure_3.wado//__Closure_16";
-    __typed_env = ref.cast "wado-compiler/tests/fixtures/closure_3.wado//__Closure_16"(__env);
-    return "wado-compiler/tests/fixtures/closure_3.wado/__Closure_16::__call"(__typed_env, __p0);
+    return "wado-compiler/tests/fixtures/closure_3.wado/__Closure_16::__call"(__p0);
 }
 
 fn "closure/wado-compiler/tests/fixtures/closure_3.wado/__closure_wrapper_9"(__env, __p0) {
@@ -3252,9 +3242,7 @@ fn "closure/wado-compiler/tests/fixtures/closure_3.wado/__closure_wrapper_9"(__e
 }
 
 fn "closure/wado-compiler/tests/fixtures/closure_3.wado/__closure_wrapper_10"(__env, __p0, __p1) {
-    let __typed_env: ref "wado-compiler/tests/fixtures/closure_3.wado//__Closure_20";
-    __typed_env = ref.cast "wado-compiler/tests/fixtures/closure_3.wado//__Closure_20"(__env);
-    return "wado-compiler/tests/fixtures/closure_3.wado/__Closure_20::__call"(__typed_env, __p0.value, __p1.value);
+    return "wado-compiler/tests/fixtures/closure_3.wado/__Closure_20::__call"(__p0.value, __p1.value);
 }
 
 export fn "wado-compiler/tests/fixtures/closure_3.wado/__cm_export____test_0_nested_basic" as "__test_0_nested_basic"

@@ -395,7 +395,7 @@ type "functype//core:prelude/format.wado/String^Inspect::inspect" = fn(ref "core
 
 type "functype//wado-compiler/tests/fixtures/serde_json_rename_all.wado/Config^Deserialize::deserialize<JsonDeserializer>" = fn(ref "core:json//JsonDeserializer") -> ref "core:prelude/types.wado//Result<Config,DeserializeError>";  // TypeId(117)
 
-type "functype//wado-compiler/tests/fixtures/serde_json_rename_all.wado/__Closure_2::__call" = fn(ref "wado-compiler/tests/fixtures/serde_json_rename_all.wado//__Closure_2", ref "core:prelude/string.wado//String", i32, i32) -> ref "core:prelude/types.wado//Option<i32>";  // TypeId(118)
+type "functype//wado-compiler/tests/fixtures/serde_json_rename_all.wado/__Closure_2::__call" = fn(ref "core:prelude/string.wado//String", i32, i32) -> ref "core:prelude/types.wado//Option<i32>";  // TypeId(118)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(119)
 
@@ -5152,14 +5152,12 @@ fn "core:json/JsonStructSerializer^SerializeStruct::field<i32>"(self, name, valu
     return r;
 }
 
-fn "wado-compiler/tests/fixtures/serde_json_rename_all.wado/__Closure_2::__call"(self, __input, __start, __end) {
+fn "wado-compiler/tests/fixtures/serde_json_rename_all.wado/__Closure_2::__call"(__input, __start, __end) {
     return "wado-compiler/tests/fixtures/serde_json_rename_all.wado/_config_field_lookup"(__input, __start, __end);
 }
 
 fn "closure/wado-compiler/tests/fixtures/serde_json_rename_all.wado/__closure_wrapper_0"(__env, __p0, __p1, __p2) {
-    let __typed_env: ref "wado-compiler/tests/fixtures/serde_json_rename_all.wado//__Closure_2";
-    __typed_env = ref.cast "wado-compiler/tests/fixtures/serde_json_rename_all.wado//__Closure_2"(__env);
-    return "wado-compiler/tests/fixtures/serde_json_rename_all.wado/__Closure_2::__call"(__typed_env, __p0, __p1, __p2);
+    return "wado-compiler/tests/fixtures/serde_json_rename_all.wado/__Closure_2::__call"(__p0, __p1, __p2);
 }
 
 export fn "wado-compiler/tests/fixtures/serde_json_rename_all.wado/__cm_export____test_0_serialize_with_rename_all_snake_case" as "__test_0_serialize_with_rename_all_snake_case"

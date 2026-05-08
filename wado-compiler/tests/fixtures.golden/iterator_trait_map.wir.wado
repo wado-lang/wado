@@ -98,9 +98,9 @@ type "functype//core:prelude/format.wado/String^Inspect::inspect" = fn(ref "core
 
 type "functype//core:prelude/string.wado/String::from_iter<IterMap<StrCharIter,char>>" = fn(ref "core:prelude/traits.wado//IterMap<StrCharIter,char>") -> ref "core:prelude/string.wado//String";  // TypeId(36)
 
-type "functype//wado-compiler/tests/fixtures/iterator_trait_map.wado/__Closure_0::__call" = fn(ref "wado-compiler/tests/fixtures/iterator_trait_map.wado//__Closure_0", char) -> char;  // TypeId(37)
+type "functype//wado-compiler/tests/fixtures/iterator_trait_map.wado/__Closure_0::__call" = fn(char) -> char;  // TypeId(37)
 
-type "functype//wado-compiler/tests/fixtures/iterator_trait_map.wado/__Closure_1::__call" = fn(ref "wado-compiler/tests/fixtures/iterator_trait_map.wado//__Closure_1", char) -> char;  // TypeId(38)
+type "functype//wado-compiler/tests/fixtures/iterator_trait_map.wado/__Closure_1::__call" = fn(char) -> char;  // TypeId(38)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(39)
 
@@ -1049,24 +1049,20 @@ fn "core:prelude/string.wado/String::from_iter<IterMap<StrCharIter,char>>"(iter)
     return s;
 }
 
-fn "wado-compiler/tests/fixtures/iterator_trait_map.wado/__Closure_0::__call"(self, c) {
+fn "wado-compiler/tests/fixtures/iterator_trait_map.wado/__Closure_0::__call"(c) {
     return "core:prelude/primitive.wado/char::to_ascii_lowercase"(c);
 }
 
-fn "wado-compiler/tests/fixtures/iterator_trait_map.wado/__Closure_1::__call"(self, c) {
+fn "wado-compiler/tests/fixtures/iterator_trait_map.wado/__Closure_1::__call"(c) {
     return "core:prelude/primitive.wado/char::to_ascii_uppercase"(c);
 }
 
 fn "closure/wado-compiler/tests/fixtures/iterator_trait_map.wado/__closure_wrapper_0"(__env, __p0) {
-    let __typed_env: ref "wado-compiler/tests/fixtures/iterator_trait_map.wado//__Closure_0";
-    __typed_env = ref.cast "wado-compiler/tests/fixtures/iterator_trait_map.wado//__Closure_0"(__env);
-    return "wado-compiler/tests/fixtures/iterator_trait_map.wado/__Closure_0::__call"(__typed_env, __p0);
+    return "wado-compiler/tests/fixtures/iterator_trait_map.wado/__Closure_0::__call"(__p0);
 }
 
 fn "closure/wado-compiler/tests/fixtures/iterator_trait_map.wado/__closure_wrapper_1"(__env, __p0) {
-    let __typed_env: ref "wado-compiler/tests/fixtures/iterator_trait_map.wado//__Closure_1";
-    __typed_env = ref.cast "wado-compiler/tests/fixtures/iterator_trait_map.wado//__Closure_1"(__env);
-    return "wado-compiler/tests/fixtures/iterator_trait_map.wado/__Closure_1::__call"(__typed_env, __p0);
+    return "wado-compiler/tests/fixtures/iterator_trait_map.wado/__Closure_1::__call"(__p0);
 }
 
 export fn "wado-compiler/tests/fixtures/iterator_trait_map.wado/__cm_export__run" as "run"

@@ -392,11 +392,11 @@ type "functype//wado-compiler/tests/fixtures/serde_synth.wado/User^Deserialize::
 
 type "functype//wado-compiler/tests/fixtures/serde_synth.wado/Point^Deserialize::deserialize<JsonDeserializer>" = fn(ref "core:json//JsonDeserializer") -> ref "core:prelude/types.wado//Result<Point,DeserializeError>";  // TypeId(125)
 
-type "functype//wado-compiler/tests/fixtures/serde_synth.wado/__Closure_2::__call" = fn(ref "wado-compiler/tests/fixtures/serde_synth.wado//__Closure_2", ref "core:prelude/string.wado//String", i32, i32) -> ref "core:prelude/types.wado//Option<i32>";  // TypeId(126)
+type "functype//wado-compiler/tests/fixtures/serde_synth.wado/__Closure_2::__call" = fn(ref "core:prelude/string.wado//String", i32, i32) -> ref "core:prelude/types.wado//Option<i32>";  // TypeId(126)
 
-type "functype//wado-compiler/tests/fixtures/serde_synth.wado/__Closure_3::__call" = fn(ref "wado-compiler/tests/fixtures/serde_synth.wado//__Closure_3", ref "core:prelude/string.wado//String", i32, i32) -> ref "core:prelude/types.wado//Option<i32>";  // TypeId(127)
+type "functype//wado-compiler/tests/fixtures/serde_synth.wado/__Closure_3::__call" = fn(ref "core:prelude/string.wado//String", i32, i32) -> ref "core:prelude/types.wado//Option<i32>";  // TypeId(127)
 
-type "functype//wado-compiler/tests/fixtures/serde_synth.wado/__Closure_4::__call" = fn(ref "wado-compiler/tests/fixtures/serde_synth.wado//__Closure_4", ref "core:prelude/string.wado//String", i32, i32) -> ref "core:prelude/types.wado//Option<i32>";  // TypeId(128)
+type "functype//wado-compiler/tests/fixtures/serde_synth.wado/__Closure_4::__call" = fn(ref "core:prelude/string.wado//String", i32, i32) -> ref "core:prelude/types.wado//Option<i32>";  // TypeId(128)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(129)
 
@@ -6383,34 +6383,28 @@ fn "wado-compiler/tests/fixtures/serde_synth.wado/Point^Deserialize::deserialize
     return struct.new "core:prelude/types.wado//Result<Point,DeserializeError>::Ok" { discriminant: 0, payload_0: struct.new "wado-compiler/tests/fixtures/serde_synth.wado//Point" { x: x, y: y } };
 }
 
-fn "wado-compiler/tests/fixtures/serde_synth.wado/__Closure_2::__call"(self, __input, __start, __end) {
+fn "wado-compiler/tests/fixtures/serde_synth.wado/__Closure_2::__call"(__input, __start, __end) {
     return "wado-compiler/tests/fixtures/serde_synth.wado/_config_field_lookup"(__input, __start, __end);
 }
 
-fn "wado-compiler/tests/fixtures/serde_synth.wado/__Closure_3::__call"(self, __input, __start, __end) {
+fn "wado-compiler/tests/fixtures/serde_synth.wado/__Closure_3::__call"(__input, __start, __end) {
     return "wado-compiler/tests/fixtures/serde_synth.wado/_user_field_lookup"(__input, __start, __end);
 }
 
-fn "wado-compiler/tests/fixtures/serde_synth.wado/__Closure_4::__call"(self, __input, __start, __end) {
+fn "wado-compiler/tests/fixtures/serde_synth.wado/__Closure_4::__call"(__input, __start, __end) {
     return "wado-compiler/tests/fixtures/serde_synth.wado/_point_field_lookup"(__input, __start, __end);
 }
 
 fn "closure/wado-compiler/tests/fixtures/serde_synth.wado/__closure_wrapper_0"(__env, __p0, __p1, __p2) {
-    let __typed_env: ref "wado-compiler/tests/fixtures/serde_synth.wado//__Closure_2";
-    __typed_env = ref.cast "wado-compiler/tests/fixtures/serde_synth.wado//__Closure_2"(__env);
-    return "wado-compiler/tests/fixtures/serde_synth.wado/__Closure_2::__call"(__typed_env, __p0, __p1, __p2);
+    return "wado-compiler/tests/fixtures/serde_synth.wado/__Closure_2::__call"(__p0, __p1, __p2);
 }
 
 fn "closure/wado-compiler/tests/fixtures/serde_synth.wado/__closure_wrapper_1"(__env, __p0, __p1, __p2) {
-    let __typed_env: ref "wado-compiler/tests/fixtures/serde_synth.wado//__Closure_3";
-    __typed_env = ref.cast "wado-compiler/tests/fixtures/serde_synth.wado//__Closure_3"(__env);
-    return "wado-compiler/tests/fixtures/serde_synth.wado/__Closure_3::__call"(__typed_env, __p0, __p1, __p2);
+    return "wado-compiler/tests/fixtures/serde_synth.wado/__Closure_3::__call"(__p0, __p1, __p2);
 }
 
 fn "closure/wado-compiler/tests/fixtures/serde_synth.wado/__closure_wrapper_2"(__env, __p0, __p1, __p2) {
-    let __typed_env: ref "wado-compiler/tests/fixtures/serde_synth.wado//__Closure_4";
-    __typed_env = ref.cast "wado-compiler/tests/fixtures/serde_synth.wado//__Closure_4"(__env);
-    return "wado-compiler/tests/fixtures/serde_synth.wado/__Closure_4::__call"(__typed_env, __p0, __p1, __p2);
+    return "wado-compiler/tests/fixtures/serde_synth.wado/__Closure_4::__call"(__p0, __p1, __p2);
 }
 
 export fn "wado-compiler/tests/fixtures/serde_synth.wado/__cm_export____test_0_synthesized_deserialize_point" as "__test_0_synthesized_deserialize_point"

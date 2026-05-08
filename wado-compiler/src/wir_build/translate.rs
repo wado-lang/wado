@@ -144,34 +144,34 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
             None => continue,
         };
 
-        // Get the __call method's param/result types (excluding self)
-        let call_func = functor.call_method.borrow();
-        let user_param_count = call_func.params.len() - 1; // skip self
+        // The wrapper's external signature is governed by the *canonical*
+        // closure signature — the param / return types of the user-written
+        // closure literal — not by the live `call_method.params`, which
+        // TIR DAE may have shrunk. Decoupling here is what lets DAE drop
+        // an unused `self` (no captures) or unused user args from `__call`
+        // without desynchronising the function-table slot type from the
+        // typed-fn callers that dispatch through it.
+        let user_param_count = functor.canonical_user_params.len();
         let type_table = &*ctx.package.type_table.borrow();
-        let user_params: Vec<WirType> = call_func
-            .params
+        let user_params: Vec<WirType> = functor
+            .canonical_user_params
             .iter()
-            .skip(1) // skip self parameter
-            .map(|p| ctx.type_id_to_wir_type(type_table, p.type_id))
+            .map(|(_, ty)| ctx.type_id_to_wir_type(type_table, *ty))
             .collect();
-        let result_wirs: Vec<WirType> = if call_func.return_type == crate::tir::TypeTable::UNIT
-            || call_func.return_type == crate::tir::TypeTable::NEVER
+        let result_wirs: Vec<WirType> = if functor.canonical_return == crate::tir::TypeTable::UNIT
+            || functor.canonical_return == crate::tir::TypeTable::NEVER
         {
             vec![]
         } else {
-            vec![ctx.type_id_to_wir_type(type_table, call_func.return_type)]
+            vec![ctx.type_id_to_wir_type(type_table, functor.canonical_return)]
         };
-        drop(call_func);
         let _ = type_table;
 
-        // Decide vtable schema for this functor by looking the
-        // signature up in the inspectable gate computed at WirContext
-        // start. Non-inspectable signatures get the slim
-        // `{ env, func }` schema and skip inspect wrapper
-        // registration entirely.
-        let call_func = functor.call_method.borrow();
-        let return_type = call_func.return_type;
-        drop(call_func);
+        // Decide vtable schema for this functor by looking the canonical
+        // return type up in the inspectable gate computed at WirContext
+        // start. Non-inspectable signatures get the slim `{ env, func }`
+        // schema and skip inspect wrapper registration entirely.
+        let return_type = functor.canonical_return;
         let is_inspectable = ctx
             .inspectable_fn_dispatch
             .contains(&(user_param_count, return_type));
@@ -194,6 +194,51 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
             _ => continue,
         };
 
+        // Map each surviving `call_method.params` entry to its source slot
+        // in the wrapper. Position 0 is always self (env, refcast); the
+        // other positions match canonical_user_params by name. The mapping
+        // tells `register_call_wrapper` exactly which wrapper-local to
+        // forward into the inner `__call` per surviving param, so DAE can
+        // freely shrink `__call.params` without breaking the wrapper.
+        let call_func = functor.call_method.borrow();
+        // Map each surviving `call_method.params` entry back to its source.
+        // The synthesised env self always lives at position 0 with name
+        // "self" AND the functor's ref type; that combination is the env
+        // discriminator (a user-declared `self` parameter — common in
+        // trait-method dispatch closures synthesised by `effect_dispatch`
+        // — has the user's resource ref type, not the functor's struct
+        // ref). Every other surviving param matches a `canonical_user_params`
+        // entry by name.
+        let live_param_sources: Vec<CallWrapperArg> = call_func
+            .params
+            .iter()
+            .enumerate()
+            .map(|(i, p)| {
+                if i == 0 && p.name == "self" && p.type_id == functor.ref_type_id {
+                    CallWrapperArg::TypedEnv
+                } else {
+                    let idx = functor
+                        .canonical_user_params
+                        .iter()
+                        .position(|(name, _)| name == &p.name)
+                        .unwrap_or_else(|| {
+                            panic!(
+                                "closure {functor_name}::__call param `{}` has no matching \
+                                 canonical user param (canonical: {:?})",
+                                p.name,
+                                functor
+                                    .canonical_user_params
+                                    .iter()
+                                    .map(|(n, _)| n)
+                                    .collect::<Vec<_>>(),
+                            )
+                        });
+                    CallWrapperArg::UserParam(idx)
+                }
+            })
+            .collect();
+        drop(call_func);
+
         // Register the call wrapper.
         let global_id = ctx.closure_wrapper_funcs.len();
         let call_wrapper_fq = format!("closure/{module_source}/__closure_wrapper_{global_id}");
@@ -207,6 +252,7 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
             user_params_clone,
             !result_wirs.is_empty(),
             call_func_id,
+            &live_param_sources,
         );
 
         // Register the inspect / inspect_alt wrappers only when the
@@ -254,8 +300,21 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
     }
 }
 
-/// Build a call wrapper: refcast `env` to `&__Closure_N`, then
-/// `call __Closure_N::__call(env, args...)`.
+/// Source of an argument the wrapper forwards into the inner `__call`.
+/// One entry per surviving `call_method.params` slot.
+#[derive(Debug, Clone, Copy)]
+enum CallWrapperArg {
+    /// The refcast `__typed_env` local — corresponds to `__call`'s `self`.
+    TypedEnv,
+    /// The wrapper's `__pN` user-param local at the given canonical index.
+    UserParam(usize),
+}
+
+/// Build a call wrapper: refcast `env` to `&__Closure_N` (only when the
+/// surviving `__call` still expects `self`), then `call __Closure_N::__call`
+/// with the surviving args. The wrapper's external signature stays
+/// `(env, canonical_user_params...) -> canonical_return` regardless of
+/// which `__call` params have been DAE'd.
 #[allow(clippy::too_many_arguments)]
 fn register_call_wrapper(
     ctx: &mut WirContext<'_>,
@@ -267,6 +326,7 @@ fn register_call_wrapper(
     user_params: Vec<crate::wir::WirType>,
     has_result: bool,
     call_func_id: crate::wir::WirFuncId,
+    live_param_sources: &[CallWrapperArg],
 ) -> crate::wir::WirFuncId {
     use crate::wir::{WirFunction, WirName, WirType};
 
@@ -277,15 +337,20 @@ fn register_call_wrapper(
         nullable: true,
     };
 
-    let mut body = vec![
-        WirInstr::DeclareLocal {
+    let needs_typed_env = live_param_sources
+        .iter()
+        .any(|s| matches!(s, CallWrapperArg::TypedEnv));
+
+    let mut body = Vec::new();
+    if needs_typed_env {
+        body.push(WirInstr::DeclareLocal {
             name: typed_env_local.clone(),
             ty: WirType::Ref {
                 type_id: functor_struct_type_id.clone(),
                 nullable: false,
             },
-        },
-        WirInstr::LocalSet {
+        });
+        body.push(WirInstr::LocalSet {
             name: typed_env_local.clone(),
             value: Box::new(WirInstr::RefCast {
                 type_id: functor_struct_type_id,
@@ -295,19 +360,22 @@ fn register_call_wrapper(
                     result_ty: abstract_struct_nullable,
                 }),
             }),
-        },
-    ];
-
-    let mut call_args = vec![WirInstr::LocalGet {
-        name: typed_env_local,
-        result_ty: functor_wir_type,
-    }];
-    for i in 0..user_param_count {
-        call_args.push(WirInstr::LocalGet {
-            name: format!("__p{i}"),
-            result_ty: user_params[i].clone(),
         });
     }
+
+    let call_args: Vec<WirInstr> = live_param_sources
+        .iter()
+        .map(|src| match src {
+            CallWrapperArg::TypedEnv => WirInstr::LocalGet {
+                name: typed_env_local.clone(),
+                result_ty: functor_wir_type.clone(),
+            },
+            CallWrapperArg::UserParam(idx) => WirInstr::LocalGet {
+                name: format!("__p{idx}"),
+                result_ty: user_params[*idx].clone(),
+            },
+        })
+        .collect();
 
     let call_instr = WirInstr::Call {
         func_id: call_func_id,
