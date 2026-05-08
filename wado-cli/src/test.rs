@@ -15,10 +15,11 @@ use wasmtime::Engine;
 use wasmtime::component::Component;
 
 use crate::args::{self, CliExit};
-use crate::compile::{self, OptLevel};
+use crate::compile::{self, CompileFlags, OptLevel};
 use crate::discover;
 use crate::manifest as project_manifest;
 use crate::runtime;
+use wado_compiler::LogLevel;
 
 const DEFAULT_TIMEOUT_MS: u64 = 5000;
 // Epoch tick interval for wasmtime's epoch-based interruption.
@@ -35,8 +36,31 @@ pub struct TestOptions {
     pub package_runs: Vec<PackageRun>,
     pub jobs: usize,
     pub opt_level: OptLevel,
+    pub log_level: LogLevel,
+    pub inline_threshold: Option<usize>,
+    pub opt_iterations: Option<u32>,
+    /// `None` lets the compiler auto-select the debug allocator for the
+    /// `test` world; explicit `--allocator` overrides that.
+    pub allocator: Option<String>,
     /// Preopened directories as `(host_path, guest_path)` pairs.
     pub preopened_dirs: Vec<(String, String)>,
+}
+
+impl TestOptions {
+    /// Build the `CompileFlags` shared with `compile`/`run`/`serve`. The
+    /// `target_world` is pinned to `test` so test functions become exports
+    /// and DCE prunes everything else.
+    fn compile_flags(&self) -> CompileFlags {
+        CompileFlags {
+            opt_level: self.opt_level,
+            log_level: self.log_level,
+            target_world: Some("test".to_string()),
+            skip_validation: false,
+            inline_threshold: self.inline_threshold,
+            opt_iterations: self.opt_iterations,
+            allocator: self.allocator.clone(),
+        }
+    }
 }
 
 /// One package context's discovered test files.
@@ -53,6 +77,10 @@ enum Opt {
     Exclude,
     Parallel,
     OptLevel,
+    InlineThreshold,
+    OptIterations,
+    LogLevel,
+    Allocator,
     Dir,
     NoDir,
     Help,
@@ -64,6 +92,10 @@ impl Opt {
         Self::Exclude,
         Self::Parallel,
         Self::OptLevel,
+        Self::InlineThreshold,
+        Self::OptIterations,
+        Self::LogLevel,
+        Self::Allocator,
         Self::Dir,
         Self::NoDir,
         Self::Help,
@@ -90,18 +122,12 @@ impl Opt {
                 desc: "Number of parallel workers (default: num CPUs)",
             },
             Self::OptLevel => args::OPT_LEVEL_SPEC,
-            Self::Dir => args::OptSpec {
-                long: Some("dir"),
-                short: None,
-                value: Some("<path>"),
-                desc: "Preopen directory for WASI filesystem access\nUse --dir host::guest to specify different guest path",
-            },
-            Self::NoDir => args::OptSpec {
-                long: Some("no-dir"),
-                short: None,
-                value: None,
-                desc: "Do not preopen any directories (disables the default)",
-            },
+            Self::InlineThreshold => args::INLINE_THRESHOLD_SPEC,
+            Self::OptIterations => args::OPT_ITERATIONS_SPEC,
+            Self::LogLevel => args::LOG_LEVEL_SPEC,
+            Self::Allocator => args::ALLOCATOR_SPEC,
+            Self::Dir => args::DIR_SPEC,
+            Self::NoDir => args::NO_DIR_SPEC,
             Self::Help => args::HELP_SPEC,
         }
     }
@@ -303,6 +329,10 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
     let mut cli_excludes: Vec<String> = Vec::new();
     let mut jobs: Option<usize> = None;
     let mut opt_level = OptLevel::default();
+    let mut log_level = LogLevel::default();
+    let mut inline_threshold: Option<usize> = None;
+    let mut opt_iterations: Option<u32> = None;
+    let mut allocator: Option<String> = None;
     let mut preopened_dirs: Vec<(String, String)> = Vec::new();
     let mut explicit_dirs = false;
     let mut no_dir = false;
@@ -324,33 +354,23 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
                         }
                     }
                 }
-                Opt::OptLevel => {
-                    let val = parser.optional_value();
-                    let level_str = val
-                        .as_ref()
-                        .map(|v| v.to_string_lossy())
-                        .unwrap_or_default();
-                    opt_level = match level_str.as_ref() {
-                        "" | "0" | "g" => OptLevel::O0,
-                        "1" => OptLevel::O1,
-                        "2" => OptLevel::O2,
-                        "3" => OptLevel::O3,
-                        "s" => OptLevel::Os,
-                        _ => {
-                            return Err(CliExit::error(format!(
-                                "unknown optimization level '-O{level_str}'. Use -O0, -O1, -O2, -O3, -Os, or -Og"
-                            )));
-                        }
-                    };
+                Opt::OptLevel => opt_level = compile::parse_opt_level_arg(&mut parser)?,
+                Opt::InlineThreshold => {
+                    inline_threshold = Some(args::parse_inline_threshold_arg(
+                        "--optimize-inline-threshold",
+                        &mut parser,
+                    )?);
                 }
+                Opt::OptIterations => {
+                    opt_iterations = Some(args::parse_opt_iterations_arg(
+                        "--optimize-iterations",
+                        &mut parser,
+                    )?);
+                }
+                Opt::LogLevel => log_level = args::parse_log_level_arg(&mut parser)?,
+                Opt::Allocator => allocator = Some(args::require_string(&mut parser)?),
                 Opt::Dir => {
-                    let dir_spec = args::require_string(&mut parser)?;
-                    let (host, guest) = if let Some((h, g)) = dir_spec.split_once("::") {
-                        (h.to_owned(), g.to_owned())
-                    } else {
-                        (dir_spec.clone(), dir_spec)
-                    };
-                    preopened_dirs.push((host, guest));
+                    preopened_dirs.push(args::parse_dir_arg(&mut parser)?);
                     explicit_dirs = true;
                 }
                 Opt::NoDir => no_dir = true,
@@ -429,6 +449,10 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
         package_runs,
         jobs,
         opt_level,
+        log_level,
+        inline_threshold,
+        opt_iterations,
+        allocator,
         preopened_dirs,
     })
 }
@@ -557,23 +581,15 @@ enum CompileTaskResult {
 /// [`collect_test_jobs`] for how this is driven across threads.
 async fn compile_one_file(
     path: String,
-    opt_level: OptLevel,
+    flags: Arc<CompileFlags>,
     overall_start: Instant,
 ) -> Result<CompileTaskResult> {
-    // Compile with --world test so test functions become component exports
-    // and non-test code is subject to DCE.
+    // `flags.target_world` is pinned to `test` by the caller so test
+    // functions become component exports and non-test code is subject to
+    // DCE; allocator is left at the caller's choice (None auto-selects
+    // the debug allocator for the test world).
     let compile_start = Instant::now();
-    let compile_result = compile::try_compile_with_full_opts(
-        &path,
-        opt_level,
-        wado_compiler::LogLevel::default(),
-        Some("test".to_string()),
-        false,
-        None,
-        None,
-        None, // auto-selects debug allocator for test world
-    )
-    .await;
+    let compile_result = compile::try_compile(&path, &flags).await;
     let compile_duration = compile_start.elapsed();
     let elapsed = format_duration(overall_start.elapsed());
 
@@ -594,7 +610,7 @@ async fn compile_one_file(
     };
 
     let load_start = Instant::now();
-    let engine = Arc::new(runtime::create_test_engine(wasmtime::OptLevel::None)?);
+    let engine = Arc::new(runtime::create_test_engine(flags.opt_level.to_wasmtime())?);
     let component = Arc::new(Component::new(&engine, &compile_result.wasm)?);
     let load_duration = load_start.elapsed();
 
@@ -625,7 +641,7 @@ async fn compile_one_file(
 /// but the `[elapsed]` prefix reflects actual completion time.
 async fn collect_test_jobs(
     paths: &[String],
-    opt_level: OptLevel,
+    flags: Arc<CompileFlags>,
     parallelism: usize,
     overall_start: Instant,
 ) -> Result<(
@@ -641,12 +657,13 @@ async fn collect_test_jobs(
     // bounds the in-flight count to `parallelism`.
     let task_results: Vec<_> = stream::iter(paths.iter().cloned())
         .map(|path| {
+            let flags = Arc::clone(&flags);
             tokio::task::spawn_blocking(move || -> Result<CompileTaskResult> {
                 let rt = tokio::runtime::Builder::new_current_thread()
                     .enable_all()
                     .build()
                     .map_err(|e| anyhow!("failed to create compile runtime: {e}"))?;
-                rt.block_on(compile_one_file(path, opt_level, overall_start))
+                rt.block_on(compile_one_file(path, flags, overall_start))
             })
         })
         .buffer_unordered(parallelism.max(1))
@@ -1104,7 +1121,7 @@ fn print_compile_failures_section(failures: &[CompileFailure]) {
 
 async fn run_one_package(
     pkg_run: &PackageRun,
-    opt_level: OptLevel,
+    flags: Arc<CompileFlags>,
     parallelism: usize,
     preopened_dirs: Arc<Vec<(String, String)>>,
     overall_start: Instant,
@@ -1117,7 +1134,7 @@ async fn run_one_package(
 
     // Phase 1: Compile all files and collect test jobs
     let (modules, jobs, todo_compile_errors, compile_failures) =
-        match collect_test_jobs(&pkg_run.paths, opt_level, parallelism, overall_start).await {
+        match collect_test_jobs(&pkg_run.paths, flags, parallelism, overall_start).await {
             Ok(result) => result,
             Err(e) => {
                 eprintln!("Error collecting tests: {e}");
@@ -1187,14 +1204,17 @@ async fn run_one_package(
 pub async fn run(opts: TestOptions) {
     let overall_start = Instant::now();
     let multi_pkg = opts.package_runs.len() > 1;
+    let flags = Arc::new(opts.compile_flags());
+    let jobs = opts.jobs;
+    let package_runs = opts.package_runs;
     let preopened_dirs = Arc::new(opts.preopened_dirs);
 
     let mut grand = PackageTotals::default();
-    for pkg_run in &opts.package_runs {
+    for pkg_run in &package_runs {
         let totals = run_one_package(
             pkg_run,
-            opts.opt_level,
-            opts.jobs,
+            Arc::clone(&flags),
+            jobs,
             preopened_dirs.clone(),
             overall_start,
             multi_pkg,

@@ -17,17 +17,16 @@ use hyper_util::server::conn::auto;
 use lexopt::Arg::Value;
 use tokio::net::TcpListener;
 use tokio::sync::Mutex;
-use wasmtime::component::{Component, Linker, ResourceTable};
-use wasmtime::{Engine, Store};
-use wasmtime_wasi::{WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
-use wasmtime_wasi_http::WasiHttpCtx;
+use wasmtime::Store;
+use wasmtime::component::{Component, Linker};
+use wasmtime::Engine;
+use wasmtime_wasi_http::p3::Request as WasiRequest;
 use wasmtime_wasi_http::p3::bindings::Service;
-use wasmtime_wasi_http::p3::{Request as WasiRequest, WasiHttpCtxView, WasiHttpView};
 
 use crate::args::{self, CliExit};
-use crate::compile::{self, OptLevel};
+use crate::compile::{self, CompileFlags, OptLevel};
 use crate::manifest;
-use crate::runtime;
+use crate::runtime::{self, WasiState};
 use wado_compiler::LogLevel;
 
 pub struct ServeOptions {
@@ -37,25 +36,36 @@ pub struct ServeOptions {
     pub addr: String,
     pub inline_threshold: Option<usize>,
     pub opt_iterations: Option<u32>,
+    pub allocator: Option<String>,
+    /// Preopened directories as `(host_path, guest_path)` pairs. Empty by
+    /// default — services rarely need filesystem access, so unlike `wado run`
+    /// we do NOT preopen the cwd unless the user passes `--dir`.
+    pub preopened_dirs: Vec<(String, String)>,
 }
 
 #[derive(Clone, Copy)]
 enum Opt {
     Addr,
+    Dir,
+    NoDir,
     OptLevel,
     InlineThreshold,
     OptIterations,
     LogLevel,
+    Allocator,
     Help,
 }
 
 impl Opt {
     const ALL: &[Self] = &[
         Self::Addr,
+        Self::Dir,
+        Self::NoDir,
         Self::OptLevel,
         Self::InlineThreshold,
         Self::OptIterations,
         Self::LogLevel,
+        Self::Allocator,
         Self::Help,
     ];
 
@@ -67,10 +77,13 @@ impl Opt {
                 value: Some("<addr>"),
                 desc: "Address to listen on (default: 0.0.0.0:8080)",
             },
+            Self::Dir => args::DIR_SPEC,
+            Self::NoDir => args::NO_DIR_SPEC,
             Self::OptLevel => args::OPT_LEVEL_SPEC,
             Self::InlineThreshold => args::INLINE_THRESHOLD_SPEC,
             Self::OptIterations => args::OPT_ITERATIONS_SPEC,
             Self::LogLevel => args::LOG_LEVEL_SPEC,
+            Self::Allocator => args::ALLOCATOR_SPEC,
             Self::Help => args::HELP_SPEC,
         }
     }
@@ -104,30 +117,17 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
     let mut addr = "0.0.0.0:8080".to_string();
     let mut inline_threshold: Option<usize> = None;
     let mut opt_iterations: Option<u32> = None;
+    let mut allocator: Option<String> = None;
+    let mut preopened_dirs: Vec<(String, String)> = Vec::new();
+    let mut no_dir = false;
 
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
             match opt {
                 Opt::Addr => addr = args::require_string(&mut parser)?,
-                Opt::OptLevel => {
-                    let val = parser.optional_value();
-                    let level_str = val
-                        .as_ref()
-                        .map(|v| v.to_string_lossy())
-                        .unwrap_or_default();
-                    opt_level = match level_str.as_ref() {
-                        "" | "0" | "g" => OptLevel::O0,
-                        "1" => OptLevel::O1,
-                        "2" => OptLevel::O2,
-                        "3" => OptLevel::O3,
-                        "s" => OptLevel::Os,
-                        _ => {
-                            return Err(CliExit::error(format!(
-                                "unknown optimization level '-O{level_str}'. Use -O0, -O1, -O2, -O3, -Os, or -Og"
-                            )));
-                        }
-                    };
-                }
+                Opt::Dir => preopened_dirs.push(args::parse_dir_arg(&mut parser)?),
+                Opt::NoDir => no_dir = true,
+                Opt::OptLevel => opt_level = compile::parse_opt_level_arg(&mut parser)?,
                 Opt::InlineThreshold => {
                     inline_threshold = Some(args::parse_inline_threshold_arg(
                         "--optimize-inline-threshold",
@@ -141,6 +141,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
                     )?);
                 }
                 Opt::LogLevel => log_level = args::parse_log_level_arg(&mut parser)?,
+                Opt::Allocator => allocator = Some(args::require_string(&mut parser)?),
                 Opt::Help => return Err(CliExit::help(usage)),
             }
         } else if let Value(val) = arg {
@@ -151,6 +152,10 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
         }
     }
 
+    // `--no-dir` is a no-op for `wado serve` (the default is already no
+    // preopens), kept for symmetry with `run`/`test`. Accept it silently.
+    let _ = no_dir;
+
     Ok(ServeOptions {
         input: manifest::resolve_input(input, manifest::EntryPointKind::Service, &usage)?,
         opt_level,
@@ -158,49 +163,9 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
         addr,
         inline_threshold,
         opt_iterations,
+        allocator,
+        preopened_dirs,
     })
-}
-
-struct HttpWasiState {
-    table: ResourceTable,
-    wasi: WasiCtx,
-    http: WasiHttpCtx,
-    http_hooks: crate::http_hooks::WadoHttpHooks,
-}
-
-impl WasiView for HttpWasiState {
-    fn ctx(&mut self) -> WasiCtxView<'_> {
-        WasiCtxView {
-            ctx: &mut self.wasi,
-            table: &mut self.table,
-        }
-    }
-}
-
-impl WasiHttpView for HttpWasiState {
-    fn http(&mut self) -> WasiHttpCtxView<'_> {
-        WasiHttpCtxView {
-            ctx: &mut self.http,
-            table: &mut self.table,
-            hooks: &mut self.http_hooks,
-        }
-    }
-}
-
-fn create_http_linker(engine: &Engine) -> Result<Linker<HttpWasiState>> {
-    let mut linker: Linker<HttpWasiState> = Linker::new(engine);
-    wasmtime_wasi::p3::add_to_linker(&mut linker)?;
-    wasmtime_wasi_http::p3::add_to_linker(&mut linker)?;
-    Ok(linker)
-}
-
-fn create_http_state() -> HttpWasiState {
-    HttpWasiState {
-        table: ResourceTable::new(),
-        wasi: WasiCtxBuilder::new().inherit_stdio().build(),
-        http: WasiHttpCtx::new(),
-        http_hooks: crate::http_hooks::WadoHttpHooks::new(),
-    }
 }
 
 /// Handle a single HTTP request using the Wasm component.
@@ -224,12 +189,15 @@ fn create_http_state() -> HttpWasiState {
 async fn handle_http_request(
     engine: &Engine,
     component: &Component,
-    linker: &Linker<HttpWasiState>,
+    linker: &Linker<WasiState>,
+    preopened_dirs: &[(String, String)],
     req: HyperRequest<hyper::body::Incoming>,
 ) -> Result<HyperResponse<BoxBody<Bytes, Infallible>>> {
     type HttpErrorCode = wasmtime_wasi_http::p3::bindings::http::types::ErrorCode;
 
-    let state = create_http_state();
+    // Each request gets a fresh WASI state — preopened dirs and program
+    // args are scoped per-request, just like the original HttpWasiState.
+    let state = WasiState::new(preopened_dirs, &[])?;
     let mut store = Store::new(engine, state);
 
     let service = Service::instantiate_async(&mut store, component, linker).await?;
@@ -303,15 +271,21 @@ fn error_body(msg: String) -> BoxBody<Bytes, Infallible> {
     BoxBody::new(Full::new(Bytes::from(msg)))
 }
 
-async fn run_http_server(wasm: Vec<u8>, addr: &str) -> Result<()> {
-    let engine = runtime::create_engine(wasmtime::OptLevel::Speed, &runtime::ProfileMode::None)?;
+async fn run_http_server(
+    wasm: Vec<u8>,
+    addr: &str,
+    cranelift_opt: wasmtime::OptLevel,
+    preopened_dirs: Vec<(String, String)>,
+) -> Result<()> {
+    let engine = runtime::create_engine(cranelift_opt, &runtime::ProfileMode::None)?;
     let component = Component::new(&engine, &wasm)?;
-    let linker = create_http_linker(&engine)?;
+    let linker = runtime::create_linker(&engine)?;
 
     // Wrap in Arc for sharing across connections
     let engine = Arc::new(engine);
     let component = Arc::new(component);
     let linker = Arc::new(Mutex::new(linker));
+    let preopened_dirs = Arc::new(preopened_dirs);
 
     let addr: SocketAddr = addr.parse()?;
     let listener = TcpListener::bind(addr).await?;
@@ -326,16 +300,18 @@ async fn run_http_server(wasm: Vec<u8>, addr: &str) -> Result<()> {
         let engine = Arc::clone(&engine);
         let component = Arc::clone(&component);
         let linker = Arc::clone(&linker);
+        let preopened_dirs = Arc::clone(&preopened_dirs);
 
         tokio::spawn(async move {
             let service = service_fn(|req| {
                 let engine = Arc::clone(&engine);
                 let component = Arc::clone(&component);
                 let linker = Arc::clone(&linker);
+                let preopened_dirs = Arc::clone(&preopened_dirs);
 
                 async move {
                     let linker = linker.lock().await;
-                    handle_http_request(&engine, &component, &linker, req).await
+                    handle_http_request(&engine, &component, &linker, &preopened_dirs, req).await
                 }
             });
 
@@ -353,19 +329,19 @@ async fn run_http_server(wasm: Vec<u8>, addr: &str) -> Result<()> {
 }
 
 pub async fn run(opts: ServeOptions) {
-    let wasm = compile::compile_with_full_opts(
-        &opts.input,
-        opts.opt_level,
-        opts.log_level,
-        Some("wasi:http/service".to_string()),
-        false,
-        opts.inline_threshold,
-        opts.opt_iterations,
-        None,
-    )
-    .await;
+    let flags = CompileFlags {
+        opt_level: opts.opt_level,
+        log_level: opts.log_level,
+        target_world: Some("wasi:http/service".to_string()),
+        skip_validation: false,
+        inline_threshold: opts.inline_threshold,
+        opt_iterations: opts.opt_iterations,
+        allocator: opts.allocator,
+    };
+    let cranelift_opt = opts.opt_level.to_wasmtime();
+    let wasm = compile::compile(&opts.input, &flags).await;
 
-    if let Err(e) = run_http_server(wasm, &opts.addr).await {
+    if let Err(e) = run_http_server(wasm, &opts.addr, cranelift_opt, opts.preopened_dirs).await {
         eprintln!("Server error: {e}");
         process::exit(1);
     }

@@ -4,6 +4,7 @@ use std::path::Path;
 use std::process;
 
 use lexopt::Arg::Value;
+use lexopt::Parser;
 use wado_compiler::LogLevel;
 
 use crate::args::{self, CliExit};
@@ -30,6 +31,22 @@ pub enum OptLevel {
     O3,
     /// Size optimizations. O2 plus name section stripping.
     Os,
+}
+
+impl OptLevel {
+    /// Convert to the matching wasmtime Cranelift opt_level so the runtime
+    /// JIT pipeline tracks the Wado front-end optimization level. wasmtime
+    /// has only three Cranelift settings (`None`/`Speed`/`SpeedAndSize`),
+    /// so `O1`/`O2`/`O3` collapse to the same `Speed`. This mirrors what
+    /// `wasmtime` CLI's own `-O` mapping does.
+    #[must_use]
+    pub const fn to_wasmtime(self) -> wasmtime::OptLevel {
+        match self {
+            OptLevel::O0 => wasmtime::OptLevel::None,
+            OptLevel::O1 | OptLevel::O2 | OptLevel::O3 => wasmtime::OptLevel::Speed,
+            OptLevel::Os => wasmtime::OptLevel::SpeedAndSize,
+        }
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -71,6 +88,40 @@ pub struct CompileOptions {
     pub opt_iterations: Option<u32>,
     pub allocator: Option<String>,
     pub lib: bool,
+}
+
+/// Compile-time options shared by every subcommand that produces a Wasm
+/// component (`compile`, `run`, `serve`, `test`).
+///
+/// `target_world` and `allocator` are left as `Option`s because each
+/// subcommand has a different default: `wado run` expects
+/// `wasi:cli/command`, `wado serve` pins `wasi:http/service`, `wado test`
+/// pins `test`, and `wado compile` lets the user override via `--world`.
+/// Same for the allocator, which the compiler picks per-world when `None`.
+#[derive(Clone, Debug, Default)]
+pub struct CompileFlags {
+    pub opt_level: OptLevel,
+    pub log_level: LogLevel,
+    pub target_world: Option<String>,
+    pub skip_validation: bool,
+    pub inline_threshold: Option<usize>,
+    pub opt_iterations: Option<u32>,
+    pub allocator: Option<String>,
+}
+
+impl CompileOptions {
+    #[must_use]
+    pub fn flags(&self) -> CompileFlags {
+        CompileFlags {
+            opt_level: self.opt_level,
+            log_level: self.log_level,
+            target_world: self.target_world.clone(),
+            skip_validation: self.skip_validation,
+            inline_threshold: self.inline_threshold,
+            opt_iterations: self.opt_iterations,
+            allocator: self.allocator.clone(),
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -125,28 +176,13 @@ impl Opt {
                 value: None,
                 desc: "Output WAT to stdout (shorthand for --format wat -o /dev/stdout)",
             },
-            Self::World => args::OptSpec {
-                long: Some("world"),
-                short: None,
-                value: Some("<name>"),
-                desc: "Target world (default: wasi:cli/command)\nUse 'test' to export test functions only",
-            },
+            Self::World => args::WORLD_SPEC,
             Self::OptLevel => args::OPT_LEVEL_SPEC,
             Self::InlineThreshold => args::INLINE_THRESHOLD_SPEC,
             Self::OptIterations => args::OPT_ITERATIONS_SPEC,
             Self::LogLevel => args::LOG_LEVEL_SPEC,
-            Self::NoValidate => args::OptSpec {
-                long: Some("no-validate"),
-                short: None,
-                value: None,
-                desc: "Skip Wasm validation (output raw bytes even if invalid)",
-            },
-            Self::Allocator => args::OptSpec {
-                long: Some("allocator"),
-                short: None,
-                value: Some("<mode>"),
-                desc: "Allocator mode: bump (default for CLI), freelist (default for HTTP), debug (no-reuse + 0xFF poison)",
-            },
+            Self::NoValidate => args::NO_VALIDATE_SPEC,
+            Self::Allocator => args::ALLOCATOR_SPEC,
             Self::Lib => args::OptSpec {
                 long: Some("lib"),
                 short: None,
@@ -204,25 +240,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
                 }
                 Opt::WatToStdout => wat_to_stdout = true,
                 Opt::World => target_world = Some(args::require_string(&mut parser)?),
-                Opt::OptLevel => {
-                    let val = parser.optional_value();
-                    let level_str = val
-                        .as_ref()
-                        .map(|v| v.to_string_lossy())
-                        .unwrap_or_default();
-                    opt_level = match level_str.as_ref() {
-                        "" | "0" | "g" => OptLevel::O0,
-                        "1" => OptLevel::O1,
-                        "2" => OptLevel::O2,
-                        "3" => OptLevel::O3,
-                        "s" => OptLevel::Os,
-                        _ => {
-                            return Err(CliExit::error(format!(
-                                "unknown optimization level '-O{level_str}'. Use -O0, -O1, -O2, -O3, -Os, or -Og"
-                            )));
-                        }
-                    };
-                }
+                Opt::OptLevel => opt_level = parse_opt_level_arg(&mut parser)?,
                 Opt::InlineThreshold => {
                     inline_threshold = Some(args::parse_inline_threshold_arg(
                         "--optimize-inline-threshold",
@@ -284,29 +302,40 @@ fn to_compiler_opt_level(level: OptLevel) -> wado_compiler::OptLevel {
     }
 }
 
-/// Compile a Wado source file with optimization options
-pub async fn compile_with_opts(
-    filename: &str,
-    opt_level: OptLevel,
-    log_level: LogLevel,
-) -> Vec<u8> {
-    compile_with_full_opts(
-        filename, opt_level, log_level, None, false, None, None, None,
-    )
-    .await
+/// Parse the `-O<n>` value (with optional bare-`-O`). Shared by every
+/// subcommand that exposes optimization-level control.
+///
+/// # Errors
+///
+/// Returns an error if the level token after `-O` is not recognised.
+pub fn parse_opt_level_arg(parser: &mut Parser) -> Result<OptLevel, CliExit> {
+    let val = parser.optional_value();
+    let level_str = val
+        .as_ref()
+        .map(|v| v.to_string_lossy())
+        .unwrap_or_default();
+    match level_str.as_ref() {
+        "" | "0" | "g" => Ok(OptLevel::O0),
+        "1" => Ok(OptLevel::O1),
+        "2" => Ok(OptLevel::O2),
+        "3" => Ok(OptLevel::O3),
+        "s" => Ok(OptLevel::Os),
+        _ => Err(CliExit::error(format!(
+            "unknown optimization level '-O{level_str}'. Use -O0, -O1, -O2, -O3, -Os, or -Og"
+        ))),
+    }
 }
 
-/// Try to compile a Wado source file, returning Result instead of exiting on error.
-/// Used by the test runner to gracefully handle compilation failures for `#![TODO]` modules.
-pub async fn try_compile_with_full_opts(
+/// Try to compile a Wado source file, returning the compiler result without
+/// exiting. Used by the test runner to handle `#![TODO]` modules gracefully.
+///
+/// # Errors
+///
+/// Propagates the compiler's own `CompileFailure` (with `is_todo_module`
+/// set when the failure was an expected one for a `#![TODO]` module).
+pub async fn try_compile(
     filename: &str,
-    opt_level: OptLevel,
-    log_level: LogLevel,
-    target_world: Option<String>,
-    skip_validation: bool,
-    inline_threshold: Option<usize>,
-    opt_iterations: Option<u32>,
-    allocator: Option<String>,
+    flags: &CompileFlags,
 ) -> Result<wado_compiler::CompileResult, wado_compiler::CompileFailure> {
     let path = Path::new(filename);
 
@@ -324,7 +353,7 @@ pub async fn try_compile_with_full_opts(
         .parent()
         .map(std::path::Path::to_path_buf)
         .unwrap_or_default();
-    let host = FilesystemCompilerHost::with_log_level(base_path, log_level);
+    let host = FilesystemCompilerHost::with_log_level(base_path, flags.log_level);
 
     let pipeline_outcome = match maybe_run_pipeline(path, &host).await {
         Ok(outcome) => outcome,
@@ -337,13 +366,13 @@ pub async fn try_compile_with_full_opts(
     };
 
     let options = wado_compiler::CompilerOptions {
-        opt_level: to_compiler_opt_level(opt_level),
-        target_world,
-        skip_validation,
-        inline_threshold,
-        opt_iterations,
-        log_level: Some(log_level),
-        allocator,
+        opt_level: to_compiler_opt_level(flags.opt_level),
+        target_world: flags.target_world.clone(),
+        skip_validation: flags.skip_validation,
+        inline_threshold: flags.inline_threshold,
+        opt_iterations: flags.opt_iterations,
+        log_level: Some(flags.log_level),
+        allocator: flags.allocator.clone(),
         invocations: pipeline_outcome.invocations,
         ..Default::default()
     };
@@ -351,65 +380,12 @@ pub async fn try_compile_with_full_opts(
     wado_compiler::compile_with_options(&source, &host, Some(filename), options).await
 }
 
-/// Compile a Wado source file with full options including target world
-pub async fn compile_with_full_opts(
-    filename: &str,
-    opt_level: OptLevel,
-    log_level: LogLevel,
-    target_world: Option<String>,
-    skip_validation: bool,
-    inline_threshold: Option<usize>,
-    opt_iterations: Option<u32>,
-    allocator: Option<String>,
-) -> Vec<u8> {
-    let path = Path::new(filename);
-
-    // Read source file
-    let source = match fs::read_to_string(path) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("Error reading '{}': {e}", path.display());
-            process::exit(1);
-        }
-    };
-
-    // Get base path for relative imports
-    let base_path = path
-        .parent()
-        .map(std::path::Path::to_path_buf)
-        .unwrap_or_default();
-    let host = FilesystemCompilerHost::with_log_level(base_path, log_level);
-
-    let pipeline_outcome = match maybe_run_pipeline(path, &host).await {
-        Ok(outcome) => outcome,
-        Err(e) => {
-            eprintln!("{e}");
-            process::exit(1);
-        }
-    };
-
-    // Build compiler options
-    let options = wado_compiler::CompilerOptions {
-        opt_level: to_compiler_opt_level(opt_level),
-        target_world,
-        skip_validation,
-        inline_threshold,
-        opt_iterations,
-        log_level: Some(log_level),
-        allocator,
-        invocations: pipeline_outcome.invocations,
-        ..Default::default()
-    };
-
-    // Compile using async API
-    let result = wado_compiler::compile_with_options(&source, &host, Some(filename), options).await;
-
-    match result {
+/// Compile a Wado source file and return the produced wasm bytes. Aborts
+/// the process on any failure (diagnostics already printed via the host).
+pub async fn compile(filename: &str, flags: &CompileFlags) -> Vec<u8> {
+    match try_compile(filename, flags).await {
         Ok(result) => result.wasm,
-        Err(_bail) => {
-            // Errors already printed by host via emit_diagnostic
-            process::exit(1);
-        }
+        Err(_) => process::exit(1),
     }
 }
 
@@ -537,17 +513,8 @@ fn wasm_to_wat(wasm: &[u8]) -> String {
 }
 
 pub async fn run(opts: CompileOptions) {
-    let wasm = compile_with_full_opts(
-        &opts.input,
-        opts.opt_level,
-        opts.log_level,
-        opts.target_world,
-        opts.skip_validation,
-        opts.inline_threshold,
-        opts.opt_iterations,
-        opts.allocator,
-    )
-    .await;
+    let flags = opts.flags();
+    let wasm = compile(&opts.input, &flags).await;
 
     // Handle --wat-to-stdout: output WAT to stdout and return
     if opts.wat_to_stdout {
