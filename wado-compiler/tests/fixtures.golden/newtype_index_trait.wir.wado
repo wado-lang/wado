@@ -111,6 +111,7 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 fn "wado-compiler/tests/fixtures/newtype_index_trait.wado/run"() with Stdout {
+    let store: ref "wado-compiler/tests/fixtures/newtype_index_trait.wado//IntStore";
     let first: i32;
     let second: i32;
     let __cond_4: bool;
@@ -168,11 +169,11 @@ fn "wado-compiler/tests/fixtures/newtype_index_trait.wado/run"() with Stdout {
     let rx_142: i32;
     let tx_143: i32;
     let handle_144: i32;
-    drop(__inline__value_copy_T20_2: block -> ref "wado-compiler/tests/fixtures/newtype_index_trait.wado//IntStore" {
+    store = __inline__value_copy_T20_2: block -> ref "wado-compiler/tests/fixtures/newtype_index_trait.wado//IntStore" {
         v_29 = struct.new "wado-compiler/tests/fixtures/newtype_index_trait.wado//IntStore" { a: 10, b: 20, c: 30 };
         break __inline__value_copy_T20_2: struct.new "wado-compiler/tests/fixtures/newtype_index_trait.wado//IntStore" { a: 10, b: 20, c: 30 };
         unreachable;
-    });
+    };
     first = 10;
     second = 20;
     __cond_4 = first == 10;

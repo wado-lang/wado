@@ -90,23 +90,16 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 fn "wado-compiler/tests/fixtures/trait_method_generic_return_on_assoc_type.wado/run"() with Stdout {
-    let n_1: i32;
     let __local_2: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/format.wado//Formatter";
     let message: ref "core:prelude/string.wado//String";
     let rx: i32;
     let tx: i32;
     let handle: i32;
-    let __sroa_reader_value: i32;
-    n_1 = __inline_read_as_i32_IntSource__2: block -> i32 {
-        __sroa_reader_value = 42;
-        break __inline_read_as_i32_IntSource__2: 42;
-        unreachable;
-    };
     message = __tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };
-        "core:prelude/primitive.wado/i32::fmt_decimal"(n_1, __local_3);
+        "core:prelude/primitive.wado/i32::fmt_decimal"(42, __local_3);
         break __tmpl: __local_2;
         unreachable;
     };

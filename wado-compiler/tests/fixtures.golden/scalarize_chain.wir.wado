@@ -97,14 +97,15 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 fn "wado-compiler/tests/fixtures/scalarize_chain.wado/transform"(p) {
+    let inner: ref "wado-compiler/tests/fixtures/scalarize_chain.wado//Pair";
     let a: i32;
     let b: i32;
-    drop(__inline_make_pair_0: block -> ref "wado-compiler/tests/fixtures/scalarize_chain.wado//Pair" {
+    inner = __inline_make_pair_0: block -> ref "wado-compiler/tests/fixtures/scalarize_chain.wado//Pair" {
         a = p.x + 1;
         b = p.y + 2;
         break __inline_make_pair_0: struct.new "wado-compiler/tests/fixtures/scalarize_chain.wado//Pair" { x: a, y: b };
         unreachable;
-    });
+    };
     return a * 2, b * 3;
 }
 

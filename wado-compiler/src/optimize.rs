@@ -434,9 +434,9 @@ fn run_optimization_passes(
         // than at WIR level) lets `inline` see the slimmer signatures on
         // the next iteration and lets `dce` clean up the freshly dead
         // computation in the same fixed-point loop.
-        step!("tir/dae", |p| eliminate_dead_arguments(p));
-        step!("tir/drve", |p| eliminate_dead_return_values(p));
-        step!("tir/elide_local", |p| elide_write_only_locals(p));
+        step!("tir/dae", eliminate_dead_arguments);
+        step!("tir/drve", eliminate_dead_return_values);
+        step!("tir/elide_local", elide_write_only_locals);
         step!("tir/cse", eliminate_common_subexprs);
         step!("tir/store_load_forward", forward_stores_to_loads);
         // `field_forward`'s rewrite responsibilities are absorbed by

@@ -85,17 +85,17 @@ type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/st
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(33)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(34)
+type "functype//wado-compiler/tests/fixtures/global_closure_field.wado/__Closure_2::__call" = fn(ref "wado-compiler/tests/fixtures/global_closure_field.wado//__Closure_2", i32) -> i32;  // TypeId(34)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(35)
+type "functype//wado-compiler/tests/fixtures/global_closure_field.wado/__Closure_3::__call" = fn(ref "wado-compiler/tests/fixtures/global_closure_field.wado//__Closure_3", i32) -> i32;  // TypeId(35)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(36)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(36)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(37)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(37)
 
-type "functype//wado-compiler/tests/fixtures/global_closure_field.wado/__Closure_2::__call" = fn(i32) -> i32;  // TypeId(38)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(38)
 
-type "functype//wado-compiler/tests/fixtures/global_closure_field.wado/__Closure_3::__call" = fn(i32) -> i32;  // TypeId(39)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(39)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -635,20 +635,24 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "wado-compiler/tests/fixtures/global_closure_field.wado/__Closure_2::__call"(y) {
+fn "wado-compiler/tests/fixtures/global_closure_field.wado/__Closure_2::__call"(self, y) {
     return y + 100;
 }
 
-fn "wado-compiler/tests/fixtures/global_closure_field.wado/__Closure_3::__call"(x) {
+fn "wado-compiler/tests/fixtures/global_closure_field.wado/__Closure_3::__call"(self, x) {
     return x * 10;
 }
 
 fn "closure/wado-compiler/tests/fixtures/global_closure_field.wado/__closure_wrapper_0"(__env, __p0) {
-    return "wado-compiler/tests/fixtures/global_closure_field.wado/__Closure_2::__call"(__p0);
+    let __typed_env: ref "wado-compiler/tests/fixtures/global_closure_field.wado//__Closure_2";
+    __typed_env = ref.cast "wado-compiler/tests/fixtures/global_closure_field.wado//__Closure_2"(__env);
+    return "wado-compiler/tests/fixtures/global_closure_field.wado/__Closure_2::__call"(__typed_env, __p0);
 }
 
 fn "closure/wado-compiler/tests/fixtures/global_closure_field.wado/__closure_wrapper_1"(__env, __p0) {
-    return "wado-compiler/tests/fixtures/global_closure_field.wado/__Closure_3::__call"(__p0);
+    let __typed_env: ref "wado-compiler/tests/fixtures/global_closure_field.wado//__Closure_3";
+    __typed_env = ref.cast "wado-compiler/tests/fixtures/global_closure_field.wado//__Closure_3"(__env);
+    return "wado-compiler/tests/fixtures/global_closure_field.wado/__Closure_3::__call"(__typed_env, __p0);
 }
 
 export fn "wado-compiler/tests/fixtures/global_closure_field.wado/__cm_export____test_0_global_closure_runs_after_lazy_init" as "__test_0_global_closure_runs_after_lazy_init"

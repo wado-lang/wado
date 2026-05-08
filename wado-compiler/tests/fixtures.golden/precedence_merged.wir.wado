@@ -6,36 +6,31 @@ type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(0)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(1)
 
-type "functype//wado-compiler/tests/fixtures/precedence_merged.wado/__test_1_assignment_precedence" = fn();  // TypeId(2)
+type "functype//wado-compiler/tests/fixtures/precedence_merged.wado/__cm_export____test_0_arithmetic_precedence" = fn();  // TypeId(2)
 
-type "functype//wado-compiler/tests/fixtures/precedence_merged.wado/__cm_export____test_0_arithmetic_precedence" = fn();  // TypeId(3)
+type "functype//wado-compiler/tests/fixtures/precedence_merged.wado/__cm_export____test_1_assignment_precedence" = fn();  // TypeId(3)
 
-type "functype//wado-compiler/tests/fixtures/precedence_merged.wado/__cm_export____test_1_assignment_precedence" = fn();  // TypeId(4)
+type "functype//wado-compiler/tests/fixtures/precedence_merged.wado/__cm_export____test_2_bitwise_precedence" = fn();  // TypeId(4)
 
-type "functype//wado-compiler/tests/fixtures/precedence_merged.wado/__cm_export____test_2_bitwise_precedence" = fn();  // TypeId(5)
+type "functype//wado-compiler/tests/fixtures/precedence_merged.wado/__cm_export____test_3_bitwise_vs_comparison_precedence" = fn();  // TypeId(5)
 
-type "functype//wado-compiler/tests/fixtures/precedence_merged.wado/__cm_export____test_3_bitwise_vs_comparison_precedence" = fn();  // TypeId(6)
+type "functype//wado-compiler/tests/fixtures/precedence_merged.wado/__cm_export____test_4_comparison_chaining" = fn();  // TypeId(6)
 
-type "functype//wado-compiler/tests/fixtures/precedence_merged.wado/__cm_export____test_4_comparison_chaining" = fn();  // TypeId(7)
+type "functype//wado-compiler/tests/fixtures/precedence_merged.wado/__cm_export____test_5_comparison_vs_logical_precedence" = fn();  // TypeId(7)
 
-type "functype//wado-compiler/tests/fixtures/precedence_merged.wado/__cm_export____test_5_comparison_vs_logical_precedence" = fn();  // TypeId(8)
+type "functype//wado-compiler/tests/fixtures/precedence_merged.wado/__cm_export____test_6_parentheses" = fn();  // TypeId(8)
 
-type "functype//wado-compiler/tests/fixtures/precedence_merged.wado/__cm_export____test_6_parentheses" = fn();  // TypeId(9)
+type "functype//wado-compiler/tests/fixtures/precedence_merged.wado/__cm_export____test_7_shift_vs_arithmetic_precedence" = fn();  // TypeId(9)
 
-type "functype//wado-compiler/tests/fixtures/precedence_merged.wado/__cm_export____test_7_shift_vs_arithmetic_precedence" = fn();  // TypeId(10)
+type "functype//wado-compiler/tests/fixtures/precedence_merged.wado/__cm_export____test_8_unary_precedence" = fn();  // TypeId(10)
 
-type "functype//wado-compiler/tests/fixtures/precedence_merged.wado/__cm_export____test_8_unary_precedence" = fn();  // TypeId(11)
-
-type "functype//wado-compiler/tests/fixtures/precedence_merged.wado/__initialize_module" = fn();  // TypeId(12)
+type "functype//wado-compiler/tests/fixtures/precedence_merged.wado/__initialize_module" = fn();  // TypeId(11)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
 import memory (1) from "mem/memory";
 
 global mut global:__modules_initialized: bool = 0;
-
-fn "wado-compiler/tests/fixtures/precedence_merged.wado/__test_1_assignment_precedence"() {
-}
 
 fn "wado-compiler/tests/fixtures/precedence_merged.wado/__cm_export____test_0_arithmetic_precedence"() {
     __inline___initialize_modules_0: block {
@@ -49,6 +44,10 @@ fn "wado-compiler/tests/fixtures/precedence_merged.wado/__cm_export____test_0_ar
 }
 
 fn "wado-compiler/tests/fixtures/precedence_merged.wado/__cm_export____test_1_assignment_precedence"() {
+    let a: i32;
+    let b: i32;
+    let h: i32;
+    let i: i32;
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
@@ -56,7 +55,10 @@ fn "wado-compiler/tests/fixtures/precedence_merged.wado/__cm_export____test_1_as
         "wado-compiler/tests/fixtures/precedence_merged.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/precedence_merged.wado/__test_1_assignment_precedence"();
+    a = 5;
+    b = 7;
+    i = 42;
+    h = 42;
     "wasi/task-return"(0);
 }
 

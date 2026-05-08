@@ -185,25 +185,25 @@ type "functype//wado-compiler/tests/fixtures/treemap_btree.wado/TreeMap<String,i
 
 type "functype//wado-compiler/tests/fixtures/treemap_btree.wado/TreeMap<String,i32>::insert_non_full" = fn(ref "wado-compiler/tests/fixtures/treemap_btree.wado//TreeMap<String,i32>", ref "wado-compiler/tests/fixtures/treemap_btree.wado//BTreeNode<String,i32>", ref "core:prelude/string.wado//String", i32);  // TypeId(65)
 
-type "functype//wado-compiler/tests/fixtures/treemap_btree.wado/TreeMap<String,i32>::split_child" = fn(ref "wado-compiler/tests/fixtures/treemap_btree.wado//TreeMap<String,i32>", ref "wado-compiler/tests/fixtures/treemap_btree.wado//BTreeNode<String,i32>", i32);  // TypeId(66)
+type "functype//wado-compiler/tests/fixtures/treemap_btree.wado/TreeMap<String,i32>::sort_node_entries" = fn(ref "wado-compiler/tests/fixtures/treemap_btree.wado//TreeMap<String,i32>", ref "wado-compiler/tests/fixtures/treemap_btree.wado//BTreeNode<String,i32>");  // TypeId(66)
 
-type "functype//core:prelude/array.wado/Array<BTreeNode<String,i32>>::push" = fn(ref "core:prelude//Array<BTreeNode<String,i32>>", ref "wado-compiler/tests/fixtures/treemap_btree.wado//BTreeNode<String,i32>");  // TypeId(67)
+type "functype//wado-compiler/tests/fixtures/treemap_btree.wado/TreeMap<String,i32>::split_child" = fn(ref "wado-compiler/tests/fixtures/treemap_btree.wado//TreeMap<String,i32>", ref "wado-compiler/tests/fixtures/treemap_btree.wado//BTreeNode<String,i32>", i32);  // TypeId(67)
 
-type "functype//core:prelude/array.wado/Array<BTreeNode<String,i32>>::grow" = fn(ref "core:prelude//Array<BTreeNode<String,i32>>");  // TypeId(68)
+type "functype//core:prelude/array.wado/Array<BTreeNode<String,i32>>::push" = fn(ref "core:prelude//Array<BTreeNode<String,i32>>", ref "wado-compiler/tests/fixtures/treemap_btree.wado//BTreeNode<String,i32>");  // TypeId(68)
 
-type "functype//wado-compiler/tests/fixtures/treemap_btree.wado/BTreeNode<String,i32>::is_full" = fn(ref "wado-compiler/tests/fixtures/treemap_btree.wado//BTreeNode<String,i32>", i32) -> bool;  // TypeId(69)
+type "functype//core:prelude/array.wado/Array<BTreeNode<String,i32>>::grow" = fn(ref "core:prelude//Array<BTreeNode<String,i32>>");  // TypeId(69)
 
-type "functype//core:prelude/array.wado/Array<String>::push" = fn(ref "core:prelude//Array<String>", ref "core:prelude/string.wado//String");  // TypeId(70)
+type "functype//wado-compiler/tests/fixtures/treemap_btree.wado/BTreeNode<String,i32>::is_full" = fn(ref "wado-compiler/tests/fixtures/treemap_btree.wado//BTreeNode<String,i32>", i32) -> bool;  // TypeId(70)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(71)
+type "functype//core:prelude/array.wado/Array<String>::push" = fn(ref "core:prelude//Array<String>", ref "core:prelude/string.wado//String");  // TypeId(71)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(72)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(72)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(73)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(73)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(74)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(74)
 
-type "functype//wado-compiler/tests/fixtures/treemap_btree.wado/TreeMap<String,i32>::sort_node_entries" = fn(ref "wado-compiler/tests/fixtures/treemap_btree.wado//BTreeNode<String,i32>");  // TypeId(75)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(75)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -1955,7 +1955,7 @@ fn "wado-compiler/tests/fixtures/treemap_btree.wado/TreeMap<String,i32>::insert_
         "core:prelude/array.wado/Array<String>::push"(node.keys, key);
         "core:prelude/array.wado/Array<i32>::push"(node.values, value);
         "core:prelude/array.wado/Array<bool>::push"(node.deleted, 0);
-        "wado-compiler/tests/fixtures/treemap_btree.wado/TreeMap<String,i32>::sort_node_entries"(node);
+        "wado-compiler/tests/fixtures/treemap_btree.wado/TreeMap<String,i32>::sort_node_entries"(self, node);
         self.size = self.size + 1;
     } else {
         pos_5 = 0;
@@ -2017,7 +2017,7 @@ fn "wado-compiler/tests/fixtures/treemap_btree.wado/TreeMap<String,i32>::insert_
     }
 }
 
-fn "wado-compiler/tests/fixtures/treemap_btree.wado/TreeMap<String,i32>::sort_node_entries"(node) {
+fn "wado-compiler/tests/fixtures/treemap_btree.wado/TreeMap<String,i32>::sort_node_entries"(self, node) {
     let i: i32;
     let j: i32;
     let temp_k: ref "core:prelude/string.wado//String";
@@ -2318,7 +2318,7 @@ fn "wado-compiler/tests/fixtures/treemap_btree.wado/TreeMap<String,i32>::split_c
     "core:prelude/array.wado/Array<i32>::push"(parent.values, promoted_value);
     "core:prelude/array.wado/Array<bool>::push"(parent.deleted, promoted_deleted);
     "core:prelude/array.wado/Array<BTreeNode<String,i32>>::push"(parent.children, new_sibling);
-    "wado-compiler/tests/fixtures/treemap_btree.wado/TreeMap<String,i32>::sort_node_entries"(parent);
+    "wado-compiler/tests/fixtures/treemap_btree.wado/TreeMap<String,i32>::sort_node_entries"(self, parent);
 }
 
 fn "core:prelude/array.wado/Array<BTreeNode<String,i32>>::push"(self, value) {

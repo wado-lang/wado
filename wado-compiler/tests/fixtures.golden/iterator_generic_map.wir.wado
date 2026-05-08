@@ -104,15 +104,15 @@ type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref 
 
 type "functype//core:prelude/array.wado/ArrayIter<i32>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<i32>") -> ref "core:prelude/types.wado//Option<i32>";  // TypeId(36)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(37)
+type "functype//wado-compiler/tests/fixtures/iterator_generic_map.wado/__Closure_2::__call" = fn(ref "wado-compiler/tests/fixtures/iterator_generic_map.wado//__Closure_2", i32) -> i32;  // TypeId(37)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(38)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(38)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(39)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(39)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(40)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(40)
 
-type "functype//wado-compiler/tests/fixtures/iterator_generic_map.wado/__Closure_2::__call" = fn(i32) -> i32;  // TypeId(41)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(41)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -786,12 +786,14 @@ fn "core:prelude/array.wado/ArrayIter<i32>^Iterator::next"(self) {
     return struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: item };
 }
 
-fn "wado-compiler/tests/fixtures/iterator_generic_map.wado/__Closure_2::__call"(x) {
+fn "wado-compiler/tests/fixtures/iterator_generic_map.wado/__Closure_2::__call"(self, x) {
     return x * 2;
 }
 
 fn "closure/wado-compiler/tests/fixtures/iterator_generic_map.wado/__closure_wrapper_0"(__env, __p0) {
-    return "wado-compiler/tests/fixtures/iterator_generic_map.wado/__Closure_2::__call"(__p0);
+    let __typed_env: ref "wado-compiler/tests/fixtures/iterator_generic_map.wado//__Closure_2";
+    __typed_env = ref.cast "wado-compiler/tests/fixtures/iterator_generic_map.wado//__Closure_2"(__env);
+    return "wado-compiler/tests/fixtures/iterator_generic_map.wado/__Closure_2::__call"(__typed_env, __p0);
 }
 
 export fn "wado-compiler/tests/fixtures/iterator_generic_map.wado/__cm_export__run" as "run"

@@ -126,23 +126,23 @@ type "functype//core:collections/TreeMap<String,i32>::insert" = fn(ref "core:col
 
 type "functype//core:collections/TreeMap<String,i32>::insert_node" = fn(ref "core:collections//TreeMap<String,i32>", ref null "core:collections//TreeMapNode<String>", ref "core:prelude/string.wado//String", i32) -> ref null "core:collections//TreeMapNode<String>";  // TypeId(44)
 
-type "functype//core:prelude/array.wado/Array<TreeMapEntry<String,i32>>::push" = fn(ref "core:prelude//Array<TreeMapEntry<String,i32>>", ref "core:collections//TreeMapEntry<String,i32>");  // TypeId(45)
+type "functype//core:collections/TreeMap<String,i32>::split" = fn(ref "core:collections//TreeMap<String,i32>", ref null "core:collections//TreeMapNode<String>") -> ref null "core:collections//TreeMapNode<String>";  // TypeId(45)
 
-type "functype//core:prelude/array.wado/Array<TreeMapEntry<String,i32>>::grow" = fn(ref "core:prelude//Array<TreeMapEntry<String,i32>>");  // TypeId(46)
+type "functype//core:collections/TreeMap<String,i32>::skew" = fn(ref "core:collections//TreeMap<String,i32>", ref null "core:collections//TreeMapNode<String>") -> ref null "core:collections//TreeMapNode<String>";  // TypeId(46)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(47)
+type "functype//core:prelude/array.wado/Array<TreeMapEntry<String,i32>>::push" = fn(ref "core:prelude//Array<TreeMapEntry<String,i32>>", ref "core:collections//TreeMapEntry<String,i32>");  // TypeId(47)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(48)
+type "functype//core:prelude/array.wado/Array<TreeMapEntry<String,i32>>::grow" = fn(ref "core:prelude//Array<TreeMapEntry<String,i32>>");  // TypeId(48)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(49)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(49)
 
-type "functype//core:prelude/string.wado/StrCharIter^Iterator::next" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(50)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(50)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(51)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(51)
 
-type "functype//core:collections/TreeMap<String,i32>::split" = fn(ref null "core:collections//TreeMapNode<String>") -> ref null "core:collections//TreeMapNode<String>";  // TypeId(52)
+type "functype//core:prelude/string.wado/StrCharIter^Iterator::next" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(52)
 
-type "functype//core:collections/TreeMap<String,i32>::skew" = fn(ref null "core:collections//TreeMapNode<String>") -> ref null "core:collections//TreeMapNode<String>";  // TypeId(53)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(53)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -1112,14 +1112,14 @@ fn "core:collections/TreeMap<String,i32>::insert_node"(self, node, key, index) {
         } else {
             n.right = "core:collections/TreeMap<String,i32>::insert_node"(self, n.right, key, index);
         }
-        after_skew = "core:collections/TreeMap<String,i32>::skew"(n);
-        return "core:collections/TreeMap<String,i32>::split"(after_skew);
+        after_skew = "core:collections/TreeMap<String,i32>::skew"(self, n);
+        return "core:collections/TreeMap<String,i32>::split"(self, after_skew);
     }
     new_node = struct.new "core:collections//TreeMapNode<String>" { key: key, index: index, level: 1, left: ref.null none, right: ref.null none };
     return new_node;
 }
 
-fn "core:collections/TreeMap<String,i32>::split"(node) {
+fn "core:collections/TreeMap<String,i32>::split"(self, node) {
     let n: ref "core:collections//TreeMapNode<String>";
     let right: ref "core:collections//TreeMapNode<String>";
     let rr: ref "core:collections//TreeMapNode<String>";
@@ -1146,7 +1146,7 @@ fn "core:collections/TreeMap<String,i32>::split"(node) {
     return ref.null none;
 }
 
-fn "core:collections/TreeMap<String,i32>::skew"(node) {
+fn "core:collections/TreeMap<String,i32>::skew"(self, node) {
     let n: ref "core:collections//TreeMapNode<String>";
     let left: ref "core:collections//TreeMapNode<String>";
     let __pattern_temp_1: ref null "core:collections//TreeMapNode<String>";

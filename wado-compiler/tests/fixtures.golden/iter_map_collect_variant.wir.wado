@@ -110,13 +110,13 @@ type "functype//core:prelude/array.wado/ArrayIter<wado-compiler/tests/fixtures/i
 
 type "functype//core:prelude/array.wado/Array<String>::push" = fn(ref "core:prelude//Array<String>", ref "core:prelude/string.wado//String");  // TypeId(37)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(38)
+type "functype//wado-compiler/tests/fixtures/iter_map_collect_variant.wado/__Closure_2::__call" = fn(ref "wado-compiler/tests/fixtures/iter_map_collect_variant.wado//__Closure_2", ref "wado-compiler/tests/fixtures/iter_map_collect_variant.wado//Color") -> ref "core:prelude/string.wado//String";  // TypeId(38)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(39)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(39)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(40)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(40)
 
-type "functype//wado-compiler/tests/fixtures/iter_map_collect_variant.wado/__Closure_2::__call" = fn(ref "wado-compiler/tests/fixtures/iter_map_collect_variant.wado//Color") -> ref "core:prelude/string.wado//String";  // TypeId(41)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(41)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -530,7 +530,7 @@ fn "core:prelude/array.wado/Array<String>::push"(self, value) {
     self.used = used + 1;
 }
 
-fn "wado-compiler/tests/fixtures/iter_map_collect_variant.wado/__Closure_2::__call"(c) {
+fn "wado-compiler/tests/fixtures/iter_map_collect_variant.wado/__Closure_2::__call"(self, c) {
     return let __match_scrut_0: ref "wado-compiler/tests/fixtures/iter_map_collect_variant.wado//Color", __match_scrut_0 = c, (if __match_scrut_0.discriminant == 0 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("red"), used: 3 };
     } else if __match_scrut_0.discriminant == 1 -> ref "core:prelude/string.wado//String" {
@@ -541,7 +541,9 @@ fn "wado-compiler/tests/fixtures/iter_map_collect_variant.wado/__Closure_2::__ca
 }
 
 fn "closure/wado-compiler/tests/fixtures/iter_map_collect_variant.wado/__closure_wrapper_0"(__env, __p0) {
-    return "wado-compiler/tests/fixtures/iter_map_collect_variant.wado/__Closure_2::__call"(__p0);
+    let __typed_env: ref "wado-compiler/tests/fixtures/iter_map_collect_variant.wado//__Closure_2";
+    __typed_env = ref.cast "wado-compiler/tests/fixtures/iter_map_collect_variant.wado//__Closure_2"(__env);
+    return "wado-compiler/tests/fixtures/iter_map_collect_variant.wado/__Closure_2::__call"(__typed_env, __p0);
 }
 
 export fn "wado-compiler/tests/fixtures/iter_map_collect_variant.wado/__cm_export__run" as "run"

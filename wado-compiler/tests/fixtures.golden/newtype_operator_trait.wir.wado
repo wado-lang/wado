@@ -180,6 +180,8 @@ fn "wado-compiler/tests/fixtures/newtype_operator_trait.wado/run"() with Stdout 
     let __v1_22: ref "wado-compiler/tests/fixtures/newtype_operator_trait.wado//Vec2";
     let __v2: bool;
     let __cond_24: bool;
+    let v1: ref "wado-compiler/tests/fixtures/newtype_operator_trait.wado//Vec2";
+    let v2: ref "wado-compiler/tests/fixtures/newtype_operator_trait.wado//Vec2";
     let __cond_29: bool;
     let __local_30: ref "core:prelude/string.wado//String";
     let __local_31: ref "core:prelude/format.wado//Formatter";
@@ -692,11 +694,12 @@ condition: !p1 == p2
     handle_184 = "wado-compiler/tests/fixtures/newtype_operator_trait.wado/__cm_binding__Stdout_write_via_stream"(rx_182);
     "core:cli/write_to_stream"(tx_183, message_181, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_184);
-    drop(__inline__value_copy_T21_82: block -> ref "wado-compiler/tests/fixtures/newtype_operator_trait.wado//Vec2" {
+    v1 = __inline__value_copy_T21_82: block -> ref "wado-compiler/tests/fixtures/newtype_operator_trait.wado//Vec2" {
         v_187 = struct.new "wado-compiler/tests/fixtures/newtype_operator_trait.wado//Vec2" { x: 5, y: 6 };
         break __inline__value_copy_T21_82: struct.new "wado-compiler/tests/fixtures/newtype_operator_trait.wado//Vec2" { x: 5, y: 6 };
         unreachable;
-    });
+    };
+    v2 = struct.new "wado-compiler/tests/fixtures/newtype_operator_trait.wado//Vec2" { x: 1, y: 1 };
     __sroa_v3_x = 5 + 1;
     __sroa_v3_y = 6 + 1;
     __cond_29 = __sroa_v3_x == 6;

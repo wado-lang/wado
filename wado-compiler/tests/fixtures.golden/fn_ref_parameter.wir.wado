@@ -79,15 +79,15 @@ type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/st
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(30)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(31)
+type "functype//wado-compiler/tests/fixtures/fn_ref_parameter.wado/__Closure_2::__call" = fn(ref "wado-compiler/tests/fixtures/fn_ref_parameter.wado//__Closure_2", i32) -> i32;  // TypeId(31)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(32)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(32)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(33)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(33)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(34)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(34)
 
-type "functype//wado-compiler/tests/fixtures/fn_ref_parameter.wado/__Closure_2::__call" = fn(i32) -> i32;  // TypeId(35)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(35)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -563,12 +563,14 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "wado-compiler/tests/fixtures/fn_ref_parameter.wado/__Closure_2::__call"(__fn_ref_p0) {
+fn "wado-compiler/tests/fixtures/fn_ref_parameter.wado/__Closure_2::__call"(self, __fn_ref_p0) {
     return __fn_ref_p0 * 2;
 }
 
 fn "closure/wado-compiler/tests/fixtures/fn_ref_parameter.wado/__closure_wrapper_0"(__env, __p0) {
-    return "wado-compiler/tests/fixtures/fn_ref_parameter.wado/__Closure_2::__call"(__p0);
+    let __typed_env: ref "wado-compiler/tests/fixtures/fn_ref_parameter.wado//__Closure_2";
+    __typed_env = ref.cast "wado-compiler/tests/fixtures/fn_ref_parameter.wado//__Closure_2"(__env);
+    return "wado-compiler/tests/fixtures/fn_ref_parameter.wado/__Closure_2::__call"(__typed_env, __p0);
 }
 
 export fn "wado-compiler/tests/fixtures/fn_ref_parameter.wado/__cm_export____test_0_function_reference_parameter" as "__test_0_function_reference_parameter"

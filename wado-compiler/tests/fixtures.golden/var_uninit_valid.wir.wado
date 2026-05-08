@@ -236,12 +236,14 @@ condition: x == 3
 }
 
 fn "wado-compiler/tests/fixtures/var_uninit_valid.wado/__test_8_string_uninit_then_assign"() {
+    let s: ref "core:prelude/string.wado//String";
     let __v0: i32;
     let __cond: bool;
     let __local_3: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/format.wado//Formatter";
     let f_9: ref "core:prelude/format.wado//Formatter";
     let f_14: ref "core:prelude/format.wado//Formatter";
+    s = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
     __v0 = 5;
     __cond = __v0 == 5;
     if __cond == 0 {
@@ -274,12 +276,14 @@ condition: s.len() == 5
 }
 
 fn "wado-compiler/tests/fixtures/var_uninit_valid.wado/__test_9_string_uninit_assigned_in_if_else"() {
+    let greeting: ref "core:prelude/string.wado//String";
     let __v0: i32;
     let __cond: bool;
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
     let f_10: ref "core:prelude/format.wado//Formatter";
     let f_15: ref "core:prelude/format.wado//Formatter";
+    greeting = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Hi!"), used: 3 };
     __v0 = 3;
     __cond = __v0 == 3;
     if __cond == 0 {
@@ -312,6 +316,7 @@ condition: greeting.len() == 3
 }
 
 fn "wado-compiler/tests/fixtures/var_uninit_valid.wado/__cm_export____test_0_declare__assign__use"() {
+    let x: i32;
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
@@ -319,10 +324,12 @@ fn "wado-compiler/tests/fixtures/var_uninit_valid.wado/__cm_export____test_0_dec
         "wado-compiler/tests/fixtures/var_uninit_valid.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
+    x = 42;
     "wasi/task-return"(0);
 }
 
 fn "wado-compiler/tests/fixtures/var_uninit_valid.wado/__cm_export____test_1_if_else_both_branches_assign"() {
+    let result: i32;
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
@@ -330,6 +337,7 @@ fn "wado-compiler/tests/fixtures/var_uninit_valid.wado/__cm_export____test_1_if_
         "wado-compiler/tests/fixtures/var_uninit_valid.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
+    result = 1;
     "wasi/task-return"(0);
 }
 
@@ -346,6 +354,7 @@ fn "wado-compiler/tests/fixtures/var_uninit_valid.wado/__cm_export____test_2_mat
 }
 
 fn "wado-compiler/tests/fixtures/var_uninit_valid.wado/__cm_export____test_3_mut__declare_then_assign_then_reassign"() {
+    let x: i32;
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
@@ -353,10 +362,13 @@ fn "wado-compiler/tests/fixtures/var_uninit_valid.wado/__cm_export____test_3_mut
         "wado-compiler/tests/fixtures/var_uninit_valid.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
+    x = 1;
+    x = 2;
     "wasi/task-return"(0);
 }
 
 fn "wado-compiler/tests/fixtures/var_uninit_valid.wado/__cm_export____test_4_nested_if_else_all_paths_assign"() {
+    let x: i32;
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
@@ -364,6 +376,7 @@ fn "wado-compiler/tests/fixtures/var_uninit_valid.wado/__cm_export____test_4_nes
         "wado-compiler/tests/fixtures/var_uninit_valid.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
+    x = 2;
     "wasi/task-return"(0);
 }
 
@@ -380,6 +393,7 @@ fn "wado-compiler/tests/fixtures/var_uninit_valid.wado/__cm_export____test_5_ass
 }
 
 fn "wado-compiler/tests/fixtures/var_uninit_valid.wado/__cm_export____test_6_f64_uninit_then_assign"() {
+    let y: f64;
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
@@ -387,10 +401,12 @@ fn "wado-compiler/tests/fixtures/var_uninit_valid.wado/__cm_export____test_6_f64
         "wado-compiler/tests/fixtures/var_uninit_valid.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
+    y = 3.14;
     "wasi/task-return"(0);
 }
 
 fn "wado-compiler/tests/fixtures/var_uninit_valid.wado/__cm_export____test_7_bool_uninit_assigned_in_if_else"() {
+    let flag: bool;
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
@@ -398,6 +414,7 @@ fn "wado-compiler/tests/fixtures/var_uninit_valid.wado/__cm_export____test_7_boo
         "wado-compiler/tests/fixtures/var_uninit_valid.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
+    flag = 1;
     "wasi/task-return"(0);
 }
 

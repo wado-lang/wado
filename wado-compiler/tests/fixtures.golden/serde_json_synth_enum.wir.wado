@@ -216,21 +216,21 @@ type "functype//core:json/core/json/to_string<wado-compiler/tests/fixtures/serde
 
 type "functype//core:prelude/string.wado/StrCharIter^Iterator::next" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(70)
 
-type "functype//core:prelude/primitive.wado/char::is_hexdigit" = fn(char) -> bool;  // TypeId(71)
+type "functype//core:json/JsonDeserializer^Deserializer::begin_variant" = fn(ref "core:json//JsonDeserializer", ref "core:prelude/string.wado//String", i32) -> [i32, ref null "core:json//JsonVariantAccess", ref null "core:serde//DeserializeError"];  // TypeId(71)
 
-type "functype//core:prelude/primitive.wado/char::hex_digit_value" = fn(char) -> i32;  // TypeId(72)
+type "functype//core:prelude/primitive.wado/char::is_hexdigit" = fn(char) -> bool;  // TypeId(72)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(73)
+type "functype//core:prelude/primitive.wado/char::hex_digit_value" = fn(char) -> i32;  // TypeId(73)
 
-type "functype//core:prelude/primitive.wado/i64::fmt_base" = fn(i64, bool, ref "core:prelude/format.wado//Formatter", i32, bool, ref "core:prelude/string.wado//String");  // TypeId(74)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(74)
 
-type "functype//core:prelude/primitive.wado/char^Display::fmt" = fn(char, ref "core:prelude/format.wado//Formatter");  // TypeId(75)
+type "functype//core:prelude/primitive.wado/i64::fmt_base" = fn(i64, bool, ref "core:prelude/format.wado//Formatter", i32, bool, ref "core:prelude/string.wado//String");  // TypeId(75)
 
-type "functype//core:prelude/primitive.wado/i32^LowerHex::fmt" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(76)
+type "functype//core:prelude/primitive.wado/char^Display::fmt" = fn(char, ref "core:prelude/format.wado//Formatter");  // TypeId(76)
 
-type "functype//wado-compiler/tests/fixtures/serde_json_synth_enum.wado/Color^Serialize::serialize<JsonSerializer>" = fn("wado-compiler/tests/fixtures/serde_json_synth_enum.wado//enum:Color", ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(77)
+type "functype//core:prelude/primitive.wado/i32^LowerHex::fmt" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(77)
 
-type "functype//core:json/JsonDeserializer^Deserializer::begin_variant" = fn(ref "core:json//JsonDeserializer") -> [i32, ref null "core:json//JsonVariantAccess", ref null "core:serde//DeserializeError"];  // TypeId(78)
+type "functype//wado-compiler/tests/fixtures/serde_json_synth_enum.wado/Color^Serialize::serialize<JsonSerializer>" = fn("wado-compiler/tests/fixtures/serde_json_synth_enum.wado//enum:Color", ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(78)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -1656,7 +1656,7 @@ fn "core:json/JsonDeserializer::read_unicode_escape"(self) {
     });
 }
 
-fn "core:json/JsonDeserializer^Deserializer::begin_variant"(self) {
+fn "core:json/JsonDeserializer^Deserializer::begin_variant"(self, type_name, num_cases) {
     let b: char;
     let __qm_v_4: ref "core:prelude/string.wado//String";
     let __qm_e_5: ref "core:serde//DeserializeError";
@@ -2087,7 +2087,7 @@ fn "wado-compiler/tests/fixtures/serde_json_synth_enum.wado/Color^Deserialize::d
     let __sroa___va_r_discriminant: i32;
     let __sroa___va_r_case0_payload_0: ref null "core:json//JsonVariantAccess";
     let __sroa___va_r_case1_payload_0: ref null "core:serde//DeserializeError";
-    multivalue_bind [__sroa___va_r_discriminant, __sroa___va_r_case0_payload_0, __sroa___va_r_case1_payload_0] = "core:json/JsonDeserializer^Deserializer::begin_variant"(d);
+    multivalue_bind [__sroa___va_r_discriminant, __sroa___va_r_case0_payload_0, __sroa___va_r_case1_payload_0] = "core:json/JsonDeserializer^Deserializer::begin_variant"(d, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Color"), used: 5 }, 3);
     if __sroa___va_r_discriminant == 0 {
         va = __inline__value_copy_T58_0: block -> ref "core:json//JsonVariantAccess" {
             v_10 = ref.as_non_null(__sroa___va_r_case0_payload_0);
@@ -2201,15 +2201,11 @@ fn "wado-compiler/tests/fixtures/serde_json_synth_enum.wado/Color^Deserialize::d
 }
 
 fn "wado-compiler/tests/fixtures/serde_json_synth_enum.wado/Color^Serialize::serialize<JsonSerializer>"(self, s) {
-    let type_name_3: ref "core:prelude/string.wado//String";
     let variant_name_4: ref "core:prelude/string.wado//String";
-    let type_name_7: ref "core:prelude/string.wado//String";
     let variant_name_8: ref "core:prelude/string.wado//String";
-    let type_name_11: ref "core:prelude/string.wado//String";
     let variant_name_12: ref "core:prelude/string.wado//String";
     return let __match_scrut_0: "wado-compiler/tests/fixtures/serde_json_synth_enum.wado//enum:Color", __match_scrut_0 = self, (if __match_scrut_0 == 0 -> ref null "core:serde//SerializeError" {
         __inline_JsonSerializer_Serializer__serialize_unit_variant_0: block -> ref null "core:serde//SerializeError" {
-            type_name_3 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Color"), used: 5 };
             variant_name_4 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Red"), used: 3 };
             "core:json/write_escaped_string"(s, variant_name_4);
             break __inline_JsonSerializer_Serializer__serialize_unit_variant_0: ref.null none;
@@ -2217,7 +2213,6 @@ fn "wado-compiler/tests/fixtures/serde_json_synth_enum.wado/Color^Serialize::ser
         };
     } else if __match_scrut_0 == 1 -> ref null "core:serde//SerializeError" {
         __inline_JsonSerializer_Serializer__serialize_unit_variant_1: block -> ref null "core:serde//SerializeError" {
-            type_name_7 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Color"), used: 5 };
             variant_name_8 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Green"), used: 5 };
             "core:json/write_escaped_string"(s, variant_name_8);
             break __inline_JsonSerializer_Serializer__serialize_unit_variant_1: ref.null none;
@@ -2225,7 +2220,6 @@ fn "wado-compiler/tests/fixtures/serde_json_synth_enum.wado/Color^Serialize::ser
         };
     } else {
         __inline_JsonSerializer_Serializer__serialize_unit_variant_2: block -> ref null "core:serde//SerializeError" {
-            type_name_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Color"), used: 5 };
             variant_name_12 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Blue"), used: 4 };
             "core:json/write_escaped_string"(s, variant_name_12);
             break __inline_JsonSerializer_Serializer__serialize_unit_variant_2: ref.null none;

@@ -20,7 +20,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(2)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 };  // TypeId(3)
+struct wado-compiler/tests/fixtures/inspect_fn_cross_module.wado//__Closure_0 {  // TypeId(3)}
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(4)
 
@@ -60,13 +60,13 @@ type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/st
 
 type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(22)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(23)
+type "functype//wado-compiler/tests/fixtures/inspect_fn_cross_module.wado/__Closure_0^Inspect::inspect" = fn(ref "wado-compiler/tests/fixtures/inspect_fn_cross_module.wado//__Closure_0", ref "core:prelude/format.wado//Formatter");  // TypeId(23)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(24)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(24)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(25)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(25)
 
-type "functype//wado-compiler/tests/fixtures/inspect_fn_cross_module.wado/__Closure_0^Inspect::inspect" = fn(ref "core:prelude/format.wado//Formatter");  // TypeId(26)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(26)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -88,25 +88,11 @@ fn "wado-compiler/tests/fixtures/inspect_fn_cross_module.wado/run"() with Stdout
     let tx: i32;
     let handle: i32;
     let s: ref "core:prelude/string.wado//String";
-    let __sroa___f_fill: char;
-    let __sroa___f_align: "core:prelude/format.wado//enum:Alignment";
-    let __sroa___f_sign_plus: bool;
-    let __sroa___f_zero_pad: bool;
-    let __sroa___f_width: i32;
-    let __sroa___f_precision: i32;
-    let __sroa___f_indent: i32;
     let __sroa___f_buf: ref "core:prelude/string.wado//String";
     "./sub/inspect_fn_cross_module_helper.wado/show_in_helper"();
     message = __tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(27), used: 0 };
         "core:prelude/string.wado/String::push_str"(__local_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("from main: "), used: 11 });
-        __sroa___f_fill = 32;
-        __sroa___f_align = 2;
-        __sroa___f_sign_plus = 0;
-        __sroa___f_zero_pad = 0;
-        __sroa___f_width = -1;
-        __sroa___f_precision = -1;
-        __sroa___f_indent = 0;
         __sroa___f_buf = __local_1;
         s = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("|i32| -> i32"), used: 12 };
         "core:prelude/string.wado/String::push_str"(__sroa___f_buf, s);
@@ -132,17 +118,19 @@ fn "wado-compiler/tests/fixtures/inspect_fn_cross_module.wado/__cm_export__run"(
 }
 
 fn "./sub/inspect_fn_cross_module_helper.wado/show_in_helper"() with Stdout {
+    let pred: ref "wado-compiler/tests/fixtures/inspect_fn_cross_module.wado//__Closure_0";
     let __local_1: ref "core:prelude/string.wado//String";
     let __local_2: ref "core:prelude/format.wado//Formatter";
     let message: ref "core:prelude/string.wado//String";
     let rx: i32;
     let tx: i32;
     let handle: i32;
+    pred = struct.new "wado-compiler/tests/fixtures/inspect_fn_cross_module.wado//__Closure_0" {  };
     message = __tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(29), used: 0 };
         "core:prelude/string.wado/String::push_str"(__local_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("from helper: "), used: 13 });
         __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
-        "wado-compiler/tests/fixtures/inspect_fn_cross_module.wado/__Closure_0^Inspect::inspect"(__local_2);
+        "wado-compiler/tests/fixtures/inspect_fn_cross_module.wado/__Closure_0^Inspect::inspect"(pred, __local_2);
         break __tmpl: __local_1;
         unreachable;
     };
@@ -264,7 +252,7 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
     self.used = new_used;
 }
 
-fn "wado-compiler/tests/fixtures/inspect_fn_cross_module.wado/__Closure_0^Inspect::inspect"(f) {
+fn "wado-compiler/tests/fixtures/inspect_fn_cross_module.wado/__Closure_0^Inspect::inspect"(self, f) {
     let s: ref "core:prelude/string.wado//String";
     s = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("|i32| -> bool"), used: 13 };
     "core:prelude/string.wado/String::push_str"(f.buf, s);

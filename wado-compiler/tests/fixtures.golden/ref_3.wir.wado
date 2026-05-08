@@ -185,6 +185,10 @@ fn "wado-compiler/tests/fixtures/ref_3.wado/ref_struct_mut"() with Stdout {
     let handle: i32;
     let f_12: ref "core:prelude/format.wado//Formatter";
     let f_17: ref "core:prelude/format.wado//Formatter";
+    let __sroa_p_x: i32;
+    let __sroa_p_y: i32;
+    __sroa_p_x = 11;
+    __sroa_p_y = 22;
     message = __tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
         __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
@@ -219,6 +223,7 @@ fn "wado-compiler/tests/fixtures/ref_3.wado/ref_struct_nested"() with Stdout {
     let rx_21: i32;
     let tx_22: i32;
     let handle_23: i32;
+    let __sroa___sroa_o_inner_value: i32;
     message_5 = __tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
@@ -233,6 +238,7 @@ fn "wado-compiler/tests/fixtures/ref_3.wado/ref_struct_nested"() with Stdout {
     handle_8 = "wado-compiler/tests/fixtures/ref_3.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
     "core:cli/write_to_stream"(tx_7, message_5, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_8);
+    __sroa___sroa_o_inner_value = 100;
     message_20 = __tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 };
@@ -264,6 +270,7 @@ fn "wado-compiler/tests/fixtures/ref_3.wado/ref_struct_string_field"() with Stdo
     let tx_22: i32;
     let handle_23: i32;
     let __sroa_u_name: ref "core:prelude/string.wado//String";
+    let __sroa_u_age: i32;
     __sroa_u_name = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 };
     message_5 = __tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 };
@@ -284,6 +291,7 @@ fn "wado-compiler/tests/fixtures/ref_3.wado/ref_struct_string_field"() with Stdo
     "wasi/future-drop-readable:transmission-cli"(handle_8);
     new_name = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Bob"), used: 3 };
     __sroa_u_name = new_name;
+    __sroa_u_age = 31;
     message_20 = __tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 };
         "core:prelude/string.wado/String::push_str"(__local_3, __sroa_u_name);
@@ -487,7 +495,6 @@ fn "wado-compiler/tests/fixtures/ref_3.wado/ref_array_ref_element"() with Stdout
 }
 
 fn "wado-compiler/tests/fixtures/ref_3.wado/ref_closure_capture"() with Stdout {
-    let result2: i32;
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
     let __local_6: ref "core:prelude/string.wado//String";
@@ -500,7 +507,6 @@ fn "wado-compiler/tests/fixtures/ref_3.wado/ref_closure_capture"() with Stdout {
     let rx_29: i32;
     let tx_30: i32;
     let handle_31: i32;
-    let __sroa_f___capture_0: i32;
     message_12 = __tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(25), used: 0 };
         "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("doubled: "), used: 9 });
@@ -516,16 +522,11 @@ fn "wado-compiler/tests/fixtures/ref_3.wado/ref_closure_capture"() with Stdout {
     handle_15 = "wado-compiler/tests/fixtures/ref_3.wado/__cm_binding__Stdout_write_via_stream"(rx_13);
     "core:cli/write_to_stream"(tx_14, message_12, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_15);
-    result2 = __inline_apply_to_ref___Closure_3_8: block -> i32 {
-        __sroa_f___capture_0 = 3;
-        break __inline_apply_to_ref___Closure_3_8: 126;
-        unreachable;
-    };
     message_28 = __tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(25), used: 0 };
         "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("tripled: "), used: 9 });
         __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
-        "core:prelude/primitive.wado/i32::fmt_decimal"(result2, __local_7);
+        "core:prelude/primitive.wado/i32::fmt_decimal"(126, __local_7);
         break __tmpl: __local_6;
         unreachable;
     };
@@ -580,6 +581,7 @@ fn "wado-compiler/tests/fixtures/ref_3.wado/ref_method_receivers_test"() with St
     let rx_23: i32;
     let tx_24: i32;
     let handle_25: i32;
+    let __sroa_c_value: i32;
     message_6 = __tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
         "core:prelude/string.wado/String::push"(__local_1, 103);
@@ -599,6 +601,9 @@ fn "wado-compiler/tests/fixtures/ref_3.wado/ref_method_receivers_test"() with St
     handle_9 = "wado-compiler/tests/fixtures/ref_3.wado/__cm_binding__Stdout_write_via_stream"(rx_7);
     "core:cli/write_to_stream"(tx_8, message_6, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_9);
+    __sroa_c_value = 1;
+    __sroa_c_value = 2;
+    __sroa_c_value = 3;
     message_22 = __tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
         "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("after increment: "), used: 17 });
