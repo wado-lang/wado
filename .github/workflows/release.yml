@@ -24,6 +24,11 @@ jobs:
       version: ${{ steps.v.outputs.version }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          # On workflow_dispatch, github.ref is the default branch — check
+          # out the requested tag instead so validate/build see the tagged
+          # source, not main.
+          ref: ${{ inputs.tag || github.ref }}
 
       - name: Determine version from tag
         id: v
@@ -67,6 +72,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.validate.outputs.tag }}
 
       - name: Install Rust target
         # rust-toolchain.toml is honored automatically by rustup; we only
