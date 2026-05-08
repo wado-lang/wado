@@ -146,26 +146,38 @@ async fn async_main() {
                         let opts = wado_cli::init::parse_args(parser).unwrap_or_else(|e| e.exit());
                         wado_cli::init::run(opts);
                     }
+                    // Each subcommand's `async fn run()` is wrapped in
+                    // `Box::pin` so its future is type-erased at this
+                    // boundary. Without this, the compiler must compute
+                    // the layout of `async_main`'s state machine by
+                    // recursively inlining the futures of EVERY subcommand
+                    // (12 of them), each of which transitively pulls in
+                    // its own await chain (compile → try_compile →
+                    // wado_compiler::compile_with_options → ...). That
+                    // recursion blows past Rust's default query-depth
+                    // limit on `--release` builds. Boxing here costs one
+                    // heap allocation per CLI invocation, which is free
+                    // for a one-shot binary.
                     Cmd::Compile => {
                         let opts =
                             wado_cli::compile::parse_args(parser).unwrap_or_else(|e| e.exit());
-                        wado_cli::compile::run(opts).await;
+                        Box::pin(wado_cli::compile::run(opts)).await;
                     }
                     Cmd::Check => {
                         let opts = wado_cli::check::parse_args(parser).unwrap_or_else(|e| e.exit());
-                        wado_cli::check::run(opts).await;
+                        Box::pin(wado_cli::check::run(opts)).await;
                     }
                     Cmd::Run => {
                         let opts = wado_cli::run::parse_args(parser).unwrap_or_else(|e| e.exit());
-                        wado_cli::run::run(opts).await;
+                        Box::pin(wado_cli::run::run(opts)).await;
                     }
                     Cmd::Serve => {
                         let opts = wado_cli::serve::parse_args(parser).unwrap_or_else(|e| e.exit());
-                        wado_cli::serve::run(opts).await;
+                        Box::pin(wado_cli::serve::run(opts)).await;
                     }
                     Cmd::Test => {
                         let opts = wado_cli::test::parse_args(parser).unwrap_or_else(|e| e.exit());
-                        wado_cli::test::run(opts).await;
+                        Box::pin(wado_cli::test::run(opts)).await;
                     }
                     Cmd::Format => {
                         let opts =
@@ -178,7 +190,7 @@ async fn async_main() {
                     }
                     Cmd::Dump => {
                         let opts = wado_cli::dump::parse_args(parser).unwrap_or_else(|e| e.exit());
-                        wado_cli::dump::run(opts).await;
+                        Box::pin(wado_cli::dump::run(opts)).await;
                     }
                     Cmd::Syntax => {
                         let opts =
@@ -186,11 +198,11 @@ async fn async_main() {
                         wado_cli::syntax::run(opts);
                     }
                     Cmd::Lsp => {
-                        wado_cli::lsp::run().await;
+                        Box::pin(wado_cli::lsp::run()).await;
                     }
                     Cmd::Query => {
                         let opts = wado_cli::query::parse_args(parser).unwrap_or_else(|e| e.exit());
-                        wado_cli::query::run(opts).await;
+                        Box::pin(wado_cli::query::run(opts)).await;
                     }
                 }
             } else {

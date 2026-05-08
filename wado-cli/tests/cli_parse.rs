@@ -294,6 +294,13 @@ fn run_profile_invalid() {
     assert_err(wado_cli::run::parse_args(parser), "unknown profile mode");
 }
 
+#[test]
+fn run_allocator() {
+    let parser = Parser::from_args(&["--allocator", "freelist", "input.wado"]);
+    let opts = wado_cli::run::parse_args(parser).unwrap();
+    assert_eq!(opts.allocator, Some("freelist".to_string()));
+}
+
 // ---- serve ----
 
 #[test]
@@ -341,6 +348,41 @@ fn serve_log_level() {
     let parser = Parser::from_args(&["--log-level", "warn", "input.wado"]);
     let opts = wado_cli::serve::parse_args(parser).unwrap();
     assert_eq!(opts.log_level, wado_compiler::LogLevel::Warn);
+}
+
+#[test]
+fn serve_allocator() {
+    let parser = Parser::from_args(&["--allocator", "debug", "input.wado"]);
+    let opts = wado_cli::serve::parse_args(parser).unwrap();
+    assert_eq!(opts.allocator, Some("debug".to_string()));
+}
+
+#[test]
+fn serve_dir() {
+    // Unlike `run`, `serve` defaults to NO preopens — explicit --dir is the
+    // only way to grant filesystem access.
+    let parser = Parser::from_args(&["--dir", "/tmp::/guest", "input.wado"]);
+    let opts = wado_cli::serve::parse_args(parser).unwrap();
+    assert_eq!(
+        opts.preopened_dirs,
+        vec![("/tmp".to_string(), "/guest".to_string())]
+    );
+}
+
+#[test]
+fn serve_no_dir_default() {
+    let parser = Parser::from_args(&["input.wado"]);
+    let opts = wado_cli::serve::parse_args(parser).unwrap();
+    assert!(opts.preopened_dirs.is_empty());
+}
+
+#[test]
+fn serve_rejects_no_dir() {
+    // `serve` deliberately omits `--no-dir`: the default is already no
+    // preopens, so the flag would be a misleading no-op. Confirm parsing
+    // fails rather than silently accepting it.
+    let parser = Parser::from_args(&["--no-dir", "input.wado"]);
+    assert_err(wado_cli::serve::parse_args(parser), "invalid option");
 }
 
 // ---- test ----
@@ -434,6 +476,34 @@ fn test_parallel_non_numeric() {
 fn test_help() {
     let parser = Parser::from_args(&["--help"]);
     assert_help(wado_cli::test::parse_args(parser), "Usage: wado test");
+}
+
+#[test]
+fn test_log_level() {
+    let parser = Parser::from_args(&["--log-level", "debug", "a.wado"]);
+    let opts = wado_cli::test::parse_args(parser).unwrap();
+    assert_eq!(opts.log_level, wado_compiler::LogLevel::Debug);
+}
+
+#[test]
+fn test_inline_threshold_and_iterations() {
+    let parser = Parser::from_args(&[
+        "--optimize-inline-threshold",
+        "42",
+        "--optimize-iterations",
+        "7",
+        "a.wado",
+    ]);
+    let opts = wado_cli::test::parse_args(parser).unwrap();
+    assert_eq!(opts.inline_threshold, Some(42));
+    assert_eq!(opts.opt_iterations, Some(7));
+}
+
+#[test]
+fn test_allocator() {
+    let parser = Parser::from_args(&["--allocator", "bump", "a.wado"]);
+    let opts = wado_cli::test::parse_args(parser).unwrap();
+    assert_eq!(opts.allocator, Some("bump".to_string()));
 }
 
 // ---- format ----
@@ -740,6 +810,19 @@ fn format_opts_help_output() {
         "should contain -v, --verbose"
     );
     assert!(output.contains("Show help"), "should contain description");
+}
+
+#[test]
+fn opt_level_maps_to_wasmtime_cranelift() {
+    // Wado -O0 disables Cranelift codegen optimizations. -O1/-O2/-O3 all
+    // collapse to wasmtime's `Speed` (wasmtime has no finer-grained level).
+    // -Os hits `SpeedAndSize`, matching `wasmtime` CLI's own `-O s` mapping.
+    use wasmtime::OptLevel as W;
+    assert_eq!(OptLevel::O0.to_wasmtime(), W::None);
+    assert_eq!(OptLevel::O1.to_wasmtime(), W::Speed);
+    assert_eq!(OptLevel::O2.to_wasmtime(), W::Speed);
+    assert_eq!(OptLevel::O3.to_wasmtime(), W::Speed);
+    assert_eq!(OptLevel::Os.to_wasmtime(), W::SpeedAndSize);
 }
 
 #[test]

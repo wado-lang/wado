@@ -11,7 +11,7 @@ use wasmtime::component::Component;
 use wasmtime::{GuestProfiler, UpdateDeadline};
 
 use crate::args::{self, CliExit};
-use crate::compile::{self, OptLevel};
+use crate::compile::{self, CompileFlags, OptLevel};
 use crate::manifest;
 use crate::runtime::{self, ProfileMode};
 use wado_compiler::LogLevel;
@@ -28,6 +28,7 @@ pub struct RunOptions {
     pub program_args: Vec<String>,
     pub inline_threshold: Option<usize>,
     pub opt_iterations: Option<u32>,
+    pub allocator: Option<String>,
 }
 
 #[derive(Clone, Copy)]
@@ -38,6 +39,7 @@ enum Opt {
     InlineThreshold,
     OptIterations,
     LogLevel,
+    Allocator,
     Profile,
     Help,
 }
@@ -50,28 +52,27 @@ impl Opt {
         Self::InlineThreshold,
         Self::OptIterations,
         Self::LogLevel,
+        Self::Allocator,
         Self::Profile,
         Self::Help,
     ];
 
     const fn spec(self) -> args::OptSpec {
         match self {
+            // `run` overrides the shared --dir description because it
+            // ALSO documents the implicit "preopen cwd by default" rule.
             Self::Dir => args::OptSpec {
                 long: Some("dir"),
                 short: None,
                 value: Some("<path>"),
                 desc: "Preopen directory for WASI filesystem access\nUse --dir host::guest to specify different guest path\nOverrides the default of preopening the current directory",
             },
-            Self::NoDir => args::OptSpec {
-                long: Some("no-dir"),
-                short: None,
-                value: None,
-                desc: "Do not preopen any directories (disables the default)",
-            },
+            Self::NoDir => args::NO_DIR_SPEC,
             Self::OptLevel => args::OPT_LEVEL_SPEC,
             Self::InlineThreshold => args::INLINE_THRESHOLD_SPEC,
             Self::OptIterations => args::OPT_ITERATIONS_SPEC,
             Self::LogLevel => args::LOG_LEVEL_SPEC,
+            Self::Allocator => args::ALLOCATOR_SPEC,
             Self::Profile => args::OptSpec {
                 long: Some("profile"),
                 short: None,
@@ -182,41 +183,17 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<RunOptions, CliExit> {
     let mut no_dir = false;
     let mut inline_threshold: Option<usize> = None;
     let mut opt_iterations: Option<u32> = None;
+    let mut allocator: Option<String> = None;
 
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
             match opt {
                 Opt::Dir => {
-                    let dir_spec = args::require_string(&mut parser)?;
-                    // Support "host::guest" or just "host" (guest defaults to host path).
-                    let (host, guest) = if let Some((h, g)) = dir_spec.split_once("::") {
-                        (h.to_owned(), g.to_owned())
-                    } else {
-                        (dir_spec.clone(), dir_spec)
-                    };
-                    preopened_dirs.push((host, guest));
+                    preopened_dirs.push(args::parse_dir_arg(&mut parser)?);
                     explicit_dirs = true;
                 }
                 Opt::NoDir => no_dir = true,
-                Opt::OptLevel => {
-                    let val = parser.optional_value();
-                    let level_str = val
-                        .as_ref()
-                        .map(|v| v.to_string_lossy())
-                        .unwrap_or_default();
-                    opt_level = match level_str.as_ref() {
-                        "" | "0" | "g" => OptLevel::O0,
-                        "1" => OptLevel::O1,
-                        "2" => OptLevel::O2,
-                        "3" => OptLevel::O3,
-                        "s" => OptLevel::Os,
-                        _ => {
-                            return Err(CliExit::error(format!(
-                                "unknown optimization level '-O{level_str}'. Use -O0, -O1, -O2, -O3, -Os, or -Og"
-                            )));
-                        }
-                    };
-                }
+                Opt::OptLevel => opt_level = compile::parse_opt_level_arg(&mut parser)?,
                 Opt::InlineThreshold => {
                     inline_threshold = Some(args::parse_inline_threshold_arg(
                         "--optimize-inline-threshold",
@@ -230,6 +207,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<RunOptions, CliExit> {
                     )?);
                 }
                 Opt::LogLevel => log_level = args::parse_log_level_arg(&mut parser)?,
+                Opt::Allocator => allocator = Some(args::require_string(&mut parser)?),
                 Opt::Profile => {
                     let spec = args::require_string(&mut parser)?;
                     profile = parse_profile(&spec)?;
@@ -265,16 +243,18 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<RunOptions, CliExit> {
         program_args,
         inline_threshold,
         opt_iterations,
+        allocator,
     })
 }
 
 async fn run_cli_component(
     wasm: &[u8],
+    cranelift_opt: wasmtime::OptLevel,
     profile: &ProfileMode,
     preopened_dirs: &[(String, String)],
     program_args: &[String],
 ) -> Result<()> {
-    let engine = runtime::create_engine(wasmtime::OptLevel::Speed, profile)?;
+    let engine = runtime::create_engine(cranelift_opt, profile)?;
     let component = Component::new(&engine, wasm)?;
     let linker = runtime::create_linker(&engine)?;
     let mut store = runtime::create_store(&engine, preopened_dirs, program_args)?;
@@ -341,20 +321,24 @@ async fn run_cli_component(
 }
 
 pub async fn run(opts: RunOptions) {
-    let wasm = compile::compile_with_full_opts(
-        &opts.input,
-        opts.opt_level,
-        opts.log_level,
-        None,
-        false,
-        opts.inline_threshold,
-        opts.opt_iterations,
-        None,
-    )
-    .await;
+    // `wado run` always targets `wasi:cli/command`; pass `None` so the
+    // compiler picks its default world (and bump allocator unless the
+    // caller overrode it via --allocator).
+    let flags = CompileFlags {
+        opt_level: opts.opt_level,
+        log_level: opts.log_level,
+        target_world: None,
+        skip_validation: false,
+        inline_threshold: opts.inline_threshold,
+        opt_iterations: opts.opt_iterations,
+        allocator: opts.allocator,
+    };
+    let cranelift_opt = opts.opt_level.to_wasmtime();
+    let wasm = compile::compile(&opts.input, &flags).await;
 
     if let Err(e) = run_cli_component(
         &wasm,
+        cranelift_opt,
         &opts.profile,
         &opts.preopened_dirs,
         &opts.program_args,
