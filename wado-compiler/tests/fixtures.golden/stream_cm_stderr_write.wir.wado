@@ -86,7 +86,13 @@ fn "wado-compiler/tests/fixtures/stream_cm_stderr_write.wado/run"() with Stderr 
     };
     "core:internal/cm_stream_write_u8"(tx, data);
     "wasi/stream-drop-writable"(tx);
-    drop(let __fr_handle_2: i32; let __fr_ptr_2: i32; let __fr_result_2: i32; __fr_handle_2 = subtask; __fr_ptr_2 = "mem/realloc"(0, 0, 8, 40); __fr_result_2 = "wasi/future-read:transmission-cli"(__fr_handle_2, __fr_ptr_2); if __fr_result_2 == -1 {
+    let __fr_handle_2: i32;
+    let __fr_ptr_2: i32;
+    let __fr_result_2: i32;
+    __fr_handle_2 = subtask;
+    __fr_ptr_2 = "mem/realloc"(0, 0, 8, 40);
+    __fr_result_2 = "wasi/future-read:transmission-cli"(__fr_handle_2, __fr_ptr_2);
+    if __fr_result_2 == -1 {
         let __fr_ws_2: i32;
         let __fr_evtptr_2: i32;
         __fr_ws_2 = "wasi/waitable-set-new"();
@@ -97,7 +103,9 @@ fn "wado-compiler/tests/fixtures/stream_cm_stderr_write.wado/run"() with Stderr 
         "wasi/waitable-join"(__fr_handle_2, 0);
         "wasi/waitable-set-drop"(__fr_ws_2);
         __fr_result_2 = 0;
-    }; let __fr_opt_3: ref null "core:prelude/types.wado//Result<unit,wasi:cli/types.wado/ErrorCode>"; __fr_opt_3 = (if (__fr_result_2 & 15) == 0 -> ref null "core:prelude/types.wado//Result<unit,wasi:cli/types.wado/ErrorCode>" {
+    }
+    let __fr_opt_3: ref null "core:prelude/types.wado//Result<unit,wasi:cli/types.wado/ErrorCode>";
+    __fr_opt_3 = (if (__fr_result_2 & 15) == 0 -> ref null "core:prelude/types.wado//Result<unit,wasi:cli/types.wado/ErrorCode>" {
         ref.as_non_null((if builtin::load_i32(__fr_ptr_2) == 0 -> ref "core:prelude/types.wado//Result<unit,wasi:cli/types.wado/ErrorCode>" {
             struct.new "core:prelude/types.wado//Result<unit,wasi:cli/types.wado/ErrorCode>" { 0 };
         } else {
@@ -105,7 +113,9 @@ fn "wado-compiler/tests/fixtures/stream_cm_stderr_write.wado/run"() with Stderr 
         }));
     } else {
         ref.null none;
-    }); drop("mem/realloc"(__fr_ptr_2, 40, 8, 0)); __fr_opt_3);
+    });
+    drop("mem/realloc"(__fr_ptr_2, 40, 8, 0));
+    drop(__fr_opt_3);
 }
 
 fn "wado-compiler/tests/fixtures/stream_cm_stderr_write.wado/__cm_binding__Stderr_write_via_stream"(data) with Stderr {

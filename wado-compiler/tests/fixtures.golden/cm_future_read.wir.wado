@@ -418,7 +418,13 @@ fn "wado-compiler/tests/fixtures/cm_future_read.wado/handle"(request) {
     __fw_write_ptr_2 = "mem/realloc"(0, 0, 4, 4);
     builtin::store_i32(__fw_write_ptr_2, 42);
     drop("wasi/future-write:s32"(future_tx, __fw_write_ptr_2));
-    drop(let __fr_handle_3: i32; let __fr_ptr_3: i32; let __fr_result_3: i32; __fr_handle_3 = future_rx; __fr_ptr_3 = "mem/realloc"(0, 0, 8, 40); __fr_result_3 = "wasi/future-read:s32"(__fr_handle_3, __fr_ptr_3); if __fr_result_3 == -1 {
+    let __fr_handle_3: i32;
+    let __fr_ptr_3: i32;
+    let __fr_result_3: i32;
+    __fr_handle_3 = future_rx;
+    __fr_ptr_3 = "mem/realloc"(0, 0, 8, 40);
+    __fr_result_3 = "wasi/future-read:s32"(__fr_handle_3, __fr_ptr_3);
+    if __fr_result_3 == -1 {
         let __fr_ws_3: i32;
         let __fr_evtptr_3: i32;
         __fr_ws_3 = "wasi/waitable-set-new"();
@@ -429,11 +435,15 @@ fn "wado-compiler/tests/fixtures/cm_future_read.wado/handle"(request) {
         "wasi/waitable-join"(__fr_handle_3, 0);
         "wasi/waitable-set-drop"(__fr_ws_3);
         __fr_result_3 = 0;
-    }; let __fr_opt_4: ref "core:prelude/types.wado//Option<i32>"; __fr_opt_4 = (if (__fr_result_3 & 15) == 0 -> ref "core:prelude/types.wado//Option<i32>" {
+    }
+    let __fr_opt_4: ref "core:prelude/types.wado//Option<i32>";
+    __fr_opt_4 = (if (__fr_result_3 & 15) == 0 -> ref "core:prelude/types.wado//Option<i32>" {
         struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: builtin::load_i32(__fr_ptr_3) };
     } else {
         struct.new "core:prelude/types.wado//Option<i32>" { 1 };
-    }); drop("mem/realloc"(__fr_ptr_3, 40, 8, 0)); __fr_opt_4);
+    });
+    drop("mem/realloc"(__fr_ptr_3, 40, 8, 0));
+    drop(__fr_opt_4);
     let __pair_temp_5: i64;
     __pair_temp_5 = "wasi/future-new"();
     trailers_future = builtin::i32_wrap_i64(__pair_temp_5);
