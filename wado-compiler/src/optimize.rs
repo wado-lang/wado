@@ -33,7 +33,10 @@ mod const_global_promotion;
 mod container_sroa;
 mod copy_prop;
 mod cse;
+mod dae;
 pub mod dce;
+mod drve;
+mod elide_local;
 mod field_scalarize;
 mod inline;
 mod labeled_block_fusion;
@@ -53,10 +56,13 @@ use const_global_promotion::promote_constant_globals;
 use container_sroa::scalarize_containers;
 use copy_prop::propagate_copies;
 use cse::eliminate_common_subexprs;
+use dae::eliminate_dead_arguments;
 use dce::{
     analyze_project, filter_bytes_literals, remove_unreachable_closure_functors,
     remove_unreachable_functions, remove_unreachable_globals, remove_unreachable_types,
 };
+use drve::eliminate_dead_return_values;
+use elide_local::elide_write_only_locals;
 use field_scalarize::scalarize_hot_fields;
 use inline::inline_functions;
 use labeled_block_fusion::fuse_labeled_blocks;
@@ -422,6 +428,15 @@ fn run_optimization_passes(
         step!("tir/ref_elim", eliminate_unnecessary_refs);
         step!("tir/sroa", scalar_replace_aggregates);
         step!("tir/copy_prop", propagate_copies);
+        // DAE / DRVE / write-only local elimination after `copy_prop` shrinks
+        // signatures and discards unused let-bindings before `cse` /
+        // `const_fold` revisit the simplified body. Running here (rather
+        // than at WIR level) lets `inline` see the slimmer signatures on
+        // the next iteration and lets `dce` clean up the freshly dead
+        // computation in the same fixed-point loop.
+        step!("tir/dae", |p| eliminate_dead_arguments(p));
+        step!("tir/drve", |p| eliminate_dead_return_values(p));
+        step!("tir/elide_local", |p| elide_write_only_locals(p));
         step!("tir/cse", eliminate_common_subexprs);
         step!("tir/store_load_forward", forward_stores_to_loads);
         // `field_forward`'s rewrite responsibilities are absorbed by

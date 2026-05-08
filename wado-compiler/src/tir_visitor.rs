@@ -90,7 +90,9 @@ pub trait TirMutVisitor {
                 self.visit_pattern(pattern);
                 self.visit_expr(value);
             }
-            TirStmtKind::TaskReturn { .. } => {}
+            TirStmtKind::TaskReturn { .. } => {
+                unreachable!("TaskReturn should be eliminated by synthesis before this phase");
+            }
             TirStmtKind::VariadicForOf { iterable, body, .. } => {
                 self.visit_expr(iterable);
                 self.visit_block(body);
@@ -285,10 +287,42 @@ pub trait TirRefVisitor {
     fn visit_block(&mut self, block: &TirBlock) {
         self.walk_block(block);
     }
+    fn visit_pattern(&mut self, pattern: &TirPattern) {
+        self.walk_pattern(pattern);
+    }
 
     fn walk_block(&mut self, block: &TirBlock) {
         for stmt in &block.stmts {
             self.visit_stmt(stmt);
+        }
+    }
+
+    fn walk_pattern(&mut self, pattern: &TirPattern) {
+        match pattern {
+            TirPattern::Wildcard | TirPattern::Binding { .. } | TirPattern::Literal(_) => {}
+            TirPattern::Tuple(patterns, _) => {
+                for p in patterns {
+                    self.visit_pattern(p);
+                }
+            }
+            TirPattern::Variant { bindings, .. } => {
+                for binding in bindings {
+                    self.visit_pattern(binding);
+                }
+            }
+            TirPattern::Enum { .. }
+            | TirPattern::ConstantValue { .. }
+            | TirPattern::Range { .. } => {}
+            TirPattern::Struct { fields, .. } => {
+                for field in fields {
+                    self.visit_pattern(&field.pattern);
+                }
+            }
+            TirPattern::Or(alternatives) => {
+                for p in alternatives {
+                    self.visit_pattern(p);
+                }
+            }
         }
     }
 
@@ -330,20 +364,24 @@ pub trait TirRefVisitor {
             }
             TirStmtKind::IfLet {
                 scrutinee,
+                pattern,
                 then_block,
                 else_block,
-                ..
             } => {
                 self.visit_expr(scrutinee);
+                self.visit_pattern(pattern);
                 self.visit_block(then_block);
                 if let Some(else_blk) = else_block {
                     self.visit_block(else_blk);
                 }
             }
-            TirStmtKind::LetDestructure { value, .. } => {
+            TirStmtKind::LetDestructure { pattern, value, .. } => {
+                self.visit_pattern(pattern);
                 self.visit_expr(value);
             }
-            TirStmtKind::TaskReturn { .. } => {}
+            TirStmtKind::TaskReturn { .. } => {
+                unreachable!("TaskReturn should be eliminated by synthesis before this phase");
+            }
             TirStmtKind::VariadicForOf { iterable, body, .. } => {
                 self.visit_expr(iterable);
                 self.visit_block(body);
@@ -431,6 +469,7 @@ pub trait TirRefVisitor {
             } => {
                 self.visit_expr(scrutinee);
                 for arm in arms {
+                    self.visit_pattern(&arm.pattern);
                     if let Some(guard) = &arm.guard {
                         self.visit_expr(guard);
                     }
@@ -525,6 +564,49 @@ pub trait TirOptVisitor {
     {
         opt_walk_block(self, block)
     }
+
+    /// Visit a pattern. Override to rewrite pattern bindings or constants.
+    /// Call `opt_walk_pattern(self, pattern)` to recurse into children.
+    fn visit_pattern(&mut self, pattern: &mut TirPattern) -> bool
+    where
+        Self: Sized,
+    {
+        opt_walk_pattern(self, pattern)
+    }
+}
+
+/// Walk a pattern's children. Bindings, literals, enum tags, and ranges are
+/// leaves; nested patterns inside `Tuple` / `Variant` / `Struct` / `Or` are
+/// visited recursively, and the `expr` of a `ConstantValue` pattern flows
+/// back through `visit_expr`.
+pub fn opt_walk_pattern(visitor: &mut impl TirOptVisitor, pattern: &mut TirPattern) -> bool {
+    let mut changed = false;
+    match pattern {
+        TirPattern::Wildcard
+        | TirPattern::Binding { .. }
+        | TirPattern::Literal(_)
+        | TirPattern::Enum { .. }
+        | TirPattern::Range { .. } => {}
+        TirPattern::Tuple(patterns, _) | TirPattern::Or(patterns) => {
+            for p in patterns {
+                changed |= visitor.visit_pattern(p);
+            }
+        }
+        TirPattern::Variant { bindings, .. } => {
+            for p in bindings {
+                changed |= visitor.visit_pattern(p);
+            }
+        }
+        TirPattern::Struct { fields, .. } => {
+            for f in fields {
+                changed |= visitor.visit_pattern(&mut f.pattern);
+            }
+        }
+        TirPattern::ConstantValue { expr } => {
+            changed |= visitor.visit_expr(expr);
+        }
+    }
+    changed
 }
 
 /// Walk all statements in a block, visiting each recursively.
@@ -539,8 +621,11 @@ pub fn opt_walk_block(visitor: &mut impl TirOptVisitor, block: &mut TirBlock) ->
 /// Walk a statement's children.
 pub fn opt_walk_stmt(visitor: &mut impl TirOptVisitor, stmt: &mut TirStmt) -> bool {
     match &mut stmt.kind {
-        TirStmtKind::Let { value, .. } | TirStmtKind::LetDestructure { value, .. } => {
-            visitor.visit_expr(value)
+        TirStmtKind::Let { value, .. } => visitor.visit_expr(value),
+        TirStmtKind::LetDestructure { pattern, value, .. } => {
+            let mut changed = visitor.visit_pattern(pattern);
+            changed |= visitor.visit_expr(value);
+            changed
         }
         TirStmtKind::Expr(expr) => visitor.visit_expr(expr),
         TirStmtKind::Return { value } | TirStmtKind::Break { value, .. } => {
@@ -562,11 +647,12 @@ pub fn opt_walk_stmt(visitor: &mut impl TirOptVisitor, stmt: &mut TirStmt) -> bo
         TirStmtKind::LabeledBlock { block, .. } => visitor.visit_block(block),
         TirStmtKind::IfLet {
             scrutinee,
+            pattern,
             then_block,
             else_block,
-            ..
         } => {
             let mut changed = visitor.visit_expr(scrutinee);
+            changed |= visitor.visit_pattern(pattern);
             changed |= visitor.visit_block(then_block);
             if let Some(eb) = else_block {
                 changed |= visitor.visit_block(eb);
@@ -654,6 +740,7 @@ pub fn opt_walk_expr(visitor: &mut impl TirOptVisitor, expr: &mut TirExpr) -> bo
         TirExprKind::Match { expr: inner, arms } => {
             changed |= visitor.visit_expr(inner);
             for arm in arms {
+                changed |= visitor.visit_pattern(&mut arm.pattern);
                 if let Some(guard) = &mut arm.guard {
                     changed |= visitor.visit_expr(guard);
                 }
